@@ -38,15 +38,9 @@ func runAtRoot(root string, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("build S-05 through S-08 snapshots: %w", err)
 	}
-	if err := ownershipinventory.WriteInventory(root, inventory); err != nil {
-		return fmt.Errorf("write inventory: %w", err)
-	}
 	freeze := ownershipinventory.BuildPathLeaseFreeze()
-	if err := ownershipinventory.WritePathLeaseFreeze(root, freeze); err != nil {
-		return fmt.Errorf("write path-lease freeze: %w", err)
-	}
-	if err := ownershipinventory.WriteSnapshotCandidates(root, candidates); err != nil {
-		return fmt.Errorf("write S-05 through S-08 snapshots: %w", err)
+	if err := ownershipinventory.PublishSnapshotGroup(root, packages, inventory, freeze, candidates); err != nil {
+		return fmt.Errorf("publish snapshot group: %w", err)
 	}
 	fmt.Fprintf(stdout, "wrote %s (%d packages)\n", ownershipinventory.InventoryRelativePath, len(inventory.Packages))
 	fmt.Fprintf(stdout, "wrote %s (%d packets)\n", ownershipinventory.PathLeaseFreezeRelativePath, len(freeze.Packets))

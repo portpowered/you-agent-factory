@@ -1,11 +1,9 @@
 package ownershipinventory
 
 import (
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 )
 
 // fileSystem is the private host-filesystem boundary used by ownership
@@ -61,24 +59,4 @@ func (osFileSystem) rename(oldPath, newPath string) error {
 
 func (osFileSystem) remove(path string) error {
 	return os.Remove(path)
-}
-
-// writeWithFileSystem preserves the direct-writer behavior while routing the
-// host effect through the private boundary shared by the later grouped
-// publisher.
-func writeWithFileSystem(
-	files fileSystem,
-	root, relativePath string,
-	payload []byte,
-	perm fs.FileMode,
-	mkdirLabel, writeLabel string,
-) error {
-	path := filepath.Join(root, filepath.FromSlash(relativePath))
-	if err := files.mkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("%s: %w", mkdirLabel, err)
-	}
-	if err := files.writeFile(path, payload, perm); err != nil {
-		return fmt.Errorf("%s: %w", writeLabel, err)
-	}
-	return nil
 }

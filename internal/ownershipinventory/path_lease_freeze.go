@@ -177,16 +177,6 @@ func LoadPathLeaseFreeze(root string) (PathLeaseFreeze, error) {
 	return freeze, nil
 }
 
-// WritePathLeaseFreeze writes the path-lease freeze artifact.
-func WritePathLeaseFreeze(root string, freeze PathLeaseFreeze) error {
-	payload, err := json.MarshalIndent(freeze, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal path-lease freeze: %w", err)
-	}
-	payload = append(payload, '\n')
-	return writeWithFileSystem(osFileSystem{}, root, PathLeaseFreezeRelativePath, payload, 0o644, "mkdir path-lease freeze", "write path-lease freeze")
-}
-
 // ValidatePathLeaseFreeze checks freeze completeness, FND-10 mechanics, and
 // portfolio-hold exclusions.
 func ValidatePathLeaseFreeze(freeze PathLeaseFreeze) PathLeaseFreezeReport {

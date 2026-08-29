@@ -1,8 +1,6 @@
 package ownershipinventory_test
 
 import (
-	"bytes"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -49,86 +47,6 @@ func TestSnapshotBuildersMatchCommittedArtifacts(t *testing.T) {
 	}
 	if got.OperatorSettingsRootGo.Clusters == nil || got.OperatorSettingsTopLevel.UnexpectedPublicSiblings == nil || got.ProviderSessionsTopLevel.UnexpectedPublicSiblingsBeyondService == nil {
 		t.Fatal("empty candidate collections must serialize as [] rather than null")
-	}
-}
-
-func TestWriteSnapshotCandidatesProducesCommittedCanonicalBytes(t *testing.T) {
-	sourceRoot := repositoryRoot(t)
-	destinationRoot := t.TempDir()
-	candidates, err := ownershipinventory.BuildSnapshotCandidates(sourceRoot)
-	if err != nil {
-		t.Fatalf("BuildSnapshotCandidates() error = %v", err)
-	}
-	if err := ownershipinventory.WriteSnapshotCandidates(destinationRoot, candidates); err != nil {
-		t.Fatalf("WriteSnapshotCandidates() error = %v", err)
-	}
-
-	paths := []string{
-		ownershipinventory.OperatorSettingsRootGoInventoryRelativePath,
-		ownershipinventory.OperatorSettingsTopLevelInventoryRelativePath,
-		ownershipinventory.ProviderSessionsRootGoInventoryRelativePath,
-		ownershipinventory.ProviderSessionsTopLevelInventoryRelativePath,
-	}
-	for _, relativePath := range paths {
-		want, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(relativePath)))
-		if err != nil {
-			t.Fatalf("read committed %s: %v", relativePath, err)
-		}
-		got, err := os.ReadFile(filepath.Join(destinationRoot, filepath.FromSlash(relativePath)))
-		if err != nil {
-			t.Fatalf("read generated %s: %v", relativePath, err)
-		}
-		if !bytes.Equal(got, want) {
-			t.Fatalf("generated %s is not byte-identical to committed artifact", relativePath)
-		}
-		if !bytes.HasSuffix(got, []byte("\n")) || bytes.HasSuffix(got[:len(got)-1], []byte("\n")) {
-			t.Fatalf("generated %s must have exactly one trailing newline", relativePath)
-		}
-	}
-}
-
-func TestWriteSnapshotCandidatesRejectsInvalidCandidateBeforeReplacingAnyArtifact(t *testing.T) {
-	sourceRoot := repositoryRoot(t)
-	destinationRoot := t.TempDir()
-	candidates, err := ownershipinventory.BuildSnapshotCandidates(sourceRoot)
-	if err != nil {
-		t.Fatalf("BuildSnapshotCandidates() error = %v", err)
-	}
-	candidates.OperatorSettingsRootGo.Files[0].Classification = "invalid_classification"
-
-	sentinel := []byte("sentinel\n")
-	paths := []string{
-		ownershipinventory.OperatorSettingsRootGoInventoryRelativePath,
-		ownershipinventory.OperatorSettingsTopLevelInventoryRelativePath,
-		ownershipinventory.ProviderSessionsRootGoInventoryRelativePath,
-		ownershipinventory.ProviderSessionsTopLevelInventoryRelativePath,
-	}
-	for _, relativePath := range paths {
-		path := filepath.Join(destinationRoot, filepath.FromSlash(relativePath))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", relativePath, err)
-		}
-		if err := os.WriteFile(path, sentinel, 0o644); err != nil {
-			t.Fatalf("write sentinel %s: %v", relativePath, err)
-		}
-	}
-
-	err = ownershipinventory.WriteSnapshotCandidates(destinationRoot, candidates)
-	if err == nil {
-		t.Fatal("WriteSnapshotCandidates() error = nil, want invalid-candidate failure")
-	}
-	if !strings.Contains(err.Error(), "invalid_classification") && !strings.Contains(err.Error(), "unknown classification") {
-		t.Fatalf("WriteSnapshotCandidates() error = %v, want classification invariant", err)
-	}
-	for _, relativePath := range paths {
-		path := filepath.Join(destinationRoot, filepath.FromSlash(relativePath))
-		got, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatalf("read sentinel %s: %v", relativePath, readErr)
-		}
-		if !bytes.Equal(got, sentinel) {
-			t.Fatalf("invalid candidate replaced %s", relativePath)
-		}
 	}
 }
 
