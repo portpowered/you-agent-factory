@@ -52,6 +52,65 @@ func waitForAgyRuntimeReady(baseURL string, timeout time.Duration) error {
 	}
 }
 
+type agyTerminalStatusResult struct {
+	status factoryapi.StatusResponse
+	err    error
+}
+
+func waitForAgySessionTerminalStatus(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) (factoryapi.StatusResponse, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	observeContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	var last factoryapi.StatusResponse
+	var lastErr error
+	for {
+		status, err := getAgySessionStatus(observeContext, endpoint)
+		if err == nil {
+			last = status
+			lastErr = nil
+			completed := status.Categories.Terminal + status.Categories.Failed
+			if completed != 0 && status.Categories.Initial == 0 && status.Categories.Processing == 0 &&
+				(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
+				return status, nil
+			}
+		} else {
+			lastErr = err
+		}
+		select {
+		case <-poll.C:
+		case <-observeContext.Done():
+			return last, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, last, lastErr)
+		}
+	}
+}
+
+func getAgySessionStatus(ctx context.Context, endpoint string) (factoryapi.StatusResponse, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return factoryapi.StatusResponse{}, fmt.Errorf("status = %d", response.StatusCode)
+	}
+	var status factoryapi.StatusResponse
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	return status, nil
+}
+
 func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
 	// Keep the default transport pool reusable for the next public observation;

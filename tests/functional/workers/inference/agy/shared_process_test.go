@@ -440,10 +440,21 @@ func (fixture *agyProcessFixture) runScenario(
 	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" || strings.TrimSpace(submitted.RequestId) == "" {
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
+	statusContext, cancelStatus := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
+	defer cancelStatus()
+	statusResult := make(chan agyTerminalStatusResult, 1)
+	go func() {
+		status, err := waitForAgySessionTerminalStatus(statusContext, fixture.baseURL, session.Id, agySharedScenarioTimeout)
+		statusResult <- agyTerminalStatusResult{status: status, err: err}
+	}()
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	// Consume frames before terminal status so stream wait overlaps runtime
-	// completion; Work/Event reads remain post-terminal.
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, session.Id, agySharedScenarioTimeout)
+	// Observe the public terminal status while consuming response frames. The
+	// status read remains a required session-boundary witness; overlapping its
+	// bounded poll with stream delivery removes only test-observer idle time.
+	terminalStatus := <-statusResult
+	if terminalStatus.err != nil {
+		t.Fatalf("AGY %q terminal session status: %v", scenario.selector, terminalStatus.err)
+	}
 	listed := listAgySessionWork(t, fixture.baseURL, session.Id)
 	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
 	// Deletion followed by normal EOF proves no frame was hidden.
