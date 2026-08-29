@@ -3,16 +3,10 @@ package modes_test
 import (
 	"encoding/json"
 	"io"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -231,8 +225,8 @@ func assertOutputModeNormalization(
 		uppercaseError.Message != `unsupported --output value "PRIMARY"; supported values are primary (default) and response-stream` {
 		t.Fatalf("uppercase primary ErrorResponse = %#v, want exact unsupported-value diagnostic", uppercaseError)
 	}
-	if uppercasePrimary.providerCalls != whitespaceStream.providerCalls {
-		t.Fatalf("uppercase primary provider calls = %d, want unchanged %d", uppercasePrimary.providerCalls, whitespaceStream.providerCalls)
+	if uppercasePrimary.providerCalls != 0 {
+		t.Fatalf("uppercase primary provider calls = %d, want zero before dispatch", uppercasePrimary.providerCalls)
 	}
 }
 
@@ -270,14 +264,7 @@ func assertSuccessfulCharacterization(
 
 func executeOutputModeCharacterizationSequence(t *testing.T) map[string]runCharacterizationObservation {
 	t.Helper()
-
-	factoryDir := scaffoldProviderBackedFactory(t)
-	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	runner := support.NewRecordingCommandRunner(wantPrimaryResult)
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	fixture := modesFixture(t)
 
 	cases := []runCharacterizationCase{
 		{name: "quiet", runArgs: []string{"--quiet"}},
@@ -307,19 +294,18 @@ func executeOutputModeCharacterizationSequence(t *testing.T) map[string]runChara
 
 	observations := make(map[string]runCharacterizationObservation, len(cases))
 	for _, testCase := range cases {
-		args := append([]string{"you"}, testCase.globalArgs...)
-		args = append(args, "run", "--factory", factoryPath, "--no-record")
-		args = append(args, testCase.runArgs...)
-		args = append(args, "prove workers-owned output characterization")
-
-		inputs := support.FakeInputs(t.Context(), args)
-		inputs.Input.WorkingDirectory = factoryDir
-		err := process.Execute(inputs.Input)
+		result := fixture.execute(t, modesInvocationSpec{
+			globalArgs:    testCase.globalArgs,
+			runArgs:       testCase.runArgs,
+			prompt:        "prove workers-owned output characterization",
+			includePrompt: true,
+			behavior:      modesRouteSuccess,
+		})
 		observations[testCase.name] = runCharacterizationObservation{
-			stdout:        inputs.Stdout(),
-			stderr:        inputs.Stderr(),
-			err:           err,
-			providerCalls: runner.CallCount(),
+			stdout:        result.stdout,
+			stderr:        result.stderr,
+			err:           result.err,
+			providerCalls: result.providerCalls,
 		}
 	}
 	return observations
@@ -327,31 +313,17 @@ func executeOutputModeCharacterizationSequence(t *testing.T) map[string]runChara
 
 func executeSuccessfulRun(t *testing.T, globalArgs, runArgs []string) successfulRunResult {
 	t.Helper()
-
-	factoryDir := scaffoldProviderBackedFactory(t)
-	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner(wantPrimaryResult), nil)
-
-	args := []string{"you"}
-	args = append(args, globalArgs...)
-	args = append(args,
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-	)
-	args = append(args, runArgs...)
-	args = append(args, "prove workers-owned output modes")
-
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	result := modesFixture(t).execute(t, modesInvocationSpec{
+		globalArgs:    globalArgs,
+		runArgs:       runArgs,
+		prompt:        "prove workers-owned output modes",
+		includePrompt: true,
+		behavior:      modesRouteSuccess,
+	})
+	if result.err != nil {
+		t.Fatalf("Process.Execute(output modes) error = %v\nstdout:\n%s\nstderr:\n%s", result.err, result.stdout, result.stderr)
 	}
-	return successfulRunResult{stdout: inputs.Stdout(), stderr: inputs.Stderr()}
+	return successfulRunResult{stdout: result.stdout, stderr: result.stderr}
 }
 
 type failedRunResult struct {
@@ -362,37 +334,18 @@ type failedRunResult struct {
 
 func executeFailedRun(t *testing.T, globalArgs, runArgs []string) (failedRunResult, error) {
 	t.Helper()
-
-	factoryDir := scaffoldProviderBackedFactory(t)
-	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		ExitCode: deterministicProviderFailureExit,
-		Stderr:   []byte(deterministicProviderFailureStderr),
+	result := modesFixture(t).execute(t, modesInvocationSpec{
+		globalArgs:    globalArgs,
+		runArgs:       runArgs,
+		prompt:        "prove workers-owned failure output modes",
+		includePrompt: true,
+		behavior:      modesRouteFailure,
 	})
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
-	args := []string{"you"}
-	args = append(args, globalArgs...)
-	args = append(args,
-		"run",
-		"--factory", factoryPath,
-		"--no-record",
-	)
-	args = append(args, runArgs...)
-	args = append(args, "prove workers-owned failure output modes")
-
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
 	return failedRunResult{
-		stdout:        inputs.Stdout(),
-		stderr:        inputs.Stderr(),
-		providerCalls: runner.CallCount(),
-	}, err
+		stdout:        result.stdout,
+		stderr:        result.stderr,
+		providerCalls: result.providerCalls,
+	}, result.err
 }
 
 func assertSingleFailedProviderCall(t *testing.T, result failedRunResult) {
@@ -400,33 +353,6 @@ func assertSingleFailedProviderCall(t *testing.T, result failedRunResult) {
 	if result.providerCalls != 1 {
 		t.Fatalf("provider command runner calls = %d, want exactly one failed dispatch", result.providerCalls)
 	}
-}
-
-func scaffoldProviderBackedFactory(t *testing.T) string {
-	t.Helper()
-
-	cfg := map[string]any{
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-			"handlingBehavior": []string{"DEFAULT"},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	}
-	dir := support.ScaffoldFactory(t, cfg)
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	return dir
 }
 
 func assertSuccessfulRunStderrEmpty(t *testing.T, stderr string) {
