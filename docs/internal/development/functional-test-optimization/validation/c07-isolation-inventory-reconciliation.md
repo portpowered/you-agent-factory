@@ -3,12 +3,12 @@
 ## Environment and artifact
 
 - Commit/build identifier: clean-room head
-  `d0773de6ca0cd3e27aee66a2ad4a7a908330dae4`; executable source commit
+  `62fd5c96fa61b64ecc35474c8c7b7d06abe81f03`; executable source commit
   `ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee`. The paired artifact hashes in
   that committed checkout were JSON
-  `8f1f9f6d84f702e4b66396d0733a87d78db502745986adeee01ac71de9864ca7` and
+  `9c3fc27740c61b4bd4246e8758013427654888ef54f37a3b7ceca819c88546af` and
   Markdown
-  `585c117a3ed77c4ab68655605ef0d805ecf3dde949a9dd275ad6538371233370`.
+  `eec166d801c1414bdba9d90b5a146d1e7e2127bf7d61dd9edc2da3631e83c3a4`.
 - Environment and configuration: Windows `10.0.26200`, Go
   `go1.25.0 windows/amd64`, `GOAMD64=v1`, PowerShell `7.6.5`, repository
   `go.mod`, empty `GOFLAGS`, default local Go cache, no remote credentials,
@@ -28,6 +28,7 @@
 | --- | --- | --- | --- |
 | Clean package and identity reproduction | PASS | Recorded `go list` pattern sets resolved 77 packages with no missing or extra entries. One `go test $RESOLVED_PACKAGE -list '^Test' -count=0` run per package exited 0 and listed 595/595 top-level declarations. | Full runtime execution of every final row. |
 | JSON/Markdown agreement | PASS | Portable jq structural filters and the PowerShell audit passed: format 2, 812 rows, 595 top-level declarations, 217 named scenarios, 206 process-start observations, class sum 812, zero unclassified, 354 unique C01 mappings, and exact Markdown totals. | None for the audited artifact fields. |
+| Canonical format-2 schema | PASS | The read-only schema validator required `package`, `sourceHashSha256`, string `classification`, nullable `isolation`, array `priorC01RowIds`, string `mappingKind`/`evidence`, and runtime observation fields; it rejected legacy field names/types and returned zero legacy fields. | No runtime behavior is implied by the evidence schema. |
 | Source and witness integrity | PASS | All 812 source files existed; 812 SHA-256 pairs, 812 source references, declaration/named-parent locations, and all process-observation references matched. | Unsupported operating systems and behavior beyond the cited source/ledger witnesses. |
 | Representative process-sensitive behavior | PASS | All eight declared focused selectors exited 0. The set covers process start/shutdown, malformed configuration, port binding, executable selection, provider crash/exit, process environment, Work, Factory Event, CLI, runtime API, JavaScript, and ACP retained replay witnesses. | Full-suite runtime parity, remote providers, and live AGY behavior. |
 | Repository lane ownership | PASS | `make test-lane-audit` exited 0 and reported `contract=8 functional=141 integration=10 maintenance=106 release=1 stress=1 unit=446`. | Required CI on the pushed PR head. |
@@ -54,9 +55,13 @@
 4. The GATE-AUDIT-005 jq filters checked format, count sums, class totals,
    unique row and stable identities, 354 unique C01 row IDs, 200 mapped final
    identities, 612 added identities, and current classification counts. The
-   PowerShell audit checked all source paths, SHA-256 values, source-reference
-   and line-shape agreement, observation references, and exact Markdown count
-   rows. Both audits passed.
+   read-only format-2 schema validator required the canonical row, mapping,
+   and observation fields and failed on the legacy names/types (`importPath`,
+   `sourceSha256`, `isolationReason`, object-valued `classification`, and
+   legacy mapping keys); it passed with zero legacy fields. The PowerShell
+   source/hash audit checked all source paths, SHA-256 values,
+   source-reference and line-shape agreement, observation references, and
+   exact Markdown count rows. All audits passed.
 5. The eight focused selectors were run once each with
    `go test -count=1 -timeout=15m -run <selector> <package>`. Every command
    exited `0`:
@@ -92,8 +97,8 @@ no repair was made.
    changes and confirmed the tracked identity inventory was present.
 2. It resolved the same package universe, listed every executable top-level
    declaration, and reconciled the JSON and Markdown count units.
-3. It recomputed each final source hash and reference, verified all C01
-   dispositions and final lineages, and confirmed zero unclassified rows.
+3. It recomputed each final source hash and reference, verified all canonical
+   C01 mappings and final lineages, and confirmed zero unclassified rows.
 4. It exercised the selected local-real Work, Factory Event, Factory Session,
    CLI, runtime API, JavaScript, listener, provider-process, and ACP replay
    witnesses through their existing boundaries.
@@ -112,7 +117,7 @@ no repair was made.
   Factory Session, Work, Factory Event, replay, and response surfaces; this
   loopback adds no new persistence behavior.
 - Accessibility/keyboard/responsive behavior: not applicable; no UI changed.
-- Operational signals: package IDs, row IDs, source hashes, process
+- Operational signals: package IDs, stable identities, source hashes, process
   observation IDs, declaration counts, class counts, and lane-ownership counts
   were checked at the owning artifact boundaries.
 
@@ -124,10 +129,10 @@ no repair was made.
 
 ## Verdict
 
-PASS for the read-only clean-room inventory reconciliation and representative
-local-real process witnesses. The remaining unproven edges are explicitly
-owned by review or by unsupported/remote environments; this report does not
-claim them.
+PASS for the read-only clean-room inventory reconciliation, canonical
+format-2 schema, and representative local-real process witnesses. The
+remaining unproven edges are explicitly owned by review or by
+unsupported/remote environments; this report does not claim them.
 
 ## Delta-plan request [Required for FAIL/BLOCKED]
 
