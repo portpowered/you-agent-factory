@@ -226,12 +226,6 @@ function policyInputFromEnvironment() {
 			},
 			directLane("Backend", "RUN_BACKEND", "BACKEND_REASON", "BACKEND_RESULT"),
 			directLane(
-				"Backend Test Stability",
-				"RUN_BACKEND_STABILITY",
-				"BACKEND_STABILITY_REASON",
-				"BACKEND_STABILITY_RESULT",
-			),
-			directLane(
 				"Backend Unit Latency",
 				"RUN_BACKEND_UNIT_LATENCY",
 				"BACKEND_UNIT_LATENCY_REASON",

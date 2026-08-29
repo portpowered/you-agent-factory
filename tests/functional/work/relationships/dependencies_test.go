@@ -3,14 +3,11 @@ package relationships
 import (
 	"errors"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -30,7 +27,7 @@ const (
 // stays undispatched at its initial state until the prerequisite reaches the
 // declared requiredState, then proceeds through the public work session once
 // that prerequisite target state is satisfied.
-func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, baseURL string) {
+func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, host *sharedRelationshipHost) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	prerequisiteWorkID := "task-prerequisite-a"
@@ -54,7 +51,7 @@ func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, baseURL stri
 		},
 	})
 
-	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 15*time.Second)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, host, dir, 15*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):       0,
@@ -90,17 +87,22 @@ func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, baseURL stri
 	}
 }
 
-// TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure proves through public
-// Work listings and Factory Event dispatch observations that a DEPENDS_ON
-// dependent never receives a worker dispatch when its prerequisite reaches a
-// failed terminal outcome instead of the declared requiredState.
-func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
-	t.Parallel()
+const (
+	sharedDependencyFailurePrerequisiteID = "shared-failure-prerequisite"
+	sharedDependencyFailureDependentID    = "shared-failure-dependent"
+)
+
+// testDependentWorkDoesNotDispatchAfterPrerequisiteFailure proves through
+// public Work listings and Factory Event dispatch observations that a
+// DEPENDS_ON dependent never receives a worker dispatch when its prerequisite
+// reaches a failed terminal outcome instead of the declared requiredState.
+func testDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
-	prerequisiteWorkID := "task-prerequisite-a"
-	dependentWorkID := "task-dependent-b"
+	prerequisiteWorkID := sharedDependencyFailurePrerequisiteID
+	dependentWorkID := sharedDependencyFailureDependentID
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
@@ -119,22 +121,15 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 			},
 		},
 	})
+	host.provider.register(t, dir, sharedRelationshipFailureProvider(
+		prerequisiteWorkID,
+		errors.New("shared prerequisite provider failure"),
+	))
 
-	provider := testutil.NewNativeMockProviderWithErrors(
-		[]providers.ExecuteResult{
-			{Content: "COMPLETE"},
-			{Content: "COMPLETE"},
-		},
-		[]error{
-			nil,
-			errors.New("prerequisite finish failed"),
-		},
-	)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	session, listed, events := runSharedRelationshipFactoryToCompletionAndClose(
 		t,
+		host,
 		dir,
-		serviceedges.Edges{ProviderOverride: provider},
 		15*time.Second,
 	)
 
@@ -151,17 +146,49 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		t.Fatalf("dependent work %q reached processing after prerequisite failure: %#v", dependentWorkID, listed)
 	}
 
-	if got := len(provider.CallsForWorker("starter")); got != 1 {
-		t.Fatalf("starter provider calls = %d, want 1 (prerequisite only)", got)
-	}
-	if got := len(provider.CallsForWorker("finisher")); got != 1 {
-		t.Fatalf("finisher provider calls = %d, want 1 (prerequisite only)", got)
-	}
-
-	assertNoDependentStartDispatch(t, events, dependentWorkID)
+	assertOnlyPrerequisiteDispatches(t, events, prerequisiteWorkID, dependentWorkID)
 
 	if session.Runtime.Progress.Categories.Terminal != 0 || session.Runtime.Progress.Categories.Failed != 2 {
 		t.Fatalf("session progress categories = %+v, want zero terminal and two failed", session.Runtime.Progress.Categories)
+	}
+	runSharedHostReuseProbe(t, host.URL())
+}
+
+func assertOnlyPrerequisiteDispatches(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	prerequisiteWorkID, dependentWorkID string,
+) {
+	t.Helper()
+	startDispatches := 0
+	finishDispatches := 0
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode prerequisite dispatch event: %v", err)
+		}
+		if dispatchRequestIncludesWork(payload, dependentWorkID) {
+			t.Fatalf("dependent Work %q received a dispatch at sequence %d", dependentWorkID, event.Context.Sequence)
+		}
+		if !dispatchRequestIncludesWork(payload, prerequisiteWorkID) {
+			continue
+		}
+		switch payload.TransitionId {
+		case dependencyStartWorkstation:
+			startDispatches++
+		case dependencyFinishWorkstation:
+			finishDispatches++
+		}
+	}
+	if startDispatches != 1 || finishDispatches != 1 {
+		t.Fatalf(
+			"prerequisite dispatches = start:%d finish:%d, want one start and one finish",
+			startDispatches,
+			finishDispatches,
+		)
 	}
 }
 
@@ -169,7 +196,7 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 // listings and Factory Event dispatch observations that work submitted without any
 // DEPENDS_ON relations is not blocked by dependency tracking and reaches its
 // terminal success state through the normal public work session path.
-func testWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T, baseURL string) {
+func testWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T, host *sharedRelationshipHost) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_simple_dir"))
 	workID := "task-no-deps"
 
@@ -179,7 +206,7 @@ func testWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T, baseURL s
 		Payload:    []byte("no dependency relations"),
 	})
 
-	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):       0,
@@ -223,7 +250,8 @@ func testWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T, baseURL s
 // declared requiredState, then proceeds only after every prerequisite target
 // state is satisfied.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func testFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T, baseURL string, gate *support.MockWorkerGate) {
+func testFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T, host *sharedRelationshipHost, gate *relationshipProviderGate) {
+	baseURL := host.URL()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	prerequisiteAWorkID := "task-prerequisite-a"
@@ -257,6 +285,7 @@ func testFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T, baseURL string, g
 			},
 		},
 	})
+	host.provider.register(t, dir, sharedRelationshipGateProvider(gate))
 
 	opened := support.OpenFactorySessionAt(t, baseURL, dir)
 	sessionID := opened.Session.Id
@@ -341,25 +370,25 @@ func testFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T, baseURL string, g
 // ordering that a DEPENDS_ON dependent requiring archived stays undispatched
 // until the prerequisite reaches archived, then both reach archived without
 // failed terminals on the happy path.
-func testDependentWorkBlockedUntilPrerequisiteArchived(t *testing.T, baseURL string) {
-	runDependencyTerminalHappyPath(t, baseURL, "prd-A-work-id", "PRD A")
+func testDependentWorkBlockedUntilPrerequisiteArchived(t *testing.T, host *sharedRelationshipHost) {
+	runDependencyTerminalHappyPath(t, host, "prd-A-work-id", "PRD A")
 }
 
 // TestDependentWorkBlockedDuringPrerequisiteProcessing proves the same archived
 // terminal unlock behavior when the prerequisite work identifier reflects an
 // in-flight processing phase before both items reach archived.
-func testDependentWorkBlockedDuringPrerequisiteProcessing(t *testing.T, baseURL string) {
-	runDependencyTerminalHappyPath(t, baseURL, "prd-A-processing", "PRD A")
+func testDependentWorkBlockedDuringPrerequisiteProcessing(t *testing.T, host *sharedRelationshipHost) {
+	runDependencyTerminalHappyPath(t, host, "prd-A-processing", "PRD A")
 }
 
 // TestDependentWorkAndPrerequisiteBothReachArchived proves both prerequisite
 // and dependent Work reach the archived terminal when the dependency requires
 // that upstream terminal state.
-func testDependentWorkAndPrerequisiteBothReachArchived(t *testing.T, baseURL string) {
-	runDependencyTerminalHappyPath(t, baseURL, "prd-A-both", "PRD A")
+func testDependentWorkAndPrerequisiteBothReachArchived(t *testing.T, host *sharedRelationshipHost) {
+	runDependencyTerminalHappyPath(t, host, "prd-A-both", "PRD A")
 }
 
-func runDependencyTerminalHappyPath(t *testing.T, baseURL, prerequisiteWorkID, prerequisitePayload string) {
+func runDependencyTerminalHappyPath(t *testing.T, host *sharedRelationshipHost, prerequisiteWorkID, prerequisitePayload string) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
@@ -383,7 +412,7 @@ func runDependencyTerminalHappyPath(t *testing.T, baseURL, prerequisiteWorkID, p
 		},
 	})
 
-	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 10*time.Second)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, host, dir, 10*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("prd", dependencyArchivedState): 2,
@@ -590,34 +619,6 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 			)
 		}
 	}
-}
-
-func startDependencyFactory(
-	t *testing.T,
-	dir string,
-	provider providers.Service,
-) (baseURL string, daemon *support.ProcessCommand) {
-	t.Helper()
-
-	server := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderOverride: provider,
-		APIServerStarter: server.Start,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-	daemon = support.StartProcessCommand(t, process, inputs.Input)
-	return server.WaitForURL(t), daemon
 }
 
 func waitForPartialFanInObservation(

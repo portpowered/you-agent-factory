@@ -109,7 +109,7 @@ func TestRunFunctionalTestsOmitsCountForDefaultCacheMode(t *testing.T) {
 	if err := runFunctionalTests(cfg); err != nil {
 		t.Fatalf("runFunctionalTests() error = %v", err)
 	}
-	want := []string{"go", "test", "-p=8", "-parallel=2", "-short", "./tests/functional/...", "-timeout=2m0s"}
+	want := []string{"go", "test", "-p=8", "-short", "./tests/functional/...", "-timeout=2m0s"}
 	if !slices.Equal(gotArgs, want) {
 		t.Fatalf("command = %v, want %v", gotArgs, want)
 	}
@@ -145,7 +145,7 @@ func TestRunFunctionalTestsUsesPackagePatternDirectly(t *testing.T) {
 	if err := runFunctionalTests(cfg); err != nil {
 		t.Fatalf("runFunctionalTests() error = %v", err)
 	}
-	want := []string{"test", "-p=8", "-parallel=2", "-short", "./tests/functional/...", "-count=3", "-timeout=2m0s"}
+	want := []string{"test", "-p=8", "-short", "./tests/functional/...", "-count=3", "-timeout=2m0s"}
 	if gotName != "go" || !slices.Equal(gotArgs, want) {
 		t.Fatalf("command = %s %v, want go %v", gotName, gotArgs, want)
 	}

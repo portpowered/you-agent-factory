@@ -14,7 +14,7 @@ import (
 // workstation fans out to multiple downstream work types, every completed branch
 // retains the submitted source name and trace identity while receiving distinct
 // generated Work IDs.
-func testMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T, baseURL string) {
+func testMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T, host *sharedRelationshipHost) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -26,7 +26,7 @@ func testMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T, base
 		Tags:       map[string]string{"priority": "high"},
 	})
 
-	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("idea", "complete"): 1,
@@ -48,7 +48,7 @@ func testMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T, base
 // TestMultiOutputNameAvailableOnDownstreamTask proves that a downstream work type
 // created by multi-output fanout can observe the submitted source name even when
 // only the downstream branch reaches a terminal state in the public Work listing.
-func testMultiOutputNameAvailableOnDownstreamTask(t *testing.T, baseURL string) {
+func testMultiOutputNameAvailableOnDownstreamTask(t *testing.T, host *sharedRelationshipHost) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -59,7 +59,7 @@ func testMultiOutputNameAvailableOnDownstreamTask(t *testing.T, baseURL string) 
 		Payload:    []byte("idea about logging"),
 	})
 
-	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
@@ -78,10 +78,10 @@ func testMultiOutputNameAvailableOnDownstreamTask(t *testing.T, baseURL string) 
 // TestReviewerFanoutPreservesSharedNameDownstream proves that a scripted
 // multi-output reviewer fanout preserves the source document name on every
 // downstream review branch with distinct generated Work IDs.
-func testReviewerFanoutPreservesSharedNameDownstream(t *testing.T, baseURL string) {
+func testReviewerFanoutPreservesSharedNameDownstream(t *testing.T, host *sharedRelationshipHost) {
 	dir := scaffoldRelationshipReviewerFanoutFactory(t)
 
-	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("document", "complete"):     1,
@@ -100,7 +100,7 @@ func testReviewerFanoutPreservesSharedNameDownstream(t *testing.T, baseURL strin
 // TestDocReviewerPNGFanoutPreservesSharedNameDownstream proves that a packaged
 // doc-reviewer factory fans out to every authored review branch while preserving
 // the submitted document name on each downstream Work item.
-func testDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T, baseURL string) {
+func testDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T, host *sharedRelationshipHost) {
 	dir := support.ScaffoldFactoryFromExamplePNG(t, "examples/factories/doc-reviewer.png")
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -111,7 +111,7 @@ func testDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T, baseURL
 		Payload:    []byte("review this document"),
 	})
 
-	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("document", "complete"):                 1,
@@ -130,7 +130,7 @@ func testDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T, baseURL
 // TestNtoNTypeMatchingCompletesEveryAuthoredBranch proves that independent
 // work types submitted into an N-to-N matching factory each complete at their
 // authored terminal states with preserved names, Work IDs, trace IDs, and tags.
-func testNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T, baseURL string) {
+func testNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T, host *sharedRelationshipHost) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "n_to_n_type_matching"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -150,7 +150,7 @@ func testNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T, baseURL stri
 		Tags:       map[string]string{"source": "figma"},
 	})
 
-	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, host, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("idea", "complete"):   1,

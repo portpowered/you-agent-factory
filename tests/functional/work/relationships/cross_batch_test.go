@@ -25,32 +25,33 @@ const (
 // part of relationship admission or release.
 func testCrossBatchDependsOnActivePrerequisiteReleasesAfterCompletion(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
-	gate *support.MockWorkerGate,
+	host *sharedRelationshipHost,
+	gate *relationshipProviderGate,
 ) {
 	factoryDir := scaffoldCrossBatchFactory(t)
-	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
-	sessionID := opened.Session.Id
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
+	baseURL := host.URL()
+	host.provider.register(t, factoryDir, sharedRelationshipGateProvider(gate))
+	session, closeSession := openSharedRelationshipSession(t, baseURL, factoryDir)
+	sessionID := session.Id
 
-	executeCrossBatchSubmitForSessionOnServer(t, server, sessionID, crossBatchPrerequisiteBatchJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, host.server, sessionID, crossBatchPrerequisiteBatchJSON())
 	gate.WaitForArrival(t, 15*time.Second)
-	assertCrossBatchWorkStateForSession(t, server.URL(), sessionID, crossBatchPrerequisiteID, "processing", "active prerequisite")
+	assertCrossBatchWorkStateForSession(t, baseURL, sessionID, crossBatchPrerequisiteID, "processing", "active prerequisite")
 
-	executeCrossBatchSubmitForSessionOnServer(t, server, sessionID, crossBatchDependentBatchJSON())
-	assertCrossBatchWorkStateForSession(t, server.URL(), sessionID, crossBatchDependentID, "init", "gated dependent")
-	assertCrossBatchNoDependentStartDispatch(t, support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID))
+	executeCrossBatchSubmitForSessionOnServer(t, host.server, sessionID, crossBatchDependentBatchJSON())
+	assertCrossBatchWorkStateForSession(t, baseURL, sessionID, crossBatchDependentID, "init", "gated dependent")
+	assertCrossBatchNoDependentStartDispatch(t, support.GetFactoryEventsForSessionAt(t, baseURL, sessionID))
 
 	gate.Release()
-	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 15*time.Second)
-	listed := listRelationshipSessionWork(t, server.URL(), sessionID)
+	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 15*time.Second)
+	listed := listRelationshipSessionWork(t, baseURL, sessionID)
 	for _, workID := range []string{crossBatchPrerequisiteID, crossBatchDependentID} {
 		if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
 			t.Fatalf("Work %q did not reach complete: %#v", workID, listed)
 		}
 	}
 
-	events := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	prerequisiteCompleteSequence, dependentStartSequence := crossBatchDispatchOrdering(t, events)
 	if dependentStartSequence <= prerequisiteCompleteSequence {
 		t.Fatalf(
@@ -59,6 +60,8 @@ func testCrossBatchDependsOnActivePrerequisiteReleasesAfterCompletion(
 			prerequisiteCompleteSequence,
 		)
 	}
+	closeSession()
+	runSharedHostReuseProbe(t, baseURL)
 }
 
 func scaffoldCrossBatchFactory(t *testing.T) string {
@@ -101,44 +104,6 @@ func assertCrossBatchWorkStateForSession(
 		15*time.Second,
 		func() (factoryapi.ListWorkResponse, error) {
 			return listRelationshipSessionWork(t, baseURL, sessionID), nil
-		},
-		func(listed factoryapi.ListWorkResponse) bool {
-			return support.HasWorkAtCustomerState(listed, workID, wantPlace)
-		},
-	)
-	if err != nil {
-		t.Fatalf("observe %s: %v; listed=%#v", description, err, listed)
-	}
-}
-
-type crossBatchFunctionalRun struct {
-	baseURL string
-	session factoryapi.FactorySession
-	server  *support.FunctionalAPIServer
-}
-
-func newCrossBatchFunctionalRun(t *testing.T) crossBatchFunctionalRun {
-	t.Helper()
-	factoryDir := scaffoldCrossBatchFactory(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	return crossBatchFunctionalRun{
-		baseURL: server.URL(),
-		session: support.GetDefaultSession(t, server.URL()),
-		server:  server,
-	}
-}
-
-func assertCrossBatchWorkState(t *testing.T, baseURL, workID, state, description string) {
-	t.Helper()
-	wantPlace := support.WorkCustomerLocation("task", state)
-	listed, err := support.WaitForObservation(
-		15*time.Second,
-		func() (factoryapi.ListWorkResponse, error) {
-			return support.ListDefaultSessionWork(t, baseURL), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
 			return support.HasWorkAtCustomerState(listed, workID, wantPlace)
@@ -210,27 +175,6 @@ func crossBatchDependentBatchJSON() string {
 			"targetWorkName": %q
 		}]
 	}`, crossBatchDependentName, crossBatchDependentID, crossBatchDependentName, crossBatchPrerequisiteName)
-}
-
-func executeCrossBatchSubmit(t *testing.T, process support.Process, baseURL, batchJSON string) {
-	t.Helper()
-	homeDir := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--server", baseURL, "--json", "submit", "batch", batchJSON,
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = homeDir
-	stdinIsTTY := true
-	inputs.Input.StdinIsTTY = &stdinIsTTY
-	inputs.Input.Stdin = strings.NewReader("")
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(submit batch) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
 }
 
 func assertCrossBatchNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEvent) {

@@ -199,7 +199,10 @@ jobs:
         id: candidate
         if: steps.prepare.outputs.reconcile == 'true'
         shell: bash
-        run: node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --github-output "$GITHUB_OUTPUT"
+        run: >-
+          node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree
+          --source-sha "$SOURCE_SHA"
+          --github-output "$GITHUB_OUTPUT"
 
       - name: Reconcile the validated bot branch and pull request
         if: steps.prepare.outputs.reconcile == 'true'
