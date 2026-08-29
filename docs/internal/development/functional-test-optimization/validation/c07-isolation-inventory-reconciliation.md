@@ -2,13 +2,13 @@
 
 ## Environment and artifact
 
-- Commit/build identifier: executable source commit
-  `ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee`; the clean-room checkout was
-  detached at the delivered implementation tree. The paired artifact hashes
-  at validation were JSON
-  `ba1cdb089d9d01a6893e1d0100dd054f907f825fa119aad85e23f930e0b886bc` and
+- Commit/build identifier: clean-room head
+  `d0773de6ca0cd3e27aee66a2ad4a7a908330dae4`; executable source commit
+  `ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee`. The paired artifact hashes in
+  that committed checkout were JSON
+  `8f1f9f6d84f702e4b66396d0733a87d78db502745986adeee01ac71de9864ca7` and
   Markdown
-  `311313e50d49bd051a50e2cb67dcfa398648c9d6eafc6b48b63ad903880f394`.
+  `585c117a3ed77c4ab68655605ef0d805ecf3dde949a9dd275ad6538371233370`.
 - Environment and configuration: Windows `10.0.26200`, Go
   `go1.25.0 windows/amd64`, `GOAMD64=v1`, PowerShell `7.6.5`, repository
   `go.mod`, empty `GOFLAGS`, default local Go cache, no remote credentials,
@@ -33,7 +33,7 @@
 | Repository lane ownership | PASS | `make test-lane-audit` exited 0 and reported `contract=8 functional=141 integration=10 maintenance=106 release=1 stress=1 unit=446`. | Required CI on the pushed PR head. |
 | Inventory Markdown diagnostics | PASS | `go run ./cmd/markdown-linter docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md` exited 0 with no diagnostics. | Review-host rendering. |
 | Diff hygiene | PASS | `git diff --check` exited 0 in the clean checkout; the implementation worktree check is rerun before commit. | Review-owned merge/conflict state. |
-| Directional timing/topology | PASS (directional) | Current clean-room focused-selector wall times were 5.418s, 6.172s, 6.063s, 7.420s, 16.221s, 5.820s, 5.549s, and 5.063s. The available identity comparison is C01 format 1: 39 packages/342 top-level/354 rows with no separate process unit, versus final: 77 resolved directories/595 top-level/812 rows/206 process-start observations. | These are noisy local observations, not a timing threshold or a like-for-like total process count; review CI owns same-head package timing. |
+| Directional timing/topology | PASS (directional) | Final-head clean-room focused-selector wall times were 5.973s, 6.653s, 6.230s, 12.038s, 15.463s, 5.823s, 5.368s, and 5.779s. The available identity comparison is C01 format 1: 39 packages/342 top-level/354 rows with no separate process unit, versus final: 77 resolved directories/595 top-level/812 rows/206 process-start observations. | These are noisy local observations, not a timing threshold or a like-for-like total process count; review CI owns same-head package timing. |
 | VAL-001 clean-room loopback | PASS | This report records the read-only detached-checkout reproduction, exact commands, artifact hashes, focused runtime results, and remaining edges. No repair was made. | Current-head required CI, terminal CI result, and merge. |
 
 ## Clean-room procedure and observed results
@@ -63,14 +63,14 @@
 
    | Package | Selector | Wall time |
    | --- | --- | ---: |
-   | `./tests/functional/work/routing` | `^TestSharedProcessWorkRouting$` | 5.418s |
-   | `./tests/functional/workers/mock` | `^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$` | 6.172s |
-   | `./tests/functional/workers/inference` | `^TestProviderNonZeroExitMapsToPublicFailure$` | 6.063s |
-   | `./tests/functional/factory/packaged/cross` | `^TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable$` | 7.420s |
-   | `./tests/functional/workers/mock` | `^TestBuiltCLIBatchExitCodesReportSingleWorkOutcome$` | 16.221s |
-   | `./tests/functional/orchestration/javascript/workers` | `^TestJavaScriptSharedWorkerBehavior$` | 5.820s |
-   | `./tests/functional/sessions/chat_sessions/root_composition` | `^TestACPWorkerChildStreamSurvivesRetainedReplay$` | 5.549s |
-   | `./tests/functional/runtime_api/factory_transformation` | `^TestCurrentFactoryPUT_RequiresAdvancedSaveVersion$` | 5.063s |
+   | `./tests/functional/work/routing` | `^TestSharedProcessWorkRouting$` | 5.973s |
+   | `./tests/functional/workers/mock` | `^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$` | 6.653s |
+   | `./tests/functional/workers/inference` | `^TestProviderNonZeroExitMapsToPublicFailure$` | 6.230s |
+   | `./tests/functional/factory/packaged/cross` | `^TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable$` | 12.038s |
+   | `./tests/functional/workers/mock` | `^TestBuiltCLIBatchExitCodesReportSingleWorkOutcome$` | 15.463s |
+   | `./tests/functional/orchestration/javascript/workers` | `^TestJavaScriptSharedWorkerBehavior$` | 5.823s |
+   | `./tests/functional/sessions/chat_sessions/root_composition` | `^TestACPWorkerChildStreamSurvivesRetainedReplay$` | 5.368s |
+   | `./tests/functional/runtime_api/factory_transformation` | `^TestCurrentFactoryPUT_RequiresAdvancedSaveVersion$` | 5.779s |
 
 6. The remaining clean-room commands all exited `0`:
 
