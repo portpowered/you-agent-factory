@@ -270,3 +270,50 @@ Not proved here:
 - real AGY credentials, executable, model, quota, and response -> external
   `provider-release-gate`.
 
+## Story 002 implementation and GATE-SPINE-001
+
+- Story: `functional-test-optimization-c10-providers-agy-disposition-002`
+- Gate: `GATE-SPINE-001`
+- Status: **PASS** for the eligible success/media/role slice.
+- Changed only `tests/functional/providers/agy/golden_test.go`,
+  `tests/functional/providers/agy/production_review_test.go`, and the new
+  package-local `tests/functional/providers/agy/shared_process_test.go`.
+- The four eligible golden leaves and three eligible role leaves now use one
+  caller-owned `support.BuildProcessWithContext` result. Role installation
+  uses `InitializeCustomerHomeWithProcess`; it does not construct a throwaway
+  process. Each route retains its own absolute home, workspace, media,
+  recording, command ledger, and public observations. Hosted golden runs get a
+  fresh loopback listener per invocation while retaining the shared process
+  graph.
+- Seven normalized `WorkDir` routes are registered before construction and
+  frozen before the process is built. A normalized duplicate is rejected;
+  unknown routes fail closed without recording or dispatching a provider call.
+  The eligible tests retain their exact command, schema, trace/media, usage,
+  Provider Session, Work, Factory Event, dispatch, recording, primary-result,
+  role, and one-call assertions.
+- Source topology moved from 41 estimated offline root constructions to 32
+  for this intermediate story: the eligible seven-leaf cohort contributes one
+  construction, while the four direct leaves, the missing-file golden leaf,
+  and the thirteen adverse role leaves remain intentionally isolated for story
+  003. The final one-offline-process target is therefore not claimed here.
+
+### Story 002 verification
+
+The following local procedures used the production root/services composition,
+the controlled `ProviderCommandRunner` edge, real local media where applicable,
+and pinned traces; no remote AGY executable or credentials were enabled:
+
+| Procedure | Observed result | Property proved |
+| --- | --- | --- |
+| `go test ./tests/functional/providers/agy -run 'TestAgy(ClipQAGoldenPassThroughRootBuildProcess\|MultimodalGoldenThroughRootBuildProcess\|StructuredJSONGoldenThroughRootBuildProcess)$' -count=1 -timeout=15m` | PASS, 6.617s | Shared golden success/media spine and preserved witnesses. |
+| `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -timeout=15m` | PASS, 45.110s | Caller-process packaged initialization and eligible role contracts. |
+| `go test ./tests/functional/providers/agy -count=1 -timeout=15m` | PASS, 64.555s | Full package compatibility, including untouched adverse and default live-gate paths. |
+| Same eligible selector with `-count=2` | PASS, 168.220s | Repeated invocation isolation and route result reuse without crossover. |
+| Same eligible selector with `-race -count=1` | PASS, 163.044s | Synchronized route accounting and supported race cleanliness. |
+
+The first focused command's wall time is the combined golden/role selector
+observation; local timings are directional only and are not a threshold.
+The full 25-leaf cleanup census, adverse-route sharing, concurrency/recovery
+matrix, final package run, clean-room loopback, and PR-host timing remain
+unproved and stay assigned to `GATE-FAIL-001`, `GATE-ISO-001`,
+`GATE-CLEAN-001`, `GATE-PKG-001`, `VAL-001`, and `GATE-PR-FUNCTIONAL`.
