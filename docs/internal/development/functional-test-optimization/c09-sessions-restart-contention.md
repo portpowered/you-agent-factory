@@ -142,8 +142,8 @@ passed to every owned CLI call across the complete round trip:
    dispatch/Worker Session history, checks for no phantom active work, and
    stops.
 
-This is eleven CLI invocations using the one stored context: two batch
-submits, two list commands, six show commands, and one Worker Session list.
+This is twelve CLI invocations using the one stored context: two batch
+submits, two list commands, seven show commands, and one Worker Session list.
 The daemon child processes themselves use `t.Context()` and are not changed by
 this characterization. The later correction is intentionally limited to
 fresh contexts at these owned CLI call sites; it must not change the build
@@ -167,7 +167,7 @@ The current source keeps these bounds independent of the stored CLI context:
 | Factory Event stream read | per-request 5-second context | Retained event count, decode, and ordered public stream |
 | Startup failure exit | real child `done` channel, 20-second wait | Non-zero corrupt-recording process exit and diagnostics |
 | Clean stop / hard kill | real signal or kill, `done` channel, 20-second wait | Exit, join, and cleanup behavior |
-| CLI operations | one shared 30-second context for all eleven calls | **Contention-sensitive cumulative lifetime budget** |
+| CLI operations | one shared 30-second context for all twelve calls | **Contention-sensitive cumulative lifetime budget** |
 
 The bounded polling loops are required because the parent test has no direct
 readiness, child-event, or filesystem-commit channel. They observe public
@@ -233,7 +233,7 @@ evidence instead of replacing it with a timing target.
 
 ## Story 002 correction and local evidence
 
-- Correction commit: `4f4ada4f20` (`test(restart): bound each CLI operation independently`).
+- Correction commit: `e3df25fec7265cfd2cff63314de42bdba11e2e71` (`test(restart): bound each CLI operation independently`), the rebased implementation commit on the current PR branch.
 - The owned scenario no longer stores or receives a cumulative `cliContext`.
   Scenario setup, including the one fresh `go build`, runs under the test
   context; each owned CLI submit, `work list`, `work show`, and Worker Session
@@ -257,20 +257,22 @@ second attempt: exit non-zero, 1200.133s
 ```
 
 After those environmental attempts, the same declared command completed on
-correction commit `4f4ada4f20` (worktree documentation head
-`3146ade935`):
+the rebased implementation correction. The historical pre-rebase run is not
+used as current-head evidence. The current implementation head used for the
+final local proof was `b815b1acc9b40c0cbc2c1d8ab18304c98183ebc7`, a descendant
+of the correction commit and the parent of this documentation-only review fix:
 
 ```text
 go test -count=3 -cpu=2 -timeout=20m -run '^TestBoardPersistenceCLIRestartRoundTrip$' ./tests/functional/sessions/restart
 ```
 
-The successful command exited `0` and reported `ok` for all three requested
-repetitions in `56.742s`. It exercised the local-real built CLI, three real
+The current-head command exited `0` and reported `ok` for all three requested
+repetitions in `54.185s`. It exercised the local-real built CLI, three real
 daemon generations per repetition, loopback HTTP, recordings, durable
 snapshots, signals, and public assertions. No daemon, CLI, restart, or cleanup
 failure was emitted. Source inspection confirms the unchanged topology of one
 fresh build and three daemon generations per target execution; the correction
-changes only ownership of the eleven CLI operation contexts. This proves the
+changes only ownership of the twelve CLI operation contexts. This proves the
 corrected context ownership, preserved round-trip assertions, and repeat
 cleanup under `-cpu=2`; it does not prove sibling selectors, jobs=16 hosted
 contention, terminal CI, excluded ancestry, or merge.
