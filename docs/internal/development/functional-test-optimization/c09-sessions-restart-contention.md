@@ -12,8 +12,9 @@
 - Environment for local characterization: Windows `windows/amd64`, Go
   `go1.25.0`, local-real filesystem/process/loopback boundaries, zero paid
   calls.
-- Status: **PASS — GATE-CHAR-001 characterization complete; correction and
-  raised-parallelism behavior remain assigned to stories 002–003.**
+- Status: **PASS — GATE-CHAR-001 characterization and GATE-FOCUSED-001
+  correction repeat are complete; package, raised-parallelism, and clean-room
+  evidence remain assigned to story 003.**
 
 This is an additive before-state record. It does not change the restart tests,
 the shared CLI helper, production code, public contracts, generated output,
@@ -244,24 +245,35 @@ evidence instead of replacing it with a timing target.
   start/stop, readiness, polling, build count, daemon count, public
   assertions, and cleanup are unchanged.
 
-GATE-FOCUSED-001 was attempted on the corrected head with:
+GATE-FOCUSED-001 was attempted twice on the corrected head before the
+successful repeat. Both attempts used the declared command and timed out at
+the `20m` package backstop while `buildBoardPersistenceBinary` waited for the
+fresh build; the scenario never started. The exact environmental failures
+remain recorded here as contaminated evidence, not as runtime behavior:
+
+```text
+first attempt:  exit non-zero, 1200.094s
+second attempt: exit non-zero, 1200.133s
+```
+
+After those environmental attempts, the same declared command completed on
+correction commit `4f4ada4f20` (worktree documentation head
+`3146ade935`):
 
 ```text
 go test -count=3 -cpu=2 -timeout=20m -run '^TestBoardPersistenceCLIRestartRoundTrip$' ./tests/functional/sessions/restart
 ```
 
-The command exited non-zero after `1200.094s` when the package timeout fired.
-The goroutine dump shows the test had not entered the scenario: it was blocked
-in `buildBoardPersistenceBinary` at `board_persistence_process_test.go:49`
-waiting for the fresh `go build`. The shared Windows host had many concurrent
-Go test/build processes. No daemon, CLI operation, restart assertion, or
-cleanup assertion was reached, so this is contaminated environmental evidence
-and does not prove or disprove the corrected round trip. The post-change
-`go test ./tests/functional/sessions/restart -list '^Test'` output enumerated
-the unchanged seven selectors and printed `ok` before its wrapper was
-interrupted after the result had been emitted; the full focused run itself
-already compiled the edited package before reaching the build wait.
+The successful command exited `0` and reported `ok` for all three requested
+repetitions in `56.742s`. It exercised the local-real built CLI, three real
+daemon generations per repetition, loopback HTTP, recordings, durable
+snapshots, signals, and public assertions. No daemon, CLI, restart, or cleanup
+failure was emitted. Source inspection confirms the unchanged topology of one
+fresh build and three daemon generations per target execution; the correction
+changes only ownership of the eleven CLI operation contexts. This proves the
+corrected context ownership, preserved round-trip assertions, and repeat
+cleanup under `-cpu=2`; it does not prove sibling selectors, jobs=16 hosted
+contention, terminal CI, excluded ancestry, or merge.
 
-Story 002 remains open pending one successful local-real focused repeat.
-Raised-parallelism CI, the full package proof, diff/ancestry audit, and clean
-room validation remain story 003 evidence.
+Story 002 is complete. Raised-parallelism CI, the full package proof,
+diff/ancestry audit, and clean-room validation remain story 003 evidence.
