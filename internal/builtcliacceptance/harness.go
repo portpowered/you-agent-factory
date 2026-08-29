@@ -429,7 +429,15 @@ func (s *Session) ProcessEnvWith(extra ...string) []string {
 	if len(extra) == 0 {
 		return env
 	}
-	return normalizeBrowserOpenEnvironment(append(env, extra...))
+	normalized := make([]string, 0, len(env)+len(extra))
+	for _, entry := range append(env, extra...) {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(key, browserOpenOptOutEnvironment) {
+			continue
+		}
+		normalized = append(normalized, entry)
+	}
+	return append(normalized, browserOpenOptOutEnvironment+"=1")
 }
 
 // Run executes the built you binary with the session's hermetic environment.

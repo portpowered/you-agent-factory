@@ -31,18 +31,7 @@ func ProcessEnvForIsolatedHome(homeDir string) []string {
 		"USERPROFILE="+homeDir,
 		"HOMEDRIVE="+filepath.VolumeName(homeDir),
 		"HOMEPATH="+string(os.PathSeparator),
+		browserOpenOptOutEnvironment+"=1",
 	)
-	return normalizeBrowserOpenEnvironment(env)
-}
-
-func normalizeBrowserOpenEnvironment(env []string) []string {
-	normalized := make([]string, 0, len(env)+1)
-	for _, entry := range env {
-		key, _, _ := strings.Cut(entry, "=")
-		if strings.EqualFold(key, browserOpenOptOutEnvironment) {
-			continue
-		}
-		normalized = append(normalized, entry)
-	}
-	return append(normalized, browserOpenOptOutEnvironment+"=1")
+	return env
 }
