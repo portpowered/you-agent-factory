@@ -50,3 +50,31 @@ test("functional coverage uses an isolated cache while unit setup-go remains unc
 	);
 	assert.equal((job.match(/uses: actions\/cache@v4/g) ?? []).length, 1);
 });
+
+test("functional coverage joins quarantine after concurrent execution and publishes both status paths", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const job = jobSection(workflow, "backend-coverage");
+	const supervisorMarker = "      - name: Run Linux functional coverage with concurrent quarantine verification";
+	const quarantineUploadMarker = "      - name: Upload Linux quarantine package evidence";
+	const supervisor = stepSection(job, supervisorMarker, "      - name: Report functional coverage verdict");
+	const quarantineUpload = stepSection(job, quarantineUploadMarker, "      # Ordinary test and coverage-gate failures");
+
+	assert.doesNotMatch(job, /      - name: Verify quarantined package inventory on Linux/);
+	assert.match(supervisor, /shell: bash/);
+	assert.match(supervisor, /run: bash scripts\/ci\/run-functional-coverage-with-quarantine\.sh/);
+	assert.match(supervisor, /FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL:/);
+	assert.match(supervisor, /FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: \.artifacts\/functional-test-viz\/quarantine-package-evidence\.txt/);
+	assert.match(quarantineUpload, /if: always\(\) && matrix\.suite == 'functional'/);
+	assert.match(quarantineUpload, /if-no-files-found: error/);
+	assert.ok(
+		job.indexOf(supervisorMarker) < job.indexOf(quarantineUploadMarker),
+		"quarantine evidence must upload after the supervisor has produced it",
+	);
+	for (const path of [
+		".artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt",
+		".artifacts/functional-test-viz/c09-critical-path/coverage-status.txt",
+		".artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt",
+	]) {
+		assert.match(job, new RegExp(path.replaceAll("/", "\\/")));
+	}
+});
