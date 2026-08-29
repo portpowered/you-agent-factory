@@ -276,12 +276,42 @@ func TestPrepareGenericAssetsRecoversAfterStagingAccessDenied(t *testing.T) {
 		Artifacts: []models.AssetRequirement{{Name: "weights.bin", SHA256: sha256Hex(body), Bytes: int64(len(body))}},
 	}
 	prepared, err := service.PrepareModelAssets(context.Background(), request)
+	requireGenericPreparationOutcome(t, prepared, err, models.AssetPreparationPrepared, "initial")
+	artifactPath, snapshotPath := genericSnapshotPaths(t, cacheDirectory, request)
+	assertGenericArtifact(t, artifactPath, body, "initial snapshot")
+
+	service.coordination = rejectingStagingCoordination{err: errors.New("access denied")}
+	assertStagingAccessDenied(t, service, request)
+	assertGenericArtifact(t, artifactPath, body, "snapshot after access denial")
+	assertNoPartialGenericSnapshot(t, snapshotPath)
+
+	service.coordination = mustPlatformLockingService(t)
+	retried, err := service.PrepareModelAssets(context.Background(), request)
+	requireGenericPreparationOutcome(t, retried, err, models.AssetPreparationAlreadyAvailable, "retry after access denial")
+}
+
+func requireGenericPreparationOutcome(
+	t *testing.T,
+	result models.PrepareModelAssetsResult,
+	err error,
+	want models.AssetPreparationOutcome,
+	label string,
+) {
+	t.Helper()
 	if err != nil {
-		t.Fatalf("initial preparation: %v", err)
+		t.Fatalf("%s preparation: %v", label, err)
 	}
-	if prepared.Outcome != models.AssetPreparationPrepared {
-		t.Fatalf("initial outcome = %v, want prepared", prepared.Outcome)
+	if result.Outcome != want {
+		t.Fatalf("%s outcome = %v, want %v", label, result.Outcome, want)
 	}
+}
+
+func genericSnapshotPaths(
+	t *testing.T,
+	cacheDirectory string,
+	request models.PrepareModelAssetsRequest,
+) (string, string) {
+	t.Helper()
 	source, err := parseGenericSource(request.Reference.NameOrURI)
 	if err != nil {
 		t.Fatalf("parse source: %v", err)
@@ -290,41 +320,40 @@ func TestPrepareGenericAssetsRecoversAfterStagingAccessDenied(t *testing.T) {
 		cacheDirectory, assetContentDirectory, assetKindModel,
 		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{{requirement: request.Artifacts[0]}}),
 	)
-	artifactPath := filepath.Join(snapshotPath, request.Artifacts[0].Name)
-	if got, err := os.ReadFile(artifactPath); err != nil || string(got) != string(body) {
-		t.Fatalf("initial snapshot = %q, %v; want prior good payload", got, err)
-	}
+	return filepath.Join(snapshotPath, request.Artifacts[0].Name), snapshotPath
+}
 
-	service.coordination = rejectingStagingCoordination{err: errors.New("access denied")}
-	if _, err := service.PrepareModelAssets(context.Background(), request); err == nil {
+func assertGenericArtifact(t *testing.T, path string, want []byte, label string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != string(want) {
+		t.Fatalf("%s = %q, %v; want %q", label, got, err, want)
+	}
+}
+
+func assertStagingAccessDenied(t *testing.T, service *service, request models.PrepareModelAssetsRequest) {
+	t.Helper()
+	_, err := service.PrepareModelAssets(context.Background(), request)
+	if err == nil {
 		t.Fatal("access-denied preparation error = nil")
-	} else {
-		var stageErr *models.PullStageError
-		if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.As(err, &stageErr) ||
-			stageErr.Stage != models.PullStageCacheInstallation {
-			t.Fatalf("access-denied error = %v, want cache-installation interruption", err)
-		}
 	}
-	if got, err := os.ReadFile(artifactPath); err != nil || string(got) != string(body) {
-		t.Fatalf("snapshot after access denial = %q, %v; want prior good payload", got, err)
+	var stageErr *models.PullStageError
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.As(err, &stageErr) ||
+		stageErr.Stage != models.PullStageCacheInstallation {
+		t.Fatalf("access-denied error = %v, want cache-installation interruption", err)
 	}
-	if entries, err := os.ReadDir(filepath.Dir(snapshotPath)); err != nil {
-		t.Fatalf("read content cache after access denial: %v", err)
-	} else {
-		for _, entry := range entries {
-			if strings.HasSuffix(entry.Name(), ".partial") {
-				t.Fatalf("access denial left partial snapshot %q", entry.Name())
-			}
-		}
-	}
+}
 
-	service.coordination = mustPlatformLockingService(t)
-	retried, err := service.PrepareModelAssets(context.Background(), request)
+func assertNoPartialGenericSnapshot(t *testing.T, snapshotPath string) {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Dir(snapshotPath))
 	if err != nil {
-		t.Fatalf("retry after access denial: %v", err)
+		t.Fatalf("read content cache after access denial: %v", err)
 	}
-	if retried.Outcome != models.AssetPreparationAlreadyAvailable {
-		t.Fatalf("retry outcome = %v, want already available", retried.Outcome)
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".partial") {
+			t.Fatalf("access denial left partial snapshot %q", entry.Name())
+		}
 	}
 }
 
