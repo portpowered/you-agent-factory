@@ -467,10 +467,11 @@ process comparison.
 
 ## Environment and artifact
 
-- Commit/build identifier: `62098cfeb659c3dbd69fbf912f7422f31b179e6c` current
-  source/test artifact. The final handoff commit changes only this ledger, so
-  executable and functional-test sources remain identical to the validated
-  artifact.
+- Commit/build identifier: final loopback head
+  `e57ed12a698e744593ea88986dcd2b6b57b94676`; its executable and
+  functional-test sources are the source-equivalent artifact at
+  `62098cfeb659c3dbd69fbf912f7422f31b179e6c`, because the final handoff
+  changes only this ledger.
 - Environment and configuration: Windows PowerShell on the shared local host; tracked worktree clean (`git status --porcelain --untracked-files=no` empty); ignored `prd.json` and `progress.txt` remain local scaffolding.
 - Customer entry point: real `root.BuildProcess`/`Process.Execute` functional paths and public Factory Session HTTP boundaries exercised by the owned tests.
 - Real and substituted dependencies: real repository root/provider composition; controlled local `ProviderCommandRunner` and permission edges; checked-in sanitized, checksum-validated Claude streams; no remote provider or paid dependency.
@@ -486,9 +487,9 @@ process comparison.
 | Process disposition | PASS | Source-derived application starts are Claude `4 -> 2`, discovery `1 -> 1`, permission `2 -> 2`. The shared Claude fixture has one root-built process, three explicit sessions, and three pre-start immutable routes; discovery and permission retain their justified topologies. | Package PR timing is supplied by Backend Functional Coverage rather than contaminated local wall-clock observations. |
 | Exclusions and ancestry | PASS | `git diff --name-only origin/main...HEAD` reports only this ledger and the five owned Claude/discovery/permission test files; `git diff --check origin/main...HEAD` is clean. PR #2316 commits `66430639c09a7b48c1451e5cd7636afbbd9e7a80` and `d7c545090d4c2da3bf72c010ee033c1425429ad2` are not ancestors of the validated head. No AGY, ACP, Codex, root Providers, shared support, inventory, baseline, or workflow file is changed. | Review may still report a merge conflict after new main commits. |
 | Security/privacy and compatibility | PASS | All provider outputs are sanitized checked-in streams validated by fixture shape and SHA-256; route errors are bounded and do not include request/environment values. No API, CLI, Factory Event, persisted schema, production, generated, or configuration file changed. | Real credentials, customer data, and remote-provider behavior are intentionally untested. |
-| Required unit/full gate | PASS | Current PR run [33244004923](https://github.com/portpowered/you-agent-factory/actions/runs/33244004923) on `62098cfeb659c3dbd69fbf912f7422f31b179e6c` reports the required Backend Lint, Backend Unit Coverage, Backend Unit Latency, Backend Functional Coverage, UI Backend Integration, and Verification Policy checks successful. | Review owns terminal CI for the final handoff head, conflict resolution, and merge. |
+| Required unit/full gate | PASS | Final-head PR run [33244701357](https://github.com/portpowered/you-agent-factory/actions/runs/33244701357) on `e57ed12a698e744593ea88986dcd2b6b57b94676` reports the required Backend Lint, Backend Unit Coverage, Backend Unit Latency, Backend Functional Coverage, UI Backend Integration, and Verification Policy checks successful. | Review owns terminal CI for the final handoff head, conflict resolution, and merge. |
 | `VAL-006` validation-loopback | PASS | This read-only report records the corrected eight-test current inventory, package results, adverse cleanup/process observation, topology disposition, exclusions, and exact current PR package timing. The operator disposition linked above resolves `PLAN-AUTH-001` and authorizes this ledger as the replacement authority. | Real or paid providers remain intentionally untested; review owns terminal CI for the final handoff head, conflict resolution, and merge. |
-| `PR-CI-005` handoff | PASS | The current Backend Functional Coverage comment [5459739530](https://github.com/portpowered/you-agent-factory/pull/2416#issuecomment-5459739530) reports successful owned-package results and timings: Claude `8.338s`, discovery `2.342s`, permission `4.558s`. It is the primary PR timing/full-gate evidence; local timings are recorded only as bounded directional evidence. | Review owns terminal CI on the final implementation head, conflict resolution, and merge. |
+| `PR-CI-005` handoff | PASS | The final-head Backend Functional Coverage comment [5459739530](https://github.com/portpowered/you-agent-factory/pull/2416#issuecomment-5459739530), produced by run [33244701357](https://github.com/portpowered/you-agent-factory/actions/runs/33244701357) on `e57ed12a698e744593ea88986dcd2b6b57b94676`, reports successful owned-package results and timings: Claude `8.675s`, discovery `1.112s`, permission `3.509s`. It is the primary PR timing/full-gate evidence; local timings are recorded only as bounded directional evidence. | Review owns terminal CI on the final implementation head, conflict resolution, and merge. |
 
 ## Customer journey
 
