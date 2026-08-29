@@ -4,15 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -30,59 +28,11 @@ const (
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/final-only-success/manifest.json
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(
-		repoRoot,
-		filepath.FromSlash(support.ProviderSessionFixturePath("agy", agyFinalOnlySuccessGoldenCase)),
-	)
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "agy-final-only-success" {
-		t.Fatalf("manifest.ID = %q, want agy-final-only-success", loaded.Manifest.ID)
-	}
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, support.ProviderSessionFidelityFinalOnly)
-	}
-
-	var request struct {
-		Model     string `json:"model"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
-	}
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
-		"stopToken: COMPLETE",
-		"skipPermissions: true\nstopToken: COMPLETE",
-		1,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy golden final-only success"}`))
-
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
-
-	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcessForTest(t)
+	scenario := fixture.scenario(t, agyFinalOnlySuccessGoldenCase)
+	replay := fixture.runScenario(t, scenario, "agy golden final-only success")
+	loaded := scenario.loaded
+	listed, events, responseEvents := replay.Listed, replay.FactoryEvents, replay.ResponseEvents
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
@@ -90,8 +40,8 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("agy command runner calls = %d, want one invocation", runner.CallCount())
+	if got := fixture.router.routeCallCount(scenario.selector); got != 1 {
+		t.Fatalf("agy %q route calls = %d, want one invocation", scenario.selector, got)
 	}
 
 	inferencePayload, dispatchOutput := agyGoldenInferenceObservation(t, events)
@@ -127,6 +77,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
 	}
+	fixture.assertProcessTopology(t)
 }
 
 // TestAgyGoldenTimeout replays a sanitized Agy timeout transcript through the
@@ -135,30 +86,11 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 // rather than a PTY-specific exit-code sentinel.
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/timeout/manifest.json
 func TestAgyGoldenTimeout(t *testing.T) {
-	loaded, request := loadAgyGoldenCase(
-		t,
-		agyTimeoutGoldenCase,
-		"agy-timeout",
-		support.ProviderSessionFidelityFinalOnly,
-	)
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
-		"stopToken: COMPLETE",
-		"skipPermissions: true\nstopToken: COMPLETE",
-		1,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy golden timeout"}`))
-
-	runner := newAgyDeadlineExceededCommandRunner(append([]byte(nil), loaded.Stdout.Raw...))
-
-	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcessForTest(t)
+	scenario := fixture.scenario(t, agyTimeoutGoldenCase)
+	replay := fixture.runScenario(t, scenario, "agy golden timeout")
+	loaded := scenario.loaded
+	listed, events, responseEvents := replay.Listed, replay.FactoryEvents, replay.ResponseEvents
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
 		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
@@ -166,8 +98,8 @@ func TestAgyGoldenTimeout(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if runner.callCount() < 1 {
-		t.Fatalf("agy command runner calls = %d, want at least one invocation", runner.callCount())
+	if got := fixture.router.routeCallCount(scenario.selector); got != 9 {
+		t.Fatalf("agy %q route calls = %d, want nine retry invocations", scenario.selector, got)
 	}
 
 	inferencePayload := agyGoldenFailedInferenceObservation(t, events)
@@ -185,6 +117,20 @@ func TestAgyGoldenTimeout(t *testing.T) {
 	}
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 	assertAgyGoldenTimeoutResponseStream(t, responseEvents)
+
+	observed := support.ProviderSessionObservedGoldens{
+		ProviderSession:  observeAgyProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ResponseEvents:   observeAgyResponseEventGoldens(responseEvents),
+		InvocationResult: observeAgyInvocationResultGolden(inferencePayload, ""),
+	}
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
+		var updated *support.ProviderSessionGoldensUpdatedError
+		if errors.As(err, &updated) {
+			t.Fatalf("%v", err)
+		}
+		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
+	}
+	fixture.assertProcessTopology(t)
 }
 
 // agyDeadlineExceededCommandRunner is a test double proving the print-mode
@@ -221,35 +167,34 @@ type agyGoldenRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-func loadAgyGoldenCase(
-	t *testing.T,
+func readAgyGoldenCase(
+	repoRoot string,
 	caseName string,
 	manifestID string,
 	fidelityClass string,
-) (support.ProviderSessionCase, agyGoldenRequest) {
-	t.Helper()
+) (support.ProviderSessionCase, agyGoldenRequest, error) {
 	caseDir := filepath.Join(
-		testutil.MustRepoRoot(t),
+		repoRoot,
 		filepath.FromSlash(support.ProviderSessionFixturePath("agy", caseName)),
 	)
 	loaded, err := support.LoadProviderSessionCase(caseDir)
 	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
+		return support.ProviderSessionCase{}, agyGoldenRequest{}, fmt.Errorf("LoadProviderSessionCase: %w", err)
 	}
 	if loaded.Manifest.ID != manifestID {
-		t.Fatalf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
+		return support.ProviderSessionCase{}, agyGoldenRequest{}, fmt.Errorf("manifest.ID = %q, want %s", loaded.Manifest.ID, manifestID)
 	}
 	if loaded.Manifest.FidelityClass != fidelityClass {
-		t.Fatalf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
+		return support.ProviderSessionCase{}, agyGoldenRequest{}, fmt.Errorf("manifest.fidelityClass = %q, want %q", loaded.Manifest.FidelityClass, fidelityClass)
 	}
 	var request agyGoldenRequest
 	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
+		return support.ProviderSessionCase{}, agyGoldenRequest{}, fmt.Errorf("decode request.json: %w", err)
 	}
 	if request.Model == "" || request.SessionID == "" {
-		t.Fatalf("request.json = %#v, want model and session_id", request)
+		return support.ProviderSessionCase{}, agyGoldenRequest{}, fmt.Errorf("request.json = %#v, want model and session_id", request)
 	}
-	return loaded, request
+	return loaded, request, nil
 }
 
 func assertAgyFailureDoesNotLeakSensitiveOutput(
@@ -502,6 +447,20 @@ func observeAgyInvocationResultGolden(
 	dispatchOutput string,
 ) json.RawMessage {
 	ok := payload.Outcome == factoryapi.InferenceOutcomeSucceeded
+	if !ok {
+		record := map[string]any{
+			"ok":            false,
+			"failureReason": "unknown",
+			"message":       "provider invocation failed",
+		}
+		if payload.FailureDetail != nil {
+			record["failureReason"] = string(payload.FailureDetail.Reason)
+			if payload.FailureDetail.Reason == factoryapi.WorkFailureTypeTimeout {
+				record["message"] = agyTimeoutFailureMessage
+			}
+		}
+		return mustMarshalJSON(record)
+	}
 	content := dispatchOutput
 	if payload.Response != nil && *payload.Response != "" {
 		content = *payload.Response
