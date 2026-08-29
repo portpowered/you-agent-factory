@@ -1,9 +1,10 @@
 # C10 AGY Worker-Inference Characterization Ledger
 
-Stories `functional-test-optimization-c10-workers-inference-agy-001` and
-`-002` are complete. Story `-003` remains open and owns clean-room, final
-scope, and delivery evidence. This ledger records the frozen baseline and the
-bounded migrated evidence; it does not claim clean-room or delivery completion.
+Stories `functional-test-optimization-c10-workers-inference-agy-001`, `-002`,
+and `-003` are complete for implementation-stage handoff. This ledger records
+the frozen baseline, bounded migrated evidence, final clean-room validation,
+and the review-owned CI/merge boundary. It does not claim live AGY behavior,
+excluded provider recovery, terminal CI, or merge.
 
 ## Authority and scope
 
@@ -144,9 +145,9 @@ route validation without executing either golden or exposing sensitive input.
 | `AGY-DET-002` | PASS | One package process/API start across three repetitions, immutable routing, unique sessions, and balanced normal cleanup. | Race safety and injected cleanup-error/assertion-failure exits. |
 | `AGY-MIG-002` | PASS | Both characterized behaviors through one process and separate explicit sessions. | Clean-room independence, final package proof, PR timing, and terminal CI. |
 
-This story intentionally does not claim `AGY-CLEAN-003`, `AGY-PKG-003`,
-`AGY-SCOPE-003`, `PR-CI-004`, or `VAL-005`; story `-003` owns those final
-loopback and delivery checks.
+At the migration checkpoint, the gates below were intentionally deferred to
+story `-003`. Their final dispositions are recorded in the validation-loopback
+section below.
 
 ## Fixture identity and hashes
 
@@ -298,9 +299,9 @@ normal path records them in the story `-002` evidence above:
   claimed. The migrated tests use explicit non-default Factory Sessions and
   delete them after each scenario.
 - Listener/port closure, route release, active-call counters, and normal
-  cancellation cleanup are directly counted by story `-002`. Injected
-  assertion-failure and cleanup-error exits remain obligations for
-  `AGY-CLEAN-003` and the final loopback in story `-003`.
+  cancellation cleanup are directly counted by story `-002`. The final
+  loopback adds behavioral error-joining coverage for assertion and cleanup
+  failures; it does not claim OS process-tree evidence.
 
 ## Complete matrix disposition
 
@@ -314,9 +315,9 @@ explicit absence is not mistaken for a migrated pass.
 | `AGY-S02` | Final-only success has one completed run and one completed assistant message, with no delta/tool/usage lifecycle. | Baseline and migrated PASS; `AGY-MIG-002-SUCCESS`. |
 | `AGY-T01` | Controlled deadline produces failed Work, failed timeout Model Response, AGY provider metadata, and failed response stream. | Baseline and migrated PASS; `AGY-MIG-002-TIMEOUT`. |
 | `AGY-P01` | Partial stdout is exposed only as completed partial message frames; Work never becomes done and forbidden sensitive text is absent. | Baseline and migrated PASS; `AGY-MIG-002-TIMEOUT`. |
-| `AGY-C01` | Existing helper has bounded command stop and process close; the migration adds package finalizer cancellation/join and process/listener census. | Normal migrated path PASS; injected nonzero-`m.Run` fault remains `AGY-CLEAN-003`. |
-| `AGY-A01` | Existing public assertions fail loudly; adverse cleanup ownership is source-derived, not directly exercised. | Scenario cleanup is migrated; forced assertion-failure cleanup remains `AGY-CLEAN-003`. |
-| `AGY-M01` | Valid manifest/request/process fixtures load successfully; malformed fixture injection is not a current test case. | Pre-start validation is migrated; malformed-fixture injection remains `AGY-CLEAN-003` / `VAL-005`. |
+| `AGY-C01` | Existing helper has bounded command stop and process close; the migration adds package finalizer cancellation/join and process/listener census. | Normal migrated path and cleanup coordinator's release-after-error behavior PASS; OS process-tree evidence remains unclaimed. |
+| `AGY-A01` | Existing public assertions fail loudly; adverse cleanup ownership is source-derived, not directly exercised. | Scenario cleanup and primary-plus-cleanup error preservation PASS in `TestAgyCleanupPreservesAssertionAndCleanupErrors`. |
+| `AGY-M01` | Valid manifest/request/process fixtures load successfully; malformed fixture injection is not a current test case. | Pre-start validation and final cleanup reconciliation PASS; malformed-fixture behavior remains outside this lane. |
 | `AGY-M02` | No malformed AGY-native output witness exists in this package. | Explicitly unproven; `PROVIDERS-AGY-RECOVERY`. |
 | `AGY-E01` | Current tests require non-empty model and native session ID, but have no empty route/session registration case. | Empty registration/session validation is migrated; `AGY-MIG-002`. |
 | `AGY-D01` | No duplicate canonical Factory-directory route exists before migration. | Duplicate route rejection is migrated; `AGY-MIG-002`. |
@@ -325,13 +326,13 @@ explicit absence is not mistaken for a migrated pass.
 | `AGY-O02` | Success response frames are run then message; timeout frames are repeated message/error pairs ending in failure. | Baseline and migrated stream isolation/order PASS; `AGY-MIG-002`. |
 | `AGY-N01` | Top-level tests are serial and have no package-global scenario selector or `t.Parallel` claim. | Immutable route-read safety and serial explicit sessions PASS; `AGY-MIG-002`. |
 | `AGY-CAP01` | Denominator is exactly two tests and source-derived starts are exactly two, one per test. | Migrated bound is one process and two explicit sessions per package execution; `AGY-MIG-002` / `AGY-PKG-003`. |
-| `AGY-CL01` | Each helper owns a temporary root, server, default session, response stream, command, and process close; balanced counters are not exposed. | Scenario session/stream/activity cleanup PASS; final package census -> `AGY-PKG-003`. |
-| `AGY-CL02` | `t.Cleanup` joins commands and removes temporary roots; cancellation, assertion failure, cleanup-error promotion, and route counters are not directly proven. | Normal package finalization counters PASS; injected adverse exits -> `AGY-CLEAN-003` / `VAL-005`. |
+| `AGY-CL01` | Each helper owns a temporary root, server, default session, response stream, command, and process close; balanced counters are not exposed. | Scenario session/stream/activity cleanup and final package census PASS; the cleanup coordinator test covers every release/check operation. |
+| `AGY-CL02` | `t.Cleanup` joins commands and removes temporary roots; cancellation, assertion failure, cleanup-error promotion, and route counters are not directly proven. | Normal package finalization plus injected primary/cleanup error joining PASS; OS-level process-tree proof remains outside the fixture. |
 | `AGY-R01` | The timeout selector reaches failed Work and closes its process; no shared-process success-after-timeout recovery is exercised. | Shared-process success-after-timeout recovery PASS; `AGY-MIG-002-TIMEOUT`. |
-| `AGY-I01` | Cleanup helpers are registered more than once across explicit stop and `t.Cleanup`, but no counter/panic assertion exists. | Scenario close is idempotent and counters remain balanced; injected cleanup errors -> `AGY-CLEAN-003`. |
-| `AGY-AUTH01` | The injected runner prevents live AGY authorization and remote execution; no authorization-boundary behavior is claimed. | Zero-cost control recorded; final zero-remote census -> `AGY-PKG-003` / `VAL-005`. |
+| `AGY-I01` | Cleanup helpers are registered more than once across explicit stop and `t.Cleanup`, but no counter/panic assertion exists. | Scenario close is idempotent, counters remain balanced, and cleanup errors are joined without skipping later operations. |
+| `AGY-AUTH01` | The injected runner prevents live AGY authorization and remote execution; no authorization-boundary behavior is claimed. | Zero-cost control and final zero-remote fixture census PASS; authorization semantics remain unclaimed. |
 | `AGY-OUT01` | No non-timeout AGY outage witness exists. | Explicitly unproven; `PROVIDERS-AGY-RECOVERY`. |
-| `AGY-PS01` | Both helpers pass `--no-record`; persistence/restart behavior is not exercised. | No persistence claim; final reconciliation -> `AGY-PKG-003` / `VAL-005`. |
+| `AGY-PS01` | Both helpers pass `--no-record`; persistence/restart behavior is not exercised. | No persistence claim; final no-record reconciliation PASS. |
 
 ## AGY-CHAR-001 evidence boundary
 
@@ -349,7 +350,74 @@ explicit absence is not mistaken for a migrated pass.
 | Migration parity | RECORDED IN `-002` | Shared process, immutable routes, explicit sessions, recovery, normal cleanup, and parity passed in the bounded migration repeat; clean-room and final package proof remain story `-003`. |
 | PR timing | NOT CLAIMED | Review-owned `PR-CI-004` remains pending; local timings are diagnostic and contaminated by shared-host variance. |
 
-No production behavior or fixture checksum changed in either characterization
-or migration. The next iteration should implement only story
-`functional-test-optimization-c10-workers-inference-agy-003` for clean-room,
-scope, and delivery evidence.
+## Story `functional-test-optimization-c10-workers-inference-agy-003` final validation loopback
+
+### VAL-005 report
+
+| Field | Result |
+| --- | --- |
+| Validation status | PASS for the implementation-stage handoff; review owns terminal CI, conflict resolution, and merge. |
+| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once after the final functional-test refactor and size-gate split. Exit `0`; package elapsed `4.469s`. |
+| Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy -run '^(TestAgyGoldenFinalOnlySuccess|TestAgyGoldenTimeout)$'` after the same split. Exit `0`; package elapsed `6.383s`. |
+| Full local gate | Fresh `make test` after the lifecycle/error/stream changes: exit `0`, `153` tests passed, `1` skipped, `0` failed. The later helper-only file split was covered by the final package run and backend-size check. |
+| Size gate | `go run ./cmd/backendsizecheck -- -root .` exit `0`; all owned Go files are within the 1000-line file and 100-line function limits. |
+| Dependency fidelity | Actual `root.BuildProcess`/`Process.Execute`, Factory Session, Work, Factory Event, response-stream, Workers-to-Providers path, and `edges.Edges` controlled command boundary; no built CLI or live AGY. |
+| Cost and data | Zero remote/paid AGY calls, zero credentials, zero customer data; checked-in sanitized fixtures and unchanged golden files. |
+
+The exact package run passed both top-level goldens through one production-
+composed process. Its normal finalizer reconciled one root/API start, explicit
+Factory Sessions and response streams, zero active command calls, released
+routes, closed listener/process state, and absent temporary roots. The response
+reader consumed exactly 2 success frames or 18 timeout frames, explicitly
+deleted the session to close the session-owned stream, and then required a
+bounded normal EOF; an extra frame, early closure, or terminal read error
+fails the test and is retained for cleanup reporting.
+
+The adverse cleanup test, `TestAgyCleanupPreservesAssertionAndCleanupErrors`,
+injects one primary assertion error and independent errors from session,
+daemon, process, API/listener, command-activity, route, census, and temporary-
+root operations. It verifies the primary error and every cleanup error remain
+discoverable with `errors.Is`, every operation still releases/checks its owned
+state, and all sessions, streams, active calls, routes, daemon/process/listener
+flags, and the root are released. This is coordinator-level failure injection;
+it does not claim an OS process-tree census after a forcibly killed child.
+
+### Gate reconciliation
+
+| Gate | Result | Exact property proved | Remaining unproven edge |
+| --- | --- | --- | --- |
+| `AGY-CLEAN-003` | PASS | Normal finalization plus injected primary/assertion and cleanup failures preserve all errors and run every cleanup/check operation. | Forced OS child-process kill and nonzero `m.Run` path are not separately injected. |
+| `AGY-PKG-003` | PASS | The exact one-run package gate proves one process/API start, both golden outcomes, balanced sessions/streams, zero active calls, released routes, closed listener/process, and removed root. | OS-wide process inventory is not claimed. |
+| `AGY-SCOPE-003` | PASS | Final PR scope is limited to the c10 ledger and `tests/functional/workers/inference/agy/**`; no `prd.json`, `progress.txt`, provider/recovery, inventory, or unrelated product file is included. | The absent `docs/temp/functional-test-optimization.md` source plan remains a recorded planning dependency. |
+| `PR-CI-004` | RECORDED / REVIEW-OWNED | The prior hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. | A fresh hosted timing comparison on the final head, terminal CI, and the bounded non-improvement decision occur after push in review; local timings are diagnostic only. |
+| `VAL-005` | PASS | This report records the exact final package procedure, result, fidelity, cleanup census, scope, cost boundary, and proved/not-proved edges without mutating fixtures or runtime state. | Live AGY, malformed native output, non-timeout outage, canonical inventory, and merge remain outside this lane. |
+
+### Scope and ancestry audit
+
+The read-only audit procedure is:
+
+```text
+git diff --name-only origin/main...HEAD
+git log --format='%H %P %s' origin/main..HEAD
+```
+
+At final delivery the expected owned paths are:
+
+```text
+docs/internal/development/functional-test-optimization/c10-workers-inference-agy.md
+tests/functional/workers/inference/agy/golden_test.go
+tests/functional/workers/inference/agy/shared_process_test.go
+tests/functional/workers/inference/agy/shared_process_cleanup_test.go
+tests/functional/workers/inference/agy/shared_process_edges_test.go
+```
+
+The final lane commits contain only the characterization ledger, the AGY
+golden migration, and the two focused shared-process support/test files. No
+provider/AGY recovery implementation or inventory history is in the ancestry;
+the missing source-plan path is recorded above rather than reconstructed.
+
+No production behavior or fixture checksum changed in characterization,
+migration, or this validation loopback. The implementation-stage finish line
+is final head pushed, PR open, and required CI started; terminal CI and merge
+remain review-stage responsibilities, and CI-run evidence belongs in the PR
+conversation rather than a commit.

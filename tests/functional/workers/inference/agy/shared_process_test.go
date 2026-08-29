@@ -21,7 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -224,31 +223,43 @@ func agySharedProcessForTest(t *testing.T) *agyProcessFixture {
 	return agySharedProcess
 }
 
-func (fixture *agyProcessFixture) setup(t *testing.T) error {
+func (fixture *agyProcessFixture) setup(t *testing.T) (setupErr error) {
 	t.Helper()
 	rootDir, err := os.MkdirTemp("", "infinite-you-agy-shared-")
 	if err != nil {
 		return fmt.Errorf("create package fixture root: %w", err)
 	}
 	fixture.rootDir = rootDir
-	cleanupOnError := true
 	defer func() {
-		if cleanupOnError {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
-			defer cancel()
-			if fixture.daemon != nil {
-				_ = fixture.daemon.stop(cleanupCtx)
-			}
-			if fixture.process != nil {
-				_ = fixture.process.Close(cleanupCtx)
-			}
-			if fixture.api != nil {
-				_ = fixture.api.waitClosed(cleanupCtx)
-			}
-			_ = os.RemoveAll(rootDir)
+		if setupErr == nil {
+			return
 		}
+		cleanupErr := fixture.cleanupResources(context.Background())
+		setupErr = errors.Join(setupErr, cleanupErr)
 	}()
 
+	if err := fixture.createDirectories(rootDir); err != nil {
+		return err
+	}
+	if err := fixture.loadScenarios(t); err != nil {
+		return err
+	}
+	if err := fixture.copyFactoryDirectories(t); err != nil {
+		return err
+	}
+	if err := fixture.registerRoutes(); err != nil {
+		return err
+	}
+	if err := fixture.startProcess(); err != nil {
+		return err
+	}
+	if err := fixture.waitForReady(t); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (fixture *agyProcessFixture) createDirectories(rootDir string) error {
 	fixture.homeDir = filepath.Join(rootDir, "home")
 	fixture.hostDir = filepath.Join(rootDir, "host")
 	fixture.successDir = filepath.Join(rootDir, "success")
@@ -258,7 +269,10 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 			return fmt.Errorf("create package fixture path %q: %w", path, err)
 		}
 	}
+	return nil
+}
 
+func (fixture *agyProcessFixture) loadScenarios(t *testing.T) error {
 	repoRoot := testutil.MustRepoRoot(t)
 	successLoaded, successRequest, err := readAgyGoldenCase(
 		repoRoot,
@@ -278,49 +292,6 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 	if err != nil {
 		return err
 	}
-	legacyDir := support.LegacyFixtureDir(t, "executor_success")
-	for _, path := range []string{fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
-		if err := copyAgyFactoryDirectory(legacyDir, path); err != nil {
-			return fmt.Errorf("copy legacy fixture to %q: %w", path, err)
-		}
-		if err := os.RemoveAll(filepath.Join(path, "inputs")); err != nil {
-			return fmt.Errorf("clear seed inputs in %q: %w", path, err)
-		}
-	}
-	if err := writeAgyWorkerConfig(fixture.hostDir, successRequest.Model); err != nil {
-		return err
-	}
-	if err := writeAgyWorkerConfig(fixture.successDir, successRequest.Model); err != nil {
-		return err
-	}
-	if err := writeAgyWorkerConfig(fixture.timeoutDir, timeoutRequest.Model); err != nil {
-		return err
-	}
-
-	successExitCode := 0
-	if successLoaded.Process.ExitCode != nil {
-		successExitCode = *successLoaded.Process.ExitCode
-	}
-	successRunner := newAgyStaticCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), successLoaded.Stdout.Raw...),
-		Stderr:   []byte(successLoaded.Stderr),
-		ExitCode: successExitCode,
-	})
-	timeoutRunner := newAgyDeadlineExceededCommandRunner(append([]byte(nil), timeoutLoaded.Stdout.Raw...))
-	router := newAgySharedCommandRouter()
-	if err := router.register(agySharedSuccessSelector, fixture.successDir, successRunner); err != nil {
-		return fmt.Errorf("register success route: %w", err)
-	}
-	if err := router.register(agySharedTimeoutSelector, fixture.timeoutDir, timeoutRunner); err != nil {
-		return fmt.Errorf("register timeout route: %w", err)
-	}
-	if err := assertAgyRoutesRejectInvalidRegistrations(router, fixture.rootDir, fixture.successDir); err != nil {
-		return err
-	}
-	if err := router.freeze(); err != nil {
-		return fmt.Errorf("freeze routes: %w", err)
-	}
-	fixture.router = router
 	fixture.scenarios = map[string]*agySharedScenario{
 		agyFinalOnlySuccessGoldenCase: {
 			selector: agySharedSuccessSelector, factoryDir: fixture.successDir,
@@ -331,11 +302,62 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 			loaded: timeoutLoaded, request: timeoutRequest,
 		},
 	}
+	return nil
+}
 
+func (fixture *agyProcessFixture) copyFactoryDirectories(t *testing.T) error {
+	legacyDir := support.LegacyFixtureDir(t, "executor_success")
+	for _, path := range []string{fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
+		if err := copyAgyFactoryDirectory(legacyDir, path); err != nil {
+			return fmt.Errorf("copy legacy fixture to %q: %w", path, err)
+		}
+		if err := os.RemoveAll(filepath.Join(path, "inputs")); err != nil {
+			return fmt.Errorf("clear seed inputs in %q: %w", path, err)
+		}
+	}
+	successModel := fixture.scenarios[agyFinalOnlySuccessGoldenCase].request.Model
+	timeoutModel := fixture.scenarios[agyTimeoutGoldenCase].request.Model
+	if err := writeAgyWorkerConfig(fixture.hostDir, successModel); err != nil {
+		return err
+	}
+	if err := writeAgyWorkerConfig(fixture.successDir, successModel); err != nil {
+		return err
+	}
+	return writeAgyWorkerConfig(fixture.timeoutDir, timeoutModel)
+}
+
+func (fixture *agyProcessFixture) registerRoutes() error {
+	success := fixture.scenarios[agyFinalOnlySuccessGoldenCase]
+	timeout := fixture.scenarios[agyTimeoutGoldenCase]
+	successExitCode := 0
+	if success.loaded.Process.ExitCode != nil {
+		successExitCode = *success.loaded.Process.ExitCode
+	}
+	router := newAgySharedCommandRouter()
+	if err := router.register(agySharedSuccessSelector, fixture.successDir, newAgyStaticCommandRunner(platformprocess.CommandResult{
+		Stdout: append([]byte(nil), success.loaded.Stdout.Raw...),
+		Stderr: []byte(success.loaded.Stderr), ExitCode: successExitCode,
+	})); err != nil {
+		return fmt.Errorf("register success route: %w", err)
+	}
+	if err := router.register(agySharedTimeoutSelector, fixture.timeoutDir, newAgyDeadlineExceededCommandRunner(append([]byte(nil), timeout.loaded.Stdout.Raw...))); err != nil {
+		return fmt.Errorf("register timeout route: %w", err)
+	}
+	if err := assertAgyRoutesRejectInvalidRegistrations(router, fixture.rootDir, fixture.successDir); err != nil {
+		return err
+	}
+	if err := router.freeze(); err != nil {
+		return fmt.Errorf("freeze routes: %w", err)
+	}
+	fixture.router = router
+	return nil
+}
+
+func (fixture *agyProcessFixture) startProcess() error {
 	api := newAgySharedHTTPServer()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      api.start,
-		ProviderCommandRunner: router,
+		ProviderCommandRunner: fixture.router,
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return fixture.homeDir, nil
 		},
@@ -346,7 +368,6 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 	fixture.processBuilds++
 	fixture.process = process
 	fixture.api = api
-
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", fixture.hostDir, "--continuously", "--with-server", "--server", "http://127.0.0.1:1", "--quiet", "--no-record",
 	})
@@ -358,11 +379,15 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 		return fmt.Errorf("wait for shared API server: %w", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, fixture.baseURL, agySharedScenarioTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
-	cleanupOnError = false
 	return nil
+}
+
+func (fixture *agyProcessFixture) waitForReady(t *testing.T) error {
+	// The production server reports readiness asynchronously after Process.Execute
+	// starts; this bounded public status observation cannot be replaced by the
+	// controlled command edge because it proves the real HTTP/session boundary.
+	t.Helper()
+	return waitForAgyRuntimeReady(fixture.baseURL, agySharedScenarioTimeout)
 }
 
 func (fixture *agyProcessFixture) scenario(t *testing.T, caseName string) *agySharedScenario {
@@ -418,11 +443,14 @@ func (fixture *agyProcessFixture) runScenario(
 	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" || strings.TrimSpace(submitted.RequestId) == "" {
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
+	// Work completion is published asynchronously by the production session
+	// runtime; the controlled command edge cannot prove the public terminal
+	// status transition, so use the bounded session-scoped observation.
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, session.Id, agySharedScenarioTimeout)
 
 	listed := listAgySessionWork(t, fixture.baseURL, session.Id)
 	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
-	responseEvents := readAgyResponseEvents(t, stream, agySharedScenarioTimeout, scenario.selector)
+	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
 	routeCalls := fixture.assertRouteRequests(t, scenario, routeRequestStart)
 
@@ -441,26 +469,116 @@ type agySharedScenarioRun struct {
 	fixture   *agyProcessFixture
 	sessionID string
 	stream    *support.FactoryResponseEventStream
-	once      sync.Once
+
+	closeOnce sync.Once
+	closeErr  error
+
+	sessionOnce     sync.Once
+	sessionCloseErr error
+	streamOnce      sync.Once
+	streamState     sync.Mutex
+	streamReadErr   error
+	streamCloseErr  error
 }
 
 func (run *agySharedScenarioRun) close(t testing.TB) {
+	t.Helper()
 	if run == nil {
 		return
 	}
-	run.once.Do(func() {
-		if strings.TrimSpace(run.sessionID) != "" {
-			support.CloseFactorySessionAt(t, run.fixture.baseURL, run.sessionID)
-			assertAgyFactorySessionDeleted(t, run.fixture.baseURL, run.sessionID)
-			run.fixture.recordSessionDeleted(run.sessionID)
-		}
-		if run.stream != nil {
-			run.stream.Close()
-			run.stream.WaitClosed(agySharedScenarioTimeout)
-			run.fixture.recordStreamClosed()
-		}
-		run.fixture.forgetRun(run.sessionID)
+	if err := run.closeResources(); err != nil {
+		t.Errorf("AGY scenario cleanup: %v", err)
+	}
+}
+
+func (run *agySharedScenarioRun) closeResources() error {
+	if run == nil {
+		return nil
+	}
+	run.closeOnce.Do(func() {
+		run.closeErr = run.closeResourcesOnce()
 	})
+	return run.closeErr
+}
+
+func (run *agySharedScenarioRun) closeResourcesOnce() error {
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
+	defer cancel()
+	var errs []error
+	if err := run.closeSession(cleanupCtx); err != nil {
+		errs = append(errs, err)
+	}
+	if err := run.closeStream(); err != nil {
+		errs = append(errs, fmt.Errorf("close response stream for session %q: %w", run.sessionID, err))
+	}
+	if err := run.observedStreamError(); err != nil {
+		errs = append(errs, fmt.Errorf("read response stream for session %q: %w", run.sessionID, err))
+	}
+	if strings.TrimSpace(run.sessionID) == "" {
+		run.fixture.forgetRun(run.sessionID)
+	}
+	return errors.Join(errs...)
+}
+
+func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
+	if run == nil || strings.TrimSpace(run.sessionID) == "" {
+		return nil
+	}
+	run.sessionOnce.Do(func() {
+		var errs []error
+		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
+			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
+		}
+		if err := assertAgyFactorySessionDeleted(run.fixture.baseURL, run.sessionID); err != nil {
+			errs = append(errs, err)
+		} else {
+			run.fixture.recordSessionDeleted(run.sessionID)
+			run.fixture.forgetRun(run.sessionID)
+		}
+		run.sessionCloseErr = errors.Join(errs...)
+	})
+	return run.sessionCloseErr
+}
+
+func (run *agySharedScenarioRun) closeStream() error {
+	if run == nil || run.stream == nil {
+		return nil
+	}
+	run.streamOnce.Do(func() {
+		run.stream.Close()
+		result := run.stream.TryNextFrameResult(time.Nanosecond)
+		run.fixture.recordStreamClosed()
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeEOF,
+			support.FactoryResponseEventStreamOutcomeCanceled:
+			return
+		case support.FactoryResponseEventStreamOutcomeReadError:
+			run.streamCloseErr = result.Err
+		default:
+			run.streamCloseErr = fmt.Errorf("response stream close outcome = %q", result.Outcome)
+		}
+	})
+	return run.streamCloseErr
+}
+
+func (run *agySharedScenarioRun) recordStreamReadResult(result support.FactoryResponseEventStreamWaitResult) {
+	if run == nil || result.Err == nil {
+		return
+	}
+	run.streamState.Lock()
+	defer run.streamState.Unlock()
+	if run.streamReadErr == nil {
+		run.streamReadErr = result.Err
+	}
+}
+
+func (run *agySharedScenarioRun) observedStreamError() error {
+	if run == nil {
+		return nil
+	}
+	run.streamState.Lock()
+	defer run.streamState.Unlock()
+	return run.streamReadErr
 }
 
 func (fixture *agyProcessFixture) recordRun(run *agySharedScenarioRun) {
@@ -563,60 +681,135 @@ func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *ag
 
 func (fixture *agyProcessFixture) finalize() error {
 	fixture.finalOnce.Do(func() {
-		var errs []error
-		if fixture.setupErr != nil {
-			fixture.finalErr = fixture.setupErr
-			return
-		}
-		if fixture.process == nil {
-			return
-		}
 		closeCtx, cancel := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
 		defer cancel()
-		if err := fixture.closeUnclosedSessions(closeCtx); err != nil {
-			errs = append(errs, err)
-		}
-		if err := fixture.daemon.stop(closeCtx); err != nil {
-			errs = append(errs, fmt.Errorf("stop daemon: %w", err))
-		}
-		if err := fixture.process.Close(closeCtx); err != nil {
-			errs = append(errs, fmt.Errorf("close process: %w", err))
-		}
-		if err := fixture.api.waitClosed(closeCtx); err != nil {
-			errs = append(errs, fmt.Errorf("wait for API shutdown: %w", err))
-		}
-		if err := assertAgyListenerClosed(fixture.baseURL); err != nil {
-			errs = append(errs, err)
-		}
-		if got := fixture.router.activeCallCount(); got != 0 {
-			errs = append(errs, fmt.Errorf("active command calls after cleanup = %d, want zero", got))
-		}
-		if err := fixture.router.releaseAll(); err != nil {
-			errs = append(errs, fmt.Errorf("release routes: %w", err))
-		}
-		if got := fixture.router.routeCount(); got != 0 {
-			errs = append(errs, fmt.Errorf("route count after cleanup = %d, want zero", got))
-		}
-		fixture.sessionMu.Lock()
-		activeSessions := len(fixture.activeSessions)
-		activeRuns := len(fixture.activeRuns)
-		opened := len(fixture.openedSessionIDs)
-		deleted := len(fixture.deletedSessionID)
-		fixture.sessionMu.Unlock()
-		fixture.streamMu.Lock()
-		streamsOpened, streamsClosed := fixture.streamsOpened, fixture.streamsClosed
-		fixture.streamMu.Unlock()
-		if activeSessions != 0 || activeRuns != 0 || opened != deleted || streamsOpened != streamsClosed {
-			errs = append(errs, fmt.Errorf("cleanup census sessions opened:%d deleted:%d active:%d runs:%d streams opened:%d closed:%d", opened, deleted, activeSessions, activeRuns, streamsOpened, streamsClosed))
-		}
-		if err := os.RemoveAll(fixture.rootDir); err != nil {
-			errs = append(errs, fmt.Errorf("remove fixture root: %w", err))
-		} else if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
-			errs = append(errs, fmt.Errorf("fixture root remains after cleanup: %v", err))
-		}
-		fixture.finalErr = errors.Join(errs...)
+		fixture.finalErr = errors.Join(fixture.setupErr, fixture.cleanupResources(closeCtx))
 	})
 	return fixture.finalErr
+}
+
+type agyCleanupOperations struct {
+	closeSessions func(context.Context) error
+	stopDaemon    func(context.Context) error
+	closeProcess  func(context.Context) error
+	waitForAPI    func(context.Context) error
+	checkListener func() error
+	checkActivity func() error
+	releaseRoutes func() error
+	checkRoutes   func() error
+	checkCensus   func() error
+	removeRoot    func() error
+}
+
+func cleanupAgyResources(ctx context.Context, primary error, operations agyCleanupOperations) error {
+	errs := []error{primary}
+	cleanup := func(label string, operation func() error) {
+		if operation == nil {
+			return
+		}
+		if err := operation(); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", label, err))
+		}
+	}
+	cleanupContext := func(label string, operation func(context.Context) error) {
+		if operation == nil {
+			return
+		}
+		cleanup(label, func() error { return operation(ctx) })
+	}
+	cleanupContext("close sessions", operations.closeSessions)
+	cleanupContext("stop daemon", operations.stopDaemon)
+	cleanupContext("close process", operations.closeProcess)
+	cleanupContext("wait for API shutdown", operations.waitForAPI)
+	cleanup("check listener", operations.checkListener)
+	cleanup("check command activity", operations.checkActivity)
+	cleanup("release routes", operations.releaseRoutes)
+	cleanup("check routes", operations.checkRoutes)
+	cleanup("check cleanup census", operations.checkCensus)
+	cleanup("remove fixture root", operations.removeRoot)
+	return errors.Join(errs...)
+}
+
+func (fixture *agyProcessFixture) cleanupResources(ctx context.Context) error {
+	return cleanupAgyResources(ctx, nil, agyCleanupOperations{
+		closeSessions: fixture.closeUnclosedSessions,
+		stopDaemon: func(ctx context.Context) error {
+			if fixture.daemon == nil {
+				return nil
+			}
+			return fixture.daemon.stop(ctx)
+		},
+		closeProcess: func(ctx context.Context) error {
+			if fixture.process == nil {
+				return nil
+			}
+			return fixture.process.Close(ctx)
+		},
+		waitForAPI: func(ctx context.Context) error {
+			if fixture.api == nil {
+				return nil
+			}
+			return fixture.api.waitClosed(ctx)
+		},
+		checkListener: func() error {
+			return assertAgyListenerClosed(fixture.baseURL)
+		},
+		checkActivity: func() error {
+			if fixture.router == nil {
+				return nil
+			}
+			if got := fixture.router.activeCallCount(); got != 0 {
+				return fmt.Errorf("active command calls after cleanup = %d, want zero", got)
+			}
+			return nil
+		},
+		releaseRoutes: func() error {
+			if fixture.router == nil {
+				return nil
+			}
+			return fixture.router.releaseAll()
+		},
+		checkRoutes: func() error {
+			if fixture.router == nil {
+				return nil
+			}
+			if got := fixture.router.routeCount(); got != 0 {
+				return fmt.Errorf("route count after cleanup = %d, want zero", got)
+			}
+			return nil
+		},
+		checkCensus: fixture.checkCleanupCensus,
+		removeRoot:  func() error { return removeAgyFixtureRoot(fixture.rootDir) },
+	})
+}
+
+func (fixture *agyProcessFixture) checkCleanupCensus() error {
+	fixture.sessionMu.Lock()
+	activeSessions := len(fixture.activeSessions)
+	activeRuns := len(fixture.activeRuns)
+	opened := len(fixture.openedSessionIDs)
+	deleted := len(fixture.deletedSessionID)
+	fixture.sessionMu.Unlock()
+	fixture.streamMu.Lock()
+	streamsOpened, streamsClosed := fixture.streamsOpened, fixture.streamsClosed
+	fixture.streamMu.Unlock()
+	if activeSessions != 0 || activeRuns != 0 || opened != deleted || streamsOpened != streamsClosed {
+		return fmt.Errorf("sessions opened:%d deleted:%d active:%d runs:%d streams opened:%d closed:%d", opened, deleted, activeSessions, activeRuns, streamsOpened, streamsClosed)
+	}
+	return nil
+}
+
+func removeAgyFixtureRoot(rootDir string) error {
+	if strings.TrimSpace(rootDir) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(rootDir); err != nil {
+		return err
+	}
+	if _, err := os.Stat(rootDir); !os.IsNotExist(err) {
+		return fmt.Errorf("fixture root remains after cleanup: %v", err)
+	}
+	return nil
 }
 
 func (fixture *agyProcessFixture) closeUnclosedSessions(ctx context.Context) error {
@@ -635,157 +828,30 @@ func (fixture *agyProcessFixture) closeUnclosedSessions(ctx context.Context) err
 	}
 	var errs []error
 	for _, id := range ids {
-		if run := runs[id]; run != nil && run.stream != nil {
-			run.stream.Close()
-			fixture.recordStreamClosed()
+		if run := runs[id]; run != nil {
+			if err := run.closeSession(ctx); err != nil {
+				errs = append(errs, fmt.Errorf("close unclosed session %q: %w", id, err))
+			}
+			if err := run.closeStream(); err != nil {
+				errs = append(errs, fmt.Errorf("close response stream for unclosed session %q: %w", id, err))
+			}
+			if err := run.observedStreamError(); err != nil {
+				errs = append(errs, fmt.Errorf("read response stream for unclosed session %q: %w", id, err))
+			}
+			continue
 		}
 		if err := closeAgyFactorySession(ctx, fixture.baseURL, id); err != nil {
 			errs = append(errs, fmt.Errorf("close unclosed session %q: %w", id, err))
 			continue
 		}
+		if err := assertAgyFactorySessionDeleted(fixture.baseURL, id); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		fixture.recordSessionDeleted(id)
+		fixture.forgetRun(id)
 	}
 	return errors.Join(errs...)
-}
-
-func writeAgyWorkerConfig(factoryDir, model string) error {
-	config := strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, model),
-		"stopToken: COMPLETE",
-		"skipPermissions: true\nstopToken: COMPLETE",
-		1,
-	)
-	path := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create AGY worker config directory: %w", err)
-	}
-	if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
-		return fmt.Errorf("write AGY worker config: %w", err)
-	}
-	return nil
-}
-
-func copyAgyFactoryDirectory(sourceDir, targetDir string) error {
-	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(sourceDir, path)
-		if err != nil {
-			return err
-		}
-		if relative == "." {
-			return os.MkdirAll(targetDir, 0o755)
-		}
-		targetPath := filepath.Join(targetDir, relative)
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode().Perm())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(targetPath, data, info.Mode().Perm())
-	})
-}
-
-func readAgyResponseEvents(
-	t testing.TB,
-	stream *support.FactoryResponseEventStream,
-	timeout time.Duration,
-	selector string,
-) []factoryapi.FactoryResponseEvent {
-	t.Helper()
-	want := 2
-	if selector == agySharedTimeoutSelector {
-		want = 18
-	}
-	events := make([]factoryapi.FactoryResponseEvent, 0)
-	for len(events) < want {
-		frame, ok := stream.TryNextFrame(timeout)
-		if !ok {
-			break
-		}
-		events = append(events, frame.Event)
-	}
-	return events
-}
-
-func assertAgySessionObservations(
-	t *testing.T,
-	scenario *agySharedScenario,
-	sessionID string,
-	submitted factoryapi.SubmitWorkResponse,
-	factoryEvents []factoryapi.FactoryEvent,
-	responseEvents []factoryapi.FactoryResponseEvent,
-) {
-	t.Helper()
-	workID := support.StringPointerValue(submitted.WorkId)
-	if workID == "" {
-		t.Fatalf("AGY %q submitted Work has no ID", scenario.selector)
-	}
-	support.AssertSingleWorkRequestEvent(t, factoryEvents, submitted.RequestId, workID, "task")
-	assertAgyFactoryEventSequence(t, scenario.selector, factoryEvents)
-	assertAgyResponseEventTopology(t, scenario.selector, responseEvents)
-	for _, event := range factoryEvents {
-		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
-			t.Fatalf("AGY %q Factory Event scope = %#v, want session %q", scenario.selector, event.Context, sessionID)
-		}
-	}
-	for _, event := range responseEvents {
-		if event.FactorySessionId != sessionID {
-			t.Fatalf("AGY %q response event session = %q, want %q", scenario.selector, event.FactorySessionId, sessionID)
-		}
-		if strings.TrimSpace(event.RunId) == "" {
-			t.Fatalf("AGY %q response event = %#v, want run identity", scenario.selector, event)
-		}
-	}
-}
-
-func assertAgyFactoryEventSequence(t testing.TB, selector string, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	want := []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeSessionStarted,
-		factoryapi.FactoryEventTypeFactoryStateResponse,
-		factoryapi.FactoryEventTypeWorkRequest,
-	}
-	attempt := []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeDispatchRequest,
-		factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
-		factoryapi.FactoryEventTypeModelRequest,
-		factoryapi.FactoryEventTypeModelResponse,
-		factoryapi.FactoryEventTypeAgentRunResponse,
-		factoryapi.FactoryEventTypeDispatchResponse,
-	}
-	if selector == agySharedTimeoutSelector {
-		for i := 0; i < 3; i++ {
-			want = append(want, attempt...)
-		}
-	} else {
-		want = append(want, attempt...)
-	}
-	if len(events) != len(want) {
-		t.Fatalf("AGY %q Factory Event count = %d, want %d; types=%v", selector, len(events), len(want), agyFactoryEventTypes(events))
-	}
-	for index, event := range events {
-		if event.Type != want[index] {
-			t.Fatalf("AGY %q Factory Event[%d] = %q, want %q; types=%v", selector, index, event.Type, want[index], agyFactoryEventTypes(events))
-		}
-	}
-}
-
-func agyFactoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
-	types := make([]factoryapi.FactoryEventType, 0, len(events))
-	for _, event := range events {
-		types = append(types, event.Type)
-	}
-	return types
 }
 
 func assertAgyResponseEventTopology(t testing.TB, selector string, events []factoryapi.FactoryResponseEvent) {
@@ -831,20 +897,6 @@ func listAgySessionWork(t testing.TB, baseURL, sessionID string) factoryapi.List
 	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
-func assertAgyFactorySessionDeleted(t testing.TB, baseURL, sessionID string) {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET deleted AGY Factory Session %q: %v", sessionID, err)
-	}
-	defer response.Body.Close()
-	body, _ := io.ReadAll(response.Body)
-	if response.StatusCode != http.StatusNotFound {
-		t.Fatalf("GET deleted AGY Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, strings.TrimSpace(string(body)))
-	}
-}
-
 func assertAgyListenerClosed(baseURL string) error {
 	if strings.TrimSpace(baseURL) == "" {
 		return nil
@@ -882,11 +934,15 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 		return readErr
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		if response.StatusCode != http.StatusConflict || !strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
+		if response.StatusCode != http.StatusNotFound &&
+			(response.StatusCode != http.StatusConflict || !strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`)) {
 			return fmt.Errorf("terminate status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 		}
 	}
 
+	// Termination is asynchronous and DELETE rejects an active Factory Session.
+	// This public status transition is the lifecycle boundary under test, so an
+	// edge-controlled result cannot replace this bounded polling observation.
 	poll := time.NewTicker(10 * time.Millisecond)
 	defer poll.Stop()
 	for {
@@ -928,201 +984,6 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 	}
 	if deleteResponse.StatusCode != http.StatusNoContent && deleteResponse.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("delete status=%d body=%q", deleteResponse.StatusCode, strings.TrimSpace(string(deleteBody)))
-	}
-	return nil
-}
-
-type agySharedCommandRoute struct {
-	selector string
-	workDir  string
-	runner   platformprocess.CommandRunner
-}
-
-// agySharedCommandRouter is immutable after freeze. WorkDir is the only
-// selector used during execution, so no test-order or mutable scenario state
-// can redirect a provider call to the other golden.
-type agySharedCommandRouter struct {
-	mu       sync.Mutex
-	routes   map[string]agySharedCommandRoute
-	requests []platformprocess.CommandRequest
-	active   int
-	frozen   bool
-	released bool
-}
-
-func newAgySharedCommandRouter() *agySharedCommandRouter {
-	return &agySharedCommandRouter{routes: make(map[string]agySharedCommandRoute)}
-}
-
-func (router *agySharedCommandRouter) register(selector, workDir string, runner platformprocess.CommandRunner) error {
-	selector = strings.TrimSpace(selector)
-	workDir = strings.TrimSpace(workDir)
-	if selector == "" || workDir == "" || runner == nil {
-		return fmt.Errorf("AGY route selector, WorkDir, and runner are required")
-	}
-	absolute, err := filepath.Abs(filepath.Clean(workDir))
-	if err != nil {
-		return fmt.Errorf("normalize AGY route WorkDir: %w", err)
-	}
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if router.frozen {
-		return fmt.Errorf("AGY routes are already frozen")
-	}
-	if router.released {
-		return fmt.Errorf("AGY routes have been released")
-	}
-	if _, exists := router.routes[absolute]; exists {
-		return fmt.Errorf("AGY WorkDir route %q is already registered", absolute)
-	}
-	for _, route := range router.routes {
-		if route.selector == selector {
-			return fmt.Errorf("AGY route selector %q is already registered", selector)
-		}
-	}
-	router.routes[absolute] = agySharedCommandRoute{selector: selector, workDir: absolute, runner: runner}
-	return nil
-}
-
-func (router *agySharedCommandRouter) freeze() error {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if router.released {
-		return fmt.Errorf("AGY routes have been released")
-	}
-	if len(router.routes) == 0 {
-		return fmt.Errorf("AGY route table is empty")
-	}
-	router.frozen = true
-	return nil
-}
-
-func (router *agySharedCommandRouter) releaseAll() error {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if router.active != 0 {
-		return fmt.Errorf("cannot release AGY routes with %d active calls", router.active)
-	}
-	router.routes = make(map[string]agySharedCommandRoute)
-	router.released = true
-	return nil
-}
-
-func (router *agySharedCommandRouter) routeCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.routes)
-}
-
-func (router *agySharedCommandRouter) activeCallCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return router.active
-}
-
-func (router *agySharedCommandRouter) requestCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.requests)
-}
-
-func (router *agySharedCommandRouter) requestsSince(start int) []platformprocess.CommandRequest {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if start < 0 {
-		start = 0
-	}
-	if start > len(router.requests) {
-		start = len(router.requests)
-	}
-	requests := make([]platformprocess.CommandRequest, len(router.requests)-start)
-	for index, request := range router.requests[start:] {
-		requests[index] = cloneAgyCommandRequest(request)
-	}
-	return requests
-}
-
-func (router *agySharedCommandRouter) Run(
-	ctx context.Context,
-	request platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	rawWorkDir := strings.TrimSpace(request.WorkDir)
-	if rawWorkDir == "" {
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY command WorkDir is required")
-	}
-	workDir, err := filepath.Abs(filepath.Clean(rawWorkDir))
-	if err != nil {
-		return platformprocess.CommandResult{}, fmt.Errorf("normalize AGY command WorkDir: %w", err)
-	}
-	router.mu.Lock()
-	if router.released {
-		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY route table is released")
-	}
-	route, ok := router.routes[workDir]
-	if !ok {
-		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("no AGY route matched WorkDir %q", workDir)
-	}
-	if request.Command != agySharedCommand {
-		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY route %q received command %q", route.selector, request.Command)
-	}
-	if err := ctx.Err(); err != nil {
-		router.mu.Unlock()
-		return platformprocess.CommandResult{}, err
-	}
-	router.requests = append(router.requests, cloneAgyCommandRequest(request))
-	router.active++
-	router.mu.Unlock()
-	defer func() {
-		router.mu.Lock()
-		router.active--
-		router.mu.Unlock()
-	}()
-	return route.runner.Run(ctx, request)
-}
-
-func cloneAgyCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
-	request.Args = append([]string(nil), request.Args...)
-	request.Stdin = append([]byte(nil), request.Stdin...)
-	request.Env = append([]string(nil), request.Env...)
-	return request
-}
-
-func assertAgyRoutesRejectInvalidRegistrations(router *agySharedCommandRouter, rootDir, registeredWorkDir string) error {
-	if err := router.register("", filepath.Join(rootDir, "invalid"), testutil.NewProviderCommandRunner()); err == nil {
-		return fmt.Errorf("empty AGY selector was accepted")
-	}
-	if err := router.register("duplicate-workdir", registeredWorkDir, testutil.NewProviderCommandRunner()); err == nil {
-		return fmt.Errorf("duplicate AGY WorkDir was accepted")
-	}
-	if err := router.register(agySharedSuccessSelector, filepath.Join(rootDir, "duplicate-selector"), testutil.NewProviderCommandRunner()); err == nil {
-		return fmt.Errorf("duplicate AGY selector was accepted")
-	}
-	if got := router.routeCount(); got != 2 {
-		return fmt.Errorf("AGY route count after invalid registration = %d, want two", got)
-	}
-	unknown := filepath.Join(rootDir, "unknown-route")
-	_, err := router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: agySharedCommand,
-		WorkDir: unknown,
-		Stdin:   []byte("sensitive AGY input"),
-		Env:     []string{"AGY_SECRET=sensitive"},
-	})
-	if err == nil {
-		return fmt.Errorf("unknown AGY WorkDir was accepted")
-	}
-	if strings.Contains(err.Error(), "sensitive") {
-		return fmt.Errorf("unknown AGY route diagnostic leaked sensitive input")
-	}
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err = router.Run(canceled, platformprocess.CommandRequest{
-		Command: agySharedCommand, WorkDir: rootDir,
-	})
-	if err == nil {
-		return fmt.Errorf("canceled AGY command was accepted")
 	}
 	return nil
 }
