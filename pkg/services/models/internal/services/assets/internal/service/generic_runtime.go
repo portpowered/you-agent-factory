@@ -458,10 +458,13 @@ func (s *service) resolveGenericRuntimeCache(
 		files = append(files, filepath.Join(inspection.CachePath, filepath.FromSlash(artifact.Name)))
 	}
 	return assets.RuntimeCacheLayout{
-		ModelName: canonicalModelName(modelName),
-		CachePath: inspection.CachePath,
-		Revision:  inspection.Revision,
-		Files:     files,
+		ModelName:        canonicalModelName(modelName),
+		CachePath:        inspection.CachePath,
+		Revision:         inspection.Revision,
+		Files:            files,
+		BackendCachePath: inspection.BackendCachePath,
+		BackendRevision:  inspection.BackendRevision,
+		BackendFiles:     append([]string(nil), inspection.BackendFiles...),
 	}, nil
 }
 
@@ -476,6 +479,7 @@ func mergeGenericRuntimeBackendFacts(
 	inspection.BackendCachePath = prepared.BackendCachePath
 	inspection.BackendRevision = prepared.BackendRevision
 	inspection.BackendInstalledFiles = prepared.BackendInstalledFiles
+	inspection.BackendFiles = append([]string(nil), prepared.BackendFiles...)
 	return inspection
 }
 

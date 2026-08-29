@@ -86,4 +86,5 @@ type RuntimeCacheInspection struct {
 	BackendCachePath      string
 	BackendRevision       string
 	BackendInstalledFiles int
+	BackendFiles          []string
 }

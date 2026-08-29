@@ -703,6 +703,21 @@ func assertGeneratedClientBinaryRequestRoundTrip(t *testing.T) {
 		Operation: &operation, Inputs: &inputs,
 	}
 
+	serverRequest := decodeGeneratedClientBinaryRequest(t, request)
+	assertGeneratedClientBinaryServerInputs(t, serverRequest, len(inputs), firstImage, secondImage)
+
+	mapped, err := GenericInvocationRequestFromGenerated(serverRequest)
+	if err != nil {
+		t.Fatalf("map generated client/server binary request: %v", err)
+	}
+	assertGeneratedClientBinaryMappedInputs(t, mapped, firstImage, secondImage)
+}
+
+func decodeGeneratedClientBinaryRequest(
+	t *testing.T,
+	request generatedclient.GenericModelInvocationRequest,
+) factoryapi.GenericModelInvocationRequest {
+	t.Helper()
 	encoded, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal generated client binary request: %v", err)
@@ -711,28 +726,63 @@ func assertGeneratedClientBinaryRequestRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(encoded, &serverRequest); err != nil {
 		t.Fatalf("decode generated client request with server contract: %v", err)
 	}
-	if serverRequest.Inputs == nil || len(*serverRequest.Inputs) != len(inputs) {
-		t.Fatalf("server contract inputs = %#v, want ordered prompt and two images", serverRequest.Inputs)
+	return serverRequest
+}
+
+func assertGeneratedClientBinaryServerInputs(
+	t *testing.T,
+	request factoryapi.GenericModelInvocationRequest,
+	wantCount int,
+	firstImage, secondImage []byte,
+) {
+	t.Helper()
+	if request.Inputs == nil {
+		t.Fatalf("server contract inputs are nil, want ordered prompt and two images")
 	}
-	serverInputs := *serverRequest.Inputs
+	serverInputs := *request.Inputs
+	if len(serverInputs) != wantCount {
+		t.Fatalf("server contract input count = %d, want %d", len(serverInputs), wantCount)
+	}
 	if serverInputs[0].Name != "prompt" || serverInputs[1].Name != "image" || serverInputs[2].Name != "image" {
 		t.Fatalf("server contract input order = %#v, want prompt,image,image", serverInputs)
 	}
-	if serverInputs[1].MediaType == nil || *serverInputs[1].MediaType != "image/png" || serverInputs[2].MediaType == nil || *serverInputs[2].MediaType != "image/png" {
-		t.Fatalf("server contract media types = %#v, want image/png", serverInputs)
-	}
-	if serverInputs[1].ContentBase64 == nil || !bytes.Equal(*serverInputs[1].ContentBase64, firstImage) ||
-		serverInputs[2].ContentBase64 == nil || !bytes.Equal(*serverInputs[2].ContentBase64, secondImage) {
-		t.Fatalf("server contract binary values = %#v, want exact non-UTF-8 bytes", serverInputs)
-	}
+	assertGeneratedClientBinaryMediaType(t, serverInputs[1].MediaType, "image/png", 1)
+	assertGeneratedClientBinaryMediaType(t, serverInputs[2].MediaType, "image/png", 2)
+	assertGeneratedClientBinaryContent(t, serverInputs[1].ContentBase64, firstImage, 1)
+	assertGeneratedClientBinaryContent(t, serverInputs[2].ContentBase64, secondImage, 2)
+}
 
-	mapped, err := GenericInvocationRequestFromGenerated(serverRequest)
-	if err != nil {
-		t.Fatalf("map generated client/server binary request: %v", err)
+func assertGeneratedClientBinaryMediaType(t *testing.T, actual *string, want string, index int) {
+	t.Helper()
+	if actual == nil || *actual != want {
+		t.Fatalf("server contract media type %d = %v, want %q", index, actual, want)
 	}
-	if len(mapped.Inputs) != 3 || mapped.Inputs[0].Content != "compare images" ||
-		!bytes.Equal([]byte(mapped.Inputs[1].Content), firstImage) || !bytes.Equal([]byte(mapped.Inputs[2].Content), secondImage) {
-		t.Fatalf("mapped binary values = %#v, want exact ordered values", mapped.Inputs)
+}
+
+func assertGeneratedClientBinaryContent(t *testing.T, actual *[]byte, want []byte, index int) {
+	t.Helper()
+	if actual == nil || !bytes.Equal(*actual, want) {
+		t.Fatalf("server contract binary value %d = %#v, want exact non-UTF-8 bytes", index, actual)
+	}
+}
+
+func assertGeneratedClientBinaryMappedInputs(
+	t *testing.T,
+	request models.GenericInvocationRequest,
+	firstImage, secondImage []byte,
+) {
+	t.Helper()
+	if len(request.Inputs) != 3 {
+		t.Fatalf("mapped input count = %d, want 3", len(request.Inputs))
+	}
+	if request.Inputs[0].Content != "compare images" {
+		t.Fatalf("mapped prompt = %q, want compare images", request.Inputs[0].Content)
+	}
+	if !bytes.Equal([]byte(request.Inputs[1].Content), firstImage) {
+		t.Fatalf("mapped first binary value = %#v, want exact bytes", request.Inputs[1].Content)
+	}
+	if !bytes.Equal([]byte(request.Inputs[2].Content), secondImage) {
+		t.Fatalf("mapped second binary value = %#v, want exact bytes", request.Inputs[2].Content)
 	}
 }
 

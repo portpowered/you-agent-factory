@@ -10,6 +10,30 @@ package backend;
 
 message HealthMessage {}
 
+message ModelOptions {
+  string Model = 1;
+  int32 NBatch = 4;
+  string ModelFile = 21;
+}
+
+message Result {
+  string message = 1;
+  bool success = 2;
+}
+
+message ToolCallDelta {
+  int32 index = 1;
+  string id = 2;
+  string name = 3;
+  string arguments = 4;
+}
+
+message ChatDelta {
+  string content = 1;
+  string reasoning_content = 2;
+  repeated ToolCallDelta tool_calls = 3;
+}
+
 message PredictOptions {
   string Prompt = 1;
   repeated string Images = 42;
@@ -22,4 +46,5 @@ message Reply {
   bytes message = 1;
   int32 tokens = 2;
   int32 prompt_tokens = 3;
+  repeated ChatDelta chat_deltas = 8;
 }

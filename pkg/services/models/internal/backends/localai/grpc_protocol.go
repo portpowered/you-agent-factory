@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	localAIHealthMethod  = "/backend.Backend/Health"
-	localAIPredictMethod = "/backend.Backend/Predict"
+	localAIHealthMethod    = "/backend.Backend/Health"
+	localAILoadModelMethod = "/backend.Backend/LoadModel"
+	localAIPredictMethod   = "/backend.Backend/Predict"
+	localAIModelBatchSize  = 512
 )
 
 type invocationEndpointContextKey struct{}
@@ -97,11 +99,59 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 			"%w: LocalAI health request failed: %v", models.ErrHostProtocolIncompatible, err,
 		)
 	}
+	if strings.TrimSpace(request.ModelPath) != "" {
+		if err := loadModel(ctx, connection, request); err != nil {
+			return modelseffects.HostProtocolNegotiationResult{}, err
+		}
+	}
 	return modelseffects.HostProtocolNegotiationResult{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         request.Backend,
 		Ready:           true,
 	}, nil
+}
+
+func loadModel(
+	ctx context.Context,
+	connection platformgrpc.Connection,
+	request modelseffects.HostProtocolNegotiationRequest,
+) error {
+	payload, err := proto.Marshal(&ModelOptions{
+		Model:     request.ModelName,
+		NBatch:    localAIModelBatchSize,
+		ModelFile: strings.TrimSpace(request.ModelPath),
+	})
+	if err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI model load request could not be serialized: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	responsePayload, err := connection.Invoke(ctx, localAILoadModelMethod, payload)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return fmt.Errorf(
+			"%w: LocalAI model load request failed: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	response := &Result{}
+	if err := proto.Unmarshal(responsePayload, response); err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI model load response was malformed: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	if !response.Success {
+		message := strings.TrimSpace(response.Message)
+		if message == "" {
+			message = "LocalAI model load response was unsuccessful"
+		}
+		return fmt.Errorf("%w: %s", models.ErrHostProtocolIncompatible, message)
+	}
+	return nil
 }
 
 type grpcProtocolClient struct {
@@ -152,8 +202,18 @@ func (client grpcProtocolClient) Predict(
 	if err := proto.Unmarshal(responsePayload, response); err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict response was malformed", err)
 	}
+	text := string(response.Message)
+	if text == "" {
+		var builder strings.Builder
+		for _, delta := range response.GetChatDeltas() {
+			if delta != nil {
+				builder.WriteString(delta.GetContent())
+			}
+		}
+		text = builder.String()
+	}
 	return PredictResponse{
-		Text:  string(response.Message),
+		Text:  text,
 		Usage: usageJSON(response),
 	}, nil
 }

@@ -79,6 +79,26 @@ func TestPinnedGRPCProtocolClientPreservesBinaryMediaThroughBase64Fields(t *test
 	}
 }
 
+func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{ChatDeltas: []*ChatDelta{
+		{Content: "generated "}, {Content: "from chat deltas"},
+	}})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if response.Text != "generated from chat deltas" {
+		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
+	}
+}
+
 func TestPinnedGRPCHostProtocolNegotiatorUsesHealthRPC(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +117,34 @@ func TestPinnedGRPCHostProtocolNegotiatorUsesHealthRPC(t *testing.T) {
 	}
 	if connection.method != localAIHealthMethod || connection.closed != 1 {
 		t.Fatalf("health transport facts = method %q, closed %d, want Health and one close", connection.method, connection.closed)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-llamacpp",
+		ModelName:       "llm",
+		ModelPath:       `C:\models\llm\model.gguf`,
+	})
+	if err != nil {
+		t.Fatalf("Negotiate() error = %v", err)
+	}
+	if !result.Ready || connection.method != localAILoadModelMethod || connection.closed != 1 {
+		t.Fatalf("load transport facts = method %q, ready %t, closed %d, want LoadModel/ready/one close", connection.method, result.Ready, connection.closed)
+	}
+	if connection.loadRequest.GetModel() != "llm" ||
+		connection.loadRequest.GetModelFile() != `C:\models\llm\model.gguf` ||
+		connection.loadRequest.GetNBatch() != localAIModelBatchSize {
+		t.Fatalf(
+			"load request model=%q modelFile=%q nBatch=%d, want model name, nonzero batch size, and exact model path",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetNBatch(),
+		)
 	}
 }
 
@@ -135,10 +183,11 @@ func (dialer recordingGRPCDialer) Dial(context.Context, string) (platformgrpc.Co
 }
 
 type recordingGRPCConnection struct {
-	method   string
-	request  PredictOptions
-	response []byte
-	closed   int
+	method      string
+	request     PredictOptions
+	loadRequest ModelOptions
+	response    []byte
+	closed      int
 }
 
 func (connection *recordingGRPCConnection) Invoke(
@@ -149,6 +198,11 @@ func (connection *recordingGRPCConnection) Invoke(
 	connection.method = method
 	if method == localAIPredictMethod {
 		if err := proto.Unmarshal(payload, &connection.request); err != nil {
+			return nil, err
+		}
+	}
+	if method == localAILoadModelMethod {
+		if err := proto.Unmarshal(payload, &connection.loadRequest); err != nil {
 			return nil, err
 		}
 	}

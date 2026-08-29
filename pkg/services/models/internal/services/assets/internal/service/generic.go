@@ -162,6 +162,7 @@ func (s *service) prepareGenericAssets(
 		runtimeInspection.BackendCachePath = backendResult.snapshotPath
 		runtimeInspection.BackendRevision = plan.backendSource.revision
 		runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
+		runtimeInspection.BackendFiles = append([]string(nil), backendResult.paths...)
 		s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
 	}
 	return genericAssetResult(plan.source, modelResult, backendResult), nil

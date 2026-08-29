@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -55,19 +56,29 @@ func localWorkerForModel(
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
 ) (*models.RuntimeWorker, error) {
+	target := canonicalModelKey(modelName)
+	if runtimeCfg != nil {
+		for _, worker := range runtimeCfg.Workers {
+			if canonicalModelKey(worker.Model) != target {
+				continue
+			}
+			if strings.TrimSpace(worker.ModelLocality) != models.RuntimeModelLocalityLocal {
+				continue
+			}
+			copied := worker
+			return &copied, nil
+		}
+	}
+	if definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName); ok {
+		return &models.RuntimeWorker{
+			Name:          definition.Name,
+			Type:          models.RuntimeWorkerTypeInference,
+			Model:         definition.Name,
+			ModelLocality: models.RuntimeModelLocalityLocal,
+		}, nil
+	}
 	if runtimeCfg == nil {
 		return nil, fmt.Errorf("runtime config is not available")
-	}
-	target := canonicalModelKey(modelName)
-	for _, worker := range runtimeCfg.Workers {
-		if canonicalModelKey(worker.Model) != target {
-			continue
-		}
-		if strings.TrimSpace(worker.ModelLocality) != models.RuntimeModelLocalityLocal {
-			continue
-		}
-		copied := worker
-		return &copied, nil
 	}
 	return nil, fmt.Errorf("local model worker not found for %q", modelName)
 }
@@ -96,9 +107,17 @@ func supervisedIdentityForModel(
 	modelName string,
 ) supervisedIdentity {
 	identity := supervisedIdentity{Name: strings.TrimSpace(modelName)}
+	if definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName); ok {
+		identity.Backend = strings.TrimSpace(definition.Backend)
+		identity.LoadPolicy = string(definition.LoadPolicy)
+	}
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil {
-		identity.Backend = strings.TrimSpace(resource.Backend)
-		identity.LoadPolicy = strings.ToUpper(strings.TrimSpace(resource.LoadPolicy))
+		if backend := strings.TrimSpace(resource.Backend); backend != "" {
+			identity.Backend = backend
+		}
+		if loadPolicy := strings.ToUpper(strings.TrimSpace(resource.LoadPolicy)); loadPolicy != "" {
+			identity.LoadPolicy = loadPolicy
+		}
 	}
 	if overlay, ok := modelOverlay(overlays, modelName); ok {
 		if overlay.Backend != nil {
@@ -147,6 +166,8 @@ func cacheInspectionFromAssets(inspection scopedassets.RuntimeCacheInspection) c
 		BackendCachePath:      inspection.BackendCachePath,
 		BackendRevision:       inspection.BackendRevision,
 		BackendInstalledFiles: inspection.BackendInstalledFiles,
+		BackendFiles:          append([]string(nil), inspection.BackendFiles...),
+		ObservedArtifacts:     append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
 	}
 }
 
@@ -162,6 +183,8 @@ type cacheInspection struct {
 	BackendCachePath      string
 	BackendRevision       string
 	BackendInstalledFiles int
+	BackendFiles          []string
+	ObservedArtifacts     []models.AssetArtifact
 }
 
 func defaultServerStartBuilder(
@@ -222,10 +245,21 @@ func defaultGRPCServerStartBuilder(
 	}
 	command := strings.TrimSpace(worker.Command)
 	if command == "" {
-		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
-			"managed backend command is required for model %q",
-			identity.Name,
-		)
+		if !inspection.BackendRequired || len(inspection.BackendFiles) == 0 {
+			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
+				"%w: managed backend executable is not installed for model %q",
+				models.ErrHostMissingAssets, identity.Name,
+			)
+		}
+		modelPath, err := firstModelArtifactPath(inspection)
+		if err != nil {
+			return modelseffects.HostProcessStartSpec{}, err
+		}
+		return modelseffects.HostProcessStartSpec{
+			Backend:      identity.Backend,
+			ModelPath:    modelPath,
+			BackendFiles: append([]string(nil), inspection.BackendFiles...),
+		}, nil
 	}
 	endpoint, args, err := supervisedGRPCEndpointAndArgs(worker.Args)
 	if err != nil {
@@ -255,6 +289,27 @@ func defaultGRPCServerStartBuilder(
 		Args:           args,
 		HealthEndpoint: endpoint,
 	}, nil
+}
+
+func firstModelArtifactPath(inspection cacheInspection) (string, error) {
+	cachePath := strings.TrimSpace(inspection.CachePath)
+	if cachePath == "" {
+		return "", fmt.Errorf(
+			"%w: model cache path is required for supervised runtime",
+			models.ErrHostMissingAssets,
+		)
+	}
+	for _, artifact := range inspection.ObservedArtifacts {
+		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
+		if name == "" || name == "." || name == ".." || filepath.IsAbs(name) {
+			continue
+		}
+		return filepath.Join(cachePath, filepath.FromSlash(name)), nil
+	}
+	return "", fmt.Errorf(
+		"%w: model artifact is not installed for supervised runtime",
+		models.ErrHostMissingAssets,
+	)
 }
 
 func supervisedGRPCEndpointAndArgs(workerArgs []string) (string, []string, error) {

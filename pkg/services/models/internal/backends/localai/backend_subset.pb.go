@@ -57,6 +57,246 @@ func (*HealthMessage) Descriptor() ([]byte, []int) {
 	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{0}
 }
 
+type ModelOptions struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Model         string                 `protobuf:"bytes,1,opt,name=Model,proto3" json:"Model,omitempty"`
+	NBatch        int32                  `protobuf:"varint,4,opt,name=NBatch,proto3" json:"NBatch,omitempty"`
+	ModelFile     string                 `protobuf:"bytes,21,opt,name=ModelFile,proto3" json:"ModelFile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelOptions) Reset() {
+	*x = ModelOptions{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelOptions) ProtoMessage() {}
+
+func (x *ModelOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelOptions.ProtoReflect.Descriptor instead.
+func (*ModelOptions) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ModelOptions) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *ModelOptions) GetNBatch() int32 {
+	if x != nil {
+		return x.NBatch
+	}
+	return 0
+}
+
+func (x *ModelOptions) GetModelFile() string {
+	if x != nil {
+		return x.ModelFile
+	}
+	return ""
+}
+
+type Result struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Result) Reset() {
+	*x = Result{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Result) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Result) ProtoMessage() {}
+
+func (x *Result) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Result.ProtoReflect.Descriptor instead.
+func (*Result) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Result) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *Result) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type ToolCallDelta struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Arguments     string                 `protobuf:"bytes,4,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolCallDelta) Reset() {
+	*x = ToolCallDelta{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolCallDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolCallDelta) ProtoMessage() {}
+
+func (x *ToolCallDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolCallDelta.ProtoReflect.Descriptor instead.
+func (*ToolCallDelta) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ToolCallDelta) GetIndex() int32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *ToolCallDelta) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ToolCallDelta) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolCallDelta) GetArguments() string {
+	if x != nil {
+		return x.Arguments
+	}
+	return ""
+}
+
+type ChatDelta struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Content          string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	ReasoningContent string                 `protobuf:"bytes,2,opt,name=reasoning_content,json=reasoningContent,proto3" json:"reasoning_content,omitempty"`
+	ToolCalls        []*ToolCallDelta       `protobuf:"bytes,3,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ChatDelta) Reset() {
+	*x = ChatDelta{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatDelta) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatDelta) ProtoMessage() {}
+
+func (x *ChatDelta) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatDelta.ProtoReflect.Descriptor instead.
+func (*ChatDelta) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ChatDelta) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ChatDelta) GetReasoningContent() string {
+	if x != nil {
+		return x.ReasoningContent
+	}
+	return ""
+}
+
+func (x *ChatDelta) GetToolCalls() []*ToolCallDelta {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return nil
+}
+
 type PredictOptions struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prompt        string                 `protobuf:"bytes,1,opt,name=Prompt,proto3" json:"Prompt,omitempty"`
@@ -70,7 +310,7 @@ type PredictOptions struct {
 
 func (x *PredictOptions) Reset() {
 	*x = PredictOptions{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[1]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -82,7 +322,7 @@ func (x *PredictOptions) String() string {
 func (*PredictOptions) ProtoMessage() {}
 
 func (x *PredictOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[1]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -95,7 +335,7 @@ func (x *PredictOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PredictOptions.ProtoReflect.Descriptor instead.
 func (*PredictOptions) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{1}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PredictOptions) GetPrompt() string {
@@ -138,13 +378,14 @@ type Reply struct {
 	Message       []byte                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	Tokens        int32                  `protobuf:"varint,2,opt,name=tokens,proto3" json:"tokens,omitempty"`
 	PromptTokens  int32                  `protobuf:"varint,3,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	ChatDeltas    []*ChatDelta           `protobuf:"bytes,8,rep,name=chat_deltas,json=chatDeltas,proto3" json:"chat_deltas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Reply) Reset() {
 	*x = Reply{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[2]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -156,7 +397,7 @@ func (x *Reply) String() string {
 func (*Reply) ProtoMessage() {}
 
 func (x *Reply) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[2]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -169,7 +410,7 @@ func (x *Reply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reply.ProtoReflect.Descriptor instead.
 func (*Reply) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{2}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Reply) GetMessage() []byte {
@@ -193,12 +434,36 @@ func (x *Reply) GetPromptTokens() int32 {
 	return 0
 }
 
+func (x *Reply) GetChatDeltas() []*ChatDelta {
+	if x != nil {
+		return x.ChatDeltas
+	}
+	return nil
+}
+
 var File_pkg_services_models_internal_backends_localai_backend_subset_proto protoreflect.FileDescriptor
 
 const file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc = "" +
 	"\n" +
 	"Bpkg/services/models/internal/backends/localai/backend_subset.proto\x12\abackend\"\x0f\n" +
-	"\rHealthMessage\"\xf0\x01\n" +
+	"\rHealthMessage\"Z\n" +
+	"\fModelOptions\x12\x14\n" +
+	"\x05Model\x18\x01 \x01(\tR\x05Model\x12\x16\n" +
+	"\x06NBatch\x18\x04 \x01(\x05R\x06NBatch\x12\x1c\n" +
+	"\tModelFile\x18\x15 \x01(\tR\tModelFile\"<\n" +
+	"\x06Result\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\"g\n" +
+	"\rToolCallDelta\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1c\n" +
+	"\targuments\x18\x04 \x01(\tR\targuments\"\x89\x01\n" +
+	"\tChatDelta\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\x12+\n" +
+	"\x11reasoning_content\x18\x02 \x01(\tR\x10reasoningContent\x125\n" +
+	"\n" +
+	"tool_calls\x18\x03 \x03(\v2\x16.backend.ToolCallDeltaR\ttoolCalls\"\xf0\x01\n" +
 	"\x0ePredictOptions\x12\x16\n" +
 	"\x06Prompt\x18\x01 \x01(\tR\x06Prompt\x12\x16\n" +
 	"\x06Images\x18* \x03(\tR\x06Images\x12\x16\n" +
@@ -207,11 +472,13 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\bMetadata\x184 \x03(\v2%.backend.PredictOptions.MetadataEntryR\bMetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"^\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
 	"\x05Reply\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\fR\amessage\x12\x16\n" +
 	"\x06tokens\x18\x02 \x01(\x05R\x06tokens\x12#\n" +
-	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokensB[ZYgithub.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai;localaib\x06proto3"
+	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokens\x123\n" +
+	"\vchat_deltas\x18\b \x03(\v2\x12.backend.ChatDeltaR\n" +
+	"chatDeltasB[ZYgithub.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai;localaib\x06proto3"
 
 var (
 	file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescOnce sync.Once
@@ -225,20 +492,26 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_raw
 	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescData
 }
 
-var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_goTypes = []any{
 	(*HealthMessage)(nil),  // 0: backend.HealthMessage
-	(*PredictOptions)(nil), // 1: backend.PredictOptions
-	(*Reply)(nil),          // 2: backend.Reply
-	nil,                    // 3: backend.PredictOptions.MetadataEntry
+	(*ModelOptions)(nil),   // 1: backend.ModelOptions
+	(*Result)(nil),         // 2: backend.Result
+	(*ToolCallDelta)(nil),  // 3: backend.ToolCallDelta
+	(*ChatDelta)(nil),      // 4: backend.ChatDelta
+	(*PredictOptions)(nil), // 5: backend.PredictOptions
+	(*Reply)(nil),          // 6: backend.Reply
+	nil,                    // 7: backend.PredictOptions.MetadataEntry
 }
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_depIdxs = []int32{
-	3, // 0: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: backend.ChatDelta.tool_calls:type_name -> backend.ToolCallDelta
+	7, // 1: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
+	4, // 2: backend.Reply.chat_deltas:type_name -> backend.ChatDelta
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pkg_services_models_internal_backends_localai_backend_subset_proto_init() }
@@ -252,7 +525,7 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_ini
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc), len(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
