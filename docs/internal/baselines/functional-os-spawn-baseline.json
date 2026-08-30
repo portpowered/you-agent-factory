@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "countUnit": "static-os-spawn-site",
+  "packages": [
+    {
+      "packagePath": "tests/functional/factory/packaged/fix",
+      "count": 2
+    },
+    {
+      "packagePath": "tests/functional/factory/packaged/full_flow",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/factory/packaged/tts",
+      "count": 2
+    },
+    {
+      "packagePath": "tests/functional/models/root_composition",
+      "count": 6
+    },
+    {
+      "packagePath": "tests/functional/observability/coverage",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/observability/verification",
+      "count": 4
+    },
+    {
+      "packagePath": "tests/functional/provider_sessions/cli",
+      "count": 5
+    },
+    {
+      "packagePath": "tests/functional/providers",
+      "count": 2
+    },
+    {
+      "packagePath": "tests/functional/providers/acp",
+      "count": 13
+    },
+    {
+      "packagePath": "tests/functional/providers/codex",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/recordings/process",
+      "count": 7
+    },
+    {
+      "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
+      "count": 4
+    },
+    {
+      "packagePath": "tests/functional/sessions/restart",
+      "count": 3
+    },
+    {
+      "packagePath": "tests/functional/sessions/resume_from_recording",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/transport/acp/realclient",
+      "count": 5
+    },
+    {
+      "packagePath": "tests/functional/workers/agent",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/workers/concurrency",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/workers/inference",
+      "count": 2
+    },
+    {
+      "packagePath": "tests/functional/workers/inference/claude",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/workers/inference/codex",
+      "count": 2
+    },
+    {
+      "packagePath": "tests/functional/workers/invoke_continue",
+      "count": 1
+    },
+    {
+      "packagePath": "tests/functional/workers/mock",
+      "count": 3
+    },
+    {
+      "packagePath": "tests/functional/workers/transports/cli/run/lifecycle",
+      "count": 1
+    }
+  ]
+}
