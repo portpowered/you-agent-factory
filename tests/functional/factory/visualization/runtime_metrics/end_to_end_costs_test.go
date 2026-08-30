@@ -110,13 +110,12 @@ func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
 // row is valued from the built-in cached rate, a complete operator replacement,
 // an omitted cached rate, and an explicit zero without another provider call.
 func TestRuntimeCostsCachedInputConfigurationMatrix(t *testing.T) {
-	functionalevidence.Covers(t, "cli/you.metrics.costs")
 	factoryDir := support.ScaffoldSingleStepFactory(t, "cached-input-pricing-functional")
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig("codex", endToEndPricedModel))
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte(`{"title":"cached cost rollup"}`))
 	providerRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: support.CodexSuccessStdoutWithUsageAndCachedInput(
-			"cached COMPLETE", cachedPricingInput, cachedPricingCached, cachedPricingOutput,
+		Stdout: support.CodexSuccessStdoutWithUsage(
+			"cached COMPLETE", cachedPricingInput, cachedPricingOutput, cachedPricingCached,
 		),
 	})
 

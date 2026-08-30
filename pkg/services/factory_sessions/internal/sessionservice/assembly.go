@@ -491,61 +491,11 @@ func (a *Assembly) Complete(
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
 }
 
-type completionSessionIdentity struct {
-	id        string
-	isDefault bool
-	target    factorysessions.TargetRef
-	runtimeID string
-}
-
-func selectCompletionSessionIdentity(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) completionSessionIdentity {
-	sessionID := strings.TrimSpace(factorySessionID)
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
-	isDefault := sessionID == factorysessions.DefaultSessionID
-	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
-	if isDefault {
-		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
-	}
-	runtimeID := ""
-	if isDefault {
-		metricsSessionID := strings.TrimSpace(startupSpec.MetricsSessionID)
-		if metricsSessionID != "" && metricsSessionID != factorysessions.DefaultSessionID {
-			runtimeID = metricsSessionID
-		} else if livesession.IsUUIDID(startupSpec.SessionID) {
-			runtimeID = strings.TrimSpace(startupSpec.SessionID)
-		}
-	}
-	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
-}
-
 func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) string {
 	if sourceID := strings.TrimSpace(startupSpec.ResumeSourceCanonicalSessionID); sourceID != "" {
 		return sourceID
 	}
 	return strings.TrimSpace(factorySessionID)
-}
-
-func retainedRuntimeMetricsSessionIDs(currentID, sourceID string) []string {
-	retained := make([]string, 0, 2)
-	for _, candidate := range []string{currentID, sourceID} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		seen := false
-		for _, existing := range retained {
-			if existing == candidate {
-				seen = true
-				break
-			}
-		}
-		if !seen {
-			retained = append(retained, candidate)
-		}
-	}
-	return retained
 }
 
 type definitionHost struct {

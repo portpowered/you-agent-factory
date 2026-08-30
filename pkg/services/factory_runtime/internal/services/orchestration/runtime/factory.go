@@ -434,66 +434,6 @@ func recordSessionStartedFromFactoryConfig(cfg *runtimeConfig, eventHistory reco
 	)
 }
 
-func recordSessionLifecycleCompletionFromFactory(
-	f *factoryImpl,
-	tick int,
-	factoryState interfaces.FactoryState,
-	reason string,
-	eventTime time.Time,
-) error {
-	if f == nil || f.eventHistory == nil || f.cfg == nil {
-		return nil
-	}
-	f.completionMu.Lock()
-	defer f.completionMu.Unlock()
-	sessionID := sessionIDFromFactoryConfig(f.cfg)
-	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
-	if phaser, ok := f.eventHistory.(recordings.SessionLifecycleCompletionPhaser); ok {
-		if !f.completionResultRecorded {
-			phaser.RecordSessionLifecycleResultUpdated(
-				sessionID, factoryCfg, tick, factoryState, reason, eventTime,
-			)
-			f.completionResultRecorded = true
-		}
-		if flush := f.completionDurabilityFlush(); flush != nil {
-			if err := flush(); err != nil {
-				return fmt.Errorf("flush Factory Session result before completion: %w", err)
-			}
-		}
-		if !f.completionEventRecorded {
-			phaser.RecordSessionLifecycleCompleted(
-				sessionID, factoryCfg, tick, factoryState, reason, eventTime,
-			)
-			f.completionEventRecorded = true
-		}
-		if flush := f.completionDurabilityFlush(); flush != nil {
-			if err := flush(); err != nil {
-				return fmt.Errorf("flush Factory Session completion: %w", err)
-			}
-		}
-		return nil
-	}
-	if !f.completionEventRecorded {
-		f.eventHistory.RecordSessionLifecycleCompletion(
-			sessionID, factoryCfg, tick, factoryState, reason, eventTime,
-		)
-		f.completionResultRecorded = true
-		f.completionEventRecorded = true
-	}
-	if flush := f.completionDurabilityFlush(); flush != nil {
-		if err := flush(); err != nil {
-			return fmt.Errorf("flush Factory Session completion: %w", err)
-		}
-	}
-	return nil
-}
-
-func publishDeferredSessionCompletion(eventHistory recordings.RuntimeLedger) {
-	if publisher, ok := eventHistory.(recordings.DeferredSessionCompletionPublisher); ok {
-		publisher.PublishDeferredSessionCompletion()
-	}
-}
-
 func (f *factoryImpl) recordSessionLifecyclePause() {
 	if f == nil || f.eventHistory == nil || f.cfg == nil {
 		return
@@ -582,28 +522,6 @@ func newFactoryImpl(
 		operatorMoveRequests:        make(map[string]appliedOperatorMove),
 		workerSessionControlResults: make(map[workerSessionControlKey]factory.WorkerSessionControlResult),
 	}
-}
-
-// SetCompletionDurabilityGate binds the Recordings flush that must complete
-// before a terminal source session is advertised. The gate is optional so
-// in-memory runtime callers retain the established lifecycle behavior.
-func (f *factoryImpl) SetCompletionDurabilityGate(flush func() error) {
-	if f == nil {
-		return
-	}
-	f.mu.Lock()
-	f.completionDurabilityGate = flush
-	f.mu.Unlock()
-}
-
-func (f *factoryImpl) completionDurabilityFlush() func() error {
-	if f == nil {
-		return nil
-	}
-	f.mu.RLock()
-	flush := f.completionDurabilityGate
-	f.mu.RUnlock()
-	return flush
 }
 
 // Run starts the factory. Blocks until ctx is cancelled or the engine
