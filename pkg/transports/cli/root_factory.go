@@ -481,7 +481,33 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 	if options.initializer == nil {
 		return false, fmt.Errorf("system initializer is required")
 	}
+	if deferBatchSystemInitialization(*cfg) {
+		return false, nil
+	}
 	return true, nil
+}
+
+// deferBatchSystemInitialization keeps the profile-selected packaged-Factory
+// bootstrap work out of the finite mock/no-record batch path. That path has no
+// system-bootstrap demand: its Factory and Work inputs are local, its worker
+// behavior is supplied by the selected mock configuration, and its recording
+// request explicitly disables durable recording. Server, recording/replay,
+// named/bootstrap, continuous, and real-worker invocations retain the normal
+// initialization boundary.
+func deferBatchSystemInitialization(cfg runcli.RunConfig) bool {
+	return strings.TrimSpace(cfg.WorkFile) != "" &&
+		!cfg.Continuously &&
+		cfg.MockWorkersEnabled &&
+		cfg.DisableDefaultRecording &&
+		strings.TrimSpace(cfg.RecordPath) == "" &&
+		strings.TrimSpace(cfg.ReplayPath) == "" &&
+		strings.TrimSpace(cfg.ResumePath) == "" &&
+		!cfg.WithServer &&
+		!cfg.WithSite &&
+		!cfg.ListenExplicit &&
+		cfg.Port <= 0 &&
+		!cfg.Bootstrap &&
+		strings.TrimSpace(cfg.NamedFactoryName) == ""
 }
 
 func inspectRunRecordingInput(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory) bool {

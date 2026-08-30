@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/spf13/cobra"
 )
 
 func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
@@ -83,6 +85,184 @@ func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty human startup diagnostics", stderr.String())
+	}
+}
+
+func TestPrepareRunSystemInitializationDefersOnlyProfileSelectedBatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		cfg          runcli.RunConfig
+		wantDeferred bool
+	}{
+		{
+			name: "finite mock no-record batch",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+			},
+			wantDeferred: true,
+		},
+		{
+			name: "explicit recording",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: false,
+				RecordPath:              "recording.jsonl",
+			},
+		},
+		{
+			name: "replay",
+			cfg: runcli.RunConfig{
+				WorkFile:           "one-work.json",
+				MockWorkersEnabled: true,
+				ReplayPath:         "recording.jsonl",
+			},
+		},
+		{
+			name: "server",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+				WithServer:              true,
+			},
+		},
+		{
+			name: "continuous",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+				Continuously:            true,
+			},
+		},
+		{
+			name: "real workers",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				DisableDefaultRecording: true,
+			},
+		},
+		{
+			name: "bootstrap",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+				Bootstrap:               true,
+			},
+		},
+		{
+			name: "named Factory",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+				NamedFactoryName:        "@you/goal",
+			},
+		},
+		{
+			name: "listener",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+				ListenExplicit:          true,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "run"}
+			cmd.SetContext(context.Background())
+			options := CommandFactory{
+				initializer: startupcli.Functions{
+					InitializeSystemFunc: func(context.Context, string) error { return nil },
+				},
+			}
+			allowed, err := prepareRunSystemInitialization(cmd, &test.cfg, options)
+			if err != nil {
+				t.Fatalf("prepareRunSystemInitialization() error = %v", err)
+			}
+			if got := !allowed; got != test.wantDeferred {
+				t.Fatalf("deferred = %t, want %t", got, test.wantDeferred)
+			}
+		})
+	}
+}
+
+func TestDeferredBatchSystemInitializationDoesNotInvokeInitializer(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	options := CommandFactory{
+		initializer: startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error {
+				calls++
+				return nil
+			},
+		},
+	}
+	cfg := runcli.RunConfig{
+		WorkFile:                "one-work.json",
+		MockWorkersEnabled:      true,
+		DisableDefaultRecording: true,
+	}
+	if err := prepareRunFactoryStartup(cmd, &cfg, options, false); err != nil {
+		t.Fatalf("prepareRunFactoryStartup() error = %v", err)
+	}
+	if cfg.StartupPreparation == nil {
+		t.Fatal("StartupPreparation is nil")
+	}
+	if err := cfg.StartupPreparation(context.Background(), false, nil); err != nil {
+		t.Fatalf("deferred StartupPreparation() error = %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("InitializeSystem calls = %d, want 0 for deferred batch", calls)
+	}
+}
+
+func TestDemandedBatchSystemInitializationPreservesFailure(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("controlled hosted system initialization failure")
+	calls := 0
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	options := CommandFactory{
+		initializer: startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error {
+				calls++
+				return wantErr
+			},
+		},
+	}
+	cfg := runcli.RunConfig{
+		WorkFile:                "one-work.json",
+		MockWorkersEnabled:      true,
+		DisableDefaultRecording: true,
+		WithServer:              true,
+	}
+	if err := prepareRunFactoryStartup(cmd, &cfg, options, false); err != nil {
+		t.Fatalf("prepareRunFactoryStartup() error = %v", err)
+	}
+	if cfg.StartupPreparation == nil {
+		t.Fatal("StartupPreparation is nil")
+	}
+	err := cfg.StartupPreparation(context.Background(), false, nil)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("demanded StartupPreparation() error = %v, want sentinel %v", err, wantErr)
+	}
+	if calls != 1 {
+		t.Fatalf("InitializeSystem calls = %d, want one demanded initialization", calls)
 	}
 }
 
