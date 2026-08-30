@@ -494,6 +494,20 @@ func (fixture *agyProcessFixture) runScenario(
 	run.stream = stream
 	fixture.recordStreamOpened()
 
+	wantFactoryEvents := 11
+	if scenario.selector == agySharedTimeoutSelector {
+		wantFactoryEvents = 23
+	}
+	factoryEventObservation := newAgySharedFactoryEventObservation(
+		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	)
+	t.Cleanup(func() {
+		result := factoryEventObservation.stop()
+		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
+			t.Errorf("AGY %q Factory Event observation cleanup: %v", scenario.selector, result.err)
+		}
+	})
+
 	routeRequestStart := fixture.router.routeCallCount(scenario.selector)
 	name := workTitle
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, session.Id, factoryapi.SubmitWorkRequest{
@@ -508,19 +522,19 @@ func (fixture *agyProcessFixture) runScenario(
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	wantFactoryEvents := 11
-	if scenario.selector == agySharedTimeoutSelector {
-		wantFactoryEvents = 23
+	factoryEventResult := factoryEventObservation.finish()
+	if factoryEventResult.err != nil {
+		t.Fatalf("AGY %q Factory Event observation: %v", scenario.selector, factoryEventResult.err)
 	}
-	factoryEvents, listed, err := readAgyTerminalObservations(
-		context.Background(), fixture.baseURL, session.Id, scenario.selector, wantFactoryEvents, agySharedScenarioTimeout,
+	listed, err := readAgyTerminalWork(
+		context.Background(), fixture.baseURL, session.Id, scenario.selector, agySharedScenarioTimeout,
 	)
 	if err != nil {
-		t.Fatalf("AGY %q terminal observations: %v", scenario.selector, err)
+		t.Fatalf("AGY %q terminal Work observation: %v", scenario.selector, err)
 	}
 	// Deletion followed by normal EOF proves no frame was hidden.
 	assertAgyResponseEventStreamClosed(t, run, agySharedScenarioTimeout, scenario.selector, len(responseEvents))
-	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
+	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEventResult.events, responseEvents)
 	routeCalls := fixture.assertRouteRequests(t, scenario, routeRequestStart)
 
 	run.close(t)
@@ -528,137 +542,10 @@ func (fixture *agyProcessFixture) runScenario(
 		Session:        session,
 		Submitted:      submitted,
 		Listed:         listed,
-		FactoryEvents:  factoryEvents,
+		FactoryEvents:  factoryEventResult.events,
 		ResponseEvents: responseEvents,
 		RouteCalls:     routeCalls,
 	}
-}
-
-type agySharedScenarioRun struct {
-	fixture   *agyProcessFixture
-	sessionID string
-	stream    *support.FactoryResponseEventStream
-
-	closeOnce sync.Once
-	closeErr  error
-
-	sessionOnce     sync.Once
-	sessionCloseErr error
-	streamOnce      sync.Once
-	streamState     sync.Mutex
-	streamReadErr   error
-	streamCloseErr  error
-}
-
-func (run *agySharedScenarioRun) close(t testing.TB) {
-	t.Helper()
-	if run == nil {
-		return
-	}
-	if err := run.closeResources(); err != nil {
-		t.Errorf("AGY scenario cleanup: %v", err)
-	}
-}
-
-func (run *agySharedScenarioRun) closeResources() error {
-	if run == nil {
-		return nil
-	}
-	run.closeOnce.Do(func() {
-		run.closeErr = run.closeResourcesOnce()
-	})
-	return run.closeErr
-}
-
-func (run *agySharedScenarioRun) closeResourcesOnce() error {
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
-	defer cancel()
-	var errs []error
-	if err := run.closeSession(cleanupCtx); err != nil {
-		errs = append(errs, err)
-	}
-	if err := run.closeStream(); err != nil {
-		errs = append(errs, fmt.Errorf("close response stream for session %q: %w", run.sessionID, err))
-	}
-	if err := run.observedStreamError(); err != nil {
-		errs = append(errs, fmt.Errorf("read response stream for session %q: %w", run.sessionID, err))
-	}
-	if strings.TrimSpace(run.sessionID) == "" {
-		run.fixture.forgetRun(run.sessionID)
-	}
-	return errors.Join(errs...)
-}
-
-func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
-	return run.closeSessionWith(ctx, closeAgyFactorySession)
-}
-
-func (run *agySharedScenarioRun) closeSessionKnownActive(ctx context.Context) error {
-	return run.closeSessionWith(ctx, closeAgyActiveFactorySession)
-}
-
-func (run *agySharedScenarioRun) closeSessionWith(
-	ctx context.Context,
-	closeSession func(context.Context, string, string) error,
-) error {
-	if run == nil || strings.TrimSpace(run.sessionID) == "" {
-		return nil
-	}
-	run.sessionOnce.Do(func() {
-		var errs []error
-		if err := closeSession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
-			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
-		} else {
-			// A successful public DELETE (or an idempotent 404) is the deletion
-			// witness. The following stream EOF check proves the session-owned
-			// response stream was released without another serialized request.
-			run.fixture.recordSessionDeleted(run.sessionID)
-			run.fixture.forgetRun(run.sessionID)
-		}
-		run.sessionCloseErr = errors.Join(errs...)
-	})
-	return run.sessionCloseErr
-}
-
-func (run *agySharedScenarioRun) closeStream() error {
-	if run == nil || run.stream == nil {
-		return nil
-	}
-	run.streamOnce.Do(func() {
-		run.stream.Close()
-		result := run.stream.TryNextFrameResult(time.Nanosecond)
-		run.fixture.recordStreamClosed()
-		switch result.Outcome {
-		case support.FactoryResponseEventStreamOutcomeEOF,
-			support.FactoryResponseEventStreamOutcomeCanceled:
-			return
-		case support.FactoryResponseEventStreamOutcomeReadError:
-			run.streamCloseErr = result.Err
-		default:
-			run.streamCloseErr = fmt.Errorf("response stream close outcome = %q", result.Outcome)
-		}
-	})
-	return run.streamCloseErr
-}
-
-func (run *agySharedScenarioRun) recordStreamReadResult(result support.FactoryResponseEventStreamWaitResult) {
-	if run == nil || result.Err == nil {
-		return
-	}
-	run.streamState.Lock()
-	defer run.streamState.Unlock()
-	if run.streamReadErr == nil {
-		run.streamReadErr = result.Err
-	}
-}
-
-func (run *agySharedScenarioRun) observedStreamError() error {
-	if run == nil {
-		return nil
-	}
-	run.streamState.Lock()
-	defer run.streamState.Unlock()
-	return run.streamReadErr
 }
 
 func (fixture *agyProcessFixture) recordRun(run *agySharedScenarioRun) {

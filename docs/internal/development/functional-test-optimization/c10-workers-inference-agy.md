@@ -559,6 +559,25 @@ repeat passed (`4.766s`), and the race package passed (`5.568s`). These local
 timings are diagnostic only; a fresh hosted Backend Functional Coverage result
 is required before the review-owned timing criterion can be dispositioned.
 
+The latest bounded package-local pass starts that same retained-plus-live
+Factory Event observer immediately after the response stream handshake and
+before Work submission. The exact Factory Event count remains the publication
+barrier; the customer-facing Work projection is read only after that barrier,
+so the pre-barrier Work read and its usual stale-projection refresh are
+coalesced into one terminal read, with the existing bounded refresh retained
+for genuine projection lag. Exact 11/23 Factory Event order, Work, provider,
+response EOF/no-extra-frame, session cleanup, immutable routing, and zero-remote
+witnesses remain asserted. The exact package passed once (`4.625s` after the
+short-suite host run), the focused success/timeout `-count=3` repeat passed
+(`5.485s`), backend-size plus formatting passed, and a fresh race package run
+passed (`4.426s`). A post-sync exact package run remains part of final
+delivery. Local timings are
+diagnostic only; fresh hosted Backend Functional Coverage remains the
+review-owned AC6 verdict. The short `make test` run recorded one unrelated
+baseline-regeneration `TASK-002` failure caused by its clean-worktree fixture
+observing this in-progress diff and generated `.cache/` artifacts; no
+unrelated source was changed.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:

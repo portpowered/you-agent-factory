@@ -83,13 +83,14 @@ func decodeAgyFactoryEventLine(line []byte) (factoryapi.FactoryEvent, bool, erro
 	return event, true, nil
 }
 
-// readAgyFactoryEventsAfterResponse keeps one retained-then-live public SSE
+// readAgyFactoryEventsUntil keeps one retained-then-live public SSE
 // subscription open until the exact terminal ledger is available. The
 // retained-count header still rejects an overfull ledger, while a short
 // retained history waits on the same response for newly published events.
-// Reusing that first response avoids a duplicate SSE handshake on a
-// publication race without changing the event-count/order barrier.
-func readAgyFactoryEventsAfterResponse(
+// Starting this observer before Work submission overlaps its one SSE
+// handshake with the provider flow without changing the event-count/order
+// barrier.
+func readAgyFactoryEventsUntil(
 	ctx context.Context,
 	baseURL string,
 	sessionID string,
@@ -148,68 +149,96 @@ func readAgyFactoryEventsAfterResponse(
 	return events, nil
 }
 
-// readAgyTerminalObservations overlaps the independent public ledger and Work
-// projections after the response stream has delivered its expected terminal
-// frames. The Factory Event count remains the publication barrier; if the
-// concurrently-read Work listing is still pre-terminal, one bounded refresh
-// preserves the final-state witness without serializing the common path.
-func readAgyTerminalObservations(
+type agySharedFactoryEventObservationResult struct {
+	events []factoryapi.FactoryEvent
+	err    error
+}
+
+// agySharedFactoryEventObservation starts the public Factory Event observer
+// ahead of Work submission. This removes the pre-barrier Work read from the
+// common path: after the exact event barrier, one Work read is sufficient in
+// the usual case and the existing bounded refresh remains available for an
+// independently lagging projection.
+type agySharedFactoryEventObservation struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	result agySharedFactoryEventObservationResult
+}
+
+func newAgySharedFactoryEventObservation(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	want int,
+	timeout time.Duration,
+) *agySharedFactoryEventObservation {
+	observeContext, cancel := context.WithCancel(ctx)
+	observation := &agySharedFactoryEventObservation{
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
+	go func() {
+		defer close(observation.done)
+		observation.result.events, observation.result.err = readAgyFactoryEventsUntil(
+			observeContext, baseURL, sessionID, want, timeout,
+		)
+	}()
+	return observation
+}
+
+func (observation *agySharedFactoryEventObservation) finish() agySharedFactoryEventObservationResult {
+	if observation == nil {
+		return agySharedFactoryEventObservationResult{err: errors.New("nil AGY Factory Event observation")}
+	}
+	<-observation.done
+	return observation.result
+}
+
+func (observation *agySharedFactoryEventObservation) stop() agySharedFactoryEventObservationResult {
+	if observation == nil {
+		return agySharedFactoryEventObservationResult{}
+	}
+	observation.cancel()
+	return observation.finish()
+}
+
+// readAgyTerminalWork reads the customer-facing Work projection after the
+// Factory Event count has become the exact publication barrier. If the
+// independently derived projection is still pre-terminal, one bounded refresh
+// preserves the final-state witness without issuing an early redundant read.
+func readAgyTerminalWork(
 	ctx context.Context,
 	baseURL string,
 	sessionID string,
 	selector string,
-	wantFactoryEvents int,
 	timeout time.Duration,
-) ([]factoryapi.FactoryEvent, factoryapi.ListWorkResponse, error) {
-	type factoryEventResult struct {
-		events []factoryapi.FactoryEvent
-		err    error
-	}
-	type workResult struct {
-		listed factoryapi.ListWorkResponse
-		err    error
-	}
+) (factoryapi.ListWorkResponse, error) {
 	observeContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	factoryEventsCh := make(chan factoryEventResult, 1)
-	workCh := make(chan workResult, 1)
-	go func() {
-		events, err := readAgyFactoryEventsAfterResponse(
-			observeContext, baseURL, sessionID, wantFactoryEvents, timeout,
-		)
-		factoryEventsCh <- factoryEventResult{events: events, err: err}
-	}()
-	go func() {
-		listed, err := readAgySessionWork(observeContext, baseURL, sessionID)
-		workCh <- workResult{listed: listed, err: err}
-	}()
-	factoryEventsResult := <-factoryEventsCh
-	workObservation := <-workCh
-	if factoryEventsResult.err != nil || workObservation.err != nil {
-		return factoryEventsResult.events, workObservation.listed, errors.Join(
-			factoryEventsResult.err,
-			workObservation.err,
-		)
+	workObservation, err := readAgySessionWork(observeContext, baseURL, sessionID)
+	if err != nil {
+		return workObservation, err
 	}
 	terminalState := "task:done"
 	if selector == agySharedTimeoutSelector {
 		terminalState = "task:failed"
 	}
-	if support.CountWorkAtCustomerState(workObservation.listed, terminalState) != 1 {
+	if support.CountWorkAtCustomerState(workObservation, terminalState) != 1 {
 		refreshed, err := waitForAgyTerminalWork(
 			observeContext,
 			baseURL,
 			sessionID,
 			terminalState,
-			workObservation.listed,
+			workObservation,
 			timeout,
 		)
 		if err != nil {
-			return factoryEventsResult.events, refreshed, err
+			return refreshed, err
 		}
-		workObservation.listed = refreshed
+		workObservation = refreshed
 	}
-	return factoryEventsResult.events, workObservation.listed, nil
+	return workObservation, nil
 }
 
 func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
