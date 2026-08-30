@@ -129,6 +129,7 @@ func TestQueryInvalidCachedInputMeasurementsRemainUnpriced(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("invalid cached-input line for %q not found in %#v", want.work, report.LineItems)
+		}
 	}
 }
 
