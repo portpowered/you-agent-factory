@@ -59,7 +59,7 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 		t.Fatalf("source Work submission = %#v, want one accepted Work identity", submitted)
 	}
 	sourceRunner.waitForStart(t)
-	sourceRunner.releaseAfter(t, 25*time.Millisecond)
+	sourceRunner.release(t)
 	support.WaitForSessionTerminalStatus(t, source.URL(), factorysessions.DefaultSessionID, 15*time.Second)
 
 	sourceSession := support.GetDefaultSession(t, source.URL())
@@ -258,11 +258,8 @@ func (runner *metricsLineageCommandRunner) waitForStart(t testing.TB) {
 	}
 }
 
-func (runner *metricsLineageCommandRunner) releaseAfter(t testing.TB, delay time.Duration) {
+func (runner *metricsLineageCommandRunner) release(t testing.TB) {
 	t.Helper()
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	<-timer.C
 	runner.releaseOnce.Do(func() { close(runner.release) })
 }
 
