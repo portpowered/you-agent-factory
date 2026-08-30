@@ -504,7 +504,6 @@ func (fixture *agyProcessFixture) runScenario(
 	if err != nil {
 		t.Fatalf("AGY %q terminal observations: %v", scenario.selector, err)
 	}
-	run.terminalObserved = true
 	// Deletion followed by normal EOF proves no frame was hidden.
 	assertAgyResponseEventStreamClosed(t, run, agySharedScenarioTimeout, scenario.selector, len(responseEvents))
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
@@ -529,13 +528,12 @@ type agySharedScenarioRun struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	sessionOnce      sync.Once
-	sessionCloseErr  error
-	terminalObserved bool
-	streamOnce       sync.Once
-	streamState      sync.Mutex
-	streamReadErr    error
-	streamCloseErr   error
+	sessionOnce     sync.Once
+	sessionCloseErr error
+	streamOnce      sync.Once
+	streamState     sync.Mutex
+	streamReadErr   error
+	streamCloseErr  error
 }
 
 func (run *agySharedScenarioRun) close(t testing.TB) {
@@ -583,7 +581,7 @@ func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
 	}
 	run.sessionOnce.Do(func() {
 		var errs []error
-		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID, run.terminalObserved); err != nil {
+		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
 			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
 		} else {
 			// A successful public DELETE (or an idempotent 404) is the deletion
@@ -922,7 +920,7 @@ func (fixture *agyProcessFixture) closeUnclosedSessions(ctx context.Context) err
 			}
 			continue
 		}
-		if err := closeAgyFactorySession(ctx, fixture.baseURL, id, false); err != nil {
+		if err := closeAgyFactorySession(ctx, fixture.baseURL, id); err != nil {
 			errs = append(errs, fmt.Errorf("close unclosed session %q: %w", id, err))
 			continue
 		}

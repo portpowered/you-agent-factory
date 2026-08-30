@@ -438,30 +438,16 @@ func readAgyJSON[T any](ctx context.Context, endpoint string) (T, error) {
 
 // closeAgyFactorySession first attempts the cheap public DELETE path. An
 // active session still follows the public terminate/status/delete lifecycle,
-// so cleanup remains valid after assertion or setup failures.
-func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string, terminalObserved bool) error {
+// so cleanup remains valid after assertion or setup failures. The initial
+// DELETE result is reused for that decision; repeating a known conflict adds
+// no lifecycle evidence.
+func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
 	// http.Client{} uses http.DefaultTransport; keep its pool reusable across
 	// the scenario's lifecycle requests instead of evicting connections.
 	client := &http.Client{}
 	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	if terminalObserved {
-		// The exact terminal Factory Event count has been observed, so try the
-		// cheap public DELETE before sending a redundant terminate control
-		// request. A conflict still falls through to the active-session
-		// termination path below if the state changed between observations.
-		deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
-		if err != nil {
-			return err
-		}
-		if deleteStatus == http.StatusNoContent || deleteStatus == http.StatusNotFound {
-			return nil
-		}
-		if deleteStatus != http.StatusConflict {
-			return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
-		}
-	}
 	deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
 	if err != nil {
 		return err
