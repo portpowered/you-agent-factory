@@ -7,16 +7,20 @@ import (
 )
 
 const (
-	boardPersistenceRequestID        = "board-persistence-round-trip-request"
-	boardPersistenceNewRequestID     = "board-persistence-after-recovery-request"
-	boardPersistenceHelperEnv        = "YOU_BOARD_PERSISTENCE_HELPER"
-	boardPersistenceReleaseEnv       = "YOU_BOARD_PERSISTENCE_RELEASE"
-	boardPersistenceHelperEnvValue   = "1"
-	boardPersistenceWorkerSentinel   = "board-persistence-worker-result:PASS"
-	boardPersistenceInitialWorkID    = "board-persistence-init"
-	boardPersistenceProcessingWorkID = "board-persistence-processing"
-	boardPersistenceAwaitingWorkID   = "board-persistence-awaiting-ci"
-	boardPersistenceNewWorkID        = "board-persistence-new-work"
+	boardPersistenceRequestID                = "board-persistence-round-trip-request"
+	boardPersistenceNewRequestID             = "board-persistence-after-recovery-request"
+	boardPersistenceHelperEnv                = "YOU_BOARD_PERSISTENCE_HELPER"
+	boardPersistenceReleaseEnv               = "YOU_BOARD_PERSISTENCE_RELEASE"
+	boardPersistenceBuildFailureEnv          = "YOU_BOARD_PERSISTENCE_BUILD_FAILURE"
+	boardPersistenceBuildReportEnv           = "YOU_BOARD_PERSISTENCE_BUILD_REPORT"
+	boardPersistenceScenarioMarkerEnv        = "YOU_BOARD_PERSISTENCE_SCENARIO_MARKER"
+	boardPersistenceHelperEnvValue           = "1"
+	boardPersistenceBuildFailureAfterTempDir = "after-temp-dir"
+	boardPersistenceWorkerSentinel           = "board-persistence-worker-result:PASS"
+	boardPersistenceInitialWorkID            = "board-persistence-init"
+	boardPersistenceProcessingWorkID         = "board-persistence-processing"
+	boardPersistenceAwaitingWorkID           = "board-persistence-awaiting-ci"
+	boardPersistenceNewWorkID                = "board-persistence-new-work"
 )
 
 type boardPersistenceExpectedWork struct {

@@ -211,6 +211,11 @@ type boardPersistenceScenario struct {
 
 func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	t.Helper()
+	if markerPath := strings.TrimSpace(os.Getenv(boardPersistenceScenarioMarkerEnv)); markerPath != "" {
+		if err := os.WriteFile(markerPath, []byte("scenario started\n"), 0o600); err != nil {
+			t.Fatalf("record scenario start for setup-failure probe: %v", err)
+		}
+	}
 	binaryPath := buildBoardPersistenceBinary(t)
 	factoryDir := support.ScaffoldFactory(t, boardPersistenceFactoryConfig())
 	homeDir := t.TempDir()

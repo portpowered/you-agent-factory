@@ -2,6 +2,7 @@ package restart_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -37,6 +39,11 @@ type boardPersistenceDaemon struct {
 	mu         sync.Mutex
 	waitErr    error
 	stopped    bool
+}
+
+type boardPersistenceBuildFailureReport struct {
+	Directory string `json:"directory"`
+	Artifact  string `json:"artifact"`
 }
 
 // The checked-out you executable is immutable for the lifetime of one package
@@ -85,6 +92,32 @@ func buildBoardPersistenceBinary(t *testing.T) string {
 		}
 		boardPersistenceBinaryDir = dir
 		path := filepath.Join(dir, binaryName)
+		if os.Getenv(boardPersistenceBuildFailureEnv) == boardPersistenceBuildFailureAfterTempDir {
+			boardPersistenceBinaryOutput = []byte("injected shared-binary setup failure after temp-root allocation")
+			if err := os.WriteFile(path, []byte("partial shared binary artifact"), 0o600); err != nil {
+				boardPersistenceBinaryErr = fmt.Errorf("create partial shared binary artifact: %w", err)
+				return
+			}
+			reportPath := strings.TrimSpace(os.Getenv(boardPersistenceBuildReportEnv))
+			if reportPath == "" {
+				boardPersistenceBinaryErr = errors.New("shared-binary setup failure report path is empty")
+				return
+			}
+			report, marshalErr := json.Marshal(boardPersistenceBuildFailureReport{
+				Directory: dir,
+				Artifact:  path,
+			})
+			if marshalErr != nil {
+				boardPersistenceBinaryErr = fmt.Errorf("marshal shared-binary setup failure report: %w", marshalErr)
+				return
+			}
+			if err := os.WriteFile(reportPath, report, 0o600); err != nil {
+				boardPersistenceBinaryErr = fmt.Errorf("write shared-binary setup failure report: %w", err)
+				return
+			}
+			boardPersistenceBinaryErr = errors.New(string(boardPersistenceBinaryOutput))
+			return
+		}
 		build := exec.CommandContext(t.Context(), "go", "build", "-o", path, "./cmd/factory")
 		build.Dir = testutil.MustRepoRoot(t)
 		boardPersistenceBinaryOutput, err = build.CombinedOutput()
@@ -112,6 +145,66 @@ func buildBoardPersistenceBinary(t *testing.T) string {
 	}
 	t.Logf("reusing package-scoped you binary built once for this process: %q (builds=%d)", boardPersistenceBinaryPath, buildCount)
 	return boardPersistenceBinaryPath
+}
+
+// TestBoardPersistenceSharedBinaryPartialSetupFailure launches the same test
+// binary in a child process so TestMain can exercise package teardown after a
+// deterministic failure immediately following temporary-root allocation.
+// The child uses the normal setup helper, while the parent observes the real
+// nonzero process status and verifies that no scenario reached its fixture
+// boundary and both partial artifacts were removed.
+func TestBoardPersistenceSharedBinaryPartialSetupFailure(t *testing.T) {
+	if os.Getenv(boardPersistenceBuildFailureEnv) == boardPersistenceBuildFailureAfterTempDir {
+		buildBoardPersistenceBinary(t)
+		t.Fatal("shared-binary setup unexpectedly succeeded")
+	}
+
+	testBinary, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve restart test binary: %v", err)
+	}
+	probeDir := t.TempDir()
+	reportPath := filepath.Join(probeDir, "shared-build-failure.json")
+	scenarioMarkerPath := filepath.Join(probeDir, "scenario-started")
+	command := exec.Command(testBinary, "-test.run=^TestBoardPersistenceSharedBinaryPartialSetupFailure$", "-test.v", "-test.count=1")
+	command.Env = append(
+		os.Environ(),
+		boardPersistenceBuildFailureEnv+"="+boardPersistenceBuildFailureAfterTempDir,
+		boardPersistenceBuildReportEnv+"="+reportPath,
+		boardPersistenceScenarioMarkerEnv+"="+scenarioMarkerPath,
+	)
+	output, runErr := command.CombinedOutput()
+	if runErr == nil {
+		t.Fatalf("partial setup probe exited successfully; output:\n%s", output)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(runErr, &exitErr) || exitErr.ExitCode() == 0 {
+		t.Fatalf("partial setup probe error = %v, want nonzero child exit; output:\n%s", runErr, output)
+	}
+	if !strings.Contains(string(output), "injected shared-binary setup failure after temp-root allocation") {
+		t.Fatalf("partial setup probe output = %q, want injected failure diagnostic", output)
+	}
+
+	reportBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read partial setup report: %v\noutput:\n%s", err, output)
+	}
+	var report boardPersistenceBuildFailureReport
+	if err := json.Unmarshal(reportBytes, &report); err != nil {
+		t.Fatalf("decode partial setup report: %v", err)
+	}
+	if report.Directory == "" || report.Artifact == "" {
+		t.Fatalf("partial setup report = %#v, want allocated directory and artifact", report)
+	}
+	if _, err := os.Stat(report.Directory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial shared binary directory stat error = %v, want removed directory %q", err, report.Directory)
+	}
+	if _, err := os.Stat(report.Artifact); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial shared binary artifact stat error = %v, want removed artifact %q", err, report.Artifact)
+	}
+	if _, err := os.Stat(scenarioMarkerPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("scenario marker stat error = %v, want no scenario execution", err)
+	}
 }
 
 func startBoardPersistenceDaemon(
