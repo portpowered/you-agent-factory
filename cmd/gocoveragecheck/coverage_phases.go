@@ -15,6 +15,12 @@ type preparedCoverageRun struct {
 	expectedFunctionalInventory *functionalTestInventory
 }
 
+// Functional packages combine package-level workers with tests marked
+// t.Parallel. Keep the in-package worker count bounded while the lane-level
+// -p value remains caller-controlled; otherwise the two levels multiply into
+// an excessive number of instrumented functional runtimes on CI hosts.
+const functionalCoverageTestParallelism = 2
+
 func prepareCoverageRunWithFunctionalMetadata(
 	cfg config,
 	targetOS string,
@@ -79,6 +85,9 @@ func prepareCoverageRunWithFunctionalMetadata(
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
 		fmt.Sprintf("-p=%d", cfg.testJobs(targetOS, logicalCPUs)),
+	}
+	if cfg.suite == functionalCoverageSuite {
+		coverageTestArgs = append(coverageTestArgs, fmt.Sprintf("-parallel=%d", functionalCoverageTestParallelism))
 	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")
