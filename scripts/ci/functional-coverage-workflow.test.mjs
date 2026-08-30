@@ -20,12 +20,14 @@ function stepSection(job, marker, nextMarker) {
 	return job.slice(start, end >= 0 ? end : job.length);
 }
 
-test("functional coverage uses an isolated cache while unit setup-go remains unchanged", () => {
+test("functional coverage separates module and source-sensitive build caches", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const job = jobSection(workflow, "backend-coverage");
 	const unitSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'unit'", "      - uses: actions/setup-go@v5");
-	const functionalSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'functional'", "      - name: Restore functional coverage Go cache");
-	const functionalCache = stepSection(job, "      - name: Restore functional coverage Go cache", "      - uses: actions/setup-node@v4");
+	const functionalSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'functional'", "      - name: Select functional runner parallelism");
+	const functionalParallelism = stepSection(job, "      - name: Select functional runner parallelism", "      - name: Restore functional Go module cache");
+	const moduleCache = stepSection(job, "      - name: Restore functional Go module cache", "      - name: Restore functional coverage Go build cache");
+	const buildCache = stepSection(job, "      - name: Restore functional coverage Go build cache", "      - uses: actions/setup-node@v4");
 
 	assert.match(unitSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
 	assert.match(unitSetup, /cache: true/);
@@ -33,22 +35,76 @@ test("functional coverage uses an isolated cache while unit setup-go remains unc
 
 	assert.match(functionalSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
 	assert.match(functionalSetup, /cache: false/);
-	assert.match(functionalCache, /if: matrix\.suite == 'functional'/);
-	assert.match(functionalCache, /id: functional-go-cache/);
-	assert.match(functionalCache, /uses: actions\/cache@v4/);
-	assert.match(functionalCache, /~\/go\/pkg\/mod/);
-	assert.match(functionalCache, /~\/\.cache\/go-build/);
+	assert.match(functionalParallelism, /functional_jobs=12/);
+	assert.match(functionalParallelism, /jobs=\$functional_jobs/);
+
+	assert.match(moduleCache, /if: matrix\.suite == 'functional'/);
+	assert.match(moduleCache, /id: functional-go-module-cache/);
+	assert.match(moduleCache, /uses: actions\/cache@v4/);
+	assert.match(moduleCache, /path: ~\/go\/pkg\/mod/);
+	assert.doesNotMatch(moduleCache, /~\/\.cache\/go-build/);
 	assert.match(
-		functionalCache,
-		/key: functional-coverage-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
+		moduleCache,
+		/key: functional-modules-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
+	);
+
+	assert.match(buildCache, /if: matrix\.suite == 'functional'/);
+	assert.match(buildCache, /id: functional-go-build-cache/);
+	assert.match(buildCache, /uses: actions\/cache\/restore@v4/);
+	assert.match(buildCache, /path: ~\/\.cache\/go-build/);
+	assert.doesNotMatch(buildCache, /~\/go\/pkg\/mod/);
+	assert.match(
+		buildCache,
+		/key: functional-coverage-build-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-jobs-\$\{\{ steps\.functional-parallelism\.outputs\.jobs \}\}-\$\{\{ hashFiles\('\.github\/workflows\/ci\.yml', 'Makefile', 'go\.mod', 'go\.sum', 'cmd\/\*\*\/\*\.go', 'internal\/\*\*\/\*\.go', 'pkg\/\*\*\/\*\.go', 'tests\/functional\/\*\*\/\*\.go', 'tests\/functional\/functional-quarantine\.json', 'docs\/internal\/baselines\/go-functional-coverage-package-minimums\.json'\) \}\}/,
 	);
 	assert.ok(
-		functionalCache.includes(
-			"restore-keys: |\n            functional-coverage-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-\n",
+		buildCache.includes(
+			"restore-keys: |\n            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-${{ steps.functional-parallelism.outputs.jobs }}-\n",
 		),
-		"functional cache restore key must stay in the functional namespace",
+		"functional build cache restore key must retain jobs and the functional build namespace",
 	);
 	assert.equal((job.match(/uses: actions\/cache@v4/g) ?? []).length, 1);
+	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 1);
+	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 1);
+	assert.doesNotMatch(job, /functional-coverage-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/);
+});
+
+test("functional coverage forwards restore identity and saves only non-exact build restores", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const job = jobSection(workflow, "backend-coverage");
+	const supervisorMarker = "      - name: Run Linux functional coverage with concurrent quarantine verification";
+	const saveMarker = "      - name: Save functional coverage Go build cache";
+	const supervisor = stepSection(job, supervisorMarker, saveMarker);
+	const save = stepSection(job, saveMarker, "      - name: Upload Linux quarantine package evidence");
+
+	for (const [name, output] of [
+		["PRIMARY_KEY", "cache-primary-key"],
+		["MATCHED_KEY", "cache-matched-key"],
+		["EXACT_HIT", "cache-hit"],
+	]) {
+		assert.ok(
+			supervisor.includes(
+				"FUNCTIONAL_COVERAGE_ACTION_CACHE_" +
+					name +
+					": ${{ steps.functional-go-build-cache.outputs." +
+					output +
+					(name === "EXACT_HIT" ? " || 'false'" : "") +
+					" }}",
+			),
+			`${name} restore identity is not forwarded to the coverage step`,
+		);
+	}
+	assert.ok(
+		supervisor.includes(
+			"FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-go-build-cache.outputs.cache-hit || 'false' }}",
+		),
+		"a cache miss must reach diagnostics as an explicit false exact-hit value",
+	);
+
+	assert.match(save, /if: always\(\) && matrix\.suite == 'functional' && steps\.functional-go-build-cache\.outputs\.cache-hit != 'true'/);
+	assert.match(save, /uses: actions\/cache\/save@v4/);
+	assert.match(save, /path: ~\/\.cache\/go-build/);
+	assert.match(save, /key: \$\{\{ steps\.functional-go-build-cache\.outputs\.cache-primary-key \}\}/);
 });
 
 test("functional coverage joins quarantine after concurrent execution and publishes both status paths", () => {

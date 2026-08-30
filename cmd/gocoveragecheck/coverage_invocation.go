@@ -332,9 +332,9 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 }
 
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string, expectedFunctionalInventory *functionalTestInventory) error {
-	buildDiagnosticRun, probeErr := runCoverageBuildProbe(cfg, plan, testPackages)
-	if probeErr != nil {
-		return errors.Join(probeErr, plan.cleanup())
+	buildDiagnosticRun, diagnosticSetupErr := prepareCoverageBuildDiagnostic(cfg, &plan, testPackages)
+	if diagnosticSetupErr != nil {
+		return errors.Join(diagnosticSetupErr, plan.cleanup())
 	}
 
 	started := time.Now()
@@ -345,6 +345,8 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	var stdout strings.Builder
 	var stderr strings.Builder
 	var laneErr error
+	var coverageCommandErr error
+	var coverageBuildTrace strings.Builder
 	succeeded := make([]bool, len(plan.invocations))
 	testFailureObserved := false
 	failedTestCount := 0
@@ -352,8 +354,12 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	for index, invocation := range plan.invocations {
 		batchStdout, batchStderr, commandErr := runCommand(invocation)
 		commandErr = errors.Join(commandErr, flushFunctionalStreamWriter(invocation.stdoutWriter))
+		if buildDiagnosticRun != nil {
+			appendCoverageBuildTrace(&coverageBuildTrace, batchStdout, batchStderr)
+		}
 		appendCoverageOutput(&stdout, batchStdout)
 		appendCoverageOutput(&stderr, batchStderr)
+		coverageCommandErr = errors.Join(coverageCommandErr, commandErr)
 		if commandErr == nil {
 			succeeded[index] = true
 			continue
@@ -383,6 +389,8 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 			buildDiagnosticRun,
 			strings.TrimSpace(cfg.coverageBuildDiagnosticsOutput),
 			wallSeconds,
+			coverageBuildTrace.String(),
+			coverageCommandErr,
 		)
 	}
 
@@ -689,7 +697,7 @@ func configureCoverageInvocationObservation(plan *coverageInvocationPlan, observ
 // by line, so its buffer is returned unchanged. The functional lane uses a
 // quiet streaming reporter and is rendered by coverageFailureDetail instead.
 func coverageFailureDetailStdout(cfg config, stdout string) string {
-	if cfg.stream || strings.TrimSpace(cfg.timingOutput) == "" {
+	if cfg.stream || (strings.TrimSpace(cfg.timingOutput) == "" && strings.TrimSpace(cfg.coverageBuildDiagnosticsOutput) == "") {
 		return stdout
 	}
 	return renderGoTestEventOutput(stdout)
