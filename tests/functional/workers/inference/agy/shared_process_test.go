@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +62,7 @@ type agySharedHTTPServer struct {
 
 	mu       sync.Mutex
 	starts   int
+	closed   bool // ProcessAPIServer.Start closes its listener before returning.
 	done     chan struct{}
 	doneOnce sync.Once
 }
@@ -82,8 +81,12 @@ func (server *agySharedHTTPServer) start(
 	server.mu.Lock()
 	server.starts++
 	server.mu.Unlock()
-	defer server.doneOnce.Do(func() { close(server.done) })
-	return server.server.Start(ctx, request)
+	err := server.server.Start(ctx, request)
+	server.mu.Lock()
+	server.closed = true
+	server.mu.Unlock()
+	server.doneOnce.Do(func() { close(server.done) })
+	return err
 }
 
 func (server *agySharedHTTPServer) startCount() int {
@@ -95,10 +98,32 @@ func (server *agySharedHTTPServer) startCount() int {
 func (server *agySharedHTTPServer) waitClosed(ctx context.Context) error {
 	select {
 	case <-server.done:
+		server.mu.Lock()
+		closed := server.closed
+		server.mu.Unlock()
+		if !closed {
+			return errors.New("AGY process API server stopped without closing its listener")
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (server *agySharedHTTPServer) assertListenerClosed() error {
+	if server == nil {
+		return nil
+	}
+	server.mu.Lock()
+	starts, closed := server.starts, server.closed
+	server.mu.Unlock()
+	if starts == 0 {
+		return nil
+	}
+	if !closed {
+		return errors.New("AGY process API listener remains open after shutdown")
+	}
+	return nil
 }
 
 type agySharedDaemon struct {
@@ -821,7 +846,10 @@ func (fixture *agyProcessFixture) cleanupResources(ctx context.Context) error {
 			return fixture.api.waitClosed(ctx)
 		},
 		checkListener: func() error {
-			return assertAgyListenerClosed(fixture.baseURL)
+			if fixture.api == nil {
+				return nil
+			}
+			return fixture.api.assertListenerClosed()
 		},
 		checkActivity: func() error {
 			if fixture.router == nil {
@@ -954,19 +982,4 @@ func assertAgyResponseEventTopology(t testing.TB, selector string, events []fact
 			t.Fatalf("AGY timeout run %q response pairs = %d, want three", runID, count)
 		}
 	}
-}
-
-func assertAgyListenerClosed(baseURL string) error {
-	if strings.TrimSpace(baseURL) == "" {
-		return nil
-	}
-	client := &http.Client{Timeout: 250 * time.Millisecond}
-	defer client.CloseIdleConnections()
-	response, err := client.Get(strings.TrimSuffix(baseURL, "/") + "/status")
-	if err != nil {
-		return nil
-	}
-	defer response.Body.Close()
-	body, readErr := io.ReadAll(response.Body)
-	return fmt.Errorf("AGY listener remains reachable after cleanup: status=%d body=%q readError=%v", response.StatusCode, strings.TrimSpace(string(body)), readErr)
 }
