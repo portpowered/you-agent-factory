@@ -742,3 +742,39 @@ final rebase. CI evidence belongs in the PR comment and will not be committed.
 Terminal CI, merge-conflict resolution, and merge remain review-owned. The
 hosted estimate `33264193119` remains a contention-inflated estimate and is not
 used as a denominator.
+
+## Post-rebase `PERF-004` refresh
+
+The final source head after the required rebase is
+`792a4ca779e254eb883646dd3e48d9bef4cf2171`. The three passing samples below
+were each separate `-count=1` processes under the matched Windows/Go
+environment; wall time used the local stopwatch and package time is the Go
+test terminal value.
+
+| Package | Sample | Wall seconds | Package seconds | Exit |
+| --- | ---: | ---: | ---: | ---: |
+| `providers` | 1 | 15.166 | 13.286 | 0 |
+| `providers` | 2 | 13.264 | 11.373 | 0 |
+| `providers` | 3 | 13.919 | 12.018 | 0 |
+| `providers/acp` | 1 | 62.928 | 60.992 | 0 |
+| `providers/acp` | 2 | 58.345 | 56.650 | 0 |
+| `providers/acp` | 3 | 57.686 | 55.981 | 0 |
+
+Three other post-rebase ACP samples were retained as diagnostics and excluded
+from the passing denominator: `57.359s` wall / `55.568s` package,
+`57.890s` wall / `56.087s` package, and `56.607s` wall / `54.818s` package.
+They failed in the previously observed contention-sensitive lifecycle/golden
+cells; no data-race report was emitted.
+
+| Denominator | Baseline package median | Final package median | Package change | Baseline wall median | Final wall median | Wall change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `providers` | 52.835s | 12.018s | **77.3% faster** | 68.590s | 13.919s | **79.7% faster** |
+| `providers/acp` | 140.804s | 56.650s | **59.8% faster** | 146.612s | 58.345s | **60.2% faster** |
+| Sum of package medians | 193.639s | 68.668s | **64.5% faster** | 215.202s | 72.264s | **66.4% faster** |
+
+The post-rebase combined package run passed (`12.690s` base and `63.332s`
+ACP package time), the exact LONG-002 selector passed (`1.537s`), and the
+focused seam regression passed (`0.088s`). This refresh supersedes the
+pre-rebase local timing table as the final performance denominator; all
+topology, wait, assertion-parity, and contention dispositions above remain
+unchanged.
