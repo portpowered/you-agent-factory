@@ -13,11 +13,11 @@ The static site unit is one Go AST `CallExpr` whose selector is `exec.Command` o
 | Audited unit | Intentional | Accidental | Total |
 | --- | ---: | ---: | ---: |
 | retained isolated rows | 64 | 167 | 231 |
-| current static OS-spawn sites | 62 | 7 | 69 |
+| current static OS-spawn sites | 61 | 8 | 69 |
 
 Allowed intentional properties are `exit-status`, `signal-delivery`, `stream-file-descriptor-behavior`, `pty`, `crash-isolation`, `descendant-cleanup`, and `executable-selection`. Intentional records have one such property and a non-empty assertion witness; accidental records have `requiredProperty: null` and a concrete c15 conversion obligation.
 
-The accidental static sites are seven fixture Git subprocesses in the `fixture-git-command` family. Their assertions observe repository/filesystem or Factory behavior, so c15 must move fixture setup/inspection behind its repository/filesystem edge. This is the near-zero static accidental total; the 167 accidental retained rows are separately justified as process-isolation reasons such as listener, readiness, filesystem, process environment, provider protocol, and runtime state that do not themselves assert an allowed OS property.
+The accidental static sites are seven fixture Git subprocesses in the `fixture-git-command` family plus one unreachable ACP command factory in the `unreachable-provider-command` family. The fixture assertions observe repository/filesystem or Factory behavior, so c15 must move fixture setup/inspection behind its repository/filesystem edge. The workers/mock assertion observes zero ACP starts and zero ProviderCommandRunner calls, not stream or file-descriptor behavior; c15 must preserve that provider-selection proof while replacing or removing the unreachable factory. The 167 accidental retained rows are separately justified as process-isolation reasons such as listener, readiness, filesystem, process environment, provider protocol, and runtime state that do not themselves assert an allowed OS property.
 
 ### Current per-package baseline
 
@@ -100,8 +100,8 @@ The paired machine baseline at `docs/internal/baselines/functional-os-spawn-base
 | `OSSPAWN-tests-functional-recordings-process-windows-harness-test-windowsTasklist-01` | `tests/functional/recordings/process/windows_harness_test.go:123` | `windowsTasklist` | INTENTIONAL-OS | descendant-cleanup |
 | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-01` | `tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go:351` | `acpStreamUsageCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
 | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-02` | `tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go:353` | `acpStreamUsageCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
-| `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01` | `tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:460` | `acpWorkerChildCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
-| `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-02` | `tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:462` | `acpWorkerChildCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
+| `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01` | `tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:481` | `acpWorkerChildCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
+| `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-02` | `tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:483` | `acpWorkerChildCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
 | `OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01` | `tests/functional/sessions/restart/board_persistence_cli_test.go:19` | `runBoardPersistenceCLI` | INTENTIONAL-OS | executable-selection |
 | `OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01` | `tests/functional/sessions/restart/board_persistence_process_test.go:47` | `buildBoardPersistenceBinary` | INTENTIONAL-OS | executable-selection |
 | `OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01` | `tests/functional/sessions/restart/board_persistence_process_test.go:74` | `startBoardPersistenceDaemonProcess` | INTENTIONAL-OS | executable-selection |
@@ -121,8 +121,23 @@ The paired machine baseline at `docs/internal/baselines/functional-os-spawn-base
 | `OSSPAWN-tests-functional-workers-invoke-continue-forced-cleanup-test-TestInvokeContinueForcedAssertionCleansOwnedResources-01` | `tests/functional/workers/invoke_continue/forced_cleanup_test.go:28` | `TestInvokeContinueForcedAssertionCleansOwnedResources` | INTENTIONAL-OS | descendant-cleanup |
 | `OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-buildYouBinary-01` | `tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go:86` | `buildYouBinary` | INTENTIONAL-OS | executable-selection |
 | `OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-runBuiltYouBinary-01` | `tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go:103` | `runBuiltYouBinary` | INTENTIONAL-OS | exit-status |
-| `OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01` | `tests/functional/workers/mock/javascript_acp_test.go:74` | `mockACPCommandFactory` | INTENTIONAL-OS | stream-file-descriptor-behavior |
+| `OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01` | `tests/functional/workers/mock/javascript_acp_test.go:74` | `mockACPCommandFactory` | ACCIDENTAL-OS | Preserve the zero-call provider-selection assertion through root.BuildProcess and Process.Execute, then replace mockACPCommandFactory with a non-spawning sentinel or remove the unreachable command factory in the owning c15 conversion lane. |
 | `OSSPAWN-tests-functional-workers-transports-cli-run-lifecycle-lifecycle-forced-cleanup-test-runForcedLifecycleCleanupParent-01` | `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_forced_cleanup_test.go:38` | `runForcedLifecycleCleanupParent` | INTENTIONAL-OS | descendant-cleanup |
+
+### Focused assertion audit
+
+The eight named witnesses were inspected against their owning assertions. Each retained intentional verdict names the allowed OS property observed by that assertion; the mock ACP helper is accidental because its owning test proves the provider route is never called.
+
+| Family | Witness | Assertion evidence | Canonical verdict |
+| --- | --- | --- | --- |
+| `provider_sessions/cli` | `runForcedProviderSessionsCleanupParent` (`forced_cleanup_test.go:44`) | Child termination and the cleanup report prove process/resource teardown. | INTENTIONAL-OS — `descendant-cleanup` |
+| `provider_sessions/cli` | `TestBuiltWorkerSessionsStreamAbortExitsNonZero` (`stream_abort_test.go:50`) | `exec.ExitError` and a non-zero child exit code are asserted. | INTENTIONAL-OS — `exit-status` |
+| `provider_sessions/cli` | `TestBuiltWorkerSessionsStreamCancellationExits130` (`stream_abort_test.go:89`) | The interrupted built CLI's exit code is asserted as 130. | INTENTIONAL-OS — `exit-status` |
+| `providers/acp` | `TestACPCommandStartFailureMapsToDependencyFailure` (`acp_error_test.go:35`) | A missing executable is observed through the public dependency-failure outcome. | INTENTIONAL-OS — `executable-selection` |
+| `providers/acp` | `retryACPCommandFactory` (`basic_factory_run_test.go:193,203`) | Two ACP peers and the resumed Provider Session/stream exchange are asserted across the child stdio boundary. | INTENTIONAL-OS — `stream-file-descriptor-behavior` |
+| `workers/mock` | `buildYouBinary` (`compiled_cli_exit_codes_helpers_test.go:86`) | The delivered CLI build and selected executable are used for public invocation. | INTENTIONAL-OS — `executable-selection` |
+| `workers/mock` | `runBuiltYouBinary` (`compiled_cli_exit_codes_helpers_test.go:103`) | The built CLI's returned `ExitCode` is captured for caller assertions. | INTENTIONAL-OS — `exit-status` |
+| `workers/mock` | `mockACPCommandFactory` (`javascript_acp_test.go:74`) | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` asserts zero ACP starts and zero `ProviderCommandRunner` calls; no child stream is observed. | ACCIDENTAL-OS — preserve the zero-call proof and replace or remove the factory |
 
 ### Retained isolated-row verdict projection
 
