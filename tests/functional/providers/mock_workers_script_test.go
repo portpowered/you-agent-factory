@@ -19,6 +19,7 @@ import (
 
 func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker script accept sweep")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     sharedMockScriptAcceptWorkID,
@@ -35,6 +36,7 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker script reject sweep")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     sharedMockScriptRejectWorkID,
@@ -64,6 +66,7 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 // rejected before runtime activation.
 func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker zero-exit rejection sweep")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject zero exit payload"))
 	exitCode := 0
@@ -73,6 +76,8 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	home := t.TempDir()
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
 	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
@@ -85,6 +90,7 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 // stdout, and child exit rather than an in-process command substitute.
 func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker command-runner side-effect sweep")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script command payload"))
 	sideEffectPath := filepath.Join(t.TempDir(), "mock-script-side-effect.txt")
