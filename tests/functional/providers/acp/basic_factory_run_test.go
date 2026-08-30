@@ -107,6 +107,7 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 // is allowed, so any shared command execution would destroy the zero-start
 // assertion.
 func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
+	t.Parallel()
 	var processStarts atomic.Int32
 	_ = support.BuildProcess(t, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts, functionalACPFixture("1")),
@@ -119,6 +120,7 @@ func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 // Isolation: isolated-with-reason - pre-start provider selection; the unknown
 // provider must fail before either ACP or fallback process/effect starts.
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unknown ACP provider"}`))
 	writeLegacyACPWorker(t, dir, "missing-acp")

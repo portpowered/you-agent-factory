@@ -18,11 +18,12 @@ import (
 // Isolation: isolated-with-reason - pinned wire transcript; sharing would
 // erase the exact initialize/session/prompt/update ordering witness.
 func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP request"}`))
 	writeACPWorker(t, dir, "cursor-acp")
+	writeGoldenSentinelWorkstation(t, dir)
 	fixture := goldenACPFixture("success")
-	t.Setenv("YOU_ACP_GOLDEN_SENTINEL", "preserved")
 
 	var starts atomic.Int32
 	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
@@ -42,6 +43,18 @@ func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
 	}
 	assertGoldenProviderSession(t, factoryEvents)
 	assertGoldenResponseStream(t, responseEvents)
+}
+
+func writeGoldenSentinelWorkstation(t *testing.T, dir string) {
+	t.Helper()
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+env:
+  YOU_ACP_GOLDEN_SENTINEL: preserved
+---
+
+Test workstation.
+`)
 }
 
 func assertGoldenProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
