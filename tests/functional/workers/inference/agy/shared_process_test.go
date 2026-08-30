@@ -468,7 +468,7 @@ func (fixture *agyProcessFixture) runScenario(
 	run.stream = stream
 	fixture.recordStreamOpened()
 
-	routeRequestStart := fixture.router.requestCount()
+	routeRequestStart := fixture.router.routeCallCount(scenario.selector)
 	name := workTitle
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, session.Id, factoryapi.SubmitWorkRequest{
 		Name:         &name,
@@ -743,16 +743,14 @@ func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *ag
 	if scenario.selector == agySharedTimeoutSelector {
 		want = 9
 	}
-	requests := fixture.router.requestsSinceForWorkDir(start, scenario.folderDir)
-	if len(requests) != want {
-		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, len(requests), want)
+	// beginCall increments this selector's counter only after the exact AGY
+	// command and normalized route WorkDir have matched, so the delta retains
+	// the prior command/WorkDir witness without copying each request payload.
+	got := fixture.router.routeCallCount(scenario.selector) - start
+	if got != want {
+		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, got, want)
 	}
-	for index, request := range requests {
-		if request.command != agySharedCommand || request.workDir != scenario.folderDir {
-			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.command, request.workDir, agySharedCommand, scenario.folderDir)
-		}
-	}
-	return len(requests)
+	return got
 }
 
 func (fixture *agyProcessFixture) finalize() error {

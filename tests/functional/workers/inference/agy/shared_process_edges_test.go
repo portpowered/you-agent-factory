@@ -618,15 +618,7 @@ type agySharedCommandRoute struct {
 	workDir      string
 	runner       platformprocess.CommandRunner
 	runStreaming func(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
-}
-
-// agyRoutedCommandRequest retains only the public route witness. The command
-// payload can contain prompt and environment data; keeping full copies for
-// later assertions adds allocations on every timeout retry without proving a
-// behavior that the golden owns.
-type agyRoutedCommandRequest struct {
-	command string
-	workDir string
+	calls        *atomic.Int64
 }
 
 // agySharedCommandRouter is immutable after freeze. WorkDir is the only
@@ -639,9 +631,8 @@ type agySharedCommandRouter struct {
 	frozen          bool
 	released        atomic.Bool
 
-	mu       sync.Mutex
-	requests []agyRoutedCommandRequest
-	active   atomic.Int64
+	lifecycleMu sync.Mutex
+	active      atomic.Int64
 }
 
 func newAgySharedCommandRouter() *agySharedCommandRouter {
@@ -676,7 +667,9 @@ func (router *agySharedCommandRouter) register(selector, workDir string, runner 
 			return fmt.Errorf("AGY route selector %q is already registered", selector)
 		}
 	}
-	route := agySharedCommandRoute{selector: selector, workDir: absolute, runner: runner}
+	route := agySharedCommandRoute{
+		selector: selector, workDir: absolute, runner: runner, calls: &atomic.Int64{},
+	}
 	if streaming, ok := runner.(interface {
 		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 	}); ok {
@@ -704,8 +697,8 @@ func (router *agySharedCommandRouter) freeze() error {
 func (router *agySharedCommandRouter) releaseAll() error {
 	router.routeMu.Lock()
 	defer router.routeMu.Unlock()
-	router.mu.Lock()
-	defer router.mu.Unlock()
+	router.lifecycleMu.Lock()
+	defer router.lifecycleMu.Unlock()
 	if active := router.active.Load(); active != 0 {
 		return fmt.Errorf("cannot release AGY routes with %d active calls", active)
 	}
@@ -723,33 +716,15 @@ func (router *agySharedCommandRouter) activeCallCount() int {
 	return int(router.active.Load())
 }
 
-func (router *agySharedCommandRouter) requestCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.requests)
-}
-
-func (router *agySharedCommandRouter) requestsSinceForWorkDir(start int, workDir string) []agyRoutedCommandRequest {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if start < 0 {
-		start = 0
-	}
-	if start > len(router.requests) {
-		start = len(router.requests)
-	}
-	absolute, err := filepath.Abs(filepath.Clean(workDir))
-	if err != nil {
-		return nil
-	}
-	requests := make([]agyRoutedCommandRequest, 0)
-	for _, request := range router.requests[start:] {
-		if request.workDir != absolute {
-			continue
+func (router *agySharedCommandRouter) routeCallCount(selector string) int {
+	selector = strings.TrimSpace(selector)
+	routes := router.publishedRoutes.Load().(map[string]agySharedCommandRoute)
+	for _, route := range routes {
+		if route.selector == selector && route.calls != nil {
+			return int(route.calls.Load())
 		}
-		requests = append(requests, request)
 	}
-	return requests
+	return 0
 }
 
 func (router *agySharedCommandRouter) Run(
@@ -820,17 +795,16 @@ func (router *agySharedCommandRouter) beginCall(
 	if err := ctx.Err(); err != nil {
 		return agySharedCommandRoute{}, err
 	}
-	router.mu.Lock()
+	router.lifecycleMu.Lock()
 	if router.released.Load() {
-		router.mu.Unlock()
+		router.lifecycleMu.Unlock()
 		return agySharedCommandRoute{}, fmt.Errorf("AGY route table is released")
 	}
-	router.requests = append(router.requests, agyRoutedCommandRequest{
-		command: request.Command,
-		workDir: workDir,
-	})
 	router.active.Add(1)
-	router.mu.Unlock()
+	router.lifecycleMu.Unlock()
+	if route.calls != nil {
+		route.calls.Add(1)
+	}
 	return route, nil
 }
 

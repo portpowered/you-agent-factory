@@ -495,6 +495,22 @@ package passed (`6.532s`), and backend-size plus `git diff --check` passed.
 The final exact package run is part of the committed-head delivery handoff;
 hosted timing remains authoritative.
 
+The current bounded pass removes the per-attempt route request ledger from the
+frozen AGY command router. Each immutable route keeps an atomic call count;
+the route matcher still rejects an unknown WorkDir, wrong command, canceled
+context, or released table before a call is counted, and teardown still
+serializes release against active calls. Scenario assertions now compare the
+route-local counter delta, preserving the exact one-call success and nine-call
+timeout witnesses without allocating or locking a request record for every
+retry. The exact package command reported `ok` with package elapsed `2.661s`;
+the focused success/timeout run reported `ok` at `3.994s`, the race run
+reported `ok` at `5.514s`, and backend-size plus `git diff --check` passed.
+The local Go wrappers remained attached after emitting their package results
+on the saturated Windows host and were stopped; hosted Backend Functional
+Coverage remains the authoritative timing result and this pass is not claimed
+as a hosted improvement. No Factory Event, Work, provider/session, response
+EOF, cleanup, or zero-remote witness was relaxed.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
