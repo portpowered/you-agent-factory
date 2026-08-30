@@ -458,3 +458,182 @@ those remain owned by GATE-PERF, VAL-001, and review.
 Final numbers, post-edit hashes, final validation-loopback report, and PR
 current-head CI URL are intentionally pending later stories. This initial
 ledger does not claim those edges.
+
+## Story 005 — GATE-PERF / GATE-SCOPE / VAL-001
+
+### Final rebased artifact
+
+The implementation was rebased onto current `origin/main` before final
+validation. The final source validation head before this evidence section was
+`9d6f564b2a6fec833ce3ab18e37a0796d8e96d0f`; `origin/main` and the merge base
+were `1552d3e3ef114eeb68b1828d46db7d686ad1ef33`. The last base update changed
+only `docs/internal/baselines/go-unit-lane-latency-budget.v1.json`, outside
+the owned package and with no runtime dependency effect. The final owned
+source hashes are:
+
+| Source | SHA-256 |
+| --- | --- |
+| `tests/functional/transport/cli/output/json_result_test.go` | `F9CC26CA3AF3B2643DED8FEF94BBA71FFB1CB53E5FAA9D1C11F95F9B51748940` |
+| `tests/functional/transport/cli/output/ndjson_stream_test.go` | `48F8DB2C3CFA0D97D6DE4BE6924B2BE5412F7B6070FA0520F379254E5941AEC2` |
+| `tests/functional/transport/cli/output/shared_fixture_test.go` | `0BADA8079152BF3F69B8ED0532568E0770C22C6B7DFF6BBFAB7FCE5C2F68C03A` |
+| `tests/functional/transport/cli/output/stream_backpressure_test.go` | `53E9D04E8FD209FC49096C16C6562ADB23E77706C6524F606178BAB73C7223C5` |
+| `tests/functional/transport/cli/output/text_stream_test.go` | `926AC9582358C7C90655ED2A0E6E83813CC588472228D8264DEF959292B3586A` |
+
+### GATE-PERF — final samples and measured floor
+
+The same PowerShell `System.Diagnostics.Stopwatch`, Windows `amd64` host,
+Go `go1.25.0`, `GOFLAGS`, module, and command used for the baseline produced
+these three final samples after the first final rebase. Every run exited zero:
+
+```text
+go test ./tests/functional/transport/cli/output/... -count=1
+```
+
+| Sample | Native wall time | Package-reported time | Exit |
+| --- | ---: | ---: | ---: |
+| 1 | 38,698.005 ms | 34.347 s | 0 |
+| 2 | 37,053.002 ms | 33.158 s | 0 |
+| 3 | 41,089.353 ms | 36.054 s | 0 |
+
+Sorted final native samples are `37,053.002`, `38,698.005`, and
+`41,089.353` ms. The final median is **38,698.005 ms (38.698 s)**. Compared
+with the pre-edit median of `59,921.491 ms`, this saves `21,223.486 ms` and
+reduces native wall time by **35.419%**. The 40-percent target is
+`35,952.895 ms`; the median misses it by `2,745.110 ms`.
+
+The permitted measured-floor path applies after the bounded profile-led pass
+in stories 002–004. One final `go test -json` profile passed in 32.541 s and
+reported the following retained costs: slow writer 3.28 s, writer failure
+3.07 s, gated human output 3.98 s, continuous listener 1.48 s, interrupted
+output 3.40 s, quiet output 1.56 s, NDJSON success 4.78 s, NDJSON failure
+7.33 s, provider-failure privacy 10.11 s, and the seven-case pre-activation
+batch 13.43 s. The parent failure/recovery test was 15.47 s, including its
+terminal failure and recovery journey; parent and subtest durations are not
+added.
+
+The measured floor for this bounded, assertion-preserving scope is therefore
+the 38.698 s final median, not a portable absolute claim. The profile and
+topology establish why the remaining cost cannot be removed by another
+duplicate-journey or polling edit within this lane: the required behavior now
+uses 15 shared-root journeys plus four independent lifecycle roots, for five
+roots and 19 `Process.Execute` journeys total. The four isolated roots retain
+real blocked-writer, writer-failure, listener readiness/rebind, and
+interruption boundaries. Source census has zero `time.Sleep` sites and zero
+`time.Now` deadline loops; all 16 remaining `time.After` calls are bounded
+failure or cleanup ceilings. Sharing those roots or deleting those journeys
+would weaken the declared isolation or assertion denominator. This is a
+profile-backed floor for the one bounded optimization pass, not a claim that
+the application runtime itself has no future optimization opportunity.
+
+### GATE-INVENTORY — final assertion reconciliation
+
+Every pre-edit atomic case has a delivered witness. The final inventory is the
+same or stronger: no assertion, failure case, privacy check, terminality
+check, isolation reason, or cleanup owner was deleted, weakened, or skipped.
+
+| Case | Delivered witness | Reconciliation |
+| --- | --- | --- |
+| CASE-001 | `TestCLIJSONFailureRemainsValidJSON/success_recovers_after_terminal_failure_on_the_shared_root` | Completed default JSON, exact primary text, and empty stderr remain asserted. |
+| CASE-002 | `TestCLIJSONFailureRemainsValidJSON/pre-terminal_failure_leaves_stdout_empty_with_one_stderr_ErrorResponse` | Execute failure, empty stdout, and one public stderr error remain asserted. |
+| CASE-003 | `TestCLIJSONFailureRemainsValidJSON/terminal_failure_emits_failed_InvocationResponse_and_one_stderr_ErrorResponse` | Failed terminal response, pinned detail, and matching stderr error remain asserted. |
+| CASE-004 | `TestCLIInvalidInputsAreBadRequest/unknown_argument_in_normal_JSON_mode` | BAD_REQUEST, empty stdout, and zero provider calls remain asserted. |
+| CASE-005 | `TestCLIInvalidInputsAreBadRequest/unknown_argument_in_quiet_mode` | Quiet BAD_REQUEST, empty stdout, and zero provider calls remain asserted. |
+| CASE-006 | `TestCLIInvalidInputsAreBadRequest/missing_value_before_next_invocation_flag` | Missing-value BAD_REQUEST, empty stdout, and zero provider calls remain asserted. |
+| CASE-007 | `TestCLIInvalidInputsAreBadRequest/missing_value_for_run_flag` | Missing run-flag value, empty stdout, and zero provider calls remain asserted. |
+| CASE-008 | `TestCLIInvalidInputsAreBadRequest/quiet_and_global_JSON` | Exact output-conflict error and zero product effects remain asserted. |
+| CASE-009 | `TestCLIInvalidInputsAreBadRequest/quiet_and_explicit_output` | Exact output-conflict error and zero product effects remain asserted. |
+| CASE-010 | `TestCLIInvalidInputsAreBadRequest/unsupported_explicit_output` | Exact unsupported-output error and zero product effects remain asserted. |
+| CASE-011 | `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` | Public event decoding, event-before-terminal ordering, and one completed result remain asserted. |
+| CASE-012 | `TestCLINDJSONFailureEndsWithOneTerminalResult` | Provider failure, event ordering, one failed result, and terminal-last remain asserted. |
+| CASE-013 | `TestCLIJSONFailureRemainsValidJSON/success_recovers_after_terminal_failure_on_the_shared_root` | Public success decoding and forbidden private-field/literal rejection remain asserted. |
+| CASE-014 | `TestCLIJSONFailureContainsNoPrivateRuntimeFields/terminal_failure_stdout_and_stderr_stay_on_public_contract_fields` | Public failed stdout/stderr decoding and privacy rejection remain asserted. |
+| CASE-015 | `TestCLITextStreamSurfacesIncrementalMessages` | Gated lifecycle-before-completion, stable stderr, canonical lines, separator, and primary output remain asserted. |
+| CASE-016 | `TestCLISlowWriterDoesNotReorderResponseEvents` | Blocked completion, release, monotonic sequences, one terminal result, and empty stderr remain asserted. |
+| CASE-017 | `TestCLIWriterFailureCancelsInvocation` | Buffered events, writer-error precedence, no terminal result, cancellation, and join remain asserted. |
+| CASE-018 | `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise/quiet_clean_primary_result` | Quiet primary-only stdout, empty stderr, and no envelope/operator noise remain asserted. |
+| CASE-019 | `TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet` | Startup text, one real readiness request, cancellation/join, listener close, and port rebind remain asserted. |
+| CASE-020 | `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` | Cancellation error/exit 130, canceled output, no success claim, and external-work join remain asserted. |
+| CASE-021 | Retained JSON/NDJSON terminal and EOF assertions | Exact terminal/error count, decode-to-EOF, and no trailing record remain asserted. |
+| CASE-022 | `TestMain`, shared fixture close, and four isolated cleanup paths | Five-root/19-journey topology, route/root cleanup, listener rebind, goroutine/worktree residue checks remain asserted. |
+
+### Final exact-head verification
+
+The exact rebased source head passed the named package witness after the final
+base sync:
+
+```text
+go test ./tests/functional/transport/cli/output/... -count=1
+```
+
+PASS, package-reported 41.452 s. The exact-head focused repeat groups also
+passed:
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^(TestCLIInvalidInputsAreBadRequest|TestCLIJSONFailureRemainsValidJSON|TestCLIJSONFailureContainsNoPrivateRuntimeFields|TestCLINDJSONFailureEndsWithOneTerminalResult)$' -count=3
+```
+
+PASS, package-reported 38.048 s.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^(TestCLISlowWriterDoesNotReorderResponseEvents|TestCLIWriterFailureCancelsInvocation|TestCLITextStreamSurfacesIncrementalMessages|TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet|TestCLITextStreamInterruptedRunDoesNotClaimCompletion)$' -count=3
+```
+
+PASS, package-reported 59.197 s. Serial targeted `-race` checks for the five
+changed lifecycle selectors all passed with exit 0 and no race report. The
+interrupted selector was once admitted after an unchanged packaged-factory
+staging-owner timeout; the failed combined/first serial admission is retained
+as a host-contended diagnostic, not counted as a behavioral pass.
+
+The repository policy and scope checks passed: `make test-lane-audit` reported
+contract=8, functional=141, integration=12, maintenance=105, release=1,
+stress=1, unit=447; `git diff --check` passed; `origin/main` was an ancestor;
+and the three-dot diff contained only this ledger and the five files under
+`tests/functional/transport/cli/output/`. Remote/paid calls remain 0 and
+USD 0. UI checks remain not applicable.
+
+### Validation report: fto-c14-pkg-transport-cli-output
+
+## Environment and artifact
+
+- Commit/build identifier: `9d6f564b2a6fec833ce3ab18e37a0796d8e96d0f` source validation head; this report adds no source changes.
+- Environment and configuration: Windows `amd64`, 13th Gen Intel(R) Core(TM) i7-13700K, Go `go1.25.0`, empty `GOFLAGS`, native PowerShell timer.
+- Customer entry point: in-process `root.BuildProcess` plus public `Process.Execute` and assembled CLI output streams.
+- Real and substituted dependencies: assembled local runtime/listener and controlled command/provider edges; no remote provider.
+- Cost/call budget used: 0 remote calls, USD 0.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| 22-case behavior and assertion parity | PASS | Final inventory above; exact package suite and repeat groups passed. | Built executable/OS signal behavior remains in existing integration suites. |
+| Lifecycle repeat and race safety | PASS | Exact-head `-count=3` lifecycle group and serial targeted `-race` selectors passed; no race report. | Terminal CI and merge remain review-owned. |
+| Performance gate | PASS via permitted measured-floor path | Three final native samples, 38.698 s median, 35.419% reduction, and profile-backed five-root/19-journey floor above. | Portable absolute latency is not claimed. |
+| Scope and cleanup | PASS | Ancestry, allowed-path diff, lane audit, diff-check, clean package shutdown, and zero polling census passed. | None within this lane. |
+| VAL-001 clean-room loopback | PASS | A separate detached exact-SHA worktree was clean; diff-check and the named package suite passed. | Remote behavior and built executable remain outside this loopback. |
+
+## Customer journey
+
+1. The clean detached worktree at exact source SHA `7ded42718d28bdfe849fef1ff4dc78c2f031cc2e` had zero status lines and passed `git diff --check`; its assembled CLI output package passed `go test ./tests/functional/transport/cli/output/... -count=1` with package-reported 41.460 s. The later base-only rebase was revalidated with the exact package and focused/race evidence above.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the canonical optimization ledger is under `docs/internal/development/functional-test-optimization/`.
+- Permission and error behavior: BAD_REQUEST, dependency, logical failure, provider failure, writer, and cancellation contracts remain covered.
+- Persistence/reload behavior: not applicable; this lane changes only functional tests and evidence.
+- Accessibility/keyboard/responsive behavior: not applicable; no UI or wording changed.
+- Operational signals: controlled failure logs were observed without committing credentials, payloads, remote responses, or CI transcripts.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| FTO-C14-ENV-001 | Informational | Run combined lifecycle `-race` under concurrent packaged-factory staging owners. | Test reaches the controlled interruption boundary. | The unchanged pre-notification provider-start guard can time out; serial rerun passes and reports no race. | Retained command diagnostic above; no source or timeout change. |
+
+## Verdict
+
+PASS
+
+The exact delivered test behavior is ready for implementation handoff. CI
+terminal status, conflict resolution after handoff, and merge remain review
+stage responsibilities. CI-run evidence belongs in the PR conversation and is
+intentionally not committed here.
