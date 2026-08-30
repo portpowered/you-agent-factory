@@ -88,9 +88,10 @@ func TestCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
 }
 
 type gatedStdoutWriter struct {
-	gate        chan struct{}
-	attempts    atomic.Int64
-	releaseOnce sync.Once
+	gate               chan struct{}
+	writeAttemptedCh   chan struct{}
+	writeAttemptedOnce sync.Once
+	releaseOnce        sync.Once
 
 	mu         sync.Mutex
 	buffer     bytes.Buffer
@@ -102,13 +103,14 @@ type gatedStdoutWriter struct {
 
 func newGatedStdoutWriter() *gatedStdoutWriter {
 	return &gatedStdoutWriter{
-		gate: make(chan struct{}),
-		done: make(chan struct{}),
+		gate:             make(chan struct{}),
+		writeAttemptedCh: make(chan struct{}),
+		done:             make(chan struct{}),
 	}
 }
 
 func (writer *gatedStdoutWriter) Write(payload []byte) (int, error) {
-	writer.attempts.Add(1)
+	writer.writeAttemptedOnce.Do(func() { close(writer.writeAttemptedCh) })
 	<-writer.gate
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
@@ -133,28 +135,16 @@ func (writer *gatedStdoutWriter) release() {
 	})
 }
 
-func waitForStdoutWriteAttempt(t *testing.T, writer stdoutWriteObserver) {
+func waitForStdoutWriteAttempt(t *testing.T, writer *gatedStdoutWriter) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if writer.writeAttempts() > 0 {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	// The writeAttempted notification is emitted at Write entry; this timeout
+	// only bounds a broken fixture and does not synchronize by elapsed time.
+	select {
+	case <-writer.writeAttemptedCh:
+		return
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for stdout write under backpressure")
 	}
-	t.Fatal("timed out waiting for stdout write under backpressure")
-}
-
-type stdoutWriteObserver interface {
-	writeAttempts() int64
-}
-
-func (writer *gatedStdoutWriter) writeAttempts() int64 {
-	return writer.attempts.Load()
-}
-
-func (writer *inFlightFailureStdoutWriter) writeAttempts() int64 {
-	return writer.attempts.Load()
 }
 
 func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *gatedStdoutWriter {
@@ -296,7 +286,6 @@ type inFlightFailureStdoutWriter struct {
 	externalWork *cancellableExternalWorkRunner
 	gate         chan struct{}
 
-	attempts     atomic.Int64
 	failArmed    atomic.Bool
 	releaseOnce  sync.Once
 	bufferedCh   chan struct{}
@@ -340,7 +329,6 @@ func (writer *inFlightFailureStdoutWriter) release() {
 }
 
 func (writer *inFlightFailureStdoutWriter) Write(payload []byte) (int, error) {
-	writer.attempts.Add(1)
 	<-writer.gate
 	if writer.failArmed.Load() {
 		return 0, writer.failErr

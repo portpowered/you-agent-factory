@@ -26,14 +26,16 @@ import (
 )
 
 const (
-	humanTextStreamScenarioTimeout = 30 * time.Second
-	textStreamPrimaryResult        = "mock worker accepted"
-	textStreamPromptRunWorkType    = "prompt-task"
+	humanTextStreamScenarioTimeout     = 30 * time.Second
+	textStreamContinuousStartupTimeout = 20 * time.Second
+	textStreamPrimaryResult            = "mock worker accepted"
+	textStreamPromptRunWorkType        = "prompt-task"
 )
 
-// TestCLITextStreamSurfacesIncrementalMessages proves a human response-stream
-// CLI run surfaces lifecycle progress on stdout while the invocation is still
-// in flight, before the terminal primary result is written.
+// TestCLITextStreamSurfacesIncrementalMessages proves one gated human
+// response-stream CLI run surfaces lifecycle progress on stdout while the
+// invocation is in flight, then completes with canonical presentation and no
+// structured or operator noise.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
@@ -61,6 +63,7 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	assertStableWorkerProgress(t, writer.diagnosticText())
 
 	stdout := writer.String()
+	assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
 	lines := nonEmptyStdoutLines(stdout)
 	if len(lines) < 3 {
 		t.Fatalf("stdout lines = %#v, want lifecycle, separator, and final response", lines)
@@ -78,25 +81,10 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	}
 }
 
-// TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves human text
-// presentation on stdout stays free of NDJSON envelopes, single-JSON
-// InvocationResponse wrappers, retired automation record shapes, and operator
-// lifecycle chatter that clean invocation output must suppress.
+// TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves quiet human
+// output stays free of structured envelopes, retired automation record shapes,
+// and operator lifecycle chatter.
 func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
-	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
-		stdout, stderr := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
-		assertStableWorkerProgress(t, stderr)
-		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
-		for _, line := range nonEmptyStdoutLines(stdout) {
-			if line == "--- primary result ---" || line == textStreamPrimaryResult {
-				continue
-			}
-			if !isHumanFactoryLifecycleLine(line) {
-				t.Fatalf("stdout line %q is not canonical customer lifecycle output\nstdout:\n%s", line, stdout)
-			}
-		}
-	})
-
 	t.Run("quiet clean primary result", func(t *testing.T) {
 		stdout, stderr := runGoalHumanInvocation(t, []string{"--quiet"})
 		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
@@ -125,7 +113,7 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	stdout := newInterruptibleStdoutCapture()
+	stdout := newContinuousStdoutCapture(wantInitiated, "Dashboard URL: "+wantDashboardURL)
 	homeDir := t.TempDir()
 	args := []string{
 		"you", "--server", configuredURL,
@@ -151,29 +139,17 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 		close(stdout.done)
 	}()
 
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		output := stdout.String()
-		if strings.Contains(output, wantInitiated) && strings.Contains(output, "Dashboard URL: "+wantDashboardURL) {
-			cancel()
-			goto waitForShutdown
-		}
-		if err := waitForTextStreamServerReady(ctx, configuredURL); err == nil {
-			output = stdout.String()
-			if strings.Contains(output, wantInitiated) && strings.Contains(output, "Dashboard URL: "+wantDashboardURL) {
-				cancel()
-				goto waitForShutdown
-			}
-		}
-		time.Sleep(25 * time.Millisecond)
+	waitForTextStreamStartup(t, stdout)
+	if err := waitForTextStreamServerReady(ctx, configuredURL); err != nil {
+		t.Fatalf(
+			"text-stream loopback readiness request failed after startup output: %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			stdout.String(),
+			stdout.diagnosticText(),
+		)
 	}
-	t.Fatalf(
-		"timed out waiting for operator startup stdout\nstdout:\n%s\nstderr:\n%s",
-		stdout.String(),
-		stdout.diagnosticText(),
-	)
+	cancel()
 
-waitForShutdown:
 	select {
 	case <-stdout.done:
 	case <-time.After(humanTextStreamScenarioTimeout):
@@ -324,8 +300,10 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 }
 
 type firstChunkGatedStdoutWriter struct {
-	gate        chan struct{}
-	releaseOnce sync.Once
+	gate           chan struct{}
+	releaseOnce    sync.Once
+	firstChunk     chan struct{}
+	firstChunkOnce sync.Once
 
 	attempts       atomic.Int64
 	firstChunkSeen atomic.Bool
@@ -339,22 +317,38 @@ type firstChunkGatedStdoutWriter struct {
 }
 
 func newInterruptibleStdoutCapture() *interruptibleStdoutCapture {
-	return &interruptibleStdoutCapture{done: make(chan struct{})}
+	return &interruptibleStdoutCapture{
+		lifecycle: make(chan struct{}),
+		done:      make(chan struct{}),
+	}
 }
 
 func newFirstChunkGatedStdoutWriter() *firstChunkGatedStdoutWriter {
 	return &firstChunkGatedStdoutWriter{
-		gate: make(chan struct{}),
-		done: make(chan struct{}),
+		gate:       make(chan struct{}),
+		firstChunk: make(chan struct{}),
+		done:       make(chan struct{}),
 	}
+}
+
+func newContinuousStdoutCapture(startupInitiated, startupDashboard string) *interruptibleStdoutCapture {
+	capture := newInterruptibleStdoutCapture()
+	capture.startup = make(chan struct{})
+	capture.startupInitiated = startupInitiated
+	capture.startupDashboard = startupDashboard
+	return capture
 }
 
 func (writer *firstChunkGatedStdoutWriter) Write(payload []byte) (int, error) {
 	writer.attempts.Add(1)
 	if !writer.firstChunkSeen.Swap(true) {
 		writer.mu.Lock()
-		defer writer.mu.Unlock()
-		return writer.buffer.Write(payload)
+		written, err := writer.buffer.Write(payload)
+		writer.mu.Unlock()
+		if written > 0 {
+			writer.firstChunkOnce.Do(func() { close(writer.firstChunk) })
+		}
+		return written, err
 	}
 	<-writer.gate
 	writer.mu.Lock()
@@ -382,14 +376,15 @@ func (writer *firstChunkGatedStdoutWriter) release() {
 
 func waitForFirstChunkStdoutContent(t *testing.T, writer *firstChunkGatedStdoutWriter) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if strings.TrimSpace(writer.String()) != "" {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	// The firstChunk notification is emitted after the first non-empty write;
+	// this timeout only bounds a broken fixture and does not synchronize by
+	// elapsed time.
+	select {
+	case <-writer.firstChunk:
+		return
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for first human response-stream stdout chunk")
 	}
-	t.Fatal("timed out waiting for first human response-stream stdout chunk")
 }
 
 func containsHumanLifecycleLine(stdout string) bool {
@@ -527,6 +522,13 @@ func runGoalHumanInterruptibleResponseStream(
 type interruptibleStdoutCapture struct {
 	cancel context.CancelFunc
 
+	startup          chan struct{}
+	startupInitiated string
+	startupDashboard string
+	startupOnce      sync.Once
+	lifecycle        chan struct{}
+	lifecycleOnce    sync.Once
+
 	mu         sync.Mutex
 	buffer     bytes.Buffer
 	diagnostic bytes.Buffer
@@ -537,8 +539,20 @@ type interruptibleStdoutCapture struct {
 
 func (capture *interruptibleStdoutCapture) Write(payload []byte) (int, error) {
 	capture.mu.Lock()
-	defer capture.mu.Unlock()
-	return capture.buffer.Write(payload)
+	written, err := capture.buffer.Write(payload)
+	if err == nil && written > 0 {
+		output := capture.buffer.String()
+		if capture.lifecycle != nil && containsHumanLifecycleLine(output) {
+			capture.lifecycleOnce.Do(func() { close(capture.lifecycle) })
+		}
+		if capture.startup != nil &&
+			strings.Contains(output, capture.startupInitiated) &&
+			strings.Contains(output, capture.startupDashboard) {
+			capture.startupOnce.Do(func() { close(capture.startup) })
+		}
+	}
+	capture.mu.Unlock()
+	return written, err
 }
 
 func (capture *interruptibleStdoutCapture) String() string {
@@ -555,14 +569,32 @@ func (capture *interruptibleStdoutCapture) diagnosticText() string {
 
 func waitForInterruptibleStdoutLifecycle(t *testing.T, capture *interruptibleStdoutCapture) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if containsHumanLifecycleLine(capture.String()) {
-			return
-		}
-		time.Sleep(time.Millisecond)
+	// The lifecycle notification is emitted by the capture after the observed
+	// customer lifecycle line is buffered; the timeout only bounds a broken
+	// fixture and does not synchronize by elapsed time.
+	select {
+	case <-capture.lifecycle:
+		return
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for human lifecycle stdout before interrupt\nstdout:\n%s", capture.String())
 	}
-	t.Fatalf("timed out waiting for human lifecycle stdout before interrupt\nstdout:\n%s", capture.String())
+}
+
+func waitForTextStreamStartup(t *testing.T, capture *interruptibleStdoutCapture) {
+	t.Helper()
+	// The startup notification is emitted after both required startup messages
+	// are buffered; this timeout only bounds a broken fixture and does not
+	// synchronize by elapsed time.
+	select {
+	case <-capture.startup:
+		return
+	case <-time.After(textStreamContinuousStartupTimeout):
+		t.Fatalf(
+			"timed out waiting for operator startup stdout\nstdout:\n%s\nstderr:\n%s",
+			capture.String(),
+			capture.diagnosticText(),
+		)
+	}
 }
 
 func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedStdoutWriter) {
