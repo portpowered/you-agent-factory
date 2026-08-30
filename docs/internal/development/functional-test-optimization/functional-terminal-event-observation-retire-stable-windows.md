@@ -419,48 +419,51 @@ Each row below is three independent invocations of:
 
     go test -tags=functionallong -count=1 <package>
 
-The tuple format is `outcome/exit, package time, Measure-Command wall time`;
-wall times are rounded to milliseconds. The median is the median wall time.
+The tuple format is `outcome/exit, clean-checkout PowerShell wall time`; wall
+times are rounded to milliseconds. The median is the median wall time. These
+are the final-head timings captured by the clean-checkout loop; the loop
+suppressed output for passing commands, so no package-internal duration is
+claimed here.
 
-| # | Package | Run 1 | Run 2 | Run 3 | Median wall |
+| # | Package | Run 1 (wall) | Run 2 (wall) | Run 3 (wall) | Median wall |
 | ---: | --- | --- | --- | --- | ---: |
-| 1 | `internal/support` | PASS/0, 8.348s, 10.967s | PASS/0, 7.925s, 10.319s | PASS/0, 8.060s, 10.336s | 10.336s |
-| 2 | `events/factory_events` | PASS/0, 5.238s, 7.270s | PASS/0, 6.078s, 8.027s | PASS/0, 4.569s, 6.452s | 7.270s |
-| 3 | `events/response_events` | PASS/0, 3.099s, 5.184s | PASS/0, 5.558s, 8.403s | PASS/0, 3.844s, 9.373s | 8.403s |
-| 4 | `factory/definitions` | PASS/0, 84.677s, 87.209s | PASS/0, 23.367s, 25.547s | PASS/0, 22.556s, 24.624s | 25.547s |
-| 5 | `factory/replay_contracts` | PASS/0, 10.363s, 12.563s | PASS/0, 10.029s, 12.131s | PASS/0, 9.933s, 11.838s | 12.131s |
-| 6 | `factory/visualization/runtime_metrics` | PASS/0, 11.413s, 13.511s | PASS/0, 10.511s, 12.368s | PASS/0, 10.520s, 12.411s | 12.411s |
-| 7 | `operator_settings/root_composition` | PASS/0, 1.124s, 2.892s | PASS/0, 1.265s, 3.022s | PASS/0, 1.352s, 3.209s | 3.022s |
-| 8 | `recordings/root_composition` | FAIL/1, 3.024s, 5.192s | FAIL/1, 2.959s, 4.779s | FAIL/1, 3.027s, 5.080s | 5.080s |
-| 9 | `replay_contracts` | FAIL/1, 50.643s, 52.589s | FAIL/1, 50.535s, 52.531s | FAIL/1, 54.842s, 56.770s | 52.589s |
-| 10 | `runtime_api` | FAIL/1, 44.933s, 47.247s | FAIL/1, 43.303s, 45.502s | FAIL/1, 40.844s, 42.952s | 45.502s |
-| 11 | `work/recovery` | PASS/0, 2.881s, 4.826s | PASS/0, 3.037s, 5.242s | PASS/0, 3.624s, 5.935s | 5.242s |
-| 12 | `work/relationships` | PASS/0, 2.930s, 5.019s | PASS/0, 3.008s, 5.060s | PASS/0, 3.211s, 5.443s | 5.060s |
-| 13 | `work/root_composition` | PASS/0, 1.978s, 4.309s | PASS/0, 2.300s, 4.790s | PASS/0, 2.551s, 4.642s | 4.642s |
-| 14 | `work/submission` | PASS/0, 18.897s, 20.900s | PASS/0, 19.778s, 22.938s | PASS/0, 27.441s, 29.396s | 22.938s |
-| 15 | `workflow` | PASS/0, 6.055s, 8.212s | PASS/0, 6.634s, 8.872s | PASS/0, 5.801s, 7.898s | 8.212s |
-| 16 | `workstations/repeater` | FAIL/1, 23.690s, 25.704s | FAIL/1, 19.577s, 21.353s | FAIL/1, 18.646s, 20.301s | 21.353s |
-| 17 | `workstations/watcher` | PASS/0, 9.359s, 11.179s | PASS/0, 8.459s, 10.205s | PASS/0, 8.128s, 9.900s | 10.205s |
+| 1 | `internal/support` | PASS/0, 28.768s | PASS/0, 18.464s | PASS/0, 14.887s | 18.464s |
+| 2 | `events/factory_events` | PASS/0, 14.237s | PASS/0, 10.284s | PASS/0, 12.498s | 12.498s |
+| 3 | `events/response_events` | PASS/0, 4.666s | PASS/0, 4.867s | PASS/0, 4.612s | 4.666s |
+| 4 | `factory/definitions` | PASS/0, 26.301s | PASS/0, 27.159s | PASS/0, 23.266s | 26.301s |
+| 5 | `factory/replay_contracts` | PASS/0, 12.685s | PASS/0, 12.313s | PASS/0, 11.900s | 12.313s |
+| 6 | `factory/visualization/runtime_metrics` | PASS/0, 13.307s | PASS/0, 12.985s | PASS/0, 14.879s | 13.307s |
+| 7 | `operator_settings/root_composition` | PASS/0, 3.579s | PASS/0, 3.344s | PASS/0, 3.185s | 3.344s |
+| 8 | `recordings/root_composition` | PASS/0, 5.674s | PASS/0, 6.946s | PASS/0, 6.874s | 6.874s |
+| 9 | `replay_contracts` | FAIL/1, 75.142s | FAIL/1, 130.369s | FAIL/1, 136.329s | 130.369s |
+| 10 | `runtime_api` | FAIL/1, 60.313s | PASS/0, 52.336s | PASS/0, 32.083s | 52.336s |
+| 11 | `work/recovery` | PASS/0, 5.603s | PASS/0, 6.828s | PASS/0, 22.356s | 6.828s |
+| 12 | `work/relationships` | PASS/0, 7.073s | PASS/0, 6.400s | PASS/0, 5.924s | 6.400s |
+| 13 | `work/root_composition` | PASS/0, 4.317s | PASS/0, 4.269s | PASS/0, 4.149s | 4.269s |
+| 14 | `work/submission` | PASS/0, 28.010s | PASS/0, 31.865s | PASS/0, 31.857s | 31.857s |
+| 15 | `workflow` | PASS/0, 9.199s | PASS/0, 7.430s | PASS/0, 7.914s | 7.914s |
+| 16 | `workstations/repeater` | FAIL/1, 26.955s | FAIL/1, 35.671s | FAIL/1, 28.447s | 28.447s |
+| 17 | `workstations/watcher` | PASS/0, 13.042s | PASS/0, 13.046s | PASS/0, 10.346s | 13.042s |
 
-The after sweep is 39 PASS and 12 FAIL, with the same four failing package
-families and baseline signatures recorded above: global `@you/full-flow`
-staging-owner contention in recordings, packaged/fixture and assertion
-failures in replay, logical-target/fixture failures in runtime API, and
-processor/path failures in repeater. The implementation did not remove or
-alter shared global state. Compared with the before medians, 10 of 17 package
-medians improved and the sum of package medians decreased from 276.263s to
-259.943s (5.9% directionally lower); repeater decreased from 32.412s to
-21.353s and watcher from 15.256s to 10.205s. This is the bounded optimization
-pass for this lane: fixed status polling and stable-window padding were removed
-from owned completion paths, with no unrelated optimization or threshold
-claim made on this saturated Windows host.
+The final-head sweep is 44 PASS and 7 FAIL runs across 17 packages. Fourteen
+packages passed all three runs; `runtime_api` had one shared packaged-install
+or listener-contention failure followed by two passes; `replay_contracts` and
+`workstations/repeater` failed all three with the known baseline signatures
+recorded below. The implementation did not remove or alter shared global
+state. Compared with the before medians, the final after medians sum to
+379.229s versus 276.263s before; this is not a directional improvement on
+the saturated, contended Windows host and is not used as a threshold claim.
+The bounded optimization pass remains valid: fixed status polling and
+stable-window padding were removed from owned completion paths, with no
+unrelated optimization or additional timing work introduced.
 
 ### Story 003 evidence conclusion
 
 The final census, exact assertion inventory above, 51 after invocations, and
 `go vet ./...` (exit 0, no findings) prove the owned migration and preserve
-the existing passing behavior. The 12 failures are unchanged diagnostic
-baseline signatures, not implementation regressions. Clean-checkout loopback,
+the existing passing behavior. The seven nonzero runs are diagnostic baseline
+or shared-environment signatures, not implementation regressions; the one
+mixed `runtime_api` row passed on its next two runs. Clean-checkout loopback,
 final delivery, and CI remain Story 004/review gates.
 
 ## Story 001 evidence conclusion
