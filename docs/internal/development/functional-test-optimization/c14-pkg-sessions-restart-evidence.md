@@ -891,3 +891,36 @@ those remain review-owned. The implementation handoff must push this final
 head, confirm CI has started on that exact head, and post the before/after
 medians plus the CI run URL in the PR conversation without committing CI-run
 evidence.
+
+## Post-review rebase and blocker refresh
+
+Captured: `2026-08-30` after rebasing onto `origin/main` at
+`5c997439079adf8761959897ba2fb70fdad8a1f9`. The exact tested source head was
+`b876663d3dd01358733c507b62c98ec9c205c6ad`; the refresh is documentation-only
+relative to the restart implementation.
+
+The review-requested local gates were rerun after the rebase:
+
+| Gate | Command/procedure | Result | Property proved |
+| --- | --- | --- | --- |
+| `GATE-PACKAGE` | `go test ./tests/functional/sessions/restart/... -count=1` | Exit `0`; package `38.044s` | Complete restart package and all eight selectors remain active. |
+| `GATE-RACE` | `go test -race ./tests/functional/sessions/restart/... -count=1` | Exit `0`; package `57.796s` on Windows/amd64, Go `1.25.0`, `CGO_ENABLED=1` | Supported race behavior remains clean. |
+| `GATE-LOOPBACK` | Detached clean worktree at the exact head, then `go test ./tests/functional/sessions/restart/... -count=1` | Exit `0`; package `40.880s`; temporary worktree removed | The exact rebased source reproduces the package proof without repair. |
+| `GATE-REPOSITORY` | `make test` | Exit `0`; 169 Node subtests, 168 passed, 0 failed, 1 expected skip | The mandated repository quality target passes on the rebased head. |
+| `GATE-ACP-DIAGNOSTIC` | `go test ./tests/functional/providers/acp -run '^TestACPSharedProcess$' -count=1 -timeout=90s` | Exit `0`; package `65.944s` | The prior hosted ACP timeout is not reproducible on this local host; no ACP or shared-support path was changed. |
+
+The final post-rebase timing samples were `41.0144s`, `34.2973s`, and
+`60.2404s`, all exit `0`; the sorted median is `41.0144s`, a `7.09%`
+reduction from the unchanged-source baseline `44.1461053s`. The result does
+not claim the 40% branch. The permitted one-build profile-backed measured-floor
+explanation remains the applicable bounded optimization decision: one normal
+package build, zero helper builds, private scenario state, and all existing
+restart witnesses are retained.
+
+The prior hosted run's failure was in untouched
+`tests/functional/providers/acp`, where
+`TestACPSharedProcess/javascript-acp-run` observed 15 rather than 16 peer
+exits before its 20-second bound. The focused test passed on the current local
+head and the restart diff does not alter ACP behavior, so no speculative
+unowned fix entered this lane. The next required evidence boundary is the
+matching-head hosted CI run after the final push.

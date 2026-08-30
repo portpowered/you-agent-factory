@@ -91,3 +91,26 @@ Not applicable: no local criterion is FAIL or BLOCKED. Implementation handoff
 still requires the final head to be pushed, required CI to be started, and the
 before/after medians plus CI run URL to be posted in the PR conversation;
 review owns terminal CI and merge.
+
+## Post-review rebase refresh
+
+The branch was rebased cleanly onto `origin/main`
+`5c997439079adf8761959897ba2fb70fdad8a1f9`. At the exact tested head
+`b876663d3dd01358733c507b62c98ec9c205c6ad`, the local package,
+supported-race, full `make test`, and clean detached-worktree package gates
+passed. The clean loopback used
+`go test ./tests/functional/sessions/restart/... -count=1`, exited `0`, and
+reported package elapsed `40.880s`; its temporary worktree was removed and no
+repair occurred.
+
+The mandated full-suite result was exit `0` with 169 Node subtests (168 pass,
+0 fail, 1 expected skip). The three post-rebase outer stopwatch samples were
+`41.0144s`, `34.2973s`, and `60.2404s`, median `41.0144s` versus the
+`44.1461053s` baseline. This is a successful but host-variable `7.09%`
+reduction; the ledger's permitted one-build measured-floor explanation remains
+in force.
+
+The earlier hosted blocker was an untouched ACP shared-process timeout. The
+focused local ACP selector passed at the rebased head (`65.944s`), and no ACP
+or shared-support file was changed. Hosted CI must re-evaluate that diagnostic
+on the final pushed head; this report does not claim terminal CI or merge.
