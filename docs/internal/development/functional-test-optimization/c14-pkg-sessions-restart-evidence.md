@@ -321,10 +321,9 @@ It does not prove:
 | Hosted PR behavior and terminal CI | `GATE-PR-CI` / review stage |
 | Support-managed internal wait counts | Later bounded package profiling if material |
 
-GATE-CHAR is complete for story 001. Stories 002 and 003 remain incomplete;
-this ledger must be extended with their focused, repeat, package, race,
-performance, scope, clean-room, and PR handoff evidence rather than replacing
-the before-state record.
+GATE-CHAR is complete for story 001. The historical sections below retain the
+earlier review attempts, while the final exact-head section at the end of this
+ledger is authoritative for stories 002 and 003 after the latest rebase.
 
 ## SHA-256 source register
 
@@ -727,3 +726,166 @@ These gates complete story 002's shared-binary, helper-recursion,
 partial-setup, assertion-preservation, repeated-use, and cleanup criteria.
 Story 003 still owns the final complete-package, race, performance, clean-room,
 and PR handoff gates.
+
+## Current exact-head validation after the latest rebase
+
+- Behavior lane: `BEH-C14-RESTART`.
+- Story: `fto-c14-pkg-sessions-restart-003`, with the exact shared-binary and
+  partial-setup witnesses from story 002 rechecked as affected prerequisites.
+- Implementation/test head: `1f6cd4510ed43464d4f2efd84c1112941d408895`.
+- Base: `origin/main` `9bc369bc418e69fb497052b8ba053e84ba22f302`.
+- Environment: Windows/amd64, Go `go1.25.0`, `CGO_ENABLED=1`.
+- Dependency fidelity: `local_real` built CLI, real daemon/server processes,
+  loopback, filesystem, recording, child-process, and existing controlled
+  provider edges.
+- Cost: zero paid or remote-provider calls.
+
+This section supersedes the earlier exact-head sections that reference
+`977d6809`, `15f8c2fd`, `c9e3e727`, or an earlier `origin/main`. The rebase
+completed without conflict, and no implementation or shared-support repair was
+made while collecting the evidence below.
+
+### GATE-SPINE and CASE-U08
+
+- Status: **PASS**.
+- Focused procedure:
+
+  ```text
+  go test ./tests/functional/sessions/restart/... -count=1 -run '^TestBoardPersistenceCLIRestartRoundTrip$' -v
+  ```
+
+  Exit `0`; the real restart journey passed in `23.48s`, with package elapsed
+  `23.576s`. Its output showed one package-scoped immutable CLI path with
+  `builds=1`, three isolated daemon session IDs, and the initial active
+  dispatch witness. The public submit, readiness, Worker Session, clean-stop,
+  replay/re-arm, release-file, response, persistence, and second-restart
+  boundaries all remained active.
+- Direct failure-path procedure:
+
+  ```text
+  go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceSharedBinaryPartialSetupFailure$' -count=1 -v
+  ```
+
+  Exit `0`; package elapsed `0.198s`. The child injected failure after
+  temporary-root allocation, exited nonzero with the diagnostic, reported the
+  allocated directory and partial artifact, never created the scenario marker,
+  and was followed by assertions that both paths were removed.
+
+### GATE-REPEAT
+
+- Status: **PASS**.
+- Procedure:
+
+  ```text
+  go test ./tests/functional/sessions/restart/... -count=3 -v
+  ```
+
+  Exit `0`; package elapsed `238.480s`. All eight selectors passed in all three
+  repetitions. Each normal process reused one package build (`builds=1`), the
+  helper path observed zero package builds, and the partial-setup child kept
+  its nonzero status, diagnostic, no-scenario marker, and cleanup assertions.
+  Scenario Factory, HOME, recording, release, port, process, and expected-state
+  resources remained private, and package cleanup followed all joins.
+
+### GATE-PACKAGE
+
+- Status: **PASS**.
+- Procedure:
+
+  ```text
+  go test ./tests/functional/sessions/restart/... -count=1 -v
+  ```
+
+  Exit `0`; package elapsed `76.788s`. The direct probe, helper selector, all
+  three board persistence/restart selectors, logical remap, resume, and
+  history selectors passed. The package log showed one normal-process CLI
+  build and no helper recursion. The pre-change seven-selector and 148
+  lexical failure-call-site denominator remains intact; the added probe only
+  strengthens setup-cleanup coverage.
+
+### GATE-RACE
+
+- Status: **PASS** on the supported local platform.
+- Procedure:
+
+  ```text
+  go test -race ./tests/functional/sessions/restart/... -count=1 -v
+  ```
+
+  Exit `0`; package elapsed `66.800s` on Windows/amd64 with Go `go1.25.0` and
+  `CGO_ENABLED=1`. All eight selectors passed, including the bounded partial
+  setup probe. No race report, helper recursion, orphan process, or cleanup
+  failure was emitted.
+
+### GATE-PERF
+
+- Status: **PASS via the permitted profile-backed measured-floor explanation**;
+  the local timing direction is host-variable and does not meet the 40% branch.
+- Authoritative unchanged-source baseline: `44.1461053s`.
+- Final isolated procedure: three sequential successful PowerShell stopwatch
+  runs of `go test ./tests/functional/sessions/restart/... -count=1`, each
+  with exit-code enforcement and captured package output.
+- Final outer samples: `60.34s`, `50.60s`, and `39.36s`; sorted median
+  `50.60s`, exit `0` for every run. The median is `14.62%` slower than the
+  baseline, so no 40% reduction is claimed.
+- The bounded optimization remains profile-backed: the source and runtime
+  topology reduce three identical package CLI builds to exactly one normal
+  process build, zero helper builds, and package teardown after all child and
+  daemon joins. The remaining six daemon generations, five in-process server
+  generations, thirteen built-CLI invocations, private scenario state, public
+  observations, and bounded diagnostics are required witnesses. Existing
+  polling waits are real HTTP/process/filesystem/log observations; no new sleep,
+  timeout padding, cumulative CLI context, assertion deletion, or second
+  unprofiled optimization was introduced.
+- The three samples are retained despite shared-host variability. This is the
+  permitted one-pass measured-floor explanation; the PR package result remains
+  the primary delivery verdict and no unrelated process was modified.
+
+### GATE-SCOPE
+
+- Status: **PASS**.
+- `git merge-base --is-ancestor origin/main HEAD` exited `0`.
+- `git diff --check` passed.
+- The three-dot diff contains only the three owned restart test files and the
+  two C14 evidence documents. The source audit retains C09's fresh
+  30-second context for every CLI operation and finds no cumulative deadline,
+  new sleep, timeout increase, public contract, generated file, production
+  file, shared-support file, workflow, CI configuration, or assertion loss.
+
+### GATE-LOOPBACK
+
+- Status: **PASS** for the clean local-real loopback.
+- A detached clean worktree at implementation/test head
+  `1f6cd4510ed43464d4f2efd84c1112941d408895` ran:
+
+  ```text
+  go test ./tests/functional/sessions/restart/... -count=1
+  ```
+
+  The command exited `0` with package elapsed `22.941s`; the temporary
+  worktree was removed after the run. No implementation repair occurred. The
+  complete package crossed the real CLI, daemon/server, restart, persistence,
+  malformed/missing state, remap, resume, history, cancellation, and cleanup
+  witnesses from a clean checkout.
+- The canonical report is
+  `c14-pkg-sessions-restart-validation-loopback.md`. It uses only PASS, FAIL,
+  and BLOCKED statuses and leaves review-owned terminal CI and merge explicitly
+  unproven.
+
+### Repository quality gate
+
+- `make test` exited `0` on this head. The unitlane report recorded 169 tests,
+  168 passed, 0 failed, and 1 skipped; the skip was an existing Windows
+  privilege/platform condition. No failure was caused by the restart-package
+  diff.
+
+### Current evidence boundary
+
+The current exact-head local evidence proves the complete restart package,
+bounded failure-path cleanup, repeated fixture isolation, supported race
+behavior, the authorized measured-floor decision, current-main ancestry, and
+clean-room reproducibility. It does not prove terminal hosted CI or merge;
+those remain review-owned. The implementation handoff must push this final
+head, confirm CI has started on that exact head, and post the before/after
+medians plus the CI run URL in the PR conversation without committing CI-run
+evidence.
