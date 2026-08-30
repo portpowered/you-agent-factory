@@ -34,7 +34,8 @@ func TestComposedWorkSnapshotReaderProjectsCanonicalState(t *testing.T) {
 		},
 	})
 
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 15*time.Second)
 	if reader == nil {
 		t.Fatal("RecordingsWorkSnapshotReaderObserver was not invoked")
 	}
@@ -62,6 +63,8 @@ func TestComposedWorkSnapshotReaderProjectsCanonicalState(t *testing.T) {
 	if len(second.Items) != len(first.Items) || len(second.Admissions) != len(first.Admissions) {
 		t.Fatalf("repeated Work snapshot sizes changed: first=%#v second=%#v", first, second)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func readComposedWorkSnapshot(

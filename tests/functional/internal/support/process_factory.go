@@ -63,13 +63,6 @@ type blockingProvider struct {
 	calls   int
 }
 
-type terminalObservationMode int
-
-const (
-	terminalObservationCorrelated terminalObservationMode = iota
-	terminalObservationStableWindow
-)
-
 func (p *blockingProvider) Execute(
 	ctx context.Context,
 	_ providers.ExecuteRequest,
@@ -127,27 +120,6 @@ func RunFactoryToCompletionWithEdgesAndWork(
 	return session, work
 }
 
-// RunFactoryToCompletionWithEdgesAndWorkStable retains the quiet stability
-// window required by watcher discovery and repeater handoffs. Other functional
-// scenarios should use RunFactoryToCompletionWithEdgesAndWork so completion is
-// correlated to the exact live Factory Session without an unconditional delay.
-func RunFactoryToCompletionWithEdgesAndWorkStable(
-	t testing.TB,
-	dir string,
-	overrides serviceedges.Edges,
-	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
-	session, work, _, _ := runFactoryToCompletionWithMode(
-		t,
-		dir,
-		overrides,
-		timeout,
-		false,
-		terminalObservationStableWindow,
-	)
-	return session, work
-}
-
 // RunFactoryToCompletionWithEdgesAndObservations also returns the public Work
 // listing and retained Factory Event history captured before the daemon stops.
 func RunFactoryToCompletionWithEdgesAndObservations(
@@ -160,10 +132,10 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	return session, work, events
 }
 
-// RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose observes
-// terminal Work and invokes beforeClose immediately before shutting down the
-// process. The hook is for process-boundary fixtures that must remain alive
-// until the public terminal observation has drained the provider response.
+// RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose is retained
+// for the excluded ACP provider lane's compatibility handoff. Despite its
+// historical name, completion is correlated to the canonical terminal event;
+// no stable-window or status-polling path remains.
 func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 	t testing.TB,
 	dir string,
@@ -179,7 +151,6 @@ func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 		timeout,
 		false,
 		nil,
-		terminalObservationStableWindow,
 		nil,
 		beforeClose,
 	)
@@ -203,7 +174,6 @@ func RunFactoryToCompletionWithConfiguredHome(
 		timeout,
 		false,
 		configure,
-		terminalObservationCorrelated,
 		nil,
 		nil,
 	)
@@ -250,7 +220,6 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 		timeout,
 		true,
 		nil,
-		terminalObservationCorrelated,
 		func(baseURL string, listed factoryapi.ListWorkResponse) {
 			seen := make(map[string]struct{})
 			for _, item := range listed.Results {
@@ -288,29 +257,6 @@ func runFactoryToCompletion(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
-	return runFactoryToCompletionWithMode(
-		t,
-		dir,
-		overrides,
-		timeout,
-		captureResponseEvents,
-		terminalObservationCorrelated,
-	)
-}
-
-func runFactoryToCompletionWithMode(
-	t testing.TB,
-	dir string,
-	overrides serviceedges.Edges,
-	timeout time.Duration,
-	captureResponseEvents bool,
-	observationMode terminalObservationMode,
-) (
-	factoryapi.FactorySession,
-	factoryapi.ListWorkResponse,
-	[]factoryapi.FactoryEvent,
-	[]factoryapi.FactoryResponseEvent,
-) {
 	return runFactoryToCompletionWithHome(
 		t,
 		dir,
@@ -318,7 +264,6 @@ func runFactoryToCompletionWithMode(
 		timeout,
 		captureResponseEvents,
 		nil,
-		observationMode,
 		nil,
 		nil,
 	)
@@ -332,7 +277,6 @@ func runFactoryToCompletionWithHome(
 	timeout time.Duration,
 	captureResponseEvents bool,
 	configure func(string),
-	observationMode terminalObservationMode,
 	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
 	beforeClose func(),
 ) (
@@ -375,6 +319,7 @@ func runFactoryToCompletionWithHome(
 	daemon := StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
 	liveSession := GetDefaultSession(t, baseURL)
+	terminalObservation := OpenSessionTerminalFactoryEventObservation(t, baseURL, liveSession.Id)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -405,11 +350,7 @@ func runFactoryToCompletionWithHome(
 			t.Fatalf("start factory response-event capture: %v", err)
 		}
 	}
-	if observationMode == terminalObservationStableWindow {
-		WaitForTerminalStatus(t, baseURL, timeout)
-	} else {
-		WaitForSessionTerminalStatus(t, baseURL, liveSession.Id, timeout)
-	}
+	WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, liveSession.Id, timeout)
 
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
@@ -432,10 +373,15 @@ func runFactoryToCompletionWithHome(
 	if beforeClose != nil {
 		beforeClose()
 	}
+	// Stop the root process after all projection and response observations have
+	// completed. Runtime shutdown records RUN_RESPONSE before the transport is
+	// allowed to close, so the already-open terminal observer receives the
+	// canonical completion event without a status-based success wait.
+	daemon.Stop(t)
+	terminalObservation.Wait(timeout)
 	// Stop the root process before canceling the capture request. Process
 	// shutdown closes the session-owned response stream, which is the
 	// authoritative boundary after all response publishers have quiesced.
-	daemon.Stop(t)
 	if responseCaptureCancel != nil {
 		responseCaptureCancel()
 		capture := <-responseCaptureDone

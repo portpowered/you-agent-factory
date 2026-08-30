@@ -43,7 +43,9 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 			ScriptCommandRunner:   scriptRunner,
 		},
 	})
-	status := support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 15*time.Second)
+	status := support.GetDefaultSessionStatus(t, server.URL())
 	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
@@ -120,6 +122,8 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 	if providerRunner.CallCount() != 0 || scriptRunner.CallCount() != 0 {
 		t.Fatalf("replay external execution calls = provider:%d script:%d, want zero", providerRunner.CallCount(), scriptRunner.CallCount())
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func decodeReplayCostsCLI(

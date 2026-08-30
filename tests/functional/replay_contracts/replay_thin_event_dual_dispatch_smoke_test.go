@@ -108,7 +108,8 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 			ScriptCommandRunner: runner,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	assertThinEventSessionPlaces(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, dualDispatchSmokeScriptWorkType + ":done": 1,
 		"task:failed": 0, dualDispatchSmokeScriptWorkType + ":failed": 0,
@@ -126,6 +127,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 
 	smoke.liveEvents = server.GetFactoryEvents(t)
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 	smoke.artifactPath = artifactPath
 	smoke.artifact = testutil.LoadReplayArtifact(t, artifactPath)
 	return smoke

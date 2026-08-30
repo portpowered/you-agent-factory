@@ -84,6 +84,7 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 		parentChildLineageChild,
 		parentChildLineageParent,
 	)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 	submitOut, err := runParentChildCLI(ctx, processHarness, dir, baseURL,
 		"--json",
 		"submit", "batch",
@@ -94,7 +95,14 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	}
 	assertParentChildBatchSubmitAcknowledgment(t, submitOut, parentChildLineageRequestID)
 
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		baseURL,
+		"~default",
+		[]string{parentChildLineageParentID, parentChildLineageChildID},
+		"complete",
+		15*time.Second,
+	)
 
 	listed := support.ListDefaultSessionWork(t, baseURL)
 	assertParentChildLineageInWorkListing(t, listed, parentChildLineageChildID, parentChildLineageParentID)
@@ -140,6 +148,8 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 		t.Fatalf("you work show %s: %v", parentChildLineageChildID, err)
 	}
 	assertParentChildRelationOnWork(t, shown, parentChildLineageParentID)
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // TestChildFailureProjectsToDocumentedParentView proves through public CLI
@@ -192,6 +202,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 		parentChildFailureChild,
 		parentChildFailureParent,
 	)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 	submitOut, err := runParentChildCLI(ctx, processHarness, dir, baseURL,
 		"--json",
 		"submit", "batch",
@@ -202,7 +213,14 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	}
 	assertParentChildFailureBatchSubmitAcknowledgment(t, submitOut, parentChildFailureRequestID)
 
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		baseURL,
+		"~default",
+		[]string{parentChildFailureParentID, parentChildFailureChildID},
+		"failed",
+		15*time.Second,
+	)
 
 	listed := support.ListDefaultSessionWork(t, baseURL)
 	assertParentChildFailureProjectionInWorkListing(t, listed, parentChildFailureParentID, parentChildFailureChildID)
@@ -236,6 +254,8 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 
 	events := server.GetFactoryEvents(t)
 	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // testDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider

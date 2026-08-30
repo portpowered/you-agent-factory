@@ -47,11 +47,13 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, recordServer.URL(), 15*time.Second)
+	recordObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, recordServer.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, recordServer.URL(), "~default", 15*time.Second)
 	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, recordServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	recordServer.Stop(t)
+	recordObservation.Wait(15 * time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
@@ -65,7 +67,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
-	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 15*time.Second)
 	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, replayServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})

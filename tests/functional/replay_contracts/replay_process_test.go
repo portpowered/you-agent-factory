@@ -27,7 +27,7 @@ func observeReplayThroughRoot(
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), timeout)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", timeout)
 	observation := replayProcessObservation{
 		Events:  server.GetFactoryEvents(t),
 		Session: support.GetDefaultSession(t, server.URL()),

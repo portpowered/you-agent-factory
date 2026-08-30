@@ -57,6 +57,12 @@ type FunctionalAPIServerConfig struct {
 	// root-built process that will host the server. The callback runs after
 	// invocation-local environment setup and before the server command starts.
 	BeforeStart func(testing.TB, Process, root.Input)
+	// BeforeRuntimeStart releases the server only after the callback has
+	// established any subscribe-before-action observations against its bound
+	// HTTP listener. It is useful for startup-driven runs whose action occurs
+	// during process initialization rather than after StartFunctionalAPIServer
+	// returns.
+	BeforeRuntimeStart func(testing.TB, string)
 }
 
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
@@ -95,6 +101,11 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 
 	api := NewProcessAPIServer()
+	var startGate chan struct{}
+	if cfg.BeforeRuntimeStart != nil {
+		startGate = make(chan struct{})
+		api.HoldStartUntilSignaled(startGate)
+	}
 	edges.APIServerStarter = api.Start
 	process, recordingReader := BuildProcessWithRecordingReader(t, edges)
 	var closeProcess func(context.Context) error
@@ -147,6 +158,24 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	readyTimeout := functionalServerReadyTimeout
 	if cfg.ServerReadyTimeout > 0 {
 		readyTimeout = cfg.ServerReadyTimeout
+	}
+	if cfg.BeforeRuntimeStart != nil {
+		boundURL, boundErr := api.WaitForBoundURL(readyTimeout)
+		if boundErr != nil {
+			close(startGate)
+			t.Fatal(boundErr)
+		}
+		released := false
+		release := func() {
+			if released {
+				return
+			}
+			close(startGate)
+			released = true
+		}
+		defer release()
+		cfg.BeforeRuntimeStart(t, boundURL)
+		release()
 	}
 	baseURL, err := api.WaitForBaseURL(readyTimeout)
 	if err != nil {

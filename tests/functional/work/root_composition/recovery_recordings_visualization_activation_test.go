@@ -60,6 +60,7 @@ func TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T
 
 	baseURL := server.URL()
 	workTypeName := recoveryActivationWorkType
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 	support.UpsertDefaultSessionWorkRequest(t, baseURL, factoryapi.WorkRequest{
 		RequestId: recoveryActivationRequestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -101,6 +102,8 @@ func TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T
 			completeLocation,
 		)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle proves
@@ -125,6 +128,7 @@ func TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle(t *tes
 	baseURL := server.URL()
 	workName := "fun-work-recordings-activation-task"
 	workTypeName := recordingsActivationWorkType
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 	support.UpsertDefaultSessionWorkRequest(t, baseURL, factoryapi.WorkRequest{
 		RequestId: "fun-work-recordings-activation-request",
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -134,7 +138,7 @@ func TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle(t *tes
 			Payload:      map[string]string{"title": "FUN Work recordings-read activation"},
 		}},
 	})
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, "~default", 15*time.Second)
 
 	process := support.BuildProcess(t, edges)
 	listOutput := executeRecordingsActivationWorkListCLI(t, process, baseURL, "")
@@ -161,6 +165,8 @@ func TestWorkRecordingsReadActivatesThroughRootBuildProcessAfterLifecycle(t *tes
 	if !found {
 		t.Fatalf("work list missing %q at complete: %#v", workName, listed.Results)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func recordingsActivationFactoryConfig() map[string]any {
@@ -213,26 +219,13 @@ func waitForRecoveryActivationWorkAtState(
 	timeout time.Duration,
 ) {
 	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		for _, item := range listed.Results {
-			if support.StringPointerValue(item.WorkId) != workID {
-				continue
-			}
-			if item.State != nil && item.State.Name == stateName {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting for work %q at state %q; last listing: %#v",
-		workID,
+	support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		baseURL,
+		"~default",
+		[]string{workID},
 		stateName,
-		listed.Results,
+		timeout,
 	)
 }
 

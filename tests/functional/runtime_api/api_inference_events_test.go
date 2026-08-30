@@ -48,10 +48,12 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	events := server.GetFactoryEvents(t)
 	assertFirstInferenceAttemptOrder(t, events)
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
 	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }

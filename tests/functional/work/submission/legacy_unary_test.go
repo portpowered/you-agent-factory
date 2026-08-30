@@ -36,6 +36,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 		},
 	})
 	defer server.Stop(t)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 
 	t.Run("direct_POST_and_idempotent_PUT", func(t *testing.T) {
 		assertLegacyUnaryDirectSubmitAndPut(t, server)
@@ -52,6 +53,9 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	t.Run("cron_internal_time_work", func(t *testing.T) {
 		assertLegacyUnaryCronSubmitPath(t)
 	})
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func assertLegacyUnaryDirectSubmitAndPut(t *testing.T, server *support.FunctionalAPIServer) {
@@ -65,7 +69,7 @@ func assertLegacyUnaryDirectSubmitAndPut(t *testing.T, server *support.Functiona
 	if submitted.TraceId == "" {
 		t.Fatal("POST /work returned an empty trace ID")
 	}
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 
 	workTypeName := "task"
 	workID := "work-retired-unary-put"
@@ -111,6 +115,7 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 		},
 	})
 	defer server.Stop(t)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 
 	waitForWorkIDsComplete(t, server.URL(), []string{"work-retired-unary-work-file"}, 10*time.Second)
 	support.AssertSingleWorkRequestEvent(
@@ -120,6 +125,8 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 		"work-retired-unary-work-file",
 		"task",
 	)
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func assertLegacyUnaryFileWatcherBatchConversion(
@@ -161,6 +168,7 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 		},
 	})
 	defer server.Stop(t)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 
 	waitForFakeClockWaiters(t, fakeClock, 1)
 	nominalAt := start.Add(time.Minute)
@@ -174,6 +182,8 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 	}
 
 	assertWorkRequestEventIncludesWorkID(t, server.GetFactoryEvents(t), record.Request.WorkID, "poll-for-work")
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func retiredUnaryCronFactoryConfig(schedule string) map[string]any {

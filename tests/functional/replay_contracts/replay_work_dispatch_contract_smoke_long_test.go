@@ -198,8 +198,9 @@ func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContrac
 			ScriptCommandRunner: runner,
 		},
 	})
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	scenario.submit(server)
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	assertReplayPlaceCounts(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:done": 1, "task:init": 0, "task:failed": 0,
 	})
@@ -208,6 +209,7 @@ func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContrac
 	}
 	events := server.GetFactoryEvents(t)
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 
 	return recordedDispatchContractRun{
 		request:       runner.LastRequest(),

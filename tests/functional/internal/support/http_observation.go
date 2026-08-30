@@ -74,51 +74,35 @@ func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) fac
 	})
 }
 
-// WaitForTerminalStatus requires the terminal token count to remain stable
-// briefly so watcher-backed seed discovery cannot be mistaken for completion
-// after only the first file is observed.
+// GetDefaultSessionStatus reads the public status projection once. Callers
+// that need terminal synchronization must observe the canonical Factory Event
+// first, then use this helper for the status values they assert.
+func GetDefaultSessionStatus(t testing.TB, baseURL string) factoryapi.StatusResponse {
+	t.Helper()
+	return GetSessionStatus(t, baseURL, factorysessions.DefaultSessionID)
+}
+
+// GetSessionStatus reads one session-scoped public status projection once.
+func GetSessionStatus(t testing.TB, baseURL, sessionID string) factoryapi.StatusResponse {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	return GetJSON[factoryapi.StatusResponse](t, endpoint)
+}
+
+// WaitForTerminalStatus is a compatibility boundary for the excluded
+// provider, provider-session, and worker live lanes. Those callers remain
+// owner-controlled handoffs and are not migrated in this lane. Owned callers
+// must open TerminalFactoryEventObservation before their trigger instead.
 //
-// The stable window also covers repeater CONTINUE handoffs: under coverage-shard
-// or parallel load, public categories can briefly show Initial=0 and
-// Processing=0 while a Work token is consumed but not yet marked in-flight.
-// Requiring IDLE/FINISHED runtime status plus a longer stable window prevents
-// those gaps from looking like completion.
+// The compatibility path has no stable window; its eventual owner migration
+// can remove this symbol without changing the event-driven owned path.
 func WaitForTerminalStatus(
 	t testing.TB,
 	baseURL string,
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	const stableWindow = 300 * time.Millisecond
-	var (
-		stableTotal int
-		stableSince time.Time
-	)
-	return WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
-		completed := status.Categories.Terminal + status.Categories.Failed
-		// TotalTokens includes resource tokens, while status categories describe
-		// customer Work. Terminality therefore depends on the absence of
-		// initial/processing Work, not equality with the aggregate token count.
-		if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
-			stableTotal = 0
-			stableSince = time.Time{}
-			return false
-		}
-		switch status.RuntimeStatus {
-		case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
-		default:
-			stableTotal = 0
-			stableSince = time.Time{}
-			return false
-		}
-		stableValue := status.TotalTokens + completed
-		if stableTotal != stableValue {
-			stableTotal = stableValue
-			stableSince = time.Now()
-			return false
-		}
-		return time.Since(stableSince) >= stableWindow
-	})
+	return WaitForSessionTerminalStatus(t, baseURL, factorysessions.DefaultSessionID, timeout)
 }
 
 func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkResponse {

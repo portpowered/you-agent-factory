@@ -55,7 +55,8 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 		},
 	})
 
-	support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 30*time.Second)
 	livePaths := functionalMetricArtifactPaths(t, metricsRoot)
 	if len(livePaths) != 1 {
 		t.Fatalf("live metrics artifacts = %#v, want exactly one regular active artifact", livePaths)
@@ -71,6 +72,7 @@ func TestRuntimeMetricsAndArtifactsThroughRootProcess(t *testing.T) {
 	}
 
 	server.Stop(t)
+	terminalObservation.Wait(30 * time.Second)
 	if _, err := os.Stat(expiredPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("expired artifact stat error = %v, want startup retention to remove %q", err, expiredPath)
 	}

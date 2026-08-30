@@ -32,7 +32,8 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 3 {
@@ -47,6 +48,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 	})
 	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "code-change:failed")
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
@@ -68,7 +70,8 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	assertWorkflowSessionPlaces(t, listed, map[string]int{"code-change:failed": 1})
 
@@ -90,6 +93,7 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 		t.Fatalf("public rejected outputs = %q, want %q", rejectedOutputs, wants)
 	}
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
@@ -103,7 +107,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 2 {
 		t.Errorf("expected swe called 2 times, got %d", got)

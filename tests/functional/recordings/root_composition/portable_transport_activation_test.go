@@ -55,7 +55,8 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	t.Cleanup(func() { recordServer.Stop(t) })
 
 	baseURL := recordServer.URL()
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, "~default", 15*time.Second)
 	waitForRecordingsActivationArtifact(t, recordArtifactPath)
 
 	events := support.GetFactoryEventsAt(t, baseURL)
@@ -88,6 +89,8 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	recordingsService := recordingsTransportActivationService(t, edges)
 	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)
 	assertRecordingsMCPTransportActivatesAfterLifecycle(t, recordingsService, durableSession.SessionId)
+	recordServer.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func recordingsTransportActivationFactoryConfig() map[string]any {

@@ -39,7 +39,7 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", fixture.artifactPath},
 	})
-	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 10*time.Second)
 	replayServer.Stop(t)
 }
 

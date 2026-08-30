@@ -34,15 +34,19 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	artifactPath := filepath.Join(t.TempDir(), "fun-recordings-activation.replay.json")
 	recordEdges := recorder.edges()
 	recordEdges.ProviderCommandRunner = support.NewStaticSuccessCommandRunner("recording activation provider COMPLETE")
+	var recordObservation *support.TerminalFactoryEventObservation
 	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		Args:                      []string{"--record", artifactPath},
 		WaitForServiceModeRuntime: true,
 		Edges:                     recordEdges,
+		BeforeRuntimeStart: func(tb testing.TB, baseURL string) {
+			recordObservation = support.OpenDefaultSessionTerminalFactoryEventObservation(tb, baseURL)
+		},
 	})
 	t.Cleanup(func() { recordServer.Stop(t) })
 
-	support.WaitForTerminalStatus(t, recordServer.URL(), 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, recordServer.URL(), "~default", 15*time.Second)
 	waitForRecordingsActivationArtifact(t, artifactPath)
 
 	if got := recorder.totalCanonicalRecording(); got <= 0 {
@@ -61,6 +65,7 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	}
 
 	recordServer.Stop(t)
+	recordObservation.Wait(15 * time.Second)
 
 	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: t.TempDir(),
@@ -68,7 +73,7 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	})
 	t.Cleanup(func() { replayServer.Stop(t) })
 
-	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 15*time.Second)
 	replayedWork := support.ListDefaultSessionWork(t, replayServer.URL())
 	if got := support.CountWorkAtCustomerState(replayedWork, "task:complete"); got != 1 {
 		t.Fatalf(
@@ -82,6 +87,7 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	if recordingsActivationLiveEventCount(replayedEvents, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
 		t.Fatal("replayed session missing dispatch response events")
 	}
+	replayServer.Stop(t)
 
 	support.ClearSeedInputs(t, dir)
 	resumeArtifactPath := filepath.Join(t.TempDir(), "fun-recordings-resume-successor.replay.json")
@@ -95,7 +101,7 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	})
 	t.Cleanup(func() { resumeServer.Stop(t) })
 
-	support.WaitForTerminalStatus(t, resumeServer.URL(), 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, resumeServer.URL(), "~default", 15*time.Second)
 	resumedSession := support.GetDefaultSession(t, resumeServer.URL())
 	if resumedSession.Id == "" {
 		t.Fatal("resumed session missing default session identity")
@@ -109,6 +115,10 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 		)
 	}
 
+	resumeEvents := resumeServer.GetFactoryEvents(t)
+	if recordingsActivationLiveEventCount(resumeEvents, factoryapi.FactoryEventTypeRunResponse) == 0 {
+		t.Fatal("resumed session missing canonical RUN_RESPONSE event")
+	}
 	resumeServer.Stop(t)
 	resumedArtifact, err := os.ReadFile(resumeArtifactPath)
 	if err != nil {

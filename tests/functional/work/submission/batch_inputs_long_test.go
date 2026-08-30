@@ -44,6 +44,7 @@ func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing
 	})
 
 	workTypeName := batchInputsWorkType
+	recordObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	submitted := support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: legacyUnaryRetirementRequestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -65,8 +66,16 @@ func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing
 		)
 	}
 
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		server.URL(),
+		"~default",
+		[]string{legacyUnaryRetirementWorkID},
+		"complete",
+		10*time.Second,
+	)
 	server.Stop(t)
+	recordObservation.Wait(10 * time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertRecordedBatchWorkRequest(t, artifact, legacyUnaryRetirementRequestID, "external-submit", 1, 0)
@@ -75,7 +84,8 @@ func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
-	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	replayObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, replayServer.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 10*time.Second)
 	support.AssertSingleWorkRequestEvent(
 		t,
 		replayServer.GetFactoryEvents(t),
@@ -84,6 +94,7 @@ func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing
 		batchInputsWorkType,
 	)
 	replayServer.Stop(t)
+	replayObservation.Wait(10 * time.Second)
 }
 
 func assertRecordedBatchWorkRequest(

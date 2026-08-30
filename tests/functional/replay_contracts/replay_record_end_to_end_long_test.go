@@ -259,9 +259,11 @@ Finish the input task.
 			ProviderOverride: provider,
 		},
 	})
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), recordReplayExternalBatchWorkRequest())
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayWorkRequestRecorded(t, artifact, "request-replay-external-batch", "external-submit", 2, 1)
@@ -364,11 +366,13 @@ Finish the input task.
 			ProviderCommandRunner: runner,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	assertReplayPlaceCounts(t, support.ListDefaultSessionWork(t, server.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:failed": 0,
 	})
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 
 	if runner.CallCount() == 0 {
 		t.Fatal("expected provider command runner to be called")

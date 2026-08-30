@@ -124,7 +124,8 @@ func TestCountWorkAtCustomerState_SupportBackedScenarioReachesTaskCompleteWithou
 		UseMockWorkers: true,
 	})
 	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")); got != 1 {
@@ -137,6 +138,8 @@ func TestCountWorkAtCustomerState_SupportBackedScenarioReachesTaskCompleteWithou
 	if workID == "" || !support.HasWorkAtCustomerState(listed, workID, "task:complete") {
 		t.Fatalf("HasWorkAtCustomerState(%q, task:complete) failed; listed=%#v", workID, listed)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func strPtr(value string) *string {

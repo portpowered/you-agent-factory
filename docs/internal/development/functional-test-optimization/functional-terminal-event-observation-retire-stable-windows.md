@@ -333,6 +333,90 @@ quiet or low-variance, and no absolute threshold was imposed. These runs prove
 the exact pre-change denominator and runnable package set; they do not prove
 the observer, migration, after timings, or clean checkout.
 
+## Story 003 — final census and after timing evidence
+
+### Final family census
+
+The final census was run after the caller migration with:
+
+    rg -n 'WaitForTerminalStatus|terminalObservationStableWindow|RunFactoryToCompletionWithEdgesAndWorkStable|RunFactoryToCompletionWithEdgesAndObservationsStable' tests/functional
+
+The owned result is zero direct `WaitForTerminalStatus` callers, zero owned
+`terminalObservationStableWindow` mode references, zero owned stable-only
+completion wrappers, and zero owned stable-wrapper callers. The final result
+retains only these owner-controlled handoffs:
+
+| Current hit | Owner/disposition |
+| --- | --- |
+| `tests/functional/providers/cli_timeout_cleanup_smoke_test.go:72,123` | Providers live lane; excluded and unchanged |
+| `tests/functional/providers/mock_workers_end_to_end_smoke_test.go:87` | Providers live lane; excluded and unchanged |
+| `tests/functional/providers/mock_workers_script_test.go:109` | Providers live lane; excluded and unchanged |
+| `tests/functional/providers/packaged_script_runtime_test.go:39,77` | Providers live lane; excluded and unchanged |
+| `tests/functional/providers/runtime_logging_smoke_test.go:318` | Providers live lane; excluded and unchanged |
+| `tests/functional/provider_sessions/association/response_exec_metadata_test.go:206,262` | Provider Sessions live lane; excluded and unchanged |
+| `tests/functional/workers/script/execution_long_test.go:64` | Workers live lane; excluded and unchanged |
+| `tests/functional/providers/acp/packaged_conformance_test.go:83` | ACP live lane's before-close wrapper; excluded and unchanged |
+| `tests/functional/internal/support/http_observation.go:92,99` | Compatibility symbol required to compile the excluded direct callers; no stable window is implemented by the compatibility boundary |
+| `tests/functional/internal/support/process_factory.go:135,139` | Compatibility wrapper required by the excluded ACP caller; its implementation is event-driven and has no stable window |
+
+The two unrelated `stableWindow` constants remain at
+`tests/functional/workstations/watcher/files_test.go:676` and
+`tests/functional/factory/current/helpers_long_test.go:248`; they are watcher
+debounce/readiness behavior outside this terminal-observation family. No file
+under the excluded provider, provider-session, or worker directories changed.
+The four audit-time JavaScript locations remain absent as established by the
+Story 001 history reconciliation.
+
+### After timing evidence — 51 exact invocations
+
+Each row below is three independent invocations of:
+
+    go test -tags=functionallong -count=1 <package>
+
+The tuple format is `outcome/exit, package time, Measure-Command wall time`;
+wall times are rounded to milliseconds. The median is the median wall time.
+
+| # | Package | Run 1 | Run 2 | Run 3 | Median wall |
+| ---: | --- | --- | --- | --- | ---: |
+| 1 | `internal/support` | PASS/0, 8.348s, 10.967s | PASS/0, 7.925s, 10.319s | PASS/0, 8.060s, 10.336s | 10.336s |
+| 2 | `events/factory_events` | PASS/0, 5.238s, 7.270s | PASS/0, 6.078s, 8.027s | PASS/0, 4.569s, 6.452s | 7.270s |
+| 3 | `events/response_events` | PASS/0, 3.099s, 5.184s | PASS/0, 5.558s, 8.403s | PASS/0, 3.844s, 9.373s | 8.403s |
+| 4 | `factory/definitions` | PASS/0, 84.677s, 87.209s | PASS/0, 23.367s, 25.547s | PASS/0, 22.556s, 24.624s | 25.547s |
+| 5 | `factory/replay_contracts` | PASS/0, 10.363s, 12.563s | PASS/0, 10.029s, 12.131s | PASS/0, 9.933s, 11.838s | 12.131s |
+| 6 | `factory/visualization/runtime_metrics` | PASS/0, 11.413s, 13.511s | PASS/0, 10.511s, 12.368s | PASS/0, 10.520s, 12.411s | 12.411s |
+| 7 | `operator_settings/root_composition` | PASS/0, 1.124s, 2.892s | PASS/0, 1.265s, 3.022s | PASS/0, 1.352s, 3.209s | 3.022s |
+| 8 | `recordings/root_composition` | FAIL/1, 3.024s, 5.192s | FAIL/1, 2.959s, 4.779s | FAIL/1, 3.027s, 5.080s | 5.080s |
+| 9 | `replay_contracts` | FAIL/1, 50.643s, 52.589s | FAIL/1, 50.535s, 52.531s | FAIL/1, 54.842s, 56.770s | 52.589s |
+| 10 | `runtime_api` | FAIL/1, 44.933s, 47.247s | FAIL/1, 43.303s, 45.502s | FAIL/1, 40.844s, 42.952s | 45.502s |
+| 11 | `work/recovery` | PASS/0, 2.881s, 4.826s | PASS/0, 3.037s, 5.242s | PASS/0, 3.624s, 5.935s | 5.242s |
+| 12 | `work/relationships` | PASS/0, 2.930s, 5.019s | PASS/0, 3.008s, 5.060s | PASS/0, 3.211s, 5.443s | 5.060s |
+| 13 | `work/root_composition` | PASS/0, 1.978s, 4.309s | PASS/0, 2.300s, 4.790s | PASS/0, 2.551s, 4.642s | 4.642s |
+| 14 | `work/submission` | PASS/0, 18.897s, 20.900s | PASS/0, 19.778s, 22.938s | PASS/0, 27.441s, 29.396s | 22.938s |
+| 15 | `workflow` | PASS/0, 6.055s, 8.212s | PASS/0, 6.634s, 8.872s | PASS/0, 5.801s, 7.898s | 8.212s |
+| 16 | `workstations/repeater` | FAIL/1, 23.690s, 25.704s | FAIL/1, 19.577s, 21.353s | FAIL/1, 18.646s, 20.301s | 21.353s |
+| 17 | `workstations/watcher` | PASS/0, 9.359s, 11.179s | PASS/0, 8.459s, 10.205s | PASS/0, 8.128s, 9.900s | 10.205s |
+
+The after sweep is 39 PASS and 12 FAIL, with the same four failing package
+families and baseline signatures recorded above: global `@you/full-flow`
+staging-owner contention in recordings, packaged/fixture and assertion
+failures in replay, logical-target/fixture failures in runtime API, and
+processor/path failures in repeater. The implementation did not remove or
+alter shared global state. Compared with the before medians, 10 of 17 package
+medians improved and the sum of package medians decreased from 276.263s to
+259.943s (5.9% directionally lower); repeater decreased from 32.412s to
+21.353s and watcher from 15.256s to 10.205s. This is the bounded optimization
+pass for this lane: fixed status polling and stable-window padding were removed
+from owned completion paths, with no unrelated optimization or threshold
+claim made on this saturated Windows host.
+
+### Story 003 evidence conclusion
+
+The final census, exact assertion inventory above, 51 after invocations, and
+`go vet ./...` (exit 0, no findings) prove the owned migration and preserve
+the existing passing behavior. The 12 failures are unchanged diagnostic
+baseline signatures, not implementation regressions. Clean-checkout loopback,
+final delivery, and CI remain Story 004/review gates.
+
 ## Story 001 evidence conclusion
 
 The ledger proves the story's four acceptance criteria:
@@ -349,4 +433,3 @@ The ledger proves the story's four acceptance criteria:
 
 Remaining gates are deliberately open: OBS-SPINE, OBS-UNIT, MIG-PKG,
 PERF-001, VET-001, and VAL-001.
-

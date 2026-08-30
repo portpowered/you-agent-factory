@@ -36,6 +36,7 @@ func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
 	t.Cleanup(func() { server.Stop(t) })
 
 	name := "ordered-durable-history-work"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
@@ -43,7 +44,7 @@ func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
 			"title": "prove ordered durable history",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 
 	firstRead := server.GetFactoryEvents(t)
 	if len(firstRead) < 4 {
@@ -60,6 +61,8 @@ func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
 		)
 	}
 	assertFactoryEventsSameRelativeOrder(t, firstRead, secondRead)
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 // TestAPIEventCursorReturnsOnlyNewerEvents proves a valid reconnect cursor
@@ -77,6 +80,7 @@ func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 	t.Cleanup(func() { server.Stop(t) })
 
 	name := "cursor-only-newer-events-work"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
@@ -84,7 +88,7 @@ func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 			"title": "prove cursor returns only newer events",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 
 	fullRead := server.GetFactoryEvents(t)
 	if len(fullRead) < 4 {
@@ -104,6 +108,8 @@ func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 		AfterSequence: &reconnectSequence,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterSequenceRead)
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 // TestAPIInvalidEventCursorReturnsTypedError proves invalid reconnect cursors
@@ -122,6 +128,7 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 	t.Cleanup(func() { server.Stop(t) })
 
 	name := "invalid-event-cursor-work"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
@@ -129,7 +136,7 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 			"title": "prove invalid cursor returns typed error",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 
 	retained := server.GetFactoryEvents(t)
 	if len(retained) < 4 {
@@ -175,6 +182,8 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 		)
 	}
 	assertFactoryEventsSameRelativeOrder(t, retained, validRead)
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 // TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent proves explicit trace and
@@ -192,6 +201,7 @@ func TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
 
 	const traceID = "trace-request"
 	name := "trace-aware-submit"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:                   &name,
 		WorkTypeName:           "task",
@@ -227,12 +237,14 @@ func TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
 		t.Fatalf("work trace ID = %q, want %s", got, traceID)
 	}
 
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	if len(listed.Results) != 1 ||
 		support.StringPointerValue(listed.Results[0].CurrentChainingTraceId) != traceID {
 		t.Fatalf("public work projection = %#v, want chaining trace identity", listed.Results)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 }
 
 func stringPtr(value string) *string {
@@ -333,6 +345,7 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 	firstStream.Close()
 
 	name := "stream-reconnect-continuity-work"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
@@ -340,7 +353,7 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 			"title": "prove reconnect has no gap or duplicate",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), factorysessions.DefaultSessionID, 15*time.Second)
 
 	reconnectStream := support.OpenFactoryEventStreamAt(
 		t,
@@ -366,6 +379,8 @@ func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
 		fullRetained,
 		cursorEvent,
 	)
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func collectFactoryEventStreamUntilCount(

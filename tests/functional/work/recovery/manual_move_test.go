@@ -52,6 +52,7 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	requiredState := "complete"
 	workTypeName := "task"
 	targetWorkName := "parent"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -80,7 +81,6 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	})
 
 	waitForWorkIDsAtState(t, server.URL(), []string{parentWorkID, childWorkID}, "failed", 15*time.Second)
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
 
 	parentMoveStatus, parentMoveBody := postMoveWorkStatus(t, server.URL(), parentWorkID, "processing")
 	if parentMoveStatus != http.StatusOK {
@@ -111,6 +111,8 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	}
 
 	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // TestTerminalFailedWorkCannotBeRedispatchedIllegally proves terminal failed work
@@ -133,6 +135,7 @@ func TestTerminalFailedWorkCannotBeRedispatchedIllegally(t *testing.T) {
 	defer server.Stop(t)
 
 	workTypeName := "task"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -184,6 +187,8 @@ func TestTerminalFailedWorkCannotBeRedispatchedIllegally(t *testing.T) {
 	if !support.HasWorkAtCustomerState(finalListed, workID, failedLocation) {
 		t.Fatalf("final work listing = %#v, want terminal failed %s", finalListed.Results, failedLocation)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // TestAPIMoveWorkResumesRecoverableFlow proves a valid POST /work/{id}/move against
@@ -214,6 +219,7 @@ func TestAPIMoveWorkResumesRecoverableFlow(t *testing.T) {
 	defer server.Stop(t)
 
 	workTypeName := "task"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -255,6 +261,8 @@ func TestAPIMoveWorkResumesRecoverableFlow(t *testing.T) {
 	if !support.HasWorkAtCustomerState(listed, workID, completeLocation) {
 		t.Fatalf("work listing after API move resume = %#v, want %s", listed.Results, completeLocation)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 // TestAPIInvalidMoveReturnsConflictWithoutMutation proves a duplicate public
@@ -278,6 +286,7 @@ func TestAPIInvalidMoveReturnsConflictWithoutMutation(t *testing.T) {
 	defer server.Stop(t)
 
 	workTypeName := "task"
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -330,4 +339,7 @@ func TestAPIInvalidMoveReturnsConflictWithoutMutation(t *testing.T) {
 	}
 
 	provider.releaseBlockedRedispatch()
+	waitForWorkIDsAtState(t, server.URL(), []string{workID}, "failed", 15*time.Second)
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }

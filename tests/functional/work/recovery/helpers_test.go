@@ -93,28 +93,14 @@ func waitForWorkIDsAtState(
 	timeout time.Duration,
 ) {
 	t.Helper()
-
-	want := make(map[string]bool, len(workIDs))
-	for _, workID := range workIDs {
-		want[workID] = true
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		found := 0
-		for _, item := range listed.Results {
-			workID := support.StringPointerValue(item.WorkId)
-			if want[workID] && workStateName(item.State) == stateName {
-				found++
-			}
-		}
-		if found == len(want) {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf("timed out waiting for work IDs %v at state %q; last listing: %#v", workIDs, stateName, listed.Results)
+	support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		baseURL,
+		"~default",
+		workIDs,
+		stateName,
+		timeout,
+	)
 }
 
 func waitForWorkIDsComplete(
@@ -124,33 +110,14 @@ func waitForWorkIDsComplete(
 	timeout time.Duration,
 ) []factoryapi.Work {
 	t.Helper()
-
-	want := make(map[string]bool, len(workIDs))
-	for _, workID := range workIDs {
-		want[workID] = true
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		found := make(map[string]factoryapi.Work, len(want))
-		for _, item := range listed.Results {
-			workID := support.StringPointerValue(item.WorkId)
-			if want[workID] && workStateName(item.State) == "complete" {
-				found[workID] = item
-			}
-		}
-		if len(found) == len(want) {
-			items := make([]factoryapi.Work, 0, len(workIDs))
-			for _, workID := range workIDs {
-				items = append(items, found[workID])
-			}
-			return items
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf("timed out waiting for work IDs %v to complete; last listing: %#v", workIDs, listed.Results)
-	return nil
+	return support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+		t,
+		baseURL,
+		"~default",
+		workIDs,
+		"complete",
+		timeout,
+	)
 }
 
 func requireWorkByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {

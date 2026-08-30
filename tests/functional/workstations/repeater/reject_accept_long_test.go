@@ -31,7 +31,7 @@ func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
 		},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStable(t, dir, serviceedges.Edges{
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
@@ -53,7 +53,7 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if provider.CallCount("exec-worker") != 3 {
 		t.Errorf("exec-worker call count = %d, want 3 reject-then-accept iterations", provider.CallCount("exec-worker"))
@@ -77,7 +77,7 @@ func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) 
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finalized. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if provider.CallCount() != 4 {
@@ -159,7 +159,7 @@ func TestWorkstationStopWords_ThroughCustomerProcess(t *testing.T) {
 				workerexecution.InferenceResponse{Content: test.response},
 			)
 
-			_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
+			_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 15*time.Second)
 			if got := support.CountWorkAtCustomerState(listed, test.wantPlace); got != 1 {
 				t.Errorf("%s token count = %d, want 1", test.wantPlace, got)
 			}
@@ -185,7 +185,7 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
@@ -202,7 +202,7 @@ func TestMultiOutput_WithoutStopWord(t *testing.T) {
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "I tried but could not finish"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{
 		"request:failed": 1, "plan:init": 0, "task:init": 0, "plan:complete": 0, "task:complete": 0,
 	})
@@ -221,7 +221,7 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
@@ -240,7 +240,7 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
 }
 
@@ -264,7 +264,7 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
@@ -299,7 +299,7 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 			{Content: "looks good<COMPLETE>"},
 		},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 	assertRepeaterWorkStates(t, listed, map[string]int{"story:complete": 1})
 
 	if provider.CallCount("executor-worker") != 2 {

@@ -47,7 +47,8 @@ func TestRecordingsEventArtifactProjectionSurfacesActivateThroughRootBuildProces
 	t.Cleanup(func() { server.Stop(t) })
 
 	baseURL := server.URL()
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, "~default", 15*time.Second)
 
 	events := support.GetFactoryEventsAt(t, baseURL)
 	if recordingsActivationLiveEventCount(events, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
@@ -113,6 +114,8 @@ func TestRecordingsEventArtifactProjectionSurfacesActivateThroughRootBuildProces
 	if artifactDetail.ContentHash == nil || strings.TrimSpace(*artifactDetail.ContentHash) == "" {
 		t.Fatalf("artifact detail contentHash = %#v, want non-empty hash after lifecycle", artifactDetail.ContentHash)
 	}
+	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 }
 
 func startRecordingsSurfaceActivationDurableSession(

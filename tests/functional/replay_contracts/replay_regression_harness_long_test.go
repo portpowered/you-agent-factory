@@ -38,7 +38,7 @@ func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *test
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("task:complete token count = %d, want 1", got)
@@ -163,8 +163,10 @@ func recordReplayHarnessFixtureArtifact(t *testing.T) string {
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 10*time.Second)
 	server.Stop(t)
+	terminalObservation.Wait(10 * time.Second)
 
 	return artifactPath
 }

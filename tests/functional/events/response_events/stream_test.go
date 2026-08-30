@@ -243,7 +243,9 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
+	sessionID := factorysessions.DefaultSessionID
 	firstWorkName := "cursor-gap-first-work"
+	firstTerminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &firstWorkName,
 		WorkTypeName: "task",
@@ -251,9 +253,10 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 			"title": "seed retained response history",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), sessionID, 20*time.Second)
 
 	secondWorkName := "cursor-gap-second-work"
+	secondTerminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &secondWorkName,
 		WorkTypeName: "task",
@@ -261,9 +264,8 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 			"title": "evict earlier retained response history",
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), sessionID, 20*time.Second)
 
-	sessionID := factorysessions.DefaultSessionID
 	retained := retainedFactoryResponseEventsWithoutGaps(
 		support.GetFactoryResponseEventsAt(t, server.URL(), sessionID),
 	)
@@ -313,6 +315,9 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 	)
 	assertResponseEventFramesMatchRetainedCatchUp(t, retained, resumeFromStream)
 	resumeStream.Close()
+	server.Stop(t)
+	firstTerminalObservation.Wait(20 * time.Second)
+	secondTerminalObservation.Wait(20 * time.Second)
 }
 
 // TestAPIResponseEventSSEStreamsRetainedThenLiveEvents proves the public
@@ -356,6 +361,7 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 		support.SessionResponseEventsURL(server.URL(), sessionID),
 	)
 	firstWorkName := "retained-then-live-first-work"
+	firstTerminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &firstWorkName,
 		WorkTypeName: "task",
@@ -364,7 +370,6 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 		},
 	})
 	retainedFrames := collectResponseEventStreamUntilTerminalRun(t, firstStream, 0, 20*time.Second)
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
 	firstStream.Close()
 	retained := responseEventsFromFrames(retainedFrames)
 	if len(retained) < 2 {
@@ -389,6 +394,7 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 	assertResponseEventFramesMatchRetainedCatchUp(t, retained, retainedFromStream)
 
 	secondWorkName := "retained-then-live-second-work"
+	secondTerminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         &secondWorkName,
 		WorkTypeName: "task",
@@ -404,7 +410,6 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 		maxRetainedSequence,
 		20*time.Second,
 	)
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
 	stream.Close()
 
 	if len(liveFromStream) == 0 {
@@ -428,6 +433,9 @@ func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
 	if runner.CallCount() != 2 {
 		t.Fatalf("provider command runner calls = %d, want 2 invocations", runner.CallCount())
 	}
+	server.Stop(t)
+	firstTerminalObservation.Wait(20 * time.Second)
+	secondTerminalObservation.Wait(20 * time.Second)
 }
 
 func loadCodexPartialStreamGoldenCase(t *testing.T) support.ProviderSessionCase {

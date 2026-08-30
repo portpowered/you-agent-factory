@@ -42,13 +42,15 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 			ProviderOverride: provider,
 		},
 	})
-	support.WaitForTerminalStatus(t, recordServer.URL(), 10*time.Second)
+	recordObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, recordServer.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, recordServer.URL(), "~default", 10*time.Second)
 	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, recordServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:failed": 0,
 	})
 	assertRecordedDispatchHistory(t, recordServer.GetFactoryEvents(t))
 	assertProviderSawCanonicalWorkstationPrompt(t, provider)
 	recordServer.Stop(t)
+	recordObservation.Wait(10 * time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertCanonicalReplayWorkstationMap(t, artifactPath, artifact)
@@ -60,7 +62,7 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
-	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 10*time.Second)
 	assertReplaySessionPlaces(t, support.ListDefaultSessionWork(t, replayServer.URL()), map[string]int{
 		"task:complete": 1, "task:init": 0, "task:processing": 0, "task:failed": 0,
 	})

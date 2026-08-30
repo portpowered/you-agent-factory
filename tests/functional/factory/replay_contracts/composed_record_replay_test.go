@@ -35,9 +35,11 @@ func TestComposedRecordReplayUsesRootBuildProcessAndExecute(t *testing.T) {
 	recordProcess := buildComposedProcess(t, effects, recordAPI, support.NewStaticSuccessCommandRunner("record provider COMPLETE"))
 	assertComposedBuildIsInert(t, effects, artifactPath)
 	recordCommand, recordURL := startComposedRun(t, recordProcess, recordAPI, factoryDir, "--record", artifactPath)
-	support.WaitForTerminalStatus(t, recordURL, 15*time.Second)
+	recordObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, recordURL)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, recordURL, "~default", 15*time.Second)
 	assertComposedRecordedState(t, recordURL, artifactPath)
 	recordCommand.Stop(t)
+	recordObservation.Wait(15 * time.Second)
 
 	recordedPayload, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -56,7 +58,7 @@ func TestComposedRecordReplayUsesRootBuildProcessAndExecute(t *testing.T) {
 	replayRunner := &composedReplayCommandRunner{}
 	replayProcess := buildComposedProcess(t, effects, replayAPI, replayRunner)
 	replayCommand, replayURL := startComposedRun(t, replayProcess, replayAPI, t.TempDir(), "--replay", artifactPath, "--no-record")
-	support.WaitForTerminalStatus(t, replayURL, 15*time.Second)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayURL, "~default", 15*time.Second)
 	assertComposedReplayedState(t, replayURL)
 	replayCommand.Stop(t)
 

@@ -37,9 +37,11 @@ func TestCanonicalRecordReplayPreservesAdmittedFacts(t *testing.T) {
 			ProviderCommandRunner: support.NewStaticSuccessCommandRunner("canonical fact provider COMPLETE"),
 		},
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 15*time.Second)
 	liveEvents := server.GetFactoryEvents(t)
 	server.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertCanonicalFactsMatchLiveStream(t, artifact, liveEvents)

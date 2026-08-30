@@ -426,11 +426,13 @@ func runFactoryWithOperatorHome(
 	inputs.Input.WorkingDirectory = dir
 	daemon := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
-	support.WaitForTerminalStatus(t, baseURL, timeout)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, "~default", timeout)
 
 	session := support.GetDefaultSession(t, baseURL)
 	work := support.ListDefaultSessionWork(t, baseURL)
 	daemon.Stop(t)
+	terminalObservation.Wait(timeout)
 	return session, work
 }
 

@@ -22,19 +22,35 @@ const processAPIServerReadyTimeout = 15 * time.Second
 // only the external server boundary and never constructs application services.
 type ProcessAPIServer struct {
 	startedSignal chan struct{}
+	bound         chan struct{}
 	ready         chan struct{}
 
 	mu           sync.Mutex
 	started      bool
 	url          string
+	startGate    <-chan struct{}
 	shutdownGate <-chan struct{}
 }
 
 func NewProcessAPIServer() *ProcessAPIServer {
 	return &ProcessAPIServer{
 		startedSignal: make(chan struct{}),
+		bound:         make(chan struct{}),
 		ready:         make(chan struct{}),
 	}
+}
+
+// HoldStartUntilSignaled keeps the runtime's startup acknowledgement from
+// being delivered after the HTTP listener binds until startup observers have
+// subscribed. The listener is already serving while the gate is held, so the
+// observer can establish its cursor against the real handler.
+func (server *ProcessAPIServer) HoldStartUntilSignaled(gate <-chan struct{}) {
+	if server == nil {
+		return
+	}
+	server.mu.Lock()
+	server.startGate = gate
+	server.mu.Unlock()
 }
 
 // HoldShutdownUntilSignaled defers listener teardown, once the owning
@@ -79,6 +95,16 @@ func (server *ProcessAPIServer) Start(
 		request.Handler, request.Pprof, platformprocessmemory.CurrentCommit, nil,
 	))
 	server.url = httpServer.URL
+	close(server.bound)
+	startGate := server.startGate
+	server.mu.Unlock()
+
+	if startGate != nil {
+		select {
+		case <-startGate:
+		case <-time.After(processAPIServerReadyTimeout):
+		}
+	}
 	if request.OnBound != nil {
 		boundPort := request.Port
 		if address, ok := httpServer.Listener.Addr().(*net.TCPAddr); ok {
@@ -86,6 +112,7 @@ func (server *ProcessAPIServer) Start(
 		}
 		request.OnBound(platformhttpserver.Binding{Port: boundPort})
 	}
+	server.mu.Lock()
 	close(server.ready)
 	server.mu.Unlock()
 
@@ -99,6 +126,25 @@ func (server *ProcessAPIServer) Start(
 	httpServer.CloseClientConnections()
 	httpServer.Close()
 	return nil
+}
+
+// WaitForBoundURL returns the listener URL before Start releases the runtime
+// gate. It is only used by startup-observer fixtures; ordinary callers should
+// use WaitForURL after the process is ready.
+func (server *ProcessAPIServer) WaitForBoundURL(timeout time.Duration) (string, error) {
+	if server == nil {
+		return "", fmt.Errorf("process API server is required")
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-server.bound:
+		server.mu.Lock()
+		defer server.mu.Unlock()
+		return server.url, nil
+	case <-timer.C:
+		return "", fmt.Errorf("timed out waiting for process API server listener after %s", timeout)
+	}
 }
 
 // BaseURL returns the bound httptest URL after Ready has been signaled.

@@ -77,8 +77,10 @@ Process the input task.
 	inputs.Input.WorkingDirectory = dir
 	daemon := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
+	support.WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, "~default", 15*time.Second)
 	daemon.Stop(t)
+	terminalObservation.Wait(15 * time.Second)
 
 	if got := recorder.readFileCalls(); got == 0 {
 		t.Fatalf("operator-config ReadFile calls after runtime lifecycle = %d, want > 0 via edges", got)

@@ -121,3 +121,40 @@ func TestProcessAPIServerWaitForURLReturnsDynamicURLAfterStart(t *testing.T) {
 		t.Fatalf("ProcessAPIServer.Start() error = %v, want nil", err)
 	}
 }
+
+func TestProcessAPIServerStartGateDelaysRuntimeBindingUntilReleased(t *testing.T) {
+	server := NewProcessAPIServer()
+	startGate := make(chan struct{})
+	server.HoldStartUntilSignaled(startGate)
+	ctx, cancel := context.WithCancel(t.Context())
+	startDone := make(chan error, 1)
+	onBound := make(chan struct{})
+	go func() {
+		startDone <- server.Start(ctx, platformhttpserver.StartRequest{
+			Handler: http.NotFoundHandler(),
+			OnBound: func(platformhttpserver.Binding) { close(onBound) },
+		})
+	}()
+
+	if _, err := server.WaitForBoundURL(time.Second); err != nil {
+		cancel()
+		close(startGate)
+		t.Fatalf("WaitForBoundURL() error = %v, want bound listener", err)
+	}
+	select {
+	case <-onBound:
+		t.Fatal("OnBound ran before startup gate was released")
+	default:
+	}
+
+	close(startGate)
+	select {
+	case <-onBound:
+	case <-time.After(time.Second):
+		t.Fatal("OnBound did not run after startup gate release")
+	}
+	cancel()
+	if err := <-startDone; err != nil {
+		t.Fatalf("ProcessAPIServer.Start() error = %v, want nil", err)
+	}
+}

@@ -214,6 +214,7 @@ func TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle(t *testi
 
 		baseURL := server.URL()
 		process := support.BuildProcess(t, edges)
+		terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 
 		batchOutput := executeRelationshipActivationBatchSubmitCLI(
 			t,
@@ -223,7 +224,14 @@ func TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle(t *testi
 		)
 		decodeRelationshipActivationBatchSubmitJSON(t, batchOutput, parentChildActivationRequestID)
 
-		support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+		support.WaitForSessionWorkIDsAtStateFromFactoryEvents(
+			t,
+			baseURL,
+			"~default",
+			[]string{parentChildActivationParentID, parentChildActivationChildID},
+			"complete",
+			15*time.Second,
+		)
 
 		listed := support.ListDefaultSessionWork(t, baseURL)
 		assertRelationshipActivationParentChildInListing(
@@ -249,6 +257,8 @@ func TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle(t *testi
 			parentChildActivationChildID,
 			parentChildActivationParentID,
 		)
+		server.Stop(t)
+		terminalObservation.Wait(15 * time.Second)
 	})
 }
 

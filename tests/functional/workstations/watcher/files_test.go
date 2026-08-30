@@ -41,7 +41,7 @@ func TestWatcherSingleFileCompletesOneWork(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -103,7 +103,7 @@ func TestWatcherSequentialFilesAllComplete(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -170,7 +170,7 @@ func TestWatcherConcurrentFilesCompleteWithoutDuplicates(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -243,7 +243,7 @@ func TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -310,7 +310,7 @@ func TestWatcherDefaultChannelSubmission(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -362,7 +362,7 @@ func TestWatcherExecutionIDDirectorySubmission(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -411,7 +411,7 @@ func TestWatcherCombinedDefaultAndDynamicExecDirectory(t *testing.T) {
 		},
 	})
 
-	session, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(
+	session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
@@ -457,7 +457,7 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Story set failed. COMPLETE")},
 	)
 
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStable(
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
 		serviceedges.Edges{ProviderCommandRunner: runner},

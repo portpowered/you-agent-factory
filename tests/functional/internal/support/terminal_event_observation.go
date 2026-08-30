@@ -300,13 +300,18 @@ func (observation *TerminalFactoryEventObservation) belongsToSession(event facto
 		return true
 	}
 	eventSessionID := strings.TrimSpace(*event.Context.SessionId)
+	if observation.sessionID == factorysessions.DefaultSessionID {
+		// The default compatibility route is already session-scoped by the
+		// handler. Its events may carry the resolved runtime UUID rather than
+		// the ~default selector, so the route itself is the authority here.
+		return true
+	}
 	if eventSessionID == observation.sessionID {
 		return true
 	}
 	// The live default-session route may publish its stable selector in event
 	// context while the session read route returns the resolved runtime UUID.
-	return observation.sessionID != factorysessions.DefaultSessionID &&
-		eventSessionID == factorysessions.DefaultSessionID
+	return eventSessionID == factorysessions.DefaultSessionID
 }
 
 func (observation *TerminalFactoryEventObservation) signalError(err error) {
