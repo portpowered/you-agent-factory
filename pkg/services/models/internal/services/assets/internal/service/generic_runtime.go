@@ -401,6 +401,96 @@ func (s *service) inspectGenericRuntimeCache(
 	return inspection, true, nil
 }
 
+func (s *service) reusableGenericRuntimeCache(
+	ctx context.Context,
+	plan genericPreparationPlan,
+) (*assets.RuntimeCacheInspection, bool, error) {
+	if strings.TrimSpace(plan.source.modelName) == "" {
+		return nil, false, nil
+	}
+	inspection, present, err := s.inspectGenericRuntimeCache(
+		ctx, plan.cacheDirectory, plan.source.modelName, plan.source,
+	)
+	if err != nil || !present || !inspection.Installed ||
+		!inspection.ManifestValid || !inspection.IntegrityVerified ||
+		!genericRuntimeCacheMatchesPlan(plan, inspection) {
+		return nil, false, err
+	}
+	return &inspection, true, nil
+}
+
+func genericRuntimeCacheMatchesPlan(
+	plan genericPreparationPlan,
+	inspection assets.RuntimeCacheInspection,
+) bool {
+	requestedRevision := strings.TrimSpace(plan.source.revision)
+	if requestedRevision != "" {
+		if !strings.EqualFold(strings.TrimSpace(inspection.Revision), requestedRevision) {
+			return false
+		}
+	} else if len(plan.modelRequirements) == 0 {
+		// Without an immutable source revision or requested artifact facts there
+		// is no safe identity with which to associate a managed cache record.
+		return false
+	}
+	requestedArtifacts := make([]models.AssetRequirement, 0, len(plan.modelRequirements))
+	for _, artifact := range plan.modelRequirements {
+		requestedArtifacts = append(requestedArtifacts, artifact.requirement)
+	}
+	return genericRuntimeRequirementsSatisfy(
+		requestedArtifacts, inspection.ExpectedArtifacts,
+	)
+}
+
+func genericRuntimeRequirementsSatisfy(
+	requested []models.AssetRequirement,
+	cached []models.AssetRequirement,
+) bool {
+	if len(requested) == 0 {
+		return true
+	}
+	byName := make(map[string]models.AssetRequirement, len(cached))
+	for _, requirement := range cached {
+		byName[filepath.ToSlash(strings.TrimSpace(requirement.Name))] = requirement
+	}
+	for _, requirement := range requested {
+		cachedRequirement, ok := byName[filepath.ToSlash(strings.TrimSpace(requirement.Name))]
+		if !ok {
+			return false
+		}
+		if requirement.Bytes > 0 && cachedRequirement.Bytes != requirement.Bytes {
+			return false
+		}
+		if digest := strings.TrimSpace(requirement.SHA256); digest != "" &&
+			!strings.EqualFold(digest, strings.TrimSpace(cachedRequirement.SHA256)) {
+			return false
+		}
+	}
+	return true
+}
+
+func genericCacheResultFromRuntimeCache(
+	inspection assets.RuntimeCacheInspection,
+) genericCacheResult {
+	result := genericCacheResult{
+		artifacts: make([]models.AssetArtifact, 0, len(inspection.ObservedArtifacts)),
+		paths:     make([]string, 0, len(inspection.ObservedArtifacts)),
+	}
+	for _, artifact := range inspection.ObservedArtifacts {
+		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
+		if name == "" || strings.TrimSpace(inspection.CachePath) == "" {
+			continue
+		}
+		artifact.Name = name
+		artifact.Kind = models.AssetArtifactKindModel
+		result.artifacts = append(result.artifacts, artifact)
+		result.paths = append(result.paths, filepath.Join(
+			inspection.CachePath, filepath.FromSlash(name),
+		))
+	}
+	return result
+}
+
 func (s *service) inspectGenericRuntimeFiles(
 	ctx context.Context,
 	revisionPath string,

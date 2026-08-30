@@ -57,6 +57,100 @@ func TestPrepareGenericAssetsPublishesDurableRuntimeCacheAcrossServiceReconstruc
 	}
 }
 
+func TestPrepareGenericAssetsReusesVerifiedManagedRuntimeBeforeRemotePreflight(t *testing.T) {
+	t.Parallel()
+
+	scope, service, modelName, revision, fileName, body := newVerifiedManagedRuntimeFixture(t)
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      modelName,
+		Reference: models.ModelReference{NameOrURI: "hf://owner/embed@" + revision},
+	}
+	preflight, err := service.PreflightModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	assertVerifiedManagedRuntimePreflight(t, preflight)
+	result, err := service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	assertVerifiedManagedRuntimeResult(t, result, fileName, body)
+
+	_, err = service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      modelName,
+		Reference: models.ModelReference{NameOrURI: "hf://owner/embed@" + strings.Repeat("b", 40)},
+		Offline:   true,
+	})
+	if !errors.Is(err, models.ErrAssetOffline) {
+		t.Fatalf("different revision preflight error = %v, want offline cache miss", err)
+	}
+}
+
+func newVerifiedManagedRuntimeFixture(t *testing.T) (
+	models.RuntimeScopeRef, *service, string, string, string, []byte,
+) {
+	t.Helper()
+	cacheDirectory := t.TempDir()
+	modelName := "embed"
+	revision := strings.Repeat("a", 40)
+	fileName := "model.safetensors"
+	body := []byte("verified managed embedding model")
+	modelRoot := filepath.Join(cacheDirectory, canonicalModelName(modelName))
+	revisionPath := filepath.Join(modelRoot, revision)
+	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
+		t.Fatalf("create managed runtime: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(revisionPath, fileName), body, 0o644); err != nil {
+		t.Fatalf("write managed runtime artifact: %v", err)
+	}
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: modelName,
+		Revision:  revision,
+		Files: []metadataFile{{
+			Path: fileName, Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal managed runtime metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelRoot, metadataFileName), metadata, 0o644); err != nil {
+		t.Fatalf("write managed runtime metadata: %v", err)
+	}
+	scopes := newScopes(t, "generic-managed-cache-reuse")
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("verified managed runtime preflight used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	return scope, service, modelName, revision, fileName, body
+}
+
+func assertVerifiedManagedRuntimePreflight(
+	t *testing.T,
+	preflight models.PreflightModelAssetsResult,
+) {
+	t.Helper()
+	if preflight.ModelDownloadRequired || preflight.BackendDownloadRequired || preflight.TotalBytes != 0 {
+		t.Fatalf("preflight = %#v, want no download for verified managed runtime", preflight)
+	}
+}
+
+func assertVerifiedManagedRuntimeResult(
+	t *testing.T,
+	result models.PrepareModelAssetsResult,
+	fileName string,
+	body []byte,
+) {
+	t.Helper()
+	if result.Outcome != models.AssetPreparationAlreadyAvailable || len(result.Asset.Artifacts) != 1 ||
+		result.Asset.Artifacts[0].Name != fileName || result.Asset.Artifacts[0].Bytes != int64(len(body)) ||
+		result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
+		t.Fatalf("prepared asset = %#v, want verified managed artifact", result.Asset)
+	}
+}
+
 func TestPrepareGenericAssetsReplacesNamedRuntimeCacheAtomically(t *testing.T) {
 	t.Parallel()
 
