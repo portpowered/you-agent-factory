@@ -584,15 +584,19 @@ three owned package roots and this ledger.
 ## LOOPBACK-C14: clean-room validation report
 
 The report below follows `factory/docs/standards/validation-loopback-template.md`.
-It was executed read-only from a fresh detached worktree at the current pushed
-source head `500ad1b85c98f3e9bae242e8d07325a68b08571e`; the temporary worktree
-was clean before execution and removed afterward. No implementation repair was
-made during loopback.
+It was executed read-only from a fresh detached worktree at rebased source
+candidate `fa50c00e86299d1271ee2e3bfa187aed10ce0bde`; the temporary worktree was
+clean before execution and removed afterward. The pushed head
+`bac24cf2b98ba0c459619239051222038da8601a` contains only the evidence-only
+ledger refresh after that loopback source candidate. No implementation repair
+was made during loopback.
 
 ### Environment and artifact
 
-- Commit/build identifier: `500ad1b85c98f3e9bae242e8d07325a68b08571e` (the
-  current pushed source head before this evidence-only ledger refresh).
+- Commit/build identifier: `fa50c00e86299d1271ee2e3bfa187aed10ce0bde` (the
+  rebased source candidate tested by the clean-room loopback). The pushed head
+  `bac24cf2b98ba0c459619239051222038da8601a` is only the evidence-only ledger
+  refresh after that check.
 - Environment and configuration: Windows 11 Home `10.0.26200`,
   `go1.25.0 windows/amd64`, `GOAMD64=v1`, `GOTOOLCHAIN=auto`, module
   `go.mod`, `GOFLAGS` empty; shared-host contention was left visible.
