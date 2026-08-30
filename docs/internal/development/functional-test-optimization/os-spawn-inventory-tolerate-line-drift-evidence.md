@@ -160,3 +160,131 @@ wiring, clean final-commit reproduction, hosted CI, or merge.
 No current PR hosted-CI result is claimed or recorded in this ledger; the
 operator-supplied pre-fix `main` failure is recorded above as the scope
 amendment's finding.
+
+## Validation report: BEH-002 — repository-integrated delivery
+
+## Environment and artifact
+
+- Commit/build identifier: `a949e3cc4f1c2c6aad4955abf0eaf43b0dfd7f07` (the
+  rebased implementation head validated in the clean-room pass below; this
+  report adds no executable, test, inventory, or baseline behavior).
+- Base identity: rebased cleanly onto current `origin/main`
+  `8b7f496b60`; the operator-authorized sessions-restart reconciliation is
+  retained.
+- Environment and configuration: Windows `10.0.26100`, `go1.25.0
+  windows/amd64`, PowerShell, repository `go.mod`, default Go build cache, no
+  remote credentials, and no paid provider calls.
+- Customer entry point: the repository's production `cmd/functionalosboundarycheck`
+  checker through `go run`, `make functional-os-boundary-check`, and the
+  focused `make lint` driver.
+- Real and substituted dependencies: real local filesystem, Go parser/AST
+  scan, JSON loaders, reconciliation, baseline evaluator, Make/lint driver,
+  and a detached clean worktree; no product runtime or external service is
+  applicable.
+- Cost/call budget used: zero remote or paid calls; maximum cost `$0`.
+
+## Exact-head run record
+
+The clean-room worktree was detached at the exact implementation head above.
+`git status --short --untracked-files=no` emitted no tracked changes. The
+following commands ran in that worktree and all exited `0`:
+
+| Procedure | Observed result |
+| --- | --- |
+| `go test ./cmd/functionalosboundarycheck -count=1` | `ok github.com/portpowered/infinite-you/cmd/functionalosboundarycheck 0.315s` |
+| `go run ./cmd/functionalosboundarycheck -root . -baseline docs/internal/baselines/functional-os-spawn-baseline.json -inventory docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | `observed=70 baseline=70 packages=23 intentional=62 accidental=8 decreased=0`; `reconciled 70 inventory OS-spawn records` |
+| `make functional-os-boundary-check` | checker output above; `LINT PASSED` is not emitted by this target, exit `0` |
+| `make lint LINT_TARGETS=functional-os-boundary-check` | `functional-os-boundary-check: PASS`; `LINT PASSED: 1 target(s) completed successfully` |
+
+The focused lint run emitted one transient Windows file-lock warning before
+the lint driver started, but the driver completed the checker successfully
+with exit `0`; it did not alter the result or the canonical inputs. The exact
+clean-room checker summaries were:
+
+```text
+[agent-factory:functional-os-boundary] static OS-spawn baseline holds: observed=70 baseline=70 packages=23 intentional=62 accidental=8 decreased=0
+[agent-factory:functional-os-boundary] reconciled 70 inventory OS-spawn records
+```
+
+The canonical input hashes were identical before and after all clean-room
+commands:
+
+```text
+baseline sha256: 30656D69EE00BF37EDF149033D08FC41D9B0D16310D2E149CDEB777850FA0797
+inventory sha256: DDB618D20CCF4B956F652D6EAE57CD9B609D107CE5435158784043A0F46478BB
+```
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Line-only source motion is informational and read-only | PASS | The package witness `TestInventoryReconciliationToleratesSourceLineDriftByIdentity` passed with exact sorted stdout, empty stderr, and byte-identical fixture files; the clean current tree emitted no drift. | Future scanner behavior on unsupported platforms. |
+| New unjustified spawn retains paired baseline/inventory admission failure | PASS | `TestInventoryRejectsUninventoriedSpawnIncrease` passed with the existing actionable admission diagnostic, nonzero result, empty stdout, and unchanged inputs. | A future new site in the live repository. |
+| Paired removal remains a permitted decrease | PASS | `TestInventoryAllowsPairedRemovalAsDecrease` passed with `observed=1 baseline=2 decreased=1` and unchanged baseline bytes. | Repository-wide removal scenarios. |
+| Renamed or moved identity fails closed | PASS | `TestInventoryRejectsRenamedOrMovedIdentity` passed for both enclosing-function rename and source move; absent/new identity findings remained fatal and no drift notice was emitted. | Platform-specific path behavior. |
+| Complete checker package regression suite | PASS | `go test ./cmd/functionalosboundarycheck -count=1` exited `0` at the rebased head. | Hosted CI and other package families. |
+| Twenty-run deterministic witness repeat | PASS | The required four-witness `-count=20` command exited `0`; temporary fixtures proved stable ordering and no state leakage. | Host-wide concurrency outside the package. |
+| Actual 69-site ratchet criterion amended by the operator | PASS under `operatorAmendment1` | Direct checker, Make target, focused lint driver, and clean checkout all proved `observed=70 baseline=70 packages=23 intentional=62 accidental=8 decreased=0` and `reconciled 70 inventory OS-spawn records`. The amendment authorizes the truthful sessions-restart row and count increase. | Terminal hosted CI. |
+| Scope and read-only boundary | PASS under `operatorAmendment1` | `git diff --name-status origin/main...HEAD` contains only the checker, its package tests, the authorized baseline/inventory maintenance, and this ledger; no tests/functional, Make, API, generated, UI, or unrelated user files changed. Clean-room hashes stayed unchanged. | Future merges can invalidate the per-site inventory; the systemic re-check recommendation remains follow-up. |
+| Committed clean-room loopback report | PASS | This report records the exact detached head, commands, exits, 70-site outputs, dependency fidelity, cost, input hashes, findings, verdict, and remaining gates using the validation-loopback template. | The report commit itself is documentation-only and is not self-referenced. |
+| Hosted Backend Lint terminal result | BLOCKED — review-stage gate | The earlier run on superseded head `33332393126` was cancelled/failed; no terminal result is claimed here. The final push must start a fresh required run. | Review-owned terminal Backend Lint and Verification Policy on the pushed head. |
+| Implementation-stage delivery | BLOCKED until handoff | Local implementation and clean-room evidence are complete; final push, open-PR head update, and required CI start remain to be performed after this report commit. | Review-owned terminal CI, conflict resolution, and merge. |
+
+## Customer journey
+
+1. A clean detached checkout ran the production checker against the authored
+   AST, baseline, and inventory. It exited `0` and reported the amended
+   `70/70`, `23`, `62/8`, `decreased=0` census with 70 reconciled records.
+2. The same checkout ran the existing `make functional-os-boundary-check`
+   entry and the focused `make lint LINT_TARGETS=functional-os-boundary-check`
+   driver. Both invoked the checker through the real repository wiring and
+   exited `0`.
+3. Package and repeated fixture witnesses retained line-drift tolerance,
+   identity failures, admission policy, ordering, malformed-input handling,
+   and read-only behavior. No product runtime, browser, or paid dependency is
+   part of this checker journey.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: this ledger now contains the story-001
+  decision/evidence and the required BEH-002 validation report under the
+  canonical functional-test optimization directory.
+- Permission and error behavior: not applicable to this repository-local
+  static checker; malformed data and reconciliation failures remain explicit
+  nonzero diagnostics.
+- Persistence/reload behavior: not applicable; the checker reads authored
+  files and performs no writes.
+- Accessibility/keyboard/responsive behavior: not applicable; no UI or
+  customer-facing copy changed.
+- Operational signals: stdout/stderr separation, exact exit statuses,
+  deterministic counts, stable drift ordering, and before/after input hashes
+  provide the relevant diagnostics.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| ENV-001 | advisory, resolved | Clean-room `make lint LINT_TARGETS=functional-os-boundary-check` on Windows | Focused lint driver completes and reports the checker result | One transient file-lock warning preceded a successful `functional-os-boundary-check: PASS` and exit `0`; canonical hashes were unchanged. | Exact-head run record above. |
+| REVIEW-001 | review-stage | Final head is not pushed at report capture | Required CI starts on the final pushed head | Local evidence is complete; review still owns fresh CI terminal status and merge. | PR #2497 handoff. |
+
+## Verdict
+
+**PASS** for the local implementation and clean-room validation. The amended
+70-site checker journey is integrated through the real Make/lint path and is
+read-only. Final push, required CI start, terminal hosted CI, and merge remain
+review-stage responsibilities and are not claimed by this report.
+
+## Delta-plan request [Required for BLOCKED]
+
+- Affected behavior and criterion: implementation-stage delivery and
+  `CI-BACKEND-LINT` terminal result.
+- Root-cause evidence or remaining uncertainty: the report was captured before
+  the documentation commit was pushed, and the prior required run was tied to
+  superseded head `e17beb5f5b`; no current-head terminal result exists yet.
+- Smallest recommended correction/prerequisite: commit this authored report,
+  push the rebased final head, confirm the PR remains open, and confirm the
+  required Backend Lint and Verification Policy checks have started. Do not
+  add CI results or audit transcripts as commits.
+- Dependencies and retest scope: review owns terminal CI, one allowed rerun of
+  a failed job if needed, conflict resolution, and merge; implementation
+  retesting is limited to failures caused by this diff.
