@@ -41,6 +41,7 @@ func NewInvocationOwner(
 		Observe: func(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
 			return invocationruntime.Observe(ctx, fs.sessionState, sessionID, input, fs.worldStateProjector)
 		},
+		WaitSession: newSessionInvocationWaitOpener(fs),
 		Telemetry: packagedtts.NewTelemetry(
 			ttsObservability,
 			func(metric sessioninvocation.SessionInvocationMetric) {

@@ -64,6 +64,7 @@ func TestWorkInvocationBoundary_PreparesInputThroughWorkService(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		factorydefinitionfixtures.InvocationInterpolation{},
 		staticInvocationWorkType("task"),
 		func(string) ([]byte, error) { return nil, nil },
@@ -109,6 +110,7 @@ func TestWorkInvocationBoundary_ResolvesPrimaryResultThroughWorkService(t *testi
 		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
 			return observation, nil
 		},
+		nil,
 		nil,
 		nil,
 		nil,

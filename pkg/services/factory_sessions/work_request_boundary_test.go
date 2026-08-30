@@ -50,6 +50,7 @@ func TestWorkRequestBoundary_InvocationSubmitConstructsDetachedWorkRequest(t *te
 		nil,
 		nil,
 		nil,
+		nil,
 		factorydefinitionfixtures.InvocationInterpolation{},
 		staticInvocationWorkType("task"),
 		func(string) ([]byte, error) { return nil, nil },
@@ -90,6 +91,7 @@ func TestWorkRequestBoundary_InvocationSubmitRejectsTypedAdmissionFailure(t *tes
 		func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
 			return legacyinvocation.SessionInvocationObservation{}, nil
 		},
+		nil,
 		nil,
 		nil,
 		nil,

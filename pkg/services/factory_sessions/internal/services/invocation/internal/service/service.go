@@ -50,6 +50,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.SubmitWork,
 		deps.Observe,
 		deps.WaitNext,
+		deps.WaitSession,
 		deps.Telemetry,
 		deps.SpecialCase,
 		deps.Interpolation,

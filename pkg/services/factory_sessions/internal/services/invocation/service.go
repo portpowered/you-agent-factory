@@ -27,6 +27,7 @@ type Dependencies struct {
 	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
 	Observe       func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
+	WaitSession   func(context.Context, string) (legacyinvocation.SessionInvocationWaiter, legacyinvocation.ReleaseSessionInvocationWaiter)
 	Telemetry     legacyinvocation.SessionInvocationTelemetry
 	SpecialCase   legacyinvocation.SessionInvocationSpecialCase
 	Interpolation factorydefinitions.InvocationInterpolationService
