@@ -3,7 +3,7 @@
 ## Environment and artifact
 
 - Commit/build identifier: implementation/test head
-  `1f6cd4510ed43464d4f2efd84c1112941d408895`; the report and evidence-ledger
+  `8a1f3edb09df6a99b452338dd6cec0ff79bf5d4d`; the report and evidence-ledger
   edits are documentation-only descendants of this validated source.
 - Environment and configuration: Windows/amd64, Go `go1.25.0`,
   `CGO_ENABLED=1`; package commands used `-count=1` unless a repeat gate is
@@ -23,39 +23,39 @@
 | One guarded package CLI build | PASS | Focused, complete-package, race, and repeat runs logged one normal-process package build (`builds=1`) and zero helper builds; package teardown followed all joins. | Other operating systems and future toolchains. |
 | Partial-setup cleanup and failure status | PASS | Direct CASE-U08 exited `0`; its child failed nonzero after temp-root allocation, emitted the injected diagnostic and allocated paths, skipped the scenario marker, and both partial paths were absent after teardown. | Filesystem failures other than the deterministic injected branch. |
 | Restart behavior and assertion denominator | PASS | Complete package and race runs passed all eight selectors; the seven-selector/148 lexical failure-call-site pre-change denominator is unchanged, and the added probe only strengthens cleanup coverage. | Unsupported platforms and future source changes. |
-| Complete package proof | PASS | `go test ./tests/functional/sessions/restart/... -count=1 -v` exited `0` in `76.788s`; helper, board restart/persistence, remap, resume, history, and cleanup witnesses passed. | Hosted CI and merge. |
-| Supported race proof | PASS | `go test -race ./tests/functional/sessions/restart/... -count=1 -v` exited `0` in `66.800s` on Windows/amd64; no race report or process-cleanup failure occurred. | Unsupported platforms and unexercised concurrency. |
-| Performance or measured floor | PASS | Final successful outer samples were `60.34s`, `50.60s`, and `39.36s`, median `50.60s` versus baseline `44.1461053s`; the permitted one-build profile-backed measured-floor explanation is retained rather than claiming the 40% branch. | Portable or quiet-host wall time. |
+| Complete package proof | PASS | `go test ./tests/functional/sessions/restart/... -count=1 -v` exited `0` in `50.933s`; helper, board restart/persistence, remap, resume, history, and cleanup witnesses passed. | Hosted CI and merge. |
+| Supported race proof | PASS | `go test -race ./tests/functional/sessions/restart/... -count=1 -v` exited `0` in `77.541s` on Windows/amd64; no race report or process-cleanup failure occurred. | Unsupported platforms and unexercised concurrency. |
+| Performance or measured floor | PASS | Final successful outer samples were `57.45s`, `59.86s`, and `52.64s`, median `57.45s` versus baseline `44.1461053s`; the permitted one-build profile-backed measured-floor explanation is retained rather than claiming the 40% branch. | Portable or quiet-host wall time. |
 | Scope and C09 preservation | PASS | Rebase ancestry, `git diff --check`, and the three-dot path audit passed; only the three restart test files and two C14 evidence documents changed, with fresh per-operation CLI contexts and no new sleep/timeout padding. | Future GitHub conflict resolution. |
-| Clean-room reproducibility | PASS | A detached clean worktree at the exact implementation/test head ran the complete package successfully in `22.941s`; no repair was made and the worktree was removed afterward. | Remote runner behavior. |
-| Repository quality gate | PASS | `make test` exited `0`; the unitlane report recorded 169 tests, 168 passed, 0 failed, and 1 skipped for an existing Windows privilege/platform condition. | Full hosted CI policy. |
+| Clean-room reproducibility | PASS | A detached clean worktree at the exact implementation/test head ran the complete package successfully in `20.266s`; no repair was made and the worktree was removed afterward. | Remote runner behavior. |
+| Repository quality gate | PASS | `make test` exited `0` in `202.29s`; the unitlane report recorded 169 tests, 168 passed, 0 failed, and 1 skipped for an existing Windows privilege/platform condition. | Full hosted CI policy. |
 
 ## Customer journey
 
 1. The direct CASE-U08 command
    `go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceSharedBinaryPartialSetupFailure$' -count=1 -v`
-   exited `0` in `0.198s`. The parent launched an isolated copy of the test
+   exited `0` in `0.083s`. The parent launched an isolated copy of the test
    binary, observed the injected nonzero setup failure and diagnostic, decoded
    the allocated directory/artifact report, and verified both paths plus the
    scenario marker were absent after child exit.
 2. The focused real-process command
    `go test ./tests/functional/sessions/restart/... -count=1 -run '^TestBoardPersistenceCLIRestartRoundTrip$' -v`
-   exited `0` in `23.576s`. The real CLI submitted work, crossed readiness,
+   exited `0` in `13.382s`. The real CLI submitted work, crossed readiness,
    Worker Session, clean-stop, replay/re-arm, release-file, response,
    persistence, and second-restart boundaries, and logged one package build.
 3. The complete package command
    `go test ./tests/functional/sessions/restart/... -count=1 -v` exited `0`
-   in `76.788s`; all eight selectors passed with private scenario resources.
-4. The supported race command exited `0` in `66.800s` with the same eight
+   in `50.933s`; all eight selectors passed with private scenario resources.
+4. The supported race command exited `0` in `77.541s` with the same eight
    selectors and no race diagnostics.
 5. A detached clean worktree at
-   `1f6cd4510ed43464d4f2efd84c1112941d408895` ran
+   `8a1f3edb09df6a99b452338dd6cec0ff79bf5d4d` ran
    `go test ./tests/functional/sessions/restart/... -count=1`, exited `0` in
-   `22.941s`, and was removed after the run.
+   `20.266s`, and was removed after the run.
 6. The prescribed three-run final timing procedure ran the complete package
    three times sequentially, enforced exit `0` for every run, and retained
-   outer samples `60.34s`, `50.60s`, and `39.36s`; the middle sorted value is
-   `50.60s`.
+   outer samples `57.45s`, `59.86s`, and `52.64s`; the middle sorted value is
+   `57.45s`.
 
 ## Cross-task integration and usability
 
