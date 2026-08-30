@@ -433,9 +433,11 @@ func (a *Adapter) observationsForScope(scope workerSessionScope) observationServ
 		return nil
 	}
 	if resolver, ok := a.resolver.(sessionObservationResolver); ok {
-		if observations := resolver.WorkerSessionsObservationForSession(scope.effectiveID); observations != nil {
-			return observations
-		}
+		// A resolver that exposes the scoped capability is authoritative for
+		// session reads. Do not fall back to the adapter's retained service when
+		// the requested runtime has no observation source: that service may be
+		// the projection for a different Factory Session.
+		return resolver.WorkerSessionsObservationForSession(scope.effectiveID)
 	}
 	return a.observations
 }

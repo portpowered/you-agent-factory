@@ -25,8 +25,9 @@ func (stub *sessionScopeResolverStub) ResolveWorkerSessionScope(context.Context,
 
 type decoratedSessionScopeResolverStub struct {
 	sessionScopeResolverStub
-	observations workersessions.ObservationService
-	resolveCalls int
+	observations         workersessions.ObservationService
+	resolveCalls         int
+	observationSessionID string
 }
 
 func (stub *decoratedSessionScopeResolverStub) ResolveWorkerSessionScope(ctx context.Context, sessionID string) (SessionScope, error) {
@@ -34,7 +35,8 @@ func (stub *decoratedSessionScopeResolverStub) ResolveWorkerSessionScope(ctx con
 	return stub.sessionScopeResolverStub.ResolveWorkerSessionScope(ctx, sessionID)
 }
 
-func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSession(sessionID string) workersessions.ObservationService {
+	stub.observationSessionID = sessionID
 	return stub.observations
 }
 
@@ -126,6 +128,44 @@ func TestListWorkerSessionsBySessionIDValidatesWorkBeforeResolvingScope(t *testi
 	}
 	if resolver.resolveCalls != 1 {
 		t.Fatalf("Factory Session scope resolution calls = %d, want 1 after Work validation", resolver.resolveCalls)
+	}
+	if resolver.observationSessionID != "session-1" {
+		t.Fatalf("scoped observation session ID = %q, want session-1", resolver.observationSessionID)
+	}
+}
+
+func TestListWorkerSessionsBySessionIDDoesNotFallBackToRetainedObservationSource(t *testing.T) {
+	retained := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID:  "stale-worker-session",
+		FactorySessionID: "session-1",
+		WorkIDs:          []string{"work-1"},
+		AttemptID:        "stale-attempt",
+		State:            workersessions.StateCompleted,
+	}}}}
+	resolver := &decoratedSessionScopeResolverStub{
+		sessionScopeResolverStub: sessionScopeResolverStub{scope: SessionScope{EffectiveID: "session-1"}},
+	}
+	handler := NewHandler(NewAdapter(retained, workServiceStub{}, resolver), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions?workId=work-1", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("error code = %q, want INTERNAL_ERROR", response.Code)
+	}
+	if retained.listCalled {
+		t.Fatal("retained observation service was used after scoped source became unavailable")
 	}
 }
 
