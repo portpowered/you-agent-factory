@@ -209,8 +209,8 @@ func (o *Root) CloseRuntimeScope(
 	o.runtimeMu.Lock()
 	delete(o.runtimeByScope, request.Scope)
 	o.runtimeMu.Unlock()
-	if closer, ok := o.runtimeHost.(runtimehost.ScopeCloser); ok {
-		if err := closer.CloseRuntimeScope(context.WithoutCancel(ctx), request.Scope); err != nil {
+	if o.runtimeHost != nil {
+		if err := o.runtimeHost.CloseRuntimeScope(context.WithoutCancel(ctx), request.Scope); err != nil {
 			return models.CloseRuntimeScopeResult{}, err
 		}
 	}

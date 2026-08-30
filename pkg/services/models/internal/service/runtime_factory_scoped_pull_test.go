@@ -521,3 +521,7 @@ func (host *removeGuardHost) GetModelLease(context.Context, models.GetModelLease
 func (host *removeGuardHost) ReleaseModelLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
+
+func (host *removeGuardHost) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}

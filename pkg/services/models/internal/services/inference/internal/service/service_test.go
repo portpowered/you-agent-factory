@@ -840,6 +840,10 @@ func (host *recordingInferenceHost) ReleaseModelLease(
 	}, nil
 }
 
+func (host *recordingInferenceHost) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}
+
 type availableInferenceAssets struct{}
 
 var _ scopedassets.Service = availableInferenceAssets{}

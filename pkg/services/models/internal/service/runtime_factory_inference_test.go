@@ -27,6 +27,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type runtimeFactoryInvocationRuntime struct{}
+
+func (runtimeFactoryInvocationRuntime) Invoke(
+	context.Context,
+	inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	return inference.InvocationRuntimeResult{}, nil
+}
+
 func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -292,7 +301,7 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 		assets,
 		catalog,
 		runtimeHost,
-		inference.InputEchoInvocationRuntime{},
+		runtimeFactoryInvocationRuntime{},
 		inference.InertArtifactFileSystem{},
 		clock.Now,
 	)
@@ -330,7 +339,7 @@ func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
 	inferenceService, err := inferencewire.NewService(
-		scopes, assets, catalog, runtimeHost, inference.InputEchoInvocationRuntime{},
+		scopes, assets, catalog, runtimeHost, runtimeFactoryInvocationRuntime{},
 		inference.InertArtifactFileSystem{}, clock.Now,
 	)
 	if err != nil {
@@ -893,6 +902,10 @@ func (host *joinedHostService) ReleaseModelLease(context.Context, models.Release
 	*host.events = append(*host.events, "release")
 	host.lease.Status = models.ModelLeaseStatusReleased
 	return models.ReleaseModelLeaseResult{Lease: host.lease, Outcome: models.ModelLeaseReleased}, nil
+}
+
+func (host *joinedHostService) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
 }
 
 type joinedInferenceService struct {

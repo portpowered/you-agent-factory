@@ -416,11 +416,7 @@ func TestCloseRuntimeScopeStopsOnlyThatScopesSupervisedRuntimes(t *testing.T) {
 		}
 	}
 
-	closer, ok := host.(runtimehost.ScopeCloser)
-	if !ok {
-		t.Fatal("Runtime Host does not expose optional scope cleanup")
-	}
-	if err := closer.CloseRuntimeScope(context.Background(), left); err != nil {
+	if err := host.CloseRuntimeScope(context.Background(), left); err != nil {
 		t.Fatalf("CloseRuntimeScope: %v", err)
 	}
 	if stopCount.Load() != 1 {

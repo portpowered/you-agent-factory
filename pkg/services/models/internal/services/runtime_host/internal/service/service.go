@@ -344,13 +344,31 @@ func (s *service) CloseRuntimeScope(
 	if scope.IsZero() {
 		return models.ErrRuntimeScopeInvalid
 	}
+	slots, modelNames := s.detachRuntimeScope(scope.String() + "|")
+
+	for _, modelName := range modelNames {
+		s.revokeHostLeases(scope, modelName)
+	}
+	return s.stopRuntimeSlots(runtimeScopeCloseContext(ctx), slots)
+}
+
+func runtimeScopeCloseContext(ctx context.Context) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx = context.WithoutCancel(ctx)
-	prefix := scope.String() + "|"
+	return context.WithoutCancel(ctx)
+}
 
+func (s *service) detachRuntimeScope(prefix string) ([]*supervisedRuntime, []string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	slots, modelNames := s.detachRuntimeSlotsLocked(prefix)
+	s.cancelRuntimeScopeTimersLocked(prefix)
+	s.clearRuntimeScopeCapacityLocked(prefix)
+	return slots, modelNames
+}
+
+func (s *service) detachRuntimeSlotsLocked(prefix string) ([]*supervisedRuntime, []string) {
 	slots := make([]*supervisedRuntime, 0)
 	modelNames := make([]string, 0)
 	for key, slot := range s.runtimeSlots {
@@ -364,21 +382,26 @@ func (s *service) CloseRuntimeScope(
 			modelNames = append(modelNames, modelName)
 		}
 	}
+	return slots, modelNames
+}
+
+func (s *service) cancelRuntimeScopeTimersLocked(prefix string) {
 	for key := range s.idleUnloadTimers {
 		if strings.HasPrefix(key, prefix) {
 			s.cancelIdleUnloadLocked(key)
 		}
 	}
+}
+
+func (s *service) clearRuntimeScopeCapacityLocked(prefix string) {
 	for key := range s.capacityHolders {
 		if strings.HasPrefix(key, prefix) {
 			delete(s.capacityHolders, key)
 		}
 	}
-	s.mu.Unlock()
+}
 
-	for _, modelName := range modelNames {
-		s.revokeHostLeases(scope, modelName)
-	}
+func (s *service) stopRuntimeSlots(ctx context.Context, slots []*supervisedRuntime) error {
 	var firstErr error
 	for _, slot := range slots {
 		if slot == nil {
