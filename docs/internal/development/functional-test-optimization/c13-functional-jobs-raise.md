@@ -250,3 +250,34 @@ This satisfies the characterization story as a structured blocker. The
 correction behavior, final-head hosted wall, and post-merge main behavior
 remain unproven and are carried by GATE-FOCUSED, GATE-PR, and
 GATE-MAIN-LOOPBACK respectively.
+
+## Story 002 post-Amendment2 remeasurement
+
+After operatorAmendment2 lifted the temporary C13 workflow-cache exclusion,
+the branch was rebased onto current `origin/main` at `9c5e2bc6cb`. The
+post-#2466 current-main run was then inspected read-only before considering a
+new edit. The C09 cache topology is present in the rebased source: module and
+build caches are separate, the build key includes `jobs=12` and authored build
+inputs, restore identity is forwarded to the diagnostic, and a non-exact
+restore is saved under its primary key.
+
+| Property | Post-C09 remeasurement |
+| --- | --- |
+| Main head / run / Backend Functional Coverage job | `9c5e2bc6cb4e55e4ec0bb02bf1bcafeccf41322e` / `33328050085` / `99301657776` |
+| Hosted runner / selected width | Ubuntu 24.04 / `logical_cpus=4`, `jobs=12` |
+| Functional timing | Complete; `wallSeconds=180.497` |
+| Inventory and outcomes | `149/149` selected packages; `1,063` tests: `1,062` pass / `0` fail / `1` skip |
+| Build/cache evidence | Schema v2; exact primary-key hit; `0` compiler + `73` linker = `73` build actions; `compile-work-observed`; command passed |
+| Coverage, quarantine, ACP | Coverage green at `61.6%` against `33.1%`; quarantine `9/9` expected skips and status `0`; pinned ACP evidence passed and cleanup was complete |
+| Required artifacts | Timing, coverage, command, diagnostics, verdict, quarantine, ACP, and critical-path artifacts present and complete |
+
+The remeasurement is `142.514s` faster than the prior green incident
+comparator (`323.011 - 180.497`) and `122.224s` below the jobs-8 threshold
+(`302.721 - 180.497`), so no residual C13 correction is needed to cross the
+acceptance wall. The exact-key `73`-action result shows that the source-
+sensitive cache boundary already merged in C09 has absorbed the characterized
+cache-state regression. This is the operator-authorized terminal no-op
+outcome; no second cache-key, width, `-p=12`, quarantine, inventory, or
+failure-policy change is justified. The final-head hosted proof remains the
+story-003 edge, and first natural post-merge behavior remains
+GATE-MAIN-LOOPBACK.
