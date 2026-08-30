@@ -52,11 +52,32 @@ func (f *Factory) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
 ) (*factoryruntime.RuntimeActivation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	openingRequest, err := runtimeOpeningRequestFromActivation(request)
 	if err != nil {
 		return nil, err
 	}
-	products, err := f.openRuntimeWithSnapshot(ctx, openingRequest, f.baseLogger, &request.Snapshot)
+	canonicalSessionIDProvided := strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(openingRequest, f.canonicalSessionIDGenerator()); err != nil {
+		return nil, err
+	}
+	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
+		strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
+	openingRequest.FactorySession.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+	// Runtime Root validates the caller context before it invokes this
+	// activation operation. A generated canonical identity is allocated at the
+	// session-product boundary for compatibility with the historical session-ID
+	// edge, which may itself cancel the caller context. Once the activation has
+	// been admitted, finish constructing it atomically even if that allocation
+	// cancels the caller. Cancellation already present on entry still returns
+	// above.
+	openingContext := ctx
+	if canonicalSessionIDGenerated && ctx.Err() != nil {
+		openingContext = context.WithoutCancel(ctx)
+	}
+	products, err := f.openRuntimeWithSnapshot(openingContext, openingRequest, f.baseLogger, &request.Snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -404,12 +425,6 @@ func (f *Factory) activationRequestWithInputs(
 		sessionID,
 		opening.Recordings.WorkflowID,
 	)
-	canonicalSessionIDProvided := strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
-	if err := ensureDefaultCanonicalSessionID(&opening, f.canonicalSessionIDGenerator()); err != nil {
-		return factoryruntime.RuntimeActivationRequest{}, err
-	}
-	opening.FactorySession.CanonicalSessionIDGenerated = !canonicalSessionIDProvided &&
-		strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
 	inputs := runtimeActivationInputs(opening, resumeInput)
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed

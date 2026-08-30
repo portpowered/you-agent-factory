@@ -374,13 +374,6 @@ func (a *Assembly) Complete(
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
-	// A fresh default runtime now receives its canonical metrics identity before
-	// construction. Keep the legacy session-identity edge at its historical
-	// completion boundary so cancellation and other caller-visible effects do
-	// not move earlier in the opening lifecycle.
-	if startupSpec.CanonicalSessionIDGenerated && a.sessionIDs != nil {
-		_ = a.sessionIDs()
-	}
 	session := livesession.NewWithRuntimeID(
 		identity.id,
 		startupRuntime.Directory(),

@@ -47,12 +47,16 @@ func TestResolveRuntimeRootPreservesExplicitIdentityWithoutGenerator(t *testing.
 	}
 }
 
-func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T) {
+func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testing.T) {
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	var canonicalCalls atomic.Int32
 	factory := &Factory{
-		generateSessionID:         func() string { return canonicalID },
+		generateSessionID: func() string {
+			canonicalCalls.Add(1)
+			return canonicalID
+		},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
@@ -65,8 +69,11 @@ func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T
 	if activation.FactorySessionID != factorysessions.DefaultSessionID || activation.RuntimeID != "runtime-1" {
 		t.Fatalf("activation identity = %#v, want default/runtime-1", activation)
 	}
-	if activation.Inputs.Session.CanonicalSessionID != canonicalID {
-		t.Fatalf("canonical session identity = %q, want generated UUID", activation.Inputs.Session.CanonicalSessionID)
+	if activation.Inputs.Session.CanonicalSessionID != "" {
+		t.Fatalf("canonical session identity = %q, want deferred allocation", activation.Inputs.Session.CanonicalSessionID)
+	}
+	if got := canonicalCalls.Load(); got != 0 {
+		t.Fatalf("canonical session ID generator calls = %d, want 0 before Runtime activation", got)
 	}
 }
 
