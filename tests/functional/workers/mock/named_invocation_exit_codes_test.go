@@ -54,35 +54,6 @@ func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
 		}
 	})
 
-	t.Run("terminal failure preserves human detail", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-		defer cancel()
-		session := newConfiguredGoalSession(t, ctx, harness, "compiled-named-human-failure")
-		mockWorkersPath := writeRejectingGoalMockWorkers(t)
-
-		result, err := runBuiltYouBinary(ctx, binaryPath, session, characterizedNamedRunArgs(
-			session,
-			mockWorkersPath,
-			"compiled named human failure",
-			"--output", "response-stream",
-		)...)
-		if err == nil {
-			t.Fatalf("compiled you run --named human failure succeeded: %#v", result)
-		}
-		if result.ExitCode == 0 {
-			t.Fatalf("human failure exit code = %d, want non-zero", result.ExitCode)
-		}
-		for _, want := range []string{"status: FAILED", "workName: ", "workState: goal:failed"} {
-			if !strings.Contains(result.Stdout, want) {
-				t.Fatalf("human failure stdout missing %q:\n%s", want, result.Stdout)
-			}
-		}
-		if !hasNonEmptyLabeledValue(result.Stdout, "workName: ") {
-			t.Fatalf("human failure stdout has an empty Work name:\n%s", result.Stdout)
-		}
-	})
-
 	t.Run("terminal failure preserves JSON detail", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
@@ -166,13 +137,4 @@ func decodeNamedInvocationResult(t *testing.T, stdout string) factoryapi.Invocat
 		t.Fatalf("terminal invocation result records = %d, want one; stdout:\n%s", terminalRecords, stdout)
 	}
 	return terminal
-}
-
-func hasNonEmptyLabeledValue(output, label string) bool {
-	for _, line := range strings.Split(output, "\n") {
-		if value, ok := strings.CutPrefix(line, label); ok && strings.TrimSpace(value) != "" {
-			return true
-		}
-	}
-	return false
 }

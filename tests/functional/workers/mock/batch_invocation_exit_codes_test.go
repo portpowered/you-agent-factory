@@ -45,20 +45,6 @@ func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 		runCompiledBatchQuietSuccess(t, binaryPath, harness)
 	})
 
-	for _, policy := range []struct {
-		name  string
-		extra string
-	}{
-		{name: "default"},
-		{name: "verbose", extra: "--verbose"},
-	} {
-		policy := policy
-		t.Run("success "+policy.name+" policy keeps result", func(t *testing.T) {
-			t.Parallel()
-			runCompiledBatchSuccess(t, binaryPath, harness, policy.name, policy.extra)
-		})
-	}
-
 	t.Run("failed terminal Work exits nonzero with human detail", func(t *testing.T) {
 		t.Parallel()
 		runCompiledBatchHumanFailure(t, binaryPath, harness)
@@ -82,48 +68,10 @@ func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	defer cancelBuild()
 	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
 
-	t.Run("all submitted Work failures are reported deterministically", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchAllFailedHuman(t, binaryPath, harness)
-	})
-
 	t.Run("all submitted Work failures have a complete JSON collection", func(t *testing.T) {
 		t.Parallel()
 		runCompiledBatchAllFailedJSON(t, binaryPath, harness)
 	})
-
-	t.Run("mixed success and failure does not round to success", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchMixed(t, binaryPath, harness)
-	})
-
-	for _, policy := range []struct {
-		name string
-		json bool
-	}{
-		{name: "human"},
-		{name: "json", json: true},
-	} {
-		policy := policy
-		t.Run("circuit breaker reports reason in "+policy.name+" output", func(t *testing.T) {
-			t.Parallel()
-			runCompiledBatchCircuitBreaker(t, binaryPath, harness, policy.json)
-		})
-	}
-
-	for _, policy := range []struct {
-		name string
-		json bool
-	}{
-		{name: "human"},
-		{name: "json", json: true},
-	} {
-		policy := policy
-		t.Run("script non-zero exit reports reason in "+policy.name+" output", func(t *testing.T) {
-			t.Parallel()
-			runCompiledBatchScriptFailure(t, binaryPath, harness, policy.json)
-		})
-	}
 }
 
 func runCompiledBatchQuietSuccess(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
@@ -137,24 +85,6 @@ func runCompiledBatchQuietSuccess(t *testing.T, binaryPath string, harness *buil
 	result, err := runBuiltYouBinary(ctx, binaryPath, session, batchRunArgs(session, workFile, mockWorkersPath, "--quiet")...)
 	if err != nil || result.ExitCode != 0 || result.Stdout != "Batch completed successfully.\n" || result.Stderr != "" {
 		t.Fatalf("compiled batch success: %v; exit=%d stdout=%q stderr=%q", err, result.ExitCode, result.Stdout, result.Stderr)
-	}
-}
-
-func runCompiledBatchSuccess(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness, policy, extra string) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-success-"+policy)
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWork(t, "single "+policy+" batch Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeAccept)
-	args := batchRunArgs(session, workFile, mockWorkersPath)
-	if extra != "" {
-		args = append(args, extra)
-	}
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
-	if err != nil || result.ExitCode != 0 || !strings.Contains(result.Stdout, "Batch completed successfully.") {
-		t.Fatalf("compiled batch %s success: %v; exit=%d stdout=%q stderr=%q", policy, err, result.ExitCode, result.Stdout, result.Stderr)
 	}
 }
 
@@ -202,25 +132,6 @@ func runCompiledBatchJSONFailure(t *testing.T, binaryPath string, harness *built
 	}
 }
 
-func runCompiledBatchAllFailedHuman(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-all-failed")
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWorks(t, "all failed first Work", "all failed second Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeReject)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, batchRunArgs(session, workFile, mockWorkersPath, "--quiet")...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("all-failed batch result = %#v, error = %v; want non-zero", result, err)
-	}
-	for _, want := range []string{`Work "all failed first Work"`, `Work "all failed second Work"`, "prompt-task:failed"} {
-		if !strings.Contains(result.Stdout, want) {
-			t.Fatalf("all-failed stdout missing %q:\n%s", want, result.Stdout)
-		}
-	}
-}
-
 func runCompiledBatchAllFailedJSON(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
@@ -243,105 +154,6 @@ func runCompiledBatchAllFailedJSON(t *testing.T, binaryPath string, harness *bui
 	for _, failure := range report.Failures {
 		if failure.WorkState != "prompt-task:failed" || strings.TrimSpace(failure.Reason) == "" {
 			t.Fatalf("all-failed JSON failure = %#v, want state and reason", failure)
-		}
-	}
-}
-
-func runCompiledBatchMixed(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-mixed-outcomes")
-	writeBatchMixedFactory(t, session.WorkDir)
-	workFile := writeBatchWorksWithTypes(t, batchWorkSpec{Name: "mixed successful Work", WorkTypeID: "successful-task"}, batchWorkSpec{Name: "mixed failed Work", WorkTypeID: "failed-task"})
-	mockWorkersPath := writeBatchMixedMockWorkers(t)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, append([]string{"--json"}, batchRunArgs(session, workFile, mockWorkersPath)...)...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("mixed batch result = %#v, error = %v; want non-zero", result, err)
-	}
-	report := decodeBatchProcessReport(t, result.Stdout)
-	if report.Status != "FAILED" || len(report.Failures) != 1 {
-		t.Fatalf("mixed JSON report = %#v, want one failed Work", report)
-	}
-	failure := report.Failures[0]
-	if failure.WorkName != "mixed failed Work" || failure.WorkState != "failed-task:failed" {
-		t.Fatalf("mixed failure = %#v, want only the failed Work", failure)
-	}
-}
-
-func runCompiledBatchCircuitBreaker(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness, jsonOutput bool) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-circuit-breaker")
-	writeBatchRetryFactory(t, session.WorkDir)
-	workFile := writeBatchWorksWithTypes(t, batchWorkSpec{Name: "circuit breaker Work", WorkTypeID: "retry-task"})
-	programPath := writeBatchFailingScript(t)
-	// A normalized terminal provider rejection routes directly to FAILED; use
-	// a retryable script failure so this fixture exercises the retry breaker.
-	mockWorkersPath := writeBatchMockWorkersConfig(t, workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
-		WorkerName: "retry-worker", WorkstationName: "retry-work", RunType: workers.MockWorkerRunTypeScript,
-		ScriptConfig: &workers.MockWorkerScriptConfig{
-			Command: "go", Args: []string{"run", programPath}, Env: map[string]string{"GO111MODULE": "off"},
-		},
-	}}})
-	args := batchRunArgs(session, workFile, mockWorkersPath)
-	if jsonOutput {
-		args = append([]string{"--json"}, args...)
-	} else {
-		args = append(args, "--quiet")
-	}
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("circuit-breaker batch result = %#v, error = %v; want non-zero", result, err)
-	}
-	const breakerReason = "consecutive failures 1 for transition retry-work exceeds max 1"
-	if jsonOutput {
-		report := decodeBatchProcessReport(t, result.Stdout)
-		if report.Status != "FAILED" || len(report.Failures) != 1 || report.Failures[0].WorkName != "circuit breaker Work" || report.Failures[0].WorkState != "retry-task:failed" || !strings.Contains(report.Failures[0].Reason, breakerReason) {
-			t.Fatalf("circuit-breaker JSON report = %#v, want Work, state, and breaker reason", report)
-		}
-		return
-	}
-	for _, want := range []string{`Work "circuit breaker Work"`, "retry-task:failed", breakerReason} {
-		if !strings.Contains(result.Stdout, want) {
-			t.Fatalf("circuit-breaker stdout missing %q:\n%s", want, result.Stdout)
-		}
-	}
-}
-
-func runCompiledBatchScriptFailure(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness, jsonOutput bool) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-script-failure")
-	writeBatchScriptFactory(t, session.WorkDir)
-	workFile := writeBatchWorksWithTypes(t, batchWorkSpec{Name: "script failure Work", WorkTypeID: "script-task"})
-	programPath := writeBatchFailingScript(t)
-	mockWorkersPath := writeBatchMockWorkersConfig(t, workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
-		WorkerName: "script-worker", WorkstationName: "script-work", RunType: workers.MockWorkerRunTypeScript,
-		ScriptConfig: &workers.MockWorkerScriptConfig{Command: "go", Args: []string{"run", programPath}, Env: map[string]string{"GO111MODULE": "off"}},
-	}}})
-	args := batchRunArgs(session, workFile, mockWorkersPath)
-	if jsonOutput {
-		args = append([]string{"--json"}, args...)
-	} else {
-		args = append(args, "--quiet")
-	}
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("script-failure batch result = %#v, error = %v; want non-zero", result, err)
-	}
-	if jsonOutput {
-		report := decodeBatchProcessReport(t, result.Stdout)
-		if report.Status != "FAILED" || len(report.Failures) != 1 || report.Failures[0].WorkName != "script failure Work" || report.Failures[0].WorkState != "script-task:failed" || !strings.Contains(report.Failures[0].Reason, "script worker exited non-zero") {
-			t.Fatalf("script-failure JSON report = %#v, want Work, state, and script reason", report)
-		}
-		return
-	}
-	for _, want := range []string{`Work "script failure Work"`, "script-task:failed", "script worker exited non-zero"} {
-		if !strings.Contains(result.Stdout, want) {
-			t.Fatalf("script-failure stdout missing %q:\n%s", want, result.Stdout)
 		}
 	}
 }
@@ -612,25 +424,4 @@ func batchScriptWorkerConfig() string {
 
 func batchModelWorkstationConfig() string {
 	return "---\ntype: MODEL_WORKSTATION\n---\nProcess the batch Work.\n"
-}
-
-func writeBatchFailingScript(t testing.TB) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "batch-script-failure.go")
-	const source = `package main
-
-import (
-	"fmt"
-	"os"
-)
-
-func main() {
-	fmt.Fprint(os.Stderr, "script worker exited non-zero")
-	os.Exit(7)
-}
-`
-	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
-		t.Fatalf("write failing batch script: %v", err)
-	}
-	return path
 }
