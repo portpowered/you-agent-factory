@@ -573,11 +573,11 @@ identity. `go run ./cmd/pkgboundarycheck --root .` reports zero production or
 test-only violations.
 
 The implementation was rebased onto current `origin/main`
-`a44ed015421b1ed42b919f1178531f38fd5087b5`. The validated source head is
-`1dc12f20f7ef812d7924e0e2e6d65d39ee4d585a`; its ancestry is clean. The
+`406e9aa5874c8e5fa2f7ea953960cadb1eeca41a`. The validated source head is
+`cfdd00ad9348bae2549d058f08249654ee19c06b`; its ancestry is clean. The
 final evidence-head artifact
-`.artifacts/batch-coldstart-probe/validation-9d1ffa7653-novcs.exe` was built
-from evidence head `9d1ffa765342fdef4b565825562ec71fface455e` with
+`.artifacts/batch-coldstart-probe/validation-cfdd00ad-novcs.exe` was built
+from evidence head `cfdd00ad9348bae2549d058f08249654ee19c06b` with
 `go build -buildvcs=false -o ... ./cmd/factory` and has SHA-256
 `BA6D1E721E97EBE98BA17C921DD659BC8710FBFD68CD5DC3413FC8612D887FFE`.
 No Go, functional-test, API, generated, or Wire source changed after this
@@ -589,17 +589,17 @@ validated source head.
 run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
 ~~~
 
-ran in three fresh child fixture/home directories in `461.502 ms`,
-`348.449 ms`, and `350.666 ms`; sorted median `350.666 ms`. Against the
-story-001 `1318.610 ms` baseline, this is `967.944 ms` and `73.41%` lower
-(`0.2659x` the baseline). Every child exited `0`, reported
+ran in three fresh child fixture/home directories in `385.910 ms`,
+`363.848 ms`, and `342.466 ms`; sorted median `363.848 ms`. Against the
+story-001 `1318.610 ms` baseline, this is `954.762 ms` and `72.41%` lower
+(`0.2759x` the baseline). Every child exited `0`, reported
 `HasExited=True`, wrote exact stdout `Batch completed successfully.\n`,
 empty stderr, and left zero packaged-Factory files. Each durable snapshot
 contained `one-work` at `prompt-task:complete`, state `complete`, outcome
 `ACCEPTED`, and transition `process-prompt`. Snapshot hashes for runs 1–3
-were `A5AD7E388B2E57E964E315F41DBB91F1DA834873C7314D13930C83C50FB41B06`,
-`67A7FC11E2FD496E4376FD4495B5778D1E9650C17013BE6FC6A9474CEC3B8F05`, and
-`9C13B65C4868C2A60DEC1001D616A1A676EF7EC88F9AC43A9AFC1F2644EB47D4`.
+were `7D98551DA034C5BD1914365CFD4E61A601247A84D454921E1BB90DF3A9575D5A`,
+`BA3ABAA3982DBCD9E0102C005DA2A1FDDBA57B4D738961BC715970C48F09535D`, and
+`8A87F5F8BD36ACEDA3C6A774EDE4FEA17AB3F6C87ACA9E727E159E057F935FC5`.
 Fixture hashes remained unchanged: Factory
 `AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
 `CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, and
