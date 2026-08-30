@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -313,19 +314,226 @@ func TestC15InvalidAccidentalFieldsFailClosed(t *testing.T) {
 	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "invalid accidental inventory")
 }
 
-func TestC16SiteMetadataMustMatchAST(t *testing.T) {
+func TestInventoryReconciliationToleratesSourceLineDriftByIdentity(t *testing.T) {
 	fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
-	fixture.writeBaseline(t, map[string]int{"tests/functional/fixture": 1})
-	records := fixture.siteRecordsForSites(intentionalVerdict)
-	records[0].SourceLine++
-	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+	fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites)
+	fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
 	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+	originalSite := fixture.sites[0]
+	callOffset := strings.Index(oneSpawnSource, "_ = exec.Command")
+	if callOffset < 0 {
+		t.Fatal("oneSpawnSource does not contain the fixture spawn")
+	}
+	driftedSource := oneSpawnSource[:callOffset] + "\n\n" + oneSpawnSource[callOffset:]
+	writeFixtureSource(t, fixture.root, "tests/functional/fixture/process_test.go", driftedSource)
+	driftedSites, err := scanFunctionalOSSpawns(fixture.root)
+	if err != nil {
+		t.Fatalf("scan drifted fixture: %v", err)
+	}
+	if len(driftedSites) != 1 || driftedSites[0].SiteID != originalSite.SiteID || driftedSites[0].SourceLine <= originalSite.SourceLine {
+		t.Fatalf("drifted sites = %#v, want unchanged identity and moved source line", driftedSites)
+	}
 
-	_, stderr, err := fixture.run(t)
-	if err == nil || !strings.Contains(stderr, "does not match AST sourceLine") {
-		t.Fatalf("run() error=%v stderr=%q, want source-line mismatch", err, stderr)
+	stdout, stderr, err := fixture.run(t)
+	if err != nil {
+		t.Fatalf("run() error = %v, stderr=%q", err, stderr)
+	}
+	want := fmt.Sprintf("[agent-factory:functional-os-boundary] tolerated sourceLine drift for inventory site %s: recorded=%d observed=%d; siteId matched\n[agent-factory:functional-os-boundary] static OS-spawn baseline holds: observed=1 baseline=1 packages=1 intentional=1 accidental=0 decreased=0\n[agent-factory:functional-os-boundary] reconciled 1 inventory OS-spawn records\n", originalSite.SiteID, originalSite.SourceLine, driftedSites[0].SourceLine)
+	if stdout != want {
+		t.Fatalf("stdout = %q, want exact drift and success report %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed on line drift: before=%s after=%s", baselineBefore, baselineAfter)
 	}
 	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "metadata-drift inventory")
+}
+
+func TestInventoryRejectsUninventoriedSpawnIncrease(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
+	fixture.writeBaseline(t, map[string]int{"tests/functional/fixture": 0})
+	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: []inventorySpawnSite{}})
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+
+	stdout, stderr, err := fixture.run(t)
+	if err == nil {
+		t.Fatal("run() error = nil, want un-inventoried increase failure")
+	}
+	want := fmt.Sprintf("[agent-factory:functional-os-boundary] AST site %s at %s:%d has no inventory verdict; update the baseline together with an INTENTIONAL-OS inventory row naming an allowed OS property\nLINT_VIOLATION_COUNT: 1\n", fixture.sites[0].SiteID, fixture.sites[0].SourcePath, fixture.sites[0].SourceLine)
+	if stdout != "" || stderr != want {
+		t.Fatalf("stdout=%q stderr=%q, want stdout empty and exact admission diagnostic %q", stdout, stderr, want)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed on un-inventoried increase: before=%s after=%s", baselineBefore, baselineAfter)
+	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "un-inventoried increase inventory")
+}
+
+func TestInventoryReconciliationRejectsNonLineMetadataDrift(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
+	fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites)
+	records := fixture.siteRecordsForSites(intentionalVerdict)
+	recordedPath := records[0].SourcePath
+	records[0].SourcePath = "tests/functional/fixture/renamed.go"
+	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+
+	stdout, stderr, err := fixture.run(t)
+	if err == nil {
+		t.Fatal("run() error = nil, want non-line metadata failure")
+	}
+	want := fmt.Sprintf("[agent-factory:functional-os-boundary] inventory site %s sourcePath=%q does not match AST sourcePath=%q\nLINT_VIOLATION_COUNT: 1\n", fixture.sites[0].SiteID, records[0].SourcePath, recordedPath)
+	if stdout != "" || stderr != want {
+		t.Fatalf("stdout=%q stderr=%q, want stdout empty and exact metadata diagnostic %q", stdout, stderr, want)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed on non-line metadata failure: before=%s after=%s", baselineBefore, baselineAfter)
+	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "non-line metadata inventory")
+}
+
+func TestInventoryAllowsPairedRemovalAsDecrease(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", twoSpawnSource)
+	fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 2}, fixture.sites)
+	fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
+
+	writeFixtureSource(t, fixture.root, "tests/functional/fixture/process_test.go", oneSpawnSource)
+	remainingSites, err := scanFunctionalOSSpawns(fixture.root)
+	if err != nil {
+		t.Fatalf("scan reduced fixture: %v", err)
+	}
+	fixture.sites = remainingSites
+	fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+
+	stdout, stderr, err := fixture.run(t)
+	if err != nil {
+		t.Fatalf("run() error = %v, stderr=%q", err, stderr)
+	}
+	want := "[agent-factory:functional-os-boundary] static OS-spawn baseline holds: observed=1 baseline=2 packages=1 intentional=1 accidental=0 decreased=1\n[agent-factory:functional-os-boundary] reconciled 1 inventory OS-spawn records\n"
+	if stdout != want || stderr != "" {
+		t.Fatalf("stdout=%q stderr=%q, want exact decrease report %q and empty stderr", stdout, stderr, want)
+	}
+	if strings.Contains(stdout, "tolerated sourceLine drift") {
+		t.Fatalf("stdout = %q, paired removal must not report line drift", stdout)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed on paired removal: before=%s after=%s", baselineBefore, baselineAfter)
+	}
+}
+
+func TestInventoryRejectsRenamedOrMovedIdentity(t *testing.T) {
+	t.Run("enclosing function rename", func(t *testing.T) {
+		fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
+		fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites)
+		fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+		baselineBefore := readFixtureFile(t, fixture.baselinePath)
+		inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+		oldSite := fixture.sites[0]
+
+		renamedSource := strings.Replace(oneSpawnSource, "func Spawn()", "func RenamedSpawn()", 1)
+		writeFixtureSource(t, fixture.root, "tests/functional/fixture/process_test.go", renamedSource)
+		newSites, err := scanFunctionalOSSpawns(fixture.root)
+		if err != nil {
+			t.Fatalf("scan renamed fixture: %v", err)
+		}
+		if len(newSites) != 1 || newSites[0].SiteID == oldSite.SiteID {
+			t.Fatalf("renamed sites = %#v, want a new identity", newSites)
+		}
+		assertIdentityChangeRejected(t, fixture, oldSite, newSites[0], baselineBefore, inventoryBefore)
+	})
+
+	t.Run("source move", func(t *testing.T) {
+		fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
+		fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites)
+		fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+		baselineBefore := readFixtureFile(t, fixture.baselinePath)
+		inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+		oldSite := fixture.sites[0]
+		movedPath := "tests/functional/moved/process_test.go"
+
+		writeFixtureSource(t, fixture.root, movedPath, oneSpawnSource)
+		if err := os.Remove(fixture.sourcePath); err != nil {
+			t.Fatalf("remove original source: %v", err)
+		}
+		newSites, err := scanFunctionalOSSpawns(fixture.root)
+		if err != nil {
+			t.Fatalf("scan moved fixture: %v", err)
+		}
+		if len(newSites) != 1 || newSites[0].SiteID == oldSite.SiteID {
+			t.Fatalf("moved sites = %#v, want a new identity", newSites)
+		}
+		assertIdentityChangeRejected(t, fixture, oldSite, newSites[0], baselineBefore, inventoryBefore)
+	})
+}
+
+func assertIdentityChangeRejected(t *testing.T, fixture *checkerFixture, oldSite, newSite spawnSite, baselineBefore, inventoryBefore []byte) {
+	t.Helper()
+	stdout, stderr, err := fixture.run(t)
+	if err == nil {
+		t.Fatal("run() error = nil, want identity reconciliation failure")
+	}
+	newFinding := fmt.Sprintf("AST site %s at %s:%d has no inventory verdict; update the baseline together with an INTENTIONAL-OS inventory row naming an allowed OS property", newSite.SiteID, newSite.SourcePath, newSite.SourceLine)
+	oldFinding := fmt.Sprintf("inventory site %s is not present in the AST census", oldSite.SiteID)
+	findings := []string{newFinding, oldFinding}
+	sort.Strings(findings)
+	findings[0] = "[agent-factory:functional-os-boundary] " + findings[0]
+	wantStderr := strings.Join(findings, "\n") + "\nLINT_VIOLATION_COUNT: 2\n"
+	if stdout != "" || stderr != wantStderr {
+		t.Fatalf("stdout=%q stderr=%q, want stdout empty and exact identity diagnostics %q", stdout, stderr, wantStderr)
+	}
+	if strings.Contains(stderr, "tolerated sourceLine drift") {
+		t.Fatalf("stderr = %q, identity change must not be treated as line drift", stderr)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed on identity failure: before=%s after=%s", baselineBefore, baselineAfter)
+	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "identity failure inventory")
+}
+
+func TestInventoryReconciliationSortsSourceLineDriftBySiteID(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureSource(t, root, "tests/functional/zeta/process_test.go", oneSpawnSource)
+	writeFixtureSource(t, root, "tests/functional/alpha/process_test.go", oneSpawnSource)
+	sites, err := scanFunctionalOSSpawns(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	fixture := &checkerFixture{root: root, baselinePath: filepath.Join(root, "baseline.json"), inventoryPath: filepath.Join(root, "inventory.json"), sites: sites}
+	counts := map[string]int{"tests/functional/alpha": 1, "tests/functional/zeta": 1}
+	fixture.writeBaselineWithSites(t, counts, sites)
+	records := fixture.siteRecordsForSites(intentionalVerdict)
+	for index := range records {
+		records[index].SourceLine--
+	}
+	for left, right := 0, len(records)-1; left < right; left, right = left+1, right-1 {
+		records[left], records[right] = records[right], records[left]
+	}
+	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+
+	stdout, stderr, err := fixture.run(t)
+	if err != nil {
+		t.Fatalf("run() error = %v, stderr=%q", err, stderr)
+	}
+	drifts := make([]string, 0, len(sites))
+	for _, site := range sites {
+		for _, record := range records {
+			if record.SiteID == site.SiteID {
+				drifts = append(drifts, fmt.Sprintf("[agent-factory:functional-os-boundary] tolerated sourceLine drift for inventory site %s: recorded=%d observed=%d; siteId matched", record.SiteID, record.SourceLine, site.SourceLine))
+				break
+			}
+		}
+	}
+	sort.Strings(drifts)
+	want := strings.Join(append(drifts, "[agent-factory:functional-os-boundary] static OS-spawn baseline holds: observed=2 baseline=2 packages=2 intentional=2 accidental=0 decreased=0", "[agent-factory:functional-os-boundary] reconciled 2 inventory OS-spawn records"), "\n") + "\n"
+	if stdout != want || stderr != "" {
+		t.Fatalf("stdout=%q stderr=%q, want sorted exact drift report %q and empty stderr", stdout, stderr, want)
+	}
 }
 
 func TestC17StableIdentityIsDeterministicAndOccurrenceIsTwoDigits(t *testing.T) {

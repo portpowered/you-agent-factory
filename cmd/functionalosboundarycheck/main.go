@@ -68,7 +68,8 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := reconcileInventory(sites, inventory); err != nil {
+	reconciliation, err := reconcileInventoryWithDiagnostics(sites, inventory)
+	if err != nil {
 		return reportFindings(stderr, err)
 	}
 	violations := evaluateBaseline(sites, inventory, baseline)
@@ -76,6 +77,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 		return reportViolations(stderr, violations)
 	}
 
+	writeSourceLineDrifts(stdout, reconciliation.sourceLineDrifts)
 	writeSuccess(stdout, sites, baseline, inventory)
 	return nil
 }
