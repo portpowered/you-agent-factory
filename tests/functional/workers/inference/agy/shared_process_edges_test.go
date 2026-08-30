@@ -241,6 +241,11 @@ func readAgyFactoryEventSnapshot(
 	if retainedCount > want {
 		return nil, false, fmt.Errorf("GET %s retained event count = %d, want at most %d", endpoint, retainedCount, want)
 	}
+	if retainedCount != want {
+		// The retained-plus-live fallback will decode this history once. Do not
+		// decode a partial snapshot that the fallback would immediately replay.
+		return nil, false, nil
+	}
 	events = make([]factoryapi.FactoryEvent, 0, retainedCount)
 	scanner := bufio.NewScanner(response.Body)
 	for len(events) < retainedCount && scanner.Scan() {
@@ -260,7 +265,7 @@ func readAgyFactoryEventSnapshot(
 	if len(events) != retainedCount {
 		return nil, false, fmt.Errorf("read factory events: got %d of %d retained events", len(events), retainedCount)
 	}
-	return events, retainedCount == want, nil
+	return events, true, nil
 }
 
 func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
@@ -636,7 +641,7 @@ type agySharedCommandRouter struct {
 
 	mu       sync.Mutex
 	requests []agyRoutedCommandRequest
-	active   int
+	active   atomic.Int64
 }
 
 func newAgySharedCommandRouter() *agySharedCommandRouter {
@@ -701,8 +706,8 @@ func (router *agySharedCommandRouter) releaseAll() error {
 	defer router.routeMu.Unlock()
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	if router.active != 0 {
-		return fmt.Errorf("cannot release AGY routes with %d active calls", router.active)
+	if active := router.active.Load(); active != 0 {
+		return fmt.Errorf("cannot release AGY routes with %d active calls", active)
 	}
 	router.released.Store(true)
 	router.routes = make(map[string]agySharedCommandRoute)
@@ -715,9 +720,7 @@ func (router *agySharedCommandRouter) routeCount() int {
 }
 
 func (router *agySharedCommandRouter) activeCallCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return router.active
+	return int(router.active.Load())
 }
 
 func (router *agySharedCommandRouter) requestCount() int {
@@ -826,7 +829,7 @@ func (router *agySharedCommandRouter) beginCall(
 		command: request.Command,
 		workDir: workDir,
 	})
-	router.active++
+	router.active.Add(1)
 	router.mu.Unlock()
 	return route, nil
 }
@@ -840,9 +843,9 @@ func (router *agySharedCommandRouter) publishRoutesLocked() {
 }
 
 func (router *agySharedCommandRouter) endCall() {
-	router.mu.Lock()
-	router.active--
-	router.mu.Unlock()
+	// Activity is read independently from the request ledger, so completion of
+	// each retry need not reacquire the ledger mutex.
+	router.active.Add(-1)
 }
 
 func assertAgyRoutesRejectInvalidRegistrations(router *agySharedCommandRouter, rootDir, registeredWorkDir string) error {
