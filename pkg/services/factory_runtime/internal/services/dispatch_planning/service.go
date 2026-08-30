@@ -113,10 +113,11 @@ const (
 type OutboxIntentStatus string
 
 const (
-	OutboxIntentStatusPending    OutboxIntentStatus = "PENDING"
-	OutboxIntentStatusPublishing OutboxIntentStatus = "PUBLISHING"
-	OutboxIntentStatusPublished  OutboxIntentStatus = "PUBLISHED"
-	OutboxIntentStatusRetired    OutboxIntentStatus = "RETIRED"
+	OutboxIntentStatusPending     OutboxIntentStatus = "PENDING"
+	OutboxIntentStatusPublishing  OutboxIntentStatus = "PUBLISHING"
+	OutboxIntentStatusPublished   OutboxIntentStatus = "PUBLISHED"
+	OutboxIntentStatusInvalidated OutboxIntentStatus = "INVALIDATED"
+	OutboxIntentStatusRetired     OutboxIntentStatus = "RETIRED"
 )
 
 // PublicationResult identifies the accepted logical intent and its outcome.
@@ -133,6 +134,34 @@ type OutboxIntent struct {
 	Attempts              int
 	CancellationRequested bool
 	Result                *TerminalResult
+}
+
+// WorkInvalidationOutcome describes whether a Work-scoped invalidation found
+// any accepted Runtime intent. An invalidated intent remains addressable so a
+// late result can be retired and classified by the terminal Work guard.
+type WorkInvalidationOutcome string
+
+const (
+	WorkInvalidationOutcomeNoOp        WorkInvalidationOutcome = "NO_OP"
+	WorkInvalidationOutcomeInvalidated WorkInvalidationOutcome = "INVALIDATED"
+)
+
+// WorkInvalidationIntent records the exact accepted intent observed during a
+// Work-scoped invalidation, including tombstones that were already retired.
+type WorkInvalidationIntent struct {
+	DispatchID            string
+	CorrelationID         string
+	PreviousStatus        OutboxIntentStatus
+	Status                OutboxIntentStatus
+	CancellationRequested bool
+}
+
+// WorkInvalidationResult is a detached observation of one Work-scoped
+// invalidation. Intents preserve their accepted publication order.
+type WorkInvalidationResult struct {
+	WorkID  string
+	Outcome WorkInvalidationOutcome
+	Intents []WorkInvalidationIntent
 }
 
 // RuntimeOutboxMode controls whether accepted intents may cross the Workers
@@ -203,6 +232,7 @@ type Service interface {
 	Plan(context.Context, PlanRequest) (PlanResult, error)
 	Publish(context.Context, OutboxAction) (PublicationResult, error)
 	Retry(context.Context, string) (PublicationResult, error)
+	InvalidateWork(context.Context, string) (WorkInvalidationResult, error)
 	Retire(context.Context, TerminalResult) (RetirementResult, error)
 	Pause(context.Context) error
 	Resume(context.Context) error

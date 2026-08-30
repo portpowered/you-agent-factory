@@ -43,7 +43,8 @@ func (p *Planner) Retire(
 		)
 	}
 	if record.status != dispatchplanning.OutboxIntentStatusPublished &&
-		record.status != dispatchplanning.OutboxIntentStatusPublishing {
+		record.status != dispatchplanning.OutboxIntentStatusPublishing &&
+		(record.status != dispatchplanning.OutboxIntentStatusInvalidated || !record.published) {
 		return dispatchplanning.RetirementResult{}, fmt.Errorf(
 			"%w: dispatch %q has not been published",
 			dispatchplanning.ErrInvalidDispatchResultBoundary,

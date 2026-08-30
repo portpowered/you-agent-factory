@@ -661,9 +661,33 @@ func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName str
 		}
 		f.mu.Unlock()
 	}
-
 	if source != "" {
+		// Record the committed state change before waiting on best-effort
+		// dispatch cancellation. A cancellation can complete a held Worker
+		// Session synchronously, and its late result must be ordered after the
+		// operator's committed WORK_STATE_CHANGE in the canonical ledger.
 		f.recordOperatorWorkStateChange(result, source, requestID, "", "")
+	}
+
+	if f.dispatchPlan != nil {
+		if _, err := f.dispatchPlan.InvalidateWork(ctx, result.WorkID); err != nil {
+			// The engine move is the correctness boundary. Cancellation is only
+			// an optimization/resource-release action; retaining this warning
+			// lets the terminal-result guard protect the committed state even
+			// when Workers cannot accept the cancellation request.
+			f.logger.Error(
+				"Factory Runtime Work move committed but dispatch invalidation/cancellation failed",
+				"work_id", result.WorkID,
+				"error", err,
+			)
+		}
+	}
+	// Active-dispatch moves defer the engine wake until the matching outbox
+	// intents are fenced, so restored tokens cannot be scheduled in the gap.
+	// Normal moves may already have signaled from the engine; this signal is
+	// intentionally idempotent and also covers a nil dispatch planner.
+	if f.engine != nil {
+		f.engine.WakeForPendingProcessing()
 	}
 	return result, nil
 }

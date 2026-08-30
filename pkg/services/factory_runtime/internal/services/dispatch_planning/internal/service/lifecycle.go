@@ -94,6 +94,14 @@ func (p *Planner) State() dispatchplanning.RuntimeOutboxState {
 }
 
 func (p *Planner) cancelPublished(ctx context.Context, record *intentRecord) error {
+	return p.cancelPublishedWithReason(ctx, record, workers.WorkstationDispatchCancelRequest{})
+}
+
+func (p *Planner) cancelPublishedWithReason(
+	ctx context.Context,
+	record *intentRecord,
+	request workers.WorkstationDispatchCancelRequest,
+) error {
 	p.mu.Lock()
 	if record.cancelled || record.cancelling || record.result != nil {
 		p.mu.Unlock()
@@ -101,6 +109,7 @@ func (p *Planner) cancelPublished(ctx context.Context, record *intentRecord) err
 	}
 	dispatchID := record.action.Request.Execution.Dispatch.DispatchID
 	canceler := p.canceler
+	request.DispatchID = dispatchID
 	record.cancelling = true
 	p.mu.Unlock()
 
@@ -110,7 +119,7 @@ func (p *Planner) cancelPublished(ctx context.Context, record *intentRecord) err
 		p.mu.Unlock()
 		return fmt.Errorf("cancel dispatch intent %q: Workers canceler is unavailable", dispatchID)
 	}
-	if _, err := canceler(ctx, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID}); err != nil {
+	if _, err := canceler(ctx, request); err != nil {
 		p.mu.Lock()
 		record.cancelling = false
 		p.mu.Unlock()
@@ -122,6 +131,23 @@ func (p *Planner) cancelPublished(ctx context.Context, record *intentRecord) err
 	record.cancelled = true
 	p.mu.Unlock()
 	return nil
+}
+
+// cancelInvalidated forwards a superseding cancellation only after an
+// invalidated intent has actually crossed the Workers publication boundary.
+// A publication that races the invalidation sets published before its
+// completion signal, so this remains safe for the PUBLISHING state.
+func (p *Planner) cancelInvalidated(ctx context.Context, record *intentRecord) error {
+	p.mu.Lock()
+	status := record.status
+	published := record.published
+	p.mu.Unlock()
+	if status != dispatchplanning.OutboxIntentStatusInvalidated || !published {
+		return nil
+	}
+	return p.cancelPublishedWithReason(ctx, record, workers.WorkstationDispatchCancelRequest{
+		Reason: workers.WorkstationDispatchCancelReasonSuperseded,
+	})
 }
 
 func (p *Planner) cancelIfPublished(ctx context.Context, record *intentRecord) error {
@@ -139,8 +165,12 @@ func (p *Planner) cancelIfPublished(ctx context.Context, record *intentRecord) e
 		status = record.status
 		p.mu.Unlock()
 	}
-	if status != dispatchplanning.OutboxIntentStatusPublished {
+	if status != dispatchplanning.OutboxIntentStatusPublished &&
+		status != dispatchplanning.OutboxIntentStatusInvalidated {
 		return nil
+	}
+	if status == dispatchplanning.OutboxIntentStatusInvalidated {
+		return p.cancelInvalidated(ctx, record)
 	}
 	return p.cancelPublished(ctx, record)
 }

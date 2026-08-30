@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -153,7 +151,7 @@ const dispatchReleaseObservationBudget = 10 * time.Second
 // end-state hands back to Factory Runtime.
 //
 // The held phase reproduces the reported incident state: the dispatch is in
-// flight, it holds the work token, and `work move` is refused. The release
+// flight and its consumed work token is absent from the marking. The release
 // phase is the fix's contract -- a terminal worker outcome must retire the
 // dispatch on its own, without waiting on the execution timeout.
 type terminalOnReleaseExecutor struct {
@@ -164,11 +162,10 @@ type terminalOnReleaseExecutor struct {
 	cause       error
 }
 
-// oneShotScheduler keeps this terminal-outcome regression focused on the
-// dispatch being retired. Once cancellation restores an initial Work token,
-// the normal runtime scheduler is allowed to retry the still-eligible
-// transition; that retry would race the MoveWork assertion instead of testing
-// the release contract.
+// oneShotScheduler keeps this move regression focused on the dispatch being
+// retired. Once the operator move restores and relocates the consumed token,
+// the normal runtime scheduler is allowed to observe the terminal Work without
+// creating a replacement dispatch.
 type oneShotScheduler struct {
 	delegate scheduler.Scheduler
 	mu       sync.Mutex
@@ -240,10 +237,10 @@ func TestMoveWork_ProcessGoneWorkerSessionReleasesDispatch(t *testing.T) {
 	)
 }
 
-// assertTerminalWorkerOutcomeReleasesDispatch proves the before/after of the
-// incident for one terminal cause: while the attempt is in flight `work move`
-// is refused with ErrMoveWorkInFlightDispatch, and once the attempt reaches
-// that terminal cause the dispatch releases and the same `work move` succeeds.
+// assertTerminalWorkerOutcomeReleasesDispatch proves the move-side incident
+// boundary for one terminal cause: an operator move succeeds while the
+// attempt is in flight, then the late worker outcome releases without moving
+// the Work away from the operator's terminal target.
 func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, cause error) {
 	t.Helper()
 
@@ -285,21 +282,22 @@ func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, ca
 		return snapshot.InFlightCount > 0
 	})
 
-	// The wedged state the incident reported. A worker dispatch consumes the
-	// item's token into the transition for the life of the attempt, so the
-	// operator's recovery move is refused for as long as the attempt runs --
-	// which, before the runner's wait was bounded, meant until the two-hour
-	// execution timeout.
-	if _, err := harness.Factory.MoveWork(
+	// The operator move restores the consumed token, commits the terminal
+	// target, and invalidates the matching Runtime intent before returning.
+	result, err := harness.Factory.MoveWork(
 		ctx, workID, "done", work.WorkStateChangeSourceCLI, "",
-	); !errors.Is(err, factory.ErrMoveWorkNotFound) {
-		t.Fatalf("MoveWork while the attempt is in flight = %v, want %v", err, factory.ErrMoveWorkNotFound)
+	)
+	if err != nil {
+		t.Fatalf("MoveWork while the attempt is in flight: %v", err)
+	}
+	if result.FromState != "init" || result.ToState != "done" {
+		t.Fatalf("MoveWork result = %#v, want init -> done", result)
 	}
 
 	executor.releaseOnce()
 
-	// The terminal worker outcome alone must retire the dispatch. Nothing here
-	// waits on the workstation execution timeout.
+	// The late worker outcome must retire the invalidated dispatch. Nothing
+	// here waits on the workstation execution timeout.
 	waitForAggregateSnapshotWithTimeout(
 		t,
 		harness.Factory,
@@ -308,25 +306,10 @@ func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, ca
 			if snapshot.InFlightCount != 0 {
 				return false
 			}
-			if errors.Is(cause, workers.ErrWorkstationDispatchCanceled) {
-				return markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:init") &&
-					!markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
-			}
-			return markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
+			return markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:done") &&
+				!markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
 		},
 	)
-
-	result, err := harness.Factory.MoveWork(ctx, workID, "done", work.WorkStateChangeSourceCLI, "")
-	if err != nil {
-		t.Fatalf("MoveWork after the attempt reached %v: %v", cause, err)
-	}
-	wantFromState := "failed"
-	if errors.Is(cause, workers.ErrWorkstationDispatchCanceled) {
-		wantFromState = "init"
-	}
-	if result.FromState != wantFromState || result.ToState != "done" {
-		t.Fatalf("move result = %#v, want %s -> done", result, wantFromState)
-	}
 
 	snapshot, err := harness.Factory.GetEngineStateSnapshot(ctx)
 	if err != nil {

@@ -20,6 +20,7 @@ type Planner struct {
 	canceler      dispatchplanning.WorkersCanceler
 	byDispatch    map[string]*intentRecord
 	byCorrelation map[string]*intentRecord
+	byWorkID      map[string][]*intentRecord
 	ordered       []*intentRecord
 	mode          dispatchplanning.RuntimeOutboxMode
 	stopReason    dispatchplanning.RuntimeStopReason
@@ -32,6 +33,7 @@ type intentRecord struct {
 	result      *dispatchplanning.TerminalResult
 	cancelled   bool
 	cancelling  bool
+	published   bool
 	publishDone chan struct{}
 }
 
@@ -53,6 +55,7 @@ func NewWithCancellation(
 		canceler:      canceler,
 		byDispatch:    make(map[string]*intentRecord),
 		byCorrelation: make(map[string]*intentRecord),
+		byWorkID:      make(map[string][]*intentRecord),
 		mode:          dispatchplanning.RuntimeOutboxModeActive,
 	}
 }
@@ -127,6 +130,15 @@ func (p *Planner) Publish(
 	}
 	p.byDispatch[stable.Request.Execution.Dispatch.DispatchID] = record
 	p.byCorrelation[stable.CorrelationID] = record
+	indexedWorkIDs := make(map[string]struct{}, len(stable.Request.Execution.Dispatch.Execution.WorkIDs))
+	for _, workID := range stable.Request.Execution.Dispatch.Execution.WorkIDs {
+		workID = strings.TrimSpace(workID)
+		if _, indexed := indexedWorkIDs[workID]; indexed {
+			continue
+		}
+		indexedWorkIDs[workID] = struct{}{}
+		p.byWorkID[workID] = append(p.byWorkID[workID], record)
+	}
 	p.ordered = append(p.ordered, record)
 	paused := p.mode == dispatchplanning.RuntimeOutboxModePaused
 	p.mu.Unlock()
@@ -136,6 +148,97 @@ func (p *Planner) Publish(
 		return result, nil
 	}
 	return result, p.publish(ctx, record)
+}
+
+// InvalidateWork marks every accepted intent whose canonical Work lineage
+// contains workID as non-publishable. Publishing intents are allowed to cross
+// the existing publication completion boundary before a best-effort Workers
+// cancellation is attempted; a successful publication after invalidation is
+// still cancelled exactly once. Retired intents remain tombstones.
+func (p *Planner) InvalidateWork(
+	ctx context.Context,
+	workID string,
+) (dispatchplanning.WorkInvalidationResult, error) {
+	if ctx == nil {
+		return dispatchplanning.WorkInvalidationResult{}, fmt.Errorf(
+			"%w: context is required",
+			dispatchplanning.ErrInvalidRunnableDecision,
+		)
+	}
+	if err := ctx.Err(); err != nil {
+		return dispatchplanning.WorkInvalidationResult{}, err
+	}
+	workID = strings.TrimSpace(workID)
+	if workID == "" {
+		return dispatchplanning.WorkInvalidationResult{}, fmt.Errorf(
+			"%w: Work ID is required",
+			dispatchplanning.ErrInvalidRunnableDecision,
+		)
+	}
+
+	p.mu.Lock()
+	records := append([]*intentRecord(nil), p.byWorkID[workID]...)
+	waits := make([]chan struct{}, len(records))
+	previousStatuses := make([]dispatchplanning.OutboxIntentStatus, len(records))
+	for index, record := range records {
+		previousStatuses[index] = record.status
+		switch record.status {
+		case dispatchplanning.OutboxIntentStatusPending,
+			dispatchplanning.OutboxIntentStatusPublishing,
+			dispatchplanning.OutboxIntentStatusPublished,
+			dispatchplanning.OutboxIntentStatusInvalidated:
+			record.status = dispatchplanning.OutboxIntentStatusInvalidated
+		}
+		if previousStatuses[index] == dispatchplanning.OutboxIntentStatusPublishing {
+			waits[index] = record.publishDone
+		}
+	}
+	p.mu.Unlock()
+
+	var firstErr error
+	for index, record := range records {
+		if waits[index] != nil {
+			select {
+			case <-waits[index]:
+			case <-ctx.Done():
+				if firstErr == nil {
+					firstErr = ctx.Err()
+				}
+				continue
+			}
+		}
+		if err := p.cancelInvalidated(ctx, record); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf(
+				"invalidate Work %q dispatch %q: %w",
+				workID,
+				record.action.Request.Execution.Dispatch.DispatchID,
+				err,
+			)
+		}
+	}
+
+	p.mu.Lock()
+	intents := make([]dispatchplanning.WorkInvalidationIntent, 0, len(records))
+	for index, record := range records {
+		intents = append(intents, dispatchplanning.WorkInvalidationIntent{
+			DispatchID:            record.action.Request.Execution.Dispatch.DispatchID,
+			CorrelationID:         record.action.CorrelationID,
+			PreviousStatus:        previousStatuses[index],
+			Status:                record.status,
+			CancellationRequested: record.cancelled,
+		})
+	}
+	p.mu.Unlock()
+
+	outcome := dispatchplanning.WorkInvalidationOutcomeNoOp
+	if len(intents) > 0 {
+		outcome = dispatchplanning.WorkInvalidationOutcomeInvalidated
+	}
+	return dispatchplanning.WorkInvalidationResult{
+		WorkID:  workID,
+		Outcome: outcome,
+		Intents: intents,
+	}, firstErr
 }
 
 // Retry republishes only an explicitly pending intent. Concurrent retry or an
@@ -234,10 +337,20 @@ func (p *Planner) publish(ctx context.Context, record *intentRecord) error {
 		p.mu.Unlock()
 		return err
 	}
+	if record.status == dispatchplanning.OutboxIntentStatusInvalidated {
+		if err == nil {
+			record.published = true
+		}
+		close(record.publishDone)
+		record.publishDone = nil
+		p.mu.Unlock()
+		return err
+	}
 	if err != nil {
 		record.status = dispatchplanning.OutboxIntentStatusPending
 	} else {
 		record.status = dispatchplanning.OutboxIntentStatusPublished
+		record.published = true
 	}
 	close(record.publishDone)
 	record.publishDone = nil

@@ -53,22 +53,53 @@ func TestMoveWork_RejectsInvalidTargetState(t *testing.T) {
 	}
 }
 
-func TestMoveWork_RejectsInFlightDispatch(t *testing.T) {
+func TestMoveWork_RestoresInFlightDispatchTokens(t *testing.T) {
 	net := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	marking.AddToken(newMoveTestToken("tok-1", "work-1", "task:init"))
+	consumed := newMoveTestToken("tok-1", "work-1", "task:init")
+	marking.AddToken(consumed)
+
+	eng := newTestFactoryEngine(net, marking, nil)
+	eng.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
+		DispatchID:     "dispatch-1",
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{*consumed}),
+	}
+	marking.RemoveToken(consumed.ID)
+
+	result, err := eng.MoveWork(context.Background(), "work-1", "complete")
+	if err != nil {
+		t.Fatalf("MoveWork error = %v, want active dispatch token restoration", err)
+	}
+	if result.FromState != "init" || result.ToState != "complete" {
+		t.Fatalf("MoveWork result = %#v, want init -> complete", result)
+	}
+	moved, ok := eng.runtimeState.Marking.Tokens[consumed.ID]
+	if !ok || moved.PlaceID != "task:complete" {
+		t.Fatalf("marking = %#v, want moved work at task:complete", eng.runtimeState.Marking.Tokens)
+	}
+}
+
+func TestMoveWork_DoesNotPartiallyRestoreInvalidDispatchTokens(t *testing.T) {
+	net := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	valid := newMoveTestToken("tok-valid", "work-1", "task:init")
+	invalid := newMoveTestToken("tok-invalid", "work-1", "task:missing")
 
 	eng := newTestFactoryEngine(net, marking, nil)
 	eng.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
 		DispatchID: "dispatch-1",
-		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
-			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task"},
-		}}),
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{
+			*valid,
+			*invalid,
+		}),
 	}
 
 	_, err := eng.MoveWork(context.Background(), "work-1", "complete")
-	if !errors.Is(err, ErrMoveWorkInFlightDispatch) {
-		t.Fatalf("MoveWork error = %v, want %v", err, ErrMoveWorkInFlightDispatch)
+	if err == nil {
+		t.Fatal("MoveWork succeeded with an invalid active dispatch token")
+	}
+	if len(marking.Tokens) != 0 || len(marking.PlaceTokens) != 0 {
+		t.Fatalf("marking after failed move = %#v, want no restored tokens", marking)
 	}
 }
 

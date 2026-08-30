@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -413,6 +414,111 @@ func TestEngine_LateDispatchResultGateOrdersTerminalPlacementBeforeRelease(t *te
 		ignored.ObservedState.Name != "complete" || ignored.ObservedState.Type != interfaces.StateTypeTerminal ||
 		snapshot.DispatchHistory[0].IgnoredWorkID != workID {
 		t.Fatalf("ignored result marker = %#v, work id = %q, want terminal %s marker", ignored, snapshot.DispatchHistory[0].IgnoredWorkID, workID)
+	}
+}
+
+func TestEngine_LateDispatchResultWinsBeforeOperatorMove(t *testing.T) {
+	const (
+		workID     = "work-result-wins"
+		dispatchID = "dispatch-result-wins"
+	)
+	now := time.Date(2026, time.August, 29, 12, 5, 0, 0, time.UTC)
+	net := buildTestNet()
+	net.Transitions["result-wins"] = &petri.Transition{
+		ID:         "result-wins",
+		Name:       "Result wins",
+		WorkerType: "worker",
+		InputArcs: []petri.Arc{{
+			ID: "input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{
+			ID: "accepted", PlaceID: "task:complete", Direction: petri.ArcOutput,
+		}},
+		FailureArcs: []petri.Arc{{
+			ID: "failed", PlaceID: "task:failed", Direction: petri.ArcOutput,
+		}},
+	}
+
+	marking := petri.NewMarking("result-wins-test")
+	source := &factorytoken.Token{
+		ID: "result-wins-token", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
+		Color:   factorytoken.Color{WorkID: workID, WorkTypeID: "task", TraceID: "trace-result-wins"},
+		History: newTestTokenHistory(),
+	}
+	marking.AddToken(source)
+	marking.RemoveToken(source.ID)
+
+	resultReady := make(chan struct{})
+	releaseResult := make(chan struct{})
+	var resultReadyOnce sync.Once
+	hook := newTestDispatchResultHook()
+	hook.onTick = func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error) {
+		resultReadyOnce.Do(func() { close(resultReady) })
+		<-releaseResult
+		return []workerexecution.WorkResult{{
+			DispatchID: dispatchID, TransitionID: "result-wins", Outcome: workerexecution.OutcomeAccepted,
+		}}, nil
+	}
+	transitioner := subsystems.NewTransitioner(
+		net, nil, func() time.Time { return now },
+		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
+		nil, nil, nil,
+		factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}),
+	)
+	engine := newTestFactoryEngine(
+		net, marking, []subsystems.Subsystem{transitioner},
+		WithDispatchResultHook(hook),
+	)
+	engine.runtimeState.Dispatches[dispatchID] = &interfaces.DispatchEntry{
+		DispatchID: dispatchID, TransitionID: "result-wins", StartTime: now,
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{factorytoken.Clone(*source)}),
+		HeldMutations: []interfaces.MarkingMutation{{
+			Type: interfaces.MutationConsume, TokenID: source.ID, FromPlace: source.PlaceID,
+		}},
+	}
+	engine.runtimeState.InFlightCount = 1
+
+	tickDone := make(chan error, 1)
+	go func() { tickDone <- engine.Tick(context.Background()) }()
+	<-resultReady
+
+	moveDone := make(chan struct {
+		result work.OperatorMoveResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := engine.MoveWork(context.Background(), workID, "complete")
+		moveDone <- struct {
+			result work.OperatorMoveResult
+			err    error
+		}{result: result, err: err}
+	}()
+	close(releaseResult)
+
+	if err := <-tickDone; err != nil {
+		t.Fatalf("result-winning Tick() error: %v", err)
+	}
+	move := <-moveDone
+	if move.err != nil {
+		t.Fatalf("operator move after result winner: %v", move.err)
+	}
+	if move.result.FromState != "complete" || move.result.ToState != "complete" {
+		t.Fatalf("move after result winner = %#v, want complete -> complete", move.result)
+	}
+
+	snapshot := engine.GetRuntimeStateSnapshot()
+	terminal := snapshot.Marking.TokensInPlace("task:complete")
+	if len(terminal) != 1 || terminal[0].Color.WorkID != workID {
+		t.Fatalf("result-winning terminal Work = %#v, want one %s token", terminal, workID)
+	}
+	if failed := snapshot.Marking.TokensInPlace("task:failed"); len(failed) != 0 {
+		t.Fatalf("result-winning failed Work = %#v, want none", failed)
+	}
+	if len(snapshot.DispatchHistory) != 1 || snapshot.DispatchHistory[0].IgnoredResult != nil {
+		t.Fatalf("result-winning dispatch history = %#v, want one normal completion", snapshot.DispatchHistory)
 	}
 }
 
