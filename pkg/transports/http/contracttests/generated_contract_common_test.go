@@ -239,6 +239,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeScriptResponse,
 	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
+	factoryapi.FactoryEventTypeDispatchResultIgnored,
 	factoryapi.FactoryEventTypeWorkStateChange,
 	factoryapi.FactoryEventTypeFactoryStateResponse,
 	factoryapi.FactoryEventTypeRunResponse,
@@ -339,6 +340,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeDispatchResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsDispatchResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchResultIgnored: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchResultIgnoredEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeWorkStateChange: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -465,6 +470,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.DispatchResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchResponseEventPayload(value.(factoryapi.DispatchResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchResultIgnoredEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchResultIgnoredEventPayload(value.(factoryapi.DispatchResultIgnoredEventPayload))
 	},
 	reflect.TypeOf(factoryapi.WorkStateChangeEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromWorkStateChangeEventPayload(value.(factoryapi.WorkStateChangeEventPayload))

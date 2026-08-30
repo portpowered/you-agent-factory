@@ -188,6 +188,7 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"AgentRunToolDiagnosticEntry":                  "./components/schemas/events/AgentRunToolDiagnosticEntry.yaml",
 		"AgentRunTranscriptEntry":                      "./components/schemas/events/AgentRunTranscriptEntry.yaml",
 		"DispatchResponseEventPayload":                 "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
+		"DispatchResultIgnoredEventPayload":            "./components/schemas/events/payloads/DispatchResultIgnoredEventPayload.yaml",
 		"WorkStateChangeEventPayload":                  "./components/schemas/events/payloads/WorkStateChangeEventPayload.yaml",
 		"WorkStateChangeSource":                        "./components/schemas/events/WorkStateChangeSource.yaml",
 		"FactoryStateResponseEventPayload":             "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
