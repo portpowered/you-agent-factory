@@ -52,7 +52,7 @@ Run the audit from a clean detached checkout.
 11. Inspect hosted-only claims from the matching protected-main workflow run.
 
 The independent path-name sweep is only a completeness witness. This command
-returned 665 tracked candidates at the audit revision:
+returned 673 tracked candidates at the audit revision:
 
 ```text
 git ls-files | rg -i 'baseline|inventory|comparison|budget|floor|minimum|manifest|freeze|golden|snapshot|allowlist|whitelist'
@@ -350,19 +350,20 @@ This local runner failure does not authorize an R-17 edit.
 The R-07 command `bun run check:localized-copy` also exited 0.
 
 The following consumer observations remain explicit.
-`make deadcode` returned exit 1 because the Windows report had 3,072 findings against the committed 3,074-line Linux snapshot.
+`make deadcode` returned outer Make exit 2. Its checker returned exit 1 because the Windows report had 3,072 findings against the committed 3,074-line Linux snapshot.
 The platform-sensitive count and Unix-to-Windows file substitutions are local diagnostics.
 They do not authorize a snapshot edit.
 
-`make test-unit-latency-budget` returned exit 1 because the hosted `.artifacts/unit-latency/run-1.v2.json` input was absent.
+`make test-unit-latency-budget` returned outer Make exit 2. Its validator returned exit 1 because the hosted `.artifacts/unit-latency/run-1.v2.json` input was absent.
 No local timing run substitutes for that hosted artifact.
 `make test-unit-coverage` exited 0 and reported 80.7% overall coverage against
 the 75.9% minimum, with zero gate failures. The committed R-06 manifest still
 contains 403 package floors and 33 explicit floor holds; no manifest edit was
 made.
-The bounded local `make functional-test-viz` command exited 1 after the
-declared 35-minute budget was reached and the validation session was
-cancelled. Its inspection-only timing summary recorded `complete=false`,
+The bounded local `make functional-test-viz` invocation was externally
+cancelled after the declared 35-minute budget. The enclosing command returned
+shell exit 1. The target did not complete, so no inner checker result or normal
+Make exit code was observed. Its inspection-only timing summary recorded `complete=false`,
 149 selected packages, and 113 observed packages: 102 pass, 7 fail, and 4
 skip. The failures were `models/root_composition`, `providers`,
 `recordings/root_composition`, `runtime_api`, `sessions/execution`,
@@ -379,7 +380,8 @@ returned exit 1. It reports 356 committed undocumented-test identities and
 357 identities discovered from current source. This is a current-main
 comparison failure, not permission to shrink the ratchet in this audit.
 
-`make test-contract` returned exit 1 at the audit SHA. The focused S-09
+`make test-contract` returned outer Make exit 2 at the audit SHA. Its test
+process returned exit 1. The focused S-09
 and S-10 identity comparisons passed, but
 `contracts/session_command_family_test.go:116` reported
 `you.session.list --scope default = all, want live`. This is a separate
