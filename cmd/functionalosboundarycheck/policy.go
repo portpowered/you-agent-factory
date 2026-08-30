@@ -63,10 +63,12 @@ func compareSiteMetadata(observed spawnSite, recorded inventorySpawnSite) []stri
 
 func evaluateBaseline(sites []spawnSite, inventory inventoryDocument, baseline baselineDocument) []violation {
 	observed := packageCounts(sites)
-	intentional := intentionalCounts(inventory)
-	siteIDs := siteIDsByPackage(sites)
+	sitesByPackage := sitesByPackage(sites)
+	inventoryByID := inventorySitesByID(inventory)
+	baselineByPackage := map[string]baselinePackageRow{}
 	recorded := map[string]int{}
 	for _, row := range baseline.Packages {
+		baselineByPackage[row.PackagePath] = row
 		recorded[row.PackagePath] = row.Count
 	}
 	packages := unionPackagePaths(observed, recorded)
@@ -77,23 +79,55 @@ func evaluateBaseline(sites []spawnSite, inventory inventoryDocument, baseline b
 		if actual <= ceiling {
 			continue
 		}
-		delta := actual - ceiling
-		admitted := intentional[packagePath]
-		if admitted >= delta {
+		baselineIDs := baselineSiteIDs(baselineByPackage[packagePath])
+		unadmitted := unadmittedNewSiteIDs(sitesByPackage[packagePath], baselineIDs, inventoryByID)
+		if len(unadmitted) == 0 {
 			continue
 		}
-		violations = append(violations, violation{message: fmt.Sprintf("package %s observed %d static OS-spawn site(s), baseline %d; %d new site(s) require paired INTENTIONAL-OS inventory admission naming an allowed OS property (found %d; sites=%s)", packagePath, actual, ceiling, delta, admitted, strings.Join(siteIDs[packagePath], ", "))})
+		violations = append(violations, violation{message: fmt.Sprintf("package %s observed %d static OS-spawn site(s), baseline %d; %d new site(s) require paired INTENTIONAL-OS inventory admission naming an allowed OS property (unadmitted=%d; sites=%s)", packagePath, actual, ceiling, actual-ceiling, len(unadmitted), strings.Join(unadmitted, ", "))})
 	}
 	return violations
 }
 
-func siteIDsByPackage(sites []spawnSite) map[string][]string {
-	result := map[string][]string{}
+func sitesByPackage(sites []spawnSite) map[string][]spawnSite {
+	result := map[string][]spawnSite{}
 	for _, site := range sites {
-		result[site.PackagePath] = append(result[site.PackagePath], site.SiteID)
+		result[site.PackagePath] = append(result[site.PackagePath], site)
 	}
 	for packagePath := range result {
-		slices.Sort(result[packagePath])
+		slices.SortFunc(result[packagePath], func(left, right spawnSite) int {
+			return strings.Compare(left.SiteID, right.SiteID)
+		})
+	}
+	return result
+}
+
+func inventorySitesByID(inventory inventoryDocument) map[string]inventorySpawnSite {
+	result := make(map[string]inventorySpawnSite, len(inventory.OSSpawnSites))
+	for _, site := range inventory.OSSpawnSites {
+		result[site.SiteID] = site
+	}
+	return result
+}
+
+func baselineSiteIDs(row baselinePackageRow) map[string]struct{} {
+	result := make(map[string]struct{}, len(row.SiteIDs))
+	for _, siteID := range row.SiteIDs {
+		result[siteID] = struct{}{}
+	}
+	return result
+}
+
+func unadmittedNewSiteIDs(sites []spawnSite, baselineIDs map[string]struct{}, inventoryByID map[string]inventorySpawnSite) []string {
+	var result []string
+	for _, site := range sites {
+		if _, existed := baselineIDs[site.SiteID]; existed {
+			continue
+		}
+		record, exists := inventoryByID[site.SiteID]
+		if !exists || record.Verdict != intentionalVerdict {
+			result = append(result, site.SiteID)
+		}
 	}
 	return result
 }

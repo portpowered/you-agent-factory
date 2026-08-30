@@ -80,6 +80,7 @@ func validateBaseline(baseline baselineDocument) []string {
 		return findings
 	}
 	previous := ""
+	seenSiteIDs := map[string]string{}
 	for index, row := range baseline.Packages {
 		label := fmt.Sprintf("packages[%d]", index)
 		if err := validatePackagePath(row.PackagePath); err != nil {
@@ -90,6 +91,27 @@ func validateBaseline(baseline baselineDocument) []string {
 		}
 		if row.Count < 0 {
 			findings = append(findings, fmt.Sprintf("%s count must be non-negative", label))
+		}
+		if row.SiteIDs != nil {
+			if len(row.SiteIDs) != row.Count {
+				findings = append(findings, fmt.Sprintf("%s siteIds length=%d must equal count=%d", label, len(row.SiteIDs), row.Count))
+			}
+			previousSiteID := ""
+			for siteIndex, siteID := range row.SiteIDs {
+				siteLabel := fmt.Sprintf("%s siteIds[%d]", label, siteIndex)
+				if strings.TrimSpace(siteID) == "" {
+					findings = append(findings, fmt.Sprintf("%s must not be empty", siteLabel))
+				}
+				if siteID <= previousSiteID {
+					findings = append(findings, fmt.Sprintf("%s must be unique and sorted", siteLabel))
+				}
+				if priorPackage, exists := seenSiteIDs[siteID]; exists {
+					findings = append(findings, fmt.Sprintf("%s duplicates siteId %q from %s", siteLabel, siteID, priorPackage))
+				} else {
+					seenSiteIDs[siteID] = label
+				}
+				previousSiteID = siteID
+			}
 		}
 		previous = row.PackagePath
 	}

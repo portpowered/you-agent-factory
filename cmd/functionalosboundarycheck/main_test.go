@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -70,17 +71,34 @@ func TestC05UnjustifiedIncreaseFailsWithPairedUpdateGuidance(t *testing.T) {
 	}
 }
 
-func TestC03IntentionalAdmissionAllowsRaisedBaseline(t *testing.T) {
-	fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
-	fixture.writeBaseline(t, map[string]int{"tests/functional/fixture": 1})
+func TestC03IntentionalAdmissionAllowsRaisedBaselineForNewSite(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", twoSpawnSource)
+	fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites[:1])
 	fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
 
 	stdout, stderr, err := fixture.run(t)
 	if err != nil {
 		t.Fatalf("run() error = %v, stderr=%s", err, stderr)
 	}
-	if !strings.Contains(stdout, "observed=1 baseline=1") {
+	if !strings.Contains(stdout, "observed=2 baseline=1") {
 		t.Fatalf("stdout = %q, want raised-baseline counts", stdout)
+	}
+}
+
+func TestC03ExistingIntentionalCannotAdmitNewAccidentalSite(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", twoSpawnSource)
+	fixture.writeBaselineWithSites(t, map[string]int{"tests/functional/fixture": 1}, fixture.sites[:1])
+	records := fixture.siteRecordsForSites(intentionalVerdict)
+	accidentalRecords := fixture.siteRecordsForSites(accidentalVerdict)
+	records[1] = accidentalRecords[1]
+	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+
+	_, stderr, err := fixture.run(t)
+	if err == nil {
+		t.Fatal("run() error = nil, want existing-intentional/new-accidental failure")
+	}
+	if !strings.Contains(stderr, fixture.sites[1].SiteID) || !strings.Contains(stderr, "unadmitted=1") {
+		t.Fatalf("stderr = %q, want the new accidental site identified", stderr)
 	}
 }
 
@@ -524,6 +542,11 @@ func (fixture *checkerFixture) siteRecordsForSites(verdict string) []inventorySp
 
 func (fixture *checkerFixture) writeBaseline(t *testing.T, counts map[string]int) {
 	t.Helper()
+	fixture.writeBaselineWithSites(t, counts, nil)
+}
+
+func (fixture *checkerFixture) writeBaselineWithSites(t *testing.T, counts map[string]int, baselineSites []spawnSite) {
+	t.Helper()
 	paths := make([]string, 0, len(counts))
 	for packagePath := range counts {
 		paths = append(paths, packagePath)
@@ -536,9 +559,15 @@ func (fixture *checkerFixture) writeBaseline(t *testing.T, counts map[string]int
 			}
 		}
 	}
+	siteIDsByPackage := map[string][]string{}
+	for _, site := range baselineSites {
+		siteIDsByPackage[site.PackagePath] = append(siteIDsByPackage[site.PackagePath], site.SiteID)
+	}
 	packages := make([]baselinePackageRow, 0, len(paths))
 	for _, packagePath := range paths {
-		packages = append(packages, baselinePackageRow{PackagePath: packagePath, Count: counts[packagePath]})
+		siteIDs := append([]string(nil), siteIDsByPackage[packagePath]...)
+		sort.Strings(siteIDs)
+		packages = append(packages, baselinePackageRow{PackagePath: packagePath, Count: counts[packagePath], SiteIDs: siteIDs})
 	}
 	writeFixtureJSON(t, fixture.baselinePath, baselineDocument{Version: baselineFormatVersion, CountUnit: spawnCountUnit, Packages: packages})
 }

@@ -33,6 +33,10 @@ type baselineDocument struct {
 type baselinePackageRow struct {
 	PackagePath string `json:"packagePath"`
 	Count       int    `json:"count"`
+	// SiteIDs records the stable identities measured for this package at the
+	// baseline point. An omitted list is supported for older baselines and is
+	// treated conservatively: no current site is considered pre-existing.
+	SiteIDs []string `json:"siteIds,omitempty"`
 }
 
 type inventoryDocument struct {
@@ -85,16 +89,6 @@ func packageCounts(sites []spawnSite) map[string]int {
 	counts := map[string]int{}
 	for _, site := range sites {
 		counts[site.PackagePath]++
-	}
-	return counts
-}
-
-func intentionalCounts(inventory inventoryDocument) map[string]int {
-	counts := map[string]int{}
-	for _, site := range inventory.OSSpawnSites {
-		if site.Verdict == intentionalVerdict {
-			counts[site.PackagePath]++
-		}
 	}
 	return counts
 }
