@@ -467,22 +467,6 @@ func (fixture *agyProcessFixture) runScenario(
 	)
 	run.stream = stream
 	fixture.recordStreamOpened()
-	wantFactoryEvents := 11
-	if scenario.selector == agySharedTimeoutSelector {
-		wantFactoryEvents = 23
-	}
-	factoryEventObservation := newAgySharedFactoryEventObservation(
-		fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
-	)
-	// Register this cleanup after the scenario cleanup so a setup or assertion
-	// failure cancels the Factory Event observer before the session and response
-	// stream are released by run.close.
-	t.Cleanup(func() {
-		result := factoryEventObservation.stop()
-		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
-			t.Errorf("AGY %q Factory Event observation cleanup: %v", scenario.selector, result.err)
-		}
-	})
 
 	routeRequestStart := fixture.router.routeCallCount(scenario.selector)
 	name := workTitle
@@ -498,11 +482,16 @@ func (fixture *agyProcessFixture) runScenario(
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	factoryEventResult := factoryEventObservation.finish()
-	if factoryEventResult.err != nil {
-		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, factoryEventResult.err)
+	wantFactoryEvents := 11
+	if scenario.selector == agySharedTimeoutSelector {
+		wantFactoryEvents = 23
 	}
-	factoryEvents := factoryEventResult.events
+	factoryEvents, err := readAgyFactoryEventsAfterResponse(
+		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	)
+	if err != nil {
+		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, err)
+	}
 	run.terminalObserved = true
 	listed, err := readAgySessionWork(context.Background(), fixture.baseURL, session.Id)
 	if err != nil {

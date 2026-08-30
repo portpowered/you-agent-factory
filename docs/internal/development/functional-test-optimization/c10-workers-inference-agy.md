@@ -511,17 +511,17 @@ Coverage remains the authoritative timing result and this pass is not claimed
 as a hosted improvement. No Factory Event, Work, provider/session, response
 EOF, cleanup, or zero-remote witness was relaxed.
 
-The latest bounded pass starts the retained-plus-live Factory Event observer
-after the response stream is open but before Work submission. Exact event
-decoding therefore overlaps controlled AGY execution and response-frame
-consumption; the observer still drains the expected 11 or 23 events before the
-public Work projection is read. Its cleanup is registered after the scenario
-cleanup so assertion/setup failure cancels the observer before session and
-response-stream release. The snapshot-first helper was removed because this
-observer now provides the same retained-ledger barrier on the single public
-SSE request while eliminating the serial post-response observation tail.
-Behavioral, cleanup, route, and size gates remain required on the committed
-head; hosted timing remains review-owned.
+The current bounded pass makes Factory Event validation snapshot-first after
+the exact response frames arrive. It reads the retained event count and
+decodes the already-published 11 or 23 events without starting a live
+subscription; only a publication race falls back to the existing
+retained-plus-live SSE reader. This removes the normal-path observer goroutine
+and live subscription while preserving the exact ledger barrier, Work
+projection read, response EOF check, and cleanup sequence. The exact package
+run passed at `2.440s`, the focused success/timeout `-count=3` run passed at
+`10.119s`, and the race package run passed at `5.915s`; these local timings are
+diagnostic only. Behavioral, cleanup, route, and size gates remain required on
+the committed head; hosted timing remains review-owned.
 
 ### Scope and ancestry audit
 
