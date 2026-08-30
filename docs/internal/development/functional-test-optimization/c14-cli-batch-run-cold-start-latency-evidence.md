@@ -229,3 +229,121 @@ stories:
 
 No browser criterion applies to this backend/CLI story. No production
 optimization or threshold success claim is made by CHAR-001.
+
+## Story 002 — profile-selected batch system-bootstrap deferral
+
+Status: the selected optimization is implemented and has bounded behavioral,
+repeatability, race-selector, and delivered-binary evidence. Final clean
+rebase, validation loopback, pull request publication, and review handoff are
+story 003 work.
+
+### Implementation boundary
+
+`pkg/transports/cli/root_factory.go` now skips the existing system-initialization
+operation only for the profile-selected finite batch shape: a Work file,
+mock workers, no recording, no replay/resume, no server/site/listener,
+non-continuous execution, no bootstrap, and no named Factory. Explicit
+`--dir`, `--factory`, or `--named` flag provenance retains initialization even
+when the parsed selection has already populated the same fields. Real workers,
+recording/replay, hosted execution, continuous execution, bootstrap, named
+Factories, and explicit Factory selections remain on the existing startup
+path. The change reuses the existing `RunConfig`, `StartupPreparation`,
+`CommandFactory`, and single `wire.InjectBundle` graph; it does not add a
+second graph or a public configuration mode.
+
+The changed-path tests are in
+`pkg/transports/cli/batch_cold_start_deferral_test.go`. They table-test the
+deferral boundary, assert that the deferred initializer is not called for the
+exact command shape, assert that demanded initialization preserves a sentinel
+failure and exactly-one call, and cover explicit Factory path/directory,
+recording, replay, server, continuous, real-worker, bootstrap, named-Factory,
+and listener exclusions. The existing process-lifecycle characterization
+remains in
+`pkg/services/factory_sessions/internal/processlifecycle/batch_server_characterization_test.go`.
+
+### Acceptance evidence
+
+`GATE-PERF-001: PASS for the profile-selected exact batch path.` The final
+compiled binary was
+`.artifacts/batch-coldstart-probe/post-optimized-b08fbd550e.exe`, SHA-256
+`DED26C02B440D3F64009CB00EC823C3B01B1A765761419AA83FE0F8FA31F064B`. Three
+fresh child processes used isolated `HOME`/`USERPROFILE` directories and the
+exact command below from a copied fixture:
+
+~~~
+run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
+~~~
+
+The post-change wall times were 221.779 ms, 213.539 ms, and 223.867 ms;
+sorted median 221.779 ms. Against the characterized pre-change median of
+1318.610 ms, this is 1096.831 ms and 83.18% lower. All three processes exited
+0 with exact stdout `Batch completed successfully.\n` (30 UTF-8 bytes) and
+empty stderr. Each persisted snapshot contained `one-work` at
+`prompt-task:complete`, state `complete`, outcome `ACCEPTED`; each snapshot
+reported session status `RUNNING`, matching the existing CLI contract. The
+run-1 snapshot artifact was
+`.artifacts/batch-coldstart-probe/post-optimized-b08fbd550e-final2/run-1/.you-agent-factory/durable-sessions/~default.json`,
+SHA-256
+`1EA613ABD8FAC9D73D3388A7F95CC315FBD9921079D7CB08F087E27D2562A6A6`. Each
+child had exited after wait, and each isolated packaged-Factory directory had
+zero files. Fixture hashes were unchanged: factory
+`AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
+`CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, mock
+workers `69A0CE360F450CF9E71D4C9935345D1B2CF6A734A4E79DAE534E836F6218D3C3`.
+
+`GATE-SPINE-001: PASS for the selected CLI and existing lifecycle boundary.`
+The following final focused package run exited 0:
+
+~~~
+go test ./pkg/transports/cli ./pkg/services/factory_sessions/internal/processlifecycle -count=1 -timeout=10m
+~~~
+
+The exact command path, deferred initializer call count, demanded failure
+identity, startup role order, reverse unwind, readiness/listener, and
+exactly-once close witnesses all passed. `make pkg-maint` also exited 0 after
+the test-shape refactor, with the repository limits of 1000 lines per file,
+100 lines per function, and cyclomatic complexity 15 or less.
+
+`GATE-RACE-001: PASS for changed selectors; broad lane remains qualified.`
+The CLI deferral selectors passed the repeated race run (five repetitions),
+and the process-lifecycle characterization passed under the race detector.
+A broader race command was also run:
+
+~~~
+go test -race ./pkg/transports/cli ./pkg/transports/cli/run ./pkg/initializer/process ./pkg/initializer/application -count=1 -timeout=10m
+~~~
+
+That broader run was not green because the unrelated existing
+`TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead`
+failed with `Execute() did not return after cancellation while stdin remained
+open and idle`; a direct selector rerun reproduced the same failure. This
+batch change does not claim the first-demand concurrency, cancellation, retry,
+capacity, repeated `Process.Execute`, or lazy-close edges from that failure.
+
+`GATE-SERVER-001: PASS for existing direct preservation witnesses.` Existing
+recording/replay, runtime-hosting readiness/failure/cancellation, and process
+lifecycle tests passed in the focused and unit lanes. The demanded server
+sentinel test proves the predicate does not bypass required initialization;
+the full hosted/recording/replay inventory remains an unchanged-path risk to
+be looped in story 003.
+
+`GATE-FUNC-001: PASS for the final unit lane; functional clean-room result is
+contaminated.` `make test` exited 0 with 168 tests passed, one
+platform-conditional skip, and zero failures. The exact fresh functional
+command `make test-functional-fresh` could not provide clean-room evidence:
+the shared packaged-Factory staging owner
+`C:\Users\andre\.you-agent-factory\factories\.you--full-flow.staging-owner`
+was held by pid 6224 for backend/full scope
+`local-0fbcdede-35ac-44d2-b02f-5888b9b8a1`, with liveness indeterminate. The
+run reported installation contention, `process API server starter was never
+invoked`, context cancellations, and unrelated MCP/session/provider/model/
+recording failures. No shared-host cleanup or unrelated production repair was
+performed. `make lint` was attempted; UI lint/deadcode could not run because
+the environment lacks the Biome and Knip binaries, while the targeted
+`make pkg-maint` gate passed after the maintainability fixes. Full lint is not
+claimed.
+
+`GATE-LOOP-001: NOT YET PROVEN.` The final source tree has not yet been
+rebased in a clean room, run through the complete story-003 validation
+loopback, pushed, or published as a pull request. Those are the remaining
+acceptance edges; no browser criterion applies.
