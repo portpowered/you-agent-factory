@@ -1,7 +1,8 @@
 # Petri guard functional deflake evidence
 
-Status: story 001 pre-fix characterization only. The repository code was not
-repaired in this iteration.
+Status: operator-amended pre-fix characterization complete. The repository
+code was not repaired in this lane because the only observed contention race is
+owned by the sibling deflake lane.
 
 The unchanged branch was tested at commit
 `905d5fe06e54f2cc18fa9d5ed4f08d72e5d85739` with Go 1.25.0. The owned package
@@ -54,6 +55,55 @@ taskset -c 0-3 env GOMAXPROCS=4 go test ./tests/functional/orchestration/petri/g
   -json -count=30 -timeout=10m
 ```
 
+## Operator-amendment whole-package campaign
+
+The operator amendment required the same contention topology across the whole
+owned package before deciding whether this lane had another repair to make.
+These runs used the unchanged test and runtime sources at commit
+`b2461393c2d47b68b3081a73031142984edbb20c` (the ledger-only commit), Go
+`1.25.0 linux/amd64` under Ubuntu WSL2, `GOMAXPROCS=4`, the test process
+pinned to CPUs 0-3, and twelve PID-tracked `taskset -c 0-3 yes` workers. The
+persistent runs recorded every worker being killed and waited for, with zero
+remaining load PIDs. C-008's ephemeral artifact did not retain its cleanup
+line.
+
+| Attempt | Exact command shape | Result | Cleanup/lifecycle |
+| --- | --- | --- | --- |
+| C-008 | Whole package, `-json -count=20 -timeout=30m`, same pinned four-CPU topology; first run retained only in ephemeral WSL `/tmp` | package exit 1; raw artifact was unavailable after WSL teardown, so no test identity is claimed from this attempt | cleanup output was not retained; this attempt is not used to attribute an additional failure |
+| C-009 | Whole package, `-json -count=20 -timeout=30m`, same pinned four-CPU topology; retained at `[LOCAL_TEMP]/petri-guards-whole-gOfOv7/test.json` | package pass; 340/340 test and subtest pass events; no test fail event | `processStarts=1 apiStarts=1 sessionsOpened=320 sessionsClosed=320 routes=0`; zero load PIDs |
+| C-010 | Whole package, `-json -count=30 -timeout=45m`, same pinned four-CPU topology; retained at `[LOCAL_TEMP]/petri-guards-whole-campaign-20260830/test.json` | package exit 1; 509/510 test and subtest pass events; exactly one test fail event, on repetition 20 of `TestGuardPartialCompletionPreservesIndependentOutcome`; all other events passed 30/30 | `processStarts=1 apiStarts=1 sessionsOpened=480 sessionsClosed=480 routes=0`; zero load PIDs |
+
+C-010's retained `test2json` failure event was:
+
+```text
+{"Action":"fail","Package":"github.com/portpowered/infinite-you/tests/functional/orchestration/petri/guards","Test":"TestGuardPartialCompletionPreservesIndependentOutcome","Elapsed":0.09}
+```
+
+Its exact assertion remained the unchanged assertion at
+`guard_cases_test.go:131`:
+
+```text
+guard_cases_test.go:131: Work "guard-partial-complete" state = &generated.WorkState{Id:(*string)(nil), Name:"failed", Type:"FAILED"}, want "complete"; item=generated.Work{...}
+```
+
+The retained structured records immediately before that assertion identify
+`work_id=guard-partial-complete`, `event_name=command_runner.completed`,
+`outcome=failed`, `exit_code=31`, followed by
+`event_name=factory_runtime.dispatch_result`, `outcome=FAILED`, and
+`failure_message=provider execution failed`. No other test emitted a fail
+event or assertion failure in C-010. Together with C-007, this establishes one
+observed contention race in the owned package: the controlled responder binds
+the `COMPLETE` and exit-code-31 outcomes by concurrent command-arrival order
+instead of Work ID. The package's other guard scenarios did not reproduce an
+additional contention failure in the whole-package campaign.
+
+The C-010 stream proves attribution and the scope decision; it does not prove
+repair correctness or post-fix stability. The sibling lane owns the
+Work-ID-specific responder binding repair. This lane therefore intentionally
+does not modify `guard_cases_test.go`, `shared_fixture_test.go`, production
+Factory Runtime, CI, or any sibling package. The retained deliverable for this
+operator-amended lane is this sanitized ledger alone.
+
 ## Exact failure and causal trace
 
 The first C-007 failure was the fifth repeated test invocation. Its retained
@@ -102,7 +152,8 @@ Work-ID-specific provider-result binding in the controlled edge. CPU packing
 is the width/scheduling inference that changes which dispatch enters the
 sequence first; the raw test2json failure and Work-ID runtime events are the
 direct evidence. No production Factory Runtime or shared support helper was
-changed, and the repair is deferred to story 002.
+changed, and the repair remains with the sibling lane under the operator
+amendment.
 
 Remaining unproven edges are the deterministic repair, the 20-run repaired
 contention gate, the full package and race gates on the repaired head, the
