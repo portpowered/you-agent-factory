@@ -101,6 +101,29 @@ func TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope(t *testing.T) 
 	t.Cleanup(func() { server.Stop(t) })
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
+	expected := submitConcurrentWorkerSessionDispatches(t, server, stream)
+	runner.waitCallCount(t, 2)
+
+	readConcurrentWorkerSessions(t, server, expected)
+
+	close(gate)
+	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, routeCharacterizationTimeout)
+	assertConcurrentWorkerSessionDispatchesCompleted(t, server, runner, expected)
+}
+
+type concurrentWorkerSessionListResult struct {
+	workID   string
+	response factoryapi.ListWorkerSessionsResponse
+	err      error
+	stderr   string
+}
+
+func submitConcurrentWorkerSessionDispatches(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	stream *support.FactoryEventStream,
+) map[string]routeCharacterizationDispatch {
+	t.Helper()
 	expected := make(map[string]routeCharacterizationDispatch, 2)
 	for index := 0; index < 2; index++ {
 		name := "worker-sessions-route-concurrent-work-" + string(rune('1'+index))
@@ -115,8 +138,15 @@ func TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope(t *testing.T) 
 		}
 		expected[workID] = waitForRouteCharacterizationAssociation(t, stream, workID)
 	}
-	runner.waitCallCount(t, 2)
+	return expected
+}
 
+func readConcurrentWorkerSessions(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	expected map[string]routeCharacterizationDispatch,
+) {
+	t.Helper()
 	workIDs := make([]string, 0, len(expected))
 	for _, dispatch := range expected {
 		workIDs = append(workIDs, dispatch.workID)
@@ -153,9 +183,15 @@ func TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope(t *testing.T) 
 		}
 		assertConcurrentWorkerSessionObservation(t, result.response, expected[result.workID])
 	}
+}
 
-	close(gate)
-	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, routeCharacterizationTimeout)
+func assertConcurrentWorkerSessionDispatchesCompleted(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	runner *functionalWorkerGate,
+	expected map[string]routeCharacterizationDispatch,
+) {
+	t.Helper()
 	if runner.callCount() != 2 {
 		t.Fatalf("provider calls after concurrent reads = %d, want exactly 2", runner.callCount())
 	}
@@ -163,13 +199,6 @@ func TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope(t *testing.T) 
 		response := support.ListDefaultSessionWorkerSessions(t, server.URL(), dispatch.workID)
 		assertRouteCharacterizationObservation(t, "REST after concurrent reads", response, dispatch)
 	}
-}
-
-type concurrentWorkerSessionListResult struct {
-	workID   string
-	response factoryapi.ListWorkerSessionsResponse
-	err      error
-	stderr   string
 }
 
 // TestWorkerSessionRouteFunctionalBadInputAndUnknownWork exercises the two
