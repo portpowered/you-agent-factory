@@ -31,6 +31,9 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 		"--worktree", "worktrees/feature-token-branch/work-execution-template",
 		"--system-prompt", "Process the input task.",
 		"--model", "test-claude-model",
+		"--verbose",
+		"--output-format", "stream-json",
+		"--include-partial-messages",
 	}, executionTemplateWantPrompt(dir)))
 	assertProviderStdin(t, req, "")
 	assertProviderExecutionFields(t, dir, req)

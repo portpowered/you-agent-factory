@@ -615,3 +615,36 @@ The smallest authorized correction is to resolve execution fields before
 prompt rendering, apply the resolved fields to a detached prompt context, and
 render against the non-resource Work-input token view. The exact witness and
 all existing assertions remain unchanged.
+
+## LONG-002 owning-seam correction and BASE-002 retest
+
+The authorized correction was applied at the owning runtime prompt seam after
+the characterization above. `renderRuntimePrompt` now resolves workstation
+execution fields before rendering, renders with a cloned context carrying the
+resolved working directory/environment, and supplies a prompt-facing token
+projection that excludes Runtime-only resource tokens. The generic Workers
+prompt renderer and the dispatch guard transitioner were not changed.
+
+The focused seam regression
+`go test ./pkg/services/factory_runtime/internal/services/orchestration/runtime
+-run 'TestRenderRuntimePrompt(AndTemplateFieldsUsesDetachedCapabilities|UsesResolvedContextAndWorkInputTokens|InterpolatesInvocationArguments)'
+-count=1` passed. It proves resolver-before-render ordering, resolved context
+visibility, non-resource positional inputs, and no mutation of the caller's
+context.
+
+The focused seam selector passed in `0.021s`; the owning runtime package then
+passed in `0.855s`. The retained exact LONG-002 command passed with exit 0
+(`1.476s` package elapsed): both Claude and Codex received the resolved prompt context and one
+Work input, while the timeout/retry and companion completion witnesses also
+passed. BASE-002's untagged package command passed with exit 0 (`10.464s`),
+the owning runtime package passed with exit 0 (`0.855s`), and
+`go run ./cmd/functionalboundarycheck` passed with exit 0. The Claude exact
+argv expectation was corrected only to retain the native adapter's already
+emitted `--verbose --output-format stream-json --include-partial-messages`
+flags; the prompt, stdin, execution fields, completion, and cleanup
+assertions remain exact.
+
+This supersedes the pre-amendment LONG-002 blocker for story 002. The older
+CLEAN-004 table remains a historical pre-correction report; final medians,
+clean-room validation, exact ACP race disposition, and hosted CI remain owned
+by story 004.
