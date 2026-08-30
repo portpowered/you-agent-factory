@@ -320,6 +320,9 @@ func waitForJavaScriptPersistedResume(
 	sessionID string,
 ) {
 	t.Helper()
+	// The fsnotify replacement event is the deterministic durable-store
+	// completion signal. Keep this bounded timer only as a fail-fast diagnostic
+	// when the store never publishes that event; polling cannot prove completion.
 	timer := time.NewTimer(15 * time.Second)
 	defer timer.Stop()
 	for {
@@ -797,6 +800,8 @@ func javascriptDurabilityProviderCommandResult(
 
 func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForBlockedInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
+	// inferStarted is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -809,6 +814,8 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForBlockedInfer(t 
 
 func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
+	// contextCanceled is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -821,6 +828,8 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForCanceledInfer(t
 
 func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForResumedInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
+	// resumedCompleted is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
