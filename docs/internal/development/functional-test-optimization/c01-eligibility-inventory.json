@@ -9,7 +9,7 @@
     {
       "gateId": "AUDIT-001",
       "procedure": "At branch point eef5150f277490384b460a47a0a3bcca51338e67, run go test ./tests/functional/... -list '^Test' -count=0; walk tests/functional with a Go AST CallExpr scan for exec.Command and exec.CommandContext while excluding tests/functional/internal/support/** and **/testdata/**; cross-check with rg -n 'exec\\.Command(?:Context)?\\s*\\(' tests/functional --glob '!**/testdata/**' --glob '!**/internal/support/**'; reconcile every retained isolated row and independently recompute the paired baseline.",
-      "propertyProved": "The list-only census exited 0 with 1117 top-level declarations across 158 package results; the static scan found 69 unique stable OS-spawn sites across 23 packages, with 62 INTENTIONAL-OS and 7 ACCIDENTAL-OS sites. All 231 retained isolated-with-reason rows have exactly one nested osBoundaryIntentionality record: 64 intentional and 167 accidental.",
+      "propertyProved": "The list-only census exited 0 with 1117 top-level declarations across 158 package results; the static scan found 69 unique stable OS-spawn sites across 23 packages, with 61 INTENTIONAL-OS and 8 ACCIDENTAL-OS sites. All 231 retained isolated-with-reason rows have exactly one nested osBoundaryIntentionality record: 64 intentional and 167 accidental.",
       "propertyNotProved": "This audit records assertion evidence and conversion obligations but does not prove every human verdict's semantic correctness, checker enforcement, functional conversion, full runtime parity, unsupported Unix behavior, or current-head PR CI.",
       "status": "pass"
     },
@@ -6580,10 +6580,15 @@
           "count": 7,
           "family": "fixture-git-command",
           "ruling": "Move repository setup/inspection to the c15 repository/filesystem edge; preserve the public fixture assertion."
+        },
+        {
+          "count": 1,
+          "family": "unreachable-provider-command",
+          "ruling": "Preserve the zero-call provider-selection assertion through root.BuildProcess and Process.Execute, then replace mockACPCommandFactory with a non-spawning sentinel or remove the unreachable command factory in the owning c15 conversion lane."
         }
       ],
-      "accidentalSites": 7,
-      "intentionalSites": 62,
+      "accidentalSites": 8,
+      "intentionalSites": 61,
       "packageCount": 23,
       "packageCounts": [
         {
@@ -7475,13 +7480,13 @@
       "siteId": "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01",
       "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
       "sourcePath": "tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go",
-      "sourceLine": 460,
+      "sourceLine": 481,
       "enclosingIdentity": "acpWorkerChildCommandFactory",
       "launcherKind": "test-helper-process",
       "occurrence": 1,
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:460 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
+      "assertionEvidence": "The assertions owning acpWorkerChildCommandFactory observe the scripted ACP child peer's stdio framing, ordered updates, retained replay, stream completion, and worker attribution across the process boundary.",
       "conversionObligation": null,
       "testRowIds": [
         "C07-F025-top-level-test-TestACPWorkerChildPeerProcess",
@@ -7495,13 +7500,13 @@
       "siteId": "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-02",
       "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
       "sourcePath": "tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go",
-      "sourceLine": 462,
+      "sourceLine": 483,
       "enclosingIdentity": "acpWorkerChildCommandFactory",
       "launcherKind": "external-process-harness",
       "occurrence": 2,
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:462 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
+      "assertionEvidence": "The assertions owning acpWorkerChildCommandFactory observe the scripted ACP child peer's stdio framing, ordered updates, retained replay, stream completion, and worker attribution across the process boundary.",
       "conversionObligation": null,
       "testRowIds": [
         "C07-F025-top-level-test-TestACPWorkerChildPeerProcess",
@@ -7816,10 +7821,10 @@
       "enclosingIdentity": "mockACPCommandFactory",
       "launcherKind": "test-helper-process",
       "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/workers/mock/javascript_acp_test.go:74 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
+      "verdict": "ACCIDENTAL-OS",
+      "requiredProperty": null,
+      "assertionEvidence": "TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected asserts acpStarts == 0 and ProviderCommandRunner calls == 0; it does not invoke mockACPCommandFactory or observe child stdio, stream completion, or file-descriptor behavior.",
+      "conversionObligation": "Preserve the zero-call provider-selection assertion through root.BuildProcess and Process.Execute, then replace mockACPCommandFactory with a non-spawning sentinel or remove the unreachable command factory in the owning c15 conversion lane.",
       "testRowIds": [
         "C07-F059-top-level-test-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
       ]

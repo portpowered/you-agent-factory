@@ -23,7 +23,7 @@ func reconcileInventory(sites []spawnSite, inventory inventoryDocument) error {
 		if _, exists := byID[site.SiteID]; exists {
 			continue
 		}
-		findings = append(findings, fmt.Sprintf("AST site %s at %s:%d has no inventory verdict; update the baseline together with an inventory row naming an allowed OS property", site.SiteID, site.SourcePath, site.SourceLine))
+		findings = append(findings, fmt.Sprintf("AST site %s at %s:%d has no inventory verdict; update the baseline together with an INTENTIONAL-OS inventory row naming an allowed OS property", site.SiteID, site.SourcePath, site.SourceLine))
 	}
 	if len(findings) == 0 {
 		return nil

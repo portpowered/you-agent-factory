@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -64,10 +65,12 @@ func TestC05UnjustifiedIncreaseFailsWithPairedUpdateGuidance(t *testing.T) {
 	if err == nil {
 		t.Fatal("run() error = nil, want an unpaired increase failure")
 	}
-	for _, expected := range []string{"update the baseline", "inventory row", "OS property", "LINT_VIOLATION_COUNT: 1"} {
-		if !strings.Contains(stderr, expected) {
-			t.Fatalf("stderr = %q, want %q", stderr, expected)
-		}
+	expected := "AST site " + fixture.sites[0].SiteID + " at " + fixture.sites[0].SourcePath + ":" + strconv.Itoa(fixture.sites[0].SourceLine) + " has no inventory verdict; update the baseline together with an INTENTIONAL-OS inventory row naming an allowed OS property"
+	if !strings.Contains(stderr, expected) {
+		t.Fatalf("stderr = %q, want exact diagnostic %q", stderr, expected)
+	}
+	if !strings.Contains(stderr, "LINT_VIOLATION_COUNT: 1") {
+		t.Fatalf("stderr = %q, want one lint violation", stderr)
 	}
 }
 
@@ -187,11 +190,13 @@ func TestC09MalformedInventoryFailsClosed(t *testing.T) {
 	if err := os.WriteFile(fixture.inventoryPath, []byte("{not-json\n"), 0o644); err != nil {
 		t.Fatalf("write malformed inventory: %v", err)
 	}
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
 
 	_, _, err := fixture.run(t)
 	if err == nil || !strings.Contains(err.Error(), "parse inventory") {
 		t.Fatalf("run() error = %v, want parse inventory diagnosis", err)
 	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "malformed inventory")
 }
 
 func TestC10MalformedBaselineFailsClosed(t *testing.T) {
@@ -200,11 +205,13 @@ func TestC10MalformedBaselineFailsClosed(t *testing.T) {
 	if err := os.WriteFile(fixture.baselinePath, []byte("{not-json\n"), 0o644); err != nil {
 		t.Fatalf("write malformed baseline: %v", err)
 	}
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
 
 	_, _, err := fixture.run(t)
 	if err == nil || !strings.Contains(err.Error(), "parse baseline") {
 		t.Fatalf("run() error = %v, want parse baseline diagnosis", err)
 	}
+	assertFixtureFileUnchanged(t, fixture.baselinePath, baselineBefore, "malformed baseline")
 }
 
 func TestC11BaselineSchemaRejectsBadVersionUnitAndOrdering(t *testing.T) {
@@ -276,6 +283,7 @@ func TestC14InvalidIntentionalPropertyFailsClosed(t *testing.T) {
 	records := fixture.siteRecordsForSites(intentionalVerdict)
 	records[0].RequiredProperty = stringPointer("listener")
 	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
 
 	_, _, err := fixture.run(t)
 	if err == nil || !strings.Contains(err.Error(), "one allowed OS property") {
@@ -286,6 +294,7 @@ func TestC14InvalidIntentionalPropertyFailsClosed(t *testing.T) {
 			t.Fatalf("run() error = %v, want allowed property %q", err, property)
 		}
 	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "invalid intentional inventory")
 }
 
 func TestC15InvalidAccidentalFieldsFailClosed(t *testing.T) {
@@ -295,11 +304,13 @@ func TestC15InvalidAccidentalFieldsFailClosed(t *testing.T) {
 	records[0].RequiredProperty = stringPointer("exit-status")
 	records[0].ConversionObligation = nil
 	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
 
 	_, _, err := fixture.run(t)
 	if err == nil || !strings.Contains(err.Error(), "accidental verdict must have requiredProperty=null") {
 		t.Fatalf("run() error = %v, want accidental-field diagnosis", err)
 	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "invalid accidental inventory")
 }
 
 func TestC16SiteMetadataMustMatchAST(t *testing.T) {
@@ -308,11 +319,13 @@ func TestC16SiteMetadataMustMatchAST(t *testing.T) {
 	records := fixture.siteRecordsForSites(intentionalVerdict)
 	records[0].SourceLine++
 	fixture.writeInventory(t, inventoryDocument{FormatVersion: inventoryFormatVersion, TestRows: []inventoryTestRow{}, OSSpawnSites: records})
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
 
 	_, stderr, err := fixture.run(t)
 	if err == nil || !strings.Contains(stderr, "does not match AST sourceLine") {
 		t.Fatalf("run() error=%v stderr=%q, want source-line mismatch", err, stderr)
 	}
+	assertFixtureFileUnchanged(t, fixture.inventoryPath, inventoryBefore, "metadata-drift inventory")
 }
 
 func TestC17StableIdentityIsDeterministicAndOccurrenceIsTwoDigits(t *testing.T) {
@@ -471,6 +484,75 @@ func TestC20PackageAggregationAndSortedOutput(t *testing.T) {
 	}
 }
 
+func TestC21ScratchSpawnIsStaticOnlyAndRemovalRecovers(t *testing.T) {
+	fixture := newFixture(t, "tests/functional/fixture/process_test.go", oneSpawnSource)
+	fixture.writeBaseline(t, map[string]int{"tests/functional/fixture": 1})
+	fixture.writeInventory(t, fixture.inventoryForSites(intentionalVerdict))
+	baselineBefore := readFixtureFile(t, fixture.baselinePath)
+	inventoryBefore := readFixtureFile(t, fixture.inventoryPath)
+
+	sentinelPath := filepath.Join(fixture.root, "checker-sentinel-must-not-be-created")
+	scratchPath := "tests/functional/fixture/scratch_test.go"
+	scratchSource := `package fixture
+
+import "os/exec"
+
+func Scratch() {
+	_ = exec.Command("sh", "-c", "printf executed > "+"` + filepath.ToSlash(sentinelPath) + `").Run()
+}
+`
+	writeFixtureSource(t, fixture.root, scratchPath, scratchSource)
+
+	_, stderr, err := fixture.run(t)
+	if err == nil {
+		t.Fatal("run() error = nil, want unadmitted scratch spawn failure")
+	}
+	if !strings.Contains(stderr, "INTENTIONAL-OS inventory row naming an allowed OS property") {
+		t.Fatalf("stderr = %q, want paired intentional-admission guidance", stderr)
+	}
+	scratchSites, err := scanFunctionalOSSpawns(fixture.root)
+	if err != nil {
+		t.Fatalf("rescan scratch fixture: %v", err)
+	}
+	var scratchSite *spawnSite
+	for index := range scratchSites {
+		if scratchSites[index].SourcePath == scratchPath {
+			scratchSite = &scratchSites[index]
+			break
+		}
+	}
+	if scratchSite == nil {
+		t.Fatalf("scratch site missing from AST census: %#v", scratchSites)
+	}
+	expectedSiteID := stableSiteID(scratchPath, "Scratch", 1)
+	if scratchSite.SiteID != expectedSiteID || !strings.Contains(stderr, expectedSiteID) {
+		t.Fatalf("scratch site=%#v stderr=%q, want stable site %q in diagnostic", scratchSite, stderr, expectedSiteID)
+	}
+	if _, statErr := os.Stat(sentinelPath); !os.IsNotExist(statErr) {
+		t.Fatalf("checker created sentinel at %q; stat error=%v", sentinelPath, statErr)
+	}
+	if baselineAfter := readFixtureFile(t, fixture.baselinePath); !bytes.Equal(baselineBefore, baselineAfter) {
+		t.Fatalf("baseline changed during scratch rejection: before=%s after=%s", baselineBefore, baselineAfter)
+	}
+	if inventoryAfter := readFixtureFile(t, fixture.inventoryPath); !bytes.Equal(inventoryBefore, inventoryAfter) {
+		t.Fatalf("inventory changed during scratch rejection: before=%s after=%s", inventoryBefore, inventoryAfter)
+	}
+
+	if err := os.Remove(filepath.Join(fixture.root, filepath.FromSlash(scratchPath))); err != nil {
+		t.Fatalf("remove scratch source: %v", err)
+	}
+	stdout, stderr, err := fixture.run(t)
+	if err != nil {
+		t.Fatalf("recovered run() error = %v, stderr=%s", err, stderr)
+	}
+	if stderr != "" || !strings.Contains(stdout, "observed=1 baseline=1 packages=1") {
+		t.Fatalf("recovered stdout=%q stderr=%q, want exact clean pass", stdout, stderr)
+	}
+	if _, statErr := os.Stat(sentinelPath); !os.IsNotExist(statErr) {
+		t.Fatalf("recovery created sentinel at %q; stat error=%v", sentinelPath, statErr)
+	}
+}
+
 type checkerFixture struct {
 	root          string
 	sourcePath    string
@@ -609,6 +691,14 @@ func readFixtureFile(t *testing.T, path string) []byte {
 		t.Fatalf("read fixture file: %v", err)
 	}
 	return data
+}
+
+func assertFixtureFileUnchanged(t *testing.T, path string, before []byte, label string) {
+	t.Helper()
+	after := readFixtureFile(t, path)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("%s changed after checker failure: before=%s after=%s", label, before, after)
+	}
 }
 
 func stringPointer(value string) *string {
