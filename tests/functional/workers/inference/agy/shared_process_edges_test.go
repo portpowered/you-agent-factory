@@ -138,14 +138,13 @@ func waitForAgySessionFactoryEvents(
 				scanner := bufio.NewScanner(response.Body)
 			readLoop:
 				for scanner.Scan() {
-					line := strings.TrimSpace(scanner.Text())
-					if !strings.HasPrefix(line, "data:") {
-						continue
+					event, ok, decodeErr := decodeAgyFactoryEventLine(scanner.Bytes())
+					if decodeErr != nil {
+						streamErr = fmt.Errorf("decode factory event: %w", decodeErr)
+						break readLoop
 					}
-					var event factoryapi.FactoryEvent
-					if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-						streamErr = fmt.Errorf("decode factory event: %w", err)
-						break
+					if !ok {
+						continue
 					}
 					select {
 					case eventsCh <- event:
@@ -184,6 +183,23 @@ func waitForAgySessionFactoryEvents(
 		return nil, fmt.Errorf("Factory Session %q Factory Events stream after %d events: %w", sessionID, len(events), streamErr)
 	}
 	return events, nil
+}
+
+// decodeAgyFactoryEventLine parses one SSE data line without converting the
+// scanner buffer to a string and back to bytes. The decoded event owns its
+// fields before the next Scan call, while the retained/live fallback avoids an
+// intermediate allocation per event.
+func decodeAgyFactoryEventLine(line []byte) (factoryapi.FactoryEvent, bool, error) {
+	line = bytes.TrimSpace(line)
+	if !bytes.HasPrefix(line, []byte("data:")) {
+		return factoryapi.FactoryEvent{}, false, nil
+	}
+	data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal(data, &event); err != nil {
+		return factoryapi.FactoryEvent{}, true, err
+	}
+	return event, true, nil
 }
 
 // readAgyFactoryEventsAfterResponse uses the cheapest public observation that
@@ -249,13 +265,12 @@ func readAgyFactoryEventSnapshot(
 	events = make([]factoryapi.FactoryEvent, 0, retainedCount)
 	scanner := bufio.NewScanner(response.Body)
 	for len(events) < retainedCount && scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
+		event, ok, decodeErr := decodeAgyFactoryEventLine(scanner.Bytes())
+		if decodeErr != nil {
+			return nil, false, fmt.Errorf("decode factory event: %w", decodeErr)
 		}
-		var event factoryapi.FactoryEvent
-		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-			return nil, false, fmt.Errorf("decode factory event: %w", err)
+		if !ok {
+			continue
 		}
 		events = append(events, event)
 	}
@@ -283,16 +298,32 @@ func readAgyJSON[T any](ctx context.Context, endpoint string) (T, error) {
 	if err != nil {
 		return result, err
 	}
-	body, readErr := io.ReadAll(response.Body)
-	closeErr := response.Body.Close()
-	if readErr != nil || closeErr != nil {
-		return result, errors.Join(readErr, closeErr)
-	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		body, readErr := io.ReadAll(response.Body)
+		closeErr := response.Body.Close()
+		if readErr != nil || closeErr != nil {
+			return result, errors.Join(readErr, closeErr)
+		}
 		return result, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return result, fmt.Errorf("decode GET %s: %w", endpoint, err)
+	decoder := json.NewDecoder(response.Body)
+	decodeErr := decoder.Decode(&result)
+	if decodeErr == nil {
+		var trailing json.RawMessage
+		trailingErr := decoder.Decode(&trailing)
+		switch {
+		case trailingErr == nil:
+			decodeErr = errors.New("unexpected trailing JSON")
+		case !errors.Is(trailingErr, io.EOF):
+			decodeErr = trailingErr
+		}
+	}
+	closeErr := response.Body.Close()
+	if decodeErr != nil {
+		return result, errors.Join(fmt.Errorf("decode GET %s: %w", endpoint, decodeErr), closeErr)
+	}
+	if closeErr != nil {
+		return result, closeErr
 	}
 	return result, nil
 }

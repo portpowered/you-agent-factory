@@ -391,7 +391,7 @@ it does not claim an OS process-tree census after a forcibly killed child.
 | `AGY-CLEAN-003` | PASS | Normal finalization plus injected primary/assertion and cleanup failures preserve all errors and run every cleanup/check operation. | Forced OS child-process kill and nonzero `m.Run` path are not separately injected. |
 | `AGY-PKG-003` | PASS | The exact one-run package gate proves one process/API start, both golden outcomes, balanced sessions/streams, zero active calls, released routes, closed listener/process, and removed root. | OS-wide process inventory is not claimed. |
 | `AGY-SCOPE-003` | PASS | Final PR scope is limited to the c10 ledger and `tests/functional/workers/inference/agy/**`; no `prd.json`, `progress.txt`, provider/recovery, inventory, or unrelated product file is included. | The absent `docs/temp/functional-test-optimization.md` source plan remains a recorded planning dependency. |
-| `PR-CI-004` | RECORDED / REVIEW-OWNED | The comparison hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. The preceding final-head run on `d1ccc5e205037b43acb8c6e59af1245fce6ea345` (run `33264251377`) recorded the AGY package as passing at `3.686s`; its required checks were green. The latest bounded local candidate is `f667939178ab881c0fae043288dd2682dc299af9`, pending fresh hosted measurement. | A fresh hosted timing comparison on the pushed head and terminal CI remain review-owned; local timings are diagnostic only. |
+| `PR-CI-004` | RECORDED / REVIEW-OWNED | The comparison hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. The preceding final-head run on `d1ccc5e205037b43acb8c6e59af1245fce6ea345` (run `33264251377`) recorded the AGY package as passing at `3.686s`; its required checks were green. The latest bounded local candidate is the package-local decoder pass recorded below, pending fresh hosted measurement. | A fresh hosted timing comparison on the pushed head and terminal CI remain review-owned; local timings are diagnostic only. |
 | `VAL-005` | PASS | This report records the exact final package procedure, result, fidelity, cleanup census, scope, cost boundary, and proved/not-proved edges without mutating fixtures or runtime state. | Live AGY, malformed native output, non-timeout outage, canonical inventory, and merge remain outside this lane. |
 
 The hosted AGY package result remained above the comparison, so one bounded
@@ -522,6 +522,21 @@ run passed at `2.440s`, the focused success/timeout `-count=3` run passed at
 `10.119s`, and the race package run passed at `5.915s`; these local timings are
 diagnostic only. Behavioral, cleanup, route, and size gates remain required on
 the committed head; hosted timing remains review-owned.
+
+The next bounded package-local pass removes the scanner-buffer string/byte
+round trip from retained and live Factory Event decoding and streams successful
+public JSON projections directly into their typed result. The strict decoder
+still rejects malformed, truncated, and trailing JSON, and the event parser
+retains the same `data:` filtering, exact count/order, Work projection,
+response EOF/no-extra-frame, cleanup, route, and zero-remote witnesses. The
+exact package run passed at `2.227s`, the focused success/timeout `-count=3` run
+passed at `5.601s`, the race package passed at `5.927s`, and backend-size plus
+`git diff --check` passed. The short `make test` run had one unrelated
+host-timing failure in
+`scripts/ci/functional-coverage-supervisor.test.mjs:193`; its named subtest
+passed when rerun once in isolation. No unrelated CI code was changed. Hosted
+timing remains the authoritative verdict and requires a fresh Backend
+Functional Coverage run on the pushed head.
 
 ### Scope and ancestry audit
 
