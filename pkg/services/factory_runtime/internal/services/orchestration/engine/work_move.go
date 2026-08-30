@@ -36,24 +36,9 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		return work.OperatorMoveResult{}, ErrMoveWorkEngineTerminated
 	}
 
-	activeEntries := activeDispatchEntriesForWork(e.runtimeState.Dispatches, workID)
-	var activeToken *factorytoken.Token
-	if len(activeEntries) > 0 {
-		var activeTokenFound bool
-		activeToken, activeTokenFound = findWorkTokenInDispatchEntries(activeEntries, workID)
-		if !activeTokenFound {
-			return work.OperatorMoveResult{}, ErrMoveWorkNotFound
-		}
-	}
-	token, ok := findWorkTokenByID(e.runtimeState.Marking.Tokens, workID)
-	if activeToken != nil {
-		// The dispatch entry is authoritative while a Work token is consumed;
-		// this keeps the move tied to the exact token that the late result will
-		// otherwise correlate.
-		token, ok = activeToken, true
-	}
-	if !ok {
-		return work.OperatorMoveResult{}, ErrMoveWorkNotFound
+	token, activeEntries, err := e.resolveMoveWorkToken(workID)
+	if err != nil {
+		return work.OperatorMoveResult{}, err
 	}
 
 	toPlaceID, err := resolveTargetPlace(e.state, token.Color.WorkTypeID, stateName)
@@ -67,11 +52,8 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		return work.OperatorMoveResult{}, fmt.Errorf("resolve current state for place %q: place not found", fromPlaceID)
 	}
 	if len(activeEntries) > 0 {
-		if err := restoreActiveDispatchTokens(e.runtimeState.Marking, e.state.Places, activeEntries); err != nil {
-			return work.OperatorMoveResult{}, fmt.Errorf("restore active dispatch tokens for Work %q: %w", workID, err)
-		}
 		var restored bool
-		token, restored = e.runtimeState.Marking.Tokens[activeToken.ID]
+		token, restored = e.runtimeState.Marking.Tokens[token.ID]
 		if !restored {
 			return work.OperatorMoveResult{}, ErrMoveWorkNotFound
 		}
@@ -117,6 +99,43 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		ToState:    stateName,
 		TokenID:    token.ID,
 	}, nil
+}
+
+// resolveMoveWorkToken selects the current Work token, restoring the exact
+// consumed token snapshot first when an active dispatch owns it. The caller
+// holds the engine mutex while this helper runs.
+func (e *FactoryEngine) resolveMoveWorkToken(workID string) (*factorytoken.Token, []*interfaces.DispatchEntry, error) {
+	activeEntries := activeDispatchEntriesForWork(e.runtimeState.Dispatches, workID)
+	var activeToken *factorytoken.Token
+	if len(activeEntries) > 0 {
+		var activeTokenFound bool
+		activeToken, activeTokenFound = findWorkTokenInDispatchEntries(activeEntries, workID)
+		if !activeTokenFound {
+			return nil, nil, ErrMoveWorkNotFound
+		}
+	}
+
+	token, ok := findWorkTokenByID(e.runtimeState.Marking.Tokens, workID)
+	if activeToken != nil {
+		// The dispatch entry is authoritative while a Work token is consumed;
+		// this keeps the move tied to the exact token that the late result will
+		// otherwise correlate.
+		token, ok = activeToken, true
+	}
+	if !ok {
+		return nil, nil, ErrMoveWorkNotFound
+	}
+	if len(activeEntries) == 0 {
+		return token, activeEntries, nil
+	}
+	if err := restoreActiveDispatchTokens(e.runtimeState.Marking, e.state.Places, activeEntries); err != nil {
+		return nil, nil, fmt.Errorf("restore active dispatch tokens for Work %q: %w", workID, err)
+	}
+	restored, ok := e.runtimeState.Marking.Tokens[token.ID]
+	if !ok {
+		return nil, nil, ErrMoveWorkNotFound
+	}
+	return restored, activeEntries, nil
 }
 
 func findWorkTokenByID(tokens map[string]*factorytoken.Token, workID string) (*factorytoken.Token, bool) {

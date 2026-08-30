@@ -745,15 +745,6 @@ func (r *factoryWorldReducer) applyDispatchLifecycleEvent(event interfaces.Facto
 	}
 }
 
-// applyDispatchResultIgnoredEvent validates the redacted stale-result
-// diagnostic while intentionally leaving the reconstructed world unchanged.
-// The corresponding dispatch response was never applied to the marking, so
-// replay must preserve that same state no-op.
-func (r *factoryWorldReducer) applyDispatchResultIgnoredEvent(event interfaces.FactoryEvent) error {
-	var payload interfaces.DispatchResultIgnoredEventPayload
-	return event.DecodePayload(&payload)
-}
-
 func (r *factoryWorldReducer) applyDispatchQueuedEvent(event interfaces.FactoryEvent) error {
 	var payload interfaces.DispatchQueuedEventPayload
 	if err := event.DecodePayload(&payload); err != nil {

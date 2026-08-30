@@ -287,27 +287,7 @@ func New(
 		},
 		cfg.completionRecorder,
 		func(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
-			if ignored := completed.IgnoredResult; ignored != nil {
-				if ignoredRecorder, ok := effectiveEventHistory.(recordings.DispatchResultIgnoredRecorder); ok {
-					eventTime := completed.EndTime
-					if eventTime.IsZero() {
-						eventTime = cfg.clock.Now()
-					}
-					ignoredRecorder.RecordDispatchResultIgnored(recordings.DispatchResultIgnoredInput{
-						SessionID:        sessionIDFromFactoryConfig(cfg),
-						OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(cfg))),
-						DispatchID:       result.DispatchID,
-						Source:           "runtime",
-						Tick:             tick,
-						WorkIDs:          []string{completed.IgnoredWorkID},
-						Reason:           ignored.Reason,
-						ResultOutcome:    ignored.ResultOutcome,
-						ObservedState:    ignored.ObservedState,
-					}, eventTime)
-				}
-				return
-			}
-			effectiveEventHistory.RecordWorkstationResponse(tick, result, completed)
+			recordRuntimeDispatchCompletion(cfg, effectiveEventHistory, tick, result, completed)
 		},
 		recordPetriMutations,
 		impl.automaticTicksPaused,
@@ -669,26 +649,7 @@ func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName str
 		f.recordOperatorWorkStateChange(result, source, requestID, "", "")
 	}
 
-	if f.dispatchPlan != nil {
-		if _, err := f.dispatchPlan.InvalidateWork(ctx, result.WorkID); err != nil {
-			// The engine move is the correctness boundary. Cancellation is only
-			// an optimization/resource-release action; retaining this warning
-			// lets the terminal-result guard protect the committed state even
-			// when Workers cannot accept the cancellation request.
-			f.logger.Error(
-				"Factory Runtime Work move committed but dispatch invalidation/cancellation failed",
-				"work_id", result.WorkID,
-				"error", err,
-			)
-		}
-	}
-	// Active-dispatch moves defer the engine wake until the matching outbox
-	// intents are fenced, so restored tokens cannot be scheduled in the gap.
-	// Normal moves may already have signaled from the engine; this signal is
-	// intentionally idempotent and also covers a nil dispatch planner.
-	if f.engine != nil {
-		f.engine.WakeForPendingProcessing()
-	}
+	f.finalizeOperatorMove(ctx, result)
 	return result, nil
 }
 

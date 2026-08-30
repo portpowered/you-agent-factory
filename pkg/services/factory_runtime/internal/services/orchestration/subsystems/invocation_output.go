@@ -7,6 +7,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -55,6 +57,45 @@ func applyPackagedTTSInvocationMetadata(
 	token.Color.Content = metadataContent
 	token.Color.Payload = nil
 	return nil
+}
+
+func (t *TransitionerSubsystem) resolveGeneratedBatchWork(
+	transition *petri.Transition,
+	snapshot *factorydefinitions.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	resolved resolvedWorkResult,
+	inputColors []factorytoken.Color,
+) ([]work.GeneratedSubmissionBatch, int, resolvedWorkResult) {
+	if resolved.outcome != workerexecution.OutcomeAccepted {
+		return nil, 0, resolved
+	}
+	generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(
+		resolved, inputColors, existingWorksForAdmission(snapshot),
+	)
+	if batchErr != nil {
+		resolved.outcome = workerexecution.OutcomeFailed
+		resolved.err = batchErr.Error()
+		return nil, 0, resolved
+	}
+	if !detectedBatch {
+		return nil, 0, resolved
+	}
+	if workstation, ok := runtimeWorkstation(transition.Name, t.runtimeConfig); ok {
+		limit := effectiveGeneratedWorkItemLimit(workstation.Limits, inputColors)
+		if limit > 0 && len(generatedBatch.submits) > limit {
+			resolved.outcome = workerexecution.OutcomeFailed
+			resolved.err = fmt.Sprintf(
+				"worker-emitted work request batch contains %d Work items, exceeding workstation limit %d",
+				len(generatedBatch.submits),
+				limit,
+			)
+		}
+	}
+	if resolved.outcome != workerexecution.OutcomeAccepted {
+		return nil, 0, resolved
+	}
+	return []work.GeneratedSubmissionBatch{{
+		Request: generatedBatch.request, Metadata: generatedBatch.metadata, Submissions: generatedBatch.submits,
+	}}, len(generatedBatch.submits), resolved
 }
 
 func applyPackagedGoalInvocationSummary(

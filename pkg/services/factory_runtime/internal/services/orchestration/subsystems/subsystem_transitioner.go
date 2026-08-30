@@ -159,17 +159,8 @@ func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interface
 // TODO: we should break out the logic here to be referentially transparent and testable independent of the subsystem. Right now its too reliant on internal state.
 // Break out dependency on ID generation as well as the logger/mocker.
 func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
-	if ignored, ok := t.terminalWorkForResult(snapshot, result); ok {
-		t.logger.Info(
-			"transitioner: ignored stale dispatch result",
-			"reason", interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
-			"dispatch_id", result.DispatchID,
-			"work_id", ignored.WorkID,
-			"observed_state", ignored.State.Name,
-			"observed_state_type", ignored.State.Type,
-			"result_outcome", result.Outcome,
-		)
-		return nil, t.buildIgnoredCompletedDispatch(snapshot, result, ignored, t.now()), nil, nil
+	if completed, ok := t.ignoredDispatchCompletion(snapshot, result); ok {
+		return nil, completed, nil, nil
 	}
 
 	currentTransition, ok := t.netDefinition.Transitions[result.TransitionID]
@@ -243,137 +234,6 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
 	return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), generatedBatches, nil
-}
-
-type terminalWorkObservation struct {
-	WorkID string
-	State  interfaces.ObservedWorkState
-}
-
-// terminalWorkForResult identifies the first correlated Work that is already
-// terminal or failed in the current marking. Dispatch input order is the
-// canonical lineage order, so returning on the first matching Work makes the
-// diagnostic deterministic while the guard remains atomic for all inputs.
-func (t *TransitionerSubsystem) terminalWorkForResult(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	result *workerexecution.WorkResult,
-) (terminalWorkObservation, bool) {
-	if t == nil || t.netDefinition == nil || snapshot == nil || result == nil || snapshot.Marking.Tokens == nil {
-		return terminalWorkObservation{}, false
-	}
-	consumedTokens := consumedTokensForResult(snapshot, result)
-	seenWorkIDs := make(map[string]struct{}, len(consumedTokens))
-	for _, consumed := range consumedTokens {
-		if consumed.Color.DataType == factorytoken.DataTypeResource || consumed.Color.WorkID == "" {
-			continue
-		}
-		if _, seen := seenWorkIDs[consumed.Color.WorkID]; seen {
-			continue
-		}
-		seenWorkIDs[consumed.Color.WorkID] = struct{}{}
-
-		for _, tokenID := range currentMarkingTokenIDsForWork(snapshot.Marking.Tokens, consumed.Color.WorkID) {
-			token := snapshot.Marking.Tokens[tokenID]
-			if token == nil {
-				continue
-			}
-			category := t.netDefinition.StateCategoryForPlace(token.PlaceID)
-			if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
-				continue
-			}
-			place := t.netDefinition.Places[token.PlaceID]
-			if place == nil {
-				continue
-			}
-			return terminalWorkObservation{
-				WorkID: consumed.Color.WorkID,
-				State: interfaces.ObservedWorkState{
-					Name: place.State,
-					Type: interfaces.StateType(category),
-				},
-			}, true
-		}
-	}
-	return terminalWorkObservation{}, false
-}
-
-func currentMarkingTokenIDsForWork(tokens map[string]*factorytoken.Token, workID string) []string {
-	ids := make([]string, 0, 1)
-	for tokenID, token := range tokens {
-		if token != nil && token.Color.WorkID == workID {
-			ids = append(ids, tokenID)
-		}
-	}
-	sort.Strings(ids)
-	return ids
-}
-
-func (t *TransitionerSubsystem) buildIgnoredCompletedDispatch(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	result *workerexecution.WorkResult,
-	observation terminalWorkObservation,
-	endTime time.Time,
-) interfaces.CompletedDispatch {
-	consumedTokens := consumedTokensForResult(snapshot, result)
-	completed := interfaces.CompletedDispatch{
-		DispatchID:     result.DispatchID,
-		TransitionID:   result.TransitionID,
-		Outcome:        result.Outcome,
-		Reason:         interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
-		EndTime:        endTime,
-		ConsumedTokens: factorytoken.ToWorkerSlice(consumedTokens),
-		IgnoredWorkID:  observation.WorkID,
-		IgnoredResult: &interfaces.DispatchResultIgnoredEventPayload{
-			Reason:        interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
-			ResultOutcome: result.Outcome,
-			ObservedState: observation.State,
-		},
-	}
-	if dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID); dispatchEntry != nil {
-		completed.WorkstationName = dispatchEntry.WorkstationName
-		completed.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatchEntry.ExpectedArtifactContext)
-		completed.StartTime = dispatchEntry.StartTime
-		completed.Duration = completed.EndTime.Sub(dispatchEntry.StartTime)
-	}
-	return completed
-}
-
-func (t *TransitionerSubsystem) resolveGeneratedBatchWork(
-	transition *petri.Transition,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	resolved resolvedWorkResult,
-	inputColors []factorytoken.Color,
-) ([]work.GeneratedSubmissionBatch, int, resolvedWorkResult) {
-	if resolved.outcome != workerexecution.OutcomeAccepted {
-		return nil, 0, resolved
-	}
-	generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(
-		resolved, inputColors, existingWorksForAdmission(snapshot),
-	)
-	if batchErr != nil {
-		resolved.outcome = workerexecution.OutcomeFailed
-		resolved.err = batchErr.Error()
-		return nil, 0, resolved
-	}
-	if !detectedBatch {
-		return nil, 0, resolved
-	}
-	if workstation, ok := runtimeWorkstation(transition.Name, t.runtimeConfig); ok {
-		limit := effectiveGeneratedWorkItemLimit(workstation.Limits, inputColors)
-		if limit > 0 && len(generatedBatch.submits) > limit {
-			resolved.outcome = workerexecution.OutcomeFailed
-			resolved.err = fmt.Sprintf(
-				"worker-emitted work request batch contains %d Work items, exceeding workstation limit %d",
-				len(generatedBatch.submits), limit,
-			)
-		}
-	}
-	if resolved.outcome != workerexecution.OutcomeAccepted {
-		return nil, 0, resolved
-	}
-	return []work.GeneratedSubmissionBatch{{
-		Request: generatedBatch.request, Metadata: generatedBatch.metadata, Submissions: generatedBatch.submits,
-	}}, len(generatedBatch.submits), resolved
 }
 
 func (t *TransitionerSubsystem) mapCanceledDispatch(

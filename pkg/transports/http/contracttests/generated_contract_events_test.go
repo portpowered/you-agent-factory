@@ -555,6 +555,7 @@ func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
 	events := make([]factoryapi.FactoryEvent, 0, 10)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
+	events = append(events, generatedFactoryIgnoredResultEvents(t)...)
 	events = append(events, generatedFactoryWorkStateChangeEvents(t)...)
 	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
@@ -652,26 +653,6 @@ func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {
 				PreviousChainingTraceIds: &[]string{"chain-a", "chain-z"},
 				Outcome:                  factoryapi.WorkOutcomeAccepted,
 				OutputWork:               &[]factoryapi.Work{work},
-			}),
-		},
-		{
-			SchemaVersion: factoryapi.AgentFactoryEventV1,
-			Id:            "event-dispatch-result-ignored",
-			Type:          factoryapi.FactoryEventTypeDispatchResultIgnored,
-			Context: factoryapi.FactoryEventContext{
-				Sequence:                 8,
-				Tick:                     3,
-				EventTime:                eventTime,
-				TraceIds:                 &traceIDs,
-				WorkIds:                  &workIDs,
-				DispatchId:               &scriptDispatchID,
-				CurrentChainingTraceId:   stringPtr("chain-current-1"),
-				PreviousChainingTraceIds: &[]string{"chain-a", "chain-z"},
-			},
-			Payload: factoryEventPayload(t, factoryapi.DispatchResultIgnoredEventPayload{
-				Reason:        factoryapi.WORKALREADYTERMINAL,
-				ResultOutcome: factoryapi.WorkOutcomeFailed,
-				ObservedState: factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
 			}),
 		},
 	}

@@ -867,3 +867,54 @@ func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities
 	clone := *value
 	return &clone
 }
+
+func recordRuntimeDispatchCompletion(
+	cfg *runtimeConfig,
+	eventHistory recordings.RuntimeLedger,
+	tick int,
+	result workers.WorkResult,
+	completed interfaces.CompletedDispatch,
+) {
+	if ignored := completed.IgnoredResult; ignored != nil {
+		if ignoredRecorder, ok := eventHistory.(recordings.DispatchResultIgnoredRecorder); ok {
+			eventTime := completed.EndTime
+			if eventTime.IsZero() {
+				eventTime = cfg.clock.Now()
+			}
+			ignoredRecorder.RecordDispatchResultIgnored(recordings.DispatchResultIgnoredInput{
+				SessionID:        sessionIDFromFactoryConfig(cfg),
+				OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(cfg))),
+				DispatchID:       result.DispatchID,
+				Source:           "runtime",
+				Tick:             tick,
+				WorkIDs:          []string{completed.IgnoredWorkID},
+				Reason:           ignored.Reason,
+				ResultOutcome:    ignored.ResultOutcome,
+				ObservedState:    ignored.ObservedState,
+			}, eventTime)
+		}
+		return
+	}
+	eventHistory.RecordWorkstationResponse(tick, result, completed)
+}
+
+// finalizeOperatorMove fences matching Runtime intents after the engine has
+// committed the move. Cancellation is best effort; the result-time guard is
+// the correctness boundary when Workers cannot accept the request.
+func (f *factoryImpl) finalizeOperatorMove(ctx context.Context, result work.OperatorMoveResult) {
+	if f.dispatchPlan != nil {
+		if _, err := f.dispatchPlan.InvalidateWork(ctx, result.WorkID); err != nil {
+			f.logger.Error(
+				"Factory Runtime Work move committed but dispatch invalidation/cancellation failed",
+				"work_id", result.WorkID,
+				"error", err,
+			)
+		}
+	}
+	// Active-dispatch moves defer the engine wake until the matching outbox
+	// intents are fenced. Normal moves may already have signaled; the signal is
+	// intentionally idempotent and also covers a nil dispatch planner.
+	if f.engine != nil {
+		f.engine.WakeForPendingProcessing()
+	}
+}

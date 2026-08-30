@@ -54,7 +54,11 @@ func TestFactoryEventHistory_RecordDispatchResultIgnoredIsRedactedAndIdempotent(
 	input.ObservedState = interfaces.ObservedWorkState{Name: "failed", Type: interfaces.StateTypeFailed}
 	history.RecordDispatchResultIgnored(input, t0.Add(time.Second))
 
-	events := generatedHistoryEvents(t, history)
+	assertDispatchResultIgnoredEvent(t, generatedHistoryEvents(t, history))
+}
+
+func assertDispatchResultIgnoredEvent(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
 	if len(events) != 1 {
 		t.Fatalf("canonical events = %#v, want one diagnostic after equivalent redelivery", events)
 	}
@@ -77,6 +81,11 @@ func TestFactoryEventHistory_RecordDispatchResultIgnoredIsRedactedAndIdempotent(
 		payload.ObservedState.Name != "complete" || string(payload.ObservedState.Type) != string(interfaces.StateTypeTerminal) {
 		t.Fatalf("ignored payload = %#v, want first redelivery facts", payload)
 	}
+	assertIgnoredEventPayloadIsRedacted(t, event)
+}
+
+func assertIgnoredEventPayloadIsRedacted(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
 	encoded, err := json.Marshal(event)
 	if err != nil {
 		t.Fatalf("marshal ignored event: %v", err)

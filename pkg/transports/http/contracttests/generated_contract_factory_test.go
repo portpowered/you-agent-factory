@@ -789,3 +789,33 @@ func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertArrayItemRef(t, workProperties, "relations", "#/components/schemas/Relation")
 	assertPropertiesAbsent(t, workProperties, "Work", "work_type_id", "target_state")
 }
+
+func generatedFactoryIgnoredResultEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	traceIDs := []string{"trace-1"}
+	workIDs := []string{"work-1"}
+	scriptDispatchID := "dispatch-script-1"
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-result-ignored",
+			Type:          factoryapi.FactoryEventTypeDispatchResultIgnored,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:                 8,
+				Tick:                     3,
+				EventTime:                eventTime,
+				TraceIds:                 &traceIDs,
+				WorkIds:                  &workIDs,
+				DispatchId:               &scriptDispatchID,
+				CurrentChainingTraceId:   stringPtr("chain-current-1"),
+				PreviousChainingTraceIds: &[]string{"chain-a", "chain-z"},
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchResultIgnoredEventPayload{
+				Reason:        factoryapi.WORKALREADYTERMINAL,
+				ResultOutcome: factoryapi.WorkOutcomeFailed,
+				ObservedState: factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			}),
+		},
+	}
+}

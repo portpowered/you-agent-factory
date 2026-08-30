@@ -182,29 +182,7 @@ func TestInvalidateWorkMarksExactIntentsAndCancelsPublishedDispatches(t *testing
 		t.Fatalf("Publish(unrelated) error = %v", err)
 	}
 
-	first, err := planner.InvalidateWork(context.Background(), "work-target")
-	if err != nil {
-		t.Fatalf("InvalidateWork(first) error = %v", err)
-	}
-	if first.Outcome != dispatchplanning.WorkInvalidationOutcomeInvalidated || len(first.Intents) != 1 {
-		t.Fatalf("InvalidateWork(first) = %#v, want one pending target intent", first)
-	}
-	if first.Intents[0].PreviousStatus != dispatchplanning.OutboxIntentStatusPending ||
-		first.Intents[0].Status != dispatchplanning.OutboxIntentStatusInvalidated ||
-		first.Intents[0].CancellationRequested {
-		t.Fatalf("pending invalidation = %#v, want INVALIDATED without cancellation", first.Intents[0])
-	}
-	if len(cancelRequests) != 0 {
-		t.Fatalf("pending cancellation requests = %#v, want none", cancelRequests)
-	}
-	if _, err := planner.Retire(context.Background(), dispatchplanning.TerminalResult{
-		DispatchID:    "dispatch-pending-target",
-		CorrelationID: "correlation-pending-target",
-		WorkID:        "work-target",
-		Outcome:       dispatchplanning.TerminalResultOutcomeCancelled,
-	}); !errors.Is(err, dispatchplanning.ErrInvalidDispatchResultBoundary) {
-		t.Fatalf("Retire(pending invalidated intent) error = %v, want unpublished boundary error", err)
-	}
+	assertPendingWorkInvalidation(t, planner, cancelRequests)
 
 	if err := planner.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume() error = %v", err)
@@ -233,6 +211,41 @@ func TestInvalidateWorkMarksExactIntentsAndCancelsPublishedDispatches(t *testing
 	if err != nil || duplicate.Outcome != dispatchplanning.PublicationOutcomeDuplicateIdempotent {
 		t.Fatalf("Publish(duplicate target) = (%#v, %v), want idempotent duplicate", duplicate, err)
 	}
+
+	assertPublishedWorkInvalidation(t, planner, &cancelRequests)
+	assertUnmatchedWorkInvalidation(t, planner)
+}
+
+func assertPendingWorkInvalidation(t *testing.T, planner *Planner, cancelRequests []workers.WorkstationDispatchCancelRequest) {
+	t.Helper()
+
+	first, err := planner.InvalidateWork(context.Background(), "work-target")
+	if err != nil {
+		t.Fatalf("InvalidateWork(first) error = %v", err)
+	}
+	if first.Outcome != dispatchplanning.WorkInvalidationOutcomeInvalidated || len(first.Intents) != 1 {
+		t.Fatalf("InvalidateWork(first) = %#v, want one pending target intent", first)
+	}
+	if first.Intents[0].PreviousStatus != dispatchplanning.OutboxIntentStatusPending ||
+		first.Intents[0].Status != dispatchplanning.OutboxIntentStatusInvalidated ||
+		first.Intents[0].CancellationRequested {
+		t.Fatalf("pending invalidation = %#v, want INVALIDATED without cancellation", first.Intents[0])
+	}
+	if len(cancelRequests) != 0 {
+		t.Fatalf("pending cancellation requests = %#v, want none", cancelRequests)
+	}
+	if _, err := planner.Retire(context.Background(), dispatchplanning.TerminalResult{
+		DispatchID:    "dispatch-pending-target",
+		CorrelationID: "correlation-pending-target",
+		WorkID:        "work-target",
+		Outcome:       dispatchplanning.TerminalResultOutcomeCancelled,
+	}); !errors.Is(err, dispatchplanning.ErrInvalidDispatchResultBoundary) {
+		t.Fatalf("Retire(pending invalidated intent) error = %v, want unpublished boundary error", err)
+	}
+}
+
+func assertPublishedWorkInvalidation(t *testing.T, planner *Planner, cancelRequests *[]workers.WorkstationDispatchCancelRequest) {
+	t.Helper()
 
 	second, err := planner.InvalidateWork(context.Background(), "work-target")
 	if err != nil {
@@ -267,15 +280,19 @@ func TestInvalidateWorkMarksExactIntentsAndCancelsPublishedDispatches(t *testing
 	if !reflect.DeepEqual(second.Intents, want) {
 		t.Fatalf("InvalidateWork(second) intents = %#v, want %#v", second.Intents, want)
 	}
-	if !reflect.DeepEqual(cancelRequests, []workers.WorkstationDispatchCancelRequest{
+	if !reflect.DeepEqual(*cancelRequests, []workers.WorkstationDispatchCancelRequest{
 		{DispatchID: "dispatch-published-target", Reason: workers.WorkstationDispatchCancelReasonSuperseded},
 	}) {
-		t.Fatalf("published cancellation requests = %#v, want exact superseded request", cancelRequests)
+		t.Fatalf("published cancellation requests = %#v, want exact superseded request", *cancelRequests)
 	}
 	unrelatedIntent, ok := planner.Intent("dispatch-unrelated")
 	if !ok || unrelatedIntent.Status != dispatchplanning.OutboxIntentStatusPublished || unrelatedIntent.CancellationRequested {
 		t.Fatalf("unrelated intent = (%#v, %t), want unchanged PUBLISHED without cancellation", unrelatedIntent, ok)
 	}
+}
+
+func assertUnmatchedWorkInvalidation(t *testing.T, planner *Planner) {
+	t.Helper()
 
 	noMatch, err := planner.InvalidateWork(context.Background(), "work-missing")
 	if err != nil {

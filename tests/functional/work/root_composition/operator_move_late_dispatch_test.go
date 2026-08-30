@@ -34,7 +34,7 @@ const (
 func TestOperatorMoveTerminalWorkRejectsLateDispatchResult(t *testing.T) {
 	t.Parallel()
 
-	runner := support.NewGatedFailureCommandRunner("controlled late provider failure")
+	runner := newGatedFailureCommandRunner("controlled late provider failure")
 	defer runner.Release()
 	dir := support.ScaffoldFactory(t, operatorMoveLateDispatchFactoryConfig())
 	support.WriteAgentConfig(
@@ -114,6 +114,18 @@ func TestOperatorMoveTerminalWorkRejectsLateDispatchResult(t *testing.T) {
 	case <-observationContext.Done():
 		t.Fatalf("public terminal move did not complete after cancellation: %v", observationContext.Err())
 	}
+	assertOperatorMoveLateDispatchOutcome(t, server, stream, targetMoveInputs, runner, observationContext)
+}
+
+func assertOperatorMoveLateDispatchOutcome(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	stream *support.FactoryEventStream,
+	targetMoveInputs *support.CapturedInputs,
+	runner *gatedFailureCommandRunner,
+	observationContext context.Context,
+) {
+	t.Helper()
 	if err := runner.WaitForCompletion(observationContext); err != nil {
 		t.Fatalf("controlled provider command did not return its late failure: %v", err)
 	}

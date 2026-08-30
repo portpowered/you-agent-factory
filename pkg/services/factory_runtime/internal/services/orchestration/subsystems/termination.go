@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -407,4 +408,117 @@ func canonicalExecutorReviewTraceID(color factorytoken.Color) string {
 		return color.CurrentChainingTraceID
 	}
 	return color.TraceID
+}
+
+type terminalWorkObservation struct {
+	WorkID string
+	State  interfaces.ObservedWorkState
+}
+
+func (t *TransitionerSubsystem) ignoredDispatchCompletion(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	result *workerexecution.WorkResult,
+) (interfaces.CompletedDispatch, bool) {
+	observation, ok := t.terminalWorkForResult(snapshot, result)
+	if !ok {
+		return interfaces.CompletedDispatch{}, false
+	}
+	t.logger.Info(
+		"transitioner: ignored stale dispatch result",
+		"reason", interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
+		"dispatch_id", result.DispatchID,
+		"work_id", observation.WorkID,
+		"observed_state", observation.State.Name,
+		"observed_state_type", observation.State.Type,
+		"result_outcome", result.Outcome,
+	)
+	return t.buildIgnoredCompletedDispatch(snapshot, result, observation, t.now()), true
+}
+
+// terminalWorkForResult identifies the first correlated Work that is already
+// terminal or failed in the current marking. Dispatch input order is the
+// canonical lineage order, so returning on the first matching Work makes the
+// diagnostic deterministic while the guard remains atomic for all inputs.
+func (t *TransitionerSubsystem) terminalWorkForResult(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	result *workerexecution.WorkResult,
+) (terminalWorkObservation, bool) {
+	if t == nil || t.netDefinition == nil || snapshot == nil || result == nil || snapshot.Marking.Tokens == nil {
+		return terminalWorkObservation{}, false
+	}
+	consumedTokens := consumedTokensForResult(snapshot, result)
+	seenWorkIDs := make(map[string]struct{}, len(consumedTokens))
+	for _, consumed := range consumedTokens {
+		if consumed.Color.DataType == factorytoken.DataTypeResource || consumed.Color.WorkID == "" {
+			continue
+		}
+		if _, seen := seenWorkIDs[consumed.Color.WorkID]; seen {
+			continue
+		}
+		seenWorkIDs[consumed.Color.WorkID] = struct{}{}
+
+		for _, tokenID := range currentMarkingTokenIDsForWork(snapshot.Marking.Tokens, consumed.Color.WorkID) {
+			token := snapshot.Marking.Tokens[tokenID]
+			if token == nil {
+				continue
+			}
+			category := t.netDefinition.StateCategoryForPlace(token.PlaceID)
+			if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+				continue
+			}
+			place := t.netDefinition.Places[token.PlaceID]
+			if place == nil {
+				continue
+			}
+			return terminalWorkObservation{
+				WorkID: consumed.Color.WorkID,
+				State: interfaces.ObservedWorkState{
+					Name: place.State,
+					Type: interfaces.StateType(category),
+				},
+			}, true
+		}
+	}
+	return terminalWorkObservation{}, false
+}
+
+func currentMarkingTokenIDsForWork(tokens map[string]*factorytoken.Token, workID string) []string {
+	ids := make([]string, 0, 1)
+	for tokenID, token := range tokens {
+		if token != nil && token.Color.WorkID == workID {
+			ids = append(ids, tokenID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (t *TransitionerSubsystem) buildIgnoredCompletedDispatch(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	result *workerexecution.WorkResult,
+	observation terminalWorkObservation,
+	endTime time.Time,
+) interfaces.CompletedDispatch {
+	consumedTokens := consumedTokensForResult(snapshot, result)
+	completed := interfaces.CompletedDispatch{
+		DispatchID:     result.DispatchID,
+		TransitionID:   result.TransitionID,
+		Outcome:        result.Outcome,
+		Reason:         interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
+		EndTime:        endTime,
+		ConsumedTokens: factorytoken.ToWorkerSlice(consumedTokens),
+		IgnoredWorkID:  observation.WorkID,
+		IgnoredResult: &interfaces.DispatchResultIgnoredEventPayload{
+			Reason:        interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
+			ResultOutcome: result.Outcome,
+			ObservedState: observation.State,
+		},
+	}
+	if dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID); dispatchEntry != nil {
+		completed.WorkstationName = dispatchEntry.WorkstationName
+		completed.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatchEntry.ExpectedArtifactContext)
+		completed.StartTime = dispatchEntry.StartTime
+		completed.Duration = completed.EndTime.Sub(dispatchEntry.StartTime)
+	}
+	return completed
 }

@@ -159,21 +159,9 @@ func (p *Planner) InvalidateWork(
 	ctx context.Context,
 	workID string,
 ) (dispatchplanning.WorkInvalidationResult, error) {
-	if ctx == nil {
-		return dispatchplanning.WorkInvalidationResult{}, fmt.Errorf(
-			"%w: context is required",
-			dispatchplanning.ErrInvalidRunnableDecision,
-		)
-	}
-	if err := ctx.Err(); err != nil {
+	workID, err := validateWorkInvalidation(ctx, workID)
+	if err != nil {
 		return dispatchplanning.WorkInvalidationResult{}, err
-	}
-	workID = strings.TrimSpace(workID)
-	if workID == "" {
-		return dispatchplanning.WorkInvalidationResult{}, fmt.Errorf(
-			"%w: Work ID is required",
-			dispatchplanning.ErrInvalidRunnableDecision,
-		)
 	}
 
 	p.mu.Lock()
@@ -239,6 +227,26 @@ func (p *Planner) InvalidateWork(
 		Outcome: outcome,
 		Intents: intents,
 	}, firstErr
+}
+
+func validateWorkInvalidation(ctx context.Context, workID string) (string, error) {
+	if ctx == nil {
+		return "", fmt.Errorf(
+			"%w: context is required",
+			dispatchplanning.ErrInvalidRunnableDecision,
+		)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	workID = strings.TrimSpace(workID)
+	if workID == "" {
+		return "", fmt.Errorf(
+			"%w: Work ID is required",
+			dispatchplanning.ErrInvalidRunnableDecision,
+		)
+	}
+	return workID, nil
 }
 
 // Retry republishes only an explicitly pending intent. Concurrent retry or an
