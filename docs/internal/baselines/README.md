@@ -15,14 +15,14 @@ entries and lowering accepted debt over expanding a baseline.
 
 This is the source-backed provenance inventory for required repository-state comparisons.
 It was audited from a clean detached checkout of `origin/main` at commit
-`2b56dd815b4a2d6fea6c39d52db07e6b222f0b91` on 2026-08-30.
+`42eeee4472656b8290f798c36a5b8c871b24d7d0` on 2026-08-30.
 The checkout had an empty `git status --porcelain`.
 One row represents one committed comparison file.
 Shared consumers do not collapse rows.
-The source-first and reverse passes resolved to 28 active repository-state comparison files.
+The source-first and reverse passes resolved to 30 active repository-state comparison files.
 
-The set contains 18 files in this directory, five Packaged Service Structure live inventories,
-and three contract or transport identity inventories.
+The set contains 19 files in this directory, one functional-test inventory,
+five Packaged Service Structure live inventories, and three contract or transport identity inventories.
 It also contains one root boundary inventory and one UI style inventory.
 The `Class` column is the exact join key to the maintenance classification below.
 
@@ -66,6 +66,7 @@ The source graph, rather than this keyword list, determines the active set.
 | `.github/workflows/ci.yml` `Backend Coverage` → `make test-unit-coverage` and `make functional-test-viz` | R-05 and R-06 |
 | `.github/workflows/ci.yml` `Backend Unit Latency` → three hosted samples → `make test-unit-latency-budget` | S-02 |
 | `.github/workflows/ci.yml` `Frontend Component` → `make ui-component-test` | R-17 |
+| `Makefile:569-570` `functional-os-boundary-check` → `cmd/functionalosboundarycheck` | R-18 and R-19 |
 | `make ci-verify-tests` → `make verify-tests` → `test-maintenance` | R-04, S-05, S-06, S-07, and S-08 |
 | `make test-contract` and required backend unit package tests | S-09, S-10, and S-11 |
 | `.github/workflows/regenerate-shared-ci-baselines.yml` → `make regenerate-shared-ci-baselines` | S-01 through S-11, subject to the shared allowlist |
@@ -78,7 +79,7 @@ The required S-04 witness starts at its ownership consumer. The path is
 This source edge reaches S-04 even though its filename contains none of
 `baseline`, `inventory`, or `comparison`.
 
-The reverse pass has 26 literal path matches and two source-aware resolutions.
+The reverse pass has 28 literal path matches and two source-aware resolutions.
 The two non-literal paths use the following reproducible witnesses:
 
 A missing full-path literal is not an exclusion. Trace its owning source and
@@ -112,8 +113,8 @@ ledger entries.
 ### GATE-AUDIT bidirectional ledgers
 
 The following two ledgers were produced independently. They are sorted by
-repository path and show the same 28-path set. The file-to-source ledger uses
-literal matches for 26 rows and the source-aware witnesses above for two rows.
+repository path and show the same 30-path set. The file-to-source ledger uses
+literal matches for 28 rows and the source-aware witnesses above for two rows.
 
 | # | Source-to-file ledger | File-to-source ledger |
 | ---: | --- | --- |
@@ -124,33 +125,35 @@ literal matches for 26 rows and the source-aware witnesses above for two rows.
 | 5 | `docs/internal/baselines/backend-package-file-count.json` | `docs/internal/baselines/backend-package-file-count.json` |
 | 6 | `docs/internal/baselines/deadcode-baseline.txt` | `docs/internal/baselines/deadcode-baseline.txt` |
 | 7 | `docs/internal/baselines/frontend-deadcode-baseline.json` | `docs/internal/baselines/frontend-deadcode-baseline.json` |
-| 8 | `docs/internal/baselines/functional-undocumented-tests.json` | `docs/internal/baselines/functional-undocumented-tests.json` |
-| 9 | `docs/internal/baselines/go-functional-coverage-package-minimums.json` | `docs/internal/baselines/go-functional-coverage-package-minimums.json` |
-| 10 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `docs/internal/baselines/go-unit-coverage-package-minimums.json` |
-| 11 | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` |
-| 12 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` |
-| 13 | `docs/internal/baselines/ownership-inventory.json` | `docs/internal/baselines/ownership-inventory.json` |
-| 14 | `docs/internal/baselines/package-structure-baseline.json` | `docs/internal/baselines/package-structure-baseline.json` |
-| 15 | `docs/internal/baselines/package-target-test-only-baseline.json` | `docs/internal/baselines/package-target-test-only-baseline.json` |
-| 16 | `docs/internal/baselines/petri-public-surface-baseline.json` | `docs/internal/baselines/petri-public-surface-baseline.json` |
-| 17 | `docs/internal/baselines/service-construction-baseline.json` | `docs/internal/baselines/service-construction-baseline.json` |
-| 18 | `docs/internal/baselines/service-cycle-ceiling.json` | `docs/internal/baselines/service-cycle-ceiling.json` |
-| 19 | `docs/internal/baselines/test-service-import-baseline.json` | `docs/internal/baselines/test-service-import-baseline.json` |
-| 20 | `docs/internal/baselines/transport-behavior-baseline.json` | `docs/internal/baselines/transport-behavior-baseline.json` |
-| 21 | `docs/internal/baselines/unfinished-package-moves.json` | `docs/internal/baselines/unfinished-package-moves.json` |
-| 22 | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` |
-| 23 | `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json` | `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json` |
-| 24 | `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json` | `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json` |
-| 25 | `docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json` | `docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json` |
-| 26 | `docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json` | `docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json` |
-| 27 | `ownership-boundary-baseline.json` | `ownership-boundary-baseline.json` |
-| 28 | `ui/src/styles/palette-contrast-baseline.ts` | `ui/src/styles/palette-contrast-baseline.ts` |
+| 8 | `docs/internal/baselines/functional-os-spawn-baseline.json` | `docs/internal/baselines/functional-os-spawn-baseline.json` |
+| 9 | `docs/internal/baselines/functional-undocumented-tests.json` | `docs/internal/baselines/functional-undocumented-tests.json` |
+| 10 | `docs/internal/baselines/go-functional-coverage-package-minimums.json` | `docs/internal/baselines/go-functional-coverage-package-minimums.json` |
+| 11 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `docs/internal/baselines/go-unit-coverage-package-minimums.json` |
+| 12 | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` |
+| 13 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` |
+| 14 | `docs/internal/baselines/ownership-inventory.json` | `docs/internal/baselines/ownership-inventory.json` |
+| 15 | `docs/internal/baselines/package-structure-baseline.json` | `docs/internal/baselines/package-structure-baseline.json` |
+| 16 | `docs/internal/baselines/package-target-test-only-baseline.json` | `docs/internal/baselines/package-target-test-only-baseline.json` |
+| 17 | `docs/internal/baselines/petri-public-surface-baseline.json` | `docs/internal/baselines/petri-public-surface-baseline.json` |
+| 18 | `docs/internal/baselines/service-construction-baseline.json` | `docs/internal/baselines/service-construction-baseline.json` |
+| 19 | `docs/internal/baselines/service-cycle-ceiling.json` | `docs/internal/baselines/service-cycle-ceiling.json` |
+| 20 | `docs/internal/baselines/test-service-import-baseline.json` | `docs/internal/baselines/test-service-import-baseline.json` |
+| 21 | `docs/internal/baselines/transport-behavior-baseline.json` | `docs/internal/baselines/transport-behavior-baseline.json` |
+| 22 | `docs/internal/baselines/unfinished-package-moves.json` | `docs/internal/baselines/unfinished-package-moves.json` |
+| 23 | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` |
+| 24 | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` |
+| 25 | `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json` | `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json` |
+| 26 | `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json` | `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json` |
+| 27 | `docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json` | `docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json` |
+| 28 | `docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json` | `docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json` |
+| 29 | `ownership-boundary-baseline.json` | `ownership-boundary-baseline.json` |
+| 30 | `ui/src/styles/palette-contrast-baseline.ts` | `ui/src/styles/palette-contrast-baseline.ts` |
 
-GATE-AUDIT result: both ledgers contain 28 entries.
+GATE-AUDIT result: both ledgers contain 30 entries.
 Both ledgers have zero duplicate rows and zero unclassified active comparison files.
-The reverse ledger contains 26 literal matches and two source-aware resolutions
+The reverse ledger contains 28 literal matches and two source-aware resolutions
 for R-04 and R-17. Their set difference is empty at audit SHA
-`2b56dd815b4a2d6fea6c39d52db07e6b222f0b91`.
+`42eeee4472656b8290f798c36a5b8c871b24d7d0`.
 The consumer blocker in GATE-BLOCKER does not change this set result.
 
 ### Repository quality and coverage comparisons
@@ -161,10 +164,11 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/backend-package-file-count.json` | `make lint` → `pkg-file-count` | `cmd/pkgfilecountcheck/main.go` | Backend package-shape gate | Package path and tracked Go file count | `make pkg-file-count` | R-02 | `sha256:c87c5eed895cfbab2a9923849f1678851f0f0853b98cca930bc3d2fc75c18cc3` |
 | `docs/internal/baselines/deadcode-baseline.txt` | `make lint` → `deadcode` | `cmd/deadcodecheck/main.go` | Backend dead-code gate | Normalized unreachable-symbol identity | `make deadcode` | S-01 | `sha256:f31645c911b22d76e5a121e0da0c47d5549de16045e1d803e0003a254afdfe13` |
 | `docs/internal/baselines/frontend-deadcode-baseline.json` | `make lint` → `ui-deadcode` | `ui/scripts/check-deadcode-baseline.ts` | Dashboard dead-code gate | Normalized Knip issue identity | `make ui-deadcode` | R-03 | `sha256:988791a647d158530d962cf9b6f03b187f381b97ed78d10bcad1439b3d6d2e5b` |
+| `docs/internal/baselines/functional-os-spawn-baseline.json` | `make lint` → `functional-os-boundary-check` | `Makefile:569-570`, `cmd/functionalosboundarycheck/main.go`, `cmd/functionalosboundarycheck/scanner.go`, `cmd/functionalosboundarycheck/json.go`, `cmd/functionalosboundarycheck/model.go`, `cmd/functionalosboundarycheck/policy.go` | Functional-test OS-boundary gate | Package count ceiling plus stable OS-spawn site identity | `make functional-os-boundary-check` | R-18 | `sha256:30656d69ee00bf37edf149033d08fc41d9b0d16310d2e149cdeb777850fa0797` |
 | `docs/internal/baselines/functional-undocumented-tests.json` | `make verify-tests` → `test-maintenance` | `internal/functionaltestmetadata/baseline_repo_test.go:TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests` | Functional test metadata | Relative test file and `Test*` name | `go test ./internal/functionaltestmetadata -run TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests -count=1` | R-04 | `sha256:6fb6ce8170a2c0518acb65051d830a38a4d122c343475023112ab2ad2aeaa7b0` |
 | `docs/internal/baselines/go-functional-coverage-package-minimums.json` | `make functional-test-viz` → backend functional coverage | `cmd/functionaltestviz/main.go:packageManifestPath`, `Makefile:GO_FUNCTIONAL_COVERAGE_MANIFEST` | Functional coverage gate | Go import package and minimum statement-coverage percentage | `make functional-test-viz` | R-05 | `sha256:79e77099a74fe8065b9af69a53622303196353b77ef55d373def3f52adb12dc5` |
 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `make test-unit-coverage` → backend unit coverage | `cmd/unitcoverage/main.go`, `Makefile:GO_UNIT_COVERAGE_MANIFEST` | Unit coverage gate | Go import package and minimum statement-coverage percentage | `make test-unit-coverage` | R-06 | `sha256:ee1faa58bad1f07903868c3eb791184ea299c10250cfddb5478adfbecb299eb3` |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:00b9a90e109ba9f0ab8be96b37d54faff1eaa6b1703818da04c707d6641ab636` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:6add0f6ef92dec8e91b0d1279f2a4cd7e9da411d14c648e19c1e06a5d1327fbe` |
 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `make lint` → `ui-lint` | `ui/scripts/check-hardcoded-ui-copy.ts`, `ui/package.json:check:localized-copy` | Dashboard localization gate | Source location and literal finding | `cd ui && bun run check:localized-copy` | R-07 | `sha256:bb6ee7e94bc96d013f164dc81004471112e457fa8a22d11ab17c1804982c609a` |
 | `docs/internal/baselines/package-structure-baseline.json` | `make lint` → `pkg-structure` | `cmd/pkgstructurecheck/main.go` | Packaged Service Structure | Package path and exact recorded structure finding | `make pkg-structure` | R-08 | `sha256:a4d7890e639929891305296bdeb0597612499d1f114aa495d8b08a68823817b8` |
 | `docs/internal/baselines/package-target-test-only-baseline.json` | `make lint` → `package-target-manifest-check` | `cmd/packagetargetmanifestcheck/manifest.go` | Package-target migration gate | Open-move package path and test-only source identity | `make package-target-manifest-check` | R-09 | `sha256:64c98e7f5ee3b25d74bda79ee50a571b1b3a21e985946bc34688b330df5af40a` |
@@ -174,6 +178,7 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/test-service-import-baseline.json` | `make lint` → `pkg-boundary` | `cmd/pkgboundarycheck/service_baselines.go` | Test service-boundary gate | Test source file, concrete import, and target service | `make pkg-boundary` | R-13 | `sha256:336548d5046747b3a823faf4cdca89648d67a3896ed3a5fd076f66131e9cc49a` |
 | `docs/internal/baselines/transport-behavior-baseline.json` | `make lint` → `pkg-boundary` | `cmd/pkgboundarycheck/transport_behavior.go` | Transport boundary gate | Transport source, imported service, and behavior edge | `make pkg-boundary` | R-14 | `sha256:ce7868b58936d0cd6cd635a2ac9ca404baf007069573e395c77466393eeaa29e` |
 | `docs/internal/baselines/unfinished-package-moves.json` | `make lint` → `ownership-inventory-check`, `package-target-manifest-check` | `internal/ownershipinventory/moves.go`, `cmd/packagetargetmanifestcheck/manifest.go` | Packaged Service Structure migration | Live `pkg/` package path and successor move row | `make ownership-inventory-check`, `make package-target-manifest-check` | R-15 | `sha256:21bb2cfc079413494f5d10b093b6f775fefa019385e6b4ec1ef95366e938f26f` |
+| `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | `make lint` → `functional-os-boundary-check` | `Makefile:569-570`, `cmd/functionalosboundarycheck/main.go`, `cmd/functionalosboundarycheck/scanner.go`, `cmd/functionalosboundarycheck/json.go`, `cmd/functionalosboundarycheck/model.go`, `cmd/functionalosboundarycheck/policy.go` | Functional-test OS-boundary gate | Exact `siteId`, package/source/enclosing/occurrence metadata, verdict, assertion evidence, and conversion obligation | `make functional-os-boundary-check` | R-19 | `sha256:ddb618d20ccf4b956f652d6eae57cd9b609d107ce5435158784043a0f46478bb` |
 
 ### Ownership and live tree comparisons
 
@@ -201,16 +206,16 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 These values were parsed from committed files at the audit SHA. They are
 content observations, not permission to rewrite a ratchet or snapshot.
 
-| Class | Comparison file | Current scalar observation at `2b56dd815b4a2d6fea6c39d52db07e6b222f0b91` |
+| Class | Comparison file | Current scalar observation at `42eeee4472656b8290f798c36a5b8c871b24d7d0` |
 | --- | --- | --- |
 | R-01 | `backend-exemption-budget.json` | 457 exemption-budget entries |
 | R-02 | `backend-package-file-count.json` | 61 package-file-count entries |
 | S-01 | `deadcode-baseline.txt` | 3,074 normalized findings |
 | R-03 | `frontend-deadcode-baseline.json` | 30 accepted Knip issues |
-| R-04 | `functional-undocumented-tests.json` | 356 committed undocumented-test identities; the current parser discovers 357 identities, so the consumer fails without a baseline edit |
+| R-04 | `functional-undocumented-tests.json` | 356 committed undocumented-test identities; the current parser discovers 359 identities, so the consumer fails without a baseline edit |
 | R-05 | `go-functional-coverage-package-minimums.json` | 357 packages and 29 floor holds |
 | R-06 | `go-unit-coverage-package-minimums.json` | 403 packages and 33 floor holds |
-| S-02 | `go-unit-lane-latency-budget.v1.json` | 445 packages and 18,246 final-mode test identities; stored `reference.baseCommit` `406e9aa5874c8e5fa2f7ea953960cadb1eeca41a` is historical relative to this audit |
+| S-02 | `go-unit-lane-latency-budget.v1.json` | 445 packages and 18,286 final-mode test identities; stored `reference.baseCommit` `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce` is historical relative to this audit |
 | R-07 | `hardcoded-ui-copy-baseline.txt` | 2 accepted literal findings |
 | R-08 | `package-structure-baseline.json` | 531 structure findings |
 | R-09 | `package-target-test-only-baseline.json` | 31 test-only migration findings |
@@ -231,10 +236,13 @@ content observations, not permission to rewrite a ratchet or snapshot.
 | S-10 | `cli-command-inputs.json` | 37 arguments, 538 flags, and 11 relationships |
 | S-11 | `mcp-tools.json` | 10 registered tools |
 | R-17 | `palette-contrast-baseline.ts` | 8 measured palette entries |
+| R-18 | `functional-os-spawn-baseline.json` | 23 functional packages and 70 static OS-spawn sites |
+| R-19 | `c01-eligibility-inventory.json` | 812 test rows and 70 OS-spawn records, including 62 `INTENTIONAL-OS` and 8 `ACCIDENTAL-OS` records |
 
 ## Maintenance classification
 
 Every active inventory row above has exactly one class ID.
+The catalog contains 30 active rows: 19 manual ratchets and 11 snapshots.
 The `R-*` rows are manual ratchets recording an intentional one-way quality or migration commitment.
 Review a current finding before changing the canonical file.
 The `S-*` rows are snapshots.
@@ -270,6 +278,8 @@ artifact generator must not be relabelled as a maintenance mechanism.
 | R-15 | `docs/internal/baselines/unfinished-package-moves.json` | Packaged Service Structure migration — live `pkg/` package path and successor move row | Run `make ownership-inventory-check` and `make package-target-manifest-check`. Landing a move deletes its row. When no moves remain, delete the empty ledger with its consumers. | Manual shrink-only ledger. No generator exists because package ownership is derived from the live tree. |
 | R-16 | `ownership-boundary-baseline.json` | Root service-boundary gate — boundary finding key and occurrence count | Run `make pkg-boundary`. Resolve the boundary finding, then remove or lower only the corresponding reviewed entry. Never raise accepted boundary debt. | Manual deletion-only ratchet. `-create-baseline` refuses to overwrite an existing file. |
 | R-17 | `ui/src/styles/palette-contrast-baseline.ts` | Dashboard styles — palette, foreground token, fill token, and measured contrast ratio | Run `make ui-component-test`. Improve the measured contrast, then lower or remove the debt entry. Never raise the recorded debt to make a regression pass. | Manual ratchet. The component test has no baseline writer, and automatic recapture could record a regression. |
+| R-18 | `docs/internal/baselines/functional-os-spawn-baseline.json` | Functional-test OS-boundary maintainers — package count ceiling plus stable OS-spawn site identity | Run `make functional-os-boundary-check`. When a site is removed, lower the package ceiling and remove its site ID in the same reviewed change. When a site is intentionally added, review the source and paired `INTENTIONAL-OS` inventory admission before changing the baseline. Never raise a ceiling or admit a site automatically. | Manual ratchet. The checker has no baseline writer, and automatic recapture could accept a new OS-spawn site and weaken the boundary. |
+| R-19 | `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json` | Functional-test OS-boundary maintainers — exact site identity and metadata, semantic verdict, assertion evidence, and conversion obligation | Run `make functional-os-boundary-check`. Reconcile each `osSpawnSites` record by exact `siteId` and non-line metadata. Treat source-line drift as informational only when every other field matches. Review the owning assertion before changing a verdict, evidence, or conversion obligation. Never recapture verdicts automatically. | Manual ratchet. The checker has no inventory writer, and automatic recapture could accept a new site, alter a semantic verdict, or erase a conversion obligation. |
 
 ### Self-maintained snapshots
 
@@ -314,6 +324,9 @@ target.
 
 S-01 and S-02 consume those hosted artifacts directly.
 S-03 through S-11 are source projections generated in the same protected path.
+R-18 and R-19 are outside the protected eleven-path snapshot allowlist.
+The functional-OS checker reads both canonical files and writes neither.
+Neither ratchet has a canonical writer or snapshot mechanism.
 
 The classification separates backend dead-code from frontend dead-code.
 S-01 has a self-maintaining writer on main through merged PR #2347.
@@ -330,9 +343,9 @@ This catalog does not alter any ratchet procedure, comparison file, or required 
 ### GATE-CONSUMERS
 
 The source-first and reverse audit used a clean disposable Windows checkout at
-the audit SHA. The documented package-shape and ownership commands ran against
-that same pinned source revision in this worktree; generated validation files
-were not retained. The following commands passed with exit 0: `make
+the catalog audit SHA. The pre-existing consumer observations below retain
+their original historical pins where shown. Generated validation files were
+not retained. The following commands passed with exit 0: `make
 backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-boundary`,
 `make pkg-structure`, and `make service-cycle-check`.
 
@@ -377,7 +390,7 @@ Their hosted evidence remains separate.
 `go test ./internal/functionaltestmetadata -run
 ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`
 returned exit 1. It reports 356 committed undocumented-test identities and
-357 identities discovered from current source. This is a current-main
+359 identities discovered from current source. This is a current-main
 comparison failure, not permission to shrink the ratchet in this audit.
 
 `make test-contract` returned outer Make exit 2 at the audit SHA. Its test
@@ -419,7 +432,7 @@ Local timing remains diagnostic.
 
 | ID | Owning gate and owner | Reproduction and observed result | Smallest separate correction |
 | --- | --- | --- | --- |
-| C12-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `2b56dd815b4a2d6fea6c39d52db07e6b222f0b91`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 356 committed identities and 357 discovered identities. | Review the one-entry set difference, document the test or remove only a resolved row, and rerun the checker in a separately owned correction. This lane makes no baseline edit. |
+| C12-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `42eeee4472656b8290f798c36a5b8c871b24d7d0`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 356 committed identities and 359 discovered identities. | Review the three-entry set difference, document the tests or remove only resolved rows, and rerun the checker in a separately owned correction. This lane makes no baseline edit. |
 | C12-CONTRACT-002 | `GATE-CONSUMERS`, CLI contract owner | At audit SHA `2b56dd815b4a2d6fea6c39d52db07e6b222f0b91`, run `make test-contract`. The command returned exit 1 at `contracts/session_command_family_test.go:116`: `you.session.list --scope default = all, want live`. Focused S-09 and S-10 identity comparisons passed. | Confirm the intended default at the contract and production-command sources, then correct the owning contract surface and rerun `make test-contract`. This lane makes no fixture or generated-file edit. |
 | C12-FUNCTIONAL-003 | `GATE-HOSTED`, functional coverage owners | CI run `33314683256` at audit SHA `2b56dd815b4a2d6fea6c39d52db07e6b222f0b91` failed Backend Functional Coverage job `99265866917` in `tests/functional/providers/acp`; Verification Policy job `99266840600` also failed. | Diagnose the existing provider functional failure in its owning lane and rerun hosted CI. This catalog records the failure and does not edit a comparison file. |
 
@@ -433,7 +446,7 @@ The bounded local functional run is likewise diagnostic only: its incomplete
 ### GATE-DOC-REVIEW
 
 The documentation checklist passed for this revision. The intended tracked
-diff is one file, all 28 rows have one class, and protected literals retain
+diff is one file, all 30 rows have one class, and protected literals retain
 their exact paths and commands. Current and historical values are labeled,
 manual ratchets retain shrink or repin review, and snapshot writers name their
 protected path and allowlist. No typed surface changed.
@@ -448,9 +461,9 @@ generated-file, schema, baseline, or code rollback.
 ### GATE-LOOPBACK and GATE-PR-CI
 
 The implementation audit at immutable SHA
-`2b56dd815b4a2d6fea6c39d52db07e6b222f0b91` produced 28 unique source-ledger
-paths and 28 unique reverse-ledger paths.
-The reverse pass produced 26 literal matches and two source-aware resolutions
+`42eeee4472656b8290f798c36a5b8c871b24d7d0` produced 30 unique source-ledger
+paths and 30 unique reverse-ledger paths.
+The reverse pass produced 28 literal matches and two source-aware resolutions
 for R-04 and R-17.
 Their set difference was empty, with zero duplicate paths, zero duplicate
 classes, zero missing files, and zero SHA mismatches.
@@ -467,11 +480,11 @@ were:
 
 | Criterion | Status | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| C1 source/file reconciliation | PASS | 28 source paths matched 26 literal reverse matches and two source-aware resolutions | Future source drift |
-| C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and R-04/R-17 had resolver witnesses alongside the 28 row records | Future consumer changes |
-| C3 revision-pinned hashes and scalars | PASS | All 28 raw SHA-256 values and scalar observations matched | Future artifact changes |
+| C1 source/file reconciliation | PASS | 30 source paths matched 28 literal reverse matches and two source-aware resolutions | Future source drift |
+| C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and R-04/R-17 had resolver witnesses alongside the 30 row records | Future consumer changes |
+| C3 revision-pinned hashes and scalars | PASS | All 30 raw SHA-256 values and scalar observations matched | Future artifact changes |
 | C4 ratchet procedures | PASS | R-* rows retained deliberate shrink or manual-repin procedures | Semantic review of future procedures |
-| C5 hosted writer evidence | PASS | Protected regeneration run 33315083228 matched the audit SHA, validated the allowlist, and produced only the S-02 candidate | Future protected-main runs |
+| C5 hosted writer evidence | PASS | Protected regeneration run 33315083228 matched the prior catalog audit SHA, validated the allowlist, and produced only the S-02 candidate | Future protected-main runs |
 | C6 defect handling | PASS | R-04, contract, platform deadcode, missing latency artifact, and hosted functional failures were reproduced and left unchanged | Separately owned corrections |
 | C7 performance scope | PASS | Hosted latency remained authoritative, while local timing and UI wall time remained diagnostic | Future hosted samples |
 | C8 security, scope, and rollback | PASS | Clean status, one README diff, no secrets, and one-file revert path | Review-time merge state |
@@ -491,8 +504,8 @@ terminal CI, merge conflicts, and merge after that handoff.
 
 The unit-lane budget contains two deliberately different inventory units that
 must remain visible. The checked-in comparison file has **445 packages and
-18,246 current test identities** at the audit commit. Its internal
-`reference.baseCommit` is `406e9aa5874c8e5fa2f7ea953960cadb1eeca41a`, the
+18,286 current test identities** at the audit commit. Its internal
+`reference.baseCommit` is `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce`, the
 historical source revision used for the accepted timing sample. It is not the
 catalog audit SHA. The accepted historical sample evidence records **444
 packages and 18,122 tests** in each of its three captures. The latter is not
@@ -501,7 +514,7 @@ while the budget's `testInventory` is the current final-mode identity set.
 
 | Evidence source | Reproduction command | Unit and observed value | SHA-256 |
 | --- | --- | --- | --- |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 445 packages, 18,246 test identities. Stored `reference.baseCommit` is historical `406e9aa5874c8e5fa2f7ea953960cadb1eeca41a` | `00b9a90e109ba9f0ab8be96b37d54faff1eaa6b1703818da04c707d6641ab636` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 445 packages, 18,286 test identities. Stored `reference.baseCommit` is historical `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce` | `6add0f6ef92dec8e91b0d1279f2a4cd7e9da411d14c648e19c1e06a5d1327fbe` |
 | `docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-summary.md` and its three linked `baseline-make-run-*.v2.json` captures | `go run ./cmd/unitlanebudget -mode baseline -samples docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json` | Historical baseline distribution: 444 packages, 18,122 tests per capture. The three wall samples are 222.006s, 239.612s, and 258.271s | Summary `801e62cbff17729f7c256309f058fc961ed0959a321de86e3783933049d43a93`, captures `ba7e1364ed5c88d66071d4cac4b2bf027571044ef7d159b16d25435f7fc95d8a`, `d30fdc0215d50a14c0a4cef65b234fde68a680e4015e37b5d9a463c9f361723f`, `e4288d9085e19ea3e7f8a87e0ad67ca52b38a255e0bc1e1a569ad59fbd008d98` |
 
 The mapping is therefore **same package unit, different test-inventory
@@ -544,7 +557,7 @@ inventory row. Their absence is recorded rather than inferred as a populated
 zero-debt baseline.
 
 GATE-LOOPBACK must repeat the same exclusion review from a fresh delivered checkout.
-At the named audit commit, both ledgers contained 28 entries.
+At the named audit commit, both ledgers contained 30 entries.
 They had zero duplicate rows and zero unclassified active comparison files.
 No active consumer was unreadable or ambiguous.
 Future comparison files must be added to exactly one inventory row before their check is treated as reconciled.
