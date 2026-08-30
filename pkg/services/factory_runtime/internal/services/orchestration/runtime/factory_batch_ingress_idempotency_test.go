@@ -398,7 +398,7 @@ func TestRuntimeCompletionFlushFailureLeavesSourceIncompleteAndRetryable(t *test
 		t.Fatalf("first completion error = %v, want flush cause", err)
 	}
 	if countCompletionEvents(history.CanonicalEvents()) != 1 || completionPublished != 0 {
-		t.Fatalf("failed completion advertised close: events=%d callbacks=%d", countCompletionEvents(history.CanonicalEvents()), completionPublished)
+		t.Fatalf("failed completion state: events=%d callbacks=%d", countCompletionEvents(history.CanonicalEvents()), completionPublished)
 	}
 
 	if err := recordSessionLifecycleCompletionFromFactory(

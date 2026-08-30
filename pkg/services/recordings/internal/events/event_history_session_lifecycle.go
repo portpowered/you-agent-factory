@@ -395,8 +395,9 @@ func (h *FactoryEventHistory) RecordSessionLifecycleFromFactoryConfig(
 }
 
 // RecordSessionLifecycleResultUpdated records the terminal result portion of
-// the runtime lifecycle. It is split from SESSION_COMPLETED so a caller can
-// flush the result before publishing the authoritative close marker.
+// the runtime lifecycle. It is split from SESSION_COMPLETED so callers that
+// need separate append control can place the result before the authoritative
+// close marker; the runtime terminal path persists both in one snapshot.
 func (h *FactoryEventHistory) RecordSessionLifecycleResultUpdated(
 	sessionID string,
 	factoryCfg *interfaces.FactoryConfig,

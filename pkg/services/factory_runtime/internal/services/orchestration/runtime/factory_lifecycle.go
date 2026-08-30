@@ -35,8 +35,8 @@ func recordSessionLifecycleCompletionFromFactory(
 			)
 			f.completionEventRecorded = true
 		}
-		if flush := f.completionDurabilityFlush(); flush != nil {
-			if err := flush(); err != nil {
+		if persist := f.completionDurabilityGateFunc(); persist != nil {
+			if err := persist(); err != nil {
 				return fmt.Errorf("persist Factory Session completion: %w", err)
 			}
 		}
@@ -49,8 +49,8 @@ func recordSessionLifecycleCompletionFromFactory(
 		f.completionResultRecorded = true
 		f.completionEventRecorded = true
 	}
-	if flush := f.completionDurabilityFlush(); flush != nil {
-		if err := flush(); err != nil {
+	if persist := f.completionDurabilityGateFunc(); persist != nil {
+		if err := persist(); err != nil {
 			return fmt.Errorf("persist Factory Session completion: %w", err)
 		}
 	}
@@ -66,21 +66,21 @@ func publishDeferredSessionCompletion(eventHistory recordings.RuntimeLedger) {
 // SetCompletionDurabilityGate binds the Recordings terminal persistence gate
 // that must complete before a terminal source session is advertised. The gate
 // is optional so in-memory runtime callers retain the established behavior.
-func (f *factoryImpl) SetCompletionDurabilityGate(flush func() error) {
+func (f *factoryImpl) SetCompletionDurabilityGate(persist func() error) {
 	if f == nil {
 		return
 	}
 	f.mu.Lock()
-	f.completionDurabilityGate = flush
+	f.completionDurabilityGate = persist
 	f.mu.Unlock()
 }
 
-func (f *factoryImpl) completionDurabilityFlush() func() error {
+func (f *factoryImpl) completionDurabilityGateFunc() func() error {
 	if f == nil {
 		return nil
 	}
 	f.mu.RLock()
-	flush := f.completionDurabilityGate
+	persist := f.completionDurabilityGate
 	f.mu.RUnlock()
-	return flush
+	return persist
 }
