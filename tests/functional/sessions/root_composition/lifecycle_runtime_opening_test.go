@@ -27,6 +27,7 @@ import (
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	recorder := newSessionActivationRecorder(t)
 	dir := support.ScaffoldFactory(t, sessionsLifecycleRuntimeOpeningFactoryConfig())

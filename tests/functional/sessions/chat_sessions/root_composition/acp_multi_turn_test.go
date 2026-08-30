@@ -48,6 +48,7 @@ func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 	}
 
 	cohort := newControlledACPCohort(t, "multi-turn")
+	t.Parallel()
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "multi-turn")
 	stdin, stdout := startControlledServeACPHarness(t, cohort, cwd)
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
@@ -113,6 +114,7 @@ func driveIdentifiedSessionPrompt(
 	requestID, sessionID, text string,
 ) (serveACPLine, []acpsdk.SessionNotification) {
 	t.Helper()
+	defer releaseChatACPHomeForInput(stdin)
 
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,

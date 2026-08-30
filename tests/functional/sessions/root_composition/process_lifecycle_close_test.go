@@ -33,6 +33,7 @@ func processLifecycleHomeEnvironment(home string) []string {
 // change the customer's exit code.
 func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -98,6 +99,7 @@ func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing
 // non-zero exit code even though the customer's command worked.
 func TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	home := t.TempDir()
 	workingDirectory := t.TempDir()

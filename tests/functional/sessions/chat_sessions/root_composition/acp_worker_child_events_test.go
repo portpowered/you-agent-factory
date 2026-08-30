@@ -3,6 +3,7 @@ package root_composition_test
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +17,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -35,7 +35,9 @@ import (
 // edge intact so a passing result proves both attribution and the subprocess
 // protocol, rather than only an in-process projection.
 
-const acpWorkerChildPeerEnvironment = "YOU_TEST_ACP_WORKER_CHILD_PEER"
+const acpWorkerChildPeerFlag = "you-test-acp-worker-child-peer"
+
+var runACPWorkerChildPeer = flag.Bool(acpWorkerChildPeerFlag, false, "run the scripted ACP worker-child peer")
 
 // acpWorkerChildCompletionText ends in the fixture worker's own stopToken, so
 // the Work genuinely reaches its declared terminal state. Without a literal
@@ -51,6 +53,7 @@ func TestOneACPWorkerDeliversEveryUpdateAsChildContent(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
+	t.Parallel()
 
 	notifications := runACPWorkerChildFixture(t, "one-worker", 1)
 	children, topLevel := splitACPWorkerChildNotifications(notifications)
@@ -113,6 +116,7 @@ func TestTwoACPWorkersKeepChildStreamsAttributed(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
+	t.Parallel()
 
 	notifications := runACPWorkerChildFixture(t, "two-workers", 2)
 	children, _ := splitACPWorkerChildNotifications(notifications)
@@ -190,6 +194,7 @@ func TestACPWorkerChildStreamSurvivesRetainedReplay(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
+	t.Parallel()
 
 	notifications := runACPWorkerChildFixture(t, "replay", 1)
 	children, _ := splitACPWorkerChildNotifications(notifications)
@@ -322,6 +327,7 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@acp-child-test/"+name)
 	promptResp, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, "please run this work")
 	if promptResp.Error != nil {
 		t.Fatalf("session/prompt response error = %+v, want a successful final result", promptResp.Error)
@@ -343,16 +349,34 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd string) {
 	t.Helper()
 
-	home = chatTempDir(t, "ACP worker child "+name, "worker-child-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv(acpWorkerChildPeerEnvironment, "1")
+	home = seedACPActivationCommandHomeForTest(
+		t,
+		"ACP worker child "+name+" initialization home",
+		"you-chat-worker-child-"+name+"-home-",
+	)
+	cwd = chatTempDir(t, "ACP worker child "+name+" working directory", "worker-child-cwd-")
+	seedACPWorkerChildFactoryAtRoot(t, factorydefinitions.ProjectFactoriesRoot(cwd), name, stages)
+	return home, cwd
+}
 
-	factoryName := "@acp-child-test/" + name
+func seedSharedACPWorkerChildFactories(t testing.TB, home string) {
+	t.Helper()
+	seedACPWorkerChildFactory(t, home, "one-worker", 1)
+	seedACPWorkerChildFactory(t, home, "two-workers", 2)
+	seedACPWorkerChildFactory(t, home, "replay", 1)
+}
+
+func seedACPWorkerChildFactory(t testing.TB, home, name string, stages int) {
+	t.Helper()
 	root, err := factorydefinitions.NamedFactoriesRootForHome(home)
 	if err != nil {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
+	seedACPWorkerChildFactoryAtRoot(t, root, name, stages)
+}
+
+func seedACPWorkerChildFactoryAtRoot(t testing.TB, root, name string, stages int) {
+	t.Helper()
 	dir := filepath.Join(root, "@acp-child-test", name)
 	registerChatFactoryPath(t, dir)
 	writeACPWorkerChildFile(t, dir, "factory.json", acpWorkerChildFactoryJSON(name, stages))
@@ -362,12 +386,9 @@ func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd st
 		writeACPWorkerChildFile(t, filepath.Join(dir, "workstations", fmt.Sprintf("stage%d", stage)),
 			"AGENTS.md", acpWorkerChildWorkstationAgents)
 	}
-	support.SeedACPAgentProfile(t, home, "factory:"+factoryName, []string{"factory:" + factoryName})
-
-	return home, chatTempDir(t, "ACP worker child "+name+" working directory", "worker-child-cwd-")
 }
 
-func writeACPWorkerChildFile(t *testing.T, dir, name, content string) {
+func writeACPWorkerChildFile(t testing.TB, dir, name, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", dir, err)
@@ -457,7 +478,7 @@ func acpWorkerChildCommandFactory(starts *atomic.Int32, peerOwner string) platfo
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
 			beginChatPeer(peerOwner)
-			return exec.Command(os.Args[0], "-test.run=^TestACPWorkerChildPeerProcess$")
+			return exec.Command(os.Args[0], "-test.run=^TestACPWorkerChildPeerProcess$", "-"+acpWorkerChildPeerFlag)
 		}
 		return exec.Command(name, args...)
 	}
@@ -471,7 +492,7 @@ func (acpWorkerChildExecutableLocator) LookPath(file string) (string, error) { r
 // entrypoint. Under a normal `go test` run of this package the gate variable is
 // unset and this returns immediately.
 func TestACPWorkerChildPeerProcess(t *testing.T) {
-	if os.Getenv(acpWorkerChildPeerEnvironment) == "" {
+	if !*runACPWorkerChildPeer {
 		return
 	}
 	err := support.RunACPWorkerPeer(support.ACPWorkerPeerConfig{
@@ -514,27 +535,29 @@ func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	// This cell intentionally owns its root: the @you/spawn activation depends
-	// on the process environment's default Worker provider and its completed
-	// activation remains retained under the process-scoped ~default binding.
-	// Sharing it with another activation-owning witness would change that
-	// production lifecycle edge, not merely reuse immutable wiring.
-	home := chatTempDir(t, "JavaScript worker child", "javascript-child-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
-	seedInstalledPackagedFactory(t, home, "@you/spawn")
-	support.SeedACPAgentProfile(t, home, "factory:@you/spawn", []string{"factory:@you/spawn"})
+	// This cell intentionally owns its root process: the @you/spawn activation
+	// depends on the process environment's default Worker provider and its
+	// completed activation remains retained under the process-scoped ~default
+	// binding. Its immutable catalog/profile seed is shared with the other
+	// activation cells, but its command home and process remain private;
+	// sharing the process would change that production lifecycle edge.
+	home := seedACPActivationCommandHomeForTest(
+		t,
+		"JavaScript worker child initialization home",
+		"you-chat-javascript-child-home-",
+	)
 
 	runner := &spawnACPRunner{}
 	cwd := chatTempDir(t, "JavaScript worker child working directory", "javascript-child-cwd-")
+	seedProjectPackagedFactory(t, cwd, "@you/spawn")
+	t.Parallel()
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@you/spawn")
 
 	response, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, "spawn parallel work")
 	if response.Error != nil {

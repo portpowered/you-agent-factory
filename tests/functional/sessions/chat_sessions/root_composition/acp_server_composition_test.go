@@ -13,14 +13,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	"github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
@@ -56,6 +55,288 @@ var packagedFactoryCatalogState struct {
 	catalog factorydefinitions.PackagedFactoryCatalogOperations
 	names   []string
 	err     error
+}
+
+// sharedACPActivationHome is immutable fixture input for activation-owning
+// tests. The roots themselves remain per-test because the on-demand Factory
+// target retains a terminal runtime under the process-scoped default session;
+// the home/catalog/profile do not need to be rebuilt for every process.
+var sharedACPActivationHomeState struct {
+	sync.Mutex
+	home string
+	err  error
+
+	originalHomeSet            bool
+	originalHome               string
+	originalUserProfileSet     bool
+	originalUserProfile        string
+	originalDefaultProviderSet bool
+	originalDefaultProvider    string
+	originalDefaultModelSet    bool
+	originalDefaultModel       string
+}
+
+var sharedACPActivationTargets = []string{
+	"factory:@you/goal",
+	"factory:@you/classify",
+	"factory:@you/loop",
+	"factory:@you/plan-parallel",
+	"factory:@you/factory-builder",
+	"factory:@you/spawn",
+	"factory:@you/deep-research",
+	"factory:@acp-child-test/one-worker",
+	"factory:@acp-child-test/two-workers",
+	"factory:@acp-child-test/replay",
+}
+
+// ACP's production home resolver is process-global, while the command input
+// home is invocation-scoped. Keep the resolver on the activation's private
+// seeded home only through startup and the first prompt, when the runtime
+// captures its home/config paths; later prompts reuse that captured runtime.
+// Different homes serialize on this process-global environment, while
+// concurrent requests for one active home share a reference-counted lease.
+var chatACPHomeEnvironmentMu sync.Mutex
+var chatACPHomeEnvironmentStateMu sync.Mutex
+var chatACPHomeLeases sync.Map
+var chatACPServerHomes sync.Map
+var chatACPActiveHome string
+var chatACPActiveUsers int
+var chatACPActiveLease *chatACPHomeEnvironment
+
+type chatACPHomeEnvironment struct {
+	home                       string
+	originalHomeSet            bool
+	originalHome               string
+	originalUserProfileSet     bool
+	originalUserProfile        string
+	originalDefaultProviderSet bool
+	originalDefaultProvider    string
+	originalDefaultModelSet    bool
+	originalDefaultModel       string
+	releaseOnce                sync.Once
+}
+
+func beginChatACPHomeEnvironment(t testing.TB, home string) *chatACPHomeEnvironment {
+	t.Helper()
+	chatACPHomeEnvironmentMu.Lock()
+	lease := &chatACPHomeEnvironment{home: home}
+	captureChatACPHomeEnvironment(lease)
+	if err := os.Setenv("HOME", home); err != nil {
+		chatACPHomeEnvironmentMu.Unlock()
+		t.Fatalf("set ACP activation HOME: %v", err)
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		lease.restore()
+		chatACPHomeEnvironmentMu.Unlock()
+		t.Fatalf("set ACP activation USERPROFILE: %v", err)
+	}
+	chatACPHomeEnvironmentStateMu.Lock()
+	chatACPActiveHome = home
+	chatACPActiveUsers = 1
+	chatACPActiveLease = lease
+	chatACPHomeEnvironmentStateMu.Unlock()
+	t.Cleanup(lease.release)
+	return lease
+}
+
+func captureChatACPHomeEnvironment(lease *chatACPHomeEnvironment) {
+	lease.originalHome, lease.originalHomeSet = os.LookupEnv("HOME")
+	lease.originalUserProfile, lease.originalUserProfileSet = os.LookupEnv("USERPROFILE")
+	lease.originalDefaultProvider, lease.originalDefaultProviderSet = os.LookupEnv(operatorsettings.EnvDefaultWorkerModelProvider)
+	lease.originalDefaultModel, lease.originalDefaultModelSet = os.LookupEnv(operatorsettings.EnvDefaultWorkerModel)
+}
+
+func (lease *chatACPHomeEnvironment) release() {
+	if lease == nil {
+		return
+	}
+	lease.releaseOnce.Do(func() {
+		releaseChatACPHomeEnvironmentUser(lease)
+	})
+}
+
+func (lease *chatACPHomeEnvironment) restore() {
+	if lease.originalHomeSet {
+		_ = os.Setenv("HOME", lease.originalHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	if lease.originalUserProfileSet {
+		_ = os.Setenv("USERPROFILE", lease.originalUserProfile)
+	} else {
+		_ = os.Unsetenv("USERPROFILE")
+	}
+	if lease.originalDefaultProviderSet {
+		_ = os.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, lease.originalDefaultProvider)
+	} else {
+		_ = os.Unsetenv(operatorsettings.EnvDefaultWorkerModelProvider)
+	}
+	if lease.originalDefaultModelSet {
+		_ = os.Setenv(operatorsettings.EnvDefaultWorkerModel, lease.originalDefaultModel)
+	} else {
+		_ = os.Unsetenv(operatorsettings.EnvDefaultWorkerModel)
+	}
+}
+
+func releaseChatACPHomeEnvironmentUser(lease *chatACPHomeEnvironment) {
+	chatACPHomeEnvironmentStateMu.Lock()
+	if lease == nil {
+		lease = chatACPActiveLease
+	}
+	if lease == nil || chatACPActiveLease != lease || chatACPActiveHome != lease.home || chatACPActiveUsers == 0 {
+		chatACPHomeEnvironmentStateMu.Unlock()
+		return
+	}
+	chatACPActiveUsers--
+	if chatACPActiveUsers != 0 {
+		chatACPHomeEnvironmentStateMu.Unlock()
+		return
+	}
+	chatACPActiveHome = ""
+	chatACPActiveLease = nil
+	lease.restore()
+	chatACPHomeEnvironmentStateMu.Unlock()
+	chatACPHomeEnvironmentMu.Unlock()
+}
+
+func enterSameChatACPHomeEnvironment(home string) bool {
+	chatACPHomeEnvironmentStateMu.Lock()
+	defer chatACPHomeEnvironmentStateMu.Unlock()
+	if chatACPActiveHome != home || chatACPActiveUsers == 0 || chatACPActiveLease == nil {
+		return false
+	}
+	chatACPActiveUsers++
+	return true
+}
+
+func leaveSameChatACPHomeEnvironment() {
+	releaseChatACPHomeEnvironmentUser(nil)
+}
+
+func withChatACPHomeEnvironment(home string, fn func() error) error {
+	if enterSameChatACPHomeEnvironment(home) {
+		defer leaveSameChatACPHomeEnvironment()
+		return fn()
+	}
+
+	chatACPHomeEnvironmentMu.Lock()
+	lease := &chatACPHomeEnvironment{home: home}
+	captureChatACPHomeEnvironment(lease)
+	if err := os.Setenv("HOME", home); err != nil {
+		chatACPHomeEnvironmentMu.Unlock()
+		return err
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		lease.restore()
+		chatACPHomeEnvironmentMu.Unlock()
+		return err
+	}
+	chatACPHomeEnvironmentStateMu.Lock()
+	chatACPActiveHome = home
+	chatACPActiveUsers = 1
+	chatACPActiveLease = lease
+	chatACPHomeEnvironmentStateMu.Unlock()
+	defer lease.release()
+	return fn()
+}
+
+func registerChatACPServerHome(server support.ACPServer, home string) {
+	if key := chatIdentity(server); key != "" {
+		chatACPServerHomes.Store(key, home)
+	}
+}
+
+func chatACPHomeForServer(server support.ACPServer) string {
+	if key := chatIdentity(server); key != "" {
+		if home, ok := chatACPServerHomes.Load(key); ok {
+			return home.(string)
+		}
+	}
+	return ""
+}
+
+func releaseChatACPHomeForInput(input *os.File) {
+	if input == nil {
+		return
+	}
+	if lease, ok := chatACPHomeLeases.Load(input); ok {
+		lease.(*chatACPHomeEnvironment).release()
+	}
+}
+
+// sharedACPActivationHomeForTest returns one immutable catalog/profile seed
+// while every caller still gets a fresh root process and command home. It uses
+// the package process environment, rather than testing.T.Setenv, because
+// callers may enter setup after t.Parallel. The environment is restored by an
+// activation lease before another home is admitted.
+func sharedACPActivationHomeForTest(t testing.TB) string {
+	t.Helper()
+
+	chatACPHomeEnvironmentMu.Lock()
+	defer chatACPHomeEnvironmentMu.Unlock()
+	sharedACPActivationHomeState.Lock()
+	defer sharedACPActivationHomeState.Unlock()
+	if sharedACPActivationHomeState.home == "" && sharedACPActivationHomeState.err == nil {
+		home, err := chatPersistentMkdirTemp("shared ACP activation home", "you-chat-activation-cohort-")
+		if err != nil {
+			sharedACPActivationHomeState.err = fmt.Errorf("create shared ACP activation home: %w", err)
+		} else {
+			// Runtime opening performs packaged-install reconciliation. Materialize
+			// the complete published catalog once so concurrent private roots only
+			// read this home and never contend on a staging-owner path.
+			seedEveryInstalledPackagedFactory(t, home)
+			seedSharedACPWorkerChildFactories(t, home)
+			support.SeedACPAgentProfile(
+				t,
+				home,
+				"factory:@you/goal",
+				sharedACPActivationTargets,
+			)
+			if err := os.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex"); err != nil {
+				sharedACPActivationHomeState.err = fmt.Errorf("set shared ACP default worker provider: %w", err)
+			} else if err := os.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5"); err != nil {
+				sharedACPActivationHomeState.err = fmt.Errorf("set shared ACP default worker model: %w", err)
+			}
+			sharedACPActivationHomeState.home = home
+		}
+	}
+	if sharedACPActivationHomeState.err != nil {
+		t.Fatalf("shared ACP activation home: %v", sharedACPActivationHomeState.err)
+	}
+	home := sharedACPActivationHomeState.home
+	if err := os.Setenv("HOME", home); err != nil {
+		t.Fatalf("set shared ACP HOME: %v", err)
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		t.Fatalf("set shared ACP USERPROFILE: %v", err)
+	}
+	return home
+}
+
+func closeSharedACPActivationHome() error {
+	sharedACPActivationHomeState.Lock()
+	home := sharedACPActivationHomeState.home
+	sharedACPActivationHomeState.Unlock()
+	if home == "" {
+		return nil
+	}
+	return chatRemoveRoot(home)
+}
+
+// seedACPActivationCommandHomeForTest gives each activation-owning command
+// its own initialization home. The shared home above is only the immutable
+// catalog/profile seed; the real you.server.acp startup and its process-global
+// resolver run under this separately seeded home. That keeps the complete
+// initialization/opening lifetime independent across parallel scenarios
+// without sharing mutable runtime artifacts or changing production code.
+func seedACPActivationCommandHomeForTest(t testing.TB, owner, prefix string) string {
+	t.Helper()
+	seedHome := sharedACPActivationHomeForTest(t)
+	home := chatMkdirTemp(t, owner, "", prefix)
+	if err := os.CopyFS(home, os.DirFS(seedHome)); err != nil {
+		t.Fatalf("copy ACP activation seed home %q to %q: %v", seedHome, home, err)
+	}
+	return home
 }
 
 func catalogCohortForTest(t *testing.T) *catalogCohort {
@@ -172,7 +453,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 // derived from home, at <globalRoot>/<scope>/<name>/factory.json -- the exact
 // layout the production named-Factory catalog and effective-catalog
 // discovery both read.
-func seedInstalledPackagedFactory(t *testing.T, home, name string) {
+func seedInstalledPackagedFactory(t testing.TB, home, name string) {
 	t.Helper()
 
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
@@ -184,7 +465,7 @@ func seedInstalledPackagedFactory(t *testing.T, home, name string) {
 	seedInstalledPackagedFactoryFromCatalog(t, globalRoot, catalog, name)
 }
 
-func seedInstalledPackagedFactories(t *testing.T, home string, names []string) {
+func seedInstalledPackagedFactories(t testing.TB, home string, names []string) {
 	t.Helper()
 
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
@@ -197,8 +478,19 @@ func seedInstalledPackagedFactories(t *testing.T, home string, names []string) {
 	}
 }
 
+func seedProjectPackagedFactory(t testing.TB, workingDirectory, name string) {
+	t.Helper()
+	catalog, _ := packagedFactoryCatalogForTest(t)
+	seedInstalledPackagedFactoryFromCatalog(
+		t,
+		factorydefinitions.ProjectFactoriesRoot(workingDirectory),
+		catalog,
+		name,
+	)
+}
+
 func seedInstalledPackagedFactoryFromCatalog(
-	t *testing.T,
+	t testing.TB,
 	globalRoot string,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	name string,
@@ -227,7 +519,7 @@ func seedInstalledPackagedFactoryFromCatalog(
 }
 
 func packagedFactoryCatalogForTest(
-	t *testing.T,
+	t testing.TB,
 ) (factorydefinitions.PackagedFactoryCatalogOperations, []string) {
 	t.Helper()
 
@@ -344,7 +636,7 @@ func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 // packaged Factory under home's global named-Factory root, reproducing the
 // state a real `you server acp` process reaches after system initialization
 // runs. It returns the installed names.
-func seedEveryInstalledPackagedFactory(t *testing.T, home string) []string {
+func seedEveryInstalledPackagedFactory(t testing.TB, home string) []string {
 	t.Helper()
 
 	_, names := packagedFactoryCatalogForTest(t)
@@ -581,33 +873,15 @@ func TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted(t *testing
 	}
 }
 
-const controlledACPFactory = "@you/goal"
-
-// controlledACPCohort is an immutable-profile process fixture. The shared
-// package cohort is used for ACP witnesses that do not activate a Factory
-// runtime; activation-owning witnesses use newControlledACPCohort so their
-// retained ~default Factory Definitions binding cannot leak into another
-// scenario. Both paths use the same root.BuildProcess composition and the
-// same request-keyed command-runner edge.
-type controlledACPCohort struct {
-	home                  string
-	process               support.ApplicationProcess
-	runner                *controlledACPCommandRunner
-	factorySessionIDCalls atomic.Int32
-	workingDirectoryRoot  string
-}
-
-var controlledCohortState struct {
-	sync.Mutex
-	cohort *controlledACPCohort
-	err    error
-}
-
 // TestMain closes the package-scoped process only after every test invocation
 // has stopped. Per-test ACP command executions close their own pipes and
 // contexts, while this final close releases runtimes retained by the shared
 // process before its fixed home is removed.
 func TestMain(m *testing.M) {
+	sharedACPActivationHomeState.originalHome, sharedACPActivationHomeState.originalHomeSet = os.LookupEnv("HOME")
+	sharedACPActivationHomeState.originalUserProfile, sharedACPActivationHomeState.originalUserProfileSet = os.LookupEnv("USERPROFILE")
+	sharedACPActivationHomeState.originalDefaultProvider, sharedACPActivationHomeState.originalDefaultProviderSet = os.LookupEnv("YOU_DEFAULT_WORKER_MODEL_PROVIDER")
+	sharedACPActivationHomeState.originalDefaultModel, sharedACPActivationHomeState.originalDefaultModelSet = os.LookupEnv("YOU_DEFAULT_WORKER_MODEL")
 	code := m.Run()
 
 	if err := closeCatalogCohort(); err != nil {
@@ -627,6 +901,30 @@ func TestMain(m *testing.M) {
 			_, _ = fmt.Fprintf(os.Stderr, "controlled ACP cohort home cleanup: %v\n", err)
 			code = 1
 		}
+	}
+	if err := closeSharedACPActivationHome(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "shared ACP activation home cleanup: %v\n", err)
+		code = 1
+	}
+	if sharedACPActivationHomeState.originalHomeSet {
+		_ = os.Setenv("HOME", sharedACPActivationHomeState.originalHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	if sharedACPActivationHomeState.originalUserProfileSet {
+		_ = os.Setenv("USERPROFILE", sharedACPActivationHomeState.originalUserProfile)
+	} else {
+		_ = os.Unsetenv("USERPROFILE")
+	}
+	if sharedACPActivationHomeState.originalDefaultProviderSet {
+		_ = os.Setenv("YOU_DEFAULT_WORKER_MODEL_PROVIDER", sharedACPActivationHomeState.originalDefaultProvider)
+	} else {
+		_ = os.Unsetenv("YOU_DEFAULT_WORKER_MODEL_PROVIDER")
+	}
+	if sharedACPActivationHomeState.originalDefaultModelSet {
+		_ = os.Setenv("YOU_DEFAULT_WORKER_MODEL", sharedACPActivationHomeState.originalDefaultModel)
+	} else {
+		_ = os.Unsetenv("YOU_DEFAULT_WORKER_MODEL")
 	}
 	if err := chatCensus.assertClean(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %v\n", err)
@@ -652,7 +950,6 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 			workingDirectoryRoot := filepath.Join(home, "workdirs")
 			if err := os.MkdirAll(workingDirectoryRoot, 0o755); err != nil {
 				controlledCohortState.err = fmt.Errorf("create controlled ACP cohort workdirs: %w", err)
-				_ = os.RemoveAll(home)
 			} else {
 				runner := &controlledACPCommandRunner{}
 				seedInstalledPackagedFactory(t, home, controlledACPFactory)
@@ -672,7 +969,6 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 				})
 				if err != nil {
 					controlledCohortState.err = fmt.Errorf("build controlled ACP cohort process: %w", err)
-					_ = os.RemoveAll(home)
 				} else {
 					cohort.process = process
 					controlledCohortState.cohort = cohort
@@ -688,175 +984,4 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 	t.Setenv("HOME", cohort.home)
 	t.Setenv("USERPROFILE", cohort.home)
 	return cohort
-}
-
-// newControlledACPCohort builds one fixed-profile root for a scenario whose
-// real Factory activation remains retained by the on-demand ACP target. The
-// production runtime currently binds Factory Definitions under the fixed
-// ~default session scope and the public ACP close path cannot close a
-// terminalized session, so sharing that retained activation across scenarios
-// would make later tests fail with dependency_unavailable. This isolated
-// process is the smallest faithful boundary until the production activation
-// owner gains a supported release/reopen capability.
-func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
-	t.Helper()
-	home := chatMkdirTemp(t, "controlled ACP "+name, "", "you-chat-sessions-"+name+"-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	workingDirectoryRoot := filepath.Join(home, "workdirs")
-	if err := os.MkdirAll(workingDirectoryRoot, 0o755); err != nil {
-		_ = os.RemoveAll(home)
-		t.Fatalf("create controlled ACP %s workdirs: %v", name, err)
-	}
-
-	runner := &controlledACPCommandRunner{}
-	seedInstalledPackagedFactory(t, home, controlledACPFactory)
-	support.SeedACPAgentProfile(t, home, "factory:"+controlledACPFactory, []string{"factory:" + controlledACPFactory})
-
-	cohort := &controlledACPCohort{
-		home:                 home,
-		runner:               runner,
-		workingDirectoryRoot: workingDirectoryRoot,
-	}
-	process, err := buildChatProcess(t, "controlled ACP "+name, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		FactorySessionIDGenerator: func() string {
-			n := cohort.factorySessionIDCalls.Add(1)
-			return fmt.Sprintf("acp-%s-factory-session-%d", name, n)
-		},
-	})
-	if err != nil {
-		_ = os.RemoveAll(home)
-		t.Fatalf("build controlled ACP %s process: %v", name, err)
-	}
-	cohort.process = process
-	t.Cleanup(func() {
-		if err := closeChatProcess(cohort.process); err != nil {
-			t.Errorf("close controlled ACP %s process: %v", name, err)
-		}
-	})
-	return cohort
-}
-
-func controlledACPHome(t *testing.T) string {
-	t.Helper()
-	return controlledACPCohortForTest(t).home
-}
-
-func controlledACPWorkingDirectory(t *testing.T, name string) string {
-	t.Helper()
-	cohort := controlledACPCohortForTest(t)
-	return controlledACPWorkingDirectoryForCohort(t, cohort, name)
-}
-
-func controlledACPWorkingDirectoryForCohort(t *testing.T, cohort *controlledACPCohort, name string) string {
-	t.Helper()
-	return chatMkdirTemp(t, "controlled ACP "+name+" working directory", cohort.workingDirectoryRoot, name+"-")
-}
-
-func controlledACPServer(t *testing.T) support.ACPServer {
-	t.Helper()
-	cohort := controlledACPCohortForTest(t)
-	return controlledACPServerForCohort(t, cohort)
-}
-
-func controlledACPServerForCohort(t *testing.T, cohort *controlledACPCohort) support.ACPServer {
-	t.Helper()
-	server := cohort.process.ACPServer()
-	if server == nil {
-		t.Fatal("controlled ACP cohort Process.ACPServer() returned nil")
-	}
-	return server
-}
-
-// controlledACPCommandRunner routes from the provider request itself. The
-// request contains the current user turn, so the result does not depend on
-// which compatible scenario ran first or how many provider calls a previous
-// turn made. The busy route is armed only by its owning witness and can be
-// released by the witness without changing the process edge.
-type controlledACPCommandRunner struct {
-	mu              sync.Mutex
-	requests        []process.CommandRequest
-	busyStarted     chan struct{}
-	busyRelease     chan struct{}
-	busyActive      bool
-	busyStartedOnce sync.Once
-	busyReleaseOnce sync.Once
-}
-
-func (runner *controlledACPCommandRunner) Run(
-	ctx context.Context,
-	request process.CommandRequest,
-) (process.CommandResult, error) {
-	callID := beginChatCall("controlled ACP provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
-	runner.mu.Lock()
-	runner.requests = append(runner.requests, request)
-	busyStarted := runner.busyStarted
-	busyRelease := runner.busyRelease
-	busyActive := runner.busyActive
-	runner.mu.Unlock()
-
-	prompt := string(request.Stdin)
-	switch {
-	case strings.Contains(prompt, "[cohort-failure]"):
-		return controlledACPResult("not a decision envelope"), nil
-	case strings.Contains(prompt, "[cohort-busy-concurrent]"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"busy concurrent route"}`), nil
-	case strings.Contains(prompt, "[cohort-busy-later]"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"busy later route"}`), nil
-	case strings.Contains(prompt, "[cohort-busy]") && busyActive:
-		runner.busyStartedOnce.Do(func() { close(busyStarted) })
-		select {
-		case <-busyRelease:
-		case <-ctx.Done():
-			return process.CommandResult{}, ctx.Err()
-		}
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"busy first route"}`), nil
-	case strings.Contains(prompt, "pursue the third goal"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"third turn answer"}`), nil
-	case strings.Contains(prompt, "pursue the second goal"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"second turn answer"}`), nil
-	case strings.Contains(prompt, "pursue the first goal"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"first turn answer"}`), nil
-	case strings.Contains(prompt, "please pursue this goal"):
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"goal genuinely completed through you server acp"}`), nil
-	default:
-		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"goal reached over ACP"}`), nil
-	}
-}
-
-func (runner *controlledACPCommandRunner) requestCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return len(runner.requests)
-}
-
-func controlledACPResult(output string) process.CommandResult {
-	return process.CommandResult{Stdout: support.CodexSuccessStdout(output)}
-}
-
-func (runner *controlledACPCommandRunner) armBusy() (<-chan struct{}, func()) {
-	runner.mu.Lock()
-	runner.busyStarted = make(chan struct{})
-	runner.busyRelease = make(chan struct{})
-	runner.busyActive = true
-	runner.busyStartedOnce = sync.Once{}
-	runner.busyReleaseOnce = sync.Once{}
-	started := runner.busyStarted
-	release := runner.busyRelease
-	runner.mu.Unlock()
-
-	return started, func() {
-		runner.busyReleaseOnce.Do(func() {
-			close(release)
-			runner.mu.Lock()
-			runner.busyActive = false
-			runner.mu.Unlock()
-		})
-	}
 }

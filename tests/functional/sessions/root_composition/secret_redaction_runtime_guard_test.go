@@ -15,6 +15,9 @@ import (
 
 // TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary proves declared secrets are redacted before recording persistence.
 func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+
 	secret := "story003-declared-secret-9e5c2a7f"
 	control := "story003-visible-control"
 	dir := support.ScaffoldFactory(t, map[string]any{
@@ -88,9 +91,7 @@ func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing
 	})
 	replayInputs.Input.WorkingDirectory = dir
 	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, replayProcess)
-	if err := replayProcess.Execute(replayInputs.Input); err != nil {
+	if err := process.Execute(replayInputs.Input); err != nil {
 		t.Fatalf("replay persisted recording: %v\nstderr=%s", err, replayInputs.Stderr())
 	}
 }
@@ -160,15 +161,23 @@ func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
 	}
 }
 
-func TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
-	runRecordedTwoWorkstationLifecycle(t, false)
+func TestRecordedFactoryRedactsSecretStepsAcrossLifecycle(t *testing.T) {
+	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("story003-two-step-output"),
+	})
+	support.CleanupProcess(t, process)
+	t.Run("secret step", func(t *testing.T) {
+		runRecordedTwoWorkstationLifecycle(t, process, false)
+	})
+	t.Run("inline secret step", func(t *testing.T) {
+		runRecordedTwoWorkstationLifecycle(t, process, true)
+	})
 }
 
-func TestRecordedFactoryRedactsInlineSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
-	runRecordedTwoWorkstationLifecycle(t, true)
-}
-
-func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
+func runRecordedTwoWorkstationLifecycle(t *testing.T, process support.Process, inline bool) {
 	secret := "sk-fake-story003-lifecycle-secret-4c9e2a7f"
 	secretControl := "secret-step-visible-control"
 	plainControl := "plain-step-visible-control"
@@ -190,10 +199,6 @@ func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
 	})
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(output),
-	})
-	support.CleanupProcess(t, process)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recording two-workstation Factory run: %v\nstderr=%s", err, inputs.Stderr())
 	}
@@ -212,7 +217,7 @@ func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
 	}
 	assertRecordedTwoWorkstationArtifact(t, artifactPath, secretControl, plainControl, output)
 
-	replayFunctionalRecording(t, artifactPath, dir, homeDir)
+	replayFunctionalRecording(t, process, artifactPath, dir, homeDir)
 }
 
 func scaffoldRecordedTwoWorkstationFactory(t *testing.T, inline bool, secretControl, plainControl string) string {
@@ -284,16 +289,14 @@ func scaffoldRecordedTwoWorkstationFactory(t *testing.T, inline bool, secretCont
 	})
 }
 
-func replayFunctionalRecording(t *testing.T, artifactPath, dir, homeDir string) {
+func replayFunctionalRecording(t *testing.T, process support.Process, artifactPath, dir, homeDir string) {
 	t.Helper()
 	replayInputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--replay", artifactPath, "--no-record", "--quiet",
 	})
 	replayInputs.Input.WorkingDirectory = dir
 	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, replayProcess)
-	if err := replayProcess.Execute(replayInputs.Input); err != nil {
+	if err := process.Execute(replayInputs.Input); err != nil {
 		t.Fatalf("replay two-workstation recording: %v\nstderr=%s", err, replayInputs.Stderr())
 	}
 }

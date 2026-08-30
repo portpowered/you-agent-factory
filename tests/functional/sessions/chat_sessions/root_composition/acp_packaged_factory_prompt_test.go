@@ -13,7 +13,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -38,11 +37,10 @@ type packagedFactoryPromptCase struct {
 	wantProviderCalls int
 }
 
-// packagedFactoryCohort is a fixed-home/profile root for one packaged Factory
-// prompt cell. The target profile and catalog are written before construction
-// and never changed afterward. A prompt cell that activates a Factory remains
-// its own cohort until the production activation lifetime can be released;
-// catalog-only cells use the shared cohort in acp_server_composition_test.go.
+// packagedFactoryCohort owns one root process for a packaged Factory prompt
+// cell. Its immutable catalog/profile seed is shared with other activation
+// cells, while the command home and process remain private because a completed on-demand
+// activation is retained under that process's ~default scope.
 type packagedFactoryCohort struct {
 	home    string
 	process support.ApplicationProcess
@@ -54,12 +52,12 @@ func newPackagedFactoryCohort(
 	runner process.CommandRunner,
 ) *packagedFactoryCohort {
 	t.Helper()
-	home := chatTempDir(t, "packaged Factory "+factory, "packaged-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, factory)
-	support.SeedACPAgentProfile(t, home, target, []string{target})
-	buildProcess, err := buildChatProcess(t, "packaged Factory "+factory, serviceedges.Edges{
+	home := seedACPActivationCommandHomeForTest(
+		t,
+		"packaged Factory "+factory+" initialization home",
+		"you-chat-packaged-"+strings.NewReplacer("@", "", "/", "-").Replace(factory)+"-home-",
+	)
+	buildProcess, err := buildChatProcess(t, "packaged Factory "+factory+" target "+target, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {
@@ -182,14 +180,17 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			runner := newPackagedFactoryPromptRunner(testCase)
 			cohort := newPackagedFactoryCohort(t, testCase.factory, testCase.target, runner)
+			t.Parallel()
 
 			cwd := chatTempDir(t, "packaged Factory "+testCase.name+" working directory", "packaged-cwd-")
+			seedProjectPackagedFactory(t, cwd, testCase.factory)
 			stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 			sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 			if sessionID == "" {
 				t.Fatal("session/new returned a blank sessionId")
 			}
+			driveServeACPFactoryTarget(t, stdin, stdout, sessionID, testCase.target)
 
 			promptResp, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, testCase.prompt)
 			if promptResp.Error != nil {
@@ -290,6 +291,7 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 		"factory:@you/plan-parallel",
 		runner,
 	)
+	t.Parallel()
 
 	cwd := chatTempDir(t, "plan-parallel working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
@@ -298,6 +300,7 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@you/plan-parallel")
 
 	promptResp, notifications := driveServeACPSessionPrompt(
 		t, stdin, stdout, sessionID, "implement and verify the requested change",
@@ -374,10 +377,12 @@ func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
 		"factory:@you/factory-builder",
 		runner,
 	)
+	t.Parallel()
 	cwd := chatTempDir(t, "Factory Builder working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@you/factory-builder")
 	promptResp, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, "hi")
 	if promptResp.Error != nil {
 		t.Fatalf("session/prompt response error = %+v, want a successful result", promptResp.Error)
@@ -473,11 +478,9 @@ func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 	// own -- @you/spawn passes an empty executorProvider/modelProvider -- so
 	// the operator default is what selects their runner. An ACP client cannot
 	// pass `--provider`, which is how the CLI supplies one.
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
-
 	runner := &spawnACPRunner{}
 	cohort := newPackagedFactoryCohort(t, "@you/spawn", "factory:@you/spawn", runner)
+	t.Parallel()
 	cwd := chatTempDir(t, "spawn working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
@@ -485,6 +488,7 @@ func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@you/spawn")
 
 	promptResp, notifications := driveServeACPSessionPrompt(
 		t, stdin, stdout, sessionID, "research three independent angles on this question",
@@ -568,9 +572,6 @@ func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testin
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
-
 	runner := &deepResearchACPRunner{}
 	cohort := newPackagedFactoryCohort(
 		t,
@@ -578,6 +579,7 @@ func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testin
 		"factory:@you/deep-research",
 		runner,
 	)
+	t.Parallel()
 	cwd := chatTempDir(t, "deep-research working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
@@ -585,6 +587,7 @@ func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testin
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
+	driveServeACPFactoryTarget(t, stdin, stdout, sessionID, "factory:@you/deep-research")
 
 	promptResp, notifications := driveServeACPSessionPrompt(
 		t, stdin, stdout, sessionID, "research what this repository does and synthesize it",

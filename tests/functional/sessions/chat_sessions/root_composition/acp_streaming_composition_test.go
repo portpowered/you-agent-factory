@@ -107,6 +107,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 	}
 
 	cohort := newControlledACPCohort(t, "streaming-composition")
+	t.Parallel()
 
 	const wantPrimaryResultText = "goal genuinely completed through you server acp"
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "streaming-composition")
@@ -156,13 +157,11 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 }
 
 // startControlledServeACPHarness runs a fresh customer-facing ACP command
-// invocation on a scenario-scoped fixed-profile process. The invocation's
-// pipes and context are owned by the calling test; the process is closed by
-// that scenario's cleanup.
+// invocation on a scenario-scoped process and initialization home. The
+// invocation's pipes and context are owned by the calling test; the process is
+// closed by that scenario's cleanup.
 func startControlledServeACPHarness(t *testing.T, cohort *controlledACPCohort, cwd string) (*os.File, *bufio.Reader) {
 	t.Helper()
-	t.Setenv("HOME", cohort.home)
-	t.Setenv("USERPROFILE", cohort.home)
 	return startServeACPProcess(t, cohort.process, cohort.home, cwd)
 }
 
@@ -172,6 +171,7 @@ func startServeACPProcess(
 	home, cwd string,
 ) (*os.File, *bufio.Reader) {
 	t.Helper()
+	lease := beginChatACPHomeEnvironment(t, home)
 
 	stdinReadFile, stdinWriteFile, err := os.Pipe()
 	if err != nil {
@@ -179,6 +179,8 @@ func startServeACPProcess(
 	}
 	stdinRead := newChatPipeEndpoint(stdinReadFile, "ACP stdin reader")
 	stdinWrite := newChatPipeEndpoint(stdinWriteFile, "ACP stdin writer")
+	chatACPHomeLeases.Store(stdinWrite.file, lease)
+	t.Cleanup(func() { chatACPHomeLeases.Delete(stdinWrite.file) })
 	stdoutReadFile, stdoutWriteFile, err := os.Pipe()
 	if err != nil {
 		_ = stdinRead.Close()
@@ -335,6 +337,36 @@ func driveServeACPSessionNew(t *testing.T, stdin *os.File, stdout *bufio.Reader,
 	return string(created.SessionId)
 }
 
+// driveServeACPFactoryTarget selects a target from the shared immutable
+// profile's catalog before the session's first prompt. The target change is
+// Chat Session state, not home/profile mutation, so each activation-owning
+// process can reuse the same catalog while retaining its own runtime.
+func driveServeACPFactoryTarget(
+	t *testing.T,
+	stdin *os.File,
+	stdout *bufio.Reader,
+	sessionID, target string,
+) {
+	t.Helper()
+
+	params, err := json.Marshal(map[string]string{
+		"sessionId": sessionID,
+		"configId":  "target",
+		"value":     target,
+	})
+	if err != nil {
+		t.Fatalf("marshal session/set_config_option params: %v", err)
+	}
+	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":"session/set_config_option","params":%s}`, params) + "\n"
+	if _, err := stdin.Write([]byte(line)); err != nil {
+		t.Fatalf("write session/set_config_option request: %v", err)
+	}
+	response := readServeACPResponse(t, stdout, "3")
+	if response.Error != nil {
+		t.Fatalf("session/set_config_option response error = %+v, want a successful target selection", response.Error)
+	}
+}
+
 // driveServeACPSessionPrompt writes one "session/prompt" request to stdin and
 // reads stdout lines until the matching response, returning that response
 // alongside every "session/update" notification observed strictly before it
@@ -342,6 +374,7 @@ func driveServeACPSessionNew(t *testing.T, stdin *os.File, stdout *bufio.Reader,
 // updates, then the terminal prompt result).
 func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID, text string) (serveACPLine, []acpsdk.SessionNotification) {
 	t.Helper()
+	defer releaseChatACPHomeForInput(stdin)
 
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,

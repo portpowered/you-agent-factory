@@ -18,6 +18,9 @@ import (
 // identity readable through the public API session surface and terminal work outcome
 // facts readable through the public API work read surface on the same Factory host.
 func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	dir := scaffoldInvocationFactory(t, nil)
 	providerRunner := support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult)
 
@@ -110,6 +113,9 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 // agree with the CLI-compatible InvocationResponse fields customers compare
 // across surfaces for the same minimal invocation fixture.
 func TestAPIInvocationResultMatchesCLICompatibleFacts(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	dir := scaffoldInvocationFactory(t, nil)
 	providerRunner := support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult)
 

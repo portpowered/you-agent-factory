@@ -36,6 +36,7 @@ const (
 // and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	fixture := newRootProcessReuseFixture(t)
 	assertRootProcessBuildIsInert(t, fixture)
@@ -46,11 +47,13 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	second := runRootProcessCLIInvocation(t, fixture, 1, "run the failing session")
 	assertRootProcessFailure(t, second)
 	assertRootProcessReuse(t, fixture, first.session, second.session)
+	t.Run("direct JavaScript transport start failure", func(t *testing.T) {
+		assertRootProcessReportsDirectJavaScriptTransportStartFailure(t, fixture)
+	})
 }
 
-func TestRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T) {
-	t.Parallel()
-
+func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T, fixture *rootProcessReuseFixture) {
+	t.Helper()
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
@@ -58,17 +61,11 @@ func TestRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T) {
 	}
 
 	const failureText = "injected direct JavaScript host failure"
-	var starterCalls atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			starterCalls.Add(1)
-			return errors.New(failureText)
-		},
-	})
-	support.CleanupProcess(t, process)
+	startsBefore := fixture.router.starts.Load()
+	fixture.router.setFailure(errors.New(failureText))
 
 	var stdout, stderr bytes.Buffer
-	err := process.Execute(root.Input{
+	err := fixture.process.Execute(root.Input{
 		Args: []string{
 			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
 		},
@@ -82,8 +79,8 @@ func TestRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), failureText) {
 		t.Fatalf("Process.Execute(direct JavaScript host failure) error = %v, want injected failure; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}
-	if starterCalls.Load() != 1 {
-		t.Fatalf("injected API server starter calls = %d, want exactly one", starterCalls.Load())
+	if got := fixture.router.starts.Load() - startsBefore; got != 1 {
+		t.Fatalf("injected API server starter calls = %d, want exactly one", got)
 	}
 	if strings.Contains(stdout.String(), "completed (SUCCEEDED)") {
 		t.Fatalf("direct JavaScript failure stdout = %q, want no success result", stdout.String())
@@ -324,12 +321,21 @@ var _ platformprocess.CommandRunner = (*gatedRootProviderCommandRunner)(nil)
 type reusableRootAPIServerStarter struct {
 	mu      sync.Mutex
 	current *support.ProcessAPIServer
+	failure error
 	starts  atomic.Int32
 }
 
 func (s *reusableRootAPIServerStarter) setCurrent(server *support.ProcessAPIServer) {
 	s.mu.Lock()
 	s.current = server
+	s.failure = nil
+	s.mu.Unlock()
+}
+
+func (s *reusableRootAPIServerStarter) setFailure(err error) {
+	s.mu.Lock()
+	s.current = nil
+	s.failure = err
 	s.mu.Unlock()
 }
 
@@ -338,8 +344,12 @@ func (s *reusableRootAPIServerStarter) start(
 	request platformhttpserver.StartRequest,
 ) error {
 	s.mu.Lock()
-	server := s.current
+	server, failure := s.current, s.failure
 	s.mu.Unlock()
+	if failure != nil {
+		s.starts.Add(1)
+		return failure
+	}
 	if server == nil {
 		return fmt.Errorf("reusable root API server is not selected")
 	}
