@@ -60,6 +60,14 @@ type SessionInvocationTelemetry interface {
 	LogInvocationFailed(string, SessionInvocationWaitInput, FactoryInvocationResult, string)
 }
 
+// SessionInvocationWaiter blocks until the next result observation attempt is
+// warranted. ReleaseSessionInvocationWaiter frees any resources the waiter
+// holds once its invocation wait loop ends.
+type (
+	SessionInvocationWaiter        = func(context.Context) error
+	ReleaseSessionInvocationWaiter = func()
+)
+
 // SessionOwner coordinates the complete session invocation lifecycle through
 // narrow, explicit collaborators.
 type SessionOwner struct {
@@ -67,6 +75,7 @@ type SessionOwner struct {
 	submitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
 	observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	waitNextFn    func(context.Context) error
+	waitSessionFn func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
 	telemetry     SessionInvocationTelemetry
 	specialCase   SessionInvocationSpecialCase
 	interpolation factorydefinitions.InvocationInterpolationService
@@ -76,11 +85,14 @@ type SessionOwner struct {
 }
 
 // NewSessionOwner constructs the canonical Factory Session invocation owner.
+// waitSession, when present, opens one event-driven waiter per invocation wait
+// loop; waitNext remains the per-iteration fallback wait.
 func NewSessionOwner(
 	factoryConfig func(string) (*factorydefinitions.FactoryConfig, error),
 	submitWork func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error),
 	observe func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error),
 	waitNext func(context.Context) error,
+	waitSession func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter),
 	telemetry SessionInvocationTelemetry,
 	specialCase SessionInvocationSpecialCase,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -90,7 +102,8 @@ func NewSessionOwner(
 ) *SessionOwner {
 	return &SessionOwner{
 		factoryConfig: factoryConfig, submitWork: submitWork, observe: observe,
-		waitNextFn: waitNext, telemetry: telemetry, specialCase: specialCase,
+		waitNextFn: waitNext, waitSessionFn: waitSession,
+		telemetry: telemetry, specialCase: specialCase,
 		interpolation: interpolation, workTypes: workTypes, inputFiles: inputFiles,
 		workService: workService,
 	}

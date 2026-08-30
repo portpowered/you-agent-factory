@@ -14,6 +14,7 @@ type sessionOwnerFixture struct {
 	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
 	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
+	WaitSession   func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
 	Telemetry     SessionInvocationTelemetry
 	SpecialCase   SessionInvocationSpecialCase
 	Interpolation interfaces.InvocationInterpolationService
@@ -44,6 +45,7 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 		fixture.SubmitWork,
 		fixture.Observe,
 		fixture.WaitNext,
+		fixture.WaitSession,
 		fixture.Telemetry,
 		fixture.SpecialCase,
 		interpolation,

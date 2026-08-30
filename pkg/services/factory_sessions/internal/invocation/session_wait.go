@@ -47,6 +47,8 @@ func (o *SessionOwner) waitForResult(
 ) (FactoryInvocationResult, error) {
 	waitCtx, cancel := invocationWaitContext(ctx, input.TimeoutMillis)
 	defer cancel()
+	waitNext, releaseWaiter := o.acquireInvocationWaiter(waitCtx, sessionID)
+	defer releaseWaiter()
 
 	packaged := o.specialCase != nil && o.specialCase.Active(input.FactoryConfig)
 	loggedActive := false
@@ -76,7 +78,7 @@ func (o *SessionOwner) waitForResult(
 			}
 			return result, err
 		}
-		if err := o.waitNext(waitCtx); err != nil {
+		if err := waitNext(waitCtx); err != nil {
 			return o.waitErrorResult(sessionID, input, err)
 		}
 	}
@@ -284,6 +286,25 @@ func (o *SessionOwner) recordFailure(
 		o.telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
 		o.telemetry.LogInvocationFailed(sessionID, input, result, failureClass)
 	}
+}
+
+// acquireInvocationWaiter opens the wait mechanism for one invocation wait
+// loop. An event-driven session waiter takes precedence when its opener is
+// wired and yields a waiter; otherwise the per-iteration fallback wait applies
+// unchanged. The returned release always frees waiter resources exactly once.
+func (o *SessionOwner) acquireInvocationWaiter(
+	ctx context.Context,
+	sessionID string,
+) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter) {
+	if o.waitSessionFn != nil {
+		if waiter, release := o.waitSessionFn(ctx, sessionID); waiter != nil {
+			if release == nil {
+				release = func() {}
+			}
+			return waiter, release
+		}
+	}
+	return o.waitNext, func() {}
 }
 
 func (o *SessionOwner) waitNext(ctx context.Context) error {
