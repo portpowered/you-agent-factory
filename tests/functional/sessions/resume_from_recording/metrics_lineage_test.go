@@ -1,20 +1,20 @@
 package resume_from_recording_test
 
 import (
-	"context"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -41,13 +41,13 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	sourceRecording := filepath.Join(home, "source.recording.jsonl")
 	successorRecording := filepath.Join(home, "successor.recording.jsonl")
-	sourceRunner := newMetricsLineageCommandRunner()
+	sourceProvider := newMetricsLineageProvider()
 	source := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
 		Args:                      []string{"--record", sourceRecording},
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: sourceRunner},
+		Edges:                     serviceedges.Edges{ProviderOverride: sourceProvider},
 	})
 
 	submitted := support.SubmitDefaultSessionWork(t, source.URL(), factoryapi.SubmitWorkRequest{
@@ -58,8 +58,6 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 	if submitted.Accepted != true || submitted.WorkId == nil || *submitted.WorkId == "" {
 		t.Fatalf("source Work submission = %#v, want one accepted Work identity", submitted)
 	}
-	sourceRunner.waitForStart(t)
-	sourceRunner.releaseProvider(t)
 	support.WaitForSessionTerminalStatus(t, source.URL(), factorysessions.DefaultSessionID, 15*time.Second)
 
 	sourceSession := support.GetDefaultSession(t, source.URL())
@@ -72,8 +70,8 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 	defaultSnapshot := queryMetricsLineageSnapshot(t, source.URL(), factorysessions.DefaultSessionID)
 	assertMetricsLineageSnapshot(t, defaultSnapshot, factorysessions.DefaultSessionID, sourceSession.Id)
 	assertMetricsLineageFactsEqual(t, "live ~default", sourceSnapshot, defaultSnapshot)
-	if got := sourceRunner.CallCount(); got != 1 {
-		t.Fatalf("source provider command calls = %d, want exactly one", got)
+	if got := sourceProvider.CallCount(); got != 1 {
+		t.Fatalf("source provider calls = %d, want exactly one", got)
 	}
 
 	source.Close(t)
@@ -81,13 +79,13 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 		t.Fatalf("source recording after close: %v", err)
 	}
 
-	successorRunner := testutil.NewProviderCommandRunner()
+	successorProvider := testutil.NewNativeMockProvider()
 	successor := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
 		Args:                      []string{"--resume", sourceRecording, "--record", successorRecording},
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: successorRunner},
+		Edges:                     serviceedges.Edges{ProviderOverride: successorProvider},
 	})
 	support.WaitForSessionTerminalStatus(t, successor.URL(), factorysessions.DefaultSessionID, 15*time.Second)
 
@@ -108,9 +106,24 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 	assertMetricsLineageFactsEqual(t, "resumed successor", sourceSnapshot, successorSnapshot)
 	repeatedSuccessorSnapshot := queryMetricsLineageSnapshot(t, successor.URL(), successorSession.Id)
 	assertMetricsLineageFactsEqual(t, "repeated successor", successorSnapshot, repeatedSuccessorSnapshot)
-	if got := successorRunner.CallCount(); got != 0 {
-		t.Fatalf("successor provider command calls = %d, want zero redispatches", got)
+	if got := successorProvider.CallCount(); got != 0 {
+		t.Fatalf("successor provider calls = %d, want zero redispatches", got)
 	}
+}
+
+func newMetricsLineageProvider() *testutil.NativeMockProvider {
+	return testutil.NewNativeMockProvider(providers.ExecuteResult{
+		Content: "single dispatch COMPLETE",
+		Diagnostics: &providers.ExecuteDiagnostics{
+			DurationMillis: 1,
+			Metadata: map[string]string{
+				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+				workerexecution.ProviderResponseMetadataDurationMS:         "1",
+				workerexecution.ProviderResponseMetadataInputTokens:        strconv.FormatInt(metricsLineageInputTokens, 10),
+				workerexecution.ProviderResponseMetadataOutputTokens:       strconv.FormatInt(metricsLineageOutputTokens, 10),
+			},
+		},
+	})
 }
 
 type metricsLineageSnapshot struct {
@@ -211,60 +224,3 @@ func assertMetricsLineageFactsEqual(
 		t.Fatalf("%s lineage facts differ:\nleft metrics=%#v\nright metrics=%#v\nleft costs=%#v\nright costs=%#v", phase, left.metrics, right.metrics, left.costs, right.costs)
 	}
 }
-
-type metricsLineageCommandRunner struct {
-	delegate    *testutil.ProviderCommandRunner
-	started     chan struct{}
-	release     chan struct{}
-	startOnce   sync.Once
-	releaseOnce sync.Once
-}
-
-func newMetricsLineageCommandRunner() *metricsLineageCommandRunner {
-	return &metricsLineageCommandRunner{
-		delegate: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stdout: support.CodexSuccessStdoutWithUsage(
-				"single dispatch COMPLETE",
-				metricsLineageInputTokens,
-				metricsLineageOutputTokens,
-			),
-		}),
-		started: make(chan struct{}),
-		release: make(chan struct{}),
-	}
-}
-
-func (runner *metricsLineageCommandRunner) Run(
-	ctx context.Context,
-	request platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	runner.startOnce.Do(func() { close(runner.started) })
-	select {
-	case <-runner.release:
-	case <-ctx.Done():
-		return platformprocess.CommandResult{}, ctx.Err()
-	}
-	return runner.delegate.Run(ctx, request)
-}
-
-func (runner *metricsLineageCommandRunner) waitForStart(t testing.TB) {
-	t.Helper()
-	timer := time.NewTimer(15 * time.Second)
-	defer timer.Stop()
-	select {
-	case <-runner.started:
-	case <-timer.C:
-		t.Fatal("source provider command did not start")
-	}
-}
-
-func (runner *metricsLineageCommandRunner) releaseProvider(t testing.TB) {
-	t.Helper()
-	runner.releaseOnce.Do(func() { close(runner.release) })
-}
-
-func (runner *metricsLineageCommandRunner) CallCount() int {
-	return runner.delegate.CallCount()
-}
-
-var _ platformprocess.CommandRunner = (*metricsLineageCommandRunner)(nil)
