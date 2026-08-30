@@ -305,6 +305,13 @@ func (s *Service) Register(registration Registration) string {
 		return ""
 	}
 	isDefault := registration.Default || logicaltarget.IsLiveSessionDefaultSelector(sessionID)
+	var retainedMetricsSessionIDs []string
+	if existing := s.Resolve(sessionID); existing != nil {
+		retainedMetricsSessionIDs = append(
+			retainedMetricsSessionIDs,
+			existing.RetainedRuntimeMetricsSessionIDs...,
+		)
+	}
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID
@@ -325,6 +332,7 @@ func (s *Service) Register(registration Registration) string {
 	if session == nil {
 		return ""
 	}
+	session.RetainedRuntimeMetricsSessionIDs = retainedMetricsSessionIDs
 	session.Runtime = registration.Runtime
 	s.bindResponseEventCompletion(session, registration.AddEventTypeRecorder)
 	s.registry.Upsert(session, registration.Select)

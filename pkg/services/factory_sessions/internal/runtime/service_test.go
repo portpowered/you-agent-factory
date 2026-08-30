@@ -108,6 +108,7 @@ func TestServiceRegisterDefaultPreservesCanonicalRuntimeID(t *testing.T) {
 	if existing == nil {
 		t.Fatal("construct existing default session")
 	}
+	existing.RetainedRuntimeMetricsSessionIDs = []string{canonicalID, "source-runtime-id"}
 	registry.Upsert(existing, true)
 
 	gotID := service.Register(sessionruntime.Registration{
@@ -128,6 +129,11 @@ func TestServiceRegisterDefaultPreservesCanonicalRuntimeID(t *testing.T) {
 	}
 	if service.Resolve(canonicalID) != got || got.ResponseEvents == nil || got.ResponseEvents.FactorySessionID() != canonicalID {
 		t.Fatalf("replacement canonical session resolution/events = (%v, %q), want canonical session", service.Resolve(canonicalID) == got, responseEventSessionID(got))
+	}
+	if len(got.RetainedRuntimeMetricsSessionIDs) != 2 ||
+		got.RetainedRuntimeMetricsSessionIDs[0] != canonicalID ||
+		got.RetainedRuntimeMetricsSessionIDs[1] != "source-runtime-id" {
+		t.Fatalf("replacement retained metrics IDs = %#v, want successor and source lineage", got.RetainedRuntimeMetricsSessionIDs)
 	}
 }
 
