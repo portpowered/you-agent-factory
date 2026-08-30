@@ -7,9 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -25,17 +22,39 @@ return { ok: true };`
 	stablePolicyDeniedModelDiagnostic = `policy denied: model "gpt-denied" is not listed in allowedModels`
 )
 
-// TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic proves a
+// TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic preserves
+// the original behavior selector while sharing the package-owned process.
+func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.T) {
+	fixture := policyFixtureForTest(t)
+	before := fixture.trackedSessionCount()
+	runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t, fixture)
+	if got := fixture.trackedSessionCount() - before; got != 2 {
+		t.Fatalf("stable-denial Factory Sessions = %d, want two fresh sessions", got)
+	}
+}
+
+// TestJavaScriptPolicyFailureDoesNotDispatchExternalWork preserves the
+// original behavior selector while sharing the package-owned process.
+func TestJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
+	fixture := policyFixtureForTest(t)
+	before := fixture.trackedSessionCount()
+	runJavaScriptPolicyFailureDoesNotDispatchExternalWork(t, fixture)
+	if got := fixture.trackedSessionCount() - before; got != 1 {
+		t.Fatalf("no-dispatch Factory Sessions = %d, want one fresh session", got)
+	}
+}
+
+// runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic proves a
 // JavaScript Factory whose child request violates effective policy fails through
 // the public invocation boundary with a stable customer-readable policy denial
 // diagnostic after a root-built process run with external effects substituted
 // only through edges.Edges.
-func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.T) {
-	t.Parallel()
-
-	dir := scaffoldPolicyDeniedJavaScriptFactory(t)
-	first := runPolicyDeniedJavaScriptInvocation(t, dir)
-	second := runPolicyDeniedJavaScriptInvocation(t, dir)
+func runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(
+	t *testing.T,
+	fixture *policyFixture,
+) {
+	first := runPolicyDeniedJavaScriptInvocation(t, fixture, scaffoldPolicyDeniedJavaScriptFactory(t))
+	second := runPolicyDeniedJavaScriptInvocation(t, fixture, scaffoldPolicyDeniedJavaScriptFactory(t))
 
 	assertPolicyDeniedInvocationOutcome(t, first.outcome)
 	assertPolicyDeniedInvocationOutcome(t, second.outcome)
@@ -48,35 +67,27 @@ func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.
 	}
 }
 
-// TestJavaScriptPolicyFailureDoesNotDispatchExternalWork proves a denied child
+// runJavaScriptPolicyFailureDoesNotDispatchExternalWork proves a denied child
 // operation fails through the public invocation boundary before any external
 // worker or provider work is dispatched when external effects are substituted
 // only through edges.Edges.
-func TestJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
-	t.Parallel()
-
-	dir := scaffoldPolicyDeniedJavaScriptFactory(t)
-	run := runPolicyDeniedJavaScriptInvocation(t, dir)
+func runJavaScriptPolicyFailureDoesNotDispatchExternalWork(
+	t *testing.T,
+	fixture *policyFixture,
+) {
+	run := runPolicyDeniedJavaScriptInvocation(t, fixture, scaffoldPolicyDeniedJavaScriptFactory(t))
 
 	assertPolicyDeniedInvocationOutcome(t, run.outcome)
-	if run.providerRunner.CallCount() != 0 {
+	if fixture.providerRunner.CallCount() != 0 {
 		t.Fatalf(
 			"provider command runner call count = %d, want 0 before policy-denied child dispatch",
-			run.providerRunner.CallCount(),
-		)
-	}
-	if run.workerProvider.CallCount() != 0 {
-		t.Fatalf(
-			"worker provider inference call count = %d, want 0 before policy-denied child dispatch",
-			run.workerProvider.CallCount(),
+			fixture.providerRunner.CallCount(),
 		)
 	}
 }
 
 type policyDeniedInvocationRun struct {
-	providerRunner *support.RecordingCommandRunner
-	workerProvider *testutil.MockProvider
-	outcome        policyDeniedInvocationOutcome
+	outcome policyDeniedInvocationOutcome
 }
 
 type policyDeniedInvocationOutcome struct {
@@ -117,34 +128,27 @@ func scaffoldPolicyDeniedJavaScriptFactory(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(policyDeniedModelWorkflow), 0o600); err != nil {
 		t.Fatalf("write JavaScript workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "mock-workers.json"), []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
-func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedInvocationRun {
+func runPolicyDeniedJavaScriptInvocation(
+	t *testing.T,
+	fixture *policyFixture,
+	dir string,
+) policyDeniedInvocationRun {
 	t.Helper()
 
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	workerProvider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: `{"text":"should not run"}`},
-	)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
 		"--no-record",
-		"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
 		"hello",
 	})
 	inputs.Input.WorkingDirectory = dir
 	home := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = policyCustomerEnvironment(home)
 
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		ProviderOverride:      workerProvider,
-	}).Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf("Process.Execute() error = nil; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 	}
@@ -160,10 +164,9 @@ func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedI
 			t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", decodeErr, stderr)
 		}
 	}
+	fixture.trackInvocationSession(t, runOutcome.response, dir, home)
 	return policyDeniedInvocationRun{
-		providerRunner: runner,
-		workerProvider: workerProvider,
-		outcome:        runOutcome,
+		outcome: runOutcome,
 	}
 }
 

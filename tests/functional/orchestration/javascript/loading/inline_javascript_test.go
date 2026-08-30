@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -75,12 +74,10 @@ var privateJavaScriptVMDiagnosticMarkers = []string{
 
 // TestInlineJavaScriptFactoryRunsFromCLI proves an inline JavaScript Factory
 // definition completes through the public you run customer process boundary
-// with mock workers, a terminal COMPLETED primary outcome that returns the
+// with the injected provider command edge, a terminal COMPLETED primary outcome that returns the
 // authored primary result, and without private VM internals in success
 // diagnostics.
-func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
-	t.Parallel()
-
+func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture) {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "inline-javascript-loading",
 		"invocationSignature": map[string]any{
@@ -104,34 +101,17 @@ func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 			},
 		},
 	})
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}, dir, t.TempDir())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for inline factory without child dispatch", got, providerCalls)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for inline factory without child dispatch", runner.CallCount())
-	}
-
-	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertInlineJavaScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -140,39 +120,20 @@ func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 // JavaScript Factory with sequential agent.run child dispatches completes
 // through the public you run customer process boundary with ordered stage
 // evidence, stage-two dependency on stage-one output, and a terminal COMPLETED
-// primary outcome without live provider execution.
-func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
-	t.Parallel()
-
+// primary outcome with deterministic provider-command edge responses.
+func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldOrderedInlineJavaScriptPipelineFactory(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}, dir, t.TempDir())
+	if got := fixture.provider.CallCount(); got != providerCalls+2 {
+		t.Fatalf("provider command runner call count = %d, want %d for two ordered child dispatches", got, providerCalls+2)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for mock-worker child execution", runner.CallCount())
-	}
-
-	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertOrderedInlineJavaScriptPipelineOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -182,9 +143,7 @@ func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
 // through the public you run customer process boundary with an actionable
 // authored source location and without private VM internals or external
 // worker dispatch.
-func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
-	t.Parallel()
-
+func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *loadingFixture) {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "inline-javascript-syntax-error",
 		"invocationSignature": map[string]any{
@@ -208,24 +167,14 @@ func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
 			},
 		},
 	})
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input)
+	}, dir, t.TempDir())
 	assertInlineJavaScriptSyntaxFailureOutcome(
 		t,
 		err,
@@ -233,10 +182,11 @@ func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
 		inputs.Stderr(),
 		inlineJavaScriptSyntaxErrorLine,
 	)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for syntax error before dispatch", runner.CallCount())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for syntax error before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	fixture.recoverAfterLoadFailure(t, "inline-syntax")
 }
 
 func scaffoldOrderedInlineJavaScriptPipelineFactory(t *testing.T) string {
@@ -266,16 +216,6 @@ func scaffoldOrderedInlineJavaScriptPipelineFactory(t *testing.T) string {
 		t.Fatalf("write ordered pipeline workflow: %v", err)
 	}
 	return dir
-}
-
-func writeEmptyMockWorkersConfig(t *testing.T, dir string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, "mock-workers.json")
-	if err := os.WriteFile(path, []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
-	return path
 }
 
 func decodeSingleInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

@@ -4,16 +4,14 @@ package loading_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -25,49 +23,44 @@ const (
 	namedJavaScriptSessionControlWait = 10 * time.Second
 )
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
+	fixture := loadingFixtureForTest(t)
+	// The Go test runner reuses one TestMain process for -count repetitions.
+	// This is the final selector in the package's normal registration order;
+	// release the hosted compatibility runtime after its session cleanups so
+	// the next repetition can build its own one-process fixture.
+	t.Cleanup(func() {
+		if err := fixture.shutdown(); err != nil {
+			t.Errorf("reset loading fixture after repeated run: %v", err)
+		}
+		loadingFixtureMu.Lock()
+		if sharedLoadingFixture == fixture {
+			sharedLoadingFixture = nil
+		}
+		loadingFixtureMu.Unlock()
+	})
+	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
+}
+
 // TestNamedJavaScriptFactoryRunsThroughStandardCLI proves a named JavaScript
 // Factory resolves by name and completes through the public you run customer
 // process boundary with a terminal COMPLETED primary outcome tied to the named
 // Factory identity and without private VM internals in success diagnostics.
-func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
-	t.Parallel()
-
-	homeDir := t.TempDir()
-	sourceDir := scaffoldNamedInlineJavaScriptFactorySource(t)
-	support.CreateNamedFactory(
-		t,
-		homeDir,
-		sourceDir,
-		namedJavaScriptFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, sourceDir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+func runNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T, fixture *loadingFixture) {
+	factoryName := fixture.namedCLI.name
+	namedFactoryDir := fixture.namedCLI.factoryDir
+	providerCalls := fixture.provider.CallCount()
+	result, inputs := fixture.runCLIInvocationAtRoot(t, []string{
 		"you", "--json", "run",
-		"--named", namedJavaScriptFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--named", factoryName,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}, t.TempDir(), fixture.homeDir, namedFactoryDir)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", runner.CallCount())
-	}
-
-	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertNamedJavaScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -76,39 +69,17 @@ func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
 // JavaScript Factory completes through the public HTTP sync execution customer
 // entry path with a terminal COMPLETED primary outcome consistent with the CLI
 // named-factory success path and without private VM internals in success diagnostics.
-func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
-	t.Parallel()
-
-	homeDir := t.TempDir()
-	sourceDir := scaffoldNamedInlineJavaScriptFactorySource(t)
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	namedFactoryDir := support.CreateNamedFactory(
-		t,
-		homeDir,
-		sourceDir,
-		namedJavaScriptFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                namedFactoryDir,
-		WorkingDirectory:          t.TempDir(),
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			FactoryRuntimeWorkflowHome: func() (string, error) {
-				return homeDir, nil
-			},
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	result := invokeNamedJavaScriptFactoryOverHTTP(t, server.URL(), "hello")
-	assertNamedJavaScriptSessionSuccessOutcome(t, result)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", runner.CallCount())
+func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *loadingFixture) {
+	fixture.startAPIServer(t)
+	factoryName := fixture.namedAPI.name
+	namedFactoryDir := fixture.namedAPI.factoryDir
+	requestID := fixture.nextRequestID("named-api")
+	providerCalls := fixture.provider.CallCount()
+	result := invokeNamedJavaScriptFactoryOverHTTP(t, fixture.baseURL, factoryName, "hello", requestID)
+	fixture.trackSession(t, result.SessionId, requestID, namedFactoryDir, fixture.homeDir, "api")
+	assertNamedJavaScriptSessionSuccessOutcome(t, result, factoryName)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
 	}
 
 	responseJSON, err := json.Marshal(result)
@@ -122,49 +93,19 @@ func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 // Factory Session lifecycle controls apply to a named JavaScript Factory session
 // started through the public HTTP customer boundary and remain observable on the
 // public session surface for that named Factory identity through HTTP and CLI.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
-	t.Parallel()
-
-	homeDir := t.TempDir()
-	sourceDir := scaffoldNamedBusyLoopJavaScriptFactorySource(t)
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	namedFactoryDir := support.CreateNamedFactory(
-		t,
-		homeDir,
-		sourceDir,
-		namedJavaScriptFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                namedFactoryDir,
-		WorkingDirectory:          t.TempDir(),
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			FactoryRuntimeWorkflowHome: func() (string, error) {
-				return homeDir, nil
-			},
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := strings.TrimSuffix(server.URL(), "/")
-	sessionID := startNamedJavaScriptFactoryAsyncSession(t, baseURL)
-	waitForNamedJavaScriptDurableSessionStatus(
-		t,
-		baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
-	)
+func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixture *loadingFixture) {
+	fixture.startAPIServer(t)
+	providerCalls := fixture.provider.CallCount()
+	factoryName := fixture.namedControl.name
+	namedFactoryDir := fixture.namedControl.factoryDir
+	requestID := fixture.nextRequestID("named-controls")
+	sessionID := startNamedJavaScriptFactoryAsyncSession(t, fixture.baseURL, factoryName, requestID)
+	fixture.trackSession(t, sessionID, requestID, namedFactoryDir, fixture.homeDir, "api")
+	waitForNamedJavaScriptSessionStarted(t, fixture.baseURL, sessionID)
 
 	pause := applyNamedJavaScriptSessionLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		sessionID,
 		factoryapi.FactorySessionLifecycleControlKindPause,
 	)
@@ -174,13 +115,14 @@ func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 	}
 	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		readNamedJavaScriptDurableSession(t, baseURL, sessionID),
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		factoryName,
 	)
 
 	resume := applyNamedJavaScriptSessionLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		sessionID,
 		factoryapi.FactorySessionLifecycleControlKindResume,
 	)
@@ -188,59 +130,45 @@ func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("HTTP resume response = %#v, want accepted resume", resume)
 	}
-	waitForNamedJavaScriptDurableSessionStatus(
+	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		baseURL,
-		sessionID,
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
+		factoryName,
 	)
 
-	cliPause := runNamedJavaScriptSessionLifecycleCLIJSON(
-		t,
-		homeDir,
-		baseURL,
-		namedFactoryDir,
-		"pause",
-		sessionID,
-	)
+	cliPause := runNamedJavaScriptSessionLifecycleCLIJSON(t, fixture, t.TempDir(), "pause", sessionID)
 	if cliPause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
 		cliPause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("CLI pause response = %#v, want accepted pause", cliPause)
 	}
 	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		readNamedJavaScriptDurableSession(t, baseURL, sessionID),
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		factoryName,
 	)
 
-	cliResume := runNamedJavaScriptSessionLifecycleCLIJSON(
-		t,
-		homeDir,
-		baseURL,
-		namedFactoryDir,
-		"resume",
-		sessionID,
-	)
+	cliResume := runNamedJavaScriptSessionLifecycleCLIJSON(t, fixture, t.TempDir(), "resume", sessionID)
 	if cliResume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
 		cliResume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("CLI resume response = %#v, want accepted resume", cliResume)
 	}
-	waitForNamedJavaScriptDurableSessionStatus(
+	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		baseURL,
-		sessionID,
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
+		factoryName,
 	)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", runner.CallCount())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named busy-loop factory without child dispatch", got, providerCalls)
 	}
 }
 
 func assertNamedJavaScriptSessionSuccessOutcome(
 	t *testing.T,
 	response factoryapi.FactorySessionSyncExecutionResponse,
+	factoryName string,
 ) {
 	t.Helper()
 
@@ -264,20 +192,20 @@ func assertNamedJavaScriptSessionSuccessOutcome(
 		t.Fatalf("primary result = %q, want exact named-factory string %q", part.Text, namedJavaScriptSuccessResult)
 	}
 	if response.ResolvedSource.SourceRef == nil ||
-		!strings.Contains(*response.ResolvedSource.SourceRef, namedJavaScriptFactoryName) {
+		!strings.Contains(*response.ResolvedSource.SourceRef, factoryName) {
 		t.Fatalf(
 			"resolved source ref = %#v, want named factory reference containing %q",
 			response.ResolvedSource.SourceRef,
-			namedJavaScriptFactoryName,
+			factoryName,
 		)
 	}
 }
 
-func scaffoldNamedInlineJavaScriptFactorySource(t *testing.T) string {
+func scaffoldNamedInlineJavaScriptFactorySource(t *testing.T, factoryName string) string {
 	t.Helper()
 
 	return support.ScaffoldFactory(t, map[string]any{
-		"name": namedJavaScriptFactoryName,
+		"name": factoryName,
 		"invocationSignature": map[string]any{
 			"parameters": []any{map[string]any{
 				"name": "prompt", "required": false,
@@ -322,13 +250,15 @@ func assertNamedJavaScriptSuccessOutcome(t *testing.T, result factoryapi.Invocat
 func invokeNamedJavaScriptFactoryOverHTTP(
 	t *testing.T,
 	baseURL string,
+	factoryName string,
 	prompt string,
+	requestID string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
-	factoryID := namedJavaScriptFactoryName
+	factoryID := factoryName
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "named-javascript-loading-api",
+		RequestId: requestID,
 		Args:      &map[string]any{"prompt": prompt},
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
@@ -363,11 +293,11 @@ func invokeNamedJavaScriptFactoryOverHTTP(
 	return result
 }
 
-func scaffoldNamedBusyLoopJavaScriptFactorySource(t *testing.T) string {
+func scaffoldNamedBusyLoopJavaScriptFactorySource(t *testing.T, factoryName string) string {
 	t.Helper()
 
 	return support.ScaffoldFactory(t, map[string]any{
-		"name": namedJavaScriptFactoryName,
+		"name": factoryName,
 		"invocationSignature": map[string]any{
 			"parameters": []any{map[string]any{
 				"name": "prompt", "required": false,
@@ -391,15 +321,20 @@ func scaffoldNamedBusyLoopJavaScriptFactorySource(t *testing.T) string {
 	})
 }
 
-func startNamedJavaScriptFactoryAsyncSession(t *testing.T, baseURL string) string {
+func startNamedJavaScriptFactoryAsyncSession(
+	t *testing.T,
+	baseURL string,
+	factoryName string,
+	requestID string,
+) string {
 	t.Helper()
 
-	factoryID := namedJavaScriptFactoryName
+	factoryID := factoryName
 	started := postNamedJavaScriptJSON[factoryapi.FactorySessionExecutionResponse](
 		t,
 		baseURL+"/factory-sessions/async",
 		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "named-javascript-loading-session-controls",
+			RequestId: requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 				FactoryId: &factoryID,
@@ -466,37 +401,24 @@ func readNamedJavaScriptDurableSession(
 	return session
 }
 
-func waitForNamedJavaScriptDurableSessionStatus(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) {
+func waitForNamedJavaScriptSessionStarted(t *testing.T, baseURL string, sessionID string) {
 	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readNamedJavaScriptDurableSession(t, baseURL, sessionID)
-		if session.Status == want {
+	ctx, cancel := context.WithTimeout(t.Context(), namedJavaScriptSessionControlWait)
+	defer cancel()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeSessionStarted {
 			return
 		}
-		time.Sleep(15 * time.Millisecond)
 	}
-	session := readNamedJavaScriptDurableSession(t, baseURL, sessionID)
-	t.Fatalf(
-		"named JavaScript durable session %s status = %q, want %q within %s",
-		sessionID,
-		session.Status,
-		want,
-		timeout,
-	)
 }
 
 func assertNamedJavaScriptDurableSessionStatus(
 	t *testing.T,
 	session factoryapi.FactorySessionDurableReadModel,
 	want factoryapi.FactorySessionDurableLifecycleStatus,
+	factoryName string,
 ) {
 	t.Helper()
 
@@ -511,19 +433,18 @@ func assertNamedJavaScriptDurableSessionStatus(
 		)
 	}
 	if session.ResolvedSource.SourceRef == nil ||
-		!strings.Contains(*session.ResolvedSource.SourceRef, namedJavaScriptFactoryName) {
+		!strings.Contains(*session.ResolvedSource.SourceRef, factoryName) {
 		t.Fatalf(
 			"named JavaScript durable session resolved source ref = %#v, want named factory reference containing %q",
 			session.ResolvedSource.SourceRef,
-			namedJavaScriptFactoryName,
+			factoryName,
 		)
 	}
 }
 
 func runNamedJavaScriptSessionLifecycleCLIJSON(
 	t *testing.T,
-	homeDir string,
-	serverURL string,
+	fixture *loadingFixture,
 	workingDir string,
 	operation string,
 	sessionID string,
@@ -531,13 +452,13 @@ func runNamedJavaScriptSessionLifecycleCLIJSON(
 	t.Helper()
 
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--remote", "--json", "--server", serverURL,
+		"you", "--remote", "--json", "--server", fixture.baseURL,
 		"session", operation, sessionID,
 	})
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = loadingCustomerEnvironment(fixture.homeDir)
 	inputs.Input.WorkingDirectory = workingDir
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(session %s) error = %v\nstdout:\n%s\nstderr:\n%s",
 			operation,

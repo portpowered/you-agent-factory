@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -28,38 +27,19 @@ const (
 // customer process boundary with a terminal COMPLETED primary outcome that
 // reflects typed TypeScript source execution and without private VM internals
 // in success diagnostics.
-func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
-	t.Parallel()
-
+func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactory(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}, dir, t.TempDir())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed TypeScript factory without child dispatch", got, providerCalls)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for file-backed TypeScript factory without child dispatch", runner.CallCount())
-	}
-
-	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertTypeScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -69,28 +49,16 @@ func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
 // work starts through the public you run customer process boundary with an
 // actionable load/validation diagnostic and without private VM internals or
 // external worker dispatch.
-func TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T) {
-	t.Parallel()
-
+func runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input)
+	}, dir, t.TempDir())
 	assertTypeScriptTypeOrSyntaxFailureOutcome(
 		t,
 		err,
@@ -98,38 +66,27 @@ func TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T) {
 		inputs.Stderr(),
 		typeScriptSyntaxErrorLine,
 	)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript syntax failure before dispatch", runner.CallCount())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript syntax failure before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	fixture.recoverAfterLoadFailure(t, "typescript-syntax")
 }
 
 // TestTypeScriptSourceMapReportsAuthoredLocation proves a file-backed
 // TypeScript Factory failure diagnostic reports the customer-authored .ts
 // source line via source-map remapping rather than only the emitted JavaScript
 // line after TypeScript stripping.
-func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
-	t.Parallel()
-
+func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactoryWithSourceMapSyntaxError(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input)
+	}, dir, t.TempDir())
 	assertTypeScriptSourceMapFailureOutcome(
 		t,
 		err,
@@ -138,10 +95,11 @@ func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
 		typeScriptSourceMapAuthoredLine,
 		typeScriptSourceMapEmittedLine,
 	)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript source-map failure before dispatch", runner.CallCount())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript source-map failure before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	fixture.recoverAfterLoadFailure(t, "typescript-source-map")
 }
 
 func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {

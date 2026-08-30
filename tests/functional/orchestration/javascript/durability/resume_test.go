@@ -14,11 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const javascriptDurabilityResumeRequestID = "req-js-durability-resume-interrupt-001"
 
 // TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren proves
 // that a durable JavaScript Factory Session interrupted after the first child
@@ -27,6 +30,10 @@ import (
 // only the remaining child dispatch continues, and the session reaches a
 // successful terminal outcome.
 func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t *testing.T) {
+	// C01 isolation reason: this row holds an injected provider command open,
+	// interrupts that live dispatch, and resumes the same durable session. Keep
+	// its cancellation gate and recovery lifecycle on a fresh process so it
+	// cannot share interrupted runtime state with another behavior row.
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
@@ -34,6 +41,10 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
 		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	t.Cleanup(func() {
+		server.Stop(t)
+		t.Logf("durability isolated lifecycle: process_starts=1 process_stops=1 isolation_reason=%q", "blocked dispatch cancellation and same-session resume")
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -63,15 +74,7 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 		t.Fatalf("pre-resume dispatch count = %d, want 2", len(beforeDispatches.Dispatches))
 	}
 
-	assertAcceptedJavaScriptResume(t, resumeJavaScriptSession(t, baseURL, sessionID), sessionID)
-
-	after := waitForDurableJavaScriptSessionStatus(
-		t,
-		baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-		8*time.Second,
-	)
+	after := resumeAndWaitForJavaScriptSession(t, baseURL, sessionID, provider, projectRoot)
 	assertDurableProgressCounts(t, after.Progress, 2, 2, 0)
 	if after.Lifecycle == nil || after.Lifecycle.InterruptedAt == nil || after.Lifecycle.ResumedAt == nil {
 		t.Fatalf("post-resume lifecycle = %#v, want interruptedAt and resumedAt continuity", after.Lifecycle)
@@ -128,6 +131,9 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 // (latest checkpoint and dispatch counts preserved, not a blank restart) and
 // reaches the expected terminal primary result for the completed workflow.
 func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
+	// C01 isolation reason: this row validates checkpoint identity and restored
+	// primary-result state after interruption. Keep its durable snapshot and
+	// replay lifecycle on a fresh process rather than sharing recovery state.
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
@@ -135,6 +141,10 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
 		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	t.Cleanup(func() {
+		server.Stop(t)
+		t.Logf("durability isolated lifecycle: process_starts=1 process_stops=1 isolation_reason=%q", "checkpoint identity and restored final-result recovery")
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -147,18 +157,7 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	}
 	checkpointBefore := requireLatestCheckpointLabel(t, before, "after-step-one")
 
-	resumeResponse := resumeJavaScriptSession(t, baseURL, sessionID)
-	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
-	}
-
-	after := waitForDurableJavaScriptSessionStatus(
-		t,
-		baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-		8*time.Second,
-	)
+	after := resumeAndWaitForJavaScriptSession(t, baseURL, sessionID, provider, projectRoot)
 	assertDurableProgressCounts(t, after.Progress, 2, 2, 0)
 	checkpointAfter := requireLatestCheckpointLabel(t, after, "after-step-one")
 	if checkpointAfter.Id != checkpointBefore.Id {
@@ -192,35 +191,6 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	assertResumableTwoStepFinalPrimaryResult(t, result, workflowName)
 }
 
-// TestJavaScriptDurabilityPersistsSnapshotsByDefault proves the public process
-// writes an interrupted JavaScript Factory Session to the project-local
-// durable-sessions directory during orderly shutdown.
-func TestJavaScriptDurabilityPersistsSnapshotsByDefault(t *testing.T) {
-	const workflowName = "resumable-two-step-fake-children"
-	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
-	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: projectRoot,
-		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
-	sessionID := startInterruptedJavaScriptDurabilitySession(t, baseURL, provider, workflowName)
-	interrupted := readDurableJavaScriptSession(t, baseURL, sessionID)
-	if interrupted.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
-		t.Fatalf("in-memory status = %q, want INTERRUPTED", interrupted.Status)
-	}
-	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
-		t.Fatalf("in-memory lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
-	}
-	// The public interrupted projection is published before the canceled
-	// provider command necessarily returns. Join the root-built process before
-	// inspecting project-local persistence so the assertion runs after all
-	// runtime work and cleanup associated with the canceled edge is done.
-	server.Stop(t)
-	assertJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
-}
-
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
 	t.Helper()
 
@@ -251,7 +221,7 @@ func startInterruptedJavaScriptDurabilitySession(
 		t,
 		baseURL+"/factory-sessions/async",
 		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-js-durability-resume-interrupt-001",
+			RequestId: javascriptDurabilityResumeRequestID,
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 				WorkflowName: strPtr(workflowName),
@@ -266,21 +236,17 @@ func startInterruptedJavaScriptDurabilitySession(
 		t.Fatal("session id unexpectedly empty")
 	}
 
-	waitForJavaScriptDispatchStatus(
+	responseStream := support.OpenFactoryResponseEventStreamAt(
 		t,
-		baseURL,
+		support.SessionResponseEventsURL(baseURL, sessionID),
+	)
+	defer responseStream.Close()
+	waitForJavaScriptResponseEvent(
+		t,
+		responseStream,
 		sessionID,
 		"dispatch-1",
-		factoryapi.FactoryDispatchStatusCOMPLETED,
-		5*time.Second,
-	)
-	waitForJavaScriptDispatchStatus(
-		t,
-		baseURL,
-		sessionID,
-		"dispatch-2",
-		factoryapi.FactoryDispatchStatusRUNNING,
-		5*time.Second,
+		factoryapi.FactoryResponseEventPhaseCompleted,
 	)
 	// RUNNING is published before the worker necessarily reaches the provider
 	// edge. Wait for the injected provider's entry signal before interrupting;
@@ -298,14 +264,162 @@ func startInterruptedJavaScriptDurabilitySession(
 		},
 	)
 	provider.waitForCanceledInfer(t, 5*time.Second)
-	waitForDurableJavaScriptSessionStatus(
+	waitForJavaScriptResponseEvent(
 		t,
-		baseURL,
+		responseStream,
 		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
-		5*time.Second,
+		"dispatch-2",
+		// A canceled provider command is represented by the public response
+		// stream as an ERROR/FAILED event; the durable session projection below
+		// is the authoritative INTERRUPTED lifecycle outcome.
+		factoryapi.FactoryResponseEventPhaseFailed,
 	)
+	responseStream.WaitClosed(5 * time.Second)
 	return sessionID
+}
+
+func resumeAndWaitForJavaScriptSession(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	provider *javascriptDurabilityResumeBlockingCommandRunner,
+	projectRoot string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+	snapshotPath := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("create durable snapshot watcher: %v", err)
+	}
+	defer watcher.Close()
+	if err := watcher.Add(filepath.Dir(snapshotPath)); err != nil {
+		t.Fatalf("watch durable snapshot directory: %v", err)
+	}
+	resumeResponse := resumeJavaScriptSession(t, baseURL, sessionID)
+	assertAcceptedJavaScriptResume(t, resumeResponse, sessionID)
+	provider.waitForResumedInfer(t, 5*time.Second)
+	waitForJavaScriptPersistedResume(t, watcher, snapshotPath, baseURL, sessionID)
+	assertJavaScriptFactorySessionCompletion(
+		t,
+		support.GetFactoryEventsForSessionAt(t, baseURL, sessionID),
+		sessionID,
+	)
+	return readDurableJavaScriptSession(t, baseURL, sessionID)
+}
+
+// waitForJavaScriptPersistedResume uses the durable snapshot's atomic replace
+// notification as the completion boundary. The durable event endpoint is a
+// finite history read for interrupted sessions, so reopening it cannot wait
+// for resumed events; filesystem notification gives this test an event-driven
+// boundary without status polling or a quiet-period sleep.
+func waitForJavaScriptPersistedResume(
+	t *testing.T,
+	watcher *fsnotify.Watcher,
+	snapshotPath string,
+	baseURL string,
+	sessionID string,
+) {
+	t.Helper()
+	// The fsnotify replacement event is the deterministic durable-store
+	// completion signal. Keep this bounded timer only as a fail-fast diagnostic
+	// when the store never publishes that event; polling cannot prove completion.
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				t.Fatal("durable snapshot watcher closed before resumed persistence")
+			}
+			if !strings.EqualFold(filepath.Clean(event.Name), filepath.Clean(snapshotPath)) ||
+				event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
+				continue
+			}
+			session := readDurableJavaScriptSession(t, baseURL, sessionID)
+			if session.Status == factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+				return
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				t.Fatal("durable snapshot watcher error channel closed before resumed persistence")
+			}
+			t.Fatalf("durable snapshot watcher: %v", err)
+		case <-timer.C:
+			t.Fatalf("durable snapshot did not publish resumed terminal state at %s", snapshotPath)
+		}
+	}
+}
+
+func assertJavaScriptFactorySessionCompletion(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+) {
+	t.Helper()
+	for _, event := range events {
+		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
+			t.Fatalf("factory event session id = %q, want %q", *event.Context.SessionId, sessionID)
+		}
+		if event.Type != factoryapi.FactoryEventTypeSessionCompleted {
+			continue
+		}
+		payload, err := event.Payload.AsSessionCompletedEventPayload()
+		if err != nil {
+			t.Fatalf("decode resumed SESSION_COMPLETED payload: %v", err)
+		}
+		if payload.ResultStatus == nil || *payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFinal {
+			t.Fatalf("resumed SESSION_COMPLETED payload = %#v, want FINAL result", payload)
+		}
+		return
+	}
+	t.Fatalf("factory events = %#v, want SESSION_COMPLETED for resumed session %q", events, sessionID)
+}
+
+// waitForJavaScriptResponseEvent uses the public retained Response Event
+// stream as the lifecycle boundary. Each timed read is a fail-fast guard for
+// a broken stream, not a scheduler poll or quiet-period synchronization.
+func waitForJavaScriptResponseEvent(
+	t *testing.T,
+	stream *support.FactoryResponseEventStream,
+	sessionID string,
+	dispatchID string,
+	wantPhase factoryapi.FactoryResponseEventPhase,
+) {
+	t.Helper()
+	seen := make([]string, 0, 8)
+	for {
+		result := stream.TryNextFrameResult(5 * time.Second)
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeFrame:
+			event := result.Frame.Event
+			dispatch := ""
+			if event.DispatchId != nil {
+				dispatch = *event.DispatchId
+			}
+			seen = append(seen, fmt.Sprintf("kind=%s phase=%s dispatch=%s", event.Kind, event.Phase, dispatch))
+			if event.FactorySessionId != sessionID {
+				t.Fatalf("response event session id = %q, want %q", event.FactorySessionId, sessionID)
+			}
+			if event.DispatchId == nil || !durabilityDispatchMatches(*event.DispatchId, dispatchID) {
+				continue
+			}
+			if event.Phase == wantPhase &&
+				(event.Kind == factoryapi.FactoryResponseEventKindRun || event.Kind == factoryapi.FactoryResponseEventKindError) {
+				return
+			}
+		case support.FactoryResponseEventStreamOutcomeTimeout,
+			support.FactoryResponseEventStreamOutcomeEOF,
+			support.FactoryResponseEventStreamOutcomeCanceled,
+			support.FactoryResponseEventStreamOutcomeReadError:
+			t.Fatalf("response event stream ended before dispatch %q phase %q: %s; seen=%v", dispatchID, wantPhase, result.Diagnostic(), seen)
+		default:
+			t.Fatalf("unexpected response event stream outcome: %s", result.Diagnostic())
+		}
+	}
+}
+
+func durabilityDispatchMatches(actual, want string) bool {
+	return actual == want || strings.HasSuffix(actual, "/"+want)
 }
 
 func readDurableJavaScriptSession(
@@ -395,54 +509,6 @@ func listJavaScriptSessionDispatches(
 		t.Fatal("dispatch list unexpectedly missing")
 	}
 	return listed
-}
-
-func waitForDurableJavaScriptSessionStatus(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readDurableJavaScriptSession(t, baseURL, sessionID)
-		if session.Status == want {
-			return session
-		}
-		time.Sleep(15 * time.Millisecond)
-	}
-	session := readDurableJavaScriptSession(t, baseURL, sessionID)
-	t.Fatalf("session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
-	return session
-}
-
-func waitForJavaScriptDispatchStatus(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	dispatchID string,
-	want factoryapi.FactoryDispatchStatus,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := listJavaScriptSessionDispatches(t, baseURL, sessionID)
-		for _, dispatch := range listed.Dispatches {
-			if dispatch.Id != dispatchID {
-				continue
-			}
-			if dispatch.Status == want {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
 }
 
 func postJavaScriptDurabilityJSON[T any](t *testing.T, endpoint string, request any) T {
@@ -643,21 +709,25 @@ func strPtr(value string) *string {
 // calls complete the resumed child. The test therefore observes the real
 // provider-command path without constructing a custom in-process Provider.
 type javascriptDurabilityResumeBlockingCommandRunner struct {
-	mu                  sync.Mutex
-	calls               int
-	blockedOnce         bool
-	workflowName        string
-	inferStarted        chan struct{}
-	inferStartedOnce    sync.Once
-	contextCanceled     chan struct{}
-	contextCanceledOnce sync.Once
+	mu                   sync.Mutex
+	calls                int
+	active               int
+	blockedOnce          bool
+	workflowName         string
+	inferStarted         chan struct{}
+	inferStartedOnce     sync.Once
+	contextCanceled      chan struct{}
+	contextCanceledOnce  sync.Once
+	resumedCompleted     chan struct{}
+	resumedCompletedOnce sync.Once
 }
 
 func newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName string) *javascriptDurabilityResumeBlockingCommandRunner {
 	return &javascriptDurabilityResumeBlockingCommandRunner{
-		workflowName:    workflowName,
-		inferStarted:    make(chan struct{}),
-		contextCanceled: make(chan struct{}),
+		workflowName:     workflowName,
+		inferStarted:     make(chan struct{}),
+		contextCanceled:  make(chan struct{}),
+		resumedCompleted: make(chan struct{}),
 	}
 }
 
@@ -667,12 +737,19 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) callCount() int {
 	return p.calls
 }
 
+func (p *javascriptDurabilityResumeBlockingCommandRunner) activeCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.active
+}
+
 func (p *javascriptDurabilityResumeBlockingCommandRunner) Run(
 	ctx context.Context,
 	_ platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	p.mu.Lock()
 	p.calls++
+	p.active++
 	call := p.calls
 	alreadyBlocked := p.blockedOnce
 	if call == 2 && !alreadyBlocked {
@@ -680,6 +757,11 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) Run(
 		p.inferStartedOnce.Do(func() { close(p.inferStarted) })
 	}
 	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		p.active--
+		p.mu.Unlock()
+	}()
 
 	if call == 1 {
 		return javascriptDurabilityProviderCommandResult(
@@ -695,11 +777,13 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) Run(
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 
-	return javascriptDurabilityProviderCommandResult(
+	result := javascriptDurabilityProviderCommandResult(
 		p.workflowName,
 		"step-two",
 		"step-two",
-	), nil
+	)
+	p.resumedCompletedOnce.Do(func() { close(p.resumedCompleted) })
+	return result, nil
 }
 
 func javascriptDurabilityProviderCommandResult(
@@ -716,6 +800,8 @@ func javascriptDurabilityProviderCommandResult(
 
 func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForBlockedInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
+	// inferStarted is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -728,6 +814,8 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForBlockedInfer(t 
 
 func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
+	// contextCanceled is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
@@ -735,5 +823,19 @@ func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForCanceledInfer(t
 		return
 	case <-timer.C:
 		t.Fatal("provider Infer did not observe canceled workflow context")
+	}
+}
+
+func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForResumedInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	// resumedCompleted is emitted by the injected command edge. The timer only
+	// bounds a missing-edge failure; it is not used to synchronize the test.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.resumedCompleted:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not complete the resumed call")
 	}
 }

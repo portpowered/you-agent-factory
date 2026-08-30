@@ -3,15 +3,11 @@
 package composition_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -78,28 +74,18 @@ const (
 // with distinct named pipeline stages completes with ordered progress on public
 // Factory Event and session projection surfaces that preserve each stage's
 // identity and documented execution order.
-func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptNamedStagesExposeOrderedProgress(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldNamedStagesWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startNamedStagesWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.runner.callCount()
+	started := startNamedStagesWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
-	dispatches := listNamedStagesDispatches(t, server.URL(), started.SessionId)
+	dispatches := listNamedStagesDispatches(t, fixture, started.SessionId)
 	stageDraftDispatch, stageReviewDispatch := assertTwoCompletedNamedStageDispatches(t, dispatches.Dispatches)
 	assertNamedStagesOrderedDispatchProgress(t, dispatches.Dispatches)
 	assertNamedStagesOrderedPrimaryResult(
@@ -109,7 +95,7 @@ func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
 		stageReviewDispatch.Id,
 	)
 
-	events := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	events := fixture.publicEvents(t, started.SessionId)
 	assertNamedStagesOrderedPhaseProgress(t, events)
 }
 
@@ -117,28 +103,18 @@ func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
 // pipeline stage path completes with the documented empty ordered per-item
 // public result and does not invent child Dispatches when external effects are
 // substituted only through edges.Edges.
-func TestJavaScriptEmptyStageProducesDocumentedResult(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptEmptyStageProducesDocumentedResult(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldEmptyStagesWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startEmptyStagesWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.runner.callCount()
+	started := startEmptyStagesWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for empty stage path", runner.CallCount())
+	if got := fixture.runner.callCount(); got != providerCalls {
+		t.Fatalf("provider command call count = %d, want no provider execution after baseline %d", got, providerCalls)
 	}
 
-	dispatches := listEmptyStagesDispatches(t, server.URL(), started.SessionId)
+	dispatches := listEmptyStagesDispatches(t, fixture, started.SessionId)
 	assertEmptyStageNoChildDispatches(t, dispatches.Dispatches)
 	assertEmptyStageDocumentedPrimaryResult(t, started.Result)
 }
@@ -165,108 +141,38 @@ func scaffoldEmptyStagesWorkflow(t *testing.T) string {
 
 func startNamedStagesWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-named-stages-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal named stages workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build named stages workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start named stages workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start named stages workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode named stages workflow response: %v", err)
-	}
-	return started
+	return fixture.startPublicSync(t, "javascript-named-stages-composition", dir)
 }
 
 func startEmptyStagesWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-empty-stages-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal empty stages workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build empty stages workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start empty stages workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start empty stages workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode empty stages workflow response: %v", err)
-	}
-	return started
+	return fixture.startPublicSync(t, "javascript-empty-stages-composition", dir)
 }
 
 func listNamedStagesDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listEmptyStagesDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertTwoCompletedNamedStageDispatches(
@@ -285,8 +191,8 @@ func assertTwoCompletedNamedStageDispatches(
 			t.Fatalf("dispatch %q status = %q, want COMPLETED", dispatchLabel(dispatch), dispatch.Status)
 		}
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(dispatch), dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(dispatch), dispatch.Javascript)
 		}
 		byLabel[dispatchLabel(dispatch)] = dispatch
 	}

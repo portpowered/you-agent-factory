@@ -2,24 +2,16 @@ package contracts
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -47,85 +39,67 @@ return "hello";`
 // child dispatches publish message and tool progress as canonical
 // FactoryResponseEvent records on the public Factory Session response-event
 // surface after a root-built process run.
-func TestJavaScriptChildProgressPublishesCanonicalResponseEvents(t *testing.T) {
+func runJavaScriptChildProgressPublishesCanonicalResponseEvents(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldChildProgressWorkflow(t)
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
-	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-
-	started := startChildProgressWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startChildProgressWorkflow(t, fixture, dir, fixture.nextRequestID("child-progress"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want 1 live child invocation", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls+1 {
+		t.Fatalf("provider command runner calls = %d, want one live child invocation after %d prior calls", got, providerCalls)
 	}
-	responseEvents := support.GetFactoryResponseEventsAt(t, server.URL(), started.SessionId)
+	responseEvents := fixture.responseEvents(t, started.SessionId)
 	assertJavaScriptChildProgressResponseEvents(t, responseEvents)
 }
 
 // TestJavaScriptTerminalResultFollowsFinalResponseEvent proves the terminal
 // Factory Session invocation result becomes observable only after the final
 // published FactoryResponseEvent for a JavaScript child dispatch.
-func TestJavaScriptTerminalResultFollowsFinalResponseEvent(t *testing.T) {
+func runJavaScriptTerminalResultFollowsFinalResponseEvent(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldChildProgressWorkflow(t)
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
-	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-
-	started := startChildProgressWorkflowAsync(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startChildProgressWorkflowAsync(t, fixture, dir, fixture.nextRequestID("terminal-result"))
 	if started.SessionId == "" {
 		t.Fatal("async session id is empty")
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
-	defer cancel()
-	responseEvents, terminalResult, observations := observeChildProgressExecutionOrdering(
-		ctx,
+	responseEvents, terminalResult, observations := fixture.observeChildProgressExecutionOrdering(
 		t,
-		server.URL(),
 		started.SessionId,
 	)
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want 1 live child invocation", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls+1 {
+		t.Fatalf("provider command runner calls = %d, want one live child invocation after %d prior calls", got, providerCalls)
 	}
 	assertJavaScriptChildProgressResponseEvents(t, responseEvents)
 	assertTerminalResultFollowsFinalResponseEvent(t, observations, terminalResult)
 }
 
 // TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents proves a
-// mock-worker JavaScript Factory publishes ordered orchestrator phase and
-// checkpoint Factory Events on the public Factory Session event surface after
-// a root-built durable sync execution.
-func TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents(t *testing.T) {
+// JavaScript Factory publishes ordered orchestrator phase and checkpoint
+// Factory Events on the public Factory Session event surface after a root-built
+// durable sync execution.
+func runJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldPhaseCheckpointWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-
-	started := startPhaseCheckpointWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startPhaseCheckpointWorkflow(t, fixture, dir, fixture.nextRequestID("phase-checkpoint"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
 	}
 
-	events := getFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	events := fixture.factoryEvents(t, started.SessionId)
 	assertJavaScriptPhaseCheckpointLifecycleEvents(t, events)
 }
 
@@ -155,10 +129,12 @@ func scaffoldPhaseCheckpointWorkflow(t *testing.T) string {
 	return dir
 }
 
-func phaseCheckpointWorkflowRequest(dir string) (factoryapi.FactorySessionExecutionRequest, error) {
+func phaseCheckpointWorkflowRequest(
+	dir, requestID string,
+) (factoryapi.FactorySessionExecutionRequest, error) {
 	workflowPath := filepath.Join(dir, phaseCheckpointWorkflowFileName)
 	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-phase-checkpoint-response-events",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
@@ -166,43 +142,25 @@ func phaseCheckpointWorkflowRequest(dir string) (factoryapi.FactorySessionExecut
 	}, nil
 }
 
-func startPhaseCheckpointWorkflow(t *testing.T, serverURL, dir string) factoryapi.FactorySessionSyncExecutionResponse {
+func startPhaseCheckpointWorkflow(
+	t *testing.T,
+	fixture *contractFixture,
+	dir, requestID string,
+) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	requestPayload, err := phaseCheckpointWorkflowRequest(dir)
+	requestPayload, err := phaseCheckpointWorkflowRequest(dir, requestID)
 	if err != nil {
 		t.Fatalf("build phase checkpoint workflow request: %v", err)
 	}
-	payload, err := json.Marshal(requestPayload)
-	if err != nil {
-		t.Fatalf("marshal phase checkpoint workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build phase checkpoint workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start phase checkpoint workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start phase checkpoint workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode phase checkpoint workflow response: %v", err)
-	}
-	return started
+	return fixture.startSync(t, requestPayload, dir)
 }
 
-func childProgressWorkflowRequest(dir string) (factoryapi.FactorySessionExecutionRequest, error) {
+func childProgressWorkflowRequest(
+	dir, requestID string,
+) (factoryapi.FactorySessionExecutionRequest, error) {
 	workflowPath := filepath.Join(dir, childProgressWorkflowFileName)
 	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-child-progress-response-events",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
@@ -210,69 +168,30 @@ func childProgressWorkflowRequest(dir string) (factoryapi.FactorySessionExecutio
 	}, nil
 }
 
-func startChildProgressWorkflow(t *testing.T, serverURL, dir string) factoryapi.FactorySessionSyncExecutionResponse {
+func startChildProgressWorkflow(
+	t *testing.T,
+	fixture *contractFixture,
+	dir, requestID string,
+) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	requestPayload, err := childProgressWorkflowRequest(dir)
+	requestPayload, err := childProgressWorkflowRequest(dir, requestID)
 	if err != nil {
 		t.Fatalf("build child progress workflow request: %v", err)
 	}
-	payload, err := json.Marshal(requestPayload)
-	if err != nil {
-		t.Fatalf("marshal child progress workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build child progress workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start child progress workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start child progress workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode child progress workflow response: %v", err)
-	}
-	return started
+	return fixture.startSync(t, requestPayload, dir)
 }
 
-func startChildProgressWorkflowAsync(t *testing.T, serverURL, dir string) factoryapi.FactorySessionExecutionResponse {
+func startChildProgressWorkflowAsync(
+	t *testing.T,
+	fixture *contractFixture,
+	dir, requestID string,
+) factoryapi.FactorySessionExecutionResponse {
 	t.Helper()
-	requestPayload, err := childProgressWorkflowRequest(dir)
+	requestPayload, err := childProgressWorkflowRequest(dir, requestID)
 	if err != nil {
 		t.Fatalf("build child progress workflow request: %v", err)
 	}
-	payload, err := json.Marshal(requestPayload)
-	if err != nil {
-		t.Fatalf("marshal child progress workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/async"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build async child progress workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start async child progress workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("start async child progress workflow status = %d: %s", response.StatusCode, body)
-	}
-	var started factoryapi.FactorySessionExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode async child progress workflow response: %v", err)
-	}
-	return started
+	return fixture.startAsync(t, requestPayload, dir)
 }
 
 type executionObservationKind string
@@ -288,178 +207,77 @@ type executionObservation struct {
 }
 
 func observeChildProgressExecutionOrdering(
-	ctx context.Context,
 	t *testing.T,
 	serverURL, sessionID string,
 ) ([]factoryapi.FactoryResponseEvent, factoryapi.FactorySessionResult, []executionObservation) {
 	t.Helper()
 
-	var (
-		mu           sync.Mutex
-		order        atomic.Int64
-		observations []executionObservation
-		events       []factoryapi.FactoryResponseEvent
-		terminal     factoryapi.FactorySessionResult
+	stream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(serverURL, sessionID),
 	)
-	record := func(kind executionObservationKind) {
-		mu.Lock()
-		observations = append(observations, executionObservation{
-			order: order.Add(1),
-			kind:  kind,
-		})
-		mu.Unlock()
-	}
-
-	sseReady := make(chan struct{})
-	sseDone := make(chan struct{})
-	errCh := make(chan error, 2)
-	go func() {
-		defer close(sseDone)
-		err := streamFactoryResponseEvents(ctx, serverURL, sessionID, func(event factoryapi.FactoryResponseEvent) {
-			mu.Lock()
-			events = append(events, event)
-			mu.Unlock()
-			record(executionObservationResponseEvent)
-		}, func() {
-			close(sseReady)
-		})
-		errCh <- err
-	}()
-	go func() {
-		select {
-		case <-sseReady:
-		case <-ctx.Done():
-			errCh <- ctx.Err()
-			return
-		}
-
-		result, err := pollForFinalSessionResult(ctx, serverURL, sessionID)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		terminal = *result
-
-		// Record terminal observation only after the response-event stream
-		// finishes delivering retained events so concurrent polling cannot win
-		// the race before SSE catches up on fast CI hosts.
-		select {
-		case <-sseDone:
-		case <-ctx.Done():
-			errCh <- ctx.Err()
-			return
-		}
-		record(executionObservationTerminalResult)
-		errCh <- nil
-	}()
-
-	for range 2 {
-		if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("observe child progress execution ordering: %v", err)
-		}
-	}
-	return events, terminal, observations
-}
-
-func streamFactoryResponseEvents(
-	ctx context.Context,
-	serverURL, sessionID string,
-	onEvent func(factoryapi.FactoryResponseEvent),
-	onConnected func(),
-) error {
-	endpoint := strings.TrimSuffix(serverURL, "/") +
-		"/factory-sessions/" + sessionID + "/response-events"
-	retry := time.NewTicker(10 * time.Millisecond)
-	defer retry.Stop()
-
+	var (
+		events       []factoryapi.FactoryResponseEvent
+		observations []executionObservation
+	)
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return fmt.Errorf("build factory response events request: %w", err)
+		result := stream.TryNextFrameResult(contractFixtureTimeout)
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeFrame:
+			events = append(events, result.Frame.Event)
+			observations = append(observations, executionObservation{
+				order: int64(len(observations) + 1),
+				kind:  executionObservationResponseEvent,
+			})
+		case support.FactoryResponseEventStreamOutcomeEOF:
+			stream.WaitClosed(contractFixtureTimeout)
+			terminal := support.GetJSON[factoryapi.FactorySessionResult](
+				t,
+				strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/results?mode=final",
+			)
+			observations = append(observations, executionObservation{
+				order: int64(len(observations) + 1),
+				kind:  executionObservationTerminalResult,
+			})
+			return events, terminal, observations
+		case support.FactoryResponseEventStreamOutcomeTimeout:
+			t.Fatalf("timed out reading child response-event stream: %s", result.Diagnostic())
+		case support.FactoryResponseEventStreamOutcomeReadError,
+			support.FactoryResponseEventStreamOutcomeCanceled:
+			t.Fatalf("child response-event stream ended before terminal event: %s", result.Diagnostic())
+		default:
+			t.Fatalf("unexpected child response-event stream outcome: %s", result.Diagnostic())
 		}
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			return fmt.Errorf("GET factory response events: %w", err)
-		}
-		if response.StatusCode == http.StatusNotFound {
-			response.Body.Close()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-retry.C:
-				continue
-			}
-		}
-		if response.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(response.Body)
-			response.Body.Close()
-			return fmt.Errorf("GET factory response events status = %d: %s", response.StatusCode, body)
-		}
-		if onConnected != nil {
-			onConnected()
-			onConnected = nil
-		}
-
-		scanner := bufio.NewScanner(response.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			var event factoryapi.FactoryResponseEvent
-			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-				response.Body.Close()
-				return fmt.Errorf("decode factory response event: %w", err)
-			}
-			onEvent(event)
-		}
-		err = scanner.Err()
-		response.Body.Close()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return fmt.Errorf("read factory response events: %w", err)
-		}
-		return nil
 	}
 }
 
-func pollForFinalSessionResult(
-	ctx context.Context,
+// readFactoryResponseEventsUntilClosed uses the stream's terminal EOF as the
+// completion signal. The bounded per-frame wait is only a fail-fast guard for
+// a broken public stream; it is not a quiet-period or scheduler poll.
+func readFactoryResponseEventsUntilClosed(
+	t *testing.T,
 	serverURL, sessionID string,
-) (*factoryapi.FactorySessionResult, error) {
-	endpoint := strings.TrimSuffix(serverURL, "/") +
-		"/factory-sessions/" + sessionID + "/results?mode=final"
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
+) []factoryapi.FactoryResponseEvent {
+	t.Helper()
+	stream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(serverURL, sessionID),
+	)
+	var events []factoryapi.FactoryResponseEvent
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, fmt.Errorf("build factory session result request: %w", err)
-		}
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			return nil, fmt.Errorf("GET factory session result: %w", err)
-		}
-		body, readErr := io.ReadAll(response.Body)
-		response.Body.Close()
-		if readErr != nil {
-			return nil, fmt.Errorf("read factory session result: %w", readErr)
-		}
-		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("GET factory session result status = %d: %s", response.StatusCode, body)
-		}
-		var result factoryapi.FactorySessionResult
-		if err := json.Unmarshal(body, &result); err != nil {
-			return nil, fmt.Errorf("decode factory session result: %w", err)
-		}
-		if result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
-			return &result, nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-ticker.C:
+		result := stream.TryNextFrameResult(contractFixtureTimeout)
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeFrame:
+			events = append(events, result.Frame.Event)
+		case support.FactoryResponseEventStreamOutcomeEOF:
+			stream.WaitClosed(contractFixtureTimeout)
+			return events
+		case support.FactoryResponseEventStreamOutcomeTimeout,
+			support.FactoryResponseEventStreamOutcomeReadError,
+			support.FactoryResponseEventStreamOutcomeCanceled:
+			t.Fatalf("response-event stream ended before EOF: %s", result.Diagnostic())
+		default:
+			t.Fatalf("unexpected response-event stream outcome: %s", result.Diagnostic())
 		}
 	}
 }

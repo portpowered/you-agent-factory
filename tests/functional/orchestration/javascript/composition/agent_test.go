@@ -3,15 +3,12 @@
 package composition_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -43,28 +40,18 @@ const (
 // performs one agent.run child dispatch completes with exactly one unary
 // structured child result on the public primary result surface and one
 // completed child dispatch on the public Factory Session dispatch listing.
-func TestJavaScriptAgentReturnsUnaryResult(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptAgentReturnsUnaryResult(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldAgentUnaryWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startAgentUnaryWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.runner.callCount()
+	started := startAgentUnaryWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want a provider execution after baseline %d", got, providerCalls)
 	}
 
-	dispatches := listAgentUnaryDispatches(t, server.URL(), started.SessionId)
+	dispatches := listAgentUnaryDispatches(t, fixture, started.SessionId)
 	assertExactlyOneCompletedChildDispatch(t, dispatches.Dispatches)
 	assertUnaryAgentPrimaryResult(t, started.Result)
 }
@@ -72,28 +59,18 @@ func TestJavaScriptAgentReturnsUnaryResult(t *testing.T) {
 // TestJavaScriptAgentFailureReturnsStableFailureRecord proves a failed agent.run
 // child dispatch surfaces as a stable public failure record on the Factory Session
 // dispatch listing and result surfaces without private JavaScript VM diagnostics.
-func TestJavaScriptAgentFailureReturnsStableFailureRecord(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptAgentFailureReturnsStableFailureRecord(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldAgentFailureWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startAgentFailureWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.runner.callCount()
+	started := startAgentFailureWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("session status = %q, want FAILED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child failure edge", runner.CallCount())
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want a provider execution after baseline %d", got, providerCalls)
 	}
 
-	dispatches := listAgentFailureDispatches(t, server.URL(), started.SessionId)
+	dispatches := listAgentFailureDispatches(t, fixture, started.SessionId)
 	assertExactlyOneFailedChildDispatch(t, dispatches.Dispatches)
 	assertStableAgentFailureRecord(t, started.Result)
 }
@@ -118,104 +95,40 @@ func scaffoldAgentFailureWorkflow(t *testing.T) string {
 	return dir
 }
 
-func startAgentUnaryWorkflow(t *testing.T, serverURL, dir string) factoryapi.FactorySessionSyncExecutionResponse {
+func startAgentUnaryWorkflow(
+	t *testing.T,
+	fixture *compositionFixture,
+	dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-agent-unary-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal agent unary workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build agent unary workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start agent unary workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start agent unary workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode agent unary workflow response: %v", err)
-	}
-	return started
+	return fixture.startPublicSync(t, "javascript-agent-unary-composition", dir)
 }
 
-func startAgentFailureWorkflow(t *testing.T, serverURL, dir string) factoryapi.FactorySessionSyncExecutionResponse {
+func startAgentFailureWorkflow(
+	t *testing.T,
+	fixture *compositionFixture,
+	dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-agent-failure-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal agent failure workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build agent failure workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start agent failure workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start agent failure workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode agent failure workflow response: %v", err)
-	}
-	return started
+	return fixture.startPublicSync(t, "javascript-agent-failure-composition", dir)
 }
 
 func listAgentUnaryDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listAgentFailureDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertExactlyOneCompletedChildDispatch(
@@ -235,8 +148,8 @@ func assertExactlyOneCompletedChildDispatch(
 		t.Fatalf("dispatch label = %#v, want %q", dispatch.Label, agentUnaryChildLabel)
 	}
 	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-		*dispatch.Javascript.ExecutionMode != "fake" {
-		t.Fatalf("dispatch javascript projection = %#v, want fake execution mode", dispatch.Javascript)
+		*dispatch.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch javascript projection = %#v, want live-provider execution mode", dispatch.Javascript)
 	}
 }
 
@@ -271,8 +184,8 @@ func assertExactlyOneFailedChildDispatch(
 		}
 	}
 	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-		*dispatch.Javascript.ExecutionMode != "fake" {
-		t.Fatalf("dispatch javascript projection = %#v, want fake execution mode", dispatch.Javascript)
+		*dispatch.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch javascript projection = %#v, want live-provider execution mode", dispatch.Javascript)
 	}
 }
 

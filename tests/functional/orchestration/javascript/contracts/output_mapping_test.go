@@ -1,16 +1,13 @@
 package contracts
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -42,39 +39,32 @@ return { artifactRef: artifactRef };`
 // Factory script return value maps onto the customer-visible primary invocation
 // result on public Factory Session projection and Factory Event surfaces after
 // a root-built process run.
-func TestJavaScriptReturnValueMapsToPrimaryInvocationResult(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptReturnValueMapsToPrimaryInvocationResult(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldReturnValueMappingWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startReturnValueMappingWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startReturnValueMappingWorkflow(t, fixture, dir, fixture.nextRequestID("return-value"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for return-value echo workflow", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for return-value echo workflow", got, providerCalls)
 	}
 
 	assertReturnValuePrimaryResult(t, started.Result, returnValuePrimaryResult)
 
-	finalResult := readReturnValueFinalSessionResult(t, server.URL(), started.SessionId)
+	finalResult := readReturnValueFinalSessionResult(t, fixture.baseURL, started.SessionId)
 	assertReturnValuePrimaryResult(t, &finalResult, returnValuePrimaryResult)
 
-	session := readReturnValueMappingSession(t, server.URL(), started.SessionId)
+	session := readReturnValueMappingSession(t, fixture.baseURL, started.SessionId)
 	if session.ResultSummary == nil ||
 		session.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("session resultSummary = %#v, want FINAL durable projection", session.ResultSummary)
 	}
 
-	events := getFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	events := fixture.factoryEvents(t, started.SessionId)
 	assertReturnValueMappingFactoryEvents(t, events, returnValuePrimaryResult)
 	assertNoPrivateJavaScriptVMDiagnostics(
 		t,
@@ -86,40 +76,33 @@ func TestJavaScriptReturnValueMapsToPrimaryInvocationResult(t *testing.T) {
 // TestJavaScriptStructuredArtifactsMapToPublicResult proves structured artifacts
 // produced by a JavaScript Factory invocation appear on the customer-visible public
 // result, artifact list, and Factory Event surfaces after a root-built process run.
-func TestJavaScriptStructuredArtifactsMapToPublicResult(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptStructuredArtifactsMapToPublicResult(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldStructuredArtifactWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startStructuredArtifactWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startStructuredArtifactWorkflow(t, fixture, dir, fixture.nextRequestID("structured-artifact"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for artifact workflow", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for artifact workflow", got, providerCalls)
 	}
 
-	finalResult := readStructuredArtifactFinalSessionResult(t, server.URL(), started.SessionId)
+	finalResult := readStructuredArtifactFinalSessionResult(t, fixture.baseURL, started.SessionId)
 	assertStructuredArtifactResultSurface(t, finalResult, started.SessionId)
 
-	session := readStructuredArtifactSession(t, server.URL(), started.SessionId)
+	session := readStructuredArtifactSession(t, fixture.baseURL, started.SessionId)
 	assertStructuredArtifactSessionProjection(t, session)
 
-	artifactList := readStructuredArtifactList(t, server.URL(), started.SessionId)
+	artifactList := readStructuredArtifactList(t, fixture.baseURL, started.SessionId)
 	artifactSummary := assertStructuredArtifactListSummary(t, artifactList, started.SessionId)
 
-	artifactDetail := readStructuredArtifactDetail(t, server.URL(), started.SessionId, structuredArtifactID)
+	artifactDetail := readStructuredArtifactDetail(t, fixture.baseURL, started.SessionId, structuredArtifactID)
 	assertStructuredArtifactDetailSurface(t, artifactDetail, artifactSummary)
 
-	events := getFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	events := fixture.factoryEvents(t, started.SessionId)
 	assertStructuredArtifactFactoryEvents(t, events)
 	assertNoPrivateJavaScriptVMDiagnostics(
 		t,
@@ -133,33 +116,26 @@ func TestJavaScriptStructuredArtifactsMapToPublicResult(t *testing.T) {
 // unsupported JavaScript return value yields a non-success customer-visible
 // outcome with an actionable diagnostic and without private VM internals on
 // public Factory Session projection and Factory Event surfaces.
-func TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldUnsupportedReturnWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startUnsupportedReturnWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startUnsupportedReturnWorkflow(t, fixture, dir, fixture.nextRequestID("unsupported-return"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("session status = %q, want FAILED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for unsupported return workflow", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for unsupported return workflow", got, providerCalls)
 	}
 
 	assertUnsupportedReturnFailureResult(t, started.Result)
 
-	session := readUnsupportedReturnSession(t, server.URL(), started.SessionId)
+	session := readUnsupportedReturnSession(t, fixture.baseURL, started.SessionId)
 	assertUnsupportedReturnSessionFailure(t, session)
 
-	events := getFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	events := fixture.factoryEvents(t, started.SessionId)
 	assertUnsupportedReturnFactoryEvents(t, events)
 	assertNoPrivateJavaScriptVMDiagnostics(
 		t,
@@ -188,13 +164,6 @@ func scaffoldReturnValueMappingWorkflow(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write return value workflow: %v", err)
 	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -216,13 +185,6 @@ func scaffoldStructuredArtifactWorkflow(t *testing.T) string {
 		0o600,
 	); err != nil {
 		t.Fatalf("write structured artifact workflow: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
 	}
 	return dir
 }
@@ -246,134 +208,58 @@ func scaffoldUnsupportedReturnWorkflow(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write unsupported return workflow: %v", err)
 	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
 func startReturnValueMappingWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *contractFixture,
+	dir, requestID string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
 	workflowPath := filepath.Join(dir, returnValueWorkflowFileName)
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-return-value-output-mapping",
+	return fixture.startSync(t, factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
 		},
-	})
-	if err != nil {
-		t.Fatalf("marshal return value workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build return value workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start return value workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start return value workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode return value workflow response: %v", err)
-	}
-	return started
+	}, dir)
 }
 
 func startStructuredArtifactWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *contractFixture,
+	dir, requestID string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
 	workflowPath := filepath.Join(dir, structuredArtifactWorkflowFileName)
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-structured-artifact-output-mapping",
+	return fixture.startSync(t, factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
 		},
-	})
-	if err != nil {
-		t.Fatalf("marshal structured artifact workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build structured artifact workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start structured artifact workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start structured artifact workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode structured artifact workflow response: %v", err)
-	}
-	return started
+	}, dir)
 }
 
 func startUnsupportedReturnWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *contractFixture,
+	dir, requestID string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
 	workflowPath := filepath.Join(dir, unsupportedReturnWorkflowFileName)
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-unsupported-return-output-mapping",
+	return fixture.startSync(t, factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
 		},
-	})
-	if err != nil {
-		t.Fatalf("marshal unsupported return workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build unsupported return workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start unsupported return workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start unsupported return workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode unsupported return workflow response: %v", err)
-	}
-	return started
+	}, dir)
 }
 
 func readReturnValueFinalSessionResult(

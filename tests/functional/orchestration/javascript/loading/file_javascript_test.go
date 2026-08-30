@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,38 +23,19 @@ const (
 // file-backed JavaScript Factory resolves a factory-relative import through
 // the public you run customer process boundary with a terminal COMPLETED
 // primary outcome that reflects the imported module contribution.
-func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}, dir, t.TempDir())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed factory without child dispatch", got, providerCalls)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for file-backed factory without child dispatch", runner.CallCount())
-	}
-
-	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertFileJavaScriptImportedSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -65,28 +45,16 @@ func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
 // starts through the public you run customer process boundary with an
 // actionable load diagnostic and without private VM internals or external
 // worker dispatch.
-func TestJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithMissingImport(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	providerCalls := fixture.provider.CallCount()
+	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input)
+	}, dir, t.TempDir())
 	assertFileJavaScriptMissingImportFailureOutcome(
 		t,
 		err,
@@ -94,10 +62,11 @@ func TestJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
 		inputs.Stderr(),
 		fileJavaScriptMissingImportPath,
 	)
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for missing import before dispatch", runner.CallCount())
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for missing import before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+	fixture.recoverAfterLoadFailure(t, "missing-import")
 }
 
 func scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t *testing.T) string {
