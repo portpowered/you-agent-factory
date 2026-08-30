@@ -11,11 +11,6 @@ type inventoryReconciliation struct {
 	sourceLineDrifts []string
 }
 
-func reconcileInventory(sites []spawnSite, inventory inventoryDocument) error {
-	_, err := reconcileInventoryWithDiagnostics(sites, inventory)
-	return err
-}
-
 func reconcileInventoryWithDiagnostics(sites []spawnSite, inventory inventoryDocument) (inventoryReconciliation, error) {
 	findings := []string{}
 	sourceLineDrifts := []string{}
@@ -52,11 +47,6 @@ func findObservedSite(sites []spawnSite, siteID string) (spawnSite, bool) {
 		}
 	}
 	return spawnSite{}, false
-}
-
-func compareSiteMetadata(observed spawnSite, recorded inventorySpawnSite) []string {
-	findings, _ := compareSiteMetadataWithDiagnostics(observed, recorded)
-	return findings
 }
 
 func compareSiteMetadataWithDiagnostics(observed spawnSite, recorded inventorySpawnSite) ([]string, []string) {
