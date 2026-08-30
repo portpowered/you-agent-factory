@@ -67,6 +67,15 @@ func TestWorkerSessionRouteCharacterization_FreshAndExactly32Dispatches(t *testi
 	for _, index := range []int{0, 15, 31} {
 		assertRouteCharacterizationRead(t, server, observed[index], false)
 	}
+	beforeRepeatedReadEvents := len(support.GetFactoryEventsAt(t, server.URL()))
+	firstRepeatedRead := executeDefaultWorkerSessionsListJSON(t, server, observed[31].workID)
+	secondRepeatedRead := executeDefaultWorkerSessionsListJSON(t, server, observed[31].workID)
+	if !reflect.DeepEqual(firstRepeatedRead, secondRepeatedRead) {
+		t.Fatalf("repeated JSON Worker Session reads for Work %q differ:\nfirst: %#v\nsecond: %#v", observed[31].workID, firstRepeatedRead, secondRepeatedRead)
+	}
+	if afterRepeatedReadEvents := len(support.GetFactoryEventsAt(t, server.URL())); afterRepeatedReadEvents != beforeRepeatedReadEvents {
+		t.Fatalf("repeated Worker Session reads changed public Factory Event count from %d to %d", beforeRepeatedReadEvents, afterRepeatedReadEvents)
+	}
 	t.Logf(
 		"public dispatch associations: first=%s/%s/%s middle=%s/%s/%s final=%s/%s/%s",
 		observed[0].workID, observed[0].dispatchID, observed[0].workerSessionID,
@@ -170,6 +179,23 @@ func waitForRouteCharacterizationDispatch(
 	stream *support.FactoryEventStream,
 	workID string,
 ) routeCharacterizationDispatch {
+	return waitForRouteCharacterizationEvent(t, stream, workID, true)
+}
+
+func waitForRouteCharacterizationAssociation(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	workID string,
+) routeCharacterizationDispatch {
+	return waitForRouteCharacterizationEvent(t, stream, workID, false)
+}
+
+func waitForRouteCharacterizationEvent(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	workID string,
+	waitForResponse bool,
+) routeCharacterizationDispatch {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), routeCharacterizationTimeout)
 	defer cancel()
@@ -208,12 +234,11 @@ func waitForRouteCharacterizationDispatch(
 			}
 			entry.workerSessionID = strings.TrimSpace(association.WorkerSessionId)
 		case factoryapi.FactoryEventTypeDispatchResponse:
-			if !entry.workIDs[workID] {
-				continue
-			}
-			if entry.workerSessionID == "" {
+			if waitForResponse && entry.workIDs[workID] && entry.workerSessionID == "" {
 				t.Fatalf("public dispatch %q completed for Work %q without a Worker Session association", dispatchID, workID)
 			}
+		}
+		if entry.workIDs[workID] && entry.workerSessionID != "" && (!waitForResponse || event.Type == factoryapi.FactoryEventTypeDispatchResponse) {
 			return routeCharacterizationDispatch{
 				workID:          workID,
 				dispatchID:      dispatchID,

@@ -150,3 +150,23 @@ func executeWorkerSessionsListJSON(
 	}
 	return response
 }
+
+func executeDefaultWorkerSessionsListJSON(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	workID string,
+) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", workID,
+		"--server", server.URL(), "--output", "json",
+	})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("default JSON Worker Sessions list for Work %q: %v\nstderr:\n%s", workID, err, inputs.Stderr())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); err != nil {
+		t.Fatalf("decode default JSON Worker Sessions list for Work %q: %v\nstdout:\n%s", workID, err, inputs.Stdout())
+	}
+	return response
+}

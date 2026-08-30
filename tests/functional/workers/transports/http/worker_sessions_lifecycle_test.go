@@ -498,6 +498,7 @@ func functionalStringPtr(value string) *string { return &value }
 type functionalWorkerGate struct {
 	gate         <-chan struct{}
 	started      chan struct{}
+	callSignals  chan struct{}
 	canceled     chan struct{}
 	completed    chan struct{}
 	mu           sync.Mutex
@@ -509,7 +510,13 @@ type functionalWorkerGate struct {
 }
 
 func newFunctionalWorkerGate(gate <-chan struct{}) *functionalWorkerGate {
-	return &functionalWorkerGate{gate: gate, started: make(chan struct{}), canceled: make(chan struct{}), completed: make(chan struct{})}
+	return &functionalWorkerGate{
+		gate:        gate,
+		started:     make(chan struct{}),
+		callSignals: make(chan struct{}, 64),
+		canceled:    make(chan struct{}),
+		completed:   make(chan struct{}),
+	}
 }
 
 func (r *functionalWorkerGate) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -517,6 +524,10 @@ func (r *functionalWorkerGate) Run(ctx context.Context, _ platformprocess.Comman
 	r.calls++
 	r.startOnce.Do(func() { close(r.started) })
 	r.mu.Unlock()
+	select {
+	case r.callSignals <- struct{}{}:
+	default:
+	}
 	select {
 	case <-r.gate:
 		r.completeOnce.Do(func() { close(r.completed) })
@@ -551,6 +562,22 @@ func (r *functionalWorkerGate) waitStarted(t testing.TB) {
 	case <-r.started:
 	case <-time.After(functionalWorkerSignalTimeout):
 		t.Fatalf("functional worker did not reach the deterministic execution gate")
+	}
+}
+
+func (r *functionalWorkerGate) waitCallCount(t testing.TB, want int) {
+	t.Helper()
+	deadline := time.NewTimer(functionalWorkerSignalTimeout)
+	defer deadline.Stop()
+	for {
+		if r.callCount() >= want {
+			return
+		}
+		select {
+		case <-r.callSignals:
+		case <-deadline.C:
+			t.Fatalf("functional worker calls = %d, want at least %d", r.callCount(), want)
+		}
 	}
 }
 
