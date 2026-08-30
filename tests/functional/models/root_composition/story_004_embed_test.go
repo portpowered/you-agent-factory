@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
 
 func TestModelsEmbedRootCompositionBehavior(t *testing.T) {
 	t.Parallel()
@@ -285,8 +285,8 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 	if missCalls < 3 {
 		t.Fatalf("EMBED cache-miss asset calls = %d, want manifest, model, and backend exchanges", missCalls)
 	}
-	if !assetFixture.SawPathSuffix("/models/Qwen/Qwen3-Embedding-0.6B") ||
-		!assetFixture.SawPathSuffix("/Qwen/Qwen3-Embedding-0.6B/resolve/") ||
+	if !assetFixture.SawPathSuffix("/models/Qwen/Qwen3-Embedding-0.6B-GGUF") ||
+		!assetFixture.SawPathSuffix("/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/") ||
 		!assetFixture.SawPathSuffix("/"+selection.Name) {
 		t.Fatalf("EMBED cache-miss asset paths = %#v, want manifest, model, and pinned backend paths", assetFixture.URLs())
 	}
@@ -530,12 +530,12 @@ func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response,
 	client.urls = append(client.urls, request.URL.String())
 	client.mu.Unlock()
 	c06Ledger.assetHTTPCalls.Add(1)
-	if strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B") {
+	if strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B-GGUF") {
 		digest := fmt.Sprintf("%x", sha256.Sum256(client.modelBody))
 		manifest := map[string]any{
-			"sha": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+			"sha": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
 			"siblings": []map[string]any{{
-				"rfilename": "Qwen3-Embedding-0.6B.gguf",
+				"rfilename": "Qwen3-Embedding-0.6B-f16.gguf",
 				"size":      len(client.modelBody),
 				"lfs":       map[string]any{"oid": digest, "size": len(client.modelBody)},
 			}},
@@ -546,7 +546,7 @@ func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response,
 		}
 		return story004HTTPResponse(request, http.StatusOK, "application/json", body), nil
 	}
-	if strings.Contains(request.URL.Path, "/Qwen/Qwen3-Embedding-0.6B/resolve/") {
+	if strings.Contains(request.URL.Path, "/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/") {
 		return story004HTTPResponse(request, http.StatusOK, "application/octet-stream", client.modelBody), nil
 	}
 	if strings.HasSuffix(request.URL.Path, "/"+client.selection.Name) {

@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	story001ModelRepository = "Qwen/Qwen3-Embedding-0.6B"
-	story001ModelRevision   = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
-	story001ModelAsset      = "Qwen3-Embedding-0.6B.gguf"
+	story001ModelRepository = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+	story001ModelRevision   = "370f27d7550e0def9b39c1f16d3fbaa13aa67728"
+	story001ModelAsset      = "Qwen3-Embedding-0.6B-f16.gguf"
 	story001BackendAsset    = "localai-backend-localai-llamacpp-functional.tar.gz"
 	story001ModelInput      = "story-001-controlled-input"
 )

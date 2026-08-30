@@ -160,7 +160,7 @@ const (
 	builtInLLMSource   = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
 	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1"
 	builtInTTSSource   = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
-	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
 )
 
 // ModelDefinition describes one configured model name without resolving its

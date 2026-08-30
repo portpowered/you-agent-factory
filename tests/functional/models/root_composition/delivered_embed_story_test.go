@@ -274,9 +274,9 @@ func (fixture *deliveredEmbedFixture) serveHTTP(writer http.ResponseWriter, requ
 	switch {
 	case request.URL.Path == "/embed":
 		fixture.serveEmbedding(writer, request)
-	case strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B"):
+	case strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B-GGUF"):
 		fixture.serveModelManifest(writer, request)
-	case strings.Contains(request.URL.Path, "/Qwen/Qwen3-Embedding-0.6B/resolve/"):
+	case strings.Contains(request.URL.Path, "/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/"):
 		fixture.recordAsset(request)
 		writeDeliveredEmbedBytes(writer, http.StatusOK, []byte("story-004-embedding-model-download"), "application/octet-stream")
 	case strings.HasSuffix(request.URL.Path, "/"+deliveredEmbedBackendName):
@@ -292,9 +292,9 @@ func (fixture *deliveredEmbedFixture) serveModelManifest(writer http.ResponseWri
 	modelBody := []byte("story-004-embedding-model-download")
 	digest := fmt.Sprintf("%x", sha256.Sum256(modelBody))
 	payload := map[string]any{
-		"sha": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+		"sha": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
 		"siblings": []map[string]any{{
-			"rfilename": "Qwen3-Embedding-0.6B.gguf", "size": len(modelBody),
+			"rfilename": "Qwen3-Embedding-0.6B-f16.gguf", "size": len(modelBody),
 			"lfs": map[string]any{"oid": digest, "size": len(modelBody)},
 		}},
 	}

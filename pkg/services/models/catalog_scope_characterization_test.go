@@ -442,7 +442,7 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		},
 		{
 			name:      "embed",
-			source:    "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+			source:    "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728",
 			backend:   "localai-llamacpp",
 			operation: models.OperationEMBED,
 		},

@@ -13,7 +13,7 @@ Upstream references: [LocalAI](https://github.com/mudler/LocalAI),
 [LocalAI audio-to-text](https://localai.io/docs/features/audio-to-text/),
 [llama.cpp model loading](https://github.com/ggml-org/llama.cpp/blob/master/docs/models.md),
 [VibeVoice-7B](https://huggingface.co/vibevoice/VibeVoice-7B),
-[Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B).
+[Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF).
 
 ## Problem, gap, and outcome
 
@@ -56,7 +56,7 @@ In scope (this plan):
 | `asr` | `ASR` | `hf://ggerganov/whisper.cpp/ggml-base.en.bin` | LocalAI whisper.cpp audio backend |
 | `tts` | `TTS` | `hf://vibevoice/VibeVoice-7B` | LocalAI vibevoice audio backend |
 | `llm` | `OMNI` | gemma-e4b GGUF (pinned `hf://` revision) | LocalAI llama.cpp backend |
-| `embed` | `EMBED` | `hf://Qwen/Qwen3-Embedding-0.6B` (GGUF) | LocalAI llama.cpp backend |
+| `embed` | `EMBED` | `hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf` | LocalAI llama.cpp backend |
 
 Plus, from `problems.md`: generic CLI invocation, Hugging Face download and
 cache reuse, CI compilation of backend artifacts for mac/linux/windows, `@`
@@ -196,7 +196,7 @@ models:
     loadPolicy: ON_DEMAND
     operations: [TTS]
   embed:
-    source: hf://Qwen/Qwen3-Embedding-0.6B
+    source: hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf
     backend: localai-llamacpp
     loadPolicy: ON_DEMAND
     operations: [EMBED]
