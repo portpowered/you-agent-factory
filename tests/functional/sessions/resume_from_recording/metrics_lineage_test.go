@@ -59,7 +59,7 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 		t.Fatalf("source Work submission = %#v, want one accepted Work identity", submitted)
 	}
 	sourceRunner.waitForStart(t)
-	sourceRunner.release(t)
+	sourceRunner.releaseProvider(t)
 	support.WaitForSessionTerminalStatus(t, source.URL(), factorysessions.DefaultSessionID, 15*time.Second)
 
 	sourceSession := support.GetDefaultSession(t, source.URL())
@@ -258,7 +258,7 @@ func (runner *metricsLineageCommandRunner) waitForStart(t testing.TB) {
 	}
 }
 
-func (runner *metricsLineageCommandRunner) release(t testing.TB) {
+func (runner *metricsLineageCommandRunner) releaseProvider(t testing.TB) {
 	t.Helper()
 	runner.releaseOnce.Do(func() { close(runner.release) })
 }
