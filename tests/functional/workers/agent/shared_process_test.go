@@ -120,10 +120,11 @@ const (
 	agentSharedJSONPayloadInput agentSharedInputMode = "json-payload"
 	agentSharedJSONSeedInput    agentSharedInputMode = "json-seed"
 
-	agentSharedSuccess agentSharedScenarioBehavior = "success"
-	agentSharedFailure agentSharedScenarioBehavior = "failure"
-	agentSharedTimeout agentSharedScenarioBehavior = "timeout"
-	agentSharedCancel  agentSharedScenarioBehavior = "cancel"
+	agentSharedSuccess     agentSharedScenarioBehavior = "success"
+	agentSharedHeldSuccess agentSharedScenarioBehavior = "held-success"
+	agentSharedFailure     agentSharedScenarioBehavior = "failure"
+	agentSharedTimeout     agentSharedScenarioBehavior = "timeout"
+	agentSharedCancel      agentSharedScenarioBehavior = "cancel"
 )
 
 func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
@@ -201,7 +202,7 @@ func newAgentSharedScenarios(t *testing.T) []agentSharedScenario {
 		}
 		if testCase.behavior != "" {
 			scenario.runner = newAgentSharedScenarioRunner(testCase.behavior, testCase.output, testCase.message)
-			if testCase.behavior != agentSharedSuccess {
+			if testCase.behavior != agentSharedSuccess && testCase.behavior != agentSharedHeldSuccess {
 				scenario.wantOutcome = factoryapi.WorkOutcomeFailed
 			}
 			if testCase.behavior == agentSharedTimeout {

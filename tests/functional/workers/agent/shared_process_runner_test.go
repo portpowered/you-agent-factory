@@ -112,10 +112,12 @@ type agentSharedScenarioRunner struct {
 	behavior agentSharedScenarioBehavior
 	result   platformprocess.CommandResult
 
-	started    chan struct{}
-	finished   chan struct{}
-	startOnce  sync.Once
-	finishOnce sync.Once
+	started     chan struct{}
+	finished    chan struct{}
+	release     chan struct{}
+	startOnce   sync.Once
+	finishOnce  sync.Once
+	releaseOnce sync.Once
 
 	mu       sync.Mutex
 	requests []platformprocess.CommandRequest
@@ -141,6 +143,7 @@ func newAgentSharedScenarioRunner(
 		result:   result,
 		started:  make(chan struct{}),
 		finished: make(chan struct{}),
+		release:  make(chan struct{}),
 	}
 }
 
@@ -172,9 +175,20 @@ func (runner *agentSharedScenarioRunner) Run(
 		return cloneAgentCommandResult(runner.result), nil
 	case agentSharedSuccess:
 		return support.NewShapedProviderCommandRunner(runner.result).Run(ctx, request)
+	case agentSharedHeldSuccess:
+		select {
+		case <-runner.release:
+			return support.NewShapedProviderCommandRunner(runner.result).Run(ctx, request)
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
 	default:
 		return platformprocess.CommandResult{}, fmt.Errorf("unknown agent scenario behavior %q", runner.behavior)
 	}
+}
+
+func (runner *agentSharedScenarioRunner) releaseCall() {
+	runner.releaseOnce.Do(func() { close(runner.release) })
 }
 
 func (runner *agentSharedScenarioRunner) waitStarted(t testing.TB, timeout time.Duration) {

@@ -306,6 +306,15 @@ func (fixture *agentSharedProcessFixture) runScenario(
 			support.SessionResponseEventsURL(fixture.baseURL, sessionID),
 		)
 	}
+	if scenario.name == "RuntimeRoot" {
+		t.Cleanup(scenario.runner.releaseCall)
+		scenario.runner.waitStarted(t, agentSharedProcessTimeout)
+		responseStream = support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(fixture.baseURL, sessionID),
+		)
+		scenario.runner.releaseCall()
+	}
 	var submitted factoryapi.SubmitWorkResponse
 	if scenario.inputMode != agentSharedJSONSeedInput {
 		submitted = support.SubmitSessionWorkAt(t, fixture.baseURL, sessionID, request)
@@ -335,10 +344,9 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, agentSharedProcessTimeout)
 	}
 	if scenario.name == "RuntimeRoot" {
-		// The seed is consumed while the explicit session opens, before a live
-		// SSE subscriber can be attached. Read the retained public stream after
-		// terminalization so a fast seed dispatch cannot race subscription setup.
-		responseEvents = support.GetFactoryResponseEventsAt(t, fixture.baseURL, sessionID)
+		responseEvents = readAgentResponseEventsUntilTerminal(t, responseStream, agentSharedProcessTimeout)
+		responseStream.Close()
+		responseStream.WaitClosed(agentSharedProcessTimeout)
 	}
 	listed := listAgentSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)

@@ -47,6 +47,7 @@ func agentSharedSuccessSpecs() []agentSharedScenarioSpec {
 			inputMarker: "runtime provider root",
 			output:      "functional-runtime-provider-output COMPLETE",
 			inputMode:   agentSharedJSONSeedInput,
+			behavior:    agentSharedHeldSuccess,
 		},
 		{
 			name:        "Claude",
