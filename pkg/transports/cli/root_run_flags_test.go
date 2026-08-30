@@ -265,6 +265,7 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if !strings.Contains(runCmd.Example, "run --work ./docs/examples/startup-work.json") {
 		t.Fatal("expected run command examples to provide explicit default Work")
 	}
+	exerciseBatchColdStartCLICharacterization(t)
 }
 
 func TestRunCommand_RecordAndReplayFlags(t *testing.T) {
@@ -725,4 +726,111 @@ type rootRemoteInvocationFunc func(context.Context, runcli.RemoteInvocationReque
 
 func (fn rootRemoteInvocationFunc) StartFactorySession(ctx context.Context, request runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 	return fn(ctx, request)
+}
+
+var profileSelectedBatchSystemInitializationCases = []struct {
+	name         string
+	cfg          runcli.RunConfig
+	changedFlag  string
+	wantDeferred bool
+}{
+	{
+		name: "finite mock no-record batch",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			Port:                    7437,
+		},
+		wantDeferred: true,
+	},
+	{
+		name: "explicit recording",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: false,
+			RecordPath:              "recording.jsonl",
+		},
+	},
+	{
+		name: "replay",
+		cfg: runcli.RunConfig{
+			WorkFile:           "one-work.json",
+			MockWorkersEnabled: true,
+			ReplayPath:         "recording.jsonl",
+		},
+	},
+	{
+		name: "server",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			WithServer:              true,
+		},
+	},
+	{
+		name: "continuous",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			Continuously:            true,
+		},
+	},
+	{
+		name: "real workers",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			DisableDefaultRecording: true,
+		},
+	},
+	{
+		name: "bootstrap",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			Bootstrap:               true,
+		},
+	},
+	{
+		name: "named Factory",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			NamedFactoryName:        "@you/goal",
+		},
+	},
+	{
+		name: "listener",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			ListenExplicit:          true,
+		},
+	},
+	{
+		name:        "explicit factory path",
+		changedFlag: "factory",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			FactoryConfigPath:       "factory.json",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+		},
+	},
+	{
+		name:        "explicit factory directory",
+		changedFlag: "dir",
+		cfg: runcli.RunConfig{
+			WorkFile:                "one-work.json",
+			Dir:                     "factory",
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+		},
+	},
 }

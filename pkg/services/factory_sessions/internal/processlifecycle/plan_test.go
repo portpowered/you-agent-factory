@@ -196,6 +196,7 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	if !reflect.DeepEqual(runtime.events, want) {
 		t.Fatalf("events = %v, want %v", runtime.events, want)
 	}
+	exerciseBatchColdStartLifecycleCharacterization(t)
 }
 
 func TestRuntimeLifecycleLeavesRuntimeUnwindAvailableAfterWorkerStartFailure(t *testing.T) {

@@ -601,6 +601,58 @@ func TestRuntimeOpeningRequestFactorySelectsEnabledPersistenceForBatchAndService
 			}
 		})
 	}
+	assertBatchColdStartOpeningValues(t)
+}
+
+// assertBatchColdStartOpeningValues
+// records the exact request values that distinguish the no-listener batch
+// path from the explicitly hosted path. The later optimization story may
+// change when unused work happens, but it must not change this owner request
+// boundary.
+func assertBatchColdStartOpeningValues(t *testing.T) {
+	t.Helper()
+	opening := provideRuntimeOpeningRequestFactory()
+	mocks := workers.NewEmptyMockWorkersConfig()
+	base := runcli.RunConfig{
+		Dir:               "factory",
+		FactoryConfigPath: "factory/factory.json",
+		ExecutionBaseDir:  "execution",
+		HomeDir:           "isolated-home",
+		WorkFile:          "one-work.json",
+		BindHost:          "127.0.0.1",
+	}
+
+	batch := opening(base, mocks)
+	if batch.FactoryRuntime.Mode != factorydefinitions.RuntimeModeBatch {
+		t.Fatalf("batch runtime mode = %q, want %q", batch.FactoryRuntime.Mode, factorydefinitions.RuntimeModeBatch)
+	}
+	if batch.FactorySession.Host.Directory != base.Dir ||
+		batch.FactorySession.Host.WorkFile != base.WorkFile ||
+		!batch.FactorySession.Host.MockWorkers {
+		t.Fatalf("batch host values = %+v, want directory/work file/mock workers from the batch request", batch.FactorySession.Host)
+	}
+	if batch.FactorySession.Host.Host != "127.0.0.1" || batch.FactorySession.Host.Port != 0 ||
+		batch.FactorySession.Host.AutoPort || batch.FactorySession.Host.Pprof {
+		t.Fatalf("batch host values = %+v, want no listener request", batch.FactorySession.Host)
+	}
+
+	serverConfig := base
+	serverConfig.Port = 8123
+	serverConfig.AutoPort = true
+	serverConfig.Pprof = true
+	server := opening(serverConfig, mocks)
+	if server.FactoryRuntime.Mode != factorydefinitions.RuntimeModeBatch {
+		t.Fatalf("hosted batch runtime mode = %q, want %q", server.FactoryRuntime.Mode, factorydefinitions.RuntimeModeBatch)
+	}
+	if got := server.FactorySession.Host; got.Host != "127.0.0.1" || got.Port != 8123 || !got.AutoPort || !got.Pprof {
+		t.Fatalf("hosted batch host values = %+v, want explicit API host request", got)
+	}
+
+	t.Logf("batch host: directory=%q work=%q mock_workers=%t host=%q port=%d auto_port=%t pprof=%t; hosted host: %+v",
+		batch.FactorySession.Host.Directory, batch.FactorySession.Host.WorkFile,
+		batch.FactorySession.Host.MockWorkers, batch.FactorySession.Host.Host,
+		batch.FactorySession.Host.Port, batch.FactorySession.Host.AutoPort,
+		batch.FactorySession.Host.Pprof, server.FactorySession.Host)
 }
 
 func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) {

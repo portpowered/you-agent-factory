@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -18,6 +19,29 @@ type LocalRuntimeRunner interface {
 // CompletionOperation is the typed one-shot operation run after the
 // initializer has established any required host readiness.
 type CompletionOperation func(context.Context) error
+
+// PreparationGate serializes repeated calls to one invocation's startup
+// preparation. The initializer owns this lifecycle coordination so command
+// transports can retain their selection policy without embedding concurrency
+// primitives in a transport package.
+//
+// The zero value is ready for use. The gate does not cache an operation error;
+// its caller owns any retry or error-retention policy for the preparation.
+type PreparationGate struct {
+	mu sync.Mutex
+}
+
+func (gate *PreparationGate) Run(operation func() error) error {
+	if gate == nil {
+		return errors.New("initializer preparation gate is required")
+	}
+	if operation == nil {
+		return errors.New("initializer preparation operation is required")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	return operation()
+}
 
 // CompletionRuntimeRunner lets the initializer-owned lifecycle runner keep a
 // hosted transport alive while one-shot completion waits for runtime-host

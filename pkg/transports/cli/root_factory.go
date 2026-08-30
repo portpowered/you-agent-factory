@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -367,6 +368,7 @@ func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, opt
 }
 
 type runStartupPreparation struct {
+	gate                  initializer.PreparationGate
 	cmd                   *cobra.Command
 	cfg                   *runcli.RunConfig
 	options               CommandFactory
@@ -377,6 +379,7 @@ type runStartupPreparation struct {
 	recordingInputBlocked bool
 	activationChecked     bool
 	activationAllowed     bool
+	initializationErr     error
 }
 
 func newRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) *runStartupPreparation {
@@ -395,22 +398,27 @@ func (preparation *runStartupPreparation) Prepare(ctx context.Context, discloseH
 	if preparation == nil || preparation.cfg == nil {
 		return errors.New("run startup preparation is required")
 	}
-	if preparation.recordingInputBlocked {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.checkRecordingInput(discloseHome)
-	if preparation.recordingInputBlocked {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.checkFactoryActivation()
-	if !preparation.activationAllowed {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.discloseHome(discloseHome, disclosureOutput)
-	return preparation.initialize(ctx)
+	return preparation.gate.Run(func() error {
+		if preparation.initializationErr != nil {
+			return preparation.initializationErr
+		}
+		if preparation.recordingInputBlocked {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.checkRecordingInput(discloseHome)
+		if preparation.recordingInputBlocked {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.checkFactoryActivation()
+		if !preparation.activationAllowed {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.discloseHome(discloseHome, disclosureOutput)
+		return preparation.initialize(ctx)
+	})
 }
 
 func (preparation *runStartupPreparation) checkRecordingInput(discloseHome bool) {
@@ -456,10 +464,12 @@ func (preparation *runStartupPreparation) initialize(ctx context.Context) error 
 		return nil
 	}
 	if preparation.options.initializer == nil {
-		return errors.New("run service initializer is required")
+		preparation.initializationErr = errors.New("run service initializer is required")
+		return preparation.initializationErr
 	}
 	if err := preparation.options.initializer.InitializeSystem(ctx, preparation.homeDir); err != nil {
-		return reportSystemInitializationFailure(preparation.cmd, err)
+		preparation.initializationErr = reportSystemInitializationFailure(preparation.cmd, err)
+		return preparation.initializationErr
 	}
 	preparation.initialized = true
 	return nil
@@ -481,7 +491,44 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 	if options.initializer == nil {
 		return false, fmt.Errorf("system initializer is required")
 	}
+	if deferBatchSystemInitialization(cmd, *cfg) {
+		return false, nil
+	}
 	return true, nil
+}
+
+// deferBatchSystemInitialization keeps the profile-selected packaged-Factory
+// bootstrap work out of the finite mock/no-record batch path. That path has no
+// system-bootstrap demand: its Factory and Work inputs are local, its worker
+// behavior is supplied by the selected mock configuration, and its recording
+// request explicitly disables durable recording. Server, recording/replay,
+// named/bootstrap, continuous, and real-worker invocations retain the normal
+// initialization boundary.
+func deferBatchSystemInitialization(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	if runFactorySelectionWasExplicit(cmd) {
+		return false
+	}
+	return isFiniteMockNoRecordBatch(cfg)
+}
+
+func runFactorySelectionWasExplicit(cmd *cobra.Command) bool {
+	return cmd != nil &&
+		(cmd.Flags().Changed("dir") || cmd.Flags().Changed("factory") || cmd.Flags().Changed("named"))
+}
+
+func isFiniteMockNoRecordBatch(cfg runcli.RunConfig) bool {
+	return strings.TrimSpace(cfg.WorkFile) != "" &&
+		!cfg.Continuously &&
+		cfg.MockWorkersEnabled &&
+		cfg.DisableDefaultRecording &&
+		strings.TrimSpace(cfg.RecordPath) == "" &&
+		strings.TrimSpace(cfg.ReplayPath) == "" &&
+		strings.TrimSpace(cfg.ResumePath) == "" &&
+		!cfg.WithServer &&
+		!cfg.WithSite &&
+		!cfg.ListenExplicit &&
+		!cfg.Bootstrap &&
+		strings.TrimSpace(cfg.NamedFactoryName) == ""
 }
 
 func inspectRunRecordingInput(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory) bool {
