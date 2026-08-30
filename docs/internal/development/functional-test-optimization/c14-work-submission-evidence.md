@@ -19,7 +19,7 @@ remaining PR CI/merge ownership; it does not claim terminal PR CI or merge.
   review corrections are limited to the five submission-package test files
   recorded at final code/test head
   `97e4abb86673aa9cd34a5102a06a71360af937ae`. The current final PR head is
-  `ec1cf248e7350cffb5121820b5ce75265c6cd184` and contains this
+  `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89` and contains this
   documentation-only refresh. No production, shared-support,
   contract, generated, workflow, or sibling-package file was edited.
 - Cost and network: controlled local fixtures only; 0 remote product calls and
@@ -255,7 +255,7 @@ witness and corrected in implementation head
 `97e4abb86673aa9cd34a5102a06a71360af937ae`. The corrected implementation was
 then tested from a detached clean worktree at that exact valid head. The
 current final PR head is
-`ec1cf248e7350cffb5121820b5ce75265c6cd184`; it is a documentation-only ledger
+`bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89`; it is a documentation-only ledger
 refresh after the executable validation head and does not alter the package
 artifact or its test sources. Environment was
 `go version go1.25.0 windows/amd64`, Windows build `26200`, `amd64`, with the
@@ -446,7 +446,7 @@ their assertions remain unchanged.
 - Commit/build identifier: corrected implementation head
   `97e4abb866` (`97e4abb86673aa9cd34a5102a06a71360af937ae`), also checked from
   a detached clean worktree; current final PR head
-  `ec1cf248e7350cffb5121820b5ce75265c6cd184` contains the subsequent
+  `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89` contains the subsequent
   documentation-only ledger refresh.
 - Environment and configuration: `go version go1.25.0 windows/amd64`,
   Windows build `26200`, `amd64`, shared compute-saturated host; no test
@@ -461,8 +461,8 @@ their assertions remain unchanged.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3 at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae`; all exit `0`, package median `30.622s`, wall median `34.4792s`; detached clean-worktree run emitted `ok` (`30.575s` package) before the host wrapper cleanup hang; final PR head is `ec1cf248e7350cffb5121820b5ce75265c6cd184` | New PR CI and merge |
-| GATE-RACE: changed package race safety | PASS with host-status limitation | `go test -race ./tests/functional/work/submission/... -count=1` emitted `ok` and no race report at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae` on three attempts (`70.597s`, `47.183s`, `53.270s` package); wrappers did not return terminal status; equivalent pre-rebase code-head run exited `0`; final PR head is `ec1cf248e7350cffb5121820b5ce75265c6cd184` | Fresh hosted CI and schedules outside these runs |
+| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3 at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae`; all exit `0`, package median `30.622s`, wall median `34.4792s`; detached clean-worktree run emitted `ok` (`30.575s` package) before the host wrapper cleanup hang; final rebased PR head is `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89` | New PR CI and merge |
+| GATE-RACE: changed package race safety | PASS with host-status limitation | `go test -race ./tests/functional/work/submission/... -count=1` emitted `ok` and no race report at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae` on three attempts (`70.597s`, `47.183s`, `53.270s` package); wrappers did not return terminal status; equivalent pre-rebase code-head run exited `0`; final rebased PR head is `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89` | Fresh hosted CI and schedules outside these runs |
 | GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `49.098s` | Remote tagged workflow behavior |
 | GATE-ASSERTIONS: CASE-SUB-001..031 | PASS | Post-edit same-or-stronger table above; all 31 rows mapped to retained observable assertions | Untested real-remote systems |
 | Scope and cleanup | PASS | Corrected source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
@@ -471,7 +471,7 @@ their assertions remain unchanged.
 
 1. From the clean detached corrected artifact at valid executable head
    `97e4abb86673aa9cd34a5102a06a71360af937ae` (represented by final PR head
-   `ec1cf248e7350cffb5121820b5ce75265c6cd184` after the documentation-only
+   `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89` after the documentation-only
    refresh), run the exact
    default package command. All 29 default Work-submission cases pass through assembled local
    production wiring, including HTTP, live-root CLI, Work projection, event,
@@ -500,7 +500,7 @@ their assertions remain unchanged.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| FINDING-001 | blocking, resolved | Shared HTTP staged-image witness at pushed head `ed703...` | One staged image remains projected | Corrected shared fixture at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae` preserves image projection; focused, package, race-detector output, tagged, and clean-worktree gates pass | Local loopback clean; final PR head is `ec1cf248e7350cffb5121820b5ce75265c6cd184`; new PR CI remains required |
+| FINDING-001 | blocking, resolved | Shared HTTP staged-image witness at pushed head `ed703...` | One staged image remains projected | Corrected shared fixture at valid executable head `97e4abb86673aa9cd34a5102a06a71360af937ae` preserves image projection; focused, package, race-detector output, tagged, and clean-worktree gates pass | Local loopback clean; final rebased PR head is `bb156da3ad41aa6a4fefd0e709cb5abfb76e0a89`; new PR CI remains required |
 
 ## Verdict
 
