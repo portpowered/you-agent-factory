@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,6 +80,40 @@ type testDispatchResultHook struct {
 	submits  []work.WorkDispatch
 	results  []workerexecution.WorkResult
 	waitOnce bool
+}
+
+// deterministicResultGate holds one result until the test has completed the
+// state change that must win the result race. Its channels make the ordering
+// explicit without relying on sleeps or scheduler timing.
+type deterministicResultGate struct {
+	ready     chan struct{}
+	delivered chan struct{}
+	release   chan struct{}
+	result    workerexecution.WorkResult
+
+	readyOnce     sync.Once
+	deliveredOnce sync.Once
+	releaseOnce   sync.Once
+}
+
+func newDeterministicResultGate(result workerexecution.WorkResult) *deterministicResultGate {
+	return &deterministicResultGate{
+		ready:     make(chan struct{}),
+		delivered: make(chan struct{}),
+		release:   make(chan struct{}),
+		result:    result,
+	}
+}
+
+func (g *deterministicResultGate) waitForRelease() workerexecution.WorkResult {
+	g.readyOnce.Do(func() { close(g.ready) })
+	<-g.release
+	g.deliveredOnce.Do(func() { close(g.delivered) })
+	return g.result
+}
+
+func (g *deterministicResultGate) releaseResult() {
+	g.releaseOnce.Do(func() { close(g.release) })
 }
 
 func newTestDispatchResultHook() *testDispatchResultHook {

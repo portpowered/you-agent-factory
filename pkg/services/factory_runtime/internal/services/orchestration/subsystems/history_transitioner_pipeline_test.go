@@ -95,6 +95,104 @@ func TestHistoryTransitionerPipeline_FailedRoutesUsingConsumedDispatchTokens(t *
 	}
 }
 
+func TestHistoryTransitionerPipeline_TerminalResultOutcomeRoutes(t *testing.T) {
+	now := time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name             string
+		outcome          workerexecution.WorkOutcome
+		feedback         string
+		err              string
+		cancellation     workerexecution.DispatchCancellationReason
+		wantPlace        string
+		wantCompletion   workerexecution.WorkOutcome
+		wantReason       string
+		wantCancellation workerexecution.DispatchCancellationReason
+	}{
+		{
+			name: "accepted", outcome: workerexecution.OutcomeAccepted,
+			wantPlace: "wt-code:done", wantCompletion: workerexecution.OutcomeAccepted,
+		},
+		{
+			name: "continue", outcome: workerexecution.OutcomeContinue, feedback: "needs revision",
+			wantPlace: "wt-code:init", wantCompletion: workerexecution.OutcomeContinue,
+			wantReason: "needs revision",
+		},
+		{
+			name: "rejected", outcome: workerexecution.OutcomeRejected, feedback: "not ready",
+			wantPlace: "wt-code:init", wantCompletion: workerexecution.OutcomeRejected,
+			wantReason: "not ready",
+		},
+		{
+			name: "failed", outcome: workerexecution.OutcomeFailed, err: "agent crashed",
+			wantPlace: "wt-code:failed", wantCompletion: workerexecution.OutcomeFailed,
+			wantReason: "agent crashed",
+		},
+		{
+			name: "canceled", outcome: workerexecution.OutcomeCanceled,
+			cancellation: workerexecution.DispatchCancellationReasonSuperseded,
+			wantPlace:    "wt-code:init", wantCompletion: workerexecution.OutcomeCanceled,
+			wantReason:       string(workerexecution.DispatchCancellationReasonSuperseded),
+			wantCancellation: workerexecution.DispatchCancellationReasonSuperseded,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tp := newTestPipeline(buildPipelineNet(), func() time.Time { return now })
+			workerResult := workerexecution.WorkResult{
+				DispatchID: "d-1", TransitionID: "t1", Outcome: test.outcome,
+				Feedback: test.feedback, Error: test.err,
+			}
+			if test.cancellation != "" {
+				workerResult.Cancellation = &workerexecution.DispatchCancellation{Reason: test.cancellation}
+			}
+			tp.WriteResult(workerResult)
+
+			snapshot := pipelineSnapshot(
+				"wt-code:init", "t1", "d-1",
+				factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"}, now,
+			)
+			if test.outcome == workerexecution.OutcomeCanceled {
+				snapshot.Marking = petri.MarkingSnapshot{
+					Tokens:      map[string]*factorytoken.Token{},
+					PlaceTokens: map[string][]string{},
+				}
+				snapshot.Dispatches["d-1"].HeldMutations = []interfaces.MarkingMutation{{
+					Type:      interfaces.MutationConsume,
+					TokenID:   "tok-1",
+					FromPlace: "wt-code:init",
+				}}
+			}
+			result, err := tp.Execute(context.Background(), &snapshot)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result == nil || len(result.Mutations) != 1 {
+				t.Fatalf("Execute() result = %#v, want one route mutation", result)
+			}
+			mutation := result.Mutations[0]
+			if mutation.ToPlace != test.wantPlace || mutation.NewToken == nil ||
+				mutation.NewToken.Color.WorkID != "w1" {
+				t.Fatalf("route mutation = %#v, want Work w1 at %s", mutation, test.wantPlace)
+			}
+			if len(result.CompletedDispatches) != 1 {
+				t.Fatalf("completed dispatches = %#v, want one", result.CompletedDispatches)
+			}
+			completed := result.CompletedDispatches[0]
+			if completed.Outcome != test.wantCompletion || completed.Reason != test.wantReason {
+				t.Fatalf("completion = %#v, want outcome %s reason %q", completed, test.wantCompletion, test.wantReason)
+			}
+			if test.wantCancellation == "" {
+				if completed.Cancellation != nil {
+					t.Fatalf("completion cancellation = %#v, want nil", completed.Cancellation)
+				}
+			} else if completed.Cancellation == nil || completed.Cancellation.Reason != test.wantCancellation {
+				t.Fatalf("completion cancellation = %#v, want %s", completed.Cancellation, test.wantCancellation)
+			}
+		})
+	}
+}
+
 func TestHistoryTransitionerPipeline_FailedWithoutFailureArcs_UsesConsumedDispatchTokensForFallback(t *testing.T) {
 	n := buildPipelineNet()
 	n.Transitions["t1"].FailureArcs = nil

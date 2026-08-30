@@ -312,6 +312,100 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 	}
 }
 
+func TestEngine_LateDispatchResultGateOrdersTerminalPlacementBeforeRelease(t *testing.T) {
+	const (
+		workID     = "work-late-result"
+		dispatchID = "dispatch-late-result"
+	)
+	now := time.Date(2026, time.August, 29, 12, 0, 0, 0, time.UTC)
+	net := buildTestNet()
+	net.Transitions["late-result"] = &petri.Transition{
+		ID:         "late-result",
+		Name:       "Late result",
+		WorkerType: "worker",
+		InputArcs: []petri.Arc{{
+			ID: "input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{
+			ID: "accepted", PlaceID: "task:complete", Direction: petri.ArcOutput,
+		}},
+		FailureArcs: []petri.Arc{{
+			ID: "failed", PlaceID: "task:failed", Direction: petri.ArcOutput,
+		}},
+	}
+
+	marking := petri.NewMarking("late-result-test")
+	source := &factorytoken.Token{
+		ID: "late-result-token", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
+		Color:   factorytoken.Color{WorkID: workID, WorkTypeID: "task", TraceID: "trace-late-result"},
+		History: newTestTokenHistory(),
+	}
+	marking.AddToken(source)
+
+	gate := newDeterministicResultGate(workerexecution.WorkResult{
+		DispatchID: dispatchID, TransitionID: "late-result", Outcome: workerexecution.OutcomeFailed,
+		Error: "late worker failure",
+	})
+	hook := newTestDispatchResultHook()
+	hook.onTick = func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error) {
+		return []workerexecution.WorkResult{gate.waitForRelease()}, nil
+	}
+	transitioner := subsystems.NewTransitioner(
+		net, nil, func() time.Time { return now },
+		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
+		nil, nil, nil,
+		factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}),
+	)
+	engine := newTestFactoryEngine(
+		net, marking, []subsystems.Subsystem{transitioner},
+		WithDispatchResultHook(hook),
+	)
+	engine.runtimeState.Dispatches[dispatchID] = &interfaces.DispatchEntry{
+		DispatchID: dispatchID, TransitionID: "late-result", StartTime: now,
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{factorytoken.Clone(*source)}),
+		HeldMutations: []interfaces.MarkingMutation{{
+			Type: interfaces.MutationConsume, TokenID: source.ID, FromPlace: source.PlaceID,
+		}},
+	}
+	engine.runtimeState.InFlightCount = 1
+	t.Cleanup(gate.releaseResult)
+
+	tickDone := make(chan error, 1)
+	go func() { tickDone <- engine.Tick(context.Background()) }()
+	<-gate.ready
+	select {
+	case <-gate.delivered:
+		t.Fatal("dispatch result was delivered before the terminal placement step")
+	default:
+	}
+
+	if err := applyMutations(marking, net.Places, []interfaces.MarkingMutation{{
+		Type: interfaces.MutationMove, TokenID: source.ID,
+		FromPlace: "task:init", ToPlace: "task:complete",
+	}}, now); err != nil {
+		t.Fatalf("place Work in terminal state: %v", err)
+	}
+	gate.releaseResult()
+	if err := <-tickDone; err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+
+	snapshot := engine.GetRuntimeStateSnapshot()
+	terminal := snapshot.Marking.TokensInPlace("task:complete")
+	if len(terminal) != 1 || terminal[0].Color.WorkID != workID {
+		t.Fatalf("terminal Work = %#v, want one %s token", terminal, workID)
+	}
+	if len(snapshot.DispatchHistory) != 1 || snapshot.DispatchHistory[0].DispatchID != dispatchID {
+		t.Fatalf("dispatch history = %#v, want one retired late result", snapshot.DispatchHistory)
+	}
+	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch completion outcome = %q, want FAILED", snapshot.DispatchHistory[0].Outcome)
+	}
+}
+
 func TestHumanApprovalDispatchIsReservedWithoutWorkerForwarding(t *testing.T) {
 	n := buildTestNet()
 	n.Transitions["approval"] = &petri.Transition{
