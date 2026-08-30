@@ -966,3 +966,73 @@ func TestModelsPullWaitsForDedicatedProtocolTerminalResponse(t *testing.T) {
 		t.Fatalf("pull output = %q, want terminal success", output.String())
 	}
 }
+
+func TestModelsRemoteGenericInvokeUsesDedicatedLongRunningProtocol(t *testing.T) {
+	t.Parallel()
+
+	var standardCalls atomic.Int32
+	standard, err := clihttp.NewProtocol(modelsPullDoer(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet || request.URL.Path != "/models/llm" {
+			return nil, fmt.Errorf("standard protocol request = %s %s, want GET /models/llm", request.Method, request.URL.Path)
+		}
+		standardCalls.Add(1)
+		body, marshalErr := json.Marshal(remoteOMNIModelDetail())
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("standard protocol: %v", err)
+	}
+
+	var longRunningCalls atomic.Int32
+	longRunning, err := clihttp.NewProtocol(modelsPullDoer(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != "/models/invocations" {
+			return nil, fmt.Errorf("long-running protocol request = %s %s, want POST /models/invocations", request.Method, request.URL.Path)
+		}
+		if _, ok := request.Context().Deadline(); ok {
+			return nil, errors.New("remote inference inherited a fixed client deadline")
+		}
+		longRunningCalls.Add(1)
+		text := "remote answer"
+		body, marshalErr := json.Marshal(factoryapi.GenericModelInvocationResponse{
+			Outputs: []factoryapi.ModelInvocationOutput{{
+				Name:     "text",
+				Modality: factoryapi.ModelInvocationContentTypeText,
+				Content:  &text,
+			}},
+		})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+		}, nil
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("long-running protocol: %v", err)
+	}
+
+	service := &httpService{
+		http:            standard,
+		pullHTTP:        longRunning,
+		inputFileReader: remoteStaticInputReader([]byte("PNG")),
+	}
+	var output bytes.Buffer
+	if err := service.Invoke(remoteInvokeConfig(context.Background(), "http://factory.test", []string{
+		"prompt=Describe this image", "image=@fixture.png",
+	}, &output)); err != nil {
+		t.Fatalf("remote generic invoke: %v", err)
+	}
+	if output.String() != "remote answer" {
+		t.Fatalf("remote output = %q, want long-running response", output.String())
+	}
+	if standardCalls.Load() != 1 || longRunningCalls.Load() != 1 {
+		t.Fatalf("protocol calls = standard:%d long-running:%d, want one catalog and one inference call", standardCalls.Load(), longRunningCalls.Load())
+	}
+}
