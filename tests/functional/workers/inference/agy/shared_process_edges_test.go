@@ -367,8 +367,7 @@ func waitForAgyTerminalWork(
 	// a stale projection, bounded public Work reads are required to observe that
 	// terminal projection; a controlled command result cannot replace this
 	// customer-facing consistency boundary.
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
+	pollDelay := agyTerminalWorkPollInitialDelay
 	for {
 		refreshed, err := readAgySessionWork(ctx, baseURL, sessionID)
 		if err != nil {
@@ -378,12 +377,21 @@ func waitForAgyTerminalWork(
 		if support.CountWorkAtCustomerState(listed, terminalState) == 1 {
 			return listed, nil
 		}
+		poll := time.NewTimer(pollDelay)
 		select {
 		case <-ctx.Done():
+			stopAgyTimer(poll)
 			return listed, fmt.Errorf("waiting for %s Work projection: %w", terminalState, ctx.Err())
 		case <-deadline.C:
+			stopAgyTimer(poll)
 			return listed, fmt.Errorf("timed out waiting for %s Work projection", terminalState)
 		case <-poll.C:
+			if pollDelay < agyTerminalWorkPollMaxDelay {
+				pollDelay *= 2
+				if pollDelay > agyTerminalWorkPollMaxDelay {
+					pollDelay = agyTerminalWorkPollMaxDelay
+				}
+			}
 		}
 	}
 }

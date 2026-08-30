@@ -24,12 +24,24 @@ import (
 )
 
 const (
-	agySharedScenarioTimeout = 30 * time.Second
-	agySharedSuccessSelector = "agy-final-only-success"
-	agySharedTimeoutSelector = "agy-timeout"
-	agySharedCommand         = "agy"
-	agySharedIdleHostFactory = `{"name":"agy-shared-host","workTypes":[],"workers":[],"workstations":[]}`
+	agySharedScenarioTimeout        = 30 * time.Second
+	agySharedSuccessSelector        = "agy-final-only-success"
+	agySharedTimeoutSelector        = "agy-timeout"
+	agySharedCommand                = "agy"
+	agySharedIdleHostFactory        = `{"name":"agy-shared-host","workTypes":[],"workers":[],"workstations":[]}`
+	agyTerminalWorkPollInitialDelay = 10 * time.Millisecond
+	agyTerminalWorkPollMaxDelay     = 100 * time.Millisecond
 )
+
+func stopAgyTimer(timer *time.Timer) {
+	if timer == nil || timer.Stop() {
+		return
+	}
+	select {
+	case <-timer.C:
+	default:
+	}
+}
 
 var agySharedProcess = &agyProcessFixture{}
 
