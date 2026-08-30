@@ -306,7 +306,7 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 		},
 	})
 
-	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 15*time.Second)
+	support.WaitForSessionWorkCountTerminalFromFactoryEvents(t, server.URL(), sessionID, 1, 15*time.Second)
 	retained := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
 	if len(retained) < 4 {
 		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(retained))

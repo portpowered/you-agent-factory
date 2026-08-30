@@ -310,8 +310,8 @@ func runFactoryToCompletionWithHome(
 	t.Helper()
 
 	server := NewProcessAPIServer()
-	startGate := make(chan struct{})
-	server.HoldStartUntilSignaled(startGate)
+	shutdownGate := make(chan struct{})
+	server.HoldShutdownUntilSignaled(shutdownGate)
 	overrides.APIServerStarter = server.Start
 	process := BuildProcess(t, overrides)
 	inputs := FakeInputs(t.Context(), []string{
@@ -341,26 +341,18 @@ func runFactoryToCompletionWithHome(
 		}
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
-	startReleased := false
-	releaseStart := func() {
-		if startReleased {
+	shutdownReleased := false
+	releaseShutdown := func() {
+		if shutdownReleased {
 			return
 		}
-		close(startGate)
-		startReleased = true
+		close(shutdownGate)
+		shutdownReleased = true
 	}
-	// StartProcessCommand registers its own cleanup. Registering this release
-	// afterward makes a fatal observer-open failure unblock the command before
-	// that command cleanup tries to stop it.
-	t.Cleanup(releaseStart)
-	boundURL, err := server.WaitForBoundURL(processAPIServerReadyTimeout)
-	if err != nil {
-		t.Fatal(err)
-	}
-	terminalObservation := OpenDefaultSessionTerminalFactoryEventObservation(t, boundURL)
-	releaseStart()
+	t.Cleanup(releaseShutdown)
 	baseURL := server.WaitForURL(t)
 	liveSession := GetDefaultSession(t, baseURL)
+	terminalObservation := OpenSessionTerminalFactoryEventObservation(t, baseURL, liveSession.Id)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -401,11 +393,13 @@ func runFactoryToCompletionWithHome(
 	if beforeClose != nil {
 		beforeClose()
 	}
-	// Stop the root process after all projection and response observations have
-	// completed. Runtime shutdown records RUN_RESPONSE before the transport is
-	// allowed to close, so the already-open terminal observer receives the
-	// canonical completion event without a status-based success wait.
-	daemon.Stop(t)
+	// Request shutdown after Work completion. Runtime shutdown records
+	// RUN_RESPONSE before the transport is allowed to close, so the already-open
+	// terminal observer receives the canonical completion event without a
+	// status-based success wait. The API server holds its listener open while
+	// that event and all dependent observations are captured; releasing the gate
+	// then lets the process finish.
+	daemon.cancel()
 	terminalObservation.Wait(timeout)
 	if responseCaptureCancel != nil {
 		// Work completion and response-stream publication use separate observers.
@@ -424,10 +418,10 @@ func runFactoryToCompletionWithHome(
 		captureWorkerSessionEvents(baseURL, work)
 	}
 	var responseEvents []factoryapi.FactoryResponseEvent
-	// Stop the root process before canceling the capture request. Process
-	// shutdown closes the session-owned response stream, which is the
-	// authoritative boundary after all response publishers have quiesced.
 	if responseCaptureCancel != nil {
+		// The terminal response event has been observed before canceling this
+		// independent capture request, so its snapshot is complete without
+		// relying on transport shutdown to flush it.
 		responseCaptureCancel()
 		capture := <-responseCaptureDone
 		if capture.err != nil {
@@ -441,6 +435,15 @@ func runFactoryToCompletionWithHome(
 				len(responseEvents),
 			)
 		}
+	}
+	releaseShutdown()
+	select {
+	case <-daemon.Done():
+	case <-time.After(processCommandStopTimeout):
+		t.Fatalf("timed out waiting for Process.Execute() shutdown")
+	}
+	if err := daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Process.Execute() after shutdown error = %v", err)
 	}
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
 	defer cancelClose()

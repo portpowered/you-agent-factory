@@ -185,7 +185,7 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 3)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 2)
 	assertRepeaterWorkStates(t, listed, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
@@ -221,7 +221,7 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 		workerexecution.InferenceResponse{Content: "finisher output COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 3)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 2)
 	assertRepeaterWorkStates(t, listed, map[string]int{
 		"plan:complete": 1, "task:complete": 1, "request:init": 0, "request:failed": 0,
 	})
@@ -240,7 +240,7 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 3)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 2)
 	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
 }
 
@@ -266,7 +266,7 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 	)
 	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
-	}, 10*time.Second, 3)
+	}, 10*time.Second, 2)
 	assertRepeaterWorkStates(t, listed, map[string]int{"plan:complete": 1, "task:complete": 1})
 	assertListedLineage(t, listed, map[string]string{"plan": inputTraceID, "task": inputTraceID})
 }

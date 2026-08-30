@@ -24,7 +24,7 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 1)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 2)
 
 	if provider.CallCount("exec-worker") < 3 {
 		t.Errorf("exec-worker call count = %d, want at least 3 interleaved iterations", provider.CallCount("exec-worker"))
