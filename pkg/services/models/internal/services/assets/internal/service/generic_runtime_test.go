@@ -264,6 +264,66 @@ func TestInspectRuntimeCacheRejectsIncompleteGenericManifest(t *testing.T) {
 	}
 }
 
+func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, canonicalModelName("embed"))
+	staleRevision := strings.Repeat("a", 40)
+	revisionDirectory := filepath.Join(modelDirectory, staleRevision)
+	staleBody := []byte("stale sentence-transformer model")
+	if err := os.MkdirAll(revisionDirectory, 0o755); err != nil {
+		t.Fatalf("create stale generic model cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(revisionDirectory, "model.safetensors"), staleBody, 0o644); err != nil {
+		t.Fatalf("write stale generic model artifact: %v", err)
+	}
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: "embed",
+		Revision:  staleRevision,
+		Files: []metadataFile{{
+			Path: "model.safetensors", Bytes: int64(len(staleBody)), SHA256: sha256Hex(staleBody),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal stale generic metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
+		t.Fatalf("write stale generic metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "generic-source-mismatch")
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("source-mismatched generic inspection used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "embed",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.ManifestPresent || !inspection.ManifestValid ||
+		inspection.Installed || inspection.IntegrityVerified ||
+		inspection.FailureReason != "managed cache does not match configured source" {
+		t.Fatalf("source-mismatched inspection = %#v, want unavailable cache", inspection)
+	}
+	if len(inspection.ExpectedArtifacts) != 1 ||
+		inspection.ExpectedArtifacts[0].Name != "Qwen3-Embedding-0.6B-f16.gguf" ||
+		len(inspection.MissingAssets) != 1 ||
+		inspection.MissingAssets[0] != "Qwen3-Embedding-0.6B-f16.gguf" {
+		t.Fatalf("source-mismatched artifact facts = %#v, want pinned GGUF missing", inspection)
+	}
+	if _, err := service.ResolveRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "embed",
+	}); !errors.Is(err, models.ErrNotAvailable) {
+		t.Fatalf("ResolveRuntimeCache error = %v, want stale cache rejected", err)
+	}
+}
+
 func TestInspectRuntimeCacheReportsMissingGenericArtifact(t *testing.T) {
 	t.Parallel()
 

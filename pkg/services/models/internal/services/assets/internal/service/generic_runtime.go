@@ -386,6 +386,14 @@ func (s *service) inspectGenericRuntimeCache(
 		inspection.FailureReason = failureReason
 		return inspection, true, nil
 	}
+	if !genericRuntimeSourceMatchesMetadata(source, metadata) {
+		inspection.ExpectedArtifacts = genericRuntimeExpectedArtifacts(source)
+		inspection.MissingAssets = missingAssetNames(inspection.ExpectedArtifacts, observed)
+		inspection.InstalledFileCount = len(observed)
+		inspection.PartialArtifacts = len(observed) > 0
+		inspection.FailureReason = "managed cache does not match configured source"
+		return inspection, true, nil
+	}
 	if len(missing) > 0 {
 		return inspection, true, nil
 	}
@@ -399,6 +407,25 @@ func (s *service) inspectGenericRuntimeCache(
 		return assets.RuntimeCacheInspection{}, true, err
 	}
 	return inspection, true, nil
+}
+
+func genericRuntimeSourceMatchesMetadata(source genericSource, metadata cacheMetadata) bool {
+	if source.kind != genericSourceHF {
+		return true
+	}
+	if revision := strings.TrimSpace(source.revision); revision != "" &&
+		!strings.EqualFold(revision, strings.TrimSpace(metadata.Revision)) {
+		return false
+	}
+	if expected := filepath.ToSlash(strings.TrimSpace(source.file)); expected != "" {
+		for _, file := range metadata.Files {
+			if filepath.ToSlash(strings.TrimSpace(file.Path)) == expected {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 func (s *service) reusableGenericRuntimeCache(
