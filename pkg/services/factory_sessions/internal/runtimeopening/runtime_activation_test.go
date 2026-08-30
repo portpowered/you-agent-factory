@@ -681,6 +681,7 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 	factory := &Factory{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{err: want},
+		generateSessionID:         func() string { return "" },
 	}
 	_, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},

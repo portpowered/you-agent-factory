@@ -91,24 +91,12 @@ func openRuntime(
 	}
 	providedCanonicalSessionID := strings.TrimSpace(request.FactorySession.CanonicalSessionID)
 	canonicalSessionIDGenerated := request.FactorySession.CanonicalSessionIDGenerated
-	if err := ensureDefaultCanonicalSessionID(
-		request,
-		generateRuntimeInstanceID,
-	); err != nil {
-		return runtimeProducts{}, err
-	}
-	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
-		(providedCanonicalSessionID == "" && strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "")
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
 	sessionRequest := request.FactorySession
 	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
-	}
-	metricsSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
-	if metricsSessionID == "" {
-		metricsSessionID = sessionID
 	}
 	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
@@ -147,6 +135,21 @@ func openRuntime(
 	)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	// Resolve and validate the Factory Definition before allocating the
+	// canonical metrics identity. Invalid Current Factory or working-directory
+	// input must not consume a Factory Session identity or create a product
+	// lifecycle effect.
+	if err := ensureDefaultCanonicalSessionID(request, generateRuntimeInstanceID); err != nil {
+		return runtimeProducts{}, err
+	}
+	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
+		(providedCanonicalSessionID == "" && strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "")
+	configured.Session.CanonicalSessionID = request.FactorySession.CanonicalSessionID
+	configured.Session.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+	metricsSessionID := strings.TrimSpace(configured.Session.CanonicalSessionID)
+	if metricsSessionID == "" {
+		metricsSessionID = sessionID
 	}
 	if effort := strings.TrimSpace(configured.Workers.WorkerReasoningEffort); effort != "" &&
 		load.LoadedFactoryCfg != nil {

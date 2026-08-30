@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
@@ -69,17 +70,17 @@ func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T
 	}
 }
 
-func TestActivationOpeningAllocatesCanonicalIdentityForResumeSuccessor(t *testing.T) {
+func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *testing.T) {
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
-	generated := []string{canonicalID, "runtime-1"}
+	var canonicalCalls atomic.Int32
 	factory := &Factory{
-		generateRuntimeInstanceID: func() string {
-			identity := generated[0]
-			generated = generated[1:]
-			return identity
+		generateSessionID: func() string {
+			canonicalCalls.Add(1)
+			return canonicalID
 		},
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
 	opening, runtimeID, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
@@ -98,15 +99,15 @@ func TestActivationOpeningAllocatesCanonicalIdentityForResumeSuccessor(t *testin
 	if runtimeID != "runtime-1" {
 		t.Fatalf("runtime ID = %q, want runtime-1", runtimeID)
 	}
-	if opening.FactorySession.CanonicalSessionID != canonicalID {
-		t.Fatalf("successor canonical session ID = %q, want %q", opening.FactorySession.CanonicalSessionID, canonicalID)
+	if opening.FactorySession.CanonicalSessionID != "" {
+		t.Fatalf("successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
 	}
-	if !opening.FactorySession.CanonicalSessionIDGenerated {
-		t.Fatal("successor canonical session ID marked generated = false, want true")
+	if got := canonicalCalls.Load(); got != 0 {
+		t.Fatalf("canonical session ID generator calls = %d, want 0 before definition admission", got)
 	}
 }
 
-func TestActivationOpeningAllocatesCanonicalIdentityForAliasOnlyResume(t *testing.T) {
+func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T) {
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
@@ -119,8 +120,8 @@ func TestActivationOpeningAllocatesCanonicalIdentityForAliasOnlyResume(t *testin
 	if err != nil {
 		t.Fatalf("activationOpening(alias-only resume) error = %v", err)
 	}
-	if opening.FactorySession.CanonicalSessionID != canonicalID {
-		t.Fatalf("alias-only successor canonical session ID = %q, want %q", opening.FactorySession.CanonicalSessionID, canonicalID)
+	if opening.FactorySession.CanonicalSessionID != "" {
+		t.Fatalf("alias-only successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
 	}
 }
 

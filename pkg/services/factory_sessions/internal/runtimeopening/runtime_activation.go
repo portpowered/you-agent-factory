@@ -404,6 +404,12 @@ func (f *Factory) activationRequestWithInputs(
 		sessionID,
 		opening.Recordings.WorkflowID,
 	)
+	canonicalSessionIDProvided := strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(&opening, f.canonicalSessionIDGenerator()); err != nil {
+		return factoryruntime.RuntimeActivationRequest{}, err
+	}
+	opening.FactorySession.CanonicalSessionIDGenerated = !canonicalSessionIDProvided &&
+		strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
 	inputs := runtimeActivationInputs(opening, resumeInput)
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed
@@ -437,20 +443,6 @@ func (f *Factory) activationOpening(
 		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime opening request is required")
 	}
 	opening := *request
-	canonicalSessionIDProvided := strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
-	var canonicalIDGenerator func() string
-	if f.generateSessionID != nil {
-		canonicalIDGenerator = f.generateSessionID
-	} else {
-		// Keep direct internal callers compatible while the process graph adopts
-		// the dedicated Factory Session identity edge.
-		canonicalIDGenerator = f.generateRuntimeInstanceID
-	}
-	if err := ensureDefaultCanonicalSessionID(&opening, canonicalIDGenerator); err != nil {
-		return factorysessions.RuntimeOpeningRequest{}, "", err
-	}
-	opening.FactorySession.CanonicalSessionIDGenerated = !canonicalSessionIDProvided &&
-		strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
 	runtimeID := strings.TrimSpace(opening.FactoryRuntime.RuntimeInstanceID)
 	if runtimeID != "" {
 		return opening, runtimeID, nil
@@ -464,6 +456,18 @@ func (f *Factory) activationOpening(
 	}
 	opening.FactoryRuntime.RuntimeInstanceID = runtimeID
 	return opening, runtimeID, nil
+}
+
+func (f *Factory) canonicalSessionIDGenerator() func() string {
+	if f == nil {
+		return nil
+	}
+	if f.generateSessionID != nil {
+		return f.generateSessionID
+	}
+	// Keep direct internal callers compatible while the process graph adopts
+	// the dedicated Factory Session identity edge.
+	return f.generateRuntimeInstanceID
 }
 
 func ensureDefaultCanonicalSessionID(

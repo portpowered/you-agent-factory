@@ -325,6 +325,18 @@ func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
 	}
 }
 
+func TestRuntimeScopeKeepsPublicSessionSelectorSeparateFromCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	got := requestScope(recordings.RuntimeScopeRequest{
+		FactorySessionID:   "~default",
+		CanonicalSessionID: "550e8400-e29b-41d4-a716-446655440000",
+	})
+	if got.FactorySessionID != "~default" {
+		t.Fatalf("runtime event scope = %q, want public selector ~default", got.FactorySessionID)
+	}
+}
+
 func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	t.Parallel()
 

@@ -76,7 +76,7 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 
 	for _, path := range paths {
 		assertDatedUUIDRecordingPath(t, recordingRoot, path, wantDate)
-		assertWholeFileReplayArtifact(t, path, strings.TrimSuffix(filepath.Base(path), ".json"))
+		assertWholeFileReplayArtifact(t, path, "~default")
 	}
 	t.Logf("REC-3 default recording paths: %s and %s", paths[0], paths[1])
 	if filepath.Dir(paths[0]) != filepath.Dir(paths[1]) {
@@ -209,7 +209,7 @@ func assertDatedUUIDRecordingPath(t *testing.T, recordingRoot, path, wantDate st
 	}
 }
 
-func assertWholeFileReplayArtifact(t *testing.T, path, canonicalSessionID string) {
+func assertWholeFileReplayArtifact(t *testing.T, path, publicSessionID string) {
 	t.Helper()
 
 	data, err := os.ReadFile(path)
@@ -239,8 +239,8 @@ func assertWholeFileReplayArtifact(t *testing.T, path, canonicalSessionID string
 		}
 		if event.Context.SessionID != nil && *event.Context.SessionID != "" {
 			seenSessionID = true
-			if *event.Context.SessionID != canonicalSessionID {
-				t.Fatalf("recording %q event[%d] session ID = %q, want canonical filename ID %q", path, index, *event.Context.SessionID, canonicalSessionID)
+			if *event.Context.SessionID != publicSessionID {
+				t.Fatalf("recording %q event[%d] session ID = %q, want public session ID %q", path, index, *event.Context.SessionID, publicSessionID)
 			}
 		}
 	}
