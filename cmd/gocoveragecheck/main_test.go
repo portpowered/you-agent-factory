@@ -149,6 +149,52 @@ func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
 	}
 }
 
+func TestRunForOSWithCPUUsesExplicitFunctionalJobs(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
+
+	var invocations []commandInvocation
+	var stdout strings.Builder
+	var stderr strings.Builder
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return fakeGoCoverageCommandPassing(invocation)
+	}
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	_, err := runForOSWithCPU(config{
+		min:       0,
+		suite:     "functional",
+		jobs:      12,
+		totalOnly: true,
+		coverpkg:  strings.Join([]string{modulePath + "/pkg/config", modulePath + "/pkg/service"}, ","),
+		packages:  "./tests/functional/runtime_api",
+		profile:   filepath.Join(t.TempDir(), "coverage.out"),
+	}, "linux", 4)
+	if err != nil {
+		t.Fatalf("runForOSWithCPU() error = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("coverage invocations = %d, want one", len(invocations))
+	}
+	if !slices.Contains(invocations[0].args, "-p=12") {
+		t.Fatalf("go test args = %v, want explicit functional -p=12", invocations[0].args)
+	}
+	if slices.Contains(invocations[0].args, "-p=4") {
+		t.Fatalf("go test args = %v, unexpectedly used CPU-derived unit width", invocations[0].args)
+	}
+	if stdout.Len() == 0 || stderr.Len() != 0 {
+		t.Fatalf("coverage output = stdout %q, stderr %q; want stdout only", stdout.String(), stderr.String())
+	}
+}
+
 func TestReadPackageCoverageBaselineSkipsCommentsAndBlankLines(t *testing.T) {
 	t.Parallel()
 
