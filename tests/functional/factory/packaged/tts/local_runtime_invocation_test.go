@@ -158,6 +158,14 @@ func (backend *packagedTTSModelsBackend) SetFailure(failure error) {
 	backend.failure = failure
 }
 
+func (backend *packagedTTSModelsBackend) Reset(failure error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	backend.calls = 0
+	backend.request = nil
+	backend.failure = failure
+}
+
 func (backend *packagedTTSModelsBackend) SetArtifacts(artifacts []models.InferenceArtifact) {
 	backend.mu.Lock()
 	defer backend.mu.Unlock()

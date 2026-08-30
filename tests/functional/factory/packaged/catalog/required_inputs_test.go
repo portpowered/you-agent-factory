@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -26,6 +28,74 @@ type packagedFactoryMissingRequiredInputRun struct {
 	execErr       error
 }
 
+// catalogPackagedFactorySeed holds the read-only result of one public system
+// bootstrap. Required-input rows still receive a fresh home and selected
+// Factory directory, but do not repeatedly materialize the complete packaged
+// catalog when the only behavior under test is pre-provider input rejection.
+type catalogPackagedFactorySeed struct {
+	homeDir     string
+	factoryRoot string
+}
+
+func newCatalogPackagedFactorySeed(
+	t *testing.T,
+	process support.Process,
+	factoryName string,
+) catalogPackagedFactorySeed {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	factoryDir := support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
+	if _, err := os.Stat(filepath.Join(homeDir, ".you-agent-factory", "config.json")); err != nil {
+		t.Fatalf("catalog seed system config: %v", err)
+	}
+	// Packaged names use the customer-facing @you/<name> layout. The support
+	// helper has already validated the returned Factory directory, so retain
+	// that public result instead of reaching into Factory Definitions policy.
+	factoryRoot := filepath.Dir(filepath.Dir(factoryDir))
+	return catalogPackagedFactorySeed{homeDir: homeDir, factoryRoot: factoryRoot}
+}
+
+func (seed catalogPackagedFactorySeed) copyInto(
+	t *testing.T,
+	homeDir string,
+	factoryName string,
+) {
+	t.Helper()
+
+	seedFactoryDir := filepath.Join(seed.factoryRoot, filepath.FromSlash(factoryName))
+	if _, err := os.Stat(filepath.Join(seedFactoryDir, "factory.json")); err != nil {
+		t.Fatalf("catalog seed packaged Factory %q: %v", factoryName, err)
+	}
+	support.CopyFactoryAsNamed(t, seedFactoryDir, homeDir, factoryName)
+
+	seedConfigPath := filepath.Join(seed.homeDir, ".you-agent-factory", "config.json")
+	config, err := os.ReadFile(seedConfigPath)
+	if err != nil {
+		t.Fatalf("read catalog seed system config: %v", err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(config, &document); err != nil {
+		t.Fatalf("decode catalog seed system config: %v", err)
+	}
+	document["backendScopeID"], err = json.Marshal("local-" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("encode catalog row backend scope: %v", err)
+	}
+	config, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode catalog row system config: %v", err)
+	}
+	targetConfigPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(targetConfigPath), 0o755); err != nil {
+		t.Fatalf("create catalog row system config directory: %v", err)
+	}
+	if err := os.WriteFile(targetConfigPath, config, 0o600); err != nil {
+		t.Fatalf("copy catalog row system config: %v", err)
+	}
+}
+
 // TestPackagedFactoriesRejectMissingRequiredInputs proves that omitting required
 // invocation inputs for every packaged Factory in the embedded package matrix
 // rejects through the public packaged-catalog invocation boundary, without a
@@ -41,6 +111,7 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 
 	fixture := sharedCatalogProcess(t)
 	process := fixture.process
+	seed := newCatalogPackagedFactorySeed(t, process, cases[0].factoryName)
 
 	for _, testcase := range cases {
 		testcase := testcase
@@ -50,6 +121,7 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 			run := runPackagedFactoryMissingRequiredInputInvocation(
 				t,
 				process,
+				seed,
 				testcase.factoryName,
 			)
 			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
@@ -98,22 +170,24 @@ func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredI
 func runPackagedFactoryMissingRequiredInputInvocation(
 	t *testing.T,
 	process support.Process,
+	seed catalogPackagedFactorySeed,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
-	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, process, factoryName)
+	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, process, seed, factoryName)
 }
 
 func runPackagedFactoryMissingRequiredInputCLIInvocation(
 	t *testing.T,
 	process support.Process,
+	seed catalogPackagedFactorySeed,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
 
 	homeDir := t.TempDir()
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
+	seed.copyInto(t, homeDir, factoryName)
 
 	args := []string{
 		"you", "--json", "run",

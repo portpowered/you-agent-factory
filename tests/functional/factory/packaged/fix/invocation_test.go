@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -657,12 +656,16 @@ func runPackagedFixCLIWithFactorySetup(
 	args ...string,
 ) (factoryapi.InvocationResponse, string, error) {
 	t.Helper()
+	fixture := sharedPackagedFixCLIProcessFixture(t)
 	home := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, home, packagedFixFactoryName)
+	factoryDir := fixture.copyFactory(t, home)
 	factoryName := packagedFixFactoryName
 	if configure != nil {
 		configure(t, factoryDir)
 		factoryDir = support.CopyFactoryAsNamed(t, factoryDir, home, configuredPackagedFixFactoryName)
+		fixture.mu.Lock()
+		fixture.factoryCopies++
+		fixture.mu.Unlock()
 		factoryName = configuredPackagedFixFactoryName
 	}
 	inputArgs := []string{
@@ -672,13 +675,27 @@ func runPackagedFixCLIWithFactorySetup(
 	inputs := support.FakeInputs(t.Context(), inputArgs)
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workspace
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	err := process.Execute(inputs.Input)
+	selector := packagedFixCLIProviderSelector(workspace, args...)
+	if selector != "" {
+		fixture.providerRunner.register(selector, runner)
+		defer fixture.providerRunner.unregister(selector)
+	}
+	err := fixture.execute(t, inputs)
 	var response factoryapi.InvocationResponse
 	if strings.TrimSpace(inputs.Stdout()) != "" {
 		response = support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	}
 	return response, inputs.Stderr(), err
+}
+
+func packagedFixCLIProviderSelector(workspace string, args ...string) string {
+	for index := range args {
+		if args[index] != "--worktree-name" || index+1 >= len(args) {
+			continue
+		}
+		return filepath.Join(workspace, ".worktrees", args[index+1])
+	}
+	return ""
 }
 
 func configurePackagedFixWorkerModels(t *testing.T, factoryDir string, models map[string]string) {
@@ -946,10 +963,7 @@ func clonePackagedFixCommandRequest(request platformprocess.CommandRequest) plat
 func initPackagedFixGitRepository(t *testing.T) string {
 	t.Helper()
 	workspace := t.TempDir()
-	runPackagedFixGit(t, workspace, "init")
-	runPackagedFixGit(t, workspace, "config", "user.email", "fix-functional@example.com")
-	runPackagedFixGit(t, workspace, "config", "user.name", "fix functional")
-	runPackagedFixGit(t, workspace, "commit", "--allow-empty", "-m", "initial Fix functional repository")
+	sharedPackagedFixGitSeed(t).copyMetadata(t, workspace)
 	return workspace
 }
 
@@ -957,6 +971,7 @@ func createPackagedFixWorktree(t *testing.T, workspace, name string) string {
 	t.Helper()
 	path := filepath.Join(workspace, ".worktrees", name)
 	runPackagedFixGit(t, workspace, "worktree", "add", "--detach", path, "HEAD")
+	sharedPackagedFixGitSeed(t).recordWorktreeCreate()
 	return path
 }
 

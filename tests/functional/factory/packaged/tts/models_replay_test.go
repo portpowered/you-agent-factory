@@ -365,9 +365,10 @@ func (fixture *deliveredFactoryTTSProtocolFixture) LastRequest(t testing.TB) del
 // only backend effect replaced by the fixture is ModelInvocationBackend; the
 // live Factory history is then replayed without another backend call.
 func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *testing.T) {
+	fixture := newManagedFactoryTTSFixture(t)
 	t.Run("success", func(t *testing.T) {
 		text := "models-backed factory tts success"
-		backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+		backend := fixture.backend
 		artifact, err := (models.InferenceArtifactRef{}).Parse("models-inference:artifact:tts-success")
 		if err != nil {
 			t.Fatalf("parse TTS artifact: %v", err)
@@ -377,7 +378,7 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 			SizeBytes:  int64(len(packagedTTSFakeAudioFixture)),
 			Properties: map[string]string{"fixture": "packaged-tts", "label": "speech.wav"},
 		}})
-		live := runManagedFactoryTTSRecording(t, text, backend, nil)
+		live := runManagedFactoryTTSRecording(t, fixture, text, nil)
 
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after live success = %d, want one", backend.CallCount())
@@ -396,7 +397,7 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 			liveArtifactID = *liveAudio.ArtifactId
 		}
 
-		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, backend, true)
+		replayed := replayManagedFactoryTTSRecording(t, fixture, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, true)
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after success replay = %d, want no replay call", backend.CallCount())
 		}
@@ -416,8 +417,8 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 
 	t.Run("failure", func(t *testing.T) {
 		text := "models-backed factory tts failure"
-		backend := newPackagedTTSModelsBackend(nil)
-		live := runManagedFactoryTTSRecording(t, text, backend, errors.New("fixture TTS backend failure"))
+		backend := fixture.backend
+		live := runManagedFactoryTTSRecording(t, fixture, text, errors.New("fixture TTS backend failure"))
 
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after live failure = %d, want one", backend.CallCount())
@@ -437,7 +438,7 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		)
 		assertManagedFactoryTTSNoArtifactEvents(t, live.events, "live failure")
 
-		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, backend, false)
+		replayed := replayManagedFactoryTTSRecording(t, fixture, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, false)
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after failure replay = %d, want no replay call", backend.CallCount())
 		}
@@ -451,6 +452,7 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		t.Logf("managed TTS failure live events=%v workID=%s; replay events=%v workID=%s; backendCalls=%d",
 			eventTypes(live.events), requiredFactoryTTSWorkID(t, liveWork), eventTypes(replayed.events), requiredFactoryTTSWorkID(t, replayedWork), backend.CallCount())
 	})
+	fixture.assertReuseCounts(t)
 }
 
 func assertManagedFactoryTTSAudioDigest(t *testing.T, audio factoryapi.WorkAudioContentPart) {
@@ -869,26 +871,14 @@ type managedFactoryTTSRecording struct {
 
 func runManagedFactoryTTSRecording(
 	t *testing.T,
+	fixture *managedFactoryTTSFixture,
 	text string,
-	backend *packagedTTSModelsBackend,
 	failure error,
 ) managedFactoryTTSRecording {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	dir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedTTSFactoryName,
-	)
-
-	if failure != nil {
-		backend.SetFailure(failure)
-	}
-	cacheDir := t.TempDir()
-	writePackagedTTSReadyModelCache(t, cacheDir)
-	edges, closeHost := managedTTSModelEdges(t, backend)
-	t.Cleanup(closeHost)
+	fixture.backend.Reset(failure)
+	homeDir, dir, cacheDir := fixture.newRecordingPaths(t)
 	artifactPath := filepath.Join(t.TempDir(), "managed-tts-recording.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--named", factorydefinitions.PackagedTTSFactoryName,
@@ -900,9 +890,10 @@ func runManagedFactoryTTSRecording(
 		run.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	inputs.Input.WorkingDirectory = dir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	fixture.mu.Lock()
+	fixture.recordings++
+	fixture.mu.Unlock()
+	err := fixture.process.Execute(inputs.Input)
 	if failure == nil && err != nil {
 		t.Fatalf("root Process.Execute(managed TTS) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
@@ -960,14 +951,12 @@ func managedFactoryTTSOutputWork(t *testing.T, events []factoryapi.FactoryEvent)
 
 func replayManagedFactoryTTSRecording(
 	t *testing.T,
+	fixture *managedFactoryTTSFixture,
 	factoryDir, homeDir, cacheDir string,
 	artifactPath string,
-	backend *packagedTTSModelsBackend,
 	wantSuccess bool,
 ) managedFactoryTTSRecording {
 	t.Helper()
-	edges, closeHost := managedTTSModelEdges(t, backend)
-	t.Cleanup(closeHost)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--dir", factoryDir,
 		"--replay", artifactPath, "--no-record", "--output", "primary",
@@ -978,15 +967,13 @@ func replayManagedFactoryTTSRecording(
 		run.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	if wantSuccess && err != nil {
 		t.Fatalf("root Process.Execute(replay managed TTS) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
 	events := readManagedFactoryTTSRecording(t, artifactPath)
 	return managedFactoryTTSRecording{
-		factoryDir: factoryDir, artifactPath: artifactPath,
+		factoryDir: factoryDir, homeDir: homeDir, cacheDir: cacheDir, artifactPath: artifactPath,
 		work: managedFactoryTTSOutputWork(t, events), events: events,
 	}
 }
