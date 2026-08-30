@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -304,21 +302,6 @@ func providerSessionsTopLevelSnapshotClassification(directory string) (string, b
 	}
 }
 
-// WriteSnapshotCandidates validates and writes all four new artifacts. All
-// candidate payloads are serialized before the first new file is replaced.
-func WriteSnapshotCandidates(root string, candidates SnapshotCandidates) error {
-	writes, err := snapshotWrites(candidates)
-	if err != nil {
-		return err
-	}
-	for _, write := range writes {
-		if err := writeSnapshot(root, write.relativePath, write.payload); err != nil {
-			return fmt.Errorf("%s: %w", write.relativePath, err)
-		}
-	}
-	return nil
-}
-
 type snapshotWrite struct {
 	relativePath string
 	payload      []byte
@@ -369,15 +352,4 @@ func marshalSnapshot(label string, value any, validate func() error) ([]byte, er
 		return nil, fmt.Errorf("marshal %s: %w", label, err)
 	}
 	return payload.Bytes(), nil
-}
-
-func writeSnapshot(root, relativePath string, payload []byte) error {
-	path := filepath.Join(root, filepath.FromSlash(relativePath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir snapshot directory: %w", err)
-	}
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		return fmt.Errorf("write snapshot: %w", err)
-	}
-	return nil
 }

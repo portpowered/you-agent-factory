@@ -1,7 +1,6 @@
 package ownershipinventory
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -39,23 +38,4 @@ func Load(root string) (Inventory, error) {
 	inventory.UnfinishedMoves = moves
 	inventory.Packages = moves.PackageRows()
 	return inventory, nil
-}
-
-// WriteInventory writes the ownership-inventory freeze artifact.
-func WriteInventory(root string, inventory Inventory) error {
-	path := filepath.Join(root, filepath.FromSlash(InventoryRelativePath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir ownership inventory: %w", err)
-	}
-	var payload bytes.Buffer
-	encoder := json.NewEncoder(&payload)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(inventory); err != nil {
-		return fmt.Errorf("marshal ownership inventory: %w", err)
-	}
-	if err := os.WriteFile(path, payload.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("write ownership inventory: %w", err)
-	}
-	return nil
 }
