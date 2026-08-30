@@ -15,6 +15,7 @@ import (
 // Isolation: isolated-with-reason - pinned wire peer; each failure branch
 // requires a fresh golden subprocess and exact session/config RPC diagnostics.
 func TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		mode       string
 		diagnostic string
@@ -22,12 +23,14 @@ func TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork(t *testing.T)
 		{mode: "new-fail", diagnostic: "golden session/new failure"},
 		{mode: "config-fail", diagnostic: "golden model config failure"},
 	} {
+		test := test
 		t.Run(test.mode, func(t *testing.T) {
+			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
+			writeGoldenSentinelWorkstation(t, dir)
 			fixture := goldenACPFixture(test.mode)
-			t.Setenv("YOU_ACP_GOLDEN_SENTINEL", "preserved")
 
 			var starts atomic.Int32
 			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{

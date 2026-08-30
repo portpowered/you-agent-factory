@@ -241,14 +241,15 @@ func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
 	})
 	t.Run("valid golden fixture selects golden peer", func(t *testing.T) {
 		command := exec.Command(os.Args[0], "-test.run=^TestACPGoldenRPCPeerProcess$", "--", acpFixtureFlagPrefix+encodeACPFixture(goldenACPFixture("success")))
+		t.Parallel()
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("golden peer rejected a valid invocation-scoped fixture: %v; output=%s", err, output)
 		}
 	})
 	t.Run("production secret stays out of fixture arguments", func(t *testing.T) {
 		const secret = "super-secret-token"
-		t.Setenv("ACP_TEST_API_TOKEN", secret)
 		command := exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", functionalACPFixture("stderr"))...)
+		command.Env = append(os.Environ(), "ACP_TEST_API_TOKEN="+secret)
 		if strings.Contains(strings.Join(command.Args, "\x00"), secret) {
 			t.Fatalf("production secret appeared in child arguments: %v", command.Args)
 		}

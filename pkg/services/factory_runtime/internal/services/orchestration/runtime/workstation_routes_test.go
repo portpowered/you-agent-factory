@@ -342,6 +342,8 @@ func TestRenderRuntimePromptAndTemplateFieldsUsesDetachedCapabilities(t *testing
 		t.Fatalf("rendered selection = %#v, want detached rendered fields", selection)
 	}
 
+	assertRuntimePromptUsesResolvedContextAndWorkInputTokens(t)
+
 	badRenderer := &runtimeConfig{
 		promptRenderer: runtimePromptRendererFunc(func(string, []workers.Token, *workers.Context) (string, error) {
 			return "", errors.New("prompt failed")

@@ -15,6 +15,7 @@ import (
 // Isolation: isolated-with-reason - pinned permission wire; each branch must
 // observe its own exact selected permission option on a fresh peer.
 func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		skipPermissions bool
@@ -24,12 +25,14 @@ func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 		{name: "skipPermissions allows", skipPermissions: true, mode: "permission-allow"},
 	}
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP permission"}`))
 			writeACPWorkerPolicy(t, dir, test.skipPermissions)
+			writeGoldenSentinelWorkstation(t, dir)
 			fixture := goldenACPFixture(test.mode)
-			t.Setenv("YOU_ACP_GOLDEN_SENTINEL", "preserved")
 
 			var starts atomic.Int32
 			_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{

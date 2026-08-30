@@ -14,6 +14,7 @@ import (
 
 func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker service-runner sweep")
+	t.Parallel()
 	for _, test := range []struct {
 		name    string
 		fixture string

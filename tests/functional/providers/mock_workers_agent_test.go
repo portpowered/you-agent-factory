@@ -18,6 +18,7 @@ import (
 )
 
 func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     sharedMockAgentAcceptWorkID,
@@ -39,6 +40,7 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     sharedMockAgentRejectWorkID,
@@ -68,6 +70,7 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 // is isolated because the invalid CLI-global mock configuration must fail
 // before runtime activation and cannot be installed on the healthy shared host.
 func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject zero exit payload"))
 	exitCode := 0
@@ -77,6 +80,8 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBounda
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	home := t.TempDir()
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
 	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {

@@ -308,6 +308,7 @@ func writeBaseFixtureFile(t *testing.T, dir string, pathParts []string, content 
 }
 
 func TestScriptExecutor_Success(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
@@ -318,6 +319,7 @@ func TestScriptExecutor_Success(t *testing.T) {
 }
 
 func TestScriptExecutor_Failure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
@@ -329,6 +331,7 @@ func TestScriptExecutor_Failure(t *testing.T) {
 // TestScriptExecutor_CommandCancellationIsReported proves provider command
 // cancellation reaches the customer-visible execution result.
 func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
@@ -342,6 +345,7 @@ func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
 // malformed worker configuration is rejected during invocation startup, before
 // a healthy shared host could have activated runtime state.
 func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
@@ -353,7 +357,7 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 		"you", "run", "--dir", dir, "--quiet", "--no-record",
 	})
 	home := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
 	inputs.Input.WorkingDirectory = dir
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("unused"),
@@ -370,6 +374,7 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 // TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand proves an
 // invalid workstation template cannot invoke the provider command.
 func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	writeFixtureFile(
 		t,
@@ -390,6 +395,7 @@ func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.
 }
 
 func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("original-payload"))
 
@@ -401,6 +407,7 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 }
 
 func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-seed-001",
@@ -420,6 +427,7 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 }
 
 func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
@@ -430,6 +438,7 @@ func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 }
 
 func TestScriptExecutor_ArgTemplating(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	agentsMD := "---\ntype: SCRIPT_WORKER\ncommand: echo\nargs:\n  - \"{{ (index .Inputs 0).Name }}\"\n  - \"{{ (index .Inputs 0).WorkID }}\"\n---\n"
@@ -453,6 +462,7 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 }
 
 func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "type-stamp-test",
@@ -469,6 +479,7 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 }
 
 func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	agentsMD := "---\ntype: SCRIPT_WORKER\ncommand: echo\nargs:\n  - '{{ index (index .Inputs 0).Tags \"env\" }}'\n  - '{{ index (index .Inputs 0).Tags \"team\" }}'\n---\n"
@@ -492,6 +503,7 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 }
 
 func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
@@ -534,6 +546,7 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 }
 
 func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
@@ -606,6 +619,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 }
 
 func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 
 	workstationAgentsPath := filepath.Join(dir, "workstations", "run-script", "AGENTS.md")
@@ -632,6 +646,7 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 }
 
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow async worker-pool template fallback sweep")
 
 	t.Run("SingleFileInputWithTemplateAndPayload_Completes", func(t *testing.T) {

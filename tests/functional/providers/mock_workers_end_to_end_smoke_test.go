@@ -22,6 +22,7 @@ import (
 // is isolated because it intentionally crosses record and replay process
 // modes and proves a real mock-script child filesystem side effect.
 func TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow mock-workers end-to-end smoke")
 	}
@@ -262,6 +263,8 @@ func runRecordReplayCLIWithCapturedStdoutForProviders(
 		"--record", artifactPath,
 		"--quiet",
 	})
+	home := t.TempDir()
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
 	inputs.WorkingDirectory = t.TempDir()
 	err := process.Execute(inputs.Input)
 	return inputs.Stdout(), err

@@ -506,13 +506,15 @@ func renderRuntimePrompt(
 	if err := interpolateRuntimePromptTemplate(cfg, selection, invocation); err != nil {
 		return wrapRuntimePromptRenderError(err)
 	}
-	if err := renderRuntimePromptMessage(cfg, selection, tokens, workflowContext, inputs); err != nil {
-		return wrapRuntimePromptRenderError(err)
-	}
 	if err := resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext); err != nil {
 		return wrapRuntimePromptRenderError(err)
 	}
-	selection.promptRedaction = buildRuntimePromptRedaction(cfg, selection, tokens, workflowContext)
+	promptTokens := runtimePromptTokens(tokens)
+	promptContext := runtimePromptContext(workflowContext, selection)
+	if err := renderRuntimePromptMessage(cfg, selection, promptTokens, promptContext, inputs); err != nil {
+		return wrapRuntimePromptRenderError(err)
+	}
+	selection.promptRedaction = buildRuntimePromptRedaction(cfg, selection, promptTokens, promptContext)
 	return nil
 }
 
