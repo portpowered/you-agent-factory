@@ -391,3 +391,178 @@ performance criteria as passing.
 | Clean-room integrated validation | `CLEAN-004` |
 | Hosted PR package result and delivery comment | `PR-CI-004` |
 | Remote provider behavior | Intentionally outside scope |
+
+## C14 implementation and final evidence
+
+The bounded implementation kept the existing executable spine and changed only
+test sources. Base-package independent direct, mock-worker, timeout, service,
+record/replay, and packaged-script witnesses gained audited parallel scheduling;
+the direct process-boundary witnesses gained per-test `HOME` and `USERPROFILE`
+values. ACP invocation-scoped fixture, diagnostic, golden, and permission
+witnesses gained audited parallel scheduling; golden and secret environment
+values moved from process-wide mutation to workstation or child-command scope.
+Shared-process, persistent-connection, crash/replacement, retry, cleanup, real
+process, and pinned-golden witnesses remain isolated or serial where their
+identity is the behavior under test.
+
+No production, shared-support, contract, generated, workflow, Makefile,
+baseline, or provider-subpackage source changed. No sleep, poll, timeout, or
+cleanup assertion was removed or added. The only new behavioral assertion is
+the existing Codex adapter shape now explicitly retaining `--json` in
+`cli_template_resolution_long_test.go`; it is stronger request-shape evidence,
+not a weakened replacement. The golden sentinel assertions remain the same,
+with their environment supplied per invocation.
+
+### Final `PERF-004` samples
+
+The final samples were run as separate uncached `-count=1` invocations on the
+current test-source head `98ffcc76374e09c8ba22b9a4effcf1fc2dd24b99`, before
+this documentation update, under the baseline environment recorded above.
+The first ACP set also produced two contention-sensitive failures; those are
+retained below as diagnostics and are not included in the passing denominator.
+
+| Package | Passing package seconds | Package median | Passing wall seconds | Wall median | Exit status |
+| --- | --- | ---: | --- | ---: | --- |
+| `providers` | 35.422, 43.965, 38.143 | **38.143** | 42.191, 49.733, 43.117 | **43.117** | 0, 0, 0 |
+| `providers/acp` | 141.990, 130.443, 128.494 | **130.443** | 147.467, 135.994, 134.418 | **135.994** | 0, 0, 0 |
+
+The two ACP failed attempts were `144.979s` package / `150.550s` wall and
+`137.724s` package / `145.114s` wall. Both were exit 1 under the shared host's
+process contention; a focused diagnostic identified
+`TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt` with
+`second execution ... FAILED; want recovered success`. They are not used as
+final passing samples or as evidence of a changed assertion.
+
+| Package | Baseline package median | Final package median | Package change | Baseline wall median | Final wall median | Wall change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `providers` | 52.835s | 38.143s | **27.8% faster** | 68.590s | 43.117s | **37.1% faster** |
+| `providers/acp` | 140.804s | 130.443s | **7.4% faster** | 146.612s | 135.994s | **7.2% faster** |
+| Sum of package medians | 193.639s | 168.586s | **12.9% faster** | 215.202s | 179.111s | **16.8% faster** |
+
+Neither package reaches the nominal 40-percent target. The profile-backed
+measured-floor disposition for this test-only pass is explicit: the base
+profile's dominant useful records were runtime logging (5.340s), real timeout
+cleanup (3.800s), timeout retry (3.790s), and mixed mock/replay (2.750s); the
+remaining witnesses retain shared listener, real-child, replay, packaged
+runtime, logging-policy, and forced-cleanup identity. The ACP profile's
+dominant records were `TestACPSharedProcess` (64.870s), packaged spawn
+(10.600s), tournament (10.520s), shutdown (10.460s), serialization (10.370s),
+reuse (10.360s), and incompatible negotiation (10.100s); those cells retain
+persistent stdio, process replacement, lifecycle, and pinned-wire identity.
+The parallelized invocation-scoped cells are therefore the bounded removable
+work proven by this pass; the measured floor is local to this host and is not
+a portable absolute-latency claim.
+
+### Assertion, topology, and wait parity
+
+- The complete inventory remains **127 rows**: 35 base identities, 26 ACP
+  identities, and all 53/56/18 B/ACP/F rows. No row was deleted, skipped, or
+  weakened; the preserved `--json` Codex argument is the only added assertion.
+- Base shared construction/listener and ACP shared/persistent lifecycle
+  topology remain in place. Only independent invocation cohorts overlap under
+  the audited `t.Parallel()` changes; retained isolated roots, peers,
+  listeners, connections, and processes have the witness reasons listed in
+  the baseline topology ledger.
+- Waits removed: **0**. Sleeps, polls, public timeout budgets, release files,
+  and cleanup guards removed: **0**. New waits/padding: **0**. Synchronization
+  remains tied to real process, marker, release, public terminal, or cleanup
+  observations.
+- The assertion inventory is **same or stronger**. The base and ACP
+  optimization stories preserve their public Work/Event/process/protocol
+  observations and deterministic cleanup census; LONG-002 remains explicitly
+  unproven below rather than being reclassified.
+
+## CLEAN-004 validation report
+
+### Environment and artifact
+
+- Commit/build identifier: `98ffcc76374e09c8ba22b9a4effcf1fc2dd24b99` test
+  source head; final ledger update is documentation-only.
+- Environment and configuration: Windows 11 Home `10.0.26200`,
+  `windows/amd64`, 24 logical processors, Go `go1.25.0`, `CGO_ENABLED=1`,
+  `GOMAXPROCS` and `GOFLAGS` unset.
+- Customer entry point: `root.BuildProcess` through `Process.Execute` and
+  public Factory Session/Work/Event observations.
+- Real and substituted dependencies: real local process/filesystem/stdio and
+  pinned-golden edges; controlled `ProviderCommandRunner` and local ACP peers
+  only; no remote provider calls.
+- Cost/call budget used: no paid calls; local test execution only.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Complete base package | PASS | Three final `-count=1` samples above; combined clean-room command also passed (`33.690s` package). | LONG-002 template witnesses. |
+| Complete ACP package | PASS for selected passing samples | Three passing samples above; combined clean-room command also passed (`139.347s` package). | Intermittent crash-recovery contention failures. |
+| Pre-change-supported race commands | BLOCKED | Base exact full-package race passed (`51.666s` package). ACP exact command failed twice under host contention (`203.850s` and `184.844s` package); story 003's bounded `-race -parallel=4` full-package pass remains supplemental evidence. | Uncontended exact ACP full-package race. |
+| LONG-002 | FAIL | Timeout/retry witnesses pass; Claude and Codex fail on empty resolved context and `inputs=2` versus the retained resolved context and `inputs=1` assertion. | Production/runtime or shared-support contract disposition. |
+| Functional construction and package structure | PASS | `go run ./cmd/functionalboundarycheck`; `make pkg-structure`. | None for these gates. |
+| Fast verification | BLOCKED | `make verify-fast` stops at dashboard typecheck: `TS2688: Cannot find type definition file for 'bun'`. | UI dependency/tooling installation. |
+| Repository lint | BLOCKED | `make lint` backend/vet/structure/contract/format checks pass; UI Biome/knip binaries are missing and deadcode baseline is stale (`3072` current vs `3074` recorded). | Clean UI toolchain and baseline-owner disposition. |
+
+### Customer journey
+
+1. `go test ./tests/functional/providers ./tests/functional/providers/acp
+   -count=1 -timeout=30m` completed with exit 0; both packages traversed the
+   existing root/session/provider/process spine and returned `ok` (`33.690s`
+   and `139.347s` package time).
+2. `go test -race ./tests/functional/providers -count=1 -timeout=15m`
+   completed with exit 0 and no race report (`51.666s` package time).
+3. The exact tagged LONG-002 command exercised the public local-real path and
+   retained its exact prompt assertions; it returned exit 1 on the two known
+   context-shape mismatches, with no assertion weakening.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the ledger records baseline, profile,
+  topology, wait delta, assertion parity, final timing, and every remaining
+  edge in this canonical optimization document.
+- Permission and error behavior: ACP permission, redaction, protocol,
+  startup, cancellation, and unsupported-capability witnesses remain in the
+  retained package and passed in the story-003 evidence.
+- Persistence/reload behavior: ACP persistent/replacement and base replay
+  witnesses remain isolated; no persistence path was collapsed.
+- Accessibility/keyboard/responsive behavior: not applicable to this
+  test-only backend lane.
+- Operational signals: structured diagnostics and exact cleanup/resource
+  assertions remain part of the functional witnesses; no CI evidence is
+  committed.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `LONG-002` | Blocking | Run the declared `functionallong` selector. | Resolved WorkDir/env and one non-resource input in the provider prompt. | Empty context fields and two prompt inputs in both direct template witnesses. | Exact failure output above. |
+| `RACE-ACP-001` | Blocking for clean handoff | Run exact ACP full-package `-race` twice on this host. | Exit 0 as on the pre-change supported command. | Exit 1 under process/startup contention; bounded `-parallel=4` evidence passes. | Current package timings and story-003 race record. |
+| `TOOLING-001` | Blocking for clean handoff | Run `make verify-fast` or `make lint`. | Required UI tools/types are available. | Bun types, Biome, and knip are unavailable; deadcode baseline is stale. | Exact command output above. |
+
+### Verdict
+
+**BLOCKED**. The optimized local packages have passing full functional runs,
+measured improvement, and same-or-stronger assertions, but the clean-room
+finish line is not satisfied while LONG-002, the exact ACP race command, and
+required shared UI/deadcode tooling remain unresolved. No repair was applied to
+any of these outside-scope conditions.
+
+### Delta-plan request
+
+- Affected behavior and criterion: LONG-002 and its dependent story-002 pass
+  status; the runtime/shared-support prompt context contract must be decided
+  by its owning production/support lane while retaining the exact assertions.
+- Root-cause evidence or remaining uncertainty: the provider prompt receives
+  empty `Context.WorkDir`/`Context.Env` and two dispatch tokens, while resolved
+  workstation fields and detached Work inputs are held separately.
+- Smallest recommended correction/prerequisite: obtain the owning runtime or
+  shared-support disposition, then rerun only the tagged Claude/Codex
+  witnesses and BASE-002. Do not weaken their prompt/request assertions.
+- Dependencies and retest scope: a clean UI toolchain and deadcode-baseline
+  owner disposition are prerequisites for `verify-fast`/`lint`; an
+  uncontended host or review-owned race rerun is required for exact ACP
+  `-race`; no production change is authorized in this lane.
+
+## Final delivery disposition
+
+No PR was opened and no CI run was started because not all PRD story items are
+`passes:true`: story 002 remains false for LONG-002, and story 004 is blocked
+by the clean-room findings above. The hosted estimate from run `33264193119`
+remains a contention-inflated estimate and is not used in any denominator.
