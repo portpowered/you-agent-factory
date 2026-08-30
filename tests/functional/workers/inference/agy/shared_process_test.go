@@ -590,12 +590,23 @@ func (run *agySharedScenarioRun) closeResourcesOnce() error {
 }
 
 func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
+	return run.closeSessionWith(ctx, closeAgyFactorySession)
+}
+
+func (run *agySharedScenarioRun) closeSessionKnownActive(ctx context.Context) error {
+	return run.closeSessionWith(ctx, closeAgyActiveFactorySession)
+}
+
+func (run *agySharedScenarioRun) closeSessionWith(
+	ctx context.Context,
+	closeSession func(context.Context, string, string) error,
+) error {
 	if run == nil || strings.TrimSpace(run.sessionID) == "" {
 		return nil
 	}
 	run.sessionOnce.Do(func() {
 		var errs []error
-		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
+		if err := closeSession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
 			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
 		} else {
 			// A successful public DELETE (or an idempotent 404) is the deletion

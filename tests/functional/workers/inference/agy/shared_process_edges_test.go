@@ -307,21 +307,41 @@ func readAgyJSON[T any](ctx context.Context, endpoint string) (T, error) {
 // DELETE result is reused for that decision; repeating a known conflict adds
 // no lifecycle evidence.
 func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
+	return closeAgyFactorySessionWithKnownActive(ctx, baseURL, sessionID, false)
+}
+
+// closeAgyActiveFactorySession skips the initial DELETE when the normal
+// response-stream closure has already established the session is still owned
+// by the live runtime. The required terminate/status/delete lifecycle is
+// unchanged, while a redundant active-session DELETE conflict is removed from
+// that cleanup path.
+func closeAgyActiveFactorySession(ctx context.Context, baseURL, sessionID string) error {
+	return closeAgyFactorySessionWithKnownActive(ctx, baseURL, sessionID, true)
+}
+
+func closeAgyFactorySessionWithKnownActive(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	knownActive bool,
+) error {
 	// http.Client{} uses http.DefaultTransport; keep its pool reusable across
 	// the scenario's lifecycle requests instead of evicting connections.
 	client := &http.Client{}
 	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
-	if err != nil {
-		return err
-	}
-	if deleteStatus == http.StatusNoContent || deleteStatus == http.StatusNotFound {
-		return nil
-	}
-	if deleteStatus != http.StatusConflict {
-		return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
+	if !knownActive {
+		deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
+		if err != nil {
+			return err
+		}
+		if deleteStatus == http.StatusNoContent || deleteStatus == http.StatusNotFound {
+			return nil
+		}
+		if deleteStatus != http.StatusConflict {
+			return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
+		}
 	}
 
 	terminateStatus, terminateBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodPost, endpoint+"/terminate")
@@ -514,7 +534,7 @@ func assertAgyResponseEventStreamClosed(
 	want int,
 ) {
 	t.Helper()
-	if err := run.closeSession(context.Background()); err != nil {
+	if err := run.closeSessionKnownActive(context.Background()); err != nil {
 		t.Fatalf("AGY %q session cleanup before response stream close: %v", selector, err)
 	}
 	terminal := run.stream.TryNextFrameResult(timeout)
