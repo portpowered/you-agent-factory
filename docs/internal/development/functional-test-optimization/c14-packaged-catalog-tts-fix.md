@@ -14,8 +14,9 @@ and implementation-stage handoff evidence.
   source was read or cited.
 - Baseline source: `fea2e30a499384182d2fabe7038767e3c2f9c5e5`, equal to
   `origin/main` at capture time.
-- Rebased parent: `995137125a` (`origin/main` at final promotion). The
-  rebase applied cleanly, and `git diff --name-only
+- Rebased parent at the initial final promotion: `995137125a`
+  (`origin/main` at that time). The rebase applied cleanly, and
+  `git diff --name-only
   fea2e30a49..995137125a --
   tests/functional/factory/packaged/catalog
   tests/functional/factory/packaged/tts
@@ -23,9 +24,13 @@ and implementation-stage handoff evidence.
   docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`
   was empty, so no owned denominator or assertion inventory reconciliation was
   required.
+- Review-correction rebase parent: `47285a02c1` (current `origin/main`). The
+  rebase applied cleanly, and the owned-path comparison from `995137125a` to
+  `47285a02c1` was empty, so the frozen denominator and assertion inventory
+  remain valid.
 - Final code head used for package, profile, and loopback evidence:
-  `2ee83f1bc3`; the later ledger-only handoff commit does not change test
-  sources.
+  `2ee83f1bc3`; the review-correction head changes only Catalog seed-path
+  construction and this ledger.
 - Owned implementation surfaces characterized:
   `tests/functional/factory/packaged/catalog/**`,
   `tests/functional/factory/packaged/tts/**`, and
@@ -609,7 +614,7 @@ making an implementation repair during loopback.
 | PAC-5 — GATE-FIX-OPT local-real Git/worktrees, parity, failures, and cleanup | PASS | Fix functional suite and focused repeat/race | Root-built process with local-real Git/worktrees and controlled provider command edge | Full `-count=1`, touched `-count=3`, `-race -count=1`, and clean-room pass; 0 remote calls, `$0` | Role order/models/prompts, recovery/exhaustion, CLI/session parity, validation/provider failures, and all six cleanup causes passed | Terminal hosted CI topology | None |
 | PAC-6 — Named package suites and focused repeat/race quality gates | PASS | Three owned package suites plus touched shared-fixture gates | Local-real production composition and controlled external effects | One package pass plus focused `-count=3` and `-race -count=1` per touched sharing path; 0 remote calls, `$0` | Catalog, TTS, and Fix named suites and retained repeat/race commands exited `0`; all 70 mapped run records remained present | Current hosted functional-coverage workflow result and merge | None |
 | PAC-7 — c14 ledger parity, privacy, and content | PASS | Durable ledger and source/diff audit | Local artifacts, source assertions, and Git metadata only | Once at final promotion; 0 remote calls, `$0` | Before/after samples, profiles, techniques, counts, medians, same-or-stronger assertion inventory, and privacy audit are recorded without credentials, customer data, unnecessary temporary paths, or CI evidence commits | Future rebased-head reconciliation | None |
-| PAC-8 — GATE-REBASE-C14 current-base reconciliation | PASS | Git rebase and owned-path comparison | Local Git with `origin/main` as the integration base | Once before final measurement and push; no external calls | Clean rebase onto `995137125a`; the owned-path three-dot comparison was empty, so no denominator or inventory reconciliation was required | Terminal hosted merge state | None |
+| PAC-8 — GATE-REBASE-C14 current-base reconciliation | PASS | Git rebase and owned-path comparison | Local Git with `origin/main` as the integration base | Once before final measurement and push; no external calls | Initial clean rebase onto `995137125a`, followed by a clean review-correction rebase onto current `origin/main` `47285a02c1`; the owned-path comparison between those parents was empty, so no denominator or inventory reconciliation was required | Terminal hosted merge state | None |
 | PAC-9 — Owned three-dot diff | PASS | Git name-status and full diff audit | Local Git | Once at final promotion; no external calls | The final implementation diff contains only the three owned package roots and this ledger; no production, generated, shared-support, workflow, baseline, Makefile, other-package, or temporary-plan path changed | None within lane scope | None |
 | PAC-10 — No prohibited shortcut, leak, race, or assertion weakening | PASS | Source review, package tests, repeat/race gates, and resource census | Local-real filesystem/Git/process boundaries with controlled exact effects | Per changed package plus final audit; 0 remote calls, `$0` | No new sleep, blanket timeout, skipped/weakened assertion, production shortcut, resource leak, or race report; local-real Git and `serviceedges.Edges` boundaries remain intact | Unrelated package defects outside this diff | None |
 | PAC-11 — LOOPBACK-C14 complete criterion map | PASS | Clean-room validation report | Fresh detached local-real checkout with controlled exact edges | Once at the final artifact; 0 remote calls, `$0` | This explicit PAC-1 through PAC-13 table records status, scope, fidelity, cadence, cost, evidence, and unproven edge for every PRD project criterion; no implementation repair was made during loopback | Terminal hosted CI and merge | None |
