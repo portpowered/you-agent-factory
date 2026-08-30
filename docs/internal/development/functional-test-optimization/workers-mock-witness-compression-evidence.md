@@ -197,6 +197,101 @@ retained/migrated owner. No current assertion is intentionally dropped. The
 post-migration ledger must replace planned owners with actual selectors and
 reconcile each ID one-for-one or with a stronger assertion.
 
+## Story 002 post-migration evidence
+
+Status: `FOCUSED PASS`; the ordinary package and race gates are `BLOCKED` by
+the same unchanged global `@you/full-flow` staging-owner contention recorded
+for the baseline. The source change is limited to the workers/mock test
+topology: six compiled-CLI rows remain, nine rows now execute through the
+existing root-built shared process, and the guarded compiled-process helper is
+unchanged.
+
+### Actual owner reconciliation
+
+The current-owner column above is the before state. The following table is the
+after state for every property; grouped IDs are separate property rows that
+share the same exact post owner.
+
+| MOCK IDs | Post-migration owner |
+| --- | --- |
+| MOCK-01 | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome/success quiet result exits zero` (retained compiled CLI) |
+| MOCK-02 | `TestSharedProcessWorkersMock/BatchDefaultSuccess` |
+| MOCK-03 | `TestSharedProcessWorkersMock/BatchVerboseSuccess` |
+| MOCK-04..06 | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome/failed terminal Work exits nonzero with human detail` (retained compiled CLI) |
+| MOCK-07..09, MOCK-40 | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome/failed terminal Work JSON is parseable` (retained compiled CLI) |
+| MOCK-10..11 | `TestSharedProcessWorkersMock/BatchAllFailedHuman` |
+| MOCK-12..15, MOCK-41 | `TestBuiltCLIBatchExitCodesAggregateFailureCauses/all submitted Work failures have a complete JSON collection` (retained compiled CLI) |
+| MOCK-16..18, MOCK-42 | `TestSharedProcessWorkersMock/BatchMixedJSON` |
+| MOCK-19..20 | `TestSharedProcessWorkersMock/BatchCircuitBreakerHuman` |
+| MOCK-21..22, MOCK-43 | `TestSharedProcessWorkersMock/BatchCircuitBreakerJSON` |
+| MOCK-23..24 | `TestSharedProcessWorkersMock/BatchScriptFailureHuman` |
+| MOCK-25..26, MOCK-44 | `TestSharedProcessWorkersMock/BatchScriptFailureJSON` |
+| MOCK-27..30 | `TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot/success preserves primary result` (retained compiled CLI) |
+| MOCK-31..34 | `TestSharedProcessWorkersMock/NamedHumanFailure` |
+| MOCK-35..39, MOCK-45..48 | `TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot/terminal failure preserves JSON detail` (retained compiled CLI) |
+
+The nine migrated owners are actual `TestSharedProcessWorkersMock` table rows,
+not helper-only claims. The `BatchAllFailedHuman` row also executes one fresh
+accepted batch immediately after its rejected batch, proving the original
+failure remains observable while a later shared invocation succeeds; that
+recovery invocation is setup/recovery evidence, not an additional matrix row.
+The focused run directly spot-checked more than five migrated properties in
+the new test code, including default success, both output policies, ordered
+human aggregation, mixed JSON omission of the successful Work, the exact
+breaker reason, script-failure normalization, and named human response-stream
+shape.
+
+### Post-migration count and verification
+
+The dynamic test-owned target-binary count after the edit is:
+
+| Source parent | Retained target-binary children |
+| --- | ---: |
+| Single-Work batch | 3 (`WM-01`, `WM-04`, `WM-05`) |
+| Aggregation batch | 1 (`WM-07`) |
+| Named invocation | 2 (`WM-13`, `WM-15`) |
+| **Scenario target-binary total** | **6** |
+
+The shared-process table has nine additional migration rows (28 rows total
+including the pre-existing 19 rows). `compiledCLIBinary.once` still creates
+one compiler child, so the stricter compiled-CLI-related total is `6 + 1 = 7`.
+
+The focused procedures and observed results on the edited worktree were:
+
+```text
+go test ./tests/functional/workers/mock -run '^TestSharedProcessWorkersMock/(BatchDefaultSuccess|BatchVerboseSuccess|BatchAllFailedHuman|BatchMixedJSON|BatchCircuitBreakerHuman|BatchCircuitBreakerJSON|BatchScriptFailureHuman|BatchScriptFailureJSON|NamedHumanFailure)$' -count=1 -v
+=> exit 0; all nine migrated selectors passed; package duration 28.418s
+
+go test ./tests/functional/workers/mock -run '^TestBuiltCLI(BatchExitCodesReportSingleWorkOutcome|BatchExitCodesAggregateFailureCauses|NamedInvocationExitCodesCharacterizeOneShot)$' -count=1 -v
+=> exit 0; six retained selectors passed; package duration 11.906s
+
+go test -race ./tests/functional/workers/mock -run '^TestSharedProcessWorkersMock/(BatchDefaultSuccess|BatchVerboseSuccess|BatchAllFailedHuman|BatchMixedJSON|BatchCircuitBreakerHuman|BatchCircuitBreakerJSON|BatchScriptFailureHuman|BatchScriptFailureJSON|NamedHumanFailure)$' -count=1
+=> exit 0; all nine migrated selectors passed without a race report; package duration 44.431s
+
+go test ./tests/functional/workers/mock/... -count=1
+=> exit 1; existing TestSharedProcessWorkersMock/UnknownWorker/invalid_runType_in_override_entry
+   received the unchanged @you/full-flow global staging-owner diagnostic
+
+go test -race ./tests/functional/workers/mock/... -count=1
+=> exit 1; same unchanged @you/full-flow staging-owner diagnostic reached
+   TestSharedProcessWorkersMock/UnknownWorker/invalid_runType_in_override_entry;
+   no race report was emitted by the changed selectors
+```
+
+The full ordinary and race commands both identified
+`C:\Users\andre\.you-agent-factory\factories\.you--full-flow.staging-owner`
+with `outcome=indeterminate-contention`, `owner_pid=6224`, and
+`owner_identity=unverified`. No shared global process or file was stopped,
+removed, or edited. The changed files contain no new sleeps, and
+`compiled_cli_exit_codes_helpers_test.go` retains its baseline SHA-256
+`54E0919D3D9AB235E14CACE45CD8CFF9E542F3D7CEF30D1EBA1E2F59D6F8711A`.
+
+The focused retained and migrated runs prove the WM-01..WM-15 value contracts
+at their assigned boundaries and the one-shot recovery behavior. The complete
+package and race gates remain unproven until the shared staging-owner
+contention is resolved outside this lane. Three post-change performance
+samples, rebase loopback, and PR handoff belong to story 003.
+
 ## Baseline package runs
 
 The exact required command was run three times, in three separate shell

@@ -45,7 +45,7 @@ const (
 // TestSharedProcessWorkersMock keeps the Workers mock selection/routing
 // scenarios on one root-built customer host. Each server-backed scenario gets
 // a distinct public Factory Session and a fresh command-edge delegate. The
-// plain-batch drain rows run last, after the hosted invocation is stopped, so
+// local one-shot rows run last, after the hosted invocation is stopped, so
 // they can reuse the same root without concurrently activating another
 // default runtime. The resource-set CLI evidence belongs to this one
 // package-scoped group because its executable behavior is exercised by the
@@ -72,6 +72,15 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "LiveCapacitySafeReduction", run: testLiveResourceCapacityReductionPreservesActiveWork},
 		{name: "LiveCapacityUnsafeReduction", run: testLiveResourceCapacityRejectsReductionBelowActiveUse},
 		{name: "LiveCapacityRecording", run: testLiveResourceCapacityRecordingReplayAndCursor},
+		{name: "BatchDefaultSuccess", run: testSharedBatchDefaultSuccess},
+		{name: "BatchVerboseSuccess", run: testSharedBatchVerboseSuccess},
+		{name: "BatchAllFailedHuman", run: testSharedBatchAllFailedHuman},
+		{name: "BatchMixedJSON", run: testSharedBatchMixedJSON},
+		{name: "BatchCircuitBreakerHuman", run: testSharedBatchCircuitBreakerHuman},
+		{name: "BatchCircuitBreakerJSON", run: testSharedBatchCircuitBreakerJSON},
+		{name: "BatchScriptFailureHuman", run: testSharedBatchScriptFailureHuman},
+		{name: "BatchScriptFailureJSON", run: testSharedBatchScriptFailureJSON},
+		{name: "NamedHumanFailure", run: testSharedNamedHumanFailure},
 		{name: "PlainBatchDrainReportsStrandedWork", run: testPlainBatchDrainReportsStrandedWork},
 		{name: "PlainBatchDrainCounterexamples", run: testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples},
 		{name: "PlainBatchDrainRejectsPreActivationCancellation", run: testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation},
@@ -279,12 +288,12 @@ func (fixture *sharedWorkersMockFixture) useCommandRunners(
 	fixture.scriptEdge.set(script)
 }
 
-// prepareLocalActivation closes the one continuous host before one of the four
-// documented no-server exception rows is admitted. The root process itself
-// remains alive and reusable; only its active default runtime is stopped.
-// Keeping this transition serialized prevents a second invocation from racing
-// the host teardown and fails closed if a future caller forgets to prepare the
-// local lane.
+// prepareLocalActivation closes the one continuous host before a documented
+// no-server exception row is admitted. The root process itself remains alive
+// and reusable; only its active default runtime is stopped. Keeping this
+// transition serialized prevents a second invocation from racing the host
+// teardown and fails closed if a future caller forgets to prepare the local
+// lane.
 func (fixture *sharedWorkersMockFixture) prepareLocalActivation(t *testing.T) {
 	t.Helper()
 	fixture.activationMu.Lock()
@@ -307,9 +316,9 @@ func (fixture *sharedWorkersMockFixture) executeLocal(
 ) error {
 	t.Helper()
 	// The local CLI has no public Factory Session selector. These calls are
-	// therefore intentionally limited to the plain-batch exception rows, whose
-	// own input/HOME/runtime identities and Process.Execute completion provide
-	// the isolation and cleanup boundary.
+	// therefore limited to the package's documented one-shot exception rows,
+	// whose own input/HOME/runtime identities and Process.Execute completion
+	// provide the isolation and cleanup boundary.
 	return (&sharedWorkersMockLocalProcess{fixture: fixture, tb: t}).Execute(input)
 }
 
