@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,9 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -434,4 +438,396 @@ func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 	})
 	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), t.TempDir()))
 	return root
+}
+
+func exerciseBatchColdStartCLICharacterization(t *testing.T) {
+	t.Helper()
+	for _, test := range profileSelectedBatchSystemInitializationCases {
+		cmd := &cobra.Command{Use: "run"}
+		cmd.SetContext(context.Background())
+		if test.changedFlag != "" {
+			cmd.Flags().String(test.changedFlag, "", "")
+			if err := cmd.Flags().Set(test.changedFlag, "selected"); err != nil {
+				t.Fatalf("set changed flag %q: %v", test.changedFlag, err)
+			}
+		}
+		options := CommandFactory{
+			initializer: startupcli.Functions{
+				InitializeSystemFunc: func(context.Context, string) error { return nil },
+			},
+		}
+		allowed, err := prepareRunSystemInitialization(cmd, &test.cfg, options)
+		if err != nil {
+			t.Fatalf("prepareRunSystemInitialization(%s) error = %v", test.name, err)
+		}
+		if got := !allowed; got != test.wantDeferred {
+			t.Fatalf("%s deferred = %t, want %t", test.name, got, test.wantDeferred)
+		}
+	}
+
+	exerciseDeferredBatchSystemInitialization(t)
+	exerciseExactFiniteMockBatchCommand(t)
+	exerciseInvalidRecordingInputDoesNotActivate(t)
+	exerciseDemandedBatchSystemInitialization(t)
+	exerciseDemandedBatchCommandDoesNotDispatch(t)
+	exerciseBatchColdStartProcessBoundaries(t)
+}
+
+func exerciseDeferredBatchSystemInitialization(t *testing.T) {
+	t.Helper()
+	calls := 0
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	options := CommandFactory{initializer: startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error { calls++; return nil },
+	}}
+	cfg := runcli.RunConfig{
+		WorkFile: "one-work.json", MockWorkersEnabled: true, DisableDefaultRecording: true,
+	}
+	if err := prepareRunFactoryStartup(cmd, &cfg, options, false); err != nil {
+		t.Fatalf("prepare deferred startup: %v", err)
+	}
+	if err := cfg.StartupPreparation(context.Background(), false, nil); err != nil {
+		t.Fatalf("deferred StartupPreparation() error = %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("deferred InitializeSystem calls = %d, want 0", calls)
+	}
+}
+
+func exerciseExactFiniteMockBatchCommand(t *testing.T) {
+	t.Helper()
+	var initialized int
+	var got runcli.RunConfig
+	workingDirectory := t.TempDir()
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error { initialized++; return nil },
+			RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+				got = testRunConfig(selection)
+				return nil
+			},
+		},
+	)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	root.SetArgs([]string{"run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--no-record"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute exact finite mock batch: %v", err)
+	}
+	if initialized != 0 {
+		t.Fatalf("exact batch InitializeSystem calls = %d, want 0", initialized)
+	}
+	if got.WorkFile != "one-work.json" || !got.MockWorkersEnabled ||
+		got.MockWorkersConfigPath != "accept.json" || !got.DisableDefaultRecording {
+		t.Fatalf("exact batch config = %+v, want work/mock/config/no-record", got)
+	}
+}
+
+func exerciseInvalidRecordingInputDoesNotActivate(t *testing.T) {
+	t.Helper()
+	calls := 0
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	cfg := runcli.RunConfig{
+		WorkFile: "one-work.json", RecordPath: "recording", ReplayPath: "replay",
+		MockWorkersEnabled: true, DisableDefaultRecording: true,
+	}
+	allowed, err := prepareRunSystemInitialization(cmd, &cfg, CommandFactory{initializer: startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error { calls++; return nil },
+	}})
+	if err != nil {
+		t.Fatalf("invalid recording preflight error = %v, want deferred validation", err)
+	}
+	if allowed || calls != 0 {
+		t.Fatalf("invalid recording preflight allowed/calls = %t/%d, want false/0", allowed, calls)
+	}
+}
+
+func exerciseDemandedBatchSystemInitialization(t *testing.T) {
+	t.Helper()
+	wantErr := errors.New("controlled hosted system initialization failure")
+	calls := 0
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	options := CommandFactory{initializer: startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error { calls++; return wantErr },
+	}}
+	cfg := runcli.RunConfig{
+		WorkFile: "one-work.json", MockWorkersEnabled: true,
+		DisableDefaultRecording: true, WithServer: true,
+	}
+	if err := prepareRunFactoryStartup(cmd, &cfg, options, false); err != nil {
+		t.Fatalf("prepare demanded startup: %v", err)
+	}
+	first := cfg.StartupPreparation(context.Background(), false, nil)
+	if !errors.Is(first, wantErr) {
+		t.Fatalf("first demanded startup error = %v, want %v", first, wantErr)
+	}
+	second := cfg.StartupPreparation(context.Background(), false, nil)
+	if !errors.Is(second, wantErr) || second != first {
+		t.Fatalf("second demanded startup error = %v, want cached %v", second, first)
+	}
+	if calls != 1 {
+		t.Fatalf("demanded InitializeSystem calls = %d, want one", calls)
+	}
+}
+
+func exerciseDemandedBatchCommandDoesNotDispatch(t *testing.T) {
+	t.Helper()
+	wantErr := errors.New("controlled demanded command initialization failure")
+	initialized, dispatched := 0, 0
+	workingDirectory := t.TempDir()
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error { initialized++; return wantErr },
+			RunFunc: func(context.Context, startupcli.RunIntent, startupcli.RunSelection) error {
+				dispatched++
+				return nil
+			},
+		},
+	)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	root.SetArgs([]string{"run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--with-server", "--no-record"})
+	err := root.Execute()
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("demanded command error = %v, want %v", err, wantErr)
+	}
+	if initialized != 1 || dispatched != 0 {
+		t.Fatalf("demanded command initialized/dispatched = %d/%d, want 1/0", initialized, dispatched)
+	}
+}
+
+func exerciseBatchColdStartProcessBoundaries(t *testing.T) {
+	t.Helper()
+	exerciseBatchColdStartProcessReuse(t)
+	exerciseBatchColdStartProcessConcurrentDemand(t)
+	exerciseBatchColdStartProcessCancellation(t)
+	exerciseBatchColdStartProcessRecovery(t)
+}
+
+type batchColdStartProcessProviderRegistry struct{}
+
+func (batchColdStartProcessProviderRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+
+type batchColdStartProcessLifecycle struct {
+	closeCalls atomic.Int32
+}
+
+func (lifecycle *batchColdStartProcessLifecycle) Close(context.Context) error {
+	lifecycle.closeCalls.Add(1)
+	return nil
+}
+
+func newBatchColdStartApplicationProcess(
+	t *testing.T,
+	initializer startupcli.Initializer,
+) (*initializerapplication.Process, *batchColdStartProcessLifecycle) {
+	t.Helper()
+	lifecycle := &batchColdStartProcessLifecycle{}
+	process, err := initializerapplication.NewProcess(
+		withTestInjectedPlatformRoles(CommandFactory{}), initializer,
+		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	return process, lifecycle
+}
+
+func batchColdStartProcessInput(home, workingDirectory string, output *bytes.Buffer, server bool) initializerapplication.Input {
+	args := []string{"you", "run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--no-record"}
+	if server {
+		args = append(args, "--with-server")
+	}
+	return initializerapplication.Input{
+		Args: args, Env: []string{"HOME=" + home, "USERPROFILE=" + home},
+		Stdout: output, WorkingDirectory: workingDirectory,
+	}
+}
+
+func batchColdStartProcessRunFunctions(runCalls *atomic.Int32) startupcli.Functions {
+	return startupcli.Functions{RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+		cfg := testRunConfig(selection)
+		if cfg.StartupPreparation == nil {
+			return errors.New("process characterization startup preparation is missing")
+		}
+		if err := cfg.StartupPreparation(ctx, false, nil); err != nil {
+			return err
+		}
+		runCalls.Add(1)
+		if cfg.Output == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(cfg.Output, "processed:%s\n", cfg.WorkFile)
+		return err
+	}}
+}
+
+func exerciseBatchColdStartProcessReuse(t *testing.T) {
+	t.Helper()
+	var runCalls, initCalls atomic.Int32
+	process, lifecycle := newBatchColdStartApplicationProcess(t, startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error { initCalls.Add(1); return nil },
+		RunFunc:              batchColdStartProcessRunFunctions(&runCalls).RunFunc,
+	})
+	workingDirectory, home := t.TempDir(), t.TempDir()
+	var firstOutput, secondOutput bytes.Buffer
+	if err := process.Execute(batchColdStartProcessInput(home, workingDirectory, &firstOutput, false)); err != nil {
+		t.Fatalf("first reusable batch Execute() error = %v", err)
+	}
+	if err := process.Execute(batchColdStartProcessInput(home, workingDirectory, &secondOutput, false)); err != nil {
+		t.Fatalf("second reusable batch Execute() error = %v", err)
+	}
+	if initCalls.Load() != 0 || runCalls.Load() != 2 {
+		t.Fatalf("reusable batch init/run calls = %d/%d, want 0/2", initCalls.Load(), runCalls.Load())
+	}
+	if firstOutput.String() != "processed:one-work.json\n" || secondOutput.String() != firstOutput.String() {
+		t.Fatalf("reusable batch outputs = %q / %q, want isolated identical results", firstOutput.String(), secondOutput.String())
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("close reusable process: %v", err)
+	}
+	if lifecycle.closeCalls.Load() != 1 {
+		t.Fatalf("reusable process close calls = %d, want 1", lifecycle.closeCalls.Load())
+	}
+}
+
+func exerciseBatchColdStartProcessConcurrentDemand(t *testing.T) {
+	t.Helper()
+	var runCalls, initCalls atomic.Int32
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	process, lifecycle := newBatchColdStartApplicationProcess(t, startupcli.Functions{
+		InitializeSystemFunc: func(ctx context.Context, _ string) error {
+			initCalls.Add(1)
+			entered <- struct{}{}
+			select {
+			case <-release:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+		RunFunc: batchColdStartProcessRunFunctions(&runCalls).RunFunc,
+	})
+	workingDirectory, home := t.TempDir(), t.TempDir()
+	var firstOutput, secondOutput bytes.Buffer
+	results := make(chan error, 2)
+	go func() {
+		results <- process.Execute(batchColdStartProcessInput(home, workingDirectory, &firstOutput, true))
+	}()
+	go func() {
+		results <- process.Execute(batchColdStartProcessInput(home, workingDirectory, &secondOutput, true))
+	}()
+	awaitBatchColdStartProcessEntries(t, entered, 2)
+	close(release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("concurrent demanded Execute() error = %v", err)
+		}
+	}
+	if initCalls.Load() != 2 || runCalls.Load() != 2 {
+		t.Fatalf("concurrent demanded init/run calls = %d/%d, want 2/2", initCalls.Load(), runCalls.Load())
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("close concurrent process: %v", err)
+	}
+	if lifecycle.closeCalls.Load() != 1 {
+		t.Fatalf("concurrent process close calls = %d, want 1", lifecycle.closeCalls.Load())
+	}
+}
+
+func exerciseBatchColdStartProcessCancellation(t *testing.T) {
+	t.Helper()
+	var runCalls atomic.Int32
+	entered := make(chan struct{})
+	process, lifecycle := newBatchColdStartApplicationProcess(t, startupcli.Functions{
+		InitializeSystemFunc: func(ctx context.Context, _ string) error {
+			close(entered)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		RunFunc: batchColdStartProcessRunFunctions(&runCalls).RunFunc,
+	})
+	home, workingDirectory := t.TempDir(), t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- process.Execute(initializerapplication.Input{
+			Args:    []string{"you", "run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--with-server", "--no-record"},
+			Env:     []string{"HOME=" + home, "USERPROFILE=" + home},
+			Context: ctx, WorkingDirectory: workingDirectory,
+		})
+	}()
+	awaitBatchColdStartProcessEntries(t, entered, 1)
+	cancel()
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled demanded Execute() error = %v, want context.Canceled", err)
+	}
+	if runCalls.Load() != 0 {
+		t.Fatalf("canceled demanded run calls = %d, want 0", runCalls.Load())
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("close canceled process: %v", err)
+	}
+	if lifecycle.closeCalls.Load() != 1 {
+		t.Fatalf("canceled process close calls = %d, want 1", lifecycle.closeCalls.Load())
+	}
+}
+
+func exerciseBatchColdStartProcessRecovery(t *testing.T) {
+	t.Helper()
+	wantErr := errors.New("controlled first process activation failure")
+	var initCalls, runCalls atomic.Int32
+	process, lifecycle := newBatchColdStartApplicationProcess(t, startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error {
+			if initCalls.Add(1) == 1 {
+				return wantErr
+			}
+			return nil
+		},
+		RunFunc: batchColdStartProcessRunFunctions(&runCalls).RunFunc,
+	})
+	workingDirectory, home := t.TempDir(), t.TempDir()
+	var firstOutput, secondOutput bytes.Buffer
+	if err := process.Execute(batchColdStartProcessInput(home, workingDirectory, &firstOutput, true)); !errors.Is(err, wantErr) {
+		t.Fatalf("first recovery Execute() error = %v, want %v", err, wantErr)
+	}
+	if firstOutput.Len() != 0 {
+		t.Fatalf("failed recovery output = %q, want empty", firstOutput.String())
+	}
+	if err := process.Execute(batchColdStartProcessInput(home, workingDirectory, &secondOutput, true)); err != nil {
+		t.Fatalf("fresh recovery Execute() error = %v", err)
+	}
+	if initCalls.Load() != 2 || runCalls.Load() != 1 || secondOutput.String() != "processed:one-work.json\n" {
+		t.Fatalf("recovery init/run/output = %d/%d/%q, want 2/1/result", initCalls.Load(), runCalls.Load(), secondOutput.String())
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("close recovery process: %v", err)
+	}
+	if lifecycle.closeCalls.Load() != 1 {
+		t.Fatalf("recovery process close calls = %d, want 1", lifecycle.closeCalls.Load())
+	}
+}
+
+func awaitBatchColdStartProcessEntries(t *testing.T, entries <-chan struct{}, want int) {
+	t.Helper()
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	for range want {
+		select {
+		case <-entries:
+		case <-timer.C:
+			t.Fatalf("timed out waiting for %d process initialization entries", want)
+		}
+	}
 }

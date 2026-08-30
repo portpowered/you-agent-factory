@@ -170,15 +170,15 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsC
 		second.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCurrent {
 		t.Fatalf("second packaged factories = %#v, want one current @you/goal", second.PackagedFactories)
 	}
+	assertBatchColdStartSystemInitializationCall(t)
 }
 
-// TestBatchColdStartCharacterizationSystemInitializationCall records the
+// assertBatchColdStartSystemInitializationCall records the
 // current pre-runtime operation's value and call count. It is the package
 // witness for the profile-selected system-initialization seam; it makes no
 // production deferral decision.
-func TestBatchColdStartCharacterizationSystemInitializationCall(t *testing.T) {
-	t.Parallel()
-
+func assertBatchColdStartSystemInitializationCall(t *testing.T) {
+	t.Helper()
 	wantErr := errors.New("controlled system initialization failure")
 	service := &batchColdStartSystemInitializationService{err: wantErr}
 	operation := provideSystemInitializationOperation(service)

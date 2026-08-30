@@ -251,8 +251,9 @@ path. The change reuses the existing `RunConfig`, `StartupPreparation`,
 `CommandFactory`, and single `wire.InjectBundle` graph; it does not add a
 second graph or a public configuration mode.
 
-The changed-path tests are in
-`pkg/transports/cli/batch_cold_start_deferral_test.go`. They table-test the
+The changed-path tests are folded into the existing
+`pkg/transports/cli/root_run_flags_test.go` entry point and shared helpers in
+`pkg/transports/cli/root_run_test_helpers_test.go`. They table-test the
 deferral boundary, assert that the deferred initializer is not called for the
 exact command shape, assert that demanded initialization preserves a sentinel
 failure and exactly-one call, and cover explicit Factory path/directory,
@@ -517,3 +518,45 @@ tests, full unit gate, and platform-qualified lint evidence are complete.
 The remaining action is to push this head, open the named PR, start required
 CI, and address any blocking review feedback without claiming terminal CI or
 merge.
+
+## Story 002 review follow-up — adverse and process-boundary evidence
+
+The blocking review requested direct owner-boundary cases and exact test
+inventory preservation. The CLI characterization is now folded into the
+existing `TestRunCommand_ContinuouslyFlag` identity in
+`pkg/transports/cli/root_run_flags_test.go`; the lifecycle characterization is
+folded into the existing
+`TestRuntimeLifecycleOwnsActivationAndReverseShutdown` identity. No new Go
+test or subtest identities remain for this lane. The package-owned witnesses
+now cover invalid recording input, dependency/worker-start failure, runtime
+capacity/start failure, partial hosted transport activation failure, wait
+timeout, cancellation during wait, fresh lifecycle recovery, demanded CLI
+failure without dispatch, same-preparation failure caching, sequential
+`Process.Execute` reuse, concurrent first demand, cancellation during demand,
+fresh-process recovery after failure, isolated output streams, and exactly-once
+process close observation. `runStartupPreparation` serializes preparation and
+caches an initialization error for one invocation; a later `Process.Execute`
+still receives a fresh preparation and can recover.
+
+Exact local evidence, run from the worktree after the review fix:
+
+~~~
+go test ./pkg/transports/cli ./pkg/services/factory_sessions/internal/processlifecycle ./pkg/wire -count=1
+go test -race ./pkg/transports/cli -run '^TestRunCommand_ContinuouslyFlag$' -count=5
+go test -race ./pkg/services/factory_sessions/internal/processlifecycle -run '^TestRuntimeLifecycleOwnsActivationAndReverseShutdown$' -count=5
+make pkg-maint
+~~~
+
+All four commands exited 0. They prove the changed CLI, lifecycle, and Wire
+package behavior, the bounded repeated race path, and repository file/function
+maintainability limits. The exact local budget command was also attempted:
+
+~~~
+make test-unit-latency-budget
+~~~
+
+It exited 1 because this worktree has no retained hosted samples at
+`.artifacts/unit-latency/run-1.v2.json`, `run-2.v2.json`, or `run-3.v2.json`.
+The hosted exact-inventory gate must be rerun on the pushed head; the checked
+reference was not changed and no local substitute is claimed. The canonical
+validation report remains the next story's tracked deliverable.

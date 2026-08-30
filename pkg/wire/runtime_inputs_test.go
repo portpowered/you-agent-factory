@@ -601,16 +601,16 @@ func TestRuntimeOpeningRequestFactorySelectsEnabledPersistenceForBatchAndService
 			}
 		})
 	}
+	assertBatchColdStartOpeningValues(t)
 }
 
-// TestBatchColdStartCharacterizationPreservesBatchAndServerOpeningValues
+// assertBatchColdStartOpeningValues
 // records the exact request values that distinguish the no-listener batch
 // path from the explicitly hosted path. The later optimization story may
 // change when unused work happens, but it must not change this owner request
 // boundary.
-func TestBatchColdStartCharacterizationPreservesBatchAndServerOpeningValues(t *testing.T) {
-	t.Parallel()
-
+func assertBatchColdStartOpeningValues(t *testing.T) {
+	t.Helper()
 	opening := provideRuntimeOpeningRequestFactory()
 	mocks := workers.NewEmptyMockWorkersConfig()
 	base := runcli.RunConfig{

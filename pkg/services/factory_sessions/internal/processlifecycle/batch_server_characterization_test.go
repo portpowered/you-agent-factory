@@ -12,10 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
-// TestBatchColdStartCharacterizationLifecycleRolesAndCleanup freezes the
-// current activation transaction for both no-listener batch and hosted
-// server-shaped components. The fake transport records readiness and listener
-// ownership so the assertions stay at the lifecycle package boundary.
+// exerciseBatchColdStartLifecycleCharacterization freezes the current
+// activation transaction for both no-listener batch and hosted server-shaped
+// components. The fake transport records readiness and listener ownership so
+// the assertions stay at the lifecycle package boundary.
 type batchColdStartLifecycleCase struct {
 	name              string
 	server            bool
@@ -45,14 +45,17 @@ var batchColdStartLifecycleCases = []batchColdStartLifecycleCase{
 	},
 }
 
-func TestBatchColdStartCharacterizationLifecycleRolesAndCleanup(t *testing.T) {
-	t.Parallel()
-
+func exerciseBatchColdStartLifecycleCharacterization(t *testing.T) {
+	t.Helper()
 	for _, test := range batchColdStartLifecycleCases {
-		t.Run(test.name, func(t *testing.T) {
-			runBatchColdStartLifecycleCase(t, test)
-		})
+		t.Logf("lifecycle characterization case=%s", test.name)
+		runBatchColdStartLifecycleCase(t, test)
 	}
+	exerciseBatchColdStartLifecycleFailures(t)
+	exerciseBatchColdStartInvalidPlan(t)
+	exerciseBatchColdStartWaitFailure(t)
+	exerciseBatchColdStartCancellation(t)
+	exerciseBatchColdStartRecovery(t)
 }
 
 func runBatchColdStartLifecycleCase(t *testing.T, test batchColdStartLifecycleCase) {
@@ -151,68 +154,67 @@ func assertBatchColdStartListenerState(t *testing.T, transport *batchColdStartLi
 	}
 }
 
-// TestBatchColdStartCharacterizationLifecycleFailureUnwinds freezes the
+// exerciseBatchColdStartLifecycleFailures freezes the
 // current controlled failure paths: no dispatch-like component reaches Stop
 // unless Start succeeded, while every prior acquisition unwinds in reverse and
 // the runtime resource closes once.
-func TestBatchColdStartCharacterizationLifecycleFailureUnwinds(t *testing.T) {
-	t.Parallel()
+func exerciseBatchColdStartLifecycleFailures(t *testing.T) {
+	t.Helper()
 
-	t.Run("worker-start-failure", func(t *testing.T) {
-		startErr := errors.New("controlled worker start failure")
-		events := []string{}
-		runtime := &batchColdStartProcessRuntime{events: &events, workerErr: startErr}
-		transport := &batchColdStartLifecycleComponent{name: "transport", events: &events}
-		closeCalls := 0
-		plan := batchColdStartPlan(t, runtime, factorysessions.BoundProcessComponents{Transport: transport}, &closeCalls)
+	workerErr := errors.New("controlled worker start failure")
+	runBatchColdStartFailureCase(t, "worker-start-failure", workerErr, func(runtime *batchColdStartProcessRuntime, _, _ *batchColdStartLifecycleComponent) {
+		runtime.workerErr = workerErr
+	}, []string{"runtime:start", "workers:start", "workers:stop", "runtime:stop", "runtime:close"})
 
-		err := lifecycle.NewManager().Run(context.Background(), plan)
-		if !errors.Is(err, startErr) {
-			t.Fatalf("lifecycle error = %v, want %v", err, startErr)
-		}
-		want := []string{"runtime:start", "workers:start", "workers:stop", "runtime:stop", "runtime:close"}
-		if !slices.Equal(events, want) {
-			t.Fatalf("failure events = %v, want %v", events, want)
-		}
-		if transport.startCalls != 0 || closeCalls != 1 || runtime.workerStopCalls != 1 || runtime.stopCalls != 1 {
-			t.Fatalf("worker failure cleanup transport-start/worker-stop/runtime-stop/close = %d/%d/%d/%d, want 0/1/1/1",
-				transport.startCalls, runtime.workerStopCalls, runtime.stopCalls, closeCalls)
-		}
+	startErr := errors.New("controlled hosted transport start failure")
+	runBatchColdStartFailureCase(t, "hosted-transport-start-failure", startErr, func(_ *batchColdStartProcessRuntime, transport, visualization *batchColdStartLifecycleComponent) {
+		transport.startErr = startErr
+	}, []string{
+		"runtime:start", "workers:start", "visualization:start", "transport:start",
+		"visualization:stop", "workers:stop", "runtime:stop", "runtime:close",
 	})
 
-	t.Run("hosted-transport-start-failure", func(t *testing.T) {
-		startErr := errors.New("controlled hosted transport start failure")
-		events := []string{}
-		runtime := &batchColdStartProcessRuntime{events: &events}
-		transport := &batchColdStartLifecycleComponent{name: "transport", events: &events, startErr: startErr}
-		visualization := &batchColdStartLifecycleComponent{name: "visualization", events: &events}
-		closeCalls := 0
-		plan := batchColdStartPlan(t, runtime, factorysessions.BoundProcessComponents{
-			Transport: transport, Visualization: visualization,
-		}, &closeCalls)
-
-		err := lifecycle.NewManager().Run(context.Background(), plan)
-		if !errors.Is(err, startErr) {
-			t.Fatalf("lifecycle error = %v, want %v", err, startErr)
-		}
-		want := []string{
-			"runtime:start", "workers:start", "visualization:start", "transport:start",
-			"visualization:stop", "workers:stop", "runtime:stop", "runtime:close",
-		}
-		if !slices.Equal(events, want) {
-			t.Fatalf("hosted failure events = %v, want %v", events, want)
-		}
-		if transport.stopCalls != 0 || transport.listenerStarts != 0 || closeCalls != 1 {
-			t.Fatalf("hosted failure transport-stop/listener-start/close = %d/%d/%d, want 0/0/1",
-				transport.stopCalls, transport.listenerStarts, closeCalls)
-		}
-	})
-
+	capacityErr := errors.New("controlled runtime capacity failure")
+	runBatchColdStartFailureCase(t, "runtime-capacity-failure", capacityErr, func(runtime *batchColdStartProcessRuntime, _, _ *batchColdStartLifecycleComponent) {
+		runtime.startErr = capacityErr
+	}, []string{"runtime:start", "runtime:stop", "runtime:close"})
 }
 
-func TestBatchColdStartCharacterizationInvalidPlanDoesNotActivate(t *testing.T) {
-	t.Parallel()
+func runBatchColdStartFailureCase(
+	t *testing.T,
+	name string,
+	wantErr error,
+	configure func(*batchColdStartProcessRuntime, *batchColdStartLifecycleComponent, *batchColdStartLifecycleComponent),
+	wantEvents []string,
+) {
+	t.Helper()
+	events := []string{}
+	runtime := &batchColdStartProcessRuntime{events: &events}
+	transport := &batchColdStartLifecycleComponent{name: "transport", events: &events}
+	visualization := &batchColdStartLifecycleComponent{name: "visualization", events: &events}
+	configure(runtime, transport, visualization)
+	closeCalls := 0
+	plan := batchColdStartPlan(t, runtime, factorysessions.BoundProcessComponents{
+		Transport: transport, Visualization: visualization,
+	}, &closeCalls)
 
+	err := lifecycle.NewManager().Run(context.Background(), plan)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("%s lifecycle error = %v, want %v", name, err, wantErr)
+	}
+	if !slices.Equal(events, wantEvents) {
+		t.Fatalf("%s events = %v, want %v", name, events, wantEvents)
+	}
+	if closeCalls != 1 || runtime.stopCalls != 1 {
+		t.Fatalf("%s runtime-stop/close = %d/%d, want 1/1", name, runtime.stopCalls, closeCalls)
+	}
+	if transport.stopCalls > 1 || visualization.stopCalls > 1 {
+		t.Fatalf("%s component stop calls transport/visualization = %d/%d, want at most once", name, transport.stopCalls, visualization.stopCalls)
+	}
+}
+
+func exerciseBatchColdStartInvalidPlan(t *testing.T) {
+	t.Helper()
 	events := []string{}
 	runtime := &batchColdStartProcessRuntime{events: &events}
 	if _, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{Runtime: runtime}); err == nil {
@@ -220,6 +222,85 @@ func TestBatchColdStartCharacterizationInvalidPlanDoesNotActivate(t *testing.T) 
 	}
 	if len(events) != 0 || runtime.startCalls != 0 || runtime.workerStartCalls != 0 {
 		t.Fatalf("invalid plan activated runtime: events=%v runtime-start/workers=%d/%d", events, runtime.startCalls, runtime.workerStartCalls)
+	}
+}
+
+func exerciseBatchColdStartWaitFailure(t *testing.T) {
+	t.Helper()
+	wantErr := errors.New("controlled transport wait timeout")
+	events := []string{}
+	runtime := &batchColdStartProcessRuntime{events: &events}
+	transport := &batchColdStartLifecycleComponent{name: "transport", events: &events, waitErr: wantErr}
+	closeCalls := 0
+	plan := batchColdStartPlan(t, runtime, factorysessions.BoundProcessComponents{Transport: transport}, &closeCalls)
+	if err := lifecycle.NewManager().Run(context.Background(), plan); !errors.Is(err, wantErr) {
+		t.Fatalf("wait failure error = %v, want %v", err, wantErr)
+	}
+	wantEvents := []string{
+		"runtime:start", "workers:start", "transport:start", "transport:wait",
+		"transport:stop", "workers:stop", "runtime:stop", "runtime:close",
+	}
+	if !slices.Equal(events, wantEvents) {
+		t.Fatalf("wait failure events = %v, want %v", events, wantEvents)
+	}
+	if closeCalls != 1 || transport.stopCalls != 1 || runtime.workerStopCalls != 1 || runtime.stopCalls != 1 {
+		t.Fatalf("wait failure cleanup transport/workers/runtime/close = %d/%d/%d/%d, want 1/1/1/1",
+			transport.stopCalls, runtime.workerStopCalls, runtime.stopCalls, closeCalls)
+	}
+}
+
+func exerciseBatchColdStartCancellation(t *testing.T) {
+	t.Helper()
+	events := []string{}
+	waitEntered := make(chan struct{})
+	runtime := &batchColdStartProcessRuntime{events: &events}
+	transport := &batchColdStartLifecycleComponent{
+		name: "transport", events: &events, waitForCancellation: true, waitEntered: waitEntered,
+	}
+	closeCalls := 0
+	plan := batchColdStartPlan(t, runtime, factorysessions.BoundProcessComponents{Transport: transport}, &closeCalls)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- lifecycle.NewManager().Run(ctx, plan) }()
+	awaitLifecycleSignal(t, waitEntered)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("cancellation during wait error = %v, want nil", err)
+	}
+	if closeCalls != 1 || transport.stopCalls != 1 || runtime.workerStopCalls != 1 || runtime.stopCalls != 1 {
+		t.Fatalf("cancellation cleanup transport/workers/runtime/close = %d/%d/%d/%d, want 1/1/1/1",
+			transport.stopCalls, runtime.workerStopCalls, runtime.stopCalls, closeCalls)
+	}
+}
+
+func exerciseBatchColdStartRecovery(t *testing.T) {
+	t.Helper()
+	wantErr := errors.New("controlled first activation failure")
+	firstEvents := []string{}
+	firstRuntime := &batchColdStartProcessRuntime{events: &firstEvents, workerErr: wantErr}
+	firstTransport := &batchColdStartLifecycleComponent{name: "transport", events: &firstEvents}
+	firstCloseCalls := 0
+	firstPlan := batchColdStartPlan(t, firstRuntime, factorysessions.BoundProcessComponents{Transport: firstTransport}, &firstCloseCalls)
+	if err := lifecycle.NewManager().Run(context.Background(), firstPlan); !errors.Is(err, wantErr) {
+		t.Fatalf("first recovery run error = %v, want %v", err, wantErr)
+	}
+
+	secondEvents := []string{}
+	secondRuntime := &batchColdStartProcessRuntime{events: &secondEvents}
+	secondTransport := &batchColdStartLifecycleComponent{name: "transport", events: &secondEvents}
+	secondCloseCalls := 0
+	secondPlan := batchColdStartPlan(t, secondRuntime, factorysessions.BoundProcessComponents{Transport: secondTransport}, &secondCloseCalls)
+	if err := lifecycle.NewManager().Run(context.Background(), secondPlan); err != nil {
+		t.Fatalf("fresh recovery run error = %v, want nil", err)
+	}
+	if firstCloseCalls != 1 || secondCloseCalls != 1 {
+		t.Fatalf("recovery close calls first/second = %d/%d, want 1/1", firstCloseCalls, secondCloseCalls)
+	}
+	if !slices.Equal(secondEvents, []string{
+		"runtime:start", "workers:start", "transport:start", "transport:wait",
+		"transport:stop", "workers:stop", "runtime:stop", "runtime:close",
+	}) {
+		t.Fatalf("fresh recovery events = %v, want successful activation", secondEvents)
 	}
 }
 
@@ -281,17 +362,20 @@ func (runtime *batchColdStartProcessRuntime) Stop(context.Context) error {
 }
 
 type batchColdStartLifecycleComponent struct {
-	name           string
-	events         *[]string
-	server         bool
-	startErr       error
-	startCalls     int
-	waitCalls      int
-	stopCalls      int
-	listenerStarts int
-	listenerStops  int
-	ready          bool
-	readyAtWait    bool
+	name                string
+	events              *[]string
+	server              bool
+	startErr            error
+	waitErr             error
+	waitForCancellation bool
+	waitEntered         chan struct{}
+	startCalls          int
+	waitCalls           int
+	stopCalls           int
+	listenerStarts      int
+	listenerStops       int
+	ready               bool
+	readyAtWait         bool
 }
 
 func (component *batchColdStartLifecycleComponent) Start(context.Context) error {
@@ -317,11 +401,19 @@ func (component *batchColdStartLifecycleComponent) Stop(context.Context) error {
 	return nil
 }
 
-func (component *batchColdStartLifecycleComponent) Wait(context.Context) error {
+func (component *batchColdStartLifecycleComponent) Wait(ctx context.Context) error {
 	component.waitCalls++
 	*component.events = append(*component.events, component.name+":wait")
 	component.readyAtWait = component.ready || !component.server
-	return nil
+	if component.waitEntered != nil {
+		close(component.waitEntered)
+		component.waitEntered = nil
+	}
+	if component.waitForCancellation {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return component.waitErr
 }
 
 var _ roles.ProcessRuntime = (*batchColdStartProcessRuntime)(nil)

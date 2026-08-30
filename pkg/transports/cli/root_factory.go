@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -367,6 +368,7 @@ func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, opt
 }
 
 type runStartupPreparation struct {
+	mu                    sync.Mutex
 	cmd                   *cobra.Command
 	cfg                   *runcli.RunConfig
 	options               CommandFactory
@@ -377,6 +379,7 @@ type runStartupPreparation struct {
 	recordingInputBlocked bool
 	activationChecked     bool
 	activationAllowed     bool
+	initializationErr     error
 }
 
 func newRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) *runStartupPreparation {
@@ -394,6 +397,11 @@ func newRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, options
 func (preparation *runStartupPreparation) Prepare(ctx context.Context, discloseHome bool, disclosureOutput io.Writer) error {
 	if preparation == nil || preparation.cfg == nil {
 		return errors.New("run startup preparation is required")
+	}
+	preparation.mu.Lock()
+	defer preparation.mu.Unlock()
+	if preparation.initializationErr != nil {
+		return preparation.initializationErr
 	}
 	if preparation.recordingInputBlocked {
 		preparation.cfg.StartupPreflightBlocked = true
@@ -456,10 +464,12 @@ func (preparation *runStartupPreparation) initialize(ctx context.Context) error 
 		return nil
 	}
 	if preparation.options.initializer == nil {
-		return errors.New("run service initializer is required")
+		preparation.initializationErr = errors.New("run service initializer is required")
+		return preparation.initializationErr
 	}
 	if err := preparation.options.initializer.InitializeSystem(ctx, preparation.homeDir); err != nil {
-		return reportSystemInitializationFailure(preparation.cmd, err)
+		preparation.initializationErr = reportSystemInitializationFailure(preparation.cmd, err)
+		return preparation.initializationErr
 	}
 	preparation.initialized = true
 	return nil
