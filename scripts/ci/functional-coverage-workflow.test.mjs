@@ -88,11 +88,18 @@ test("functional coverage forwards restore identity and saves only non-exact bui
 					name +
 					": ${{ steps.functional-go-build-cache.outputs." +
 					output +
+					(name === "EXACT_HIT" ? " || 'false'" : "") +
 					" }}",
 			),
 			`${name} restore identity is not forwarded to the coverage step`,
 		);
 	}
+	assert.ok(
+		supervisor.includes(
+			"FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-go-build-cache.outputs.cache-hit || 'false' }}",
+		),
+		"a cache miss must reach diagnostics as an explicit false exact-hit value",
+	);
 
 	assert.match(save, /if: always\(\) && matrix\.suite == 'functional' && steps\.functional-go-build-cache\.outputs\.cache-hit != 'true'/);
 	assert.match(save, /uses: actions\/cache\/save@v4/);

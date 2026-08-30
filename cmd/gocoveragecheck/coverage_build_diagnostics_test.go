@@ -37,6 +37,23 @@ func TestParseCoverageBuildTraceAcceptsZeroActionTrace(t *testing.T) {
 	}
 }
 
+func TestParseCoverageBuildTraceAcceptsJSONBuildOutput(t *testing.T) {
+	trace := strings.Join([]string{
+		`{"Action":"build-output","Output":"WORK=/tmp/go-build\n"}`,
+		`{"Action":"build-output","Output":"mkdir -p $WORK/b001/\n"}`,
+		`{"Action":"build-output","Output":"\"/go/pkg/tool/linux_amd64/compile\" -o \"$WORK/b001/_pkg_.a\"\n"}`,
+		`{"Action":"build-output","Output":"\"/go/pkg/tool/linux_amd64/link\" -o \"$WORK/b001/example.test\"\n"}`,
+	}, "\n")
+
+	got, err := parseCoverageBuildTrace(trace)
+	if err != nil {
+		t.Fatalf("parseCoverageBuildTrace() error = %v", err)
+	}
+	if !got.classifiable || got.compilerCommands != 1 || got.linkerCommands != 1 || got.buildActions != 2 {
+		t.Fatalf("JSON trace summary = %+v, want one compiler, one linker, and two build actions", got)
+	}
+}
+
 func TestParseCoverageBuildTraceRejectsUnclassifiableTrace(t *testing.T) {
 	_, err := parseCoverageBuildTrace("compiler output without go test -x markers")
 	if err == nil || !strings.Contains(err.Error(), "unclassifiable go test -x trace") {

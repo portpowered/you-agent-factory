@@ -89,6 +89,11 @@ type coverageBuildTraceSummary struct {
 	classifiable     bool
 }
 
+type coverageBuildTraceEvent struct {
+	Action string `json:"Action"`
+	Output string `json:"Output"`
+}
+
 type coverageBuildDiagnosticRun struct {
 	diagnostics     coverageBuildDiagnosticsJSON
 	identityErr     error
@@ -271,26 +276,28 @@ func parseCoverageBuildTrace(trace string) (coverageBuildTraceSummary, error) {
 	scanner := bufio.NewScanner(strings.NewReader(trace))
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "WORK=") {
-			workSeen = true
-			continue
-		}
-		if isCoverageBuildToolCommand(line, "compile") {
-			summary.compilerCommands++
-			traceActivity = true
-			continue
-		}
-		if isCoverageBuildToolCommand(line, "link") {
-			summary.linkerCommands++
-			traceActivity = true
-			continue
-		}
-		if isCoverageBuildTraceActivity(line) {
-			traceActivity = true
+		for _, outputLine := range coverageBuildTraceOutputLines(scanner.Text()) {
+			line := strings.TrimSpace(outputLine)
+			if line == "" {
+				continue
+			}
+			if strings.HasPrefix(line, "WORK=") {
+				workSeen = true
+				continue
+			}
+			if isCoverageBuildToolCommand(line, "compile") {
+				summary.compilerCommands++
+				traceActivity = true
+				continue
+			}
+			if isCoverageBuildToolCommand(line, "link") {
+				summary.linkerCommands++
+				traceActivity = true
+				continue
+			}
+			if isCoverageBuildTraceActivity(line) {
+				traceActivity = true
+			}
 		}
 	}
 	summary.buildActions = summary.compilerCommands + summary.linkerCommands
@@ -302,6 +309,14 @@ func parseCoverageBuildTrace(trace string) (coverageBuildTraceSummary, error) {
 	}
 	summary.classifiable = true
 	return summary, nil
+}
+
+func coverageBuildTraceOutputLines(line string) []string {
+	var event coverageBuildTraceEvent
+	if err := json.Unmarshal([]byte(line), &event); err == nil && event.Action == "build-output" {
+		return strings.Split(event.Output, "\n")
+	}
+	return []string{line}
 }
 
 func isCoverageBuildToolCommand(line, tool string) bool {
