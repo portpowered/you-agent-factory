@@ -247,7 +247,17 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLockedWithProvenance(
 	if streamGenerationID == "" {
 		streamGenerationID = string(recorder.recordingID)
 	}
-	canonical := canonicalpkg.CanonicalEventFromFactory(event, streamGenerationID)
+	eventForRecording := event
+	if event.Type == recordings.FactoryEventTypeSessionCompleted {
+		// Keep the live Factory Event stream on its public selector, but retain
+		// the durable recording identity in SourceContext. The recording
+		// lifecycle scope must remain public so its route and binding continue
+		// to validate against the active Factory Session.
+		if canonicalSessionID := strings.TrimSpace(recorder.canonicalSessionID); canonicalSessionID != "" {
+			eventForRecording.Context.SessionID = &canonicalSessionID
+		}
+	}
+	canonical := canonicalpkg.CanonicalEventFromFactory(eventForRecording, streamGenerationID)
 	canonical.Scope = recorder.scope
 	canonical.Sequence = nextSequence
 	canonical.Cursor.Sequence = nextSequence
