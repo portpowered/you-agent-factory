@@ -282,6 +282,49 @@ func TestCostsCommandTypedHTTPFailurePreservesCodeAndSafeMessage(t *testing.T) {
 	}
 }
 
+func TestCostsCommandTypedNotFoundFailurePreservesScopeDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(writer, `{"code":"METRICS_SESSION_NOT_FOUND","family":"NOT_FOUND","message":"Factory Session \"missing-live-id\" was not found; use \u0060you session list --scope live\u0060 to choose a live ID"}`)
+	}))
+	defer server.Close()
+
+	command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
+		Operation: costscli.NewOperation(func(serverURL string) (costscli.Client, error) {
+			return generatedclient.NewClientWithResponses(
+				serverURL,
+				generatedclient.WithHTTPClient(&http.Client{}),
+			)
+		}),
+		Server: func() string { return server.URL },
+	})
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(io.Discard)
+	err := command.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("execute costs command returned nil error")
+	}
+	var costsErr *costscli.CostsError
+	if !errors.As(err, &costsErr) {
+		t.Fatalf("error = %T (%v), want typed CostsError", err, err)
+	}
+	if costsErr.CLIErrorCode() != "METRICS_SESSION_NOT_FOUND" || string(costsErr.CLIErrorFamily()) != "NOT_FOUND" {
+		t.Fatalf("costs error = %#v, want typed not-found identity", costsErr)
+	}
+	for _, want := range []string{"GET /metrics/costs", "HTTP 404", "missing-live-id", "you session list --scope live"} {
+		if !strings.Contains(costsErr.CLIErrorMessage(), want) {
+			t.Fatalf("not-found diagnostic = %q, want %q", costsErr.CLIErrorMessage(), want)
+		}
+	}
+	if output.Len() != 0 {
+		t.Fatalf("not-found failure wrote partial output %q", output.String())
+	}
+}
+
 func TestCostsCommandDistinguishesCanceledAndNetworkFailures(t *testing.T) {
 	t.Parallel()
 

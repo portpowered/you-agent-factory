@@ -391,6 +391,11 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
+	session.RuntimeEventSessionID = completionEventScopeID(identity.id, startupSpec)
+	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
+		livesession.CanonicalID(session),
+		startupSpec.ResumeSourceCanonicalSessionID,
+	)
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
@@ -497,10 +502,22 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
 	}
 	runtimeID := ""
-	if isDefault && livesession.IsUUIDID(startupSpec.SessionID) {
-		runtimeID = strings.TrimSpace(startupSpec.SessionID)
+	if isDefault {
+		metricsSessionID := strings.TrimSpace(startupSpec.MetricsSessionID)
+		if metricsSessionID != "" && metricsSessionID != factorysessions.DefaultSessionID {
+			runtimeID = metricsSessionID
+		} else if livesession.IsUUIDID(startupSpec.SessionID) {
+			runtimeID = strings.TrimSpace(startupSpec.SessionID)
+		}
 	}
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
+}
+
+func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) string {
+	if sourceID := strings.TrimSpace(startupSpec.ResumeSourceCanonicalSessionID); sourceID != "" {
+		return sourceID
+	}
+	return strings.TrimSpace(factorySessionID)
 }
 
 type definitionHost struct {

@@ -52,7 +52,7 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		}
 		reads = append(reads, factorysessions.ReadProjection{
 			Context:          projectionCtx,
-			Runtime:          sessionprojection.ProjectRuntimeContract(projectionCtx),
+			Runtime:          projectRuntimeForSession(session, projectionCtx),
 			RuntimeAvailable: true,
 		})
 	}
@@ -92,6 +92,20 @@ func GetLiveFactorySession(
 	}
 	return factorysessions.SessionProjection{
 		Context: projectionCtx,
-		Runtime: sessionprojection.ProjectRuntimeContract(projectionCtx),
+		Runtime: projectRuntimeForSession(session, projectionCtx),
 	}, nil
+}
+
+func projectRuntimeForSession(
+	session *livesession.LiveSession,
+	projectionCtx factorysessions.ProjectionContext,
+) factorysessions.RuntimeProjection {
+	runtime := sessionprojection.ProjectRuntimeContract(projectionCtx)
+	if session != nil {
+		runtime.RetainedMetricsSessionIDs = append(
+			[]string(nil),
+			session.RetainedRuntimeMetricsSessionIDs...,
+		)
+	}
+	return runtime
 }

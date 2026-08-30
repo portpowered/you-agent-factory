@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -23,21 +24,6 @@ const (
 )
 
 type metricsScopeErrorKind string
-
-// MetricsSessionScope is the resolved retained identity set used by the
-// stateless Visualization query. RequestedID remains the customer-facing
-// selector; RetainedIDs are canonical artifact identities only.
-type MetricsSessionScope struct {
-	RequestedID string
-	RetainedIDs []string
-}
-
-// MetricsSessionScopeResolver resolves a public live Factory Session selector
-// through Factory Sessions. Visualization does not discover sessions or
-// reconstruct identity from the filesystem.
-type MetricsSessionScopeResolver interface {
-	ResolveMetricsSessionScope(context.Context, string) (MetricsSessionScope, error)
-}
 
 // MetricsScopeError is the typed boundary failure for a selected metrics
 // scope. Its message is safe for public HTTP and CLI diagnostics; Cause is
@@ -97,13 +83,13 @@ func NewMetricsScopeUnavailableError(sessionID string, cause error) error {
 // runtime's metrics root during composition.
 type MetricsAdapter struct {
 	query    factoryvisualization.RuntimeMetricsQuery
-	resolver MetricsSessionScopeResolver
+	resolver factorysessions.RuntimeMetricsScopeResolver
 	request  factoryvisualization.RuntimeMetricsQueryRequest
 }
 
 func NewMetricsAdapter(
 	query factoryvisualization.RuntimeMetricsQuery,
-	resolver MetricsSessionScopeResolver,
+	resolver factorysessions.RuntimeMetricsScopeResolver,
 	metricsRoot string,
 ) *MetricsAdapter {
 	if query == nil {
@@ -131,24 +117,63 @@ func (adapter *MetricsAdapter) GetMetrics(
 		if adapter.resolver == nil {
 			return factoryapi.MetricsReport{}, NewMetricsScopeUnavailableError(requestedID, errors.New("metrics session scope resolver is required"))
 		}
-		scope, err := adapter.resolver.ResolveMetricsSessionScope(ctx, requestedID)
+		scope, err := adapter.resolver.ResolveRuntimeMetricsScope(ctx, requestedID)
 		if err != nil {
-			return factoryapi.MetricsReport{}, err
+			return factoryapi.MetricsReport{}, metricsScopeErrorFromResolver(requestedID, err)
 		}
-		if len(scope.RetainedIDs) == 0 {
+		retainedIDs := normalizedRetainedMetricsIDs(scope.RetainedFactorySessionIDs)
+		if len(retainedIDs) == 0 {
 			return factoryapi.MetricsReport{}, NewMetricsScopeUnavailableError(requestedID, nil)
 		}
 		// SessionID is the effective canonical filter for compatibility with
 		// existing query consumers; SessionIDs retains the complete resolved set
-		// for legacy/runtime artifact generations.
-		request.SessionID = strings.TrimSpace(scope.RetainedIDs[0])
-		request.SessionIDs = append([]string(nil), scope.RetainedIDs...)
+		// for source generations that contribute to one selected session.
+		request.SessionID = retainedIDs[0]
+		request.SessionIDs = retainedIDs
 	}
 	result, err := adapter.query.QueryRuntimeMetrics(ctx, request)
 	if err != nil {
 		return factoryapi.MetricsReport{}, err
 	}
 	return metricsReportToAPI(result, requestedID), nil
+}
+
+func metricsScopeErrorFromResolver(sessionID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var scopeErr *MetricsScopeError
+	if errors.As(err, &scopeErr) && scopeErr != nil {
+		return err
+	}
+	if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
+		return NewMetricsSessionNotFoundError(sessionID, err)
+	}
+	return NewMetricsScopeUnavailableError(sessionID, err)
+}
+
+func normalizedRetainedMetricsIDs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || containsRetainedMetricsID(result, value) {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
+}
+
+func containsRetainedMetricsID(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 // MetricsHandler owns HTTP error mapping and encoding for the Visualization

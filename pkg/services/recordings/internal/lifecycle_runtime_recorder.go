@@ -31,6 +31,7 @@ type lifecycleRuntimeRecorder struct {
 	recordingID        recordings.LifecycleRecordingID
 	scope              recordings.CanonicalEventScope
 	target             recordings.LifecycleArtifactReference
+	canonicalSessionID string
 	flushInterval      time.Duration
 	now                func() time.Time
 	startedAt          time.Time
@@ -130,11 +131,13 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 		return recordings.ErrRecordingBindingConflict
 	}
 	result, err := lifecycle.Begin(recordings.BeginRecordingRequest{
-		Enabled:       true,
-		RecordingID:   recorder.requestedID,
-		Scope:         recordings.LifecycleScope{FactorySessionID: scope.FactorySessionID},
-		Artifact:      recorder.target,
-		FlushInterval: recorder.flushInterval,
+		Enabled:            true,
+		RecordingID:        recorder.requestedID,
+		Scope:              recordings.LifecycleScope{FactorySessionID: scope.FactorySessionID},
+		Artifact:           recorder.target,
+		CanonicalSessionID: recorder.canonicalSessionID,
+		ReportedSessionID:  scope.FactorySessionID,
+		FlushInterval:      recorder.flushInterval,
 	})
 	if err != nil {
 		return err
@@ -598,6 +601,7 @@ func (service *combinedService) newLifecycleRuntimeRecorder(
 	if !ok || lifecycleRecorder == nil {
 		return nil, fmt.Errorf("Recordings runtime recorder has unsupported implementation")
 	}
+	lifecycleRecorder.canonicalSessionID = strings.TrimSpace(request.CanonicalSessionID)
 	if initialEvent, ok := resumeRunRequestEvent(request.ReplayEvents); ok {
 		// A successor recording must retain the source RUN_REQUEST payload.
 		// Re-capturing the rehydrated RuntimeSnapshot is not hash-idempotent

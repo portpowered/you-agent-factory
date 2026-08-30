@@ -89,17 +89,14 @@ func openRuntime(
 	if recordingsRuntime == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
 	}
+	providedCanonicalSessionID := strings.TrimSpace(request.FactorySession.CanonicalSessionID)
+	canonicalSessionIDGenerated := request.FactorySession.CanonicalSessionIDGenerated
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
 	sessionRequest := request.FactorySession
 	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
-	}
-	canonicalSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
-	effectiveSessionID := sessionID
-	if canonicalSessionID != "" {
-		effectiveSessionID = canonicalSessionID
 	}
 	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
@@ -138,6 +135,21 @@ func openRuntime(
 	)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	// Resolve and validate the Factory Definition before allocating the
+	// canonical metrics identity. Invalid Current Factory or working-directory
+	// input must not consume a Factory Session identity or create a product
+	// lifecycle effect.
+	if err := ensureDefaultCanonicalSessionID(request, generateRuntimeInstanceID); err != nil {
+		return runtimeProducts{}, err
+	}
+	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
+		(providedCanonicalSessionID == "" && strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "")
+	configured.Session.CanonicalSessionID = request.FactorySession.CanonicalSessionID
+	configured.Session.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+	metricsSessionID := strings.TrimSpace(configured.Session.CanonicalSessionID)
+	if metricsSessionID == "" {
+		metricsSessionID = sessionID
 	}
 	if effort := strings.TrimSpace(configured.Workers.WorkerReasoningEffort); effort != "" &&
 		load.LoadedFactoryCfg != nil {
@@ -297,12 +309,13 @@ func openRuntime(
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
-	if load.ReplayArtifact == nil && resumeInput == nil && canonicalSessionID == "" {
+	canonicalSessionIDWasProvided := providedCanonicalSessionID != "" && !canonicalSessionIDGenerated
+	if load.ReplayArtifact == nil && resumeInput == nil && !canonicalSessionIDWasProvided {
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
 			boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
 				durableExecution.Service,
-				effectiveSessionID,
+				sessionID,
 			)
 			if err != nil {
 				return runtimeProducts{}, err
@@ -312,7 +325,7 @@ func openRuntime(
 		restoredBoard, err = restoreCurrentBoardHistory(
 			recordingsService,
 			configured.Recordings.RecordPath,
-			effectiveSessionID,
+			sessionID,
 			boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
@@ -337,7 +350,8 @@ func openRuntime(
 			configured.Recordings.ReplayPath == "",
 			configured.Recordings.RecordPath,
 			configured.Recordings.WorkflowID,
-			effectiveSessionID,
+			sessionID,
+			metricsSessionID,
 			nil,
 			loadFactory,
 			providerOverride,
@@ -388,6 +402,9 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	startupSpec.CanonicalSessionIDGenerated = canonicalSessionIDGenerated &&
+		sessionID == factorysessions.DefaultSessionID &&
+		metricsSessionID != factorysessions.DefaultSessionID
 	if boardHistoryOpening.hasDurableState && restoredWorldState == nil {
 		if runtimeLogger := startupRuntime.RuntimeLogger(); runtimeLogger != nil {
 			runtimeLogger.Warn(
@@ -417,7 +434,7 @@ func openRuntime(
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
-		effectiveSessionID,
+		sessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -518,7 +535,7 @@ func openRuntime(
 		resourceLeaseAdmission = admission
 	}
 	if err := bindDurableExecutionCapabilities(
-		effectiveSessionID,
+		sessionID,
 		durableExecution.Service,
 		workerService,
 		rootRuntime,
@@ -555,7 +572,7 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 		cleanup.Close,
-		effectiveSessionID,
+		sessionID,
 	)
 	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock

@@ -15,7 +15,6 @@ import (
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -27,11 +26,12 @@ import (
 // not construct a second metrics adapter or transport graph.
 func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 	t.Parallel()
-	serverURL, env, workingDirectory, scopeClock := startDocumentedMetricsServer(t)
+	serverURL, env, workingDirectory, scopeClock, home := startDocumentedMetricsServer(t)
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 
 	publicID := discoverDocumentedLiveSession(t, process, serverURL, env, workingDirectory)
+	writeDocumentedMetrics(t, home, publicID)
 	unscoped := runDocumentedMetrics(t, process, serverURL, env, workingDirectory)
 	scoped := runDocumentedMetrics(t, process, serverURL, env, workingDirectory, "--session", publicID)
 	assertDocumentedScopeSubset(t, unscoped, scoped, publicID)
@@ -44,7 +44,7 @@ func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 
 func startDocumentedMetricsServer(
 	t *testing.T,
-) (string, []string, string, *documentedMetricsScopeClock) {
+) (string, []string, string, *documentedMetricsScopeClock, string) {
 	t.Helper()
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -64,8 +64,7 @@ func startDocumentedMetricsServer(
 	inputs.Input.WorkingDirectory = workingDirectory
 	support.StartProcessCommand(t, process, inputs.Input)
 	serverURL := server.WaitForURL(t)
-	writeDocumentedMetrics(t, home)
-	return serverURL, environment, workingDirectory, scopeClock
+	return serverURL, environment, workingDirectory, scopeClock, home
 }
 
 type documentedMetricsScopeClock struct {
@@ -89,7 +88,7 @@ func (clock *documentedMetricsScopeClock) Now() time.Time {
 	return time.Now()
 }
 
-func writeDocumentedMetrics(t *testing.T, home string) {
+func writeDocumentedMetrics(t *testing.T, home, sessionID string) {
 	t.Helper()
 	root := platformmetrics.RuntimeMetricsRoot(home)
 	common := func(sessionID, dispatchID, metric string, value float64) map[string]any {
@@ -100,10 +99,10 @@ func writeDocumentedMetrics(t *testing.T, home string) {
 		}
 	}
 	records := []map[string]any{
-		common(factorysessions.DefaultSessionID, "dispatch-codex", runtimeDispatchComplete, 1),
-		common(factorysessions.DefaultSessionID, "dispatch-codex", runtimeProviderInputTokens, 4),
-		common(factorysessions.DefaultSessionID, "dispatch-unknown", runtimeDispatchComplete, 1),
-		common(factorysessions.DefaultSessionID, "dispatch-unknown", runtimeProviderInputTokens, 3),
+		common(sessionID, "dispatch-codex", runtimeDispatchComplete, 1),
+		common(sessionID, "dispatch-codex", runtimeProviderInputTokens, 4),
+		common(sessionID, "dispatch-unknown", runtimeDispatchComplete, 1),
+		common(sessionID, "dispatch-unknown", runtimeProviderInputTokens, 3),
 		common("other-session", "dispatch-other", runtimeDispatchComplete, 1),
 		common("other-session", "dispatch-other", runtimeProviderInputTokens, 100),
 	}

@@ -48,6 +48,39 @@ func TestQueryExactValuationCoverageAndRollups(t *testing.T) {
 	assertExactReport(t, got)
 }
 
+func TestQueryCostsUsesRetainedFactorySessionIDsAsAuthoritativeFilter(t *testing.T) {
+	t.Parallel()
+
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("known", "1", "1", nil, nil)},
+	}}
+	query, err := New(pricing, operatorSettingsStub(), metricsQueryStub([]factoryvisualization.RuntimeMetricsUsageRow{
+		usageRow("canonical-live-id", "work-live", "dispatch-live", "worker-live", "codex", "known", 2, 3, nil, nil),
+		usageRow("~default", "work-old", "dispatch-old", "worker-old", "codex", "known", 20, 30, nil, nil),
+		usageRow("foreign-id", "work-foreign", "dispatch-foreign", "worker-foreign", "codex", "known", 200, 300, nil, nil),
+	}, nil), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	got, err := query.Query(context.Background(), costs.QueryRequest{
+		MetricsRoot:               "metrics-root",
+		OperatorSettingsPath:      "settings.json",
+		FactorySessionID:          "~default",
+		RetainedFactorySessionIDs: []string{" canonical-live-id ", "canonical-live-id"},
+	})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if got.Scope.FactorySessionID != "~default" || got.Status != costs.StatusPriced || got.KnownCost == nil || *got.KnownCost != "0.000005" {
+		t.Fatalf("scoped report = %#v, want one priced canonical row under requested alias", got)
+	}
+	if got.Coverage.EncounteredRows != 1 || len(got.LineItems) != 1 || got.LineItems[0].DispatchID != "dispatch-live" {
+		t.Fatalf("scoped report rows = coverage %#v, lines %#v, want only canonical-live-id", got.Coverage, got.LineItems)
+	}
+}
+
 func assertExactReport(t *testing.T, report costs.Report) {
 	t.Helper()
 	if report.Scope.Kind != costs.ScopeAllFactorySessions || report.Currency != "USD" {
@@ -570,12 +603,26 @@ func metricsQueryStub(rows []factoryvisualization.RuntimeMetricsUsageRow, err er
 		}
 		filtered := make([]factoryvisualization.RuntimeMetricsUsageRow, 0, len(rows))
 		for _, row := range rows {
-			if request.SessionID == "" || row.FactorySessionID == request.SessionID {
-				filtered = append(filtered, row)
+			if len(request.SessionIDs) > 0 {
+				if !containsSessionID(request.SessionIDs, row.FactorySessionID) {
+					continue
+				}
+			} else if request.SessionID != "" && row.FactorySessionID != request.SessionID {
+				continue
 			}
+			filtered = append(filtered, row)
 		}
 		return factoryvisualization.RuntimeMetricsQueryResult{UsageRows: filtered}, nil
 	}
+}
+
+func containsSessionID(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 type priceReader struct {

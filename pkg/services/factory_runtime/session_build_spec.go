@@ -24,19 +24,32 @@ type LoadedFactoryLoader = factorydefinitions.LoadedFactoryLoader
 // SessionBuildSpec is the immutable input contract for constructing one
 // session-owned runtime bundle.
 type SessionBuildSpec struct {
-	Dir                   string
-	FolderPath            string
-	SessionID             string
-	ExecutionBaseDir      string
-	LoadedFactoryCfg      LoadedConfig
-	BaseLogger            *zap.Logger
-	RuntimeInstanceID     string
-	Clock                 Clock
-	RecordPath            string
-	WorkflowID            string
-	ProviderOverride      providers.Service
-	ProviderCommandRunner platformprocess.CommandRunner
-	CommandRunnerOverride platformprocess.CommandRunner
+	Dir        string
+	FolderPath string
+	SessionID  string
+	// MetricsSessionID is the retained canonical identity written to runtime
+	// metric records. SessionID remains the public/runtime selector so a
+	// default session continues to use its ~default registry route.
+	MetricsSessionID string
+	// CanonicalSessionIDGenerated marks a fresh default opening whose canonical
+	// runtime identity was allocated before runtime construction. Factory
+	// Sessions uses it to preserve the legacy completion-time session-ID edge.
+	CanonicalSessionIDGenerated bool
+	// ResumeSourceCanonicalSessionID is the Recordings-owned source identity
+	// selected for a live successor. It is carried to Factory Sessions so the
+	// successor's retained metrics scope can include the source without
+	// copying or aliasing its rows.
+	ResumeSourceCanonicalSessionID string
+	ExecutionBaseDir               string
+	LoadedFactoryCfg               LoadedConfig
+	BaseLogger                     *zap.Logger
+	RuntimeInstanceID              string
+	Clock                          Clock
+	RecordPath                     string
+	WorkflowID                     string
+	ProviderOverride               providers.Service
+	ProviderCommandRunner          platformprocess.CommandRunner
+	CommandRunnerOverride          platformprocess.CommandRunner
 	// RestoredWorldState is an optional detached state reconstructed by
 	// Recordings. Factory Runtime converts only its recorded Work placement;
 	// current-definition resources are always generated during construction.

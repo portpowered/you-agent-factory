@@ -124,7 +124,11 @@ func newHTTPRuntimeHandlerWithMetrics(
 	}
 	recordingsAdapter := newHTTPRecordingsAdapter(opened, sessionRequests)
 	workerSessionsHandler := newHTTPWorkerSessionsHandler(opened)
-	costsHandler, err := newHTTPCostsHandler(opened, costsQuery)
+	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(opened.FactorySessions)
+	if metricsScopeResolver == nil {
+		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
+	}
+	costsHandler, err := newHTTPCostsHandler(opened, costsQuery, metricsScopeResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +139,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	return newHTTPRuntimeServer(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler,
 		providerSessionsHTTP, factoryDefinitionsHandler, opened, metricsQuery,
-		costsHandler, workerSessionsHandler,
+		metricsScopeResolver, costsHandler, workerSessionsHandler,
 	), nil
 }
 
@@ -305,11 +309,13 @@ func containsString(values []string, wanted string) bool {
 func newHTTPCostsHandler(
 	opened factorysessionwire.OpenedApplicationRuntime,
 	costsQuery costs.CostsQuery,
+	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
 ) (*costshttp.Handler, error) {
 	costsAdapter := costshttp.NewAdapter(
 		costsQuery,
 		opened.Resources.Diagnostics.MetricsRootDir,
 		opened.OperatorSettingsPath,
+		metricsScopeResolver,
 	)
 	costsHandler := costshttp.NewHandler(costsAdapter, opened.Logger)
 	if costsHandler == nil {
@@ -327,12 +333,13 @@ func newHTTPRuntimeServer(
 	factoryDefinitionsHandler *factorydefinitionshttp.Handler,
 	opened factorysessionwire.OpenedApplicationRuntime,
 	metricsQuery factoryvisualization.RuntimeMetricsQuery,
+	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
 	costsHandler *costshttp.Handler,
 	workerSessionsHandler *workersessionshttp.Handler,
 ) http.Handler {
 	metricsAdapter := factoryvisualizationhttp.NewMetricsAdapter(
 		metricsQuery,
-		newMetricsFactorySessionScopeResolver(opened.FactorySessions),
+		metricsScopeResolver,
 		opened.Resources.Diagnostics.MetricsRootDir,
 	)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(metricsAdapter, opened.Logger)

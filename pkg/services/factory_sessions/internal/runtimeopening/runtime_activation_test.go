@@ -669,7 +669,6 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 
 func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(t *testing.T) {
 	t.Parallel()
-
 	want := &factorydefinitions.RuntimeSnapshotResolutionError{
 		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
 			Code:    factorydefinitions.RuntimeSnapshotDiagnosticInvalidDefinition,
@@ -681,6 +680,7 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 	factory := &Factory{
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{err: want},
+		generateSessionID:         func() string { return "" },
 	}
 	_, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},

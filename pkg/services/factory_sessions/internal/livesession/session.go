@@ -32,9 +32,18 @@ type LiveSession struct {
 	Project                 string
 	Target                  factorysessions.TargetRef
 	RuntimeFactorySessionID string
-	ResponseEvents          *responseeventstore.SessionResponseEventStore
-	JavaScriptCheckpoints   factoryruntime.JavaScriptCheckpointStore
-	LiveChangeMu            sync.Mutex
+	// RuntimeEventSessionID is the identity used by the session-owned live
+	// Factory Event ledger. A resumed successor keeps the source event lineage
+	// while RuntimeFactorySessionID remains the current metrics/response scope.
+	RuntimeEventSessionID string
+	// RetainedRuntimeMetricsSessionIDs is the ordered, deduplicated canonical
+	// lineage selected when this session was opened. It is read by the
+	// Factory Sessions metrics-scope projection and is never serialized as a
+	// public session field.
+	RetainedRuntimeMetricsSessionIDs []string
+	ResponseEvents                   *responseeventstore.SessionResponseEventStore
+	JavaScriptCheckpoints            factoryruntime.JavaScriptCheckpointStore
+	LiveChangeMu                     sync.Mutex
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication
@@ -87,7 +96,7 @@ func New(
 
 // NewWithRuntimeID constructs a registry entry with an optional preallocated
 // runtime identity. The default-session alias remains the public registry key
-// while the supplied UUID becomes the durable event and response scope.
+// while the supplied UUID becomes the durable metrics and response scope.
 func NewWithRuntimeID(
 	sessionID string,
 	factoryDir string,
@@ -136,6 +145,19 @@ func CanonicalID(session *LiveSession) string {
 	}
 	if runtimeID := strings.TrimSpace(session.RuntimeFactorySessionID); runtimeID != "" {
 		return runtimeID
+	}
+	return strings.TrimSpace(session.ID)
+}
+
+// EventScopeID returns the identity used to interpret reconnect cursors for a
+// live Factory Event stream. A resumed successor may retain its source event
+// identity even while its metrics scope has a newly allocated identity.
+func EventScopeID(session *LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	if eventID := strings.TrimSpace(session.RuntimeEventSessionID); eventID != "" {
+		return eventID
 	}
 	return strings.TrimSpace(session.ID)
 }

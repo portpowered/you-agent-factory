@@ -645,6 +645,7 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	string,
 	string,
 	string,
+	string,
 	factorydefinitions.WorkstationLoader,
 	factoryruntime.LoadedFactoryLoader,
 	providers.Service,

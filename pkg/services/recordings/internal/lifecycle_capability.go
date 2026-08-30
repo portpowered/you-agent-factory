@@ -69,7 +69,26 @@ func (service *combinedService) LoadResumeInput(
 	if err != nil {
 		return recordings.LoadResumeInputResult{}, err
 	}
-	return recordings.LoadResumeInputResult{Input: input}, nil
+	// V2 keeps its canonical source identity in the framing header. The full
+	// replay input intentionally normalizes that header away, so ask the same
+	// Recordings loader for detached metadata when the full result did not
+	// retain it. Metadata failure is non-fatal here: legacy alias-only inputs
+	// remain resumable, but they cannot contribute a source metrics identity.
+	if input.Metadata == nil {
+		if metadataResult, metadataErr := service.LoadReplayInput(recordings.LoadReplayInputRequest{
+			Path: request.Path, MetadataOnly: true,
+		}); metadataErr == nil && metadataResult.Metadata != nil {
+			input.Metadata = metadataResult.Metadata
+		}
+	}
+	sourceID, err := resumeSourceCanonicalSessionIDForPath(input, request.Path)
+	if err != nil {
+		return recordings.LoadResumeInputResult{}, fmt.Errorf("resolve resume source identity: %w", err)
+	}
+	return recordings.LoadResumeInputResult{
+		Input:                    input,
+		SourceCanonicalSessionID: sourceID,
+	}, nil
 }
 
 // Begin implements recordings.RecordingLifecycle by adapting the existing

@@ -109,6 +109,7 @@ func (f *RuntimeFactory) Build(
 	dir string,
 	folderPath string,
 	sessionID string,
+	metricsSessionID string,
 	runnerID string,
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
@@ -195,7 +196,7 @@ func (f *RuntimeFactory) Build(
 		runtimeMetricsPolicy,
 		runtimeMetricsDir,
 		runtimeMetricsConfig,
-		sessionID,
+		metricsSessionID,
 		runtimeInstanceID,
 		folderPath,
 		dir,
@@ -232,13 +233,14 @@ func (f *RuntimeFactory) Build(
 		return nil, err
 	}
 	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
-		Topology:         net,
-		Definitions:      loadedFactoryCfg,
-		LoadedFactory:    loaded,
-		Now:              clock.Now,
-		RecordingID:      runtimeInstanceID,
-		RecordPath:       recordPath,
-		FactorySessionID: sessionID,
+		Topology:           net,
+		Definitions:        loadedFactoryCfg,
+		LoadedFactory:      loaded,
+		Now:                clock.Now,
+		RecordingID:        runtimeInstanceID,
+		RecordPath:         recordPath,
+		FactorySessionID:   sessionID,
+		CanonicalSessionID: metricsSessionID,
 	})
 	if openErr != nil {
 		return nil, openErr

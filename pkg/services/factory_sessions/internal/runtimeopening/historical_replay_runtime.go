@@ -406,6 +406,7 @@ func assemblePortableReplayRuntime(
 		configured.Recordings.RecordPath,
 		configured.Recordings.WorkflowID,
 		configured.Session.FactorySessionID,
+		configured.Session.FactorySessionID,
 		nil,
 		loadFactory,
 		providerOverride,

@@ -42,13 +42,16 @@ type Query = CostsQuery
 // QueryRequest identifies the canonical metrics input, the explicit operator
 // settings document, and optional scope filters. The settings path is read on
 // every query so changes take effect without rebuilding the process.
-// FactorySessionID and RuntimeInstanceID are optional independent filters;
-// both are passed to the canonical Factory Visualization query.
+// FactorySessionID and RuntimeInstanceID are optional filters. A non-empty
+// RetainedFactorySessionIDs set is the authoritative session filter supplied
+// by Factory Sessions; without it, FactorySessionID remains the direct
+// single-identity compatibility filter.
 type QueryRequest struct {
-	MetricsRoot          string
-	OperatorSettingsPath string
-	FactorySessionID     string
-	RuntimeInstanceID    string
+	MetricsRoot               string
+	OperatorSettingsPath      string
+	FactorySessionID          string
+	RetainedFactorySessionIDs []string
+	RuntimeInstanceID         string
 }
 
 // Validate checks request fields that can be validated before either injected

@@ -99,7 +99,11 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 	if !ok {
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
-	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+	stream, err := legacyRuntime.SubscribeFactoryEvents(
+		ctx,
+		reconnect,
+		interfaces.FactoryEventReconnectScope{SessionID: livesession.EventScopeID(session)},
+	)
 	if err != nil || stream == nil {
 		return stream, err
 	}

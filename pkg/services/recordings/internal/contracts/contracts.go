@@ -172,6 +172,10 @@ type RuntimeScopeRequest struct {
 	RecordPath       string
 	FlushInterval    time.Duration
 	FactorySessionID string
+	// CanonicalSessionID is the internal identity written into a new recording
+	// header when it is available. FactorySessionID remains the public event and
+	// live-ledger/routing scope and may intentionally be ~default.
+	CanonicalSessionID string
 }
 
 // RuntimeScopeResult returns the runtime event ledger and optional recorder
@@ -229,6 +233,11 @@ type LoadResumeInputRequest struct {
 // remain a separate, read-only product.
 type LoadResumeInputResult struct {
 	Input LoadReplayInputResult
+	// SourceCanonicalSessionID is the Recordings-owned canonical identity of
+	// the selected source when the artifact carries one. Alias-only legacy
+	// artifacts intentionally leave it empty so a resume cannot widen metrics
+	// selection through a public selector such as ~default.
+	SourceCanonicalSessionID string
 }
 
 // RuntimeOpening is the Recordings-owned capability used by Factory Runtime
@@ -1328,6 +1337,10 @@ type ReadPortableArtifactScopeResult struct {
 type RecordingSnapshot struct {
 	Status RecordingStatusFacts
 	Events []CanonicalEvent
+	// CanonicalSessionID is an in-memory provenance handoff for recording
+	// writers. It is never serialized as a new V1 field; V2 uses the existing
+	// header SessionID slot so public artifact shape remains unchanged.
+	CanonicalSessionID string `json:"-"`
 	// SecretProvenance is keyed by event index; each pointer is relative to
 	// that event's Payload and is an in-memory write-boundary handoff.
 	SecretProvenance map[int][]RecordingSecret `json:"-"`

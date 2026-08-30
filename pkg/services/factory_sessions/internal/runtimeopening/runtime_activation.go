@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -52,11 +51,32 @@ func (f *Factory) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
 ) (*factoryruntime.RuntimeActivation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	openingRequest, err := runtimeOpeningRequestFromActivation(request)
 	if err != nil {
 		return nil, err
 	}
-	products, err := f.openRuntimeWithSnapshot(ctx, openingRequest, f.baseLogger, &request.Snapshot)
+	canonicalSessionIDProvided := strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(openingRequest, f.canonicalSessionIDGenerator()); err != nil {
+		return nil, err
+	}
+	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
+		strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
+	openingRequest.FactorySession.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+	// Runtime Root validates the caller context before it invokes this
+	// activation operation. A generated canonical identity is allocated at the
+	// session-product boundary for compatibility with the historical session-ID
+	// edge, which may itself cancel the caller context. Once the activation has
+	// been admitted, finish constructing it atomically even if that allocation
+	// cancels the caller. Cancellation already present on entry still returns
+	// above.
+	openingContext := ctx
+	if canonicalSessionIDGenerated && ctx.Err() != nil {
+		openingContext = context.WithoutCancel(ctx)
+	}
+	products, err := f.openRuntimeWithSnapshot(openingContext, openingRequest, f.baseLogger, &request.Snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -127,13 +147,14 @@ func runtimeOpeningRequestFromActivation(
 		),
 		FactoryRuntime: request.Runtime,
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID:   request.FactorySessionID,
-			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
-			PersistencePolicy:  factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
-			BackendScopeID:     request.Inputs.Session.BackendScopeID,
-			SystemConfigHome:   request.Inputs.Session.SystemConfigHome,
-			SystemConfigPath:   request.Inputs.Session.SystemConfigPath,
-			WorkFile:           request.Inputs.Session.WorkFile,
+			FactorySessionID:            request.FactorySessionID,
+			CanonicalSessionID:          request.Inputs.Session.CanonicalSessionID,
+			CanonicalSessionIDGenerated: request.Inputs.Session.CanonicalSessionIDGenerated,
+			PersistencePolicy:           factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
+			BackendScopeID:              request.Inputs.Session.BackendScopeID,
+			SystemConfigHome:            request.Inputs.Session.SystemConfigHome,
+			SystemConfigPath:            request.Inputs.Session.SystemConfigPath,
+			WorkFile:                    request.Inputs.Session.WorkFile,
 			Host: factorysessions.RuntimeHostRequest{
 				Directory:   request.Inputs.Session.Host.Directory,
 				RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
@@ -449,6 +470,43 @@ func (f *Factory) activationOpening(
 	}
 	opening.FactoryRuntime.RuntimeInstanceID = runtimeID
 	return opening, runtimeID, nil
+}
+
+func (f *Factory) canonicalSessionIDGenerator() func() string {
+	if f == nil {
+		return nil
+	}
+	if f.generateSessionID != nil {
+		return f.generateSessionID
+	}
+	// Keep direct internal callers compatible while the process graph adopts
+	// the dedicated Factory Session identity edge.
+	return f.generateRuntimeInstanceID
+}
+
+func ensureDefaultCanonicalSessionID(
+	request *factorysessions.RuntimeOpeningRequest,
+	generateID func() string,
+) error {
+	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" {
+		return nil
+	}
+	sessionID := strings.TrimSpace(request.FactorySession.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "" {
+		return nil
+	}
+	if generateID == nil {
+		return fmt.Errorf("open Factory Session: canonical session ID generator is required")
+	}
+	canonicalID := strings.TrimSpace(generateID())
+	if canonicalID == "" {
+		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
+	}
+	request.FactorySession.CanonicalSessionID = canonicalID
+	return nil
 }
 
 func (f *Factory) resolveActivationSnapshot(
@@ -789,12 +847,13 @@ func runtimeActivationInputs(
 			ExecutionBaseDir: request.FactoryDefinition.ExecutionBaseDir,
 		},
 		Session: factoryruntime.RuntimeActivationSessionInputs{
-			CanonicalSessionID: request.FactorySession.CanonicalSessionID,
-			PersistencePolicy:  string(request.FactorySession.PersistencePolicy),
-			BackendScopeID:     request.FactorySession.BackendScopeID,
-			SystemConfigHome:   request.FactorySession.SystemConfigHome,
-			SystemConfigPath:   request.FactorySession.SystemConfigPath,
-			WorkFile:           request.FactorySession.WorkFile,
+			CanonicalSessionID:          request.FactorySession.CanonicalSessionID,
+			CanonicalSessionIDGenerated: request.FactorySession.CanonicalSessionIDGenerated,
+			PersistencePolicy:           string(request.FactorySession.PersistencePolicy),
+			BackendScopeID:              request.FactorySession.BackendScopeID,
+			SystemConfigHome:            request.FactorySession.SystemConfigHome,
+			SystemConfigPath:            request.FactorySession.SystemConfigPath,
+			WorkFile:                    request.FactorySession.WorkFile,
 			Host: factoryruntime.RuntimeActivationHostInputs{
 				Directory:   request.FactorySession.Host.Directory,
 				RuntimeMode: request.FactorySession.Host.RuntimeMode,
@@ -898,50 +957,4 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 		output.MockWorkers[index] = converted
 	}
 	return output
-}
-
-func cloneStringMap(input map[string]string) map[string]string {
-	if input == nil {
-		return nil
-	}
-	output := make(map[string]string, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
-	return output
-}
-
-func cloneInt64Pointer(value *int64) *int64 {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-// newOrderlyRecordingFlush adapts the already-composed Recordings root to the
-// initializer lifecycle boundary. A missing record path means that this
-// runtime has no live recording to flush, so the orderly-stop phase remains a
-// no-op.
-func newOrderlyRecordingFlush(
-	service recordings.Service,
-	recordingID string,
-	recordPath string,
-) lifecycle.OrderlyStopOperation {
-	if service == nil || strings.TrimSpace(recordingID) == "" || strings.TrimSpace(recordPath) == "" {
-		return nil
-	}
-	return func(ctx context.Context) error {
-		if ctx != nil {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-		}
-		if _, err := service.FlushRecording(recordings.FlushRecordingRequest{
-			RecordingID: recordings.RecordingID(recordingID),
-		}); err != nil {
-			return fmt.Errorf("flush live recording during orderly shutdown: %w", err)
-		}
-		return nil
-	}
 }

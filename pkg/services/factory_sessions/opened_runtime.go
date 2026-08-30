@@ -25,15 +25,20 @@ type SessionRuntimeOpeningRequest struct {
 	// FactorySessionID correlates the opened runtime with its owning Factory
 	// Session. Empty values use the process's primary session alias.
 	FactorySessionID string
-	// CanonicalSessionID is the preallocated identity for an automatic default
-	// recording. It is distinct from the public FactorySessionID alias.
+	// CanonicalSessionID is the preallocated runtime identity for an automatic
+	// default recording and its runtime metrics. It is distinct from the public
+	// FactorySessionID alias.
 	CanonicalSessionID string
-	PersistencePolicy  PersistencePolicy
-	BackendScopeID     string
-	SystemConfigHome   string
-	SystemConfigPath   string
-	WorkFile           string
-	Host               RuntimeHostRequest
+	// CanonicalSessionIDGenerated distinguishes the opener's preallocation from
+	// a caller-supplied canonical identity when the request crosses the Runtime
+	// activation boundary.
+	CanonicalSessionIDGenerated bool
+	PersistencePolicy           PersistencePolicy
+	BackendScopeID              string
+	SystemConfigHome            string
+	SystemConfigPath            string
+	WorkFile                    string
+	Host                        RuntimeHostRequest
 }
 
 // RuntimeOpeningRequest is the Factory Sessions operation input assembled from

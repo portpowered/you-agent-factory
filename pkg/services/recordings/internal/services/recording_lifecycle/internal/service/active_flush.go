@@ -97,9 +97,10 @@ func (service *Service) flush(
 	}
 	version := session.version
 	snapshot := recordings.RecordingSnapshot{
-		Status:           recordingStatus(id, session),
-		Events:           append([]recordings.CanonicalEvent(nil), session.events...),
-		SecretProvenance: cloneSecretProvenance(session.secretProvenance),
+		Status:             recordingStatus(id, session),
+		Events:             append([]recordings.CanonicalEvent(nil), session.events...),
+		CanonicalSessionID: strings.TrimSpace(session.selection.CanonicalSessionID),
+		SecretProvenance:   cloneSecretProvenance(session.secretProvenance),
 	}
 	target := session.serviceTarget
 	var through *recordings.CanonicalEventCursor

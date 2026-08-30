@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
@@ -13,6 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -42,6 +44,91 @@ func TestResolveRuntimeRootPreservesExplicitIdentityWithoutGenerator(t *testing.
 	}
 	if root.RuntimeInstanceID != "explicit-runtime" {
 		t.Fatalf("runtime instance ID = %q", root.RuntimeInstanceID)
+	}
+}
+
+func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	var canonicalCalls atomic.Int32
+	factory := &Factory{
+		generateSessionID: func() string {
+			canonicalCalls.Add(1)
+			return canonicalID
+		},
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+	}
+	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	})
+	if err != nil {
+		t.Fatalf("activationRequest() error = %v", err)
+	}
+	if activation.FactorySessionID != factorysessions.DefaultSessionID || activation.RuntimeID != "runtime-1" {
+		t.Fatalf("activation identity = %#v, want default/runtime-1", activation)
+	}
+	if activation.Inputs.Session.CanonicalSessionID != "" {
+		t.Fatalf("canonical session identity = %q, want deferred allocation", activation.Inputs.Session.CanonicalSessionID)
+	}
+	if got := canonicalCalls.Load(); got != 0 {
+		t.Fatalf("canonical session ID generator calls = %d, want 0 before Runtime activation", got)
+	}
+}
+
+func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	var canonicalCalls atomic.Int32
+	factory := &Factory{
+		generateSessionID: func() string {
+			canonicalCalls.Add(1)
+			return canonicalID
+		},
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+	}
+	opening, runtimeID, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+			FactorySessionID: factorysessions.DefaultSessionID,
+		},
+		Recordings: recordings.RuntimeOpeningRequest{
+			ResumePath: "source.recording.json",
+			ResumeInput: recordings.LoadResumeInputResult{
+				SourceCanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("activationOpening(resume) error = %v", err)
+	}
+	if runtimeID != "runtime-1" {
+		t.Fatalf("runtime ID = %q, want runtime-1", runtimeID)
+	}
+	if opening.FactorySession.CanonicalSessionID != "" {
+		t.Fatalf("successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
+	}
+	if got := canonicalCalls.Load(); got != 0 {
+		t.Fatalf("canonical session ID generator calls = %d, want 0 before definition admission", got)
+	}
+}
+
+func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	factory := &Factory{
+		generateRuntimeInstanceID: func() string { return canonicalID },
+	}
+	opening, _, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "alias-only.recording.json"},
+	})
+	if err != nil {
+		t.Fatalf("activationOpening(alias-only resume) error = %v", err)
+	}
+	if opening.FactorySession.CanonicalSessionID != "" {
+		t.Fatalf("alias-only successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
 	}
 }
 

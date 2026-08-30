@@ -4,8 +4,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -196,6 +198,27 @@ func costsResponseError(response *generatedclient.GetMetricsCostsClientResponse,
 			fmt.Sprintf("GET %s at %s returned HTTP %d: %s", metricsCostsEndpoint, safeServerEndpoint(server), response.StatusCode(), message),
 			nil,
 		)
+	}
+	if response.StatusCode() == http.StatusNotFound {
+		var candidate factoryapi.ErrorResponse
+		if err := json.Unmarshal(response.Body, &candidate); err == nil {
+			code := strings.TrimSpace(string(candidate.Code))
+			message := strings.TrimSpace(candidate.Message)
+			if code != "" || message != "" {
+				if code == "" {
+					code = CostsHTTPFailureCode
+				}
+				if message == "" {
+					message = fmt.Sprintf("server returned HTTP %d", response.StatusCode())
+				}
+				return newCostsError(
+					code,
+					candidateFamily(candidate.Family),
+					fmt.Sprintf("GET %s at %s returned HTTP %d: %s", metricsCostsEndpoint, safeServerEndpoint(server), response.StatusCode(), message),
+					nil,
+				)
+			}
+		}
 	}
 	if response.StatusCode() != 0 {
 		return newCostsError(

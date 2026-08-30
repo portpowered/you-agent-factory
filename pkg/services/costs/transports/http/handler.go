@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
@@ -22,11 +23,38 @@ const (
 	// a client-side transport deadline expires.
 	DefaultQueryTimeout = 8 * time.Second
 
-	costsQueryCanceledCode  = "COSTS_QUERY_CANCELED"
-	costsQueryFailedCode    = "COSTS_QUERY_FAILED"
-	costsInvalidRequestCode = "COSTS_INVALID_REQUEST"
-	costsQueryTimeoutCode   = "COSTS_QUERY_TIMEOUT"
+	costsQueryCanceledCode   = "COSTS_QUERY_CANCELED"
+	costsQueryFailedCode     = "COSTS_QUERY_FAILED"
+	costsInvalidRequestCode  = "COSTS_INVALID_REQUEST"
+	costsQueryTimeoutCode    = "COSTS_QUERY_TIMEOUT"
+	costsSessionNotFoundCode = "METRICS_SESSION_NOT_FOUND"
 )
+
+type costsScopeError struct {
+	sessionID string
+	cause     error
+}
+
+func (err *costsScopeError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Factory Session %q was not found; use `you session list --scope live` to choose a live ID",
+		err.sessionID,
+	)
+}
+
+func (err *costsScopeError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func newCostsSessionNotFoundError(sessionID string, cause error) error {
+	return &costsScopeError{sessionID: strings.TrimSpace(sessionID), cause: cause}
+}
 
 // Handler owns HTTP error mapping and response encoding for Costs operations.
 // Route registration remains in the top-level HTTP transport.
@@ -98,6 +126,15 @@ func (h *Handler) writeQueryError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	code := costsQueryFailedCode
 	message := "failed to query runtime costs"
+	var scopeErr *costsScopeError
+	if errors.As(err, &scopeErr) && scopeErr != nil {
+		h.writeJSON(w, http.StatusNotFound, factoryapi.ErrorResponse{
+			Message: scopeErr.Error(),
+			Family:  factoryapi.ErrorFamilyNotFound,
+			Code:    factoryapi.ErrorResponseCode(costsSessionNotFoundCode),
+		})
+		return
+	}
 	switch {
 	case errors.Is(err, context.Canceled):
 		status = http.StatusRequestTimeout
@@ -146,6 +183,9 @@ func writeResponseJSON(w http.ResponseWriter, status int, value any, logger *zap
 func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	if status == http.StatusBadRequest {
 		return factoryapi.ErrorFamilyBadRequest
+	}
+	if status == http.StatusNotFound {
+		return factoryapi.ErrorFamilyNotFound
 	}
 	return factoryapi.ErrorFamilyInternalServerError
 }

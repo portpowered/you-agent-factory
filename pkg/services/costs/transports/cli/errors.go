@@ -161,5 +161,8 @@ func familyForStatus(status int) factoryapi.ErrorFamily {
 	if status == http.StatusBadRequest {
 		return factoryapi.ErrorFamilyBadRequest
 	}
+	if status == http.StatusNotFound {
+		return factoryapi.ErrorFamilyNotFound
+	}
 	return internalErrorFamily
 }

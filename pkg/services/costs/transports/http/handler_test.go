@@ -12,6 +12,7 @@ import (
 	"time"
 
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -70,6 +71,38 @@ func TestHandlerMapsInvalidCostsRequestToBadRequest(t *testing.T) {
 	}
 	if response.Code != factoryapi.ErrorResponseCode("COSTS_INVALID_REQUEST") || response.Message != "metrics root is required" {
 		t.Fatalf("error response = %#v", response)
+	}
+}
+
+func TestHandlerMapsUnknownSelectorToTypedNotFound(t *testing.T) {
+	t.Parallel()
+
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		t.Fatal("Costs query invoked for an unknown selector")
+		return costs.Report{}, nil
+	})
+	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
+		return factorysessions.RuntimeMetricsScope{}, factorysessions.ErrSessionNotFound
+	})
+	handler := NewHandler(NewAdapter(query, "metrics", "settings", resolver), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.GetMetricsCosts(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/metrics/costs?session_id=missing-live-id", nil),
+		factoryapi.GetMetricsCostsParams{SessionId: stringPointer("missing-live-id")},
+	)
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", recorder.Code)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode(costsSessionNotFoundCode) ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		!strings.Contains(response.Message, "you session list --scope live") {
+		t.Fatalf("error response = %#v, want typed actionable not-found", response)
 	}
 }
 

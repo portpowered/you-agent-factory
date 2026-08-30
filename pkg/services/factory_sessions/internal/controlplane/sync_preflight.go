@@ -90,7 +90,7 @@ func GetLiveFactorySessionSyncPreflight(
 	err = validateReconnectCursor(
 		eventsSnapshot,
 		*reconnect,
-		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
+		interfaces.FactoryEventReconnectScope{SessionID: livesession.EventScopeID(session)},
 	)
 	if err != nil {
 		if errors.Is(err, recordings.ErrReconnectCursorNotFound) {

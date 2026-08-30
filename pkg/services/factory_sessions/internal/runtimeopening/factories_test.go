@@ -290,6 +290,7 @@ func assertFactorySessionsPortsRetained(t *testing.T, factory *Factory, dependen
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions scaffold", factory.factoryScaffoldInitializer, group.FactoryScaffoldInitializer)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions editable validation", factory.editableFactoryValidator, group.EditableFactoryValidator)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions process runtime", factory.processRuntimeFactory, group.ProcessRuntimeFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions session ID", factory.generateSessionID, group.GenerateSessionID)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime ID", factory.generateRuntimeInstanceID, group.GenerateRuntimeInstanceID)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions home", factory.resolveHome, group.ResolveHome)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions provider identities", factory.providerIdentities, group.ProviderIdentities)
@@ -405,6 +406,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions factory scaffold initializer", func(d *runtimeOpeningFixture) { d.FactorySessions.FactoryScaffoldInitializer = nil }},
 		{"Factory Sessions editable factory validator", func(d *runtimeOpeningFixture) { d.FactorySessions.EditableFactoryValidator = nil }},
 		{"Factory Sessions process runtime factory", func(d *runtimeOpeningFixture) { d.FactorySessions.ProcessRuntimeFactory = nil }},
+		{"Factory Sessions session ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateSessionID = nil }},
 		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
@@ -457,6 +459,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			FactoryScaffoldInitializer:     inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
 			EditableFactoryValidator:       inertRuntimeOpeningFunction[factorysessions.EditableFactoryValidator](calls),
 			ProcessRuntimeFactory:          processRuntimeFactoryConstructionStub{},
+			GenerateSessionID:              inertRuntimeOpeningFunction[factorysessions.SessionIDGenerator](calls),
 			GenerateRuntimeInstanceID:      inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
 			ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),

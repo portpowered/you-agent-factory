@@ -67,6 +67,36 @@ func TestCanonicalIDPrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
 	}
 }
 
+func TestEventScopeIDPrefersResumeSourceWithoutChangingCanonicalID(t *testing.T) {
+	t.Parallel()
+
+	session := &livesession.LiveSession{
+		ID:                      factorysessions.DefaultSessionID,
+		IsDefault:               true,
+		RuntimeFactorySessionID: "successor-runtime-id",
+		RuntimeEventSessionID:   "source-runtime-id",
+	}
+	if got := livesession.CanonicalID(session); got != session.RuntimeFactorySessionID {
+		t.Fatalf("CanonicalID() = %q, want metrics identity %q", got, session.RuntimeFactorySessionID)
+	}
+	if got := livesession.EventScopeID(session); got != session.RuntimeEventSessionID {
+		t.Fatalf("EventScopeID() = %q, want source event identity %q", got, session.RuntimeEventSessionID)
+	}
+}
+
+func TestEventScopeIDFallsBackToPublicSessionSelector(t *testing.T) {
+	t.Parallel()
+
+	session := &livesession.LiveSession{
+		ID:                      factorysessions.DefaultSessionID,
+		IsDefault:               true,
+		RuntimeFactorySessionID: "current-runtime-id",
+	}
+	if got := livesession.EventScopeID(session); got != factorysessions.DefaultSessionID {
+		t.Fatalf("EventScopeID() = %q, want public selector %q", got, factorysessions.DefaultSessionID)
+	}
+}
+
 func TestNewWithRuntimeIDPreservesPreallocatedCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 

@@ -150,7 +150,11 @@ type RuntimeProjection struct {
 	Status                 string
 	StopSummary            *StopSummary
 	StreamIdentity         *RuntimeStreamIdentity
-	Usage                  RuntimeUsage
+	// RetainedMetricsSessionIDs is an internal Factory Sessions projection of
+	// the exact canonical lineage selected for this live session. Transport
+	// mappers intentionally omit it from the public runtime shape.
+	RetainedMetricsSessionIDs []string
+	Usage                     RuntimeUsage
 }
 
 // StopKind classifies why a Factory Session or Work item cannot currently

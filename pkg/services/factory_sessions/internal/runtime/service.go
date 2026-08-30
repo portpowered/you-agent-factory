@@ -25,6 +25,7 @@ import (
 type Registration struct {
 	SessionID               string
 	RuntimeFactorySessionID string
+	RuntimeEventSessionID   string
 	FactoryDir              string
 	FolderPath              string
 	ExecutionBaseDir        string
@@ -304,11 +305,21 @@ func (s *Service) Register(registration Registration) string {
 		return ""
 	}
 	isDefault := registration.Default || logicaltarget.IsLiveSessionDefaultSelector(sessionID)
+	var retainedMetricsSessionIDs []string
+	if existing := s.Resolve(sessionID); existing != nil {
+		retainedMetricsSessionIDs = append(
+			retainedMetricsSessionIDs,
+			existing.RetainedRuntimeMetricsSessionIDs...,
+		)
+	}
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID
 			if strings.TrimSpace(registration.RuntimeFactorySessionID) == "" {
 				registration.RuntimeFactorySessionID = strings.TrimSpace(existing.RuntimeFactorySessionID)
+			}
+			if strings.TrimSpace(registration.RuntimeEventSessionID) == "" {
+				registration.RuntimeEventSessionID = strings.TrimSpace(existing.RuntimeEventSessionID)
 			}
 		} else {
 			sessionID = strings.TrimSpace(s.sessionIDs())
@@ -321,6 +332,7 @@ func (s *Service) Register(registration Registration) string {
 	if session == nil {
 		return ""
 	}
+	session.RetainedRuntimeMetricsSessionIDs = retainedMetricsSessionIDs
 	session.Runtime = registration.Runtime
 	s.bindResponseEventCompletion(session, registration.AddEventTypeRecorder)
 	s.registry.Upsert(session, registration.Select)
@@ -345,6 +357,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	if session == nil {
 		return nil
 	}
+	session.RuntimeEventSessionID = strings.TrimSpace(registration.RuntimeEventSessionID)
 	if runtimeSessionID := strings.TrimSpace(registration.RuntimeFactorySessionID); runtimeSessionID != "" {
 		session.RuntimeFactorySessionID = runtimeSessionID
 		if s.responseEvents == nil {
