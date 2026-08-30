@@ -460,7 +460,9 @@ func assembleRuntimeBundle(
 	if configurable, ok := activeFactory.(interface {
 		SetCompletionDurabilityGate(func() error)
 	}); ok && recording != nil {
-		configurable.SetCompletionDurabilityGate(recording.Flush)
+		configurable.SetCompletionDurabilityGate(func() error {
+			return recording.Finalize(clock.Now().UTC())
+		})
 	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err

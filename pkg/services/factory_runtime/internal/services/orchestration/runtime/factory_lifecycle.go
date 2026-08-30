@@ -29,11 +29,6 @@ func recordSessionLifecycleCompletionFromFactory(
 			)
 			f.completionResultRecorded = true
 		}
-		if flush := f.completionDurabilityFlush(); flush != nil {
-			if err := flush(); err != nil {
-				return fmt.Errorf("flush Factory Session result before completion: %w", err)
-			}
-		}
 		if !f.completionEventRecorded {
 			phaser.RecordSessionLifecycleCompleted(
 				sessionID, factoryCfg, tick, factoryState, reason, eventTime,
@@ -42,7 +37,7 @@ func recordSessionLifecycleCompletionFromFactory(
 		}
 		if flush := f.completionDurabilityFlush(); flush != nil {
 			if err := flush(); err != nil {
-				return fmt.Errorf("flush Factory Session completion: %w", err)
+				return fmt.Errorf("persist Factory Session completion: %w", err)
 			}
 		}
 		return nil
@@ -56,7 +51,7 @@ func recordSessionLifecycleCompletionFromFactory(
 	}
 	if flush := f.completionDurabilityFlush(); flush != nil {
 		if err := flush(); err != nil {
-			return fmt.Errorf("flush Factory Session completion: %w", err)
+			return fmt.Errorf("persist Factory Session completion: %w", err)
 		}
 	}
 	return nil
@@ -68,9 +63,9 @@ func publishDeferredSessionCompletion(eventHistory recordings.RuntimeLedger) {
 	}
 }
 
-// SetCompletionDurabilityGate binds the Recordings flush that must complete
-// before a terminal source session is advertised. The gate is optional so
-// in-memory runtime callers retain the established lifecycle behavior.
+// SetCompletionDurabilityGate binds the Recordings terminal persistence gate
+// that must complete before a terminal source session is advertised. The gate
+// is optional so in-memory runtime callers retain the established behavior.
 func (f *factoryImpl) SetCompletionDurabilityGate(flush func() error) {
 	if f == nil {
 		return

@@ -357,14 +357,14 @@ func TestRuntimeCompletionDurablyClosesSourceForSuccessorMetrics(t *testing.T) {
 	if completionPublished != 0 {
 		t.Fatalf("completion callbacks before durability publication = %d, want 0", completionPublished)
 	}
-	if len(flushed) != 2 {
-		t.Fatalf("durability flushes = %d, want result and completion flushes", len(flushed))
+	if len(flushed) != 1 {
+		t.Fatalf("durability flushes = %d, want one coalesced terminal flush", len(flushed))
 	}
-	if countCompletionEvents(flushed[0]) != 0 {
-		t.Fatalf("pre-completion durable snapshot contains SESSION_COMPLETED: %#v", flushed[0])
+	if countCompletionEvents(flushed[0]) != 1 {
+		t.Fatalf("coalesced durable snapshot has %d SESSION_COMPLETED events, want 1", countCompletionEvents(flushed[0]))
 	}
-	if countCompletionEvents(flushed[1]) != 1 {
-		t.Fatalf("post-completion durable snapshot has %d SESSION_COMPLETED events, want 1", countCompletionEvents(flushed[1]))
+	if resultIndex, completedIndex := completionEventOrder(flushed[0]); resultIndex < 0 || completedIndex < 0 || resultIndex >= completedIndex {
+		t.Fatalf("terminal event order = result:%d completed:%d, want result before completion: %#v", resultIndex, completedIndex, flushed[0])
 	}
 
 	publishDeferredSessionCompletion(history)
@@ -397,7 +397,7 @@ func TestRuntimeCompletionFlushFailureLeavesSourceIncompleteAndRetryable(t *test
 	if !errors.Is(err, flushErr) {
 		t.Fatalf("first completion error = %v, want flush cause", err)
 	}
-	if countCompletionEvents(history.CanonicalEvents()) != 0 || completionPublished != 0 {
+	if countCompletionEvents(history.CanonicalEvents()) != 1 || completionPublished != 0 {
 		t.Fatalf("failed completion advertised close: events=%d callbacks=%d", countCompletionEvents(history.CanonicalEvents()), completionPublished)
 	}
 
@@ -535,4 +535,22 @@ func countCompletionEvents(events []recordings.FactoryEvent) int {
 		}
 	}
 	return count
+}
+
+func completionEventOrder(events []recordings.FactoryEvent) (int, int) {
+	resultIndex := -1
+	completedIndex := -1
+	for index, event := range events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeSessionResultUpdated:
+			if resultIndex < 0 {
+				resultIndex = index
+			}
+		case interfaces.FactoryEventTypeSessionCompleted:
+			if completedIndex < 0 {
+				completedIndex = index
+			}
+		}
+	}
+	return resultIndex, completedIndex
 }
