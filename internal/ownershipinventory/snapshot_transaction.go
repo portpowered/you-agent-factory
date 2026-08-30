@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -166,11 +167,15 @@ func publishSnapshotWrites(files fileSystem, root string, writes []snapshotWrite
 }
 
 func preflightSnapshotTargets(files fileSystem, root string, writes []snapshotWrite) ([]snapshotTarget, error) {
+	if err := validateSnapshotRoot(files, root); err != nil {
+		return nil, fmt.Errorf("preflight root %q: %w", root, err)
+	}
 	targets := make([]snapshotTarget, 0, len(writes))
 	for index, write := range writes {
 		path := filepath.Join(root, filepath.FromSlash(write.relativePath))
-		if err := files.mkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return nil, fmt.Errorf("preflight position %d (%s): create destination directory %q: %w", index+1, write.relativePath, filepath.Dir(path), err)
+		directory := filepath.Dir(path)
+		if err := ensureSnapshotDestinationDirectory(files, root, directory); err != nil {
+			return nil, fmt.Errorf("preflight position %d (%s): %w", index+1, write.relativePath, err)
 		}
 		original, err := captureSnapshotOriginal(files, path)
 		if err != nil {
@@ -179,6 +184,58 @@ func preflightSnapshotTargets(files fileSystem, root string, writes []snapshotWr
 		targets = append(targets, snapshotTarget{write: write, path: path, original: original})
 	}
 	return targets, nil
+}
+
+func validateSnapshotRoot(files fileSystem, root string) error {
+	if root == "" {
+		return errors.New("snapshot root is empty")
+	}
+	info, err := files.lstat(root)
+	if err != nil {
+		return fmt.Errorf("inspect snapshot root: %w", err)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("snapshot root is symlink")
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("snapshot root is non-directory (%s)", snapshotEntryKind(info))
+	}
+	return nil
+}
+
+func ensureSnapshotDestinationDirectory(files fileSystem, root, directory string) error {
+	relative, err := filepath.Rel(root, directory)
+	if err != nil {
+		return fmt.Errorf("resolve destination directory %q from root: %w", directory, err)
+	}
+	if filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination directory %q escapes snapshot root %q", directory, root)
+	}
+
+	current := filepath.Clean(root)
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := files.lstat(current)
+		if errors.Is(err, fs.ErrNotExist) {
+			if err := files.mkdirAll(current, 0o755); err != nil {
+				return fmt.Errorf("create destination directory component %q: %w", current, err)
+			}
+			info, err = files.lstat(current)
+		}
+		if err != nil {
+			return fmt.Errorf("inspect destination directory component %q: %w", current, err)
+		}
+		if info.Mode()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("destination directory component %q is symlink", current)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("destination directory component %q is non-directory (%s)", current, snapshotEntryKind(info))
+		}
+	}
+	return nil
 }
 
 func captureSnapshotOriginal(files fileSystem, path string) (snapshotOriginal, error) {
@@ -326,7 +383,7 @@ func rollbackExistingTarget(files fileSystem, target *snapshotTarget) error {
 			removeErr = fmt.Errorf("restore original from backup %q: %w", target.backupPath, err)
 		}
 	}
-	fallbackErr := files.writeFile(target.path, target.original.payload, target.original.mode)
+	fallbackErr := restoreSnapshotBytes(files, target)
 	if fallbackErr == nil {
 		target.originalRestored = true
 		return fmt.Errorf("backup restoration failed; retained-byte fallback restored %q: %w", target.path, removeErr)
@@ -335,6 +392,16 @@ func rollbackExistingTarget(files fileSystem, target *snapshotTarget) error {
 		removeErr,
 		fmt.Errorf("retained-byte fallback for %q failed; original backup retained at %q: %w", target.path, target.backupPath, fallbackErr),
 	)
+}
+
+func restoreSnapshotBytes(files fileSystem, target *snapshotTarget) error {
+	if err := files.writeFile(target.path, target.original.payload, target.original.mode); err != nil {
+		return fmt.Errorf("write retained-byte fallback %q: %w", target.path, err)
+	}
+	if err := files.chmod(target.path, target.original.mode); err != nil {
+		return fmt.Errorf("set retained-byte fallback mode %q: %w", target.path, err)
+	}
+	return nil
 }
 
 func removeCreatedTarget(files fileSystem, target *snapshotTarget) error {

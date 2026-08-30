@@ -13,6 +13,7 @@ import (
 type fileSystem interface {
 	mkdirAll(string, fs.FileMode) error
 	writeFile(string, []byte, fs.FileMode) error
+	chmod(string, fs.FileMode) error
 	readFile(string) ([]byte, error)
 	lstat(string) (fs.FileInfo, error)
 	createTemp(string, string) (snapshotFile, error)
@@ -39,6 +40,10 @@ func (osFileSystem) mkdirAll(path string, perm fs.FileMode) error {
 
 func (osFileSystem) writeFile(path string, payload []byte, perm fs.FileMode) error {
 	return os.WriteFile(path, payload, perm)
+}
+
+func (osFileSystem) chmod(path string, perm fs.FileMode) error {
+	return os.Chmod(path, perm)
 }
 
 func (osFileSystem) readFile(path string) ([]byte, error) {

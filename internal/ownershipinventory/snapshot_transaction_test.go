@@ -179,7 +179,7 @@ func TestOwnershipSnapshotGroupRejectsNonRegularTargetsBeforeStaging(t *testing.
 			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("position %d", position+1)) || !strings.Contains(err.Error(), "directory") {
 				t.Fatalf("publishSnapshotGroup() error = %v, want position and directory", err)
 			}
-			if len(files.operations) == 0 || containsSnapshotOperation(files.operations, "create:") {
+			if containsSnapshotOperation(files.operations, "create-stage:") || containsSnapshotOperation(files.operations, "install:") {
 				t.Fatalf("non-regular target allowed staging: %v", files.operations)
 			}
 			assertNoSnapshotTransactionResidue(t, root)
@@ -517,6 +517,11 @@ func (files *controlledSnapshotFileSystem) writeFile(path string, payload []byte
 		return errors.New("forced fallback write failure")
 	}
 	return files.base.writeFile(path, payload, perm)
+}
+
+func (files *controlledSnapshotFileSystem) chmod(path string, perm fs.FileMode) error {
+	files.operations = append(files.operations, "chmod:"+path)
+	return files.base.chmod(path, perm)
 }
 
 func (files *controlledSnapshotFileSystem) readFile(path string) ([]byte, error) {
