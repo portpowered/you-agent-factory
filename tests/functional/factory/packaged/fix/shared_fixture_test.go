@@ -337,14 +337,18 @@ func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
 		{"commit", "--allow-empty", "-m", "initial Fix functional repository"},
 	}
 	for _, args := range commands {
-		command := exec.Command("git", args...)
-		command.Dir = rootDir
-		if output, err := command.CombinedOutput(); err != nil {
+		if output, err := runPackagedFixGitCommand(rootDir, args...); err != nil {
 			cleanupRoot()
 			return nil, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, output)
 		}
 	}
 	return &packagedFixGitSeed{rootDir: rootDir}, nil
+}
+
+func runPackagedFixGitCommand(workspace string, args ...string) ([]byte, error) {
+	command := exec.Command("git", args...)
+	command.Dir = workspace
+	return command.CombinedOutput()
 }
 
 func (seed *packagedFixGitSeed) copyMetadata(t *testing.T, workspace string) {
@@ -354,16 +358,15 @@ func (seed *packagedFixGitSeed) copyMetadata(t *testing.T, workspace string) {
 		t.Fatalf("create temporary packaged Fix Git clone: %v", err)
 	}
 	defer os.RemoveAll(cloneDir)
-	command := exec.Command(
-		"git", "clone", "--quiet", "--no-local", "--no-checkout",
+	if output, err := runPackagedFixGitCommand(
+		"", "clone", "--quiet", "--no-local", "--no-checkout",
 		"--config", "gc.auto=0",
 		"--config", "maintenance.auto=false",
 		"--config", "user.email=fix-functional@example.com",
 		"--config", "user.name=fix functional",
 		seed.rootDir,
 		cloneDir,
-	)
-	if output, err := command.CombinedOutput(); err != nil {
+	); err != nil {
 		t.Fatalf("clone packaged Fix Git metadata: %v\n%s", err, output)
 	}
 	if err := os.Rename(filepath.Join(cloneDir, ".git"), filepath.Join(workspace, ".git")); err != nil {
