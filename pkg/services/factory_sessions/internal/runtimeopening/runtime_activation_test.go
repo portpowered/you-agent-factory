@@ -669,7 +669,6 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 
 func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(t *testing.T) {
 	t.Parallel()
-
 	want := &factorydefinitions.RuntimeSnapshotResolutionError{
 		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
 			Code:    factorydefinitions.RuntimeSnapshotDiagnosticInvalidDefinition,
