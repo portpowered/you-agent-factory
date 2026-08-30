@@ -331,9 +331,16 @@ func readAgyTerminalObservations(
 		terminalState = "task:failed"
 	}
 	if support.CountWorkAtCustomerState(workObservation.listed, terminalState) != 1 {
-		refreshed, err := readAgySessionWork(observeContext, baseURL, sessionID)
+		refreshed, err := waitForAgyTerminalWork(
+			observeContext,
+			baseURL,
+			sessionID,
+			terminalState,
+			workObservation.listed,
+			timeout,
+		)
 		if err != nil {
-			return factoryEventsResult.events, workObservation.listed, fmt.Errorf("refresh Work projection: %w", err)
+			return factoryEventsResult.events, refreshed, err
 		}
 		workObservation.listed = refreshed
 	}
@@ -343,6 +350,42 @@ func readAgyTerminalObservations(
 func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
 	return readAgyJSON[factoryapi.ListWorkResponse](ctx, endpoint)
+}
+
+func waitForAgyTerminalWork(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	terminalState string,
+	listed factoryapi.ListWorkResponse,
+	timeout time.Duration,
+) (factoryapi.ListWorkResponse, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	// Factory Event publication is the exact ledger barrier, but its Work
+	// projection is published independently. After the overlapped read returns
+	// a stale projection, bounded public Work reads are required to observe that
+	// terminal projection; a controlled command result cannot replace this
+	// customer-facing consistency boundary.
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		refreshed, err := readAgySessionWork(ctx, baseURL, sessionID)
+		if err != nil {
+			return listed, fmt.Errorf("refresh Work projection: %w", err)
+		}
+		listed = refreshed
+		if support.CountWorkAtCustomerState(listed, terminalState) == 1 {
+			return listed, nil
+		}
+		select {
+		case <-ctx.Done():
+			return listed, fmt.Errorf("waiting for %s Work projection: %w", terminalState, ctx.Err())
+		case <-deadline.C:
+			return listed, fmt.Errorf("timed out waiting for %s Work projection", terminalState)
+		case <-poll.C:
+		}
+	}
 }
 
 func readAgyJSON[T any](ctx context.Context, endpoint string) (T, error) {
