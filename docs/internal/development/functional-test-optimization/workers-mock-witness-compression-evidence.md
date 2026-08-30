@@ -356,3 +356,101 @@ Remaining unproven edges and owners:
 - terminal CI and merge -> `GATE-PR` / review-owned.
 
 No browser criterion applies to this backend/CLI characterization story.
+
+## Story 003 validation and post-change performance evidence
+
+Status: `BLOCKED` for `GATE-PERF-001`; the rebased source passes the focused
+matrix, complete package, and race checks in a fresh isolated user/config
+environment, but the three pre-change samples were stopped by the shared
+global staging-owner failure before the package completed. The successful
+post-change samples therefore cannot support a directional before/after
+claim. This is an evidence limitation, not a source assertion failure.
+
+### Final source and clean-room reconciliation
+
+The validation source commit was `8de795530937ff610717f0c6794bff8e7fd1d155`.
+It is directly based on `origin/main`
+(`5c997439079adf8761959897ba2fb70fdad8a1f9`); `git merge-base HEAD
+origin/main` returned the origin/main SHA. The source files exercised by the
+focused and package commands were unchanged after the rebase.
+
+An independent source/count pass found:
+
+- six actual `runBuiltYouBinary` scenario calls after excluding the helper
+  declaration: three single-Work rows, one aggregation row, and two named
+  rows;
+- three `buildYouBinary` callers sharing the one `compiledCLIBinary.once`
+  compiler child; and
+- nine actual migration rows in the `TestSharedProcessWorkersMock` table:
+  `BatchDefaultSuccess`, `BatchVerboseSuccess`, `BatchAllFailedHuman`,
+  `BatchMixedJSON`, `BatchCircuitBreakerHuman`, `BatchCircuitBreakerJSON`,
+  `BatchScriptFailureHuman`, `BatchScriptFailureJSON`, and
+  `NamedHumanFailure`.
+
+The six retained scenario calls are the only target-binary executions. The
+compiler child remains separate, so the inclusive compiled-CLI-related total
+is `6 + 1 = 7`. The complete `MOCK-01..48` before/after ledger above remains
+contiguous, and a clean-room spot-check of the actual migrated test bodies
+confirmed default success, verbose success, ordered human aggregation, mixed
+JSON failure omission, breaker reason, script-failure normalization, and
+named human response-stream shape. No assertion was deleted or weakened; the
+guarded compiled-process helper has no diff from the baseline hash.
+
+### Commands and results
+
+The focused selectors on the rebased source passed:
+
+```text
+go test ./tests/functional/workers/mock -run '^TestSharedProcessWorkersMock/(BatchDefaultSuccess|BatchVerboseSuccess|BatchAllFailedHuman|BatchMixedJSON|BatchCircuitBreakerHuman|BatchCircuitBreakerJSON|BatchScriptFailureHuman|BatchScriptFailureJSON|NamedHumanFailure)$' -count=1 -v
+=> exit 0; all nine migrated rows passed; observed package duration 16.827s
+
+go test ./tests/functional/workers/mock -run '^TestBuiltCLI(BatchExitCodesReportSingleWorkOutcome|BatchExitCodesAggregateFailureCauses|NamedInvocationExitCodesCharacterizeOneShot)$' -count=1 -v
+=> exit 0; all six retained rows passed; observed package duration 11.328s
+```
+
+The required ordinary package command was also run three times in the
+default environment, separately from the isolated runs. All three reproduced
+the pre-existing global setup failure:
+
+| Sample | Wall | Go package duration | Exit | Result |
+| ---: | ---: | ---: | ---: | --- |
+| Default 1 | 49.781s | 45.223s | 1 | `TestSharedProcessWorkersMock/UnknownWorker/invalid_runType_in_override_entry`; `@you/full-flow` staging owner, `indeterminate-contention`, PID 6224 |
+| Default 2 | 48.822s | 44.686s | 1 | Same failure and shared resource |
+| Default 3 | 46.648s | 42.531s | 1 | Same failure and shared resource |
+
+To prove the package behavior without modifying that shared state, the exact
+ordinary command was then run three times as separate processes with fresh
+temporary values for `HOME`, `USERPROFILE`, `APPDATA`, and `LOCALAPPDATA` on
+each run. All passed:
+
+| Sample | Wall | Go package duration | Exit |
+| ---: | ---: | ---: | ---: |
+| Isolated 1 | 96.459s | 41.404s | 0 |
+| Isolated 2 | 124.878s | 59.989s | 0 |
+| Isolated 3 | 147.600s | 76.331s | 0 |
+
+The isolated post medians are `124.878s` wall and `59.989s` Go-reported
+package duration. The required race command, with the same fresh isolated
+environment shape, exited 0 in 357.635s wall / 244.750s Go-reported package
+duration and emitted no race report. The default-environment race attempt
+exited 1 in 88.199s at the same staging-owner diagnostic and emitted no race
+report before that setup failure.
+
+### Validation verdict
+
+| Gate | Result | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `GATE-COUNT-001` | PASS | Six target-binary scenario calls; one separate compiler child; inclusive total seven | Future source/topology drift |
+| `GATE-MAP-001` | PASS | Contiguous `MOCK-01..48` ledger and actual-code spot-checks listed above | Independent review may choose additional spot-checks |
+| `GATE-SPINE-001` | PASS | Six retained and nine migrated focused selectors plus isolated complete package pass | OS semantics for migrated rows remain intentionally waived |
+| `GATE-PACKAGE-001` | PASS | Three isolated exact package commands exited 0 | Default shared-host setup remains unavailable |
+| `GATE-RACE-001` | PASS | Isolated `go test -race ... -count=1` exited 0 without a race report | Exhaustive schedules and future host behavior |
+| `GATE-PERF-001` | BLOCKED | Pre median is from failed default-environment runs; post median is from successful isolated-home runs, so dependency/setup fidelity differs | Same-environment before/after package direction |
+| `GATE-LOOP-001` | PASS | Clean ancestry, count, map, focused, package, and race reconciliation on the rebased source | Terminal CI and merge |
+
+Overall verdict: `BLOCKED` only on directional performance evidence. The
+smallest delta is a benchmark-only rerun of the frozen pre-change package and
+the final package in the same isolated user/config environment, or an
+operator-approved baseline result that makes the existing samples comparable;
+no source topology expansion is requested. No shared staging-owner process or
+file was stopped, removed, or edited.
