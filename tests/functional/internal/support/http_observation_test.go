@@ -45,6 +45,41 @@ func TestWaitForSessionTerminalStatusUsesExactSessionAndReturnsWithoutStabilityD
 	}
 }
 
+func TestWaitForTerminalStatusUsesStatusProjectionForLiveCompatibility(t *testing.T) {
+	var statusRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/factory-sessions/~default/status":
+			request := statusRequests.Add(1)
+			status := factoryapi.StatusResponse{
+				Categories:    factoryapi.StatusCategories{Processing: 1},
+				RuntimeStatus: "ACTIVE",
+				TotalTokens:   1,
+			}
+			if request > 1 {
+				status.Categories = factoryapi.StatusCategories{Terminal: 1}
+				status.RuntimeStatus = "IDLE"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(status)
+		case "/factory-sessions/~default/events":
+			t.Errorf("live compatibility helper opened an event stream")
+			http.Error(w, "event stream is not part of this compatibility contract", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	status := support.WaitForTerminalStatus(t, server.URL, time.Second)
+	if statusRequests.Load() < 2 {
+		t.Fatalf("status requests = %d, want transient status followed by terminal status", statusRequests.Load())
+	}
+	if status.RuntimeStatus != "IDLE" || status.Categories.Terminal != 1 {
+		t.Fatalf("terminal status = %#v", status)
+	}
+}
+
 func TestWaitForSessionTerminalStatusRejectsTransientActiveGap(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

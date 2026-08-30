@@ -2,7 +2,6 @@ package support
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -80,21 +79,17 @@ func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) fac
 	})
 }
 
-// WaitForTerminalStatus is retained only for excluded provider, provider-
-// session, and worker lanes. It is a compatibility name, not a legacy
-// polling implementation: this default-session boundary subscribes to
-// canonical Factory Events and has no stable-window success condition.
+// WaitForTerminalStatus is retained for excluded provider, provider-session,
+// and worker lanes whose continuous hosts expose completion through the
+// status projection while the host remains live. Owned standalone paths use
+// the canonical Factory Event observer instead.
 func WaitForTerminalStatus(
 	t testing.TB,
 	baseURL string,
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	status, err := observeSessionTerminalStatus(baseURL, factorysessions.DefaultSessionID, timeout)
-	if err != nil {
-		t.Fatalf("timed out waiting for terminal %v", err)
-	}
-	return status
+	return WaitForSessionTerminalStatus(t, baseURL, factorysessions.DefaultSessionID, timeout)
 }
 
 func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkResponse {
@@ -342,8 +337,7 @@ func SubmitSessionWorkAt(
 
 // WaitForSessionTerminalStatus retains the pre-existing session-scoped status
 // contract used by live/shared-session callers. Its adaptive retry is bounded
-// and has no fixed polling interval or stable-window success condition. The
-// standalone default-session migration uses WaitForTerminalStatus above.
+// and has no fixed polling interval or stable-window success condition.
 func WaitForSessionTerminalStatus(
 	t testing.TB,
 	baseURL string,
@@ -359,40 +353,6 @@ func WaitForSessionTerminalStatus(
 	return status
 }
 
-var readSessionStatusUntil = func(
-	endpoint string,
-	deadline time.Time,
-) (factoryapi.StatusResponse, error) {
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return factoryapi.StatusResponse{}, context.DeadlineExceeded
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), remaining)
-	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return factoryapi.StatusResponse{}, fmt.Errorf("build status request: %w", err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return factoryapi.StatusResponse{}, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 8*1024))
-		return factoryapi.StatusResponse{}, fmt.Errorf(
-			"status = %d body = %q",
-			response.StatusCode,
-			strings.TrimSpace(string(body)),
-		)
-	}
-	var status factoryapi.StatusResponse
-	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
-		return factoryapi.StatusResponse{}, err
-	}
-	return status, nil
-}
-
 var terminalSessionStatusIsComplete = func(status factoryapi.StatusResponse) bool {
 	completed := status.Categories.Terminal + status.Categories.Failed
 	if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
@@ -404,69 +364,6 @@ var terminalSessionStatusIsComplete = func(status factoryapi.StatusResponse) boo
 	default:
 		return false
 	}
-}
-
-func observeSessionTerminalStatus(
-	baseURL string,
-	sessionID string,
-	timeout time.Duration,
-) (factoryapi.StatusResponse, error) {
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
-	if timeout <= 0 {
-		return factoryapi.StatusResponse{}, fmt.Errorf("terminal observation timeout must be positive")
-	}
-	deadline := time.Now().Add(timeout)
-	status, statusErr := readSessionStatusUntil(endpoint, deadline)
-	if statusErr == nil && terminalSessionStatusIsComplete(status) {
-		return status, nil
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return status, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, status, statusErr)
-	}
-	client := &http.Client{Timeout: remaining}
-	observation, err := openTerminalFactoryEventObservation(baseURL, sessionID, client)
-	if err != nil {
-		return status, fmt.Errorf("Factory Session %q at %s: subscribe to canonical events: %w", sessionID, endpoint, err)
-	}
-	defer observation.Close()
-	// A terminal event can be published between the first status read and the
-	// SSE response headers. This read covers that narrow handoff while the
-	// observer is already established; later completion is delivered by SSE.
-	statusAfterSubscribe, statusAfterSubscribeErr := readSessionStatusUntil(endpoint, deadline)
-	if statusAfterSubscribeErr == nil && terminalSessionStatusIsComplete(statusAfterSubscribe) {
-		return statusAfterSubscribe, nil
-	}
-	if statusAfterSubscribeErr == nil {
-		status = statusAfterSubscribe
-	} else {
-		statusErr = statusAfterSubscribeErr
-	}
-	remaining = time.Until(deadline)
-	if remaining <= 0 {
-		return status, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, status, statusErr)
-	}
-	if _, err := observation.wait(remaining); err != nil {
-		return status, fmt.Errorf("Factory Session %q at %s: %w; last=%#v status_error=%v", sessionID, endpoint, err, status, statusErr)
-	}
-	status, err = readSessionStatusUntil(endpoint, deadline)
-	if err != nil {
-		return status, fmt.Errorf(
-			"Factory Session %q at %s: %w",
-			sessionID,
-			endpoint,
-			err,
-		)
-	}
-	if !terminalSessionStatusIsComplete(status) {
-		return status, fmt.Errorf(
-			"Factory Session %q at %s: RUN_RESPONSE arrived before terminal status: %#v",
-			sessionID,
-			endpoint,
-			status,
-		)
-	}
-	return status, nil
 }
 
 func waitForStatusAt(
