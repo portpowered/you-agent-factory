@@ -1,6 +1,7 @@
 package submission_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,11 +11,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -51,22 +52,64 @@ const (
 	batchIngressRegressionTraceID   = "trace-http-batch-ingress-regression"
 )
 
-// TestWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
+// TestWorkBatchCLIIngress preserves the batch CLI input, type-selection, and
+// atomic-rejection witnesses on one serialized Factory fixture. The fixture
+// includes both task and review so every existing CLI shape remains valid.
+func TestWorkBatchCLIIngress(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
+	defer server.Stop(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	t.Run("TestWorkBatchAcceptsInlineFileAndStdinShapes", func(t *testing.T) {
+		assertWorkBatchAcceptsInlineFileAndStdinShapes(t, server, factoryDir, ctx)
+	})
+	t.Run("TestWorkBatchSelectsDefaultAndExplicitWorkTypes", func(t *testing.T) {
+		assertWorkBatchSelectsDefaultAndExplicitWorkTypes(t, server, factoryDir, ctx)
+	})
+	t.Run("TestWorkBatchRejectsUnknownTypeWithoutPartialMutation", func(t *testing.T) {
+		assertWorkBatchRejectsUnknownTypeWithoutPartialMutation(t, server, factoryDir, ctx)
+	})
+}
+
+// TestWorkBatchHTTPSubmission preserves the independent HTTP Work and staged
+// file witnesses on one same-configuration fixture. Each case owns unique
+// request and Work identities, so the shared list and event history remain
+// unambiguous.
+func TestWorkBatchHTTPSubmission(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
+	defer server.Stop(t)
+
+	t.Run("TestAPISubmitBatchThenListAndGetWork", func(t *testing.T) {
+		assertAPISubmitBatchThenListAndGetWork(t, server)
+	})
+	t.Run("TestAPIUpsertWorkRequestUsesCanonicalIdentity", func(t *testing.T) {
+		assertAPIUpsertWorkRequestUsesCanonicalIdentity(t, server)
+	})
+	t.Run("TestAPIUnknownWorkReturnsTypedNotFound", func(t *testing.T) {
+		assertAPIUnknownWorkReturnsTypedNotFound(t, server)
+	})
+	t.Run("TestAPIStageAndSubmitFileCreatesExpectedWork", func(t *testing.T) {
+		assertAPIStageAndSubmitFileCreatesExpectedWork(t, server)
+	})
+}
+
+// assertWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
 // batch ingress accepts the same canonical FACTORY_REQUEST_BATCH document when
 // provided inline, via a filesystem path, or via stdin, and that each ingress
 // path yields customer-visible accept outcomes for the submitted works.
-func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+func assertWorkBatchAcceptsInlineFileAndStdinShapes(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	factoryDir string,
+	ctx context.Context,
+) {
+	t.Helper()
 	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 
 	canonicalBatch := func(requestID, workName string) string {
 		return fmt.Sprintf(
@@ -79,7 +122,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 
 	t.Run("inline", func(t *testing.T) {
 		batchJSON := canonicalBatch(batchInputsInlineRequestID, batchInputsInlineWorkName)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch inline: %v\noutput:\n%s", err, output)
 		}
@@ -95,7 +138,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 			t.Fatalf("write batch file: %v", err)
 		}
 
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchPath, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchPath, nil)
 		if err != nil {
 			t.Fatalf("you submit batch file: %v\noutput:\n%s", err, output)
 		}
@@ -106,7 +149,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 
 	t.Run("stdin", func(t *testing.T) {
 		batchJSON := canonicalBatch(batchInputsStdinRequestID, batchInputsStdinWorkName)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, "-", strings.NewReader(batchJSON))
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, "-", strings.NewReader(batchJSON))
 		if err != nil {
 			t.Fatalf("you submit batch stdin: %v\noutput:\n%s", err, output)
 		}
@@ -116,21 +159,17 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 	})
 }
 
-// TestWorkBatchSelectsDefaultAndExplicitWorkTypes proves public Work Request
+// assertWorkBatchSelectsDefaultAndExplicitWorkTypes proves public Work Request
 // batch ingress materializes the Factory default work type when a batch work
 // entry omits workTypeName and honors an explicit workTypeName when provided.
-func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+func assertWorkBatchSelectsDefaultAndExplicitWorkTypes(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	factoryDir string,
+	ctx context.Context,
+) {
+	t.Helper()
 	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 
 	t.Run("default", func(t *testing.T) {
 		batchJSON := fmt.Sprintf(
@@ -138,7 +177,7 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 			batchInputsDefaultTypeRequestID,
 			batchInputsDefaultTypeWorkName,
 		)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch default work type: %v\noutput:\n%s", err, output)
 		}
@@ -159,7 +198,7 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 			batchInputsExplicitTypeWorkName,
 			batchInputsAltWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch explicit work type: %v\noutput:\n%s", err, output)
 		}
@@ -174,21 +213,17 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 	})
 }
 
-// TestWorkBatchRejectsUnknownTypeWithoutPartialMutation proves public Work Request
-// batch ingress rejects batches that name an unknown work type with a
+// assertWorkBatchRejectsUnknownTypeWithoutPartialMutation proves public Work
+// Request batch ingress rejects batches that name an unknown work type with a
 // customer-visible failure and leaves durable Work unchanged for that request.
-func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+func assertWorkBatchRejectsUnknownTypeWithoutPartialMutation(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	factoryDir string,
+	ctx context.Context,
+) {
+	t.Helper()
 	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 
 	baselineListed := support.ListDefaultSessionWork(t, baseURL)
 	baselineCount := len(baselineListed.Results)
@@ -200,7 +235,7 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 			batchInputsUnknownTypeWorkName,
 			batchInputsUnknownWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchJSON, nil)
 		assertBatchSubmitRejected(t, output, err, batchInputsUnknownTypeRequestID)
 		assertWorkNotListedByName(t, baseURL, batchInputsUnknownTypeWorkName)
 		assertListedWorkCount(t, baseURL, baselineCount)
@@ -215,7 +250,7 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 			batchInputsMixedInvalidWorkName,
 			batchInputsUnknownWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(t, server, ctx, factoryDir, baseURL, batchJSON, nil)
 		assertBatchSubmitRejected(t, output, err, batchInputsMixedBatchRequestID)
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedValidWorkName)
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedInvalidWorkName)
@@ -227,13 +262,11 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 // stays HTTP-observable (WORK_REQUEST plus Work list/get) while an unrelated
 // dispatch remains blocked, and same-request-ID replay stays idempotent.
 func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
-	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	dispatchRelease := make(chan struct{})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		ProviderOverride:          support.BlockingInferenceProvider(dispatchRelease),
-	})
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	dispatchRunner := newSubmissionBlockingCommandRunner()
+	t.Cleanup(dispatchRunner.Release)
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, dispatchRunner))
 	defer server.Stop(t)
 
 	baseURL := server.URL()
@@ -249,7 +282,15 @@ func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
 	if submitted.TraceId == "" {
 		t.Fatal("POST /work returned an empty trace ID")
 	}
-	waitForServiceModeSessionActive(t, baseURL, 10*time.Second)
+	waitForSubmissionDispatch(t, dispatchRunner, 10*time.Second)
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.Progress.FactoryState != "RUNNING" ||
+		session.Runtime.Progress.InFlightCount <= 0 {
+		t.Fatalf(
+			"service-mode session after controlled dispatch arrival = %#v, want RUNNING with in-flight work",
+			session.Runtime.Progress,
+		)
+	}
 
 	workTypeName := batchInputsWorkType
 	batchRequest := factoryapi.WorkRequest{
@@ -298,28 +339,28 @@ func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
 	)
 
 	select {
-	case <-dispatchRelease:
+	case <-dispatchRunner.release:
 		t.Fatal("blocked dispatch released before ingress regression assertions finished")
 	default:
 	}
 
-	close(dispatchRelease)
+	dispatchRunner.Release()
 }
 
-func waitForServiceModeSessionActive(t *testing.T, baseURL string, timeout time.Duration) {
+func waitForSubmissionDispatch(
+	t testing.TB,
+	runner *submissionBlockingCommandRunner,
+	timeout time.Duration,
+) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := support.GetDefaultSession(t, baseURL)
-		if session.Runtime.Progress.FactoryState == "RUNNING" &&
-			session.Runtime.Progress.InFlightCount > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	select {
+	case <-runner.arrived:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for controlled provider dispatch: %v", ctx.Err())
 	}
-	session := support.GetDefaultSession(t, baseURL)
-	t.Fatalf("timed out waiting for active service-mode session: %#v", session.Runtime)
 }
 
 func assertBatchIngressWorkListAndGetVisible(t *testing.T, baseURL, workID string) {
@@ -364,11 +405,10 @@ func batchIngressWorkListingContainsID(listed factoryapi.ListWorkResponse, workI
 // outcomes and preserves canonical work type names in public projections.
 func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, competingPipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a", "worker-b")
+	serverConfig := submissionServerConfig(factoryDir, submissionStaticProviderRunner())
+	serverConfig.WaitForServiceModeRuntime = true
+	server := support.StartFunctionalAPIServer(t, serverConfig)
 	defer server.Stop(t)
 
 	stream := support.OpenFactoryEventStreamAt(
@@ -610,27 +650,73 @@ func batchWorkTypeSelectionFactoryConfig() map[string]any {
 	}
 }
 
-func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
-	t.Helper()
-	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-}
-
 func runYouSubmitBatch(
+	t testing.TB,
+	server *support.FunctionalAPIServer,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	batchSource string,
 	stdin io.Reader,
 ) ([]byte, error) {
-	args := []string{"--server", serverURL, "--json", "submit", "batch", batchSource}
-	cmd := processHarness.CommandContext(ctx, args...)
-	cmd.Dir = workingDir
-	if stdin != nil {
-		cmd.Stdin = stdin
+	t.Helper()
+
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--server", serverURL, "--json", "submit", "batch", batchSource,
+	})
+	inputs.Input.WorkingDirectory = workingDir
+	if stdin == nil {
+		stdin = strings.NewReader("")
 	}
-	return cmd.CombinedOutput()
+	inputs.Input.Stdin = stdin
+	stdinIsTTY := false
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	var output bytes.Buffer
+	inputs.Input.Stdout = &output
+	inputs.Input.Stderr = &output
+	err := server.Execute(t, inputs.Input)
+	return output.Bytes(), err
 }
+
+// submissionBlockingCommandRunner blocks the first provider command at the
+// command-runner edge. The arrival channel is the exact entry signal for the
+// concurrency witness; it avoids polling the public status projection for a
+// state that the controlled edge already knows synchronously.
+type submissionBlockingCommandRunner struct {
+	release     chan struct{}
+	arrived     chan struct{}
+	arrivalOnce sync.Once
+	releaseOnce sync.Once
+}
+
+func newSubmissionBlockingCommandRunner() *submissionBlockingCommandRunner {
+	return &submissionBlockingCommandRunner{
+		release: make(chan struct{}),
+		arrived: make(chan struct{}),
+	}
+}
+
+func (runner *submissionBlockingCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.arrivalOnce.Do(func() { close(runner.arrived) })
+	select {
+	case <-runner.release:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("completed")}, nil
+}
+
+func (runner *submissionBlockingCommandRunner) Release() {
+	if runner == nil {
+		return
+	}
+	runner.releaseOnce.Do(func() { close(runner.release) })
+}
+
+var _ platformprocess.CommandRunner = (*submissionBlockingCommandRunner)(nil)
 
 func decodeBatchSubmitJSON(t *testing.T, output []byte) batchInputsSubmitJSON {
 	t.Helper()

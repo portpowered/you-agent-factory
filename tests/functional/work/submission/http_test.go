@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -30,36 +29,32 @@ const (
 	httpUnknownWorkID = "work-http-unknown-missing-id"
 )
 
-// TestAPIPOSTSubmitAndQueryWork proves REST POST /work submission and GET /work
-// query expose the submitted Work through the public HTTP surface after completion.
-func TestAPIPOSTSubmitAndQueryWork(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow config-driven REST submit/query functional test")
-	}
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		ProviderOverride:          support.MockInferenceProvider("Processed. COMPLETE"),
-	})
+// TestAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
+// /work-requests accepts canonical works content and projects ordered content
+// parts. Its top-level name is retained because the functional-evidence
+// registry owns this public endpoint coverage identity.
+func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
 	defer server.Stop(t)
 
-	postWorkViaRESTAPI(t, server.URL())
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	assertListedWorkCompleteTask(t, server.URL())
+	assertAPIBatchUpsertAcceptsWorksContent(t, server)
+	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
-// TestAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
-// /work-requests accepts canonical works content and projects ordered content parts.
-func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
+// assertAPIPOSTSubmitAndQueryWork proves REST POST /work submission and GET
+// /work query expose the submitted Work through the public HTTP surface after
+// completion.
+func assertAPIPOSTSubmitAndQueryWork(t *testing.T, server *support.FunctionalAPIServer) {
+	submitted := postWorkViaRESTAPI(t, server.URL())
+	assertListedWorkCompleteTask(t, server.URL(), submitted.TraceId)
+}
 
+// assertAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
+// /work-requests accepts canonical works content and projects ordered content
+// parts.
+func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.FunctionalAPIServer) {
 	const (
 		workID    = "work-http-batch-content"
 		requestID = "request-http-batch-content"
@@ -125,23 +120,16 @@ func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
 	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
 		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
 	}
-	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
-// TestCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an explicit
-// work type name reaches the live public HTTP handler and completes the Work.
-func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI submit functional test")
-	}
-
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+// assertCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an
+// explicit work type name reaches the live public HTTP handler and completes
+// the Work.
+func assertCLIWorkTypeNameReachesLiveAPIHandler(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	factoryDir string,
+) {
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("ship name based CLI submit"), 0o644); err != nil {
 		t.Fatalf("write CLI submit payload: %v", err)
@@ -156,7 +144,7 @@ func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 		"--payload", payloadPath,
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.ExecuteProcess(t, inputs); err != nil {
+	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(you submit --work-type-name) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -165,7 +153,7 @@ func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 		)
 	}
 
-	item := waitForWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	item := waitForWorkByNameComplete(t, server.URL(), "cli-live-api-name", "task", 10*time.Second)
 	if item.Name != "cli-live-api-name" {
 		t.Fatalf("CLI-submitted work name = %q, want cli-live-api-name", item.Name)
 	}
@@ -175,18 +163,11 @@ func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 	}
 }
 
-// TestAPISubmitBatchThenListAndGetWork proves a successful public HTTP batch
-// Work Request submission makes the submitted Work visible through list and get
-// endpoints so automation can submit once and inspect the resulting Work identity
-// and payload without a second transport.
-func TestAPISubmitBatchThenListAndGetWork(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+// assertAPISubmitBatchThenListAndGetWork proves a successful public HTTP batch
+// Work Request submission makes the submitted Work visible through list and
+// get endpoints so automation can submit once and inspect the resulting Work
+// identity and payload without a second transport.
+func assertAPISubmitBatchThenListAndGetWork(t *testing.T, server *support.FunctionalAPIServer) {
 	workTypeName := batchInputsWorkType
 	submitted := support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: httpSubmitListGetRequestID,
@@ -263,18 +244,11 @@ func TestAPISubmitBatchThenListAndGetWork(t *testing.T) {
 	}
 }
 
-// TestAPIUpsertWorkRequestUsesCanonicalIdentity proves repeat upserts of the
+// assertAPIUpsertWorkRequestUsesCanonicalIdentity proves repeat upserts of the
 // same logical Work Request through the public HTTP API keep canonical Work
 // Request and Work identities so retries and idempotent clients do not create
 // divergent identities for the same upsert key.
-func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+func assertAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T, server *support.FunctionalAPIServer) {
 	workTypeName := batchInputsWorkType
 	batchRequest := factoryapi.WorkRequest{
 		RequestId: httpUpsertCanonicalRequestID,
@@ -345,18 +319,11 @@ func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
 	}
 }
 
-// TestAPIUnknownWorkReturnsTypedNotFound proves GET for a Work identity that
+// assertAPIUnknownWorkReturnsTypedNotFound proves GET for a Work identity that
 // does not exist in the running Factory Session returns a typed not-found public
-// error outcome (structured 404 with NOT_FOUND family/code) rather than an opaque
-// 500 or unstructured failure body.
-func TestAPIUnknownWorkReturnsTypedNotFound(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+// error outcome (structured 404 with NOT_FOUND family/code) rather than an
+// opaque 500 or unstructured failure body.
+func assertAPIUnknownWorkReturnsTypedNotFound(t *testing.T, server *support.FunctionalAPIServer) {
 	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpUnknownWorkID)
 	response, err := http.Get(endpoint)
 	if err != nil {
@@ -442,7 +409,7 @@ func assertAPIUnknownWorkTypedNotFoundHTTPResponse(
 	}
 }
 
-func postWorkViaRESTAPI(t *testing.T, baseURL string) {
+func postWorkViaRESTAPI(t *testing.T, baseURL string) factoryapi.SubmitWorkResponse {
 	t.Helper()
 
 	req, err := http.NewRequest(
@@ -470,20 +437,14 @@ func postWorkViaRESTAPI(t *testing.T, baseURL string) {
 	if submitResp.TraceId == "" {
 		t.Error("POST /work: expected non-empty trace_id")
 	}
+	return submitResp
 }
 
-func assertListedWorkCompleteTask(t *testing.T, baseURL string) {
+func assertListedWorkCompleteTask(t *testing.T, baseURL, traceID string) {
 	t.Helper()
 
-	listResp := support.GetJSON[factoryapi.ListWorkResponse](
-		t,
-		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
-	)
-	if len(listResp.Results) != 1 {
-		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
-	}
-
-	work := listResp.Results[0]
+	listResp := waitForWorkByTraceComplete(t, baseURL, traceID, 10*time.Second)
+	work := requireWorkByTrace(t, listResp, traceID)
 	if support.StringPointerValue(work.WorkTypeName) != "task" {
 		t.Errorf("GET /work: expected work type 'task', got %q", support.StringPointerValue(work.WorkTypeName))
 	}

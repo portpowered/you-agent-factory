@@ -2,6 +2,7 @@ package submission_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,9 +11,83 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func configureSubmissionCodexWorkers(t *testing.T, factoryDir string, workerNames ...string) {
+	t.Helper()
+
+	for _, workerName := range workerNames {
+		support.WriteAgentConfig(
+			t,
+			factoryDir,
+			workerName,
+			support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+		)
+	}
+}
+
+func submissionServerConfig(
+	factoryDir string,
+	runner platformprocess.CommandRunner,
+) support.FunctionalAPIServerConfig {
+	return support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	}
+}
+
+func submissionStaticProviderRunner() platformprocess.CommandRunner {
+	return support.NewStaticSuccessCommandRunner("Done. COMPLETE")
+}
+
+func submissionInputPreservingFactoryConfig() map[string]any {
+	config := simplePipelineFactoryConfig()
+	config["workstations"].([]map[string]any)[0]["outcomeFormat"] = "decision-envelope"
+	return config
+}
+
+func submissionInputPreservingProviderRunner() platformprocess.CommandRunner {
+	return submissionStaticCommandResultRunner{
+		result: submissionAcceptedEmptyDecisionCommandResult(),
+	}
+}
+
+func submissionAcceptedEmptyDecisionCommandResult() platformprocess.CommandResult {
+	decision, err := json.Marshal(map[string]string{
+		"decision": "ACCEPTED",
+		"output":   "",
+	})
+	if err != nil {
+		panic(err)
+	}
+	message, err := json.Marshal(string(decision))
+	if err != nil {
+		panic(err)
+	}
+	return platformprocess.CommandResult{Stdout: []byte(
+		`{"type":"turn.started"}` + "\n" +
+			`{"type":"item.completed","item":{"id":"message","type":"agent_message","text":` + string(message) + `}}` + "\n" +
+			`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}` + "\n",
+	)}
+}
+
+type submissionStaticCommandResultRunner struct {
+	result platformprocess.CommandResult
+}
+
+func (runner submissionStaticCommandResultRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return runner.result, nil
+}
 
 func simplePipelineFactoryConfig() map[string]any {
 	return map[string]any{
@@ -174,57 +249,61 @@ func waitForWorkIDsComplete(
 	return items
 }
 
-func waitForWorkTypeComplete(
+func waitForWorkByNameComplete(
 	t *testing.T,
 	baseURL string,
+	workName string,
 	workType string,
 	timeout time.Duration,
 ) factoryapi.Work {
 	t.Helper()
 
+	var found factoryapi.Work
 	listed, err := support.WaitForObservation(
 		timeout,
 		func() (factoryapi.ListWorkResponse, error) {
 			return support.ListDefaultSessionWork(t, baseURL), nil
 		},
 		func(listed factoryapi.ListWorkResponse) bool {
+			matches := 0
 			for _, item := range listed.Results {
-				if support.StringPointerValue(item.WorkTypeName) == workType &&
+				if item.Name == workName &&
+					support.StringPointerValue(item.WorkTypeName) == workType &&
 					workStateName(item.State) == "complete" {
-					return true
+					found = item
+					matches++
 				}
 			}
-			return false
+			return matches == 1
 		},
 	)
 	if err != nil {
 		t.Fatalf(
-			"timed out waiting for completed work type %q: %v; last work response: %#v",
+			"timed out waiting for completed Work name %q type %q: %v; last work response: %#v",
+			workName,
 			workType,
 			err,
 			listed.Results,
 		)
 	}
-	for _, item := range listed.Results {
-		if support.StringPointerValue(item.WorkTypeName) == workType &&
-			workStateName(item.State) == "complete" {
-			return item
-		}
-	}
-	t.Fatalf("accepted work type %q disappeared from last observation: %#v", workType, listed.Results)
-	return factoryapi.Work{}
+	return found
 }
 
 func requireWorkByTrace(t *testing.T, listed factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
 	t.Helper()
 
+	matches := 0
+	var found factoryapi.Work
 	for _, item := range listed.Results {
 		if support.StringPointerValue(item.TraceId) == traceID {
-			return item
+			found = item
+			matches++
 		}
 	}
-	t.Fatalf("trace %q missing from work list: %#v", traceID, listed.Results)
-	return factoryapi.Work{}
+	if matches != 1 {
+		t.Fatalf("trace %q matched %d Work items, want exactly one: %#v", traceID, matches, listed.Results)
+	}
+	return found
 }
 
 func workStateName(state *factoryapi.WorkState) string {
