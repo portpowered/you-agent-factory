@@ -1,12 +1,14 @@
 # Validation report: cached-input pricing and source-session lifecycle
 
-This is the implementation-stage, no-repair validation record for
-`goal3-cached-input-pricing-and-source-lifecycle-close`. The validator did not
-edit product code or tests after the clean-room checks identified failures.
+This is the final local validation ledger for
+`goal3-cached-input-pricing-and-source-lifecycle-close`. The initial clean-room
+check identified bounded implementation deltas; the implementation follow-up
+applied only those behavior-preserving corrections. CI results are intentionally
+not recorded here.
 
 ## Environment and artifact
 
-- Commit/build identifier: `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` under validation.
+- Commit/build identifier: behavior-validation code head `937491027f1dece779616b363c05a8aa9313c05b`.
 - Baseline identifier: `1552d3e3ef114eeb68b1828d46db7d686ad1ef33`, before the two implementation stories.
 - Environment and configuration: Windows `10.0.26100`, `go1.25.0 windows/amd64`, `GOAMD64=v1`, repository `go.mod`, local Go/build caches, and the repository's installed UI dependencies.
 - Customer entry point: local-real `root.BuildProcess` composition, Factory Session runtime/recording, the public metrics costs query, and controlled provider command output.
@@ -18,11 +20,11 @@ edit product code or tests after the clean-room checks identified failures.
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | Integrated pricing and lifecycle behavior | PASS | The declared pricing functional matrix, focused package tests, race witness, and successor-lineage functional witness passed. The final matrix records `10000` input, `9984` cached input, and `100` output tokens as `PRICED` at built-in `0.002268` USD for `openai/gpt-5-codex`; the operator row produces `0.006012` USD, omission produces `UNPRICED` with a null amount and reason `cached-input rate is not configured`, and explicit zero produces exact arithmetic `0.001020` (canonical serialized form `0.00102`). The lifecycle witness observes the final dispatch response, one persisted `SESSION_COMPLETED`, flush-before-advertisement ordering, and the exact source/successor lineage rows. | Remote vendor billing and historical backfill remain out of scope. |
-| Clean-room failure handling | PASS | `make lint` failures are recorded below as a delta-plan request. No product code or tests were repaired by this validation story. | Owner resolution of the implementation delta. |
+| Clean-room failure handling | PASS | The initial findings were converted into the bounded correction plan: lifecycle helpers were moved into existing package surfaces, duplicate test helpers/declarations were consolidated, and the affected size/package-shape gates were rerun successfully. | Linux-hosted deadcode comparison remains to be confirmed. |
 | Paid validation disposition | PASS | Controlled local-real provider output proved positive cached usage, exact default/override/absence behavior, and zero provider calls during cost re-query; no paid call was attempted. | Real vendor payload variation is intentionally not exercised. |
 | Sanitized evidence ledger | PASS | The ledger below records baseline/final behavior, dependency fidelity, budget, implementation head, gate results, and remaining edges without credentials or CI results. | Terminal CI and merge are review-owned. |
-| Repository compatibility/static policy | FAIL | `make verify-fast` passed after one environment-only `make ui-deps` setup. `make lint` failed in `backend-size`, `pkg-maint`, `pkg-file-count`, `deadcode`, and `contracts-check`; exact findings are in G03-F001 through G03-F004. | The implementation owner must apply the smallest behavior-preserving correction and rerun the gates. |
-| Implementation-stage delivery | BLOCKED | The lint failure prevents the final rebase/push, PR opening, and CI start in this no-repair iteration. | Review-stage terminal CI, conflict resolution, and merge. |
+| Repository compatibility/static policy | PASS* | `make verify-fast`, `make fmt-check`, `make backend-size`, `make pkg-file-count`, and `make contracts-check` passed on the final code head. `make lint` passed every changed-surface/static target; its only local nonzero result is the platform-sensitive deadcode snapshot comparison described in G03-F004. | Linux-hosted deadcode comparison and terminal CI remain unproven locally. |
+| Implementation-stage delivery | READY | The final code head is ready for the required rebase, push, open PR, and CI-start handoff. The implementation stage stops after CI starts; terminal CI, conflicts, and merge are review-owned. | Hosted CI and review feedback. |
 
 ## Customer journey
 
@@ -30,7 +32,7 @@ edit product code or tests after the clean-room checks identified failures.
 2. The pricing matrix observed the built-in Codex rate, complete operator replacement, omitted cached subclass, explicit zero subclass, invalid token subsets, and the retained Claude/Codex catalog rows. The functional matrix's counted provider was called once for the recording; subsequent cost queries made no provider call.
 3. The lifecycle witness persisted `SESSION_RESULT_UPDATED`, then exactly one `SESSION_COMPLETED`, and only then completed the response/subscription path. It also proves append/flush failure remains unadvertised and retryable, an incomplete source cannot become a predecessor, and a reopened successor retains canonical source/successor identities and both usage rows.
 4. `make verify-fast` completed successfully: typecheck passed, 216 native UI tests passed, 3,108 dashboard tests passed, 447 Go packages passed, and the 169-test repository validation suite passed with one documented platform-specific skip.
-5. `make lint` reached all named targets but failed the implementation-size/package-shape, deadcode, and functional-evidence checks listed below. The validator stopped without repair, so no final head was pushed and no PR or CI result is claimed.
+5. The bounded corrections made the implementation-size, package-count, formatting, and functional-evidence checks pass. On Windows, `make lint` still reports only the platform-sensitive deadcode snapshot mismatch; no current-only symbol is introduced by the diff, so the Linux-hosted check remains the authoritative edge. The final head is ready for push/PR/CI handoff; no terminal CI result is claimed here.
 
 ## Cross-task integration and usability
 
@@ -44,32 +46,33 @@ edit product code or tests after the clean-room checks identified failures.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| G03-F001 | blocking | `make backend-size` and `make pkg-maint` | Changed files remain within the repository's backend file/function limits. | Four changed surfaces exceed the gate: `function buildBundle` in `pkg/services/factory_runtime/internal/runtime_build.go` is 102 lines (limit 100); `pkg/services/factory_runtime/internal/services/orchestration/runtime/factory.go` is 1,061 lines (limit 1,000); `pkg/services/factory_sessions/internal/sessionservice/assembly.go` is 1,013 lines (limit 1,000); `pkg/services/recordings/internal/events/event_history.go` is 1,037 lines (limit 1,000). | Targeted gate output on implementation head `1dded504f2`. |
-| G03-F002 | blocking | `make pkg-file-count` | New package files do not exceed the deletion-only baseline. | `pkg/services/factory_runtime/internal/services/orchestration/runtime` grew from 37 to 38 files and `pkg/services/recordings/internal` grew from 20 to 22 files. | Targeted gate output on implementation head `1dded504f2`. |
-| G03-F003 | blocking | `make contracts-check` | Every functional evidence declaration maps a stable ID to its supported evidence shape. | `TestRuntimeCostsCachedInputConfigurationMatrix` declares `cli/you.metrics.costs`, which is already declared by `TestRuntimeCostsEndToEndFromProviderCompletion`; the checker reports the new declaration's stable ID as unused. | `contracts/functional-scenario-evidence.json`, `contracts/functional-scenarios.json`, and `tests/functional/factory/visualization/runtime_metrics/end_to_end_costs_test.go`. |
-| G03-F004 | blocking pending owner review | `make deadcode` | The current deadcode report matches the checked-in baseline. | The checker reports baseline drift with equal counts, 3,074 baseline findings and 3,074 current findings. The current report includes changed test-support symbols, but this validator did not decide whether a baseline update is intentional. | `bin/deadcode-current.txt` and `docs/internal/baselines/deadcode-baseline.txt`; no baseline file was changed. |
-| G03-F005 | resolved environment note | Initial `make verify-fast` | The required UI typecheck can resolve its declared Bun types. | The initial run lacked `ui/node_modules/bun-types`; one `make ui-deps` setup installed the repository dependencies, after which the single permitted verify-fast rerun passed. | Local command results; no source or test changes. |
+| G03-F001 | resolved | `make backend-size` and `make pkg-maint` | Changed files remain within the repository's backend file/function limits. | Lifecycle helpers were moved into existing package files and `buildBundle` was reduced below the limit; the final gates passed. | Final code head `937491027f1dece779616b363c05a8aa9313c05b`. |
+| G03-F002 | resolved | `make pkg-file-count` | New package files do not exceed the deletion-only baseline. | Adjacent tests were consolidated and the final package counts passed the exact deletion-only baseline. | Final code head `937491027f1dece779616b363c05a8aa9313c05b`. |
+| G03-F003 | resolved | `make contracts-check` | Every functional evidence declaration maps a stable ID to its supported evidence shape. | The duplicate `cli/you.metrics.costs` declaration was removed; the successor-lineage witness has its own supported metrics evidence mapping, and the checker passed. | `contracts/functional-scenario-evidence.json`, `contracts/functional-scenarios.json`. |
+| G03-F004 | environment-limited | `make deadcode` | The current deadcode report matches the checked-in baseline. | Windows reports 3,072 current findings against the Linux-shaped 3,074 baseline. Current-only findings are the Windows repository-staging and terminal-lock helpers; baseline-only findings are their Unix counterparts plus Unix process-test helpers. No current-only symbol is from this diff, and the baseline was not changed. | `bin/deadcode-current.txt`, `docs/internal/baselines/deadcode-baseline.txt`; Linux CI remains the required comparison. |
+| G03-F005 | resolved environment note | Initial `make verify-fast` | The required UI typecheck can resolve its declared Bun types. | The initial run lacked `ui/node_modules/bun-types`; one `make ui-deps` setup installed the repository dependencies, after which the final committed-head verify-fast run passed. | Local command results; no source or test changes. |
 
 ## Sanitized evidence ledger
 
 | Evidence | Head/baseline | Dependency fidelity | Exact result | Budget | Remaining edge |
 | --- | --- | --- | --- | --- | --- |
 | Baseline behavior | `1552d3e3ef114eeb68b1828d46db7d686ad1ef33` | Existing committed implementation | Cached-input pricing and durable successor close were not yet present in the reviewed lane. | None | Baseline is historical context only. |
-| Pricing matrix | `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` | Local-real root/session/recording/config/query with controlled counted provider | Built-in `0.002268`; operator `0.006012`; omitted `UNPRICED`/null; explicit zero `0.001020` arithmetic and `0.00102` serialized. One recording provider call; zero cost-query provider calls. | `$0.00`, zero paid calls | Other vendors/models and live billing. |
-| Lifecycle/lineage | `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` | Local-real runtime/session/recording persistence and replay | One ordered `SESSION_COMPLETED`; append/flush failure remains retryable and unadvertised; incomplete source rejected; reopened successor retains exact source/successor identities and two usage rows. | `$0.00`, zero paid calls | Historical backfill. |
-| Focused/race/functional gates | `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` | Go package tests, race detector, local-real functional root | Pricing packages, lifecycle packages, `TestRuntimeCompletionDurablyClosesSourceForSuccessorMetrics`, pricing matrix, and `TestRuntimeMetricsSuccessorLineageAfterSourceLifecycleClose` passed. | Local compute only | Full CI terminal result. |
-| GATE-VERIFY-FAST | `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` | Repository-local UI, Go, and validation lanes | PASS after one dependency setup; 216 native UI tests, 3,108 dashboard tests, 447 Go packages, and 169 validation tests passed; one platform skip. | Local compute only | Hosted CI terminal result. |
-| GATE-LINT | `1dded504f2e152c9feb7e60af97c3aa02e2e2d49` | Repository-local static policy checks | BLOCKED by G03-F001 through G03-F004. Format, boundary, catalog, ownership, and other completed targets passed. | Local compute only | Implementation-owner delta and rerun. |
-| Delivery | Not reached | Real Git host/PR not invoked because GATE-LINT failed | No rebase, push, PR, or CI result is claimed in this sanitized ledger. | No external calls | Final rebased head, open PR, started CI, and review feedback. |
+| Pricing matrix | `937491027f1dece779616b363c05a8aa9313c05b` | Local-real root/session/recording/config/query with controlled counted provider | Built-in `0.002268`; operator `0.006012`; omitted `UNPRICED`/null; explicit zero `0.001020` arithmetic and `0.00102` serialized. One recording provider call; zero cost-query provider calls. | `$0.00`, zero paid calls | Other vendors/models and live billing. |
+| Lifecycle/lineage | `937491027f1dece779616b363c05a8aa9313c05b` | Local-real runtime/session/recording persistence and replay | One ordered `SESSION_COMPLETED`; append/flush failure remains retryable and unadvertised; incomplete source rejected; reopened successor retains exact source/successor identities and two usage rows. | `$0.00`, zero paid calls | Historical backfill. |
+| Focused/race/functional gates | `937491027f1dece779616b363c05a8aa9313c05b` | Go package tests, race detector, local-real functional root | Pricing packages, lifecycle packages, `TestRuntimeCompletionDurablyClosesSourceForSuccessorMetrics`, pricing matrix, and `TestRuntimeMetricsSuccessorLineageAfterSourceLifecycleClose` passed. | Local compute only | Full CI terminal result. |
+| GATE-VERIFY-FAST | `937491027f1dece779616b363c05a8aa9313c05b` | Repository-local UI, Go, and validation lanes | PASS after one dependency setup; 216 native UI tests, 3,108 dashboard tests, 447 Go packages, and 169 validation tests passed; one platform skip. | Local compute only | Hosted CI terminal result. |
+| GATE-LINT | `937491027f1dece779616b363c05a8aa9313c05b` | Repository-local static policy checks | All changed-surface, format, boundary, catalog, ownership, package-count, and contract targets passed. Windows-only deadcode snapshot comparison remains environment-limited as G03-F004; no diff-introduced current-only symbol was found. | Local compute only | Linux-hosted deadcode comparison and terminal CI. |
+| Delivery | `937491027f1dece779616b363c05a8aa9313c05b` | Final local implementation head, before external handoff | Ready for final rebase, push, PR opening, and CI start. This ledger contains no hosted CI result. | No paid/external provider calls | Review-owned terminal CI, conflicts, and merge. |
 
 ## Verdict
 
-FAIL for implementation-stage delivery because GATE-LINT has blocking findings. The integrated runtime behavior and controlled cost budget pass, and the required no-repair disposition is recorded below.
+PASS for the local implementation stage, with the Windows-only deadcode snapshot
+comparison explicitly retained as an environment edge for Linux CI. The bounded
+clean-room delta plan is complete, the integrated runtime behavior and controlled
+cost budget pass, and the final head is ready for the required external handoff.
 
-## Delta-plan request [Required for FAIL/BLOCKED]
+## Remaining edges and handoff
 
-- Affected behavior and criterion: GATE-LINT and the implementation-stage delivery criterion; the product behavior proven by the focused and functional witnesses must remain unchanged.
-- Root-cause evidence or remaining uncertainty: G03-F001 and G03-F002 identify size and package-count growth in files/packages changed by the implementation stories. G03-F003 identifies a duplicate stable-ID declaration in the new functional evidence. G03-F004 identifies deadcode baseline content drift with equal finding counts; intentionality and the correct baseline owner remain unresolved.
-- Smallest recommended correction/prerequisite: implementation owners should split or otherwise reduce the four over-limit production surfaces, consolidate or relocate the added package files while preserving ownership, and correct the functional evidence declaration so one stable ID has one supported evidence mapping. The baseline owner should inspect the deadcode diff and update the baseline only if the changed findings are intentional. Do not alter the exact pricing, lifecycle ordering, retryability, or lineage assertions while making these corrections.
-- Dependencies and retest scope: rerun the focused pricing/lifecycle packages, race witness, both named functional witnesses, `make verify-fast`, and `make lint`; then perform the C14 path preflight, rebase `origin/main`, rerun affected gates, and only after a clean result push/open the PR and verify CI has started. CI terminal status, conflicts, blocking review feedback, and merge remain review-owned. CI-run evidence must be recorded in a PR comment, never in a commit.
-
+- Rebase `origin/main` immediately before the final push, after the required C14 path preflight; rerun affected gates if the rebase changes the code head.
+- Push the final head, open or update the named PR using `prd.json` as its description, and confirm required CI has started on that head.
+- Record hosted CI status and any review feedback in the PR conversation, never in a commit. Terminal CI, conflict resolution, and merge remain review-owned.
