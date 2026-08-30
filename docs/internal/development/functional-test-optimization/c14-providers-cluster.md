@@ -14,7 +14,10 @@
 - No test source, production source, shared support, generated output,
   workflow, Makefile, baseline, contract, or provider-subpackage file was
   changed for this story.
-- No operator amendment is present in `prd.json`.
+- The current operator amendment in `prd.json` authorizes a narrow
+  characterize-first owning-seam correction for the retained LONG-002
+  prompt-shaping mismatch. The story-001 read-only boundary recorded below
+  remains historical; the amendment governs the follow-up story-002 correction.
 
 The ledger freezes the current executable spine before structural edits:
 `root.BuildProcess` -> `Process.Execute` -> public Factory Session/Work/Event
@@ -566,3 +569,49 @@ No PR was opened and no CI run was started because not all PRD story items are
 `passes:true`: story 002 remains false for LONG-002, and story 004 is blocked
 by the clean-room findings above. The hosted estimate from run `33264193119`
 remains a contention-inflated estimate and is not used in any denominator.
+
+## Operator amendment characterization — owning prompt seam
+
+Recorded before the authorized source correction on `2026-08-30`, against the
+unchanged implementation head `b01b923ecac5bf2caec36fe199aa06cce3c6528f`.
+
+The amendment required characterizing whether the retained LONG-002 witness
+observed a transient intermediate or the value actually sent to a provider.
+The source call path establishes the latter:
+
+1. `pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go`
+   (`executeRequestFromWorkstationRequest`) obtains `orderedTokens`, derives
+   Work inputs with `workInputsFromTokens`, and constructs the runtime
+   `workflowContext`. `workInputsFromTokens` deliberately excludes
+   `workers.DataTypeResource`, so the detached Work request has one authored
+   Work input in the LONG-002 fixture.
+2. `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_session_recorded_usage.go`
+   (`renderRuntimePrompt`) currently calls `renderRuntimePromptMessage` with
+   the original `orderedTokens` and `workflowContext` before it calls
+   `resolveRuntimeTemplateFields`. Therefore prompt rendering sees resource
+   tokens and the unresolved workflow context, while selection fields are
+   resolved only afterward.
+3. The runtime prompt renderer delegates through the Workers root to
+   `pkg/services/workers/internal/prompting/prompt.go`. Its
+   `BuildPromptDataWithFactoryDocs` copies every supplied token into `.Inputs`
+   and reads `.Context.WorkDir`/`.Context.Env` directly from the supplied
+   `workers.Context`; it does not re-resolve the runtime selection.
+4. `executionTargetFromSelection` then places the resolved directory,
+   environment, and prompt message into the detached Workers target.
+   `pkg/services/workers/internal/service/adapt.go` later applies target
+   directory/environment values when adapting the workflow context, but it
+   forwards the already-rendered `UserMessage` unchanged. The provider
+   invocation boundary forwards that same message and execution fields to the
+   Providers request; no downstream prompt rendering step exists.
+
+The exact tagged LONG-002 run on this unchanged head therefore observed the
+real provider-facing defect: Claude and Codex received empty
+`Context.WorkDir`/env and `inputs=2`, while the retained witness requires the
+resolved execution context and one non-resource input. The timeout/retry and
+companion witnesses passed. This is a production/runtime ordering and token
+ownership defect, not a test-harness intermediate-state observation.
+
+The smallest authorized correction is to resolve execution fields before
+prompt rendering, apply the resolved fields to a detached prompt context, and
+render against the non-resource Work-input token view. The exact witness and
+all existing assertions remain unchanged.
