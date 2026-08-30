@@ -648,3 +648,97 @@ This supersedes the pre-amendment LONG-002 blocker for story 002. The older
 CLEAN-004 table remains a historical pre-correction report; final medians,
 clean-room validation, exact ACP race disposition, and hosted CI remain owned
 by story 004.
+
+## Final PERF-004 and CLEAN-004 loopback after the authorized correction
+
+This is the latest local evidence for story 004, recorded on source head
+`20919fc4240f35e899aeee13a9e8eb65e9bded4c` before this documentation update.
+The head contains the authorized runtime seam correction and the subsequent
+package-file-baseline-preserving relocation; the relocation changes no
+compiled behavior. The tracked worktree was clean for execution. The ignored
+`prd.json` and `progress.txt` scaffolding is not part of the implementation
+artifact or PR diff.
+
+### Final `PERF-004` samples
+
+Each row is a separate `go test -count=1` process under the matched baseline
+Windows/Go environment. Wall time was measured with a local stopwatch around
+the complete process; package time is the terminal Go test value. All six
+samples exited 0. The host was still process-contended after the race probes,
+so these are valid passing local samples but not portable latency claims.
+
+| Package | Sample | Wall seconds | Package seconds | Exit |
+| --- | ---: | ---: | ---: | ---: |
+| `providers` | 1 | 27.727 | 24.234 | 0 |
+| `providers` | 2 | 26.163 | 23.004 | 0 |
+| `providers` | 3 | 25.746 | 22.713 | 0 |
+| `providers/acp` | 1 | 80.634 | 78.205 | 0 |
+| `providers/acp` | 2 | 70.251 | 68.070 | 0 |
+| `providers/acp` | 3 | 74.713 | 72.655 | 0 |
+
+| Denominator | Baseline package median | Final package median | Package change | Baseline wall median | Final wall median | Wall change |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `providers` | 52.835s | 23.004s | **56.5% faster** | 68.590s | 26.163s | **61.9% faster** |
+| `providers/acp` | 140.804s | 72.655s | **48.4% faster** | 146.612s | 74.713s | **49.0% faster** |
+| Sum of package medians | 193.639s | 95.659s | **50.6% faster** | 215.202s | 100.876s | **53.1% faster** |
+
+The nominal 40-percent target is met for both packages and their sum. The
+hosted estimates from run `33264193119` remain explicitly
+**contention-inflated estimates** and are not used in either denominator.
+
+### Assertion, topology, and wait parity
+
+- The complete inventory remains **127 rows**: 35 base identities, 26 ACP
+  identities, and all 53/56/18 B/ACP/F rows. The optimization retains every
+  prior assertion and adds seam assertions for resolver-before-render order,
+  resolved prompt context, non-resource positional inputs, and caller-context
+  immutability. The inventory is therefore explicitly **same or stronger**.
+- The existing shared root/listener and ACP persistent-peer/process topology is
+  retained. Only the previously audited independent invocation cohorts overlap;
+  lifecycle, replay, real-child, persistent-stdio, and cleanup witnesses stay
+  isolated for their recorded reasons.
+- Waits removed: **0**. Sleeps, polls, public timeout budgets, release files,
+  and cleanup guards removed: **0**. New sleeps or timeout padding: **0**.
+- The package file-count baseline is unchanged after the prompt projection and
+  regression test were placed in existing related files; backend size,
+  maintainability, formatting, and package structure checks pass.
+
+### Latest CLEAN-004 evidence
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Complete base and ACP packages | PASS | `go test ./tests/functional/providers ./tests/functional/providers/acp -count=1 -timeout=30m` passed after the final source relocation (`12.849s` and `80.325s` package time); the six final samples above also passed. | None for untagged package behavior. |
+| LONG-002 | PASS | The exact `functionallong` selector passed after the final source relocation (`2.429s` package time), including timeout/retry, Claude/Codex prompt context, one Work input, request shape, completion, and cleanup. | None for the declared local-real selector. |
+| Base full-package race | PASS | `go test -race ./tests/functional/providers -count=1 -timeout=15m` passed after the final source relocation (`27.509s` package time), with no race report. | Other unexercised schedules. |
+| ACP full-package race | BLOCKED | The exact supported command was run twice on the final source layout and failed only in process-start/lifecycle contention (`178.468s` and `217.124s` package time); no `WARNING: DATA RACE` was emitted. The prior exact run on the behavior-equivalent pre-relocation head passed (`89.100s`); the bounded `-parallel=4` fallback on the final layout also hit two startup-sensitive negative tests (`203.381s`) without a race report. | An uncontended exact ACP race run on the final source layout. |
+| Functional boundary and package structure | PASS | `go run ./cmd/functionalboundarycheck` and `make pkg-structure` passed; the focused rerun after the relocation also passed `make pkg-file-count`, `make backend-size`, and `make pkg-maint`. | None for these repository rules. |
+| Fast verification | BLOCKED | `make verify-fast` stopped before Go/UI tests at `TS2688: Cannot find type definition file for 'bun'`. | UI dependency/tooling installation. |
+| Repository lint | BLOCKED | Final `make lint` passed vet, backend-size, pkg-maint, pkg-file-count, package boundaries/structure, catalogs, contracts, formatting, and related gates. It remained blocked only by missing Biome (`@biomejs/biome`), missing Knip, and pre-existing deadcode baseline drift (`3074` recorded vs `3072` current). | Shared UI toolchain and deadcode-baseline owner disposition. |
+
+### CLEAN-004 customer journey and loopback verdict
+
+1. The combined package command traversed the existing `root.BuildProcess` ->
+   `Process.Execute` -> public Factory Session/Work/Event and controlled/local-
+   real provider/process spine and exited 0.
+2. The exact LONG-002 selector and both package-specific final medians passed;
+   the retained prompt/request/cleanup witnesses remained exact.
+3. Functional boundary, package structure, file-count, backend-size,
+   maintainability, formatting, and contract/catalog checks passed.
+4. The exact ACP race and shared UI/deadcode tools remain environmental
+   BLOCKED edges. No assertion, timeout, sleep, resource, production test
+   witness, or baseline was weakened or silently repaired.
+
+**BLOCKED loopback**. The implementation behavior and local performance target
+are complete, but exact ACP race evidence and shared UI/deadcode tooling need
+an uncontended/fully provisioned validation environment. The smallest delta is
+review-owned or environment-owned: rerun the exact ACP race and provide the
+missing UI tools plus the deadcode-baseline disposition. No further code
+change is justified by the current evidence.
+
+## Final delivery disposition
+
+The implementation head is ready for the authorized PR handoff after the
+final rebase. CI evidence belongs in the PR comment and will not be committed.
+Terminal CI, merge-conflict resolution, and merge remain review-owned. The
+hosted estimate `33264193119` remains a contention-inflated estimate and is not
+used as a denominator.
