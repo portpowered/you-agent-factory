@@ -123,9 +123,10 @@
     },
     {
       "packagePath": "tests/functional/sessions/restart",
-      "count": 3,
+      "count": 4,
       "siteIds": [
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01",
+        "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-TestBoardPersistenceSharedBinaryPartialSetupFailure-01",
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01",
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01"
       ]
