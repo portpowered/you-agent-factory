@@ -22,6 +22,9 @@ import (
 // dispatch crosses a real provider command edge and the public dispatch-list
 // endpoint without losing measured usage or inventing absent token facts.
 func TestAPIPetriDispatchUsageReachesDispatchList(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	tests := []petriDispatchUsageCase{
 		{
 			name:         "provider token metadata is exposed",

@@ -24,6 +24,9 @@ import (
 // invocations without fabricating terminal success results.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	t.Run("successfulInvocationExposesPrimaryResultOnInvocationAndWorkReads", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)
 		server := startInvocationServer(
@@ -96,18 +99,18 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 		waitForBlockingInvocationStart(t, blocking)
 	})
 
-	t.Run("rejectsWhitespaceOnlyTextWithTypedPublicError", func(t *testing.T) {
-		dir := scaffoldInvocationFactory(t, nil)
-		server := startInvocationServer(
-			t,
-			dir,
-			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
-			nil,
-		)
+	validationDir := scaffoldInvocationFactory(t, nil)
+	validationServer := startInvocationServer(
+		t,
+		validationDir,
+		support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+		nil,
+	)
 
+	t.Run("rejectsWhitespaceOnlyTextWithTypedPublicError", func(t *testing.T) {
 		response := postInvocationExpectStatus(
 			t,
-			server.URL(),
+			validationServer.URL(),
 			textInvocationRequest(t, "   ", nil),
 			http.StatusBadRequest,
 		)
@@ -117,17 +120,9 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	t.Run("rejectsArgsWithoutActiveSignatureWithTypedPublicError", func(t *testing.T) {
-		dir := scaffoldInvocationFactory(t, nil)
-		server := startInvocationServer(
-			t,
-			dir,
-			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
-			nil,
-		)
-
 		response := postInvocationExpectStatus(
 			t,
-			server.URL(),
+			validationServer.URL(),
 			factoryapi.InvocationRequest{
 				Args: &map[string]any{"input": "hello"},
 			},
@@ -142,17 +137,9 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	t.Run("rejectsInvalidStructuredArgValueShapeWithTypedPublicError", func(t *testing.T) {
-		dir := scaffoldInvocationFactory(t, nil)
-		server := startInvocationServer(
-			t,
-			dir,
-			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
-			nil,
-		)
-
 		response := postInvocationExpectStatus(
 			t,
-			server.URL(),
+			validationServer.URL(),
 			factoryapi.InvocationRequest{
 				Args: &map[string]any{"input": 7},
 			},
@@ -242,6 +229,9 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 // identifier and compatible correlation fields so customers can join summaries
 // to detail without private runtime handles.
 func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	dir := scaffoldDispatchCorrelationFactory(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -297,6 +287,9 @@ func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 // public results read surface while the session is still non-terminal and
 // before final completion is available.
 func TestAPIPartialResultIsAvailableBeforeTerminalCompletion(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	dir := scaffoldPartialResultFactory(t)
 	provider := newPartialResultBlockingProvider(partialResultWorkflowName)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

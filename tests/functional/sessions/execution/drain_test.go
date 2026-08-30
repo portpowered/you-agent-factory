@@ -29,6 +29,9 @@ const incompleteDrainListenAddress = "127.0.0.1:7437"
 // finite hosted run returns a failure after its listener and runtime have
 // joined when the queue drains around non-terminal customer Work.
 func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	for _, mode := range []struct {
 		name        string
 		flag        string
@@ -244,6 +247,9 @@ func waitForSignal(t *testing.T, signal <-chan struct{}, message string) {
 }
 
 func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	for _, scenario := range []struct {
 		name     string
 		workFile func(*testing.T) string
@@ -295,6 +301,9 @@ func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
 }
 
 func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+
 	for _, mode := range []struct {
 		name        string
 		flag        string

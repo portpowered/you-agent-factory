@@ -427,6 +427,67 @@ No production, public contract, generated, UI, shared-support, restart, or
 other Sessions package files changed. Remote ACP/provider behavior, hosted CI,
 and merge remain unproven and are owned by the final handoff.
 
+## Story 004 Sessions execution optimization result
+
+Story: `fto-c14-pkg-sessions-cluster-004`
+Status: **PASS — Sessions execution optimization complete; final cluster
+reconciliation and PR handoff remain owned by story 005.**
+
+Independent execution selectors now run concurrently behind an eight-slot
+package-local fixture bound. Each selector still owns its Factory home, root
+process invocation, API listener, session, provider edge, and cleanup; the
+bound only limits host startup contention. The three typed invocation-input
+failure subcases share one immutable Factory and static-provider API fixture,
+because validation rejects them before Work or provider execution. Timeout,
+cancellation, partial-result, drain, dispatch, CLI/API parity, and durable
+result witnesses retain their isolated provider, listener, session, and
+process boundaries.
+
+No assertion, sleep, timeout, public boundary, production file, shared support,
+generated output, or sibling Sessions package changed. The existing listener
+start/stop, cancellation, partial-result, terminal-state, usage, correlation,
+and CLI-compatible assertions remain active. The complete EXEC-001 through
+EXEC-015 mapping above is unchanged and is the final witness inventory.
+
+### Final EXEC package evidence
+
+The exact command was run sequentially three times with a PowerShell
+`Diagnostics.Stopwatch`; every sample exited `0`:
+
+```text
+go test ./tests/functional/sessions/execution/... -count=1
+```
+
+| Sample 1 | Sample 2 | Sample 3 | Median | Baseline median | Improvement |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 16.351s | 15.796s | 19.421s | **16.351s** | 34.896s | **53.1%** |
+
+The package gate passed with exit `0` on all three samples. The final samples
+were collected after the eight-slot bound and validation-fixture reuse were
+both in place; the same-host spread is retained and the result is directional,
+not an absolute latency claim.
+
+The changed drain, cancellation, partial-result, and visibility witnesses
+passed the declared ten-run repeat with exit `0` in package elapsed `152.952s`:
+
+```text
+go test ./tests/functional/sessions/execution -run '^(TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal|TestHostedFiniteRunsKeepEmptyAndTerminalSuccess|TestHostedContinuousRunsStayLiveWhileIdle|TestAPIResultAndResultsExposeTerminalInvocationData|TestAPIInvocationResultMatchesCLICompatibleFacts|TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads|TestAPIPartialResultIsAvailableBeforeTerminalCompletion)$' -count=10
+```
+
+The same selector set passed supported race execution with exit `0` in package
+elapsed `55.174s`:
+
+```text
+go test -race ./tests/functional/sessions/execution -run '^(TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal|TestHostedFiniteRunsKeepEmptyAndTerminalSuccess|TestHostedContinuousRunsStayLiveWhileIdle|TestAPIResultAndResultsExposeTerminalInvocationData|TestAPIInvocationResultMatchesCLICompatibleFacts|TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads|TestAPIPartialResultIsAvailableBeforeTerminalCompletion)$' -count=1
+```
+
+The final gate and repeat/race runs preserved the bad-input, timeout,
+cancellation, unresolved-result, non-terminal-drain, partial-result,
+dispatch-usage, public-correlation, cleanup, and API/CLI parity outcomes. No
+EXEC assertion was deleted, weakened, or skipped. The package has no separate
+global process census; its existing listener and command cleanup assertions
+remained passing.
+
 ## Failure, privacy, and evidence boundaries
 
 - All baseline and profile commands exited `0`; the planned environmentally
@@ -444,11 +505,11 @@ and merge remain unproven and are owned by the final handoff.
 
 ## Evidence boundaries and handoff
 
-This story proves the unchanged current-head baseline, selector cost, explicit
-setup/wait topology, existing package-local resource observations, and a
-complete ROOT/CHAT/EXEC assertion denominator before structural edits. It does
-not prove optimization, post-change medians, race safety after changes, the
-final clean-room cluster, hosted PR performance, terminal CI, remote provider
-behavior, or merge. Those edges remain owned by stories 002–005 and
+The characterization section proves the unchanged current-head baseline,
+selector cost, explicit setup/wait topology, existing package-local resource
+observations, and the complete ROOT/CHAT/EXEC assertion denominator. Stories
+002–004 add their package-local optimization evidence above. The final
+clean-room cluster, hosted PR performance, terminal CI, remote provider
+behavior, and merge remain unproven and are owned by story 005,
 `GATE-ROOT-001`, `GATE-CHAT-001`, `GATE-EXEC-001`, `GATE-RACE-001`,
 `GATE-PR-001`, and `VAL-001`.
