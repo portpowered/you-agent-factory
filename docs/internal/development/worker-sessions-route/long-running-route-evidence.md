@@ -189,3 +189,87 @@ Worker Session terminalization/control semantics changed. This bounded local
 evidence proves the corrected matrix but not OS executable packaging or the
 literal multi-day daemon hypothesis; those remain GATE-LOOPBACK and
 GATE-OPERATOR-LONG-RUN.
+
+## Story 003 actual-binary loopback
+
+Status: GATE-LOOPBACK PASS on the rebased head
+`6300480d5c4e3e5c2ba4aa02b3f4547987a0af1a`.
+
+Procedure:
+
+```text
+go build -buildvcs=false -o <temp>/you.exe ./cmd/factory
+you.exe run --dir <temp>/factory --continuously --with-server --listen 127.0.0.1:<port> --no-record --quiet
+you.exe worker-sessions list --work-id <work-id> --server http://127.0.0.1:<port>
+you.exe worker-sessions list --work-id <work-id> --server http://127.0.0.1:<port> --output json
+GET /factory-sessions/~default/worker-sessions?workId=<work-id>
+GET /status
+GET /factory-sessions/~default/events
+you.exe --server http://127.0.0.1:<port> server stop
+```
+
+The artifact was a Windows `go1.25.0` `windows/amd64` binary with SHA-256
+`D5FB53A9F156622F8FA587D15C1F1AD3FF704C47025E79395560B2B5D6BF1A2C`. The
+Factory ran from isolated temporary `HOME`/configuration and Factory roots,
+using one local `cmd.exe /c echo default-output` `SCRIPT_WORKER`; no remote or
+paid provider was called.
+
+Observed values:
+
+| Value | Result |
+| --- | --- |
+| Work ID | `batch-request-4e08f2ef-dc6e-4354-a893-9c4a9253cf9a-worker-sessions-loopback-work` |
+| Dispatch/attempt ID | `0b3633d4-3bb1-42ce-9ec1-7a69972d706b` |
+| Worker Session ID | `0b3633d4-3bb1-42ce-9ec1-7a69972d706b` |
+| Factory Session | `~default` |
+| State | `COMPLETED` |
+| Work IDs | `[batch-request-4e08f2ef-dc6e-4354-a893-9c4a9253cf9a-worker-sessions-loopback-work]` |
+
+The human CLI exited `0` and visibly contained the Work and Worker Session
+IDs. JSON CLI exited `0`; REST returned HTTP `200`; both returned one
+observation and matched on identity, Work lineage, Factory Session, state,
+confirmation state, and duration basis. `/status` returned HTTP `200` with
+`factoryState=RUNNING` before and after admission. Factory Event SSE returned
+HTTP `200` with `text/event-stream`, eight retained events, and one public
+`DISPATCH_WORKER_SESSION_ASSOCIATION`, correlated to the Work through the
+public `DISPATCH_REQUEST` context and dispatch ID. `server stop` exited `0`,
+the built Factory process exited `0`, the port was reusable, and the isolated
+temporary root was removed.
+
+Proved: the delivered built binary, public CLI route, public REST route, public
+association correlation, health/status stream, and clean local shutdown all
+work together on the final source head.
+
+Not proved: literal multi-day uptime, production proxies or infrastructure,
+multiple concurrent deployments, persistence across restart, or terminal CI.
+
+## GATE-OPERATOR-LONG-RUN exact handoff
+
+After merge, name the healthy deployment and the long-duration window, then run
+these exact commands:
+
+```text
+$serverURL = "<server-url>"
+$workID = "<work-id>"
+you worker-sessions list --work-id $workID --server $serverURL
+you worker-sessions list --work-id $workID --server $serverURL --output json
+curl.exe --fail --silent --show-error "$serverURL/factory-sessions/~default/worker-sessions?workId=$workID"
+curl.exe --fail --silent --show-error "$serverURL/status"
+curl.exe --fail --silent --show-error -N "$serverURL/factory-sessions/~default/events"
+```
+
+Expected values: the human CLI contains the Worker Session ID captured from
+the public `DISPATCH_WORKER_SESSION_ASSOCIATION`; JSON and REST succeed and
+match on `workerSessionId`, `attemptId`, `workId`, `workIds`, Factory Session
+alias, and `state`; `/status` is healthy; and SSE returns a healthy event
+stream.
+
+Stop the gate and open a new correction lane if any command returns
+`FACTORY_UNREACHABLE`, a non-success status, a mismatched identity, a stale
+observation, an unhealthy `/status`, a failed SSE stream, or an owned
+process/listener that does not shut down cleanly. Do not silently repair the
+deployment while preserving the result.
+
+Limitation: the local loopback was short and used one deterministic Work. It is
+not evidence of the reported approximately 2.5-day duration; the named
+post-merge operator gate remains the only proof for that edge.
