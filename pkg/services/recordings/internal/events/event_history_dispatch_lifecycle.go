@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	eventIDDispatchQueuedPrefix      = "factory-event/dispatch-queued"
-	eventIDDispatchInterruptedPrefix = "factory-event/dispatch-interrupted"
-	eventIDDispatchReconciledPrefix  = "factory-event/dispatch-reconciled"
-	eventIDArtifactCreatedPrefix     = "factory-event/artifact-created"
+	eventIDDispatchQueuedPrefix        = "factory-event/dispatch-queued"
+	eventIDDispatchInterruptedPrefix   = "factory-event/dispatch-interrupted"
+	eventIDDispatchReconciledPrefix    = "factory-event/dispatch-reconciled"
+	eventIDDispatchResultIgnoredPrefix = "factory-event/dispatch-result-ignored"
+	eventIDArtifactCreatedPrefix       = "factory-event/artifact-created"
 )
 
 func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEvent) bool {
@@ -225,6 +226,100 @@ type DispatchReconciledInput struct {
 	ResultArtifactRef    *interfaces.FactoryArtifactRef
 	ArtifactIDs          []string
 	FailureDetail        *workerexecution.FailureDetail
+}
+
+func (h *FactoryEventHistory) claimDispatchResultIgnoredEvent(eventID string) bool {
+	if h == nil || eventID == "" {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.ignoredDispatchResultIDs == nil {
+		h.ignoredDispatchResultIDs = make(map[string]struct{})
+	}
+	if _, exists := h.ignoredDispatchResultIDs[eventID]; exists {
+		return false
+	}
+	for _, event := range h.events {
+		if event.Id == eventID {
+			h.ignoredDispatchResultIDs[eventID] = struct{}{}
+			return false
+		}
+	}
+	h.ignoredDispatchResultIDs[eventID] = struct{}{}
+	return true
+}
+
+// RecordDispatchResultIgnored records one redacted, replay-safe diagnostic for
+// a result retired after correlated Work was already terminal or failed.
+// Event identity is deterministic per dispatch so equivalent redelivery is a
+// no-op even when it reaches the ledger through a second path.
+func (h *FactoryEventHistory) RecordDispatchResultIgnored(input recordings.DispatchResultIgnoredInput, eventTime time.Time) {
+	if h == nil {
+		return
+	}
+	dispatchID := strings.TrimSpace(input.DispatchID)
+	if dispatchID == "" || input.ResultOutcome == "" || strings.TrimSpace(input.ObservedState.Name) == "" || input.ObservedState.Type == "" {
+		return
+	}
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		reason = interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal
+	}
+	if reason != interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal {
+		return
+	}
+	workID := ""
+	for _, candidate := range input.WorkIDs {
+		if candidate = strings.TrimSpace(candidate); candidate != "" {
+			workID = candidate
+			break
+		}
+	}
+	if workID == "" {
+		return
+	}
+	eventID := fmt.Sprintf("%s/%s", eventIDDispatchResultIgnoredPrefix, dispatchID)
+	if !h.claimDispatchResultIgnoredEvent(eventID) {
+		return
+	}
+	if eventTime.IsZero() {
+		eventTime = h.now()
+	}
+	eventTime = canonicalDispatchLifecycleEventTime(eventTime)
+	var context interfaces.FactoryEventContext
+	if sessionID := strings.TrimSpace(input.SessionID); sessionID != "" {
+		context = h.dispatchLifecycleContext(
+			sessionID,
+			input.OrchestratorKind,
+			input.OrchestratorDialect,
+			input.PhaseID,
+			input.PhaseName,
+			dispatchID,
+			input.Source,
+			input.Tick,
+			eventTime,
+			h.allocateSessionLifecycleSequence(),
+		)
+	} else {
+		context = h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       input.Tick,
+			EventTime:  eventTime,
+			DispatchID: stringPtr(dispatchID),
+			Source:     stringPtrIfNotEmpty(input.Source),
+		})
+	}
+	context.WorkIDs = stringSlicePtr([]string{workID})
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchResultIgnored,
+		eventID,
+		context,
+		interfaces.DispatchResultIgnoredEventPayload{
+			Reason:        reason,
+			ResultOutcome: input.ResultOutcome,
+			ObservedState: input.ObservedState,
+		},
+	))
 }
 
 // ArtifactCreatedInput carries replay-safe facts for ARTIFACT_CREATED.

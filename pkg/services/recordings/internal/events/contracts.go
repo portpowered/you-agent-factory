@@ -71,6 +71,7 @@ func NewRuntimeLedger(
 var _ recordings.RuntimeEventLedger = (*FactoryEventHistory)(nil)
 var _ recordings.CompletedFlushWatermarkReader = (*FactoryEventHistory)(nil)
 var _ recordings.DispatchWorkerSessionAssociationRecorder = (*FactoryEventHistory)(nil)
+var _ recordings.DispatchResultIgnoredRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.SessionProjectionReader = (*FactoryEventHistory)(nil)
 

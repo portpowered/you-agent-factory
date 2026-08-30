@@ -376,6 +376,8 @@ type (
 	DispatchInterruptedEventPayload            = interfaces.DispatchInterruptedEventPayload
 	DispatchQueuedEventPayload                 = interfaces.DispatchQueuedEventPayload
 	DispatchReconciledEventPayload             = interfaces.DispatchReconciledEventPayload
+	DispatchResultIgnoredEventPayload          = interfaces.DispatchResultIgnoredEventPayload
+	ObservedWorkState                          = interfaces.ObservedWorkState
 	DispatchRequestEventPayload                = interfaces.DispatchRequestEventPayload
 	HumanApprovalDecision                      = interfaces.HumanApprovalDecision
 	HumanApprovalRequestedEventPayload         = interfaces.HumanApprovalRequestedEventPayload
@@ -412,44 +414,46 @@ type (
 const (
 	FactoryEventSchemaVersionV1 = interfaces.FactoryEventSchemaVersionV1
 
-	FactoryEventTypeAgentRunResponse              = interfaces.FactoryEventTypeAgentRunResponse
-	FactoryEventTypeArtifactCreated               = interfaces.FactoryEventTypeArtifactCreated
-	FactoryEventTypeDispatchInterrupted           = interfaces.FactoryEventTypeDispatchInterrupted
-	FactoryEventTypeDispatchQueued                = interfaces.FactoryEventTypeDispatchQueued
-	FactoryEventTypeDispatchReconciled            = interfaces.FactoryEventTypeDispatchReconciled
-	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
-	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
-	FactoryEventTypeDispatchWorkerSessionAssoc    = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
-	FactoryEventTypeHumanApprovalRequested        = interfaces.FactoryEventTypeHumanApprovalRequested
-	HumanApprovalDecisionApprove                  = interfaces.HumanApprovalDecisionApprove
-	HumanApprovalDecisionReject                   = interfaces.HumanApprovalDecisionReject
-	HumanApprovalStatusPending                    = interfaces.HumanApprovalStatusPending
-	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
-	FactoryEventTypeFactoryChangeRequest          = interfaces.FactoryEventTypeFactoryChangeRequest
-	FactoryEventTypeFactoryChangeFailed           = interfaces.FactoryEventTypeFactoryChangeFailed
-	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
-	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
-	FactoryEventTypeInferenceResponse             = interfaces.FactoryEventTypeInferenceResponse
-	FactoryEventTypeInitialStructureRequest       = interfaces.FactoryEventTypeInitialStructureRequest
-	FactoryEventTypeJavaScriptCheckpointRef       = interfaces.FactoryEventTypeJavaScriptCheckpointRef
-	FactoryEventTypeJavaScriptPhaseChange         = interfaces.FactoryEventTypeJavaScriptPhaseChange
-	FactoryEventTypeModelRequest                  = interfaces.FactoryEventTypeModelRequest
-	FactoryEventTypeModelResponse                 = interfaces.FactoryEventTypeModelResponse
-	FactoryEventTypeOrchestratorCheckpointWritten = interfaces.FactoryEventTypeOrchestratorCheckpointWritten
-	FactoryEventTypeOrchestratorPhaseChanged      = interfaces.FactoryEventTypeOrchestratorPhaseChanged
-	FactoryEventTypeRelationshipChangeRequest     = interfaces.FactoryEventTypeRelationshipChangeRequest
-	FactoryEventTypeRunRequest                    = interfaces.FactoryEventTypeRunRequest
-	FactoryEventTypeRunResponse                   = interfaces.FactoryEventTypeRunResponse
-	FactoryEventTypeScriptRequest                 = interfaces.FactoryEventTypeScriptRequest
-	FactoryEventTypeScriptResponse                = interfaces.FactoryEventTypeScriptResponse
-	FactoryEventTypeSessionCompleted              = interfaces.FactoryEventTypeSessionCompleted
-	FactoryEventTypeSessionLifecycleControl       = interfaces.FactoryEventTypeSessionLifecycleControl
-	FactoryEventTypeSessionPaused                 = interfaces.FactoryEventTypeSessionPaused
-	FactoryEventTypeSessionResultUpdated          = interfaces.FactoryEventTypeSessionResultUpdated
-	FactoryEventTypeSessionResumed                = interfaces.FactoryEventTypeSessionResumed
-	FactoryEventTypeSessionStarted                = interfaces.FactoryEventTypeSessionStarted
-	FactoryEventTypeWorkRequest                   = interfaces.FactoryEventTypeWorkRequest
-	FactoryEventTypeWorkStateChange               = interfaces.FactoryEventTypeWorkStateChange
+	FactoryEventTypeAgentRunResponse               = interfaces.FactoryEventTypeAgentRunResponse
+	FactoryEventTypeArtifactCreated                = interfaces.FactoryEventTypeArtifactCreated
+	FactoryEventTypeDispatchInterrupted            = interfaces.FactoryEventTypeDispatchInterrupted
+	FactoryEventTypeDispatchQueued                 = interfaces.FactoryEventTypeDispatchQueued
+	FactoryEventTypeDispatchReconciled             = interfaces.FactoryEventTypeDispatchReconciled
+	FactoryEventTypeDispatchResultIgnored          = interfaces.FactoryEventTypeDispatchResultIgnored
+	FactoryEventTypeDispatchRequest                = interfaces.FactoryEventTypeDispatchRequest
+	FactoryEventTypeDispatchResponse               = interfaces.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc     = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested         = interfaces.FactoryEventTypeHumanApprovalRequested
+	HumanApprovalDecisionApprove                   = interfaces.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                    = interfaces.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                     = interfaces.HumanApprovalStatusPending
+	FactoryEventTypeFactoryChange                  = interfaces.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest           = interfaces.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed            = interfaces.FactoryEventTypeFactoryChangeFailed
+	FactoryEventTypeFactoryStateResponse           = interfaces.FactoryEventTypeFactoryStateResponse
+	FactoryEventTypeInferenceRequest               = interfaces.FactoryEventTypeInferenceRequest
+	FactoryEventTypeInferenceResponse              = interfaces.FactoryEventTypeInferenceResponse
+	FactoryEventTypeInitialStructureRequest        = interfaces.FactoryEventTypeInitialStructureRequest
+	FactoryEventTypeJavaScriptCheckpointRef        = interfaces.FactoryEventTypeJavaScriptCheckpointRef
+	FactoryEventTypeJavaScriptPhaseChange          = interfaces.FactoryEventTypeJavaScriptPhaseChange
+	FactoryEventTypeModelRequest                   = interfaces.FactoryEventTypeModelRequest
+	FactoryEventTypeModelResponse                  = interfaces.FactoryEventTypeModelResponse
+	FactoryEventTypeOrchestratorCheckpointWritten  = interfaces.FactoryEventTypeOrchestratorCheckpointWritten
+	FactoryEventTypeOrchestratorPhaseChanged       = interfaces.FactoryEventTypeOrchestratorPhaseChanged
+	FactoryEventTypeRelationshipChangeRequest      = interfaces.FactoryEventTypeRelationshipChangeRequest
+	FactoryEventTypeRunRequest                     = interfaces.FactoryEventTypeRunRequest
+	FactoryEventTypeRunResponse                    = interfaces.FactoryEventTypeRunResponse
+	FactoryEventTypeScriptRequest                  = interfaces.FactoryEventTypeScriptRequest
+	FactoryEventTypeScriptResponse                 = interfaces.FactoryEventTypeScriptResponse
+	FactoryEventTypeSessionCompleted               = interfaces.FactoryEventTypeSessionCompleted
+	FactoryEventTypeSessionLifecycleControl        = interfaces.FactoryEventTypeSessionLifecycleControl
+	FactoryEventTypeSessionPaused                  = interfaces.FactoryEventTypeSessionPaused
+	FactoryEventTypeSessionResultUpdated           = interfaces.FactoryEventTypeSessionResultUpdated
+	FactoryEventTypeSessionResumed                 = interfaces.FactoryEventTypeSessionResumed
+	FactoryEventTypeSessionStarted                 = interfaces.FactoryEventTypeSessionStarted
+	FactoryEventTypeWorkRequest                    = interfaces.FactoryEventTypeWorkRequest
+	FactoryEventTypeWorkStateChange                = interfaces.FactoryEventTypeWorkStateChange
+	DispatchResultIgnoredReasonWorkAlreadyTerminal = interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal
 )
 
 var NewFactoryEvent = interfaces.NewFactoryEvent
@@ -1928,6 +1932,30 @@ type DispatchWorkerSessionAssociationRecorder interface {
 // widening every legacy RuntimeLedger test double.
 type HumanApprovalRequestRecorder interface {
 	RecordHumanApprovalRequested(int, FactoryDispatchRecord, time.Time)
+}
+
+// DispatchResultIgnoredInput carries only replay-safe identity and authored
+// state facts for a stale dispatch result diagnostic. Raw worker output,
+// errors, and Work payloads are deliberately not part of this capability.
+type DispatchResultIgnoredInput struct {
+	SessionID           string
+	OrchestratorKind    string
+	OrchestratorDialect string
+	PhaseID             string
+	PhaseName           string
+	DispatchID          string
+	Source              string
+	Tick                int
+	WorkIDs             []string
+	Reason              string
+	ResultOutcome       workerexecution.WorkOutcome
+	ObservedState       ObservedWorkState
+}
+
+// DispatchResultIgnoredRecorder is the optional RuntimeLedger capability for
+// recording a stale dispatch result without widening legacy ledger doubles.
+type DispatchResultIgnoredRecorder interface {
+	RecordDispatchResultIgnored(DispatchResultIgnoredInput, time.Time)
 }
 
 // RuntimeEventLedger combines runtime-domain and Worker event publication for

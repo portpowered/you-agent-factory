@@ -9669,6 +9669,7 @@ components:
             - $ref: '#/components/schemas/ScriptResponseEventPayload'
             - $ref: '#/components/schemas/AgentRunResponseEventPayload'
             - $ref: '#/components/schemas/DispatchResponseEventPayload'
+            - $ref: '#/components/schemas/DispatchResultIgnoredEventPayload'
             - $ref: '#/components/schemas/WorkStateChangeEventPayload'
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
             - $ref: '#/components/schemas/RunResponseEventPayload'
@@ -9726,6 +9727,7 @@ components:
           SCRIPT_RESPONSE: '#/components/schemas/ScriptResponseEventPayload'
           AGENT_RUN_RESPONSE: '#/components/schemas/AgentRunResponseEventPayload'
           DISPATCH_RESPONSE: '#/components/schemas/DispatchResponseEventPayload'
+          DISPATCH_RESULT_IGNORED: '#/components/schemas/DispatchResultIgnoredEventPayload'
           WORK_STATE_CHANGE: '#/components/schemas/WorkStateChangeEventPayload'
           FACTORY_STATE_RESPONSE: '#/components/schemas/FactoryStateResponseEventPayload'
           RUN_RESPONSE: '#/components/schemas/RunResponseEventPayload'
@@ -9788,6 +9790,7 @@ components:
         - FactoryEventTypeScriptResponse
         - FactoryEventTypeAgentRunResponse
         - FactoryEventTypeDispatchResponse
+        - FactoryEventTypeDispatchResultIgnored
         - FactoryEventTypeWorkStateChange
         - FactoryEventTypeFactoryStateResponse
         - FactoryEventTypeRunResponse
@@ -9824,6 +9827,7 @@ components:
         - SCRIPT_RESPONSE
         - AGENT_RUN_RESPONSE
         - DISPATCH_RESPONSE
+        - DISPATCH_RESULT_IGNORED
         - WORK_STATE_CHANGE
         - FACTORY_STATE_RESPONSE
         - RUN_RESPONSE
@@ -9860,6 +9864,7 @@ components:
         - A script-backed worker command attempt returned or failed before a normal exit.
         - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
         - A workstation response finished processing and produced an outcome.
+        - A stale dispatch result was ignored because correlated Work was already terminal.
         - A work item moved between authored marking states.
         - The factory lifecycle state response was recorded.
         - A factory run response ended and final metadata is available.
@@ -15640,6 +15645,24 @@ components:
           enum:
             - CANCELED
             - SUPERSEDED
+    DispatchResultIgnoredEventPayload:
+      type: object
+      additionalProperties: false
+      description: Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded.
+      required:
+        - reason
+        - resultOutcome
+        - observedState
+      properties:
+        reason:
+          type: string
+          enum:
+            - WORK_ALREADY_TERMINAL
+          description: Stable reason the result was not applied.
+        resultOutcome:
+          $ref: '#/components/schemas/WorkOutcome'
+        observedState:
+          $ref: '#/components/schemas/WorkState'
     GlobalConfigACPIntegration:
       type: object
       additionalProperties: false

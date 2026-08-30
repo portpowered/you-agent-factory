@@ -193,6 +193,93 @@ func TestHistoryTransitionerPipeline_TerminalResultOutcomeRoutes(t *testing.T) {
 	}
 }
 
+func TestTransitioner_LateDispatchResultForTerminalOrFailedWorkIsIgnored(t *testing.T) {
+	now := time.Date(2026, time.August, 29, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name      string
+		placeID   string
+		stateName string
+		stateType interfaces.StateType
+	}{
+		{name: "terminal", placeID: "wt-code:done", stateName: "done", stateType: interfaces.StateTypeTerminal},
+		{name: "failed", placeID: "wt-code:failed", stateName: "failed", stateType: interfaces.StateTypeFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			transitioner := NewTransitioner(buildPipelineNet(), nil, func() time.Time { return now }, testTokenTransformer(buildPipelineNet()), nil, nil, nil, testWorkPropagationPolicy())
+			snapshot := pipelineSnapshot(
+				test.placeID,
+				"t1",
+				"d-late-"+test.name,
+				factorytoken.Color{WorkID: "w-terminal", WorkTypeID: "wt-code"},
+				now,
+			)
+			snapshot.Results = []workerexecution.WorkResult{{
+				DispatchID: "d-late-" + test.name, TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted,
+				Output: "worker output must not be retained", Error: "worker error must not be retained",
+			}}
+
+			result, err := transitioner.Execute(context.Background(), &snapshot)
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result == nil {
+				t.Fatal("Execute() result = nil, want retired ignored dispatch")
+			}
+			if len(result.Mutations) != 0 || len(result.GeneratedBatches) != 0 {
+				t.Fatalf("ignored result changed runtime = mutations:%#v generated:%#v", result.Mutations, result.GeneratedBatches)
+			}
+			if len(result.CompletedDispatches) != 1 {
+				t.Fatalf("completed dispatches = %#v, want one ignored dispatch", result.CompletedDispatches)
+			}
+			completed := result.CompletedDispatches[0]
+			if completed.IgnoredWorkID != "w-terminal" || completed.IgnoredResult == nil {
+				t.Fatalf("ignored completion = %#v, want Work w-terminal marker", completed)
+			}
+			ignored := completed.IgnoredResult
+			if ignored.Reason != interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal ||
+				ignored.ResultOutcome != workerexecution.OutcomeAccepted ||
+				ignored.ObservedState.Name != test.stateName || ignored.ObservedState.Type != test.stateType {
+				t.Fatalf("ignored payload = %#v, want %s/%s accepted", ignored, test.stateName, test.stateType)
+			}
+		})
+	}
+}
+
+func TestTransitioner_LateDispatchResultGuardsMultiInputResultAtomically(t *testing.T) {
+	now := time.Date(2026, time.August, 29, 12, 31, 0, 0, time.UTC)
+	net := buildPipelineNet()
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	snapshot := pipelineSnapshot(
+		"wt-code:done", "t1", "d-multi-late",
+		factorytoken.Color{WorkID: "w-terminal", WorkTypeID: "wt-code"}, now,
+	)
+	second := factorytoken.Token{
+		ID: "tok-2", PlaceID: "wt-code:init", CreatedAt: now, EnteredAt: now,
+		Color: factorytoken.Color{WorkID: "w-processing", WorkTypeID: "wt-code"},
+	}
+	snapshot.Marking.Tokens[second.ID] = &second
+	snapshot.Marking.PlaceTokens[second.PlaceID] = []string{second.ID}
+	first := *snapshot.Marking.Tokens["tok-1"]
+	snapshot.Dispatches["d-multi-late"].ConsumedTokens = factorytoken.ToWorkerSlice([]factorytoken.Token{first, second})
+	snapshot.Results = []workerexecution.WorkResult{{
+		DispatchID: "d-multi-late", TransitionID: "t1", Outcome: workerexecution.OutcomeFailed,
+		Output: "must not generate or route", Error: "late failure",
+	}}
+
+	result, err := transitioner.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result == nil || len(result.Mutations) != 0 || len(result.GeneratedBatches) != 0 || len(result.CompletedDispatches) != 1 {
+		t.Fatalf("atomic ignored result = %#v, want no mutations/generated and one completion", result)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.IgnoredWorkID != "w-terminal" || completed.IgnoredResult == nil ||
+		completed.IgnoredResult.ObservedState.Type != interfaces.StateTypeTerminal {
+		t.Fatalf("multi-input ignored completion = %#v, want first terminal Work marker", completed)
+	}
+}
+
 func TestHistoryTransitionerPipeline_FailedWithoutFailureArcs_UsesConsumedDispatchTokensForFallback(t *testing.T) {
 	n := buildPipelineNet()
 	n.Transitions["t1"].FailureArcs = nil

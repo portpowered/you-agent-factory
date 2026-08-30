@@ -287,6 +287,26 @@ func New(
 		},
 		cfg.completionRecorder,
 		func(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
+			if ignored := completed.IgnoredResult; ignored != nil {
+				if ignoredRecorder, ok := effectiveEventHistory.(recordings.DispatchResultIgnoredRecorder); ok {
+					eventTime := completed.EndTime
+					if eventTime.IsZero() {
+						eventTime = cfg.clock.Now()
+					}
+					ignoredRecorder.RecordDispatchResultIgnored(recordings.DispatchResultIgnoredInput{
+						SessionID:        sessionIDFromFactoryConfig(cfg),
+						OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(cfg))),
+						DispatchID:       result.DispatchID,
+						Source:           "runtime",
+						Tick:             tick,
+						WorkIDs:          []string{completed.IgnoredWorkID},
+						Reason:           ignored.Reason,
+						ResultOutcome:    ignored.ResultOutcome,
+						ObservedState:    ignored.ObservedState,
+					}, eventTime)
+				}
+				return
+			}
 			effectiveEventHistory.RecordWorkstationResponse(tick, result, completed)
 		},
 		recordPetriMutations,

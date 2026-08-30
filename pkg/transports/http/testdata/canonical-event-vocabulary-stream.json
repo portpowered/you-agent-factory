@@ -433,6 +433,31 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-dispatch-result-ignored",
+    "type": "DISPATCH_RESULT_IGNORED",
+    "context": {
+      "sequence": 12,
+      "tick": 3,
+      "eventTime": "2026-04-21T12:00:07Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 8,
+      "dispatchId": "dispatch-script-1",
+      "workIds": [
+        "work-1"
+      ],
+      "source": "runtime"
+    },
+    "payload": {
+      "reason": "WORK_ALREADY_TERMINAL",
+      "resultOutcome": "FAILED",
+      "observedState": {
+        "name": "complete",
+        "type": "TERMINAL"
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-work-state-change-operator",
     "type": "WORK_STATE_CHANGE",
     "context": {

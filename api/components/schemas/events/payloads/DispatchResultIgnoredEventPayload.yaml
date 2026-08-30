@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+description: >-
+  Diagnostic for a correlated dispatch result that was retained in canonical
+  history but not applied because the current Work state is terminal. Dispatch
+  and Work identity live in FactoryEvent.context; raw worker output and error
+  text are intentionally excluded.
+required:
+  - reason
+  - resultOutcome
+  - observedState
+properties:
+  reason:
+    type: string
+    enum:
+      - WORK_ALREADY_TERMINAL
+    description: Stable reason the result was not applied.
+  resultOutcome:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/WorkOutcome'
+  observedState:
+    $ref: '../../data-models/WorkState.yaml'

@@ -159,6 +159,8 @@ func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 		return r.applyHumanApprovalRequestedEvent(event)
 	case interfaces.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
+	case interfaces.FactoryEventTypeDispatchResultIgnored:
+		return r.applyDispatchResultIgnoredEvent(event)
 	case interfaces.FactoryEventTypeFactoryStateResponse:
 		return r.applyFactoryStateResponseEvent(event)
 	case interfaces.FactoryEventTypeWorkStateChange:

@@ -1,12 +1,14 @@
 package events
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -32,6 +34,59 @@ func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueIn
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 	assertDispatchLifecycleWorldState(t, worldState)
+}
+
+func TestFactoryEventHistory_RecordDispatchResultIgnoredIsRedactedAndIdempotent(t *testing.T) {
+	t0 := time.Date(2026, 8, 29, 12, 32, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	input := recordings.DispatchResultIgnoredInput{
+		SessionID:     "session-runtime",
+		DispatchID:    "dispatch-late",
+		Source:        "runtime",
+		Tick:          7,
+		WorkIDs:       []string{"work-terminal", "work-sibling"},
+		Reason:        interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
+		ResultOutcome: workerexecution.OutcomeFailed,
+		ObservedState: interfaces.ObservedWorkState{Name: "complete", Type: interfaces.StateTypeTerminal},
+	}
+	history.RecordDispatchResultIgnored(input, t0)
+	input.ResultOutcome = workerexecution.OutcomeAccepted
+	input.ObservedState = interfaces.ObservedWorkState{Name: "failed", Type: interfaces.StateTypeFailed}
+	history.RecordDispatchResultIgnored(input, t0.Add(time.Second))
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %#v, want one diagnostic after equivalent redelivery", events)
+	}
+	event := events[0]
+	if event.Type != factoryapi.FactoryEventTypeDispatchResultIgnored {
+		t.Fatalf("event type = %q, want DISPATCH_RESULT_IGNORED", event.Type)
+	}
+	if event.Context.DispatchId == nil || *event.Context.DispatchId != "dispatch-late" {
+		t.Fatalf("dispatch id = %#v, want dispatch-late", event.Context.DispatchId)
+	}
+	if event.Context.WorkIds == nil || len(*event.Context.WorkIds) != 1 || (*event.Context.WorkIds)[0] != "work-terminal" {
+		t.Fatalf("work ids = %#v, want first terminal Work only", event.Context.WorkIds)
+	}
+	payload, err := event.Payload.AsDispatchResultIgnoredEventPayload()
+	if err != nil {
+		t.Fatalf("decode ignored payload: %v", err)
+	}
+	if string(payload.Reason) != interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal ||
+		string(payload.ResultOutcome) != string(workerexecution.OutcomeFailed) ||
+		payload.ObservedState.Name != "complete" || string(payload.ObservedState.Type) != string(interfaces.StateTypeTerminal) {
+		t.Fatalf("ignored payload = %#v, want first redelivery facts", payload)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal ignored event: %v", err)
+	}
+	serialized := string(encoded)
+	for _, forbidden := range []string{"worker output", "worker error", "work-sibling"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("ignored event retained forbidden value %q: %s", forbidden, serialized)
+		}
+	}
 }
 
 func recordDispatchLifecycleSequence(

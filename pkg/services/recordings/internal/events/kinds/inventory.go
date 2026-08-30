@@ -53,6 +53,7 @@ func PublicEmittableFactoryEventKinds() []PublicEmittableKind {
 		{Kind: recordings.FactoryEventTypeDispatchQueued, EmissionEvidence: "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchQueued"},
 		{Kind: recordings.FactoryEventTypeDispatchInterrupted, EmissionEvidence: "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchInterrupted"},
 		{Kind: recordings.FactoryEventTypeDispatchReconciled, EmissionEvidence: "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchReconciled"},
+		{Kind: recordings.FactoryEventTypeDispatchResultIgnored, EmissionEvidence: "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchResultIgnored"},
 		{Kind: recordings.FactoryEventTypeArtifactCreated, EmissionEvidence: "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordArtifactCreated"},
 	}
 	sort.Slice(kinds, func(i, j int) bool {

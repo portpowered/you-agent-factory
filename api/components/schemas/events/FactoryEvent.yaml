@@ -46,6 +46,7 @@ properties:
       - $ref: ./payloads/ScriptResponseEventPayload.yaml
       - $ref: ./payloads/AgentRunResponseEventPayload.yaml
       - $ref: ./payloads/DispatchResponseEventPayload.yaml
+      - $ref: ./payloads/DispatchResultIgnoredEventPayload.yaml
       - $ref: ./payloads/WorkStateChangeEventPayload.yaml
       - $ref: ./payloads/FactoryStateResponseEventPayload.yaml
       - $ref: ./payloads/RunResponseEventPayload.yaml
@@ -107,6 +108,7 @@ discriminator:
     SCRIPT_RESPONSE: ./payloads/ScriptResponseEventPayload.yaml
     AGENT_RUN_RESPONSE: ./payloads/AgentRunResponseEventPayload.yaml
     DISPATCH_RESPONSE: ./payloads/DispatchResponseEventPayload.yaml
+    DISPATCH_RESULT_IGNORED: ./payloads/DispatchResultIgnoredEventPayload.yaml
     WORK_STATE_CHANGE: ./payloads/WorkStateChangeEventPayload.yaml
     FACTORY_STATE_RESPONSE: ./payloads/FactoryStateResponseEventPayload.yaml
     RUN_RESPONSE: ./payloads/RunResponseEventPayload.yaml

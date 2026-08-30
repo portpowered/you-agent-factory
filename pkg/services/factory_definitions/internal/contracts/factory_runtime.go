@@ -373,6 +373,12 @@ type CompletedDispatch struct {
 	Duration                    time.Duration                                 `json:"duration"`
 	ConsumedTokens              []workerexecution.Token                       `json:"consumed_tokens,omitempty"`
 	OutputMutations             []TokenMutationRecord                         `json:"output_mutations,omitempty"`
+	// IgnoredResult is an internal handoff marker. It lets Runtime retire the
+	// dispatch while recording a redacted diagnostic instead of a normal
+	// DISPATCH_RESPONSE. It is intentionally absent from runtime snapshots and
+	// replay artifacts because the canonical event is the source of truth.
+	IgnoredResult *DispatchResultIgnoredEventPayload `json:"-"`
+	IgnoredWorkID string                             `json:"-"`
 }
 
 // ActiveThrottlePause records an active provider/model dispatch pause window.

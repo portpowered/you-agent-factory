@@ -1,6 +1,7 @@
 package projections
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ func TestFactoryWorldReducerRejectsMalformedOwnerEvents(t *testing.T) {
 		{name: "work state", eventType: interfaces.FactoryEventTypeWorkStateChange, apply: (*factoryWorldReducer).applyWorkStateChangeEvent},
 		{name: "dispatch request", eventType: interfaces.FactoryEventTypeDispatchRequest, apply: (*factoryWorldReducer).applyDispatchRequestEvent},
 		{name: "dispatch response", eventType: interfaces.FactoryEventTypeDispatchResponse, apply: (*factoryWorldReducer).applyDispatchResponseEvent},
+		{name: "dispatch result ignored", eventType: interfaces.FactoryEventTypeDispatchResultIgnored, apply: (*factoryWorldReducer).applyDispatchResultIgnoredEvent},
 		{name: "factory state", eventType: interfaces.FactoryEventTypeFactoryStateResponse, apply: (*factoryWorldReducer).applyFactoryStateResponseEvent},
 	}
 	for _, test := range tests {
@@ -29,6 +31,40 @@ func TestFactoryWorldReducerRejectsMalformedOwnerEvents(t *testing.T) {
 			t.Parallel()
 			assertMalformedOwnerEvent(t, test.name, test.eventType, test.apply)
 		})
+	}
+}
+
+func TestFactoryWorldReducer_ReplaysDispatchResultIgnoredAsStateNoOp(t *testing.T) {
+	eventTime := time.Date(2026, 8, 29, 12, 33, 0, 0, time.UTC)
+	reducer := newFactoryWorldReducer(3)
+	reducer.stateValue.EventTime = eventTime
+	workItem := work.FactoryWorkItem{ID: "work-terminal", WorkTypeID: "task", DisplayName: "already done", State: "complete"}
+	reducer.stateValue.WorkItemsByID[workItem.ID] = workItem
+	reducer.stateValue.ActiveWorkItemsByID[workItem.ID] = workItem
+	reducer.stateValue.TerminalWorkByID[workItem.ID] = interfaces.FactoryTerminalWork{WorkItem: workItem, Status: "TERMINAL"}
+	before, err := json.Marshal(reducer.stateValue)
+	if err != nil {
+		t.Fatalf("marshal state before ignored event: %v", err)
+	}
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchResultIgnored, interfaces.FactoryEventContext{
+		DispatchID: stringPtrForProjectionTest("dispatch-late"),
+		WorkIDs:    stringSlicePtrForProjectionTest([]string{"work-terminal"}),
+		EventTime:  eventTime,
+		Tick:       4,
+	}, interfaces.DispatchResultIgnoredEventPayload{
+		Reason:        interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal,
+		ResultOutcome: workerexecution.OutcomeFailed,
+		ObservedState: interfaces.ObservedWorkState{Name: "complete", Type: interfaces.StateTypeTerminal},
+	})
+	if err := reducer.apply(event); err != nil {
+		t.Fatalf("apply ignored event: %v", err)
+	}
+	after, err := json.Marshal(reducer.stateValue)
+	if err != nil {
+		t.Fatalf("marshal state after ignored event: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("world state changed after ignored event:\nbefore=%s\nafter=%s", before, after)
 	}
 }
 

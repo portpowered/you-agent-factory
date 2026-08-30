@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "1b925d5549049779be3ae940860e3eaa1e61c1901a0292c655faf5f9fab619ab",
+      "artifactHash": "867498b56289d7dd8ecc535b9db86b11e23baa809d9d6264a69c75db61b9b760",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "1b925d5549049779be3ae940860e3eaa1e61c1901a0292c655faf5f9fab619ab",
+        "sourceHash": "867498b56289d7dd8ecc535b9db86b11e23baa809d9d6264a69c75db61b9b760",
         "visibility": "public"
       },
       "family": "openapi",
@@ -271,7 +271,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.factory-event": {
-      "artifactHash": "3776aaa394971abc4367df109e7d388d2a987c1cc2ff1cd37738a3ff7f903036",
+      "artifactHash": "96f634597206ce868cec8c4262009df1721efb19a9f4f6cb5f2e775f6ecc355b",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-event",
-        "sourceHash": "3776aaa394971abc4367df109e7d388d2a987c1cc2ff1cd37738a3ff7f903036",
+        "sourceHash": "96f634597206ce868cec8c4262009df1721efb19a9f4f6cb5f2e775f6ecc355b",
         "visibility": "public"
       },
       "family": "config",
@@ -301,7 +301,7 @@
       "path": "generated/schemas/factory-event.schema.json"
     },
     "generated.schemas.factory-recording": {
-      "artifactHash": "363a8215552d32579b39b5f9cf4f4bae78182e2d338894adc9bae27bad6ae26d",
+      "artifactHash": "e3d677c601439389b268b154860c9163a46cd068b18a8d9b42c2dd90e0e917ce",
       "documentation": {
         "documentation": {
           "description": {
@@ -318,7 +318,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-recording",
-        "sourceHash": "363a8215552d32579b39b5f9cf4f4bae78182e2d338894adc9bae27bad6ae26d",
+        "sourceHash": "e3d677c601439389b268b154860c9163a46cd068b18a8d9b42c2dd90e0e917ce",
         "visibility": "public"
       },
       "family": "config",

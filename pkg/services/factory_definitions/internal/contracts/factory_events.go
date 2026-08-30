@@ -29,6 +29,7 @@ const (
 	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
 	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeDispatchResultIgnored         FactoryEventType = "DISPATCH_RESULT_IGNORED"
 	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeHumanApprovalRequested        FactoryEventType = "HUMAN_APPROVAL_REQUESTED"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
@@ -58,6 +59,11 @@ const (
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
 )
+
+// DispatchResultIgnoredReasonWorkAlreadyTerminal is the stable reason used
+// when a correlated result arrives after an operator or another dispatch has
+// already placed Work in a terminal or failed state.
+const DispatchResultIgnoredReasonWorkAlreadyTerminal = "WORK_ALREADY_TERMINAL"
 
 // FactoryEventReconnectCursor identifies the last acknowledged event for stream
 // reconnect. Clients may supply AfterEventID or AfterSequence; when both are
@@ -304,6 +310,22 @@ type DispatchReconciledEventPayload struct {
 	Replayed             bool                           `json:"replayed"`
 	ResultArtifactRef    *FactoryArtifactRef            `json:"resultArtifactRef,omitempty"`
 	Usage                *FactoryDispatchUsage          `json:"usage,omitempty"`
+}
+
+// DispatchResultIgnoredEventPayload records a stale dispatch result without
+// retaining raw worker output, error text, or Work payload content. Dispatch
+// and Work identity remain authoritative on FactoryEventContext.
+type DispatchResultIgnoredEventPayload struct {
+	Reason        string                      `json:"reason"`
+	ResultOutcome workerexecution.WorkOutcome `json:"resultOutcome"`
+	ObservedState ObservedWorkState           `json:"observedState"`
+}
+
+// ObservedWorkState is the authored name and lifecycle category observed when
+// a stale dispatch result was retired.
+type ObservedWorkState struct {
+	Name string    `json:"name"`
+	Type StateType `json:"type"`
 }
 
 // ArtifactCreatedEventPayload records customer-visible artifact metadata.

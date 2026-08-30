@@ -398,11 +398,21 @@ func TestEngine_LateDispatchResultGateOrdersTerminalPlacementBeforeRelease(t *te
 	if len(terminal) != 1 || terminal[0].Color.WorkID != workID {
 		t.Fatalf("terminal Work = %#v, want one %s token", terminal, workID)
 	}
+	if failed := snapshot.Marking.TokensInPlace("task:failed"); len(failed) != 0 {
+		t.Fatalf("failed Work = %#v, want no late-result mutation", failed)
+	}
 	if len(snapshot.DispatchHistory) != 1 || snapshot.DispatchHistory[0].DispatchID != dispatchID {
 		t.Fatalf("dispatch history = %#v, want one retired late result", snapshot.DispatchHistory)
 	}
 	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("dispatch completion outcome = %q, want FAILED", snapshot.DispatchHistory[0].Outcome)
+	}
+	ignored := snapshot.DispatchHistory[0].IgnoredResult
+	if ignored == nil || ignored.Reason != interfaces.DispatchResultIgnoredReasonWorkAlreadyTerminal ||
+		ignored.ResultOutcome != workerexecution.OutcomeFailed ||
+		ignored.ObservedState.Name != "complete" || ignored.ObservedState.Type != interfaces.StateTypeTerminal ||
+		snapshot.DispatchHistory[0].IgnoredWorkID != workID {
+		t.Fatalf("ignored result marker = %#v, work id = %q, want terminal %s marker", ignored, snapshot.DispatchHistory[0].IgnoredWorkID, workID)
 	}
 }
 

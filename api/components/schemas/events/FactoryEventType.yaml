@@ -22,6 +22,7 @@ x-enum-varnames:
   - FactoryEventTypeScriptResponse
   - FactoryEventTypeAgentRunResponse
   - FactoryEventTypeDispatchResponse
+  - FactoryEventTypeDispatchResultIgnored
   - FactoryEventTypeWorkStateChange
   - FactoryEventTypeFactoryStateResponse
   - FactoryEventTypeRunResponse
@@ -58,6 +59,7 @@ enum:
   - SCRIPT_RESPONSE
   - AGENT_RUN_RESPONSE
   - DISPATCH_RESPONSE
+  - DISPATCH_RESULT_IGNORED
   - WORK_STATE_CHANGE
   - FACTORY_STATE_RESPONSE
   - RUN_RESPONSE
@@ -94,6 +96,7 @@ x-enum-descriptions:
   - A script-backed worker command attempt returned or failed before a normal exit.
   - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
   - A workstation response finished processing and produced an outcome.
+  - A stale dispatch result was ignored because correlated Work was already terminal.
   - A work item moved between authored marking states.
   - The factory lifecycle state response was recorded.
   - A factory run response ended and final metadata is available.

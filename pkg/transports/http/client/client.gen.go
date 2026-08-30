@@ -123,6 +123,11 @@ const (
 	STREAMREPLAY      DispatchReconciliationSource = "STREAM_REPLAY"
 )
 
+// Defines values for DispatchResultIgnoredEventPayloadReason.
+const (
+	WORKALREADYTERMINAL DispatchResultIgnoredEventPayloadReason = "WORK_ALREADY_TERMINAL"
+)
+
 // Defines values for ErrorFamily.
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
@@ -284,6 +289,7 @@ const (
 	FactoryEventTypeDispatchReconciled               FactoryEventType = "DISPATCH_RECONCILED"
 	FactoryEventTypeDispatchRequest                  FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse                 FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeDispatchResultIgnored            FactoryEventType = "DISPATCH_RESULT_IGNORED"
 	FactoryEventTypeDispatchWorkerSessionAssociation FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                    FactoryEventType = "FACTORY_CHANGE"
 	FactoryEventTypeFactoryChangeFailed              FactoryEventType = "FACTORY_CHANGE_FAILED"
@@ -2115,6 +2121,21 @@ type DispatchResponseEventPayload struct {
 	TransitionId     string                `json:"transitionId"`
 	Usage            *FactoryDispatchUsage `json:"usage,omitempty"`
 }
+
+// DispatchResultIgnoredEventPayload Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded.
+type DispatchResultIgnoredEventPayload struct {
+	// ObservedState A lifecycle state that a work item can occupy inside one work type.
+	ObservedState WorkState `json:"observedState"`
+
+	// Reason Stable reason the result was not applied.
+	Reason DispatchResultIgnoredEventPayloadReason `json:"reason"`
+
+	// ResultOutcome Result category returned by a workstation execution.
+	ResultOutcome WorkOutcome `json:"resultOutcome"`
+}
+
+// DispatchResultIgnoredEventPayloadReason Stable reason the result was not applied.
+type DispatchResultIgnoredEventPayloadReason string
 
 // DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity.
 type DispatchWorkerSessionAssociationEventPayload struct {
@@ -15646,6 +15667,32 @@ func (t *FactoryEvent_Payload) FromDispatchResponseEventPayload(v DispatchRespon
 
 // MergeDispatchResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchResponseEventPayload
 func (t *FactoryEvent_Payload) MergeDispatchResponseEventPayload(v DispatchResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsDispatchResultIgnoredEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchResultIgnoredEventPayload
+func (t FactoryEvent_Payload) AsDispatchResultIgnoredEventPayload() (DispatchResultIgnoredEventPayload, error) {
+	var body DispatchResultIgnoredEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDispatchResultIgnoredEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided DispatchResultIgnoredEventPayload
+func (t *FactoryEvent_Payload) FromDispatchResultIgnoredEventPayload(v DispatchResultIgnoredEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDispatchResultIgnoredEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchResultIgnoredEventPayload
+func (t *FactoryEvent_Payload) MergeDispatchResultIgnoredEventPayload(v DispatchResultIgnoredEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

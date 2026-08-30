@@ -123,6 +123,10 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
+	if d.IgnoredResult != nil {
+		ignored := *d.IgnoredResult
+		cp.IgnoredResult = &ignored
+	}
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
 	cp.Cancellation = d.Cancellation.Clone()

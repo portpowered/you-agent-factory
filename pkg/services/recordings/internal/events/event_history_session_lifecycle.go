@@ -203,6 +203,12 @@ func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.Facto
 	case interfaces.FactoryEventTypeSessionCompleted:
 		h.hasSessionCompleted = true
 	}
+	if event.Type == interfaces.FactoryEventTypeDispatchResultIgnored && event.Id != "" {
+		if h.ignoredDispatchResultIDs == nil {
+			h.ignoredDispatchResultIDs = make(map[string]struct{})
+		}
+		h.ignoredDispatchResultIDs[event.Id] = struct{}{}
+	}
 	if event.Context.SessionID != nil {
 		if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
 			h.sessionID = sessionID

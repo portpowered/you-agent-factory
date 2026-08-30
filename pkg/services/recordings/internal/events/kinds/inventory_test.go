@@ -44,6 +44,7 @@ var knownRuntimeEmissionAnchors = map[recordings.FactoryEventType]string{
 	recordings.FactoryEventTypeDispatchQueued:                "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchQueued",
 	recordings.FactoryEventTypeDispatchInterrupted:           "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchInterrupted",
 	recordings.FactoryEventTypeDispatchReconciled:            "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchReconciled",
+	recordings.FactoryEventTypeDispatchResultIgnored:         "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordDispatchResultIgnored",
 	recordings.FactoryEventTypeArtifactCreated:               "pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go RecordArtifactCreated",
 }
 

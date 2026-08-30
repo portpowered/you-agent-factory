@@ -559,6 +559,31 @@
       ],
       "type": "object"
     },
+    "DispatchResultIgnoredEventPayload": {
+      "additionalProperties": false,
+      "description": "Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded.",
+      "properties": {
+        "observedState": {
+          "$ref": "#/$defs/WorkState"
+        },
+        "reason": {
+          "description": "Stable reason the result was not applied.",
+          "enum": [
+            "WORK_ALREADY_TERMINAL"
+          ],
+          "type": "string"
+        },
+        "resultOutcome": {
+          "$ref": "#/$defs/WorkOutcome"
+        }
+      },
+      "required": [
+        "reason",
+        "resultOutcome",
+        "observedState"
+      ],
+      "type": "object"
+    },
     "DispatchWorkerSessionAssociationEventPayload": {
       "additionalProperties": false,
       "description": "Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity.",
@@ -1250,6 +1275,7 @@
           "DISPATCH_RECONCILED": "#/$defs/DispatchReconciledEventPayload",
           "DISPATCH_REQUEST": "#/$defs/DispatchRequestEventPayload",
           "DISPATCH_RESPONSE": "#/$defs/DispatchResponseEventPayload",
+          "DISPATCH_RESULT_IGNORED": "#/$defs/DispatchResultIgnoredEventPayload",
           "DISPATCH_WORKER_SESSION_ASSOCIATION": "#/$defs/DispatchWorkerSessionAssociationEventPayload",
           "FACTORY_CHANGE": "#/$defs/FactoryChangeEventPayload",
           "FACTORY_CHANGE_FAILED": "#/$defs/FactoryChangeFailedEventPayload",
@@ -1573,6 +1599,21 @@
             },
             "type": {
               "const": "DISPATCH_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchResultIgnoredEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_RESULT_IGNORED"
             }
           },
           "required": [
@@ -1989,6 +2030,7 @@
         "SCRIPT_RESPONSE",
         "AGENT_RUN_RESPONSE",
         "DISPATCH_RESPONSE",
+        "DISPATCH_RESULT_IGNORED",
         "WORK_STATE_CHANGE",
         "FACTORY_STATE_RESPONSE",
         "RUN_RESPONSE",

@@ -4632,6 +4632,7 @@ export interface components {
         | components["schemas"]["ScriptResponseEventPayload"]
         | components["schemas"]["AgentRunResponseEventPayload"]
         | components["schemas"]["DispatchResponseEventPayload"]
+        | components["schemas"]["DispatchResultIgnoredEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
@@ -7713,6 +7714,16 @@ export interface components {
     DispatchCancellation: {
       /** @enum {string} */
       reason: DispatchCancellationReason;
+    };
+    /** @description Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded. */
+    DispatchResultIgnoredEventPayload: {
+      /**
+       * @description Stable reason the result was not applied.
+       * @enum {string}
+       */
+      reason: DispatchResultIgnoredEventPayloadReason;
+      resultOutcome: components["schemas"]["WorkOutcome"];
+      observedState: components["schemas"]["WorkState"];
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
@@ -11320,6 +11331,8 @@ export const FactoryEventType = {
   FactoryEventTypeAgentRunResponse: "AGENT_RUN_RESPONSE",
   // A workstation response finished processing and produced an outcome.
   FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
+  // A stale dispatch result was ignored because correlated Work was already terminal.
+  FactoryEventTypeDispatchResultIgnored: "DISPATCH_RESULT_IGNORED",
   // A work item moved between authored marking states.
   FactoryEventTypeWorkStateChange: "WORK_STATE_CHANGE",
   // The factory lifecycle state response was recorded.
@@ -12251,6 +12264,11 @@ export const DispatchCancellationReason = {
 } as const;
 export type DispatchCancellationReason =
   (typeof DispatchCancellationReason)[keyof typeof DispatchCancellationReason];
+export const DispatchResultIgnoredEventPayloadReason = {
+  WORK_ALREADY_TERMINAL: "WORK_ALREADY_TERMINAL",
+} as const;
+export type DispatchResultIgnoredEventPayloadReason =
+  (typeof DispatchResultIgnoredEventPayloadReason)[keyof typeof DispatchResultIgnoredEventPayloadReason];
 export const GlobalConfigACPIntegrationTransport = {
   stdio: "stdio",
 } as const;
