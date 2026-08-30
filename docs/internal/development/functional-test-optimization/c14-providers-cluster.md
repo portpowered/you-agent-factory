@@ -408,10 +408,15 @@ Shared-process, persistent-connection, crash/replacement, retry, cleanup, real
 process, and pinned-golden witnesses remain isolated or serial where their
 identity is the behavior under test.
 
-No production, shared-support, contract, generated, workflow, Makefile,
-baseline, or provider-subpackage source changed. No sleep, poll, timeout, or
-cleanup assertion was removed or added. The only new behavioral assertion is
-the existing Codex adapter shape now explicitly retaining `--json` in
+The final implementation includes exactly the production correction authorized
+by `operatorAmendment1`: `renderRuntimePrompt` now resolves execution fields
+before rendering, and the owning runtime prompt projection supplies the
+resolved context and non-resource Work-input tokens. The correction is limited
+to `worker_session_recorded_usage.go` and `workstation_routes.go`; no other
+production, shared-support, contract, generated, workflow, Makefile, baseline,
+or provider-subpackage source changed. No sleep, poll, timeout, or cleanup
+assertion was removed or added. The only new behavioral assertion is the
+existing Codex adapter shape now explicitly retaining `--json` in
 `cli_template_resolution_long_test.go`; it is stronger request-shape evidence,
 not a weakened replacement. The golden sentinel assertions remain the same,
 with their environment supplied per invocation.
@@ -561,7 +566,9 @@ any of these outside-scope conditions.
 - Dependencies and retest scope: a clean UI toolchain and deadcode-baseline
   owner disposition are prerequisites for `verify-fast`/`lint`; an
   uncontended host or review-owned race rerun is required for exact ACP
-  `-race`; no production change is authorized in this lane.
+  `-race`; no additional production change is authorized in this lane. The
+  single owning-seam correction above is the explicit `operatorAmendment1`
+  exception to the original test-only boundary.
 
 ## Final delivery disposition
 
@@ -710,10 +717,10 @@ hosted estimates from run `33264193119` remain explicitly
 | Complete base and ACP packages | PASS | `go test ./tests/functional/providers ./tests/functional/providers/acp -count=1 -timeout=30m` passed after the final source relocation (`12.849s` and `80.325s` package time); the six final samples above also passed. | None for untagged package behavior. |
 | LONG-002 | PASS | The exact `functionallong` selector passed after the final source relocation (`2.429s` package time), including timeout/retry, Claude/Codex prompt context, one Work input, request shape, completion, and cleanup. | None for the declared local-real selector. |
 | Base full-package race | PASS | `go test -race ./tests/functional/providers -count=1 -timeout=15m` passed after the final source relocation (`27.509s` package time), with no race report. | Other unexercised schedules. |
-| ACP full-package race | BLOCKED | The exact supported command was run twice on the final source layout and failed only in process-start/lifecycle contention (`178.468s` and `217.124s` package time); no `WARNING: DATA RACE` was emitted. The prior exact run on the behavior-equivalent pre-relocation head passed (`89.100s`); the bounded `-parallel=4` fallback on the final layout also hit two startup-sensitive negative tests (`203.381s`) without a race report. | An uncontended exact ACP race run on the final source layout. |
+| ACP full-package race | PASS | The exact supported command `go test -race ./tests/functional/providers/acp -count=1 -timeout=15m` passed on the current inventory-neutral source layout (`89.143s` package time, exit 0) with no `WARNING: DATA RACE`. | None for the declared full-package race witness. |
 | Functional boundary and package structure | PASS | `go run ./cmd/functionalboundarycheck` and `make pkg-structure` passed; the focused rerun after the relocation also passed `make pkg-file-count`, `make backend-size`, and `make pkg-maint`. | None for these repository rules. |
-| Fast verification | BLOCKED | `make verify-fast` stopped before Go/UI tests at `TS2688: Cannot find type definition file for 'bun'`. | UI dependency/tooling installation. |
-| Repository lint | BLOCKED | Final `make lint` passed vet, backend-size, pkg-maint, pkg-file-count, package boundaries/structure, catalogs, contracts, formatting, and related gates. It remained blocked only by missing Biome (`@biomejs/biome`), missing Knip, and pre-existing deadcode baseline drift (`3074` recorded vs `3072` current). | Shared UI toolchain and deadcode-baseline owner disposition. |
+| Fast verification | PASS | After restoring the lockfile-declared UI dependencies, `make verify-fast` passed dashboard typecheck, MCP contract boundary, 216 Bun tests, 3,108 Vitest tests, and the short Go suite; only platform-specific tests skipped. | None for the named fast-verification gate. |
+| Repository lint | BLOCKED | After restoring the lockfile-declared UI dependencies, `make lint` passed UI lint, vet, backend-size, pkg-maint, pkg-file-count, package boundaries/structure, catalogs, contracts, formatting, and related gates. It remained blocked only by the pre-existing deadcode baseline drift (`3074` recorded vs `3072` current). | Deadcode-baseline owner must reconcile the two removed accepted findings; this lane does not change the shared baseline. |
 
 ### CLEAN-004 customer journey and loopback verdict
 
@@ -728,12 +735,13 @@ hosted estimates from run `33264193119` remain explicitly
    BLOCKED edges. No assertion, timeout, sleep, resource, production test
    witness, or baseline was weakened or silently repaired.
 
-**BLOCKED loopback**. The implementation behavior and local performance target
-are complete, but exact ACP race evidence and shared UI/deadcode tooling need
-an uncontended/fully provisioned validation environment. The smallest delta is
-review-owned or environment-owned: rerun the exact ACP race and provide the
-missing UI tools plus the deadcode-baseline disposition. No further code
-change is justified by the current evidence.
+**BLOCKED loopback**. The implementation behavior, local performance target,
+exact ACP race, and fast verification are complete. The only remaining edge is
+the repository's pre-existing deadcode-baseline drift: the canonical checker
+records 3,074 accepted findings while the current report has 3,072. The
+smallest delta is an owner-authorized reconciliation of those two removed
+findings in the shared baseline; this lane does not change that baseline or
+silently treat the failed canonical `make lint` as a pass.
 
 ## Final delivery disposition
 
@@ -778,3 +786,15 @@ focused seam regression passed (`0.088s`). This refresh supersedes the
 pre-rebase local timing table as the final performance denominator; all
 topology, wait, assertion-parity, and contention dispositions above remain
 unchanged.
+
+The original project criterion prohibiting production changes is satisfied
+under its operator-authorized exception: the only production files in the
+final diff are the named owning-seam correction files above, and the focused
+regression remains in the existing runtime test identity. No unrelated
+production or shared-support change is included.
+
+The review follow-up also preserves the unit-lane test identity inventory:
+the resolver/context/token assertions are implemented by the non-`Test`
+helper `assertRuntimePromptUsesResolvedContextAndWorkInputTokens`, called from
+the existing `TestRenderRuntimePromptAndTemplateFieldsUsesDetachedCapabilities`
+identity. No additional top-level test declaration is present.

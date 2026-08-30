@@ -19,8 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestRenderRuntimePromptUsesResolvedContextAndWorkInputTokens(t *testing.T) {
-	t.Parallel()
+func assertRuntimePromptUsesResolvedContextAndWorkInputTokens(t *testing.T) {
+	t.Helper()
 
 	selection := &runtimeExecutionSelection{
 		promptTemplate:   "authored prompt",
@@ -48,19 +48,19 @@ func TestRenderRuntimePromptUsesResolvedContextAndWorkInputTokens(t *testing.T) 
 	})
 	promptRenderer := runtimePromptRendererFunc(func(
 		prompt string,
-		tokens []workers.Token,
-		context *workers.Context,
+		promptTokens []workers.Token,
+		promptContext *workers.Context,
 	) (string, error) {
 		callOrder = append(callOrder, "render")
 		if prompt != "authored prompt" {
 			return "", errors.New("unexpected prompt")
 		}
-		if len(tokens) != 1 || tokens[0].ID != "work" {
+		if len(promptTokens) != 1 || promptTokens[0].ID != "work" {
 			return "", errors.New("prompt received non-work tokens")
 		}
-		if context.WorkDirectory != "resolved-workdir" ||
-			context.EnvVars["TOKEN"] != "resolved" ||
-			context.EnvVars["BASE"] != "base" {
+		if promptContext.WorkDirectory != "resolved-workdir" ||
+			promptContext.EnvVars["TOKEN"] != "resolved" ||
+			promptContext.EnvVars["BASE"] != "base" {
 			return "", errors.New("prompt received unresolved execution context")
 		}
 		return "resolved prompt", nil
