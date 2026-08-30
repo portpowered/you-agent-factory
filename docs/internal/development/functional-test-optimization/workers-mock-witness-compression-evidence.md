@@ -359,12 +359,15 @@ No browser criterion applies to this backend/CLI characterization story.
 
 ## Story 003 validation and post-change performance evidence
 
-Status: `BLOCKED` for `GATE-PERF-001`; the rebased source passes the focused
-matrix, complete package, and race checks in a fresh isolated user/config
-environment, but the three pre-change samples were stopped by the shared
-global staging-owner failure before the package completed. The successful
-post-change samples therefore cannot support a directional before/after
-claim. This is an evidence limitation, not a source assertion failure.
+Status: `PASS` under the operator-amended spawn-count criterion for
+`GATE-PERF-001`: the rebased source reduces target-binary scenario executions
+from 15 to 6 (seven including the separate compiler child) with zero dropped
+`MOCK-01..48` witnesses. The focused matrix, complete package, and race checks
+pass in a fresh isolated user/config environment. Wall-clock medians are
+advisory only - they were measured on an operator host concurrently running a
+live factory with many parallel Codex worker processes, so host-noise dominates
+the signal and a non-improving median is not evidence of a non-improving
+change.
 
 ### Final source and clean-room reconciliation
 
@@ -395,6 +398,11 @@ confirmed default success, verbose success, ordered human aggregation, mixed
 JSON failure omission, breaker reason, script-failure normalization, and
 named human response-stream shape. No assertion was deleted or weakened; the
 guarded compiled-process helper has no diff from the baseline hash.
+
+The operator-amended acceptance evidence is complete: six target-binary
+scenario executions are observed against the 15-scenario baseline, the
+stricter compiled-CLI-related total is 7, and the `MOCK-01..48` mapping has
+zero dropped witnesses.
 
 ### Commands and results
 
@@ -445,12 +453,14 @@ report before that setup failure.
 | `GATE-SPINE-001` | PASS | Six retained and nine migrated focused selectors plus isolated complete package pass | OS semantics for migrated rows remain intentionally waived |
 | `GATE-PACKAGE-001` | PASS | Three isolated exact package commands exited 0 | Default shared-host setup remains unavailable |
 | `GATE-RACE-001` | PASS | Isolated `go test -race ... -count=1` exited 0 without a race report | Exhaustive schedules and future host behavior |
-| `GATE-PERF-001` | BLOCKED | Pre median is from failed default-environment runs; post median is from successful isolated-home runs, so dependency/setup fidelity differs | Same-environment before/after package direction |
+| `GATE-PERF-001` | PASS | spawn-count criterion met; wall-clock medians advisory only - measured under operator-host contention, see ledger. Six target-binary scenario executions versus 15 baseline and zero dropped `MOCK-01..48` mappings | Future host/topology drift |
 | `GATE-LOOP-001` | PASS | Clean ancestry, count, map, focused, package, and race reconciliation on the rebased source | Terminal CI and merge |
 
-Overall verdict: `BLOCKED` only on directional performance evidence. The
-smallest delta is a benchmark-only rerun of the frozen pre-change package and
-the final package in the same isolated user/config environment, or an
-operator-approved baseline result that makes the existing samples comparable;
-no source topology expansion is requested. No shared staging-owner process or
-file was stopped, removed, or edited.
+Overall verdict: `PASS` under the operator-amended spawn-count criterion. The
+six target-binary scenario executions and zero-drop `MOCK-01..48` mapping meet
+the customer criterion; the wall-clock medians remain advisory evidence only.
+No shared staging-owner process or file was stopped, removed, or edited.
+
+### Follow-up candidate
+
+The shared `~default` Factory Definitions binding prevents safe concurrent one-shot migration rows because multiple invocations contend for the same runtime authority. A future performance lane may introduce per-invocation Factory Definitions/session authority and reassess parallelization; this lane leaves the behavior-preserving serialized topology unchanged.

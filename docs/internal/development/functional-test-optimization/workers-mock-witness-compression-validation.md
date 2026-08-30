@@ -17,7 +17,7 @@
 | `GATE-SPINE-001` | PASS | Retained and migrated focused selectors passed; the complete package passed in the isolated environment. | Migrated rows intentionally do not prove OS exit/pipe semantics |
 | `GATE-PACKAGE-001` | PASS | Three separate `go test ./tests/functional/workers/mock/... -count=1` runs with fresh isolated homes exited 0. | Default shared-host setup remains contended |
 | `GATE-RACE-001` | PASS | One separate `go test -race ./tests/functional/workers/mock/... -count=1` run with a fresh isolated home exited 0 and emitted no race report. | Exhaustive schedules and future hosts |
-| `GATE-PERF-001` | BLOCKED | Story 001's three pre-change default-environment samples all failed during global setup; story 003's three successful post samples used isolated homes. Their medians are not comparable enough to claim direction. | Same-environment before/after direction |
+| `GATE-PERF-001` | PASS | spawn-count criterion met; wall-clock medians advisory only - measured under operator-host contention, see ledger. Six target-binary scenario executions versus the 15 baseline and zero dropped `MOCK-01..48` mappings. | Future host/topology drift |
 | `GATE-LOOP-001` | PASS | Clean rebase, source/count/map reconciliation, focused selectors, ordinary package, and race evidence were completed without repairing defects. | Terminal CI and merge |
 
 ## Customer journey
@@ -51,33 +51,22 @@
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| PERF-001 | Blocking for directional performance only | Run the three story-001 pre samples and compare them with the three successful story-003 isolated-home post samples | Comparable before/after package samples | Pre samples exit 1 during shared `@you/full-flow` staging-owner contention; post samples exit 0 only after using fresh isolated user/config roots, with median wall 124.878s / Go 59.989s | `workers-mock-witness-compression-evidence.md`, Story 001 and Story 003 sections |
+| PERF-001 | Advisory | Run the three story-001 pre samples and compare them with the three successful story-003 isolated-home post samples | Spawn reduction with zero witness loss; wall-clock direction is advisory under the operator ruling | Six target-binary scenario executions versus 15 baseline and zero dropped `MOCK-01..48` mappings. The medians were measured on an operator host concurrently running a live factory with many parallel Codex worker processes, so host noise dominates the signal. | `workers-mock-witness-compression-evidence.md`, Story 001 and Story 003 sections |
 | ENV-001 | Environmental | `go test ./tests/functional/workers/mock/... -count=1` in the default environment | Package reaches all assertions | Repeated `indeterminate-contention`, owner PID 6224, at `C:\Users\andre\.you-agent-factory\factories\.you--full-flow.staging-owner` | Three default post samples and one default race attempt |
 
 ## Verdict
 
-`BLOCKED`
+`PASS`
 
 The implementation preserves the 48 mapped properties, reduces the target
 binary to six scenario executions (seven including the separate compiler
 child), and is green for the complete package and race gate when run with
-fresh isolated user/config roots. Directional performance is not claimed
-because the pre and post samples have different setup fidelity and the pre
-package never completed.
+fresh isolated user/config roots. Under the operator ruling, the wall-clock
+medians are advisory only because they were measured on an operator host
+concurrently running a live factory with many parallel Codex worker processes;
+the spawn-count criterion and zero-drop witness mapping are the acceptance
+evidence.
 
-## Delta-plan request [Required for FAIL/BLOCKED]
+## Follow-up candidate
 
-- Affected behavior and criterion: `BEH-001`, `GATE-PERF-001`.
-- Root-cause evidence or remaining uncertainty: the shared global
-  `@you/full-flow` staging-owner resource reports
-  `outcome=indeterminate-contention`, `owner_pid=6224`, and
-  `owner_identity=unverified`; the successful post package uses isolated
-  user/config roots, so the existing before/after medians are not a controlled
-  comparison.
-- Smallest recommended correction/prerequisite: rerun the frozen pre-change
-  package and final post-change package with the same fresh isolated
-  user/config environment shape, or provide an operator-approved comparable
-  baseline. Do not change the workers/mock topology or guarded fixture.
-- Dependencies and retest scope: three ordinary package runs at the same
-  environment shape; compare wall and Go-reported medians, then retain the
-  already-passed focused and race evidence unless source code changes.
+The shared `~default` Factory Definitions binding prevents safe concurrent one-shot migration rows because multiple invocations contend for the same runtime authority. A future performance lane may introduce per-invocation Factory Definitions/session authority and reassess parallelization; this lane leaves the behavior-preserving serialized topology unchanged.
