@@ -38,6 +38,10 @@ func TestNewPriceTableReaderPublishesObservedSourcedFacts(t *testing.T) {
 			input: "0.20", cachedInput: "0.02", output: "1.20",
 			sourceURL: "https://developers.openai.com/api/docs/models/gpt-5.6-luna", asOfDate: "2026-08-26",
 		},
+		"claude-sonnet-5": {
+			provider: providers.IDClaude, input: "2", cachedInput: "0.20", output: "10",
+			sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing", asOfDate: "2026-08-29",
+		},
 	}
 	if len(first.Models) != len(want) {
 		t.Fatalf("price models = %#v, want exactly %d shipped identities", first.Models, len(want))
@@ -88,14 +92,19 @@ func TestNewPriceTableReaderPublishesObservedSourcedFacts(t *testing.T) {
 }
 
 type priceModelExpectation struct {
+	provider                   providers.ID
 	input, cachedInput, output string
 	sourceURL, asOfDate        string
 }
 
 func assertPriceModel(t *testing.T, model providers.PriceTableModel, expectation priceModelExpectation) {
 	t.Helper()
-	if model.Provider != providers.IDCodex {
-		t.Errorf("%s provider = %q, want %q", model.Model, model.Provider, providers.IDCodex)
+	wantProvider := expectation.provider
+	if wantProvider == "" {
+		wantProvider = providers.IDCodex
+	}
+	if model.Provider != wantProvider {
+		t.Errorf("%s provider = %q, want %q", model.Model, model.Provider, wantProvider)
 	}
 	if model.InputPerMillionTokens != expectation.input {
 		t.Errorf("%s input rate = %q, want %q", model.Model, model.InputPerMillionTokens, expectation.input)

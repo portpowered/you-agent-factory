@@ -91,6 +91,23 @@ func CodexSuccessStdout(result string) []byte {
 // CodexSuccessStdout while allowing a functional test to prove provider usage
 // metadata at the command-runner edge.
 func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64) []byte {
+	return codexSuccessStdoutWithTokenUsage(result, map[string]any{
+		"input_tokens":  inputTokens,
+		"output_tokens": outputTokens,
+	})
+}
+
+// CodexSuccessStdoutWithUsageAndCachedInput emits a sanitized Codex JSONL
+// fixture with the cached-input subclass needed by runtime cost proofs.
+func CodexSuccessStdoutWithUsageAndCachedInput(result string, inputTokens, cachedInputTokens, outputTokens int64) []byte {
+	return codexSuccessStdoutWithTokenUsage(result, map[string]any{
+		"input_tokens":        inputTokens,
+		"cached_input_tokens": cachedInputTokens,
+		"output_tokens":       outputTokens,
+	})
+}
+
+func codexSuccessStdoutWithTokenUsage(result string, usage map[string]any) []byte {
 	if result == "" {
 		result = "Done. COMPLETE"
 	}
@@ -106,11 +123,8 @@ func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64)
 		panic(err)
 	}
 	turnCompleted, err := json.Marshal(map[string]any{
-		"type": "turn.completed",
-		"usage": map[string]any{
-			"input_tokens":  inputTokens,
-			"output_tokens": outputTokens,
-		},
+		"type":  "turn.completed",
+		"usage": usage,
 	})
 	if err != nil {
 		panic(err)

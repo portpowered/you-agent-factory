@@ -8,6 +8,12 @@
       ]
     },
     {
+      "test": "tests/functional/factory/visualization/runtime_metrics/end_to_end_costs_test.go::TestRuntimeCostsCachedInputConfigurationMatrix",
+      "stableIds": [
+        "cli/you.metrics.costs"
+      ]
+    },
+    {
       "test": "tests/functional/factory/visualization/runtime_metrics/end_to_end_costs_test.go::TestRuntimeCostsEndToEndFromProviderCompletion",
       "stableIds": [
         "cli/you.metrics.costs"
