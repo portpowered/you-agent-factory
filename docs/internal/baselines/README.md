@@ -511,7 +511,7 @@ claim about the other, and future maintenance must identify which unit changed.
 
 ## Exclusion ledger
 
-The reverse file-to-consumer pass also checked the 665 tracked paths returned
+The reverse file-to-consumer pass also checked the 673 tracked paths returned
 by the independent sweep for `baseline`, `inventory`, `comparison`, `budget`,
 `floor`, `minimum`, `manifest`, `freeze`, `golden`, `snapshot`, `allowlist`, or
 `whitelist`. The following are explicitly excluded because they are historical
