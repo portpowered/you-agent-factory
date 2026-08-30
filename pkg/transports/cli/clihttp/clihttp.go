@@ -181,6 +181,7 @@ type HTTPError struct {
 	Method     string
 	URL        string
 	StatusCode int
+	Stage      string
 	Cause      error
 }
 
@@ -222,11 +223,21 @@ func (err *HTTPError) CLIHTTPStatus() int {
 	return err.StatusCode
 }
 
+// CLIHTTPStage identifies the bounded protocol stage at which an HTTP
+// operation failed. It is intentionally optional so existing callers that
+// only need method, URL, and status metadata remain compatible.
+func (err *HTTPError) CLIHTTPStage() string {
+	if err == nil {
+		return ""
+	}
+	return err.Stage
+}
+
 func NewHTTPError(method, requestURL string, statusCode int, cause error) error {
 	if cause == nil {
 		return nil
 	}
-	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Cause: cause}
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Stage: "transport", Cause: cause}
 }
 
 func NewHTTPErrorFromResponse(response *http.Response, cause error) error {
@@ -240,13 +251,20 @@ func NewHTTPErrorFromResponse(response *http.Response, cause error) error {
 		request = response.Request
 	}
 	method, requestURL := requestMetadata(request)
-	return NewHTTPError(method, requestURL, statusCode, cause)
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Cause: cause}
 }
 
 // WithHTTPResponse adds response metadata to an error that was classified
 // after the body was consumed. Existing HTTP-aware errors pass through so
 // structured server details remain the outermost diagnostic contract.
 func WithHTTPResponse(response *http.Response, cause error) error {
+	return WithHTTPResponseStage(response, cause, "")
+}
+
+// WithHTTPResponseStage adds response metadata and a bounded failure stage to
+// an error produced after an HTTP response has been received. Existing
+// HTTP-aware errors remain the outermost diagnostic contract.
+func WithHTTPResponseStage(response *http.Response, cause error, stage string) error {
 	if cause == nil {
 		return nil
 	}
@@ -258,7 +276,18 @@ func WithHTTPResponse(response *http.Response, cause error) error {
 	if errors.As(cause, &metadata) {
 		return cause
 	}
-	return NewHTTPErrorFromResponse(response, cause)
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		return NewHTTPErrorFromResponse(response, cause)
+	}
+	statusCode := 0
+	method := ""
+	requestURL := ""
+	if response != nil {
+		statusCode = response.StatusCode
+		method, requestURL = requestMetadata(response.Request)
+	}
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Stage: stage, Cause: cause}
 }
 
 func requestMetadata(request *http.Request) (string, string) {
@@ -374,10 +403,14 @@ func (p *protocol) doJSON(
 		return result, nil
 	}
 	if dst != nil {
-		decoder := json.NewDecoder(resp.Body)
+		if resp.Body == nil {
+			return result, WithHTTPResponseStage(resp, errors.New("HTTP response body is missing"), "body")
+		}
+		body := &responseBodyReader{reader: resp.Body}
+		decoder := json.NewDecoder(body)
 		if err := decoder.Decode(dst); err != nil {
 			_ = resp.Body.Close()
-			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
+			return result, WithHTTPResponseStage(resp, fmt.Errorf("parse response: %w", err), responseBodyFailureStage(body, "decode"))
 		}
 		var trailing any
 		if err := decoder.Decode(&trailing); err != io.EOF {
@@ -385,10 +418,30 @@ func (p *protocol) doJSON(
 			if err == nil {
 				err = fmt.Errorf("response contains multiple JSON values")
 			}
-			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
+			return result, WithHTTPResponseStage(resp, fmt.Errorf("parse response: %w", err), responseBodyFailureStage(body, "decode"))
 		}
 	}
 	return result, nil
+}
+
+type responseBodyReader struct {
+	reader io.Reader
+	err    error
+}
+
+func (reader *responseBodyReader) Read(payload []byte) (int, error) {
+	n, err := reader.reader.Read(payload)
+	if err != nil && err != io.EOF {
+		reader.err = err
+	}
+	return n, err
+}
+
+func responseBodyFailureStage(reader *responseBodyReader, decodeStage string) string {
+	if reader != nil && reader.err != nil {
+		return "body"
+	}
+	return decodeStage
 }
 
 func NewHTTPErrorFromRequest(request *http.Request, cause error) error {

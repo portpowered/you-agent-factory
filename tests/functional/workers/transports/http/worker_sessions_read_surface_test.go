@@ -1,6 +1,7 @@
 package http_test
 
 import (
+	"encoding/json"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,8 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 
 	runner.waitStarted(t)
 	inFlight := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, workerSessionsListURL(server.URL(), sessionID, workID))
+	cliInFlight := executeWorkerSessionsListJSON(t, server, sessionID, workID)
+	assertWorkerSessionReadIdentityEqual(t, "in-flight", cliInFlight, inFlight)
 	if len(inFlight.Sessions) != 1 {
 		t.Fatalf("in-flight Worker Session list = %#v, want one scoped observation", inFlight)
 	}
@@ -74,6 +77,8 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	runner.waitCompleted(t)
 	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
 	completed := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, workerSessionsListURL(server.URL(), sessionID, workID))
+	cliCompleted := executeWorkerSessionsListJSON(t, server, sessionID, workID)
+	assertWorkerSessionReadIdentityEqual(t, "completed", cliCompleted, completed)
 	if len(completed.Sessions) != 1 || completed.Sessions[0].WorkerSessionId != inFlight.Sessions[0].WorkerSessionId {
 		t.Fatalf("completed Worker Session list = %#v, want the same single attempt", completed)
 	}
@@ -86,10 +91,82 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	}
 }
 
+func assertWorkerSessionReadIdentityEqual(
+	t *testing.T,
+	phase string,
+	cliResponse, restResponse factoryapi.ListWorkerSessionsResponse,
+) {
+	t.Helper()
+	if len(cliResponse.Sessions) != len(restResponse.Sessions) {
+		t.Fatalf("%s CLI and REST Worker Session counts differ: CLI=%d REST=%d", phase, len(cliResponse.Sessions), len(restResponse.Sessions))
+	}
+	for index := range cliResponse.Sessions {
+		cliObservation := cliResponse.Sessions[index]
+		restObservation := restResponse.Sessions[index]
+		if cliObservation.WorkerSessionId != restObservation.WorkerSessionId ||
+			cliObservation.AttemptId != restObservation.AttemptId ||
+			cliObservation.State != restObservation.State ||
+			cliObservation.WorkId == nil || restObservation.WorkId == nil ||
+			*cliObservation.WorkId != *restObservation.WorkId ||
+			len(cliObservation.WorkIds) != len(restObservation.WorkIds) {
+			t.Fatalf("%s CLI and REST Worker Session identity at index %d differs:\nCLI: %#v\nREST: %#v", phase, index, cliObservation, restObservation)
+		}
+		for workIndex := range cliObservation.WorkIds {
+			if cliObservation.WorkIds[workIndex] != restObservation.WorkIds[workIndex] {
+				t.Fatalf("%s CLI and REST Work IDs at observation index %d differ:\nCLI: %#v\nREST: %#v", phase, index, cliObservation.WorkIds, restObservation.WorkIds)
+			}
+		}
+		if (cliObservation.FactorySessionId == nil) != (restObservation.FactorySessionId == nil) ||
+			(cliObservation.FactorySessionId != nil && *cliObservation.FactorySessionId != *restObservation.FactorySessionId) {
+			t.Fatalf("%s CLI and REST Factory Session identity at index %d differs: CLI=%#v REST=%#v", phase, index, cliObservation.FactorySessionId, restObservation.FactorySessionId)
+		}
+	}
+}
+
 func workerSessionsListURL(baseURL, sessionID, workID string) string {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions"
 	if workID == "" {
 		return endpoint
 	}
 	return endpoint + "?workId=" + url.QueryEscape(workID)
+}
+
+func executeWorkerSessionsListJSON(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	sessionID, workID string,
+) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--session", sessionID,
+		"--work-id", workID, "--server", server.URL(), "--output", "json",
+	})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("JSON Worker Sessions list for session %q Work %q: %v\nstderr:\n%s", sessionID, workID, err, inputs.Stderr())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); err != nil {
+		t.Fatalf("decode JSON Worker Sessions list for session %q Work %q: %v\nstdout:\n%s", sessionID, workID, err, inputs.Stdout())
+	}
+	return response
+}
+
+func executeDefaultWorkerSessionsListJSON(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	workID string,
+) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", workID,
+		"--server", server.URL(), "--output", "json",
+	})
+	if err := server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("default JSON Worker Sessions list for Work %q: %v\nstderr:\n%s", workID, err, inputs.Stderr())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); err != nil {
+		t.Fatalf("decode default JSON Worker Sessions list for Work %q: %v\nstdout:\n%s", workID, err, inputs.Stdout())
+	}
+	return response
 }

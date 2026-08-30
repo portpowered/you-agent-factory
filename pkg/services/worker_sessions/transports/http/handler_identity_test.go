@@ -3,10 +3,12 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -25,8 +27,9 @@ func (stub *sessionScopeResolverStub) ResolveWorkerSessionScope(context.Context,
 
 type decoratedSessionScopeResolverStub struct {
 	sessionScopeResolverStub
-	observations workersessions.ObservationService
-	resolveCalls int
+	observations         workersessions.ObservationService
+	resolveCalls         int
+	observationSessionID string
 }
 
 func (stub *decoratedSessionScopeResolverStub) ResolveWorkerSessionScope(ctx context.Context, sessionID string) (SessionScope, error) {
@@ -34,7 +37,8 @@ func (stub *decoratedSessionScopeResolverStub) ResolveWorkerSessionScope(ctx con
 	return stub.sessionScopeResolverStub.ResolveWorkerSessionScope(ctx, sessionID)
 }
 
-func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSession(sessionID string) workersessions.ObservationService {
+	stub.observationSessionID = sessionID
 	return stub.observations
 }
 
@@ -126,6 +130,163 @@ func TestListWorkerSessionsBySessionIDValidatesWorkBeforeResolvingScope(t *testi
 	}
 	if resolver.resolveCalls != 1 {
 		t.Fatalf("Factory Session scope resolution calls = %d, want 1 after Work validation", resolver.resolveCalls)
+	}
+	if resolver.observationSessionID != "session-1" {
+		t.Fatalf("scoped observation session ID = %q, want session-1", resolver.observationSessionID)
+	}
+}
+
+func TestListWorkerSessionsBySessionIDRejectsBlankWorkBeforeQueryingObservationService(t *testing.T) {
+	service := &fakeObservationService{}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	for _, workID := range []string{"", " ", "\t"} {
+		t.Run(fmt.Sprintf("workID=%q", workID), func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			handler.ListWorkerSessionsBySessionId(
+				recorder,
+				httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions", nil),
+				factoryapi.SessionID("session-1"),
+				factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: workID},
+			)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status for workID %q = %d, want 400; body=%s", workID, recorder.Code, recorder.Body.String())
+			}
+			if service.listCalled {
+				t.Fatal("observation service was queried for blank Work ID")
+			}
+		})
+	}
+}
+
+func TestListWorkerSessionsBySessionIDCancellationDoesNotReturnSuccess(t *testing.T) {
+	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID: "worker-session-stale", FactorySessionID: "session-1", WorkIDs: []string{"work-1"},
+		AttemptID: "attempt-stale", State: workersessions.StateCompleted,
+	}}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions?workId=work-1", nil).WithContext(ctx),
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("canceled response body = %q, want no response document", recorder.Body.String())
+	}
+	if service.listCalled {
+		t.Fatal("observation service was queried after request cancellation")
+	}
+}
+
+func TestListWorkerSessionsBySessionIDTimeoutDoesNotReturnStaleObservation(t *testing.T) {
+	resolver := &blockingSessionScopeResolver{entered: make(chan struct{})}
+	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID: "worker-session-stale", FactorySessionID: "session-1", WorkIDs: []string{"work-1"},
+		AttemptID: "attempt-stale", State: workersessions.StateCompleted,
+	}}}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
+	requestContext := newSignaledDeadlineContext()
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ListWorkerSessionsBySessionId(
+			recorder,
+			httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions?workId=work-1", nil).WithContext(requestContext),
+			factoryapi.SessionID("session-1"),
+			factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+		)
+		close(done)
+	}()
+	select {
+	case <-resolver.entered:
+	case <-time.After(time.Second):
+		t.Fatal("scope resolver was not reached")
+	}
+	requestContext.cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed-out list request did not release")
+	}
+	if service.listCalled {
+		t.Fatal("observation service was queried after scope resolution timed out")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode timeout response: %v; body=%s", err, recorder.Body.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("timeout error code = %q, want INTERNAL_ERROR", response.Code)
+	}
+}
+
+type blockingSessionScopeResolver struct {
+	entered chan struct{}
+}
+
+func (resolver *blockingSessionScopeResolver) ResolveWorkerSessionScope(ctx context.Context, _ string) (SessionScope, error) {
+	close(resolver.entered)
+	<-ctx.Done()
+	return SessionScope{}, ctx.Err()
+}
+
+type signaledDeadlineContext struct {
+	done   chan struct{}
+	cancel func()
+}
+
+func newSignaledDeadlineContext() *signaledDeadlineContext {
+	done := make(chan struct{})
+	return &signaledDeadlineContext{done: done, cancel: func() { close(done) }}
+}
+
+func (ctx *signaledDeadlineContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (ctx *signaledDeadlineContext) Done() <-chan struct{}       { return ctx.done }
+func (ctx *signaledDeadlineContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+func (ctx *signaledDeadlineContext) Value(any) any { return nil }
+
+func TestListWorkerSessionsBySessionIDDoesNotFallBackToRetainedObservationSource(t *testing.T) {
+	retained := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID:  "stale-worker-session",
+		FactorySessionID: "session-1",
+		WorkIDs:          []string{"work-1"},
+		AttemptID:        "stale-attempt",
+		State:            workersessions.StateCompleted,
+	}}}}
+	resolver := &decoratedSessionScopeResolverStub{
+		sessionScopeResolverStub: sessionScopeResolverStub{scope: SessionScope{EffectiveID: "session-1"}},
+	}
+	handler := NewHandler(NewAdapter(retained, workServiceStub{}, resolver), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/worker-sessions?workId=work-1", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("error code = %q, want INTERNAL_ERROR", response.Code)
+	}
+	if retained.listCalled {
+		t.Fatal("retained observation service was used after scoped source became unavailable")
 	}
 }
 

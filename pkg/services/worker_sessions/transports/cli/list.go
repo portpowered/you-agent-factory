@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -92,8 +93,9 @@ func list(config ListConfig) error {
 		clidiag.Printf(
 			config.Diagnostics,
 			config.Verbose || config.Debug,
-			"worker sessions list response endpointPath=%s error=unreachable durationMillis=%d",
+			"worker sessions list response endpointPath=%s errorStage=%s durationMillis=%d",
 			endpoint.Path,
+			workerSessionsListFailureStage(requestErr),
 			response.Duration.Milliseconds(),
 		)
 		return emitCLIError(config, jsonOutput, newCLIError(
@@ -122,9 +124,9 @@ func list(config ListConfig) error {
 		len(result.Sessions),
 	)
 	if jsonOutput {
-		return encodeListJSON(config.Output, result)
+		return writeListOutput(config.Output, result, true)
 	}
-	return renderList(config.Output, result)
+	return writeListOutput(config.Output, result, false)
 }
 
 func validateListConfig(config ListConfig) error {
@@ -248,6 +250,33 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 		sessions = append(sessions, observationJSON(session))
 	}
 	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions, PaginationContext: result.PaginationContext})
+}
+
+func writeListOutput(output io.Writer, result factoryapi.ListWorkerSessionsResponse, jsonOutput bool) error {
+	var rendered bytes.Buffer
+	var err error
+	if jsonOutput {
+		err = encodeListJSON(&rendered, result)
+	} else {
+		err = renderList(&rendered, result)
+	}
+	if err != nil {
+		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to render Worker Session list", err)
+	}
+	if _, err := io.Copy(output, &rendered); err != nil {
+		return newCLIError("WORKER_SESSION_OUTPUT_FAILED", "failed to write Worker Session list", err)
+	}
+	return nil
+}
+
+func workerSessionsListFailureStage(err error) string {
+	var staged interface{ CLIHTTPStage() string }
+	if errors.As(err, &staged) {
+		if stage := strings.TrimSpace(staged.CLIHTTPStage()); stage != "" {
+			return stage
+		}
+	}
+	return "transport"
 }
 
 func workerSessionsEndpoint(server, sessionID, workID, scope string, states []string, limit int, limitSet bool, maxResults int, nextToken string) (url.URL, error) {
