@@ -561,6 +561,28 @@ func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
 	}
 }
 
+func TestListCanceledContextIsTypedAndDoesNotReturnCollection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	protocol, err := clihttp.NewProtocol(listDoerFunc(func(request *http.Request) (*http.Response, error) {
+		return nil, request.Context().Err()
+	}), testClock{})
+	if err != nil {
+		t.Fatalf("NewProtocol() error = %v", err)
+	}
+	var output bytes.Buffer
+	err = NewList(protocol)(ListConfig{
+		Context: ctx, Server: "http://factory.test", WorkID: "work-1", OutputFormat: "json", Output: &output,
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want FACTORY_UNREACHABLE wrapping context.Canceled", err)
+	}
+	if strings.Contains(output.String(), `"sessions"`) {
+		t.Fatalf("canceled output contains a success collection: %q", output.String())
+	}
+}
+
 type listDoerFunc func(*http.Request) (*http.Response, error)
 
 func (f listDoerFunc) Do(request *http.Request) (*http.Response, error) { return f(request) }

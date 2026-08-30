@@ -40,9 +40,15 @@ func (a *Adapter) ListWorkerSessions(
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
 	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 
 	return a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)
@@ -54,11 +60,17 @@ func (a *Adapter) listWorkerSessionsForWork(
 	workID string,
 	workName string,
 ) (factoryapi.ListWorkerSessionsResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
 	observations := a.observationsForScope(scope)
 	if observations == nil {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
 	}
 	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID})
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, ctxErr
+	}
 	if err != nil {
 		if errors.Is(err, workersessions.ErrObservationWorkNotFound) {
 			return factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}}, nil

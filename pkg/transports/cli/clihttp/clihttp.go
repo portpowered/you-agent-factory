@@ -251,7 +251,7 @@ func NewHTTPErrorFromResponse(response *http.Response, cause error) error {
 		request = response.Request
 	}
 	method, requestURL := requestMetadata(request)
-	return NewHTTPError(method, requestURL, statusCode, cause)
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Cause: cause}
 }
 
 // WithHTTPResponse adds response metadata to an error that was classified
