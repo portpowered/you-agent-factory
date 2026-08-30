@@ -924,3 +924,44 @@ exits before its 20-second bound. The focused test passed on the current local
 head and the restart diff does not alter ACP behavior, so no speculative
 unowned fix entered this lane. The next required evidence boundary is the
 matching-head hosted CI run after the final push.
+
+## Current-main rebase correction and exact-head rerun
+
+Captured: `2026-08-30` after the review-requested refresh of `origin/main`.
+The branch rebased cleanly onto `origin/main`
+`905d5fe06e54f2cc18fa9d5ed4f08d72e5d85739`; the exact tested head is
+`65db217b6363aa02588a9a0a8c5aba1970294b8c`. The rebase changed no restart
+implementation behavior and introduced no conflict. This section supersedes
+the preceding stale-main handoff section for exact-head local evidence.
+
+The refreshed ancestry and owned-scope checks passed:
+
+```text
+git merge-base --is-ancestor origin/main HEAD
+exit 0
+git diff --name-status origin/main...HEAD
+five owned paths: three restart test files and two C14 evidence documents
+```
+
+The review-requested exact-head gates passed on Windows/amd64 with Go
+`go1.25.0` and `CGO_ENABLED=1`:
+
+| Gate | Command/procedure | Result | Property proved |
+| --- | --- | --- | --- |
+| `GATE-PACKAGE` | `go test ./tests/functional/sessions/restart/... -count=1` | Exit `0`; Go package `14.640s`, outer process `16.817s` | The complete restart package and all existing selectors pass on the current-main descendant. |
+| `GATE-RACE` | `go test -race ./tests/functional/sessions/restart/... -count=1` | Exit `0`; Go package `32.123s`, outer process `35.137s` | Supported Windows/amd64 race behavior remains clean. |
+| `GATE-LOOPBACK` | Detached clean worktree at `65db217b…`, then `go test ./tests/functional/sessions/restart/... -count=1` | Exit `0`; Go package `14.377s`, outer process `36.225s`; temporary worktree removed | The exact rebased artifact reproduces the package proof without repair. |
+
+The exact-head final performance procedure ran three sequential successful
+outer stopwatch samples of the package command:
+`16.7596s`, `19.0249s`, and `17.4717s`, each exit `0`. The sorted median is
+`17.4717s` versus the unchanged-source baseline `44.1461053s`, a `60.42%`
+reduction. This is a measurement refresh only; no additional optimization
+pass was made. The one-build topology remains one normal-process package CLI
+build, zero helper builds, private scenario state, and joined package cleanup.
+
+The clean-room path was confirmed absent after teardown
+(`LOOPBACK_PATH_REMOVED=True`). These local gates do not claim terminal hosted
+CI or merge; the next handoff step is to push this exact head, confirm the new
+required CI run has started, and post the refreshed before/after medians and
+CI URL in the PR conversation.

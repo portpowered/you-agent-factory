@@ -114,3 +114,32 @@ The earlier hosted blocker was an untouched ACP shared-process timeout. The
 focused local ACP selector passed at the rebased head (`65.944s`), and no ACP
 or shared-support file was changed. Hosted CI must re-evaluate that diagnostic
 on the final pushed head; this report does not claim terminal CI or merge.
+
+## Current-main rebase correction
+
+The review-requested rebase completed cleanly onto current `origin/main`
+`905d5fe06e54f2cc18fa9d5ed4f08d72e5d85739`. The exact artifact validated by
+this refresh is `65db217b6363aa02588a9a0a8c5aba1970294b8c`, on Windows/amd64
+with Go `go1.25.0` and `CGO_ENABLED=1`. No implementation conflict or repair
+was required.
+
+- `git merge-base --is-ancestor origin/main HEAD`: exit `0`.
+- The three-dot diff remains limited to the three restart test files and two
+  C14 evidence documents.
+- `go test ./tests/functional/sessions/restart/... -count=1`: exit `0`, Go
+  package `14.640s`, outer process `16.817s`.
+- `go test -race ./tests/functional/sessions/restart/... -count=1`: exit `0`,
+  Go package `32.123s`, outer process `35.137s`.
+- A detached clean worktree at the exact head ran
+  `go test ./tests/functional/sessions/restart/... -count=1`: exit `0`, Go
+  package `14.377s`, outer process `36.225s`; the temporary worktree was
+  removed and `LOOPBACK_PATH_REMOVED=True`.
+- Three sequential exact-head package timing samples were `16.7596s`,
+  `19.0249s`, and `17.4717s`, all exit `0`; median `17.4717s` versus the
+  `44.1461053s` baseline, a `60.42%` reduction. This is a measurement refresh,
+  not a second optimization pass.
+
+These exact-head local results refresh the PASS rows above. Hosted terminal CI,
+conflict-free merge, and future platform behavior remain unproven and are
+review-owned. The next implementation handoff action is to push this head,
+start required CI, and comment the refreshed medians and CI URL.
