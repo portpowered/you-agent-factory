@@ -1,13 +1,16 @@
 # Stability cleanup C12: deliberate witness admission
 
-Status: **Story 003 clean-room validation complete; review corrections applied; implementation handoff pending**
+Status: **Story 003 clean-room validation complete; report-only implementation handoff ready for review**
 
 This report contains the story-001 factual ledger, the story-002 candidate
 decision, and the story-003 clean-room loopback. It does not change a baseline,
 alter a workflow, implement a future source witness, or use a synthetic
-candidate. The correction revision will be pushed to the existing report-only
-pull request; the final head/required-check handoff remains the implementation
-finish boundary; terminal CI and merge remain review-owned.
+candidate. This Markdown artifact is not compiled, packaged, or executed by
+the untouched `tests/functional/factory/packaged/full_flow` package, so any
+functional-test result is review-owned CI evidence rather than a report
+behavior claim. The final head/required-check handoff remains the
+implementation finish boundary; terminal CI outcomes belong in the PR
+conversation and merge remains review-owned.
 
 ## Observation boundary
 
@@ -375,7 +378,7 @@ or manual merge repair is proposed.
 | Infeasible result criterion | PASS | The pinned checker source, required contexts, exact merge-result selection, direct comparison outputs, safe-class matrix, and operator decision boundary are recorded above. |
 | Governing plan authority | BLOCKED / NON-DECISIVE | `docs/temp/stability-cleanup.md` is absent at the pin; the policy contradiction does not rely on reconstructing its “useful” definition. |
 | `VAL-001` | PASS — clean-room replay | The story-003 validator independently replayed the pinned identities, checker behavior, merge tree, artifact checker, safe-class contradiction, and the corrected Windows diagnostic; the missing plan and corrected report-PR terminal state remain explicit unproven edges. |
-| Report PR handoff | READY | Existing [PR #2469](https://github.com/portpowered/you-agent-factory/pull/2469) is the report-only delivery PR; the correction revision is ready for its final push and required-check start. |
+| Report PR handoff | READY FOR REVIEW | Existing [PR #2469](https://github.com/portpowered/you-agent-factory/pull/2469) is the report-only delivery PR; the final report head is pushed and required-check outcomes are tracked in the PR conversation. |
 
 ## Verdict and smallest next step
 
