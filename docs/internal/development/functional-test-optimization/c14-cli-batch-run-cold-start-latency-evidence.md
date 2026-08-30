@@ -347,3 +347,173 @@ claimed.
 rebased in a clean room, run through the complete story-003 validation
 loopback, pushed, or published as a pull request. Those are the remaining
 acceptance edges; no browser criterion applies.
+
+---
+
+## Story 003 — final rebased artifact validation
+
+The final validation head was
+`9c6d427fbf20e04db85056fb16ad223dbb91c2c8`, rebased onto
+`a9f108bef55aa9115191661c4b3fc3c2e5ebf619`. During the validation run,
+`origin/main` advanced to `5c997439079adf8761959897ba2fb70fdad8a1f9`; no
+final push was made.
+
+`GATE-PERF-001: PASS.` The final binary was
+`.artifacts/batch-coldstart-probe/validation-9c6d427fbf20.exe`, SHA-256
+`1E87BFCC6A79B5FD56BAE60D95E25A1A2C0B4736C027C66C03878BC249BE9B86`.
+Using the exact command
+
+~~~
+run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
+~~~
+
+in three isolated child fixture/home directories produced wall times
+`538.810 ms`, `479.094 ms`, and `492.866 ms`; sorted median `492.866 ms`.
+Against the pre-change median `1318.610 ms`, the reduction is `825.744 ms`
+and `62.62%` (`0.3738x` the baseline). All three exited `0`, wrote exact
+stdout `Batch completed successfully.\n` (30 UTF-8 bytes), wrote empty stderr,
+and had no remaining packaged-Factory files. Each durable snapshot contained
+`one-work` at `prompt-task:complete`, state `complete`, outcome `ACCEPTED`,
+transition `process-prompt`, and session status `RUNNING`.
+
+The final snapshot hashes for runs 1–3 were, respectively,
+`877D8C340606A9132B5694C01E647164B20A09E64B9CC6AFA80FF56CEF7E4805`,
+`F8A2DDAC607997D362D3C15287B2CCDE791E9E09B37248395AF95083D78DD6D6`, and
+`D597533CB72D9D9422B231C64A3266845C2A9003EC5C66F93DF723365B8BA1A2`.
+Fixture hashes were unchanged from story 001: Factory
+`AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
+`CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, and
+accepting mock workers
+`69A0CE360F450CF9E71D4C9935345D1B2CF6A734A4E79DAE534E836F6218D3C3`.
+
+`GATE-SPINE-001`, `GATE-RACE-001`, and `GATE-SERVER-001` are PASS for the
+changed package and direct-consumer evidence. Normal and race-focused CLI/
+process-lifecycle tests passed; direct initializer, application, Wire,
+runtime-hosting, recordings, replay, and unchanged workers/mock selectors all
+passed. The package-count regression caused by the standalone test file was
+resolved by folding those tests into the existing CLI run-flags test file;
+`make pkg-maint`, `make backend-size`, and `make pkg-file-count` then passed.
+
+`GATE-FUNC-001: BLOCKED.` `make test-functional-fresh` was run once with the
+normal environment and once with isolated `HOME`/`USERPROFILE`. The normal run
+was blocked by the existing global
+`C:\Users\andre\.you-agent-factory\factories\.you--full-flow.staging-owner`
+(PID `6224`, backend scope
+`local-0fbcdede-35ac-44d2-b02f-5888b9b8a9e1`, liveness indeterminate). The
+isolated run removed that global conflict but still encountered concurrent
+temporary packaged-Factory staging owners in unchanged server/session/event
+tests and a Windows `Access is denied` failure removing a temporary
+`you.exe` in `tests/functional/recordings/process`. No lease or unrelated
+production/test-functional source was removed or repaired.
+
+`Quality gates: BLOCKED.` Final `make test` passed with 447 Go packages (one
+platform-conditional skip) and 169 workflow tests (168 pass, one skip).
+Backend/package/boundary/structure/cycle/catalog/generation checks passed.
+The final `make lint` reports only environment/baseline failures: UI Biome is
+missing, UI Knip is missing, and deadcode reports baseline `3074` versus
+current `3072`. No Wire authorship changed, so `make generate-wire` was not
+applicable.
+
+`GATE-LOOP-001: BLOCKED.` The canonical
+[validation-loopback report](validation/c14-cli-batch-run-cold-start-latency-validation.md)
+is present and the final binary/performance proof is complete, but the full
+functional and lint gates remain blocked, and `origin/main` advanced after the
+tested rebase. Final rebase, push, PR creation, CI start, and review feedback
+handling remain unperformed. No browser criterion applies.
+
+## Story 003 follow-up — serialized functional and lint environment
+
+The prior parallel functional failures were cleared by the bounded command
+`make FUNCTIONAL_DEFAULT_JOBS=1 test-functional-fresh` with isolated artifact
+`HOME`/`USERPROFILE` and `YOU_NO_BROWSER_OPEN=1`. The complete unchanged
+`tests/functional/...` inventory exited 0; all enumerated packages, including
+packaged factories, server/session/event paths, recordings/process, and
+`workers/mock`, passed without staging contention, Windows binary cleanup
+failure, or source edits.
+
+The pinned ignored UI dependencies were installed with
+`cd ui; bun install --frozen-lockfile`; `make ui-lint` and `make ui-deadcode`
+each exited 0. Native Windows `make lint` passed every target except the
+platform-sensitive Go deadcode comparison (3072 Windows build-tag findings
+versus the Linux baseline's 3074). The same `make deadcode` under WSL Go 1.25
+exited 0 with the committed baseline. The shared baseline was not changed.
+
+The current remaining handoff edges are the final rebase onto current
+`origin/main`, a fresh delivered-binary probe and minimum required gates on
+that head, and PR/CI start.
+
+---
+
+## Story 003 — current-main clean-room validation
+
+The delivered implementation was rebased successfully onto current
+`origin/main` at `905d5fe06e54f2cc18fa9d5ed4f08d72e5d85739`; the resulting head
+was `035b59e2ddc461718490a60023546fe0cc81d10e`. No functional, API, Wire,
+generated, or test-source changes were made during the rebase or validation.
+
+`GATE-PERF-001: PASS.` A fresh `./cmd/factory` binary built from that head at
+`.artifacts/batch-coldstart-probe/validation-035b59e2dd.exe` had SHA-256
+`1E87BFCC6A79B5FD56BAE60D95E25A1A2C0B4736C027C66C03878BC249BE9B86`.
+The exact command
+
+~~~
+run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
+~~~
+
+ran in three isolated fresh child fixture/home directories in `128.655 ms`,
+`131.264 ms`, and `174.156 ms`; sorted median `131.264 ms`. Against the
+characterized `1318.610 ms` median, this is `1187.346 ms` and `90.05%` lower
+(`0.0995x` the baseline). Every child exited `0`, wrote exact stdout
+`Batch completed successfully.\n` (30 UTF-8 bytes), empty stderr, and no
+packaged-Factory files. Each durable snapshot contained `one-work` at
+`prompt-task:complete`, state `complete`, outcome `ACCEPTED`, and transition
+`process-prompt`; all children had exited after the snapshot was inspected.
+The snapshot hashes for runs 1–3 were
+`E664C906AD6A0FD78D6746DA838CCFB57777A3AD4FD1BB08445430050CE55A4D`,
+`B4614BE35137FA3FE2E1633B1CE83B7FC8579B560586D122BED9791A49127749`, and
+`7A09035931FFB481C14A16BDA4FD94E9025350D6EB13F2CF413201FEA2445292`.
+Fixture hashes remained unchanged: Factory
+`AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
+`CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, and
+accepting mock workers
+`69A0CE360F450CF9E71D4C9935345D1B2CF6A734A4E79DAE534E836F6218D3C3`.
+
+`GATE-FUNC-001: PASS.` The complete unchanged inventory exited `0` under
+`FUNCTIONAL_DEFAULT_JOBS=1` with isolated `HOME`/`USERPROFILE` and
+`YOU_NO_BROWSER_OPEN=1`; packaged factories, server/session/event,
+recordings/process, and workers/mock all passed. This serialized run cleared
+the environment-owned staging contention seen in earlier parallel attempts;
+no shared lease, unrelated source, or functional test was changed.
+
+`GATE-SPINE-001`, `GATE-RACE-001`, and `GATE-SERVER-001: PASS` for the
+changed selectors and direct consumers. The normal and race-focused CLI and
+process-lifecycle tests passed, as did direct initializer/application/Wire,
+runtime-hosting, recordings/replay, and unchanged `workers/mock` tests. The
+broader race command retains the known unrelated idle-stdin ACP cancellation
+failure as an unproven edge; it is outside the changed selector and did not
+change during this work.
+
+`Quality gates: PASS with a platform qualification.` The final captured
+`make test` exited `0` (447 Go packages; one platform-conditional skip; 169
+workflow tests with 168 pass and one skip). Backend/package/boundary/
+structure/cycle/catalog/generation checks passed. After installing the pinned
+ignored UI dependencies with `bun install --frozen-lockfile`, `make ui-lint`
+and `make ui-deadcode` exited `0`. Native Windows `make lint` passed every
+target except the platform-sensitive deadcode comparison (`3072` Windows
+build-tag findings versus the Linux baseline's `3074`); `make deadcode` under
+WSL Go 1.25 passed against the committed baseline. The baseline was not
+changed, and no Wire authorship changed, so `make generate-wire` was not
+applicable.
+
+The first final-probe attempt intentionally failed closed because a manual
+fixture copy omitted hidden/recursive files and returned
+`CURRENT_FACTORY_NOT_FOUND`; it was discarded as a procedure error. The
+authoritative result above copied the complete fixture tree and passed all
+behavioral checks.
+
+`GATE-LOOP-001: READY FOR HANDOFF.` The current-main rebase, rebuilt binary,
+exact three-run probe, serialized functional inventory, focused/direct/race
+tests, full unit gate, and platform-qualified lint evidence are complete.
+The remaining action is to push this head, open the named PR, start required
+CI, and address any blocking review feedback without claiming terminal CI or
+merge.
