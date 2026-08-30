@@ -173,7 +173,31 @@ func TestBoardPersistenceSharedBinaryPartialSetupFailure(t *testing.T) {
 		boardPersistenceBuildReportEnv+"="+reportPath,
 		boardPersistenceScenarioMarkerEnv+"="+scenarioMarkerPath,
 	)
-	output, runErr := command.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start partial setup probe: %v", err)
+	}
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- command.Wait()
+	}()
+	probeTimer := time.NewTimer(boardPersistencePartialSetupProbeTimeout)
+	defer probeTimer.Stop()
+	var runErr error
+	select {
+	case runErr = <-waitResult:
+	case <-probeTimer.C:
+		killErr := command.Process.Kill()
+		waitErr := <-waitResult
+		output := append(append([]byte(nil), stdout.Bytes()...), stderr.Bytes()...)
+		if killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			t.Fatalf("partial setup probe timed out after %s; kill error = %v, joined wait error = %v\noutput:\n%s", boardPersistencePartialSetupProbeTimeout, killErr, waitErr, output)
+		}
+		t.Fatalf("partial setup probe timed out after %s; child was killed and joined with wait error = %v\noutput:\n%s", boardPersistencePartialSetupProbeTimeout, waitErr, output)
+	}
+	output := append(append([]byte(nil), stdout.Bytes()...), stderr.Bytes()...)
 	if runErr == nil {
 		t.Fatalf("partial setup probe exited successfully; output:\n%s", output)
 	}

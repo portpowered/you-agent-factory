@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"testing"
+	"time"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 	boardPersistenceScenarioMarkerEnv        = "YOU_BOARD_PERSISTENCE_SCENARIO_MARKER"
 	boardPersistenceHelperEnvValue           = "1"
 	boardPersistenceBuildFailureAfterTempDir = "after-temp-dir"
+	boardPersistencePartialSetupProbeTimeout = 20 * time.Second
 	boardPersistenceWorkerSentinel           = "board-persistence-worker-result:PASS"
 	boardPersistenceInitialWorkID            = "board-persistence-init"
 	boardPersistenceProcessingWorkID         = "board-persistence-processing"
