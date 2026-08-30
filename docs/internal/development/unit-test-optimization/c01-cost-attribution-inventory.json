@@ -1,0 +1,173 @@
+{
+  "schema": "you-agent-factory.unit-coverage-cost-attribution.v1",
+  "version": 1,
+  "sourcePlan": "docs/internal/development/unit-test-optimization/README.md",
+  "story": "unit-test-optimization-c01-unit-coverage-build-diagnostics-001",
+  "status": "baseline",
+  "governingRequirements": [
+    "UTO-TARGET",
+    "UTO-C01-ATTRIBUTION",
+    "UTO-C01-U01",
+    "UTO-C01-PARALLELISM-EXPERIMENT",
+    "UTO-C01-PACKAGE-CLASSIFICATION",
+    "UTO-C01-PILOT-DISPOSITION",
+    "UTO-C01-CHARTER",
+    "UTO-C01-EVIDENCE",
+    "UTO-LOOPBACK"
+  ],
+  "storyTrace": [
+    {
+      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-001",
+      "requirements": [
+        "UTO-TARGET",
+        "UTO-C01-ATTRIBUTION",
+        "UTO-C01-PACKAGE-CLASSIFICATION",
+        "UTO-C01-PILOT-DISPOSITION",
+        "UTO-C01-CHARTER"
+      ],
+      "outcome": "Charter and conservative v1 inventory structure established from the reference baseline."
+    },
+    {
+      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002",
+      "requirements": ["UTO-C01-U01", "UTO-LOOPBACK"],
+      "outcome": "Optional Make and workflow diagnostic wiring preserves the default path and publishes the existing artifact."
+    },
+    {
+      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-003",
+      "requirements": [
+        "UTO-C01-ATTRIBUTION",
+        "UTO-C01-PARALLELISM-EXPERIMENT",
+        "UTO-C01-PACKAGE-CLASSIFICATION",
+        "UTO-C01-PILOT-DISPOSITION",
+        "UTO-C01-EVIDENCE"
+      ],
+      "outcome": "Same-head hosted attribution, parallelism, medians, and 445 package classifications are reconciled."
+    },
+    {
+      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-004",
+      "requirements": ["UTO-LOOPBACK", "UTO-C01-EVIDENCE", "UTO-TARGET"],
+      "outcome": "Clean-room behavior, red-path sensitivity, scope isolation, and review handoff are independently validated."
+    }
+  ],
+  "referenceRun": {
+    "runId": 33322584614,
+    "jobId": 99287112602,
+    "source": "operator-supplied hosted Backend Unit Coverage observation",
+    "status": "reference-only"
+  },
+  "baseline": {
+    "jobWallSeconds": 649.0,
+    "coverageStepWallSeconds": 607.0,
+    "goTestWallSeconds": 342.9,
+    "testExecutionSeconds": 43.7,
+    "unattributedResidualSeconds": 264.1,
+    "residualDisposition": "measure-before-claim",
+    "optimizationClaim": "none"
+  },
+  "targets": {
+    "backendUnitCoverageMaxSeconds": 240.0,
+    "backendUnitLatencyMaxSeconds": 200.0,
+    "subTwoMinuteCoverageDisposition": "rejected",
+    "subTwoMinuteCoverageRationale": "The current lane links 445 instrumented test binaries, runs 18273 tests, emits a 99418-block profile, evaluates 445 package floors, and has a 147.3-second irreducible per-package coverage floor."
+  },
+  "corpus": {
+    "packageCount": 445,
+    "testCount": 18273,
+    "testSkipCountMaximum": 57,
+    "coveragePercent": 80.7,
+    "profileBlockCount": 99418,
+    "fixedPackageOverheadSeconds": 0.322,
+    "irreducibleCoverageFloorSeconds": 147.3
+  },
+  "buckets": [],
+  "bucketContract": {
+    "requiredBuckets": ["compile", "link", "covdata", "merge", "evaluate"],
+    "requiredRowFields": [
+      "identity",
+      "bucket",
+      "measuredSeconds",
+      "measurementSource",
+      "measurementStatus",
+      "verdict",
+      "owningLane",
+      "blockedBy"
+    ],
+    "measurementStatusValues": ["measured", "inferred"],
+    "verdictValues": [
+      "INFRASTRUCTURE-FIX",
+      "NEEDS-EXPERIMENT",
+      "CONVERT",
+      "KEEP-AS-IS",
+      "OUT-OF-SCOPE"
+    ],
+    "identityRule": "Each captured bucket identity is stable and unique.",
+    "measurementRule": "Captured seconds are finite and non-negative, and the source identifies a retrievable artifact, command, run, and job.",
+    "emptyState": "No stage measurement is captured until U01-G2 supplies same-head hosted evidence.",
+    "owner": "U01-G2"
+  },
+  "packages": [],
+  "packageContract": {
+    "expectedRowCount": 445,
+    "bucket": "fixed-package-overhead",
+    "fixedPackageOverheadSeconds": 0.322,
+    "requiredRowFields": [
+      "identity",
+      "bucket",
+      "measuredSeconds",
+      "measurementSource",
+      "measurementStatus",
+      "verdict",
+      "owningLane",
+      "blockedBy"
+    ],
+    "identityRule": "Each package identity is a unique Go import path.",
+    "verdictValues": [
+      "INFRASTRUCTURE-FIX",
+      "NEEDS-EXPERIMENT",
+      "CONVERT",
+      "KEEP-AS-IS",
+      "OUT-OF-SCOPE"
+    ],
+    "emptyState": "The expected count and row contract are recorded; package rows await U01-G2 classification.",
+    "owner": "U01-G2"
+  },
+  "parallelismExperiment": {
+    "status": "not-captured",
+    "requiredParameters": ["-p=1", "-p=4"],
+    "p1": null,
+    "p4": null,
+    "collapsedParallelismVerdict": null,
+    "owner": "U01-G2"
+  },
+  "pilotDisposition": {
+    "identity": "factory-sessions-execution",
+    "measuredSeconds": 10.63,
+    "measurementSource": "operator-supplied pilot observation associated with the factory-sessions execution inventory",
+    "measurementStatus": "measured",
+    "verdict": "KEEP-AS-IS",
+    "owningLane": "U01",
+    "blockedBy": [],
+    "reason": "The package cost cannot materially reduce a 649-second infrastructure wall."
+  },
+  "evidenceRules": {
+    "sameHeadRequired": true,
+    "invalidSamplesExcluded": [
+      "cancelled",
+      "failed",
+      "duplicate",
+      "cross-head",
+      "expired"
+    ],
+    "medianSource": "three valid hosted runs on the same head",
+    "detailedCiEvidence": "PR comment only",
+    "committedArtifacts": "aggregates and identifiers only; no raw traces, secrets, credentials, absolute runner paths, or test payloads"
+  },
+  "ownership": {
+    "charterAndInventory": "U01 story 001",
+    "makeInvocation": "U01 story 002",
+    "workflowPublication": "U01 story 002",
+    "hostedAttributionAndClassification": "U01 story 003",
+    "cleanRoomValidation": "U01 story 004",
+    "reviewTerminalCiAndMerge": "review stage"
+  }
+}
