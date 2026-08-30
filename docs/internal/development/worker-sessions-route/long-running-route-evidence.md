@@ -141,3 +141,51 @@ infrastructure, and literal multi-day uptime.
   stale session. A bounded local pass must not be described as proof of the
   historical duration.
 
+## Story 002 correction and bounded functional evidence
+
+The characterization fixtures above still did not reproduce the reported
+`FACTORY_UNREACHABLE` result, so this story does not claim that a historical
+first failing hop was observed. A controlled Worker Sessions handler regression
+did identify an owned fail-open condition: when the scoped observation resolver
+returned no source, the old adapter could fall back to a retained service from
+another Factory Session. The correction makes the resolver-provided source
+authoritative and fails closed when it is absent. The list handler also
+re-checks cancellation at dependency boundaries, and the CLI HTTP adapter keeps
+typed transport failures while distinguishing transport, body, and decode
+stages without exposing response content.
+
+The correction and test series is on the story head after
+`8dd4ddd72e` (`test(worker-sessions): cover route error parity`). Focused
+regressions proved that a missing scoped source returns safe non-success
+without calling the retained service, canceled or timed-out reads do not emit a
+success document, typed CLI failures do not contain response secrets or a
+partial collection, and successful output is not published after a writer
+failure.
+
+Functional evidence on the root-built production wiring:
+
+- `TestWorkerSessionHTTPReadDuringFactoryWork` passed for the in-flight read
+  before and after the controlled provider release, with the same exact
+  Worker Session identity and the expected terminal transition.
+- `TestWorkerSessionRouteCharacterization_FreshAndExactly32Dispatches` and
+  `TestWorkerSessionRouteCharacterization_AfterDefaultPauseResume` passed for
+  fresh, exactly 32 sequential, repeated final reads, and supported
+  pause/resume journeys. Expected values came from public dispatch association
+  events; no runtime internals were used.
+- `TestWorkerSessionRouteFunctionalKnownEmptyWork`,
+  `TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope`, and
+  `TestWorkerSessionRouteFunctionalBadInputAndUnknownWork` passed for the
+  empty, concurrent, bad-input, and unknown-Work cases. Direct REST was used
+  only for API parity and API-owned status assertions; CLI cases used
+  `Process.Execute`.
+- Focused package tests and the affected race workload passed. `make
+  verify-fast` and `make api-smoke` passed. `make lint` passed every checker
+  except the existing Windows deadcode ratchet, which reported baseline 3074
+  versus current 3072 after the correction; the platform-specific baseline
+  drift was present before this story and was not changed.
+
+No OpenAPI, generated, CLI-shape, Factory Runtime, Events, Recordings, or
+Worker Session terminalization/control semantics changed. This bounded local
+evidence proves the corrected matrix but not OS executable packaging or the
+literal multi-day daemon hypothesis; those remain GATE-LOOPBACK and
+GATE-OPERATOR-LONG-RUN.
