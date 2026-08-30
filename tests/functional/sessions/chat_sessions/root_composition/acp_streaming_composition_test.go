@@ -157,9 +157,9 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 }
 
 // startControlledServeACPHarness runs a fresh customer-facing ACP command
-// invocation on a scenario-scoped fixed-profile process. The invocation's
-// pipes and context are owned by the calling test; the process is closed by
-// that scenario's cleanup.
+// invocation on a scenario-scoped process and initialization home. The
+// invocation's pipes and context are owned by the calling test; the process is
+// closed by that scenario's cleanup.
 func startControlledServeACPHarness(t *testing.T, cohort *controlledACPCohort, cwd string) (*os.File, *bufio.Reader) {
 	t.Helper()
 	return startServeACPProcess(t, cohort.process, cohort.home, cwd)
@@ -171,7 +171,7 @@ func startServeACPProcess(
 	home, cwd string,
 ) (*os.File, *bufio.Reader) {
 	t.Helper()
-	acquireChatActivationSlot(t)
+	lease := beginChatACPHomeEnvironment(t, home)
 
 	stdinReadFile, stdinWriteFile, err := os.Pipe()
 	if err != nil {
@@ -179,6 +179,8 @@ func startServeACPProcess(
 	}
 	stdinRead := newChatPipeEndpoint(stdinReadFile, "ACP stdin reader")
 	stdinWrite := newChatPipeEndpoint(stdinWriteFile, "ACP stdin writer")
+	chatACPHomeLeases.Store(stdinWrite.file, lease)
+	t.Cleanup(func() { chatACPHomeLeases.Delete(stdinWrite.file) })
 	stdoutReadFile, stdoutWriteFile, err := os.Pipe()
 	if err != nil {
 		_ = stdinRead.Close()
@@ -372,6 +374,7 @@ func driveServeACPFactoryTarget(
 // updates, then the terminal prompt result).
 func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID, text string) (serveACPLine, []acpsdk.SessionNotification) {
 	t.Helper()
+	defer releaseChatACPHomeForInput(stdin)
 
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,

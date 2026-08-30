@@ -38,8 +38,8 @@ type packagedFactoryPromptCase struct {
 }
 
 // packagedFactoryCohort owns one root process for a packaged Factory prompt
-// cell. Its immutable catalog/profile home is shared with other activation
-// cells, while the process remains private because a completed on-demand
+// cell. Its immutable catalog/profile seed is shared with other activation
+// cells, while the command home and process remain private because a completed on-demand
 // activation is retained under that process's ~default scope.
 type packagedFactoryCohort struct {
 	home    string
@@ -52,7 +52,11 @@ func newPackagedFactoryCohort(
 	runner process.CommandRunner,
 ) *packagedFactoryCohort {
 	t.Helper()
-	home := sharedACPActivationHomeForTest(t)
+	home := seedACPActivationCommandHomeForTest(
+		t,
+		"packaged Factory "+factory+" initialization home",
+		"you-chat-packaged-"+strings.NewReplacer("@", "", "/", "-").Replace(factory)+"-home-",
+	)
 	buildProcess, err := buildChatProcess(t, "packaged Factory "+factory+" target "+target, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
@@ -179,6 +183,7 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 			t.Parallel()
 
 			cwd := chatTempDir(t, "packaged Factory "+testCase.name+" working directory", "packaged-cwd-")
+			seedProjectPackagedFactory(t, cwd, testCase.factory)
 			stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 			sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)

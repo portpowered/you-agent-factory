@@ -46,7 +46,6 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 
 	cohort := newControlledACPCohort(t, "delegation-reuse")
 	t.Parallel()
-	acquireChatActivationSlot(t)
 	server := controlledACPServerForCohort(t, cohort)
 	callsBeforeFirstTurn := cohort.factorySessionIDCalls.Load()
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-reuse")
@@ -101,7 +100,6 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 
 	cohort := newControlledACPCohort(t, "delegation-failure")
 	t.Parallel()
-	acquireChatActivationSlot(t)
 	server := controlledACPServerForCohort(t, cohort)
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-failure")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
@@ -363,7 +361,6 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 	t.Parallel()
-	acquireChatActivationSlot(t)
 
 	// A single delivery's Factory Session ID and provider request counts are
 	// the baseline: if a redelivered duplicate on the same connection
@@ -582,7 +579,6 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 	t.Parallel()
-	acquireChatActivationSlot(t)
 
 	cohort := newControlledACPCohort(t, "delegation-busy")
 	server := controlledACPServerForCohort(t, cohort)

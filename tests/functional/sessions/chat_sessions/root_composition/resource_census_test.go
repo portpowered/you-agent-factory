@@ -216,9 +216,11 @@ func closeChatProcess(process support.ApplicationProcess) error {
 	if process == nil {
 		return nil
 	}
+	server := process.ACPServer()
 	if err := process.Close(context.Background()); err != nil {
 		return err
 	}
+	chatACPServerHomes.Delete(chatIdentity(server))
 	return chatCensus.closeProcess(process)
 }
 
@@ -278,7 +280,13 @@ func serveChatRequest(server support.ACPServer, ctx context.Context, in io.Reade
 			chatCensus.recordViolation(err)
 		}
 	}()
-	return server.Serve(ctx, in, out)
+	home := chatACPHomeForServer(server)
+	if home == "" {
+		return server.Serve(ctx, in, out)
+	}
+	return withChatACPHomeEnvironment(home, func() error {
+		return server.Serve(ctx, in, out)
+	})
 }
 
 type chatPipeEndpoint struct {

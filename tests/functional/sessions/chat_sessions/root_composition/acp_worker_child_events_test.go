@@ -349,9 +349,14 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd string) {
 	t.Helper()
 
-	home = sharedACPActivationHomeForTest(t)
-
-	return home, chatTempDir(t, "ACP worker child "+name+" working directory", "worker-child-cwd-")
+	home = seedACPActivationCommandHomeForTest(
+		t,
+		"ACP worker child "+name+" initialization home",
+		"you-chat-worker-child-"+name+"-home-",
+	)
+	cwd = chatTempDir(t, "ACP worker child "+name+" working directory", "worker-child-cwd-")
+	seedACPWorkerChildFactoryAtRoot(t, factorydefinitions.ProjectFactoriesRoot(cwd), name, stages)
+	return home, cwd
 }
 
 func seedSharedACPWorkerChildFactories(t testing.TB, home string) {
@@ -367,6 +372,11 @@ func seedACPWorkerChildFactory(t testing.TB, home, name string, stages int) {
 	if err != nil {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
+	seedACPWorkerChildFactoryAtRoot(t, root, name, stages)
+}
+
+func seedACPWorkerChildFactoryAtRoot(t testing.TB, root, name string, stages int) {
+	t.Helper()
 	dir := filepath.Join(root, "@acp-child-test", name)
 	registerChatFactoryPath(t, dir)
 	writeACPWorkerChildFile(t, dir, "factory.json", acpWorkerChildFactoryJSON(name, stages))
@@ -528,13 +538,18 @@ func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 	// This cell intentionally owns its root process: the @you/spawn activation
 	// depends on the process environment's default Worker provider and its
 	// completed activation remains retained under the process-scoped ~default
-	// binding. Its immutable home/catalog/profile is shared with the other
-	// activation cells; sharing the process would change that production
-	// lifecycle edge.
-	home := sharedACPActivationHomeForTest(t)
+	// binding. Its immutable catalog/profile seed is shared with the other
+	// activation cells, but its command home and process remain private;
+	// sharing the process would change that production lifecycle edge.
+	home := seedACPActivationCommandHomeForTest(
+		t,
+		"JavaScript worker child initialization home",
+		"you-chat-javascript-child-home-",
+	)
 
 	runner := &spawnACPRunner{}
 	cwd := chatTempDir(t, "JavaScript worker child working directory", "javascript-child-cwd-")
+	seedProjectPackagedFactory(t, cwd, "@you/spawn")
 	t.Parallel()
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
 

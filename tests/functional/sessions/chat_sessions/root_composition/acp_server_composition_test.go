@@ -78,18 +78,6 @@ var sharedACPActivationHomeState struct {
 	originalDefaultModel       string
 }
 
-// A few independent ACP roots may run at once, but their real local runtime
-// startup still touches the filesystem-backed packaged catalog. This bound
-// keeps startup below the host's contention cliff while preserving parallel
-// execution of independent process/home lifetimes.
-var chatActivationSlots = make(chan struct{}, 4)
-
-func acquireChatActivationSlot(t testing.TB) {
-	t.Helper()
-	chatActivationSlots <- struct{}{}
-	t.Cleanup(func() { <-chatActivationSlots })
-}
-
 var sharedACPActivationTargets = []string{
 	"factory:@you/goal",
 	"factory:@you/classify",
@@ -103,14 +91,191 @@ var sharedACPActivationTargets = []string{
 	"factory:@acp-child-test/replay",
 }
 
-// sharedACPActivationHomeForTest returns one immutable home/catalog/profile
-// cohort while every caller still gets a fresh root process. It uses the
-// package process environment, rather than testing.T.Setenv, because callers
-// may enter the shared-root setup after t.Parallel; all activation witnesses
-// use this same value and no activation witness mutates it during execution.
+// ACP's production home resolver is process-global, while the command input
+// home is invocation-scoped. Keep the resolver on the activation's private
+// seeded home only through startup and the first prompt, when the runtime
+// captures its home/config paths; later prompts reuse that captured runtime.
+// Different homes serialize on this process-global environment, while
+// concurrent requests for one active home share a reference-counted lease.
+var chatACPHomeEnvironmentMu sync.Mutex
+var chatACPHomeEnvironmentStateMu sync.Mutex
+var chatACPHomeLeases sync.Map
+var chatACPServerHomes sync.Map
+var chatACPActiveHome string
+var chatACPActiveUsers int
+var chatACPActiveLease *chatACPHomeEnvironment
+
+type chatACPHomeEnvironment struct {
+	home                       string
+	originalHomeSet            bool
+	originalHome               string
+	originalUserProfileSet     bool
+	originalUserProfile        string
+	originalDefaultProviderSet bool
+	originalDefaultProvider    string
+	originalDefaultModelSet    bool
+	originalDefaultModel       string
+	releaseOnce                sync.Once
+}
+
+func beginChatACPHomeEnvironment(t testing.TB, home string) *chatACPHomeEnvironment {
+	t.Helper()
+	chatACPHomeEnvironmentMu.Lock()
+	lease := &chatACPHomeEnvironment{home: home}
+	captureChatACPHomeEnvironment(lease)
+	if err := os.Setenv("HOME", home); err != nil {
+		chatACPHomeEnvironmentMu.Unlock()
+		t.Fatalf("set ACP activation HOME: %v", err)
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		lease.restore()
+		chatACPHomeEnvironmentMu.Unlock()
+		t.Fatalf("set ACP activation USERPROFILE: %v", err)
+	}
+	chatACPHomeEnvironmentStateMu.Lock()
+	chatACPActiveHome = home
+	chatACPActiveUsers = 1
+	chatACPActiveLease = lease
+	chatACPHomeEnvironmentStateMu.Unlock()
+	t.Cleanup(lease.release)
+	return lease
+}
+
+func captureChatACPHomeEnvironment(lease *chatACPHomeEnvironment) {
+	lease.originalHome, lease.originalHomeSet = os.LookupEnv("HOME")
+	lease.originalUserProfile, lease.originalUserProfileSet = os.LookupEnv("USERPROFILE")
+	lease.originalDefaultProvider, lease.originalDefaultProviderSet = os.LookupEnv(operatorsettings.EnvDefaultWorkerModelProvider)
+	lease.originalDefaultModel, lease.originalDefaultModelSet = os.LookupEnv(operatorsettings.EnvDefaultWorkerModel)
+}
+
+func (lease *chatACPHomeEnvironment) release() {
+	if lease == nil {
+		return
+	}
+	lease.releaseOnce.Do(func() {
+		releaseChatACPHomeEnvironmentUser(lease)
+	})
+}
+
+func (lease *chatACPHomeEnvironment) restore() {
+	if lease.originalHomeSet {
+		_ = os.Setenv("HOME", lease.originalHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	if lease.originalUserProfileSet {
+		_ = os.Setenv("USERPROFILE", lease.originalUserProfile)
+	} else {
+		_ = os.Unsetenv("USERPROFILE")
+	}
+	if lease.originalDefaultProviderSet {
+		_ = os.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, lease.originalDefaultProvider)
+	} else {
+		_ = os.Unsetenv(operatorsettings.EnvDefaultWorkerModelProvider)
+	}
+	if lease.originalDefaultModelSet {
+		_ = os.Setenv(operatorsettings.EnvDefaultWorkerModel, lease.originalDefaultModel)
+	} else {
+		_ = os.Unsetenv(operatorsettings.EnvDefaultWorkerModel)
+	}
+}
+
+func releaseChatACPHomeEnvironmentUser(lease *chatACPHomeEnvironment) {
+	chatACPHomeEnvironmentStateMu.Lock()
+	if lease == nil {
+		lease = chatACPActiveLease
+	}
+	if lease == nil || chatACPActiveLease != lease || chatACPActiveHome != lease.home || chatACPActiveUsers == 0 {
+		chatACPHomeEnvironmentStateMu.Unlock()
+		return
+	}
+	chatACPActiveUsers--
+	if chatACPActiveUsers != 0 {
+		chatACPHomeEnvironmentStateMu.Unlock()
+		return
+	}
+	chatACPActiveHome = ""
+	chatACPActiveLease = nil
+	lease.restore()
+	chatACPHomeEnvironmentStateMu.Unlock()
+	chatACPHomeEnvironmentMu.Unlock()
+}
+
+func enterSameChatACPHomeEnvironment(home string) bool {
+	chatACPHomeEnvironmentStateMu.Lock()
+	defer chatACPHomeEnvironmentStateMu.Unlock()
+	if chatACPActiveHome != home || chatACPActiveUsers == 0 || chatACPActiveLease == nil {
+		return false
+	}
+	chatACPActiveUsers++
+	return true
+}
+
+func leaveSameChatACPHomeEnvironment() {
+	releaseChatACPHomeEnvironmentUser(nil)
+}
+
+func withChatACPHomeEnvironment(home string, fn func() error) error {
+	if enterSameChatACPHomeEnvironment(home) {
+		defer leaveSameChatACPHomeEnvironment()
+		return fn()
+	}
+
+	chatACPHomeEnvironmentMu.Lock()
+	lease := &chatACPHomeEnvironment{home: home}
+	captureChatACPHomeEnvironment(lease)
+	if err := os.Setenv("HOME", home); err != nil {
+		chatACPHomeEnvironmentMu.Unlock()
+		return err
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		lease.restore()
+		chatACPHomeEnvironmentMu.Unlock()
+		return err
+	}
+	chatACPHomeEnvironmentStateMu.Lock()
+	chatACPActiveHome = home
+	chatACPActiveUsers = 1
+	chatACPActiveLease = lease
+	chatACPHomeEnvironmentStateMu.Unlock()
+	defer lease.release()
+	return fn()
+}
+
+func registerChatACPServerHome(server support.ACPServer, home string) {
+	if key := chatIdentity(server); key != "" {
+		chatACPServerHomes.Store(key, home)
+	}
+}
+
+func chatACPHomeForServer(server support.ACPServer) string {
+	if key := chatIdentity(server); key != "" {
+		if home, ok := chatACPServerHomes.Load(key); ok {
+			return home.(string)
+		}
+	}
+	return ""
+}
+
+func releaseChatACPHomeForInput(input *os.File) {
+	if input == nil {
+		return
+	}
+	if lease, ok := chatACPHomeLeases.Load(input); ok {
+		lease.(*chatACPHomeEnvironment).release()
+	}
+}
+
+// sharedACPActivationHomeForTest returns one immutable catalog/profile seed
+// while every caller still gets a fresh root process and command home. It uses
+// the package process environment, rather than testing.T.Setenv, because
+// callers may enter setup after t.Parallel. The environment is restored by an
+// activation lease before another home is admitted.
 func sharedACPActivationHomeForTest(t testing.TB) string {
 	t.Helper()
 
+	chatACPHomeEnvironmentMu.Lock()
+	defer chatACPHomeEnvironmentMu.Unlock()
 	sharedACPActivationHomeState.Lock()
 	defer sharedACPActivationHomeState.Unlock()
 	if sharedACPActivationHomeState.home == "" && sharedACPActivationHomeState.err == nil {
@@ -158,6 +323,22 @@ func closeSharedACPActivationHome() error {
 		return nil
 	}
 	return chatRemoveRoot(home)
+}
+
+// seedACPActivationCommandHomeForTest gives each activation-owning command
+// its own initialization home. The shared home above is only the immutable
+// catalog/profile seed; the real you.server.acp startup and its process-global
+// resolver run under this separately seeded home. That keeps the complete
+// initialization/opening lifetime independent across parallel scenarios
+// without sharing mutable runtime artifacts or changing production code.
+func seedACPActivationCommandHomeForTest(t testing.TB, owner, prefix string) string {
+	t.Helper()
+	seedHome := sharedACPActivationHomeForTest(t)
+	home := chatMkdirTemp(t, owner, "", prefix)
+	if err := os.CopyFS(home, os.DirFS(seedHome)); err != nil {
+		t.Fatalf("copy ACP activation seed home %q to %q: %v", seedHome, home, err)
+	}
+	return home
 }
 
 func catalogCohortForTest(t *testing.T) *catalogCohort {
@@ -297,6 +478,17 @@ func seedInstalledPackagedFactories(t testing.TB, home string, names []string) {
 	for _, name := range names {
 		seedInstalledPackagedFactoryFromCatalog(t, globalRoot, catalog, name)
 	}
+}
+
+func seedProjectPackagedFactory(t testing.TB, workingDirectory, name string) {
+	t.Helper()
+	catalog, _ := packagedFactoryCatalogForTest(t)
+	seedInstalledPackagedFactoryFromCatalog(
+		t,
+		factorydefinitions.ProjectFactoriesRoot(workingDirectory),
+		catalog,
+		name,
+	)
 }
 
 func seedInstalledPackagedFactoryFromCatalog(
@@ -782,7 +974,6 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 			workingDirectoryRoot := filepath.Join(home, "workdirs")
 			if err := os.MkdirAll(workingDirectoryRoot, 0o755); err != nil {
 				controlledCohortState.err = fmt.Errorf("create controlled ACP cohort workdirs: %w", err)
-				_ = os.RemoveAll(home)
 			} else {
 				runner := &controlledACPCommandRunner{}
 				seedInstalledPackagedFactory(t, home, controlledACPFactory)
@@ -802,7 +993,6 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 				})
 				if err != nil {
 					controlledCohortState.err = fmt.Errorf("build controlled ACP cohort process: %w", err)
-					_ = os.RemoveAll(home)
 				} else {
 					cohort.process = process
 					controlledCohortState.cohort = cohort
@@ -822,14 +1012,18 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 
 // newControlledACPCohort builds one root process for a scenario whose real
 // Factory activation remains retained by the on-demand ACP target. The
-// immutable profile/catalog home is shared, but the process and working root
-// stay scenario-local: the production runtime currently binds Factory
+// immutable catalog/profile seed is shared, but the command home, process, and
+// working root stay scenario-local: the production runtime currently binds Factory
 // Definitions under the fixed ~default session scope and the public ACP close
 // path cannot close a terminalized session, so sharing that retained
 // activation would make later tests fail with dependency_unavailable.
 func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 	t.Helper()
-	home := sharedACPActivationHomeForTest(t)
+	home := seedACPActivationCommandHomeForTest(
+		t,
+		"controlled ACP "+name+" initialization home",
+		"you-chat-sessions-"+name+"-home-",
+	)
 	workingDirectoryRoot := chatMkdirTemp(
 		t,
 		"controlled ACP "+name+" working roots",
@@ -855,7 +1049,6 @@ func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 		},
 	})
 	if err != nil {
-		_ = os.RemoveAll(home)
 		t.Fatalf("build controlled ACP %s process: %v", name, err)
 	}
 	cohort.process = process
@@ -880,7 +1073,9 @@ func controlledACPWorkingDirectory(t *testing.T, name string) string {
 
 func controlledACPWorkingDirectoryForCohort(t *testing.T, cohort *controlledACPCohort, name string) string {
 	t.Helper()
-	return chatMkdirTemp(t, "controlled ACP "+name+" working directory", cohort.workingDirectoryRoot, name+"-")
+	workingDirectory := chatMkdirTemp(t, "controlled ACP "+name+" working directory", cohort.workingDirectoryRoot, name+"-")
+	seedProjectPackagedFactory(t, workingDirectory, controlledACPFactory)
+	return workingDirectory
 }
 
 func controlledACPServer(t *testing.T) support.ACPServer {
@@ -895,6 +1090,7 @@ func controlledACPServerForCohort(t *testing.T, cohort *controlledACPCohort) sup
 	if server == nil {
 		t.Fatal("controlled ACP cohort Process.ACPServer() returned nil")
 	}
+	registerChatACPServerHome(server, cohort.home)
 	return server
 }
 
