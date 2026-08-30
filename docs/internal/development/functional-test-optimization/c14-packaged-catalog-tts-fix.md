@@ -28,9 +28,13 @@ and implementation-stage handoff evidence.
   rebase applied cleanly, and the owned-path comparison from `995137125a` to
   `47285a02c1` was empty, so the frozen denominator and assertion inventory
   remain valid.
-- Final code head used for package, profile, and loopback evidence:
-  `2ee83f1bc3`; the review-correction head changes only Catalog seed-path
-  construction and this ledger.
+- Final promotion code head used for integrated package, repeat/race, timing,
+  and profile evidence: `2ee83f1bc3`. The review-correction head changes only
+  Catalog seed-path construction and this ledger.
+- Current pushed source head used for the clean-room loopback:
+  `500ad1b85c98f3e9bae242e8d07325a68b08571e`. The replacement commit after
+  this read-only check updates this ledger only; no implementation or test
+  behavior changes after the loopback source head.
 - Owned implementation surfaces characterized:
   `tests/functional/factory/packaged/catalog/**`,
   `tests/functional/factory/packaged/tts/**`, and
@@ -576,14 +580,15 @@ three owned package roots and this ledger.
 ## LOOPBACK-C14: clean-room validation report
 
 The report below follows `factory/docs/standards/validation-loopback-template.md`.
-It was executed read-only from a fresh detached worktree at final code head
-`2ee83f1bc3`; the temporary worktree was clean before execution and removed
-afterward. No implementation repair was made during loopback.
+It was executed read-only from a fresh detached worktree at the current pushed
+source head `500ad1b85c98f3e9bae242e8d07325a68b08571e`; the temporary worktree
+was clean before execution and removed afterward. No implementation repair was
+made during loopback.
 
 ### Environment and artifact
 
-- Commit/build identifier: `2ee83f1bc3` (rebased implementation head before
-  this ledger-only update).
+- Commit/build identifier: `500ad1b85c98f3e9bae242e8d07325a68b08571e` (the
+  current pushed source head before this evidence-only ledger refresh).
 - Environment and configuration: Windows 11 Home `10.0.26200`,
   `go1.25.0 windows/amd64`, `GOAMD64=v1`, `GOTOOLCHAIN=auto`, module
   `go.mod`, `GOFLAGS` empty; shared-host contention was left visible.
@@ -609,26 +614,26 @@ making an implementation repair during loopback.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | PAC-1 — GATE-BASE baseline, inventory, ownership, and cost topology | PASS | Functional profiling and characterization ledger | Local-real root-built composition with controlled provider/model edges and retained local Git and delivered-TTS boundaries | Once before edits; 9 timing runs plus list, JSON, and trace passes; 0 remote calls, `$0` | GATE-BASE sections record the three samples and medians, 24 top-level and 46 named records, process/root/wait/setup/cleanup census, and ranked candidates | Post-change behavior and optimization safety | None |
 | PAC-2 — Catalog, TTS, and Fix reduction or measured-floor verdict plus combined sum | PASS | End-to-end performance promotion | Local-real package execution with controlled exact external effects | Three final isolated samples per package plus post-change profiles; 0 remote calls, `$0` | Catalog `149.110s -> 37.510s` (`74.844%` lower); TTS and Fix have trace-backed floors; combined median sum `199.075s -> 102.990s` | Quiet-host portability and future optimization | None |
-| PAC-3 — GATE-CAT-OPT complete Catalog behavior and cleanup | PASS | Catalog functional suite, API-owned loopback, and focused repeat/race | Root-built public CLI/API paths, local filesystem, and controlled provider edge | Full `-count=1`, touched `-count=3`, `-race -count=1`, and clean-room pass; 0 remote calls, `$0` | Catalog ordering, metadata, precedence, atomic failure, required-input rejection, cancellation, redaction, and zero residue remained asserted and passed | Terminal hosted CI topology | None |
-| PAC-4 — GATE-TTS-OPT live, failure, replay, artifact, and concurrency fidelity | PASS | TTS functional suite, delivered binary, recording/replay, and focused repeat/race | Root-built local Models, delivered local binary, local filesystem, and controlled runner/launcher edges | Full `-count=1`, touched `-count=3`, `-race -count=1`, and clean-room pass; 0 remote calls, `$0` | Exact input/model binding, Work/Event correlation, replay without a second call, no-artifact failure, delivered protocol, and concurrent isolation passed | Real VibeVoice availability is not claimed; terminal hosted CI remains unproven | None |
-| PAC-5 — GATE-FIX-OPT local-real Git/worktrees, parity, failures, and cleanup | PASS | Fix functional suite and focused repeat/race | Root-built process with local-real Git/worktrees and controlled provider command edge | Full `-count=1`, touched `-count=3`, `-race -count=1`, and clean-room pass; 0 remote calls, `$0` | Role order/models/prompts, recovery/exhaustion, CLI/session parity, validation/provider failures, and all six cleanup causes passed | Terminal hosted CI topology | None |
-| PAC-6 — Named package suites and focused repeat/race quality gates | PASS | Three owned package suites plus touched shared-fixture gates | Local-real production composition and controlled external effects | One package pass plus focused `-count=3` and `-race -count=1` per touched sharing path; 0 remote calls, `$0` | Catalog, TTS, and Fix named suites and retained repeat/race commands exited `0`; all 70 mapped run records remained present | Current hosted functional-coverage workflow result and merge | None |
-| PAC-7 — c14 ledger parity, privacy, and content | PASS | Durable ledger and source/diff audit | Local artifacts, source assertions, and Git metadata only | Once at final promotion; 0 remote calls, `$0` | Before/after samples, profiles, techniques, counts, medians, same-or-stronger assertion inventory, and privacy audit are recorded without credentials, customer data, unnecessary temporary paths, or CI evidence commits | Future rebased-head reconciliation | None |
+| PAC-3 — GATE-CAT-OPT complete Catalog behavior and cleanup | PASS | Catalog functional suite, API-owned loopback, and focused repeat/race | Root-built public CLI/API paths, local filesystem, and controlled provider edge | Full `-count=1`, touched `-count=3`, `-race -count=1`, and current-head clean-room pass; 0 remote calls, `$0` | Catalog ordering, metadata, precedence, atomic failure, required-input rejection, cancellation, redaction, and zero residue remained asserted and passed; current-head package elapsed `85.046s` | Terminal hosted CI topology | None |
+| PAC-4 — GATE-TTS-OPT live, failure, replay, artifact, and concurrency fidelity | PASS | TTS functional suite, delivered binary, recording/replay, and focused repeat/race | Root-built local Models, delivered local binary, local filesystem, and controlled runner/launcher edges | Full `-count=1`, touched `-count=3`, `-race -count=1`, and current-head clean-room pass; 0 remote calls, `$0` | Exact input/model binding, Work/Event correlation, replay without a second call, no-artifact failure, delivered protocol, and concurrent isolation passed; current-head package elapsed `79.961s` | Real VibeVoice availability is not claimed; terminal hosted CI remains unproven | None |
+| PAC-5 — GATE-FIX-OPT local-real Git/worktrees, parity, failures, and cleanup | PASS | Fix functional suite and focused repeat/race | Root-built process with local-real Git/worktrees and controlled provider command edge | Full `-count=1`, touched `-count=3`, `-race -count=1`, and current-head clean-room pass; 0 remote calls, `$0` | Role order/models/prompts, recovery/exhaustion, CLI/session parity, validation/provider failures, and all six cleanup causes passed; current-head package elapsed `47.539s` | Terminal hosted CI topology | None |
+| PAC-6 — Named package suites and focused repeat/race quality gates | PASS | Three owned package suites plus touched shared-fixture gates | Local-real production composition and controlled external effects | One package pass plus focused `-count=3` and `-race -count=1` per touched sharing path; current-head clean-room package pass; 0 remote calls, `$0` | Catalog, TTS, and Fix commands exited `0` from a fresh detached worktree at `500ad1b85c`; all 70 mapped run records remained present | Current hosted functional-coverage workflow result and merge | None |
+| PAC-7 — c14 ledger parity, privacy, and content | PASS | Durable ledger and source/diff audit | Local artifacts, source assertions, and Git metadata only | Once at final promotion plus this review-evidence refresh; 0 remote calls, `$0` | Before/after samples, profiles, techniques, counts, medians, same-or-stronger assertion inventory, and privacy audit are recorded without credentials, customer data, unnecessary temporary paths, or CI evidence commits | None within this ledger refresh | None |
 | PAC-8 — GATE-REBASE-C14 current-base reconciliation | PASS | Git rebase and owned-path comparison | Local Git with `origin/main` as the integration base | Once before final measurement and push; no external calls | Initial clean rebase onto `995137125a`, followed by a clean review-correction rebase onto current `origin/main` `47285a02c1`; the owned-path comparison between those parents was empty, so no denominator or inventory reconciliation was required | Terminal hosted merge state | None |
 | PAC-9 — Owned three-dot diff | PASS | Git name-status and full diff audit | Local Git | Once at final promotion; no external calls | The final implementation diff contains only the three owned package roots and this ledger; no production, generated, shared-support, workflow, baseline, Makefile, other-package, or temporary-plan path changed | None within lane scope | None |
 | PAC-10 — No prohibited shortcut, leak, race, or assertion weakening | PASS | Source review, package tests, repeat/race gates, and resource census | Local-real filesystem/Git/process boundaries with controlled exact effects | Per changed package plus final audit; 0 remote calls, `$0` | No new sleep, blanket timeout, skipped/weakened assertion, production shortcut, resource leak, or race report; local-real Git and `serviceedges.Edges` boundaries remain intact | Unrelated package defects outside this diff | None |
-| PAC-11 — LOOPBACK-C14 complete criterion map | PASS | Clean-room validation report | Fresh detached local-real checkout with controlled exact edges | Once at the final artifact; 0 remote calls, `$0` | This explicit PAC-1 through PAC-13 table records status, scope, fidelity, cadence, cost, evidence, and unproven edge for every PRD project criterion; no implementation repair was made during loopback | Terminal hosted CI and merge | None |
+| PAC-11 — LOOPBACK-C14 complete criterion map | PASS | Clean-room validation report | Fresh detached local-real checkout at `500ad1b85c98f3e9bae242e8d07325a68b08571e` with controlled exact edges | Once at the current pushed source head; 0 remote calls, `$0` | The three named package commands ran sequentially from the clean detached worktree and exited `0`: Catalog `85.046s`, TTS `79.961s`, Fix `47.539s`; this explicit PAC-1 through PAC-13 table records status, scope, fidelity, cadence, cost, evidence, and unproven edge for every PRD project criterion; no implementation repair was made during loopback | Terminal hosted CI and merge | None |
 | PAC-12 — PR conversation evidence | PASS | Pull-request conversation comment | GitHub PR metadata backed by the local functional evidence | Once for the final head; no remote or paid provider calls | PR #2463 comment records before/after medians, combined sum, assertion parity, floor dispositions, and the current CI run URL; CI evidence is not committed | Terminal hosted CI result | None |
 | PAC-13 — Implementation-stage delivery handoff | PASS | Final branch, open PR, CI start, and review-feedback state | GitHub PR plus pushed branch; no paid or real-remote product dependency | Once after the review correction; no remote provider calls, `$0` | Corrected final head is pushed to PR #2463, the PR is open, required CI has started on that head, and the blocking review findings are addressed; review owns terminal CI, conflicts, and merge | Terminal current-head CI and merge | None |
 
 ### Customer journey
 
-1. From the fresh detached worktree, run
+1. From the fresh detached worktree at `500ad1b85c`, run
    `go test ./tests/functional/factory/packaged/catalog/... -count=1`,
    `.../tts/... -count=1`, and `.../fix/... -count=1` sequentially. The
-   package results were Catalog `0`, TTS `0`, and Fix `0`; the actual assertions
-   retained the public Catalog/API, delivered TTS, replay/artifact, and
-   local-real Fix journeys.
+   package results were Catalog `0` (`85.046s`), TTS `0` (`79.961s`), and Fix
+   `0` (`47.539s`); the actual assertions retained the public Catalog/API,
+   delivered TTS, replay/artifact, and local-real Fix journeys.
 
 ### Cross-task integration and usability
 
