@@ -164,8 +164,8 @@ func readClosedRecordingLifecycle(t *testing.T, path string) (string, int) {
 		}
 		completed++
 		completionSequence = record.Event.Context.Sequence
-		if record.Event.Context.SessionID == nil || strings.TrimSpace(*record.Event.Context.SessionID) != sourceID {
-			t.Fatalf("closed source SESSION_COMPLETED session ID = %#v, want header ID %q", record.Event.Context.SessionID, sourceID)
+		if record.Event.Context.SessionID == nil || strings.TrimSpace(*record.Event.Context.SessionID) != factorysessions.DefaultSessionID {
+			t.Fatalf("closed source SESSION_COMPLETED session ID = %#v, want detached public scope %q", record.Event.Context.SessionID, factorysessions.DefaultSessionID)
 		}
 		var payload factorydefinitions.FactorySessionCompletedEventPayload
 		if err := record.Event.DecodePayload(&payload); err != nil {

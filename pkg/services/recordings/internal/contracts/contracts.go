@@ -215,7 +215,9 @@ type LoadReplayInputRequest struct {
 
 // LoadReplayInputResult contains either a fully decoded Portable or Legacy
 // input, or detached Metadata when the caller requested metadata-only mode.
-// Diagnostics may accompany a fully decoded portable input.
+// A full V2 input may also carry the framing metadata needed to distinguish a
+// completed recording from an active or truncated recording. Diagnostics may
+// accompany a fully decoded portable input.
 type LoadReplayInputResult struct {
 	Portable    *PortableRecording
 	Legacy      *ReplayArtifact
@@ -223,10 +225,14 @@ type LoadReplayInputResult struct {
 	Diagnostics *ReplayInputDecodeDiagnostics
 }
 
-// ReplayInputMetadata contains only the identity needed to enumerate a
-// historical Factory Session. It deliberately has no event or payload fields.
+// ReplayInputMetadata contains the framing facts needed to identify and
+// classify a historical Factory Session. It deliberately has no event or
+// payload fields. Completed is populated by a full V2 read; header-only
+// metadata reads leave it false because they intentionally do not inspect the
+// terminal record.
 type ReplayInputMetadata struct {
 	FactorySessionID string
+	Completed        bool
 }
 
 // ReplayInputDecodeDiagnostics contains safe metadata produced while loading

@@ -2,7 +2,6 @@ package canonical
 
 import (
 	"encoding/json"
-	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -59,13 +58,7 @@ func FactoryEventFromCanonical(event recordings.CanonicalEvent) factorydefinitio
 		Payload: json.RawMessage(event.Payload),
 		Type:    factorydefinitions.FactoryEventType(event.Kind),
 	}
-	if factorydefinitions.FactoryEventType(event.Kind) == factorydefinitions.FactoryEventTypeSessionCompleted &&
-		context.SessionID != nil && strings.TrimSpace(*context.SessionID) != "" {
-		// A recorded terminal close carries the durable canonical identity in
-		// SourceContext while its detached routing scope remains the public
-		// selector. Preserve that identity when exporting the replay artifact.
-		legacy.Context.SessionID = context.SessionID
-	} else if sessionID != nil {
+	if sessionID != nil {
 		// The detached canonical scope is authoritative. SourceContext is
 		// retained for correlation metadata, but must not erase the session
 		// scope when the event is written back to the legacy artifact shape.

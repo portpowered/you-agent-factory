@@ -244,6 +244,9 @@ func resumeSourceCanonicalSessionIDForPath(
 }
 
 func replayInputHasSessionCompleted(input recordings.LoadReplayInputResult) bool {
+	if input.Metadata != nil && input.Metadata.Completed {
+		return true
+	}
 	if input.Portable != nil {
 		for _, event := range input.Portable.Events {
 			if strings.EqualFold(event.Type, string(factorydefinitions.FactoryEventTypeSessionCompleted)) {

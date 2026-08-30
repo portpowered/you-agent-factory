@@ -9,7 +9,7 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestFactoryEventFromCanonicalPreservesCanonicalTerminalIdentity(t *testing.T) {
+func TestFactoryEventFromCanonicalKeepsDetachedScopeForTerminalEvent(t *testing.T) {
 	t.Parallel()
 
 	canonicalID := "550e8400-e29b-41d4-a716-446655440000"
@@ -30,8 +30,8 @@ func TestFactoryEventFromCanonicalPreservesCanonicalTerminalIdentity(t *testing.
 		RecordedAt:    time.Unix(1_700_000_000, 0).UTC(),
 		SourceContext: string(contextPayload),
 	})
-	if got.Context.SessionID == nil || *got.Context.SessionID != canonicalID {
-		t.Fatalf("terminal session ID = %#v, want canonical %q", got.Context.SessionID, canonicalID)
+	if got.Context.SessionID == nil || *got.Context.SessionID != publicID {
+		t.Fatalf("terminal session ID = %#v, want detached scope %q", got.Context.SessionID, publicID)
 	}
 }
 
