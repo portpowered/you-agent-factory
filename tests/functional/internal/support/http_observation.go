@@ -351,29 +351,12 @@ func WaitForSessionTerminalStatus(
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	status, err := observeSessionTerminalStatusByStatus(baseURL, sessionID, timeout)
-	if err != nil {
-		t.Fatalf("timed out waiting for terminal %v", err)
-	}
-	return status
-}
-
-func observeSessionTerminalStatusByStatus(
-	baseURL string,
-	sessionID string,
-	timeout time.Duration,
-) (factoryapi.StatusResponse, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
 	status, err := waitForStatusAt(endpoint, timeout, terminalSessionStatusIsComplete)
 	if err != nil {
-		return status, fmt.Errorf(
-			"Factory Session %q at %s: %w",
-			sessionID,
-			endpoint,
-			err,
-		)
+		t.Fatalf("timed out waiting for terminal Factory Session %q at %s: %v", sessionID, endpoint, err)
 	}
-	return status, nil
+	return status
 }
 
 var readSessionStatusUntil = func(
