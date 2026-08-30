@@ -1133,6 +1133,16 @@
       "minimum": 54.54
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference",
+      "exception": {
+        "kind": "measurement",
+        "justification": "These parent-private artifact-guard methods are construction-only safeguards in the Models Inference owner; the functional suite exercises the public Models root and cannot import this internal package. Their direct error behavior is covered by the owning package tests, so this package remains report-only until an owning functional flow can measure the private guard.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "Add a public-root functional scenario that measures the private artifact guard, or remove the guard package boundary when its behavior moves into an already measured owner."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
       "minimum": 37.41
     },
@@ -1653,6 +1663,16 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
       "minimum": 80.06
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The managed-backend resolver is a private process/archive external-effect adapter. Functional tests inject the ModelHostProcessLauncher edge to keep packaged workers deterministic and platform-independent, so the public root does not execute this adapter. Its archive-safety behavior is covered by direct package tests and clean-room real local-model acceptance; keep it report-only until an owning cross-platform functional lane can launch a fixture backend.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "Add a deterministic fixture-backend functional flow through root.BuildProcess on supported CI operating systems that exercises archive resolution and cleanup, then replace this exception with a measured floor."
+      }
     }
   ]
 }
