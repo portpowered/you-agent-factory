@@ -350,8 +350,10 @@ source. They are source evidence, not generated artifacts.
 - Parent behavior: `BEH-C14-RESTART` — every restart, replay, persistence,
   failure, process, and cleanup witness remains while redundant intrinsic work
   is removed.
-- Status: **PASS for the focused one-build restart spine**.
-- Tested head: `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+- Status: **PASS for the focused one-build restart spine and direct partial-
+  setup cleanup proof**.
+- Tested head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`, rebased onto current
+  `origin/main` `1552d3e3ef114eeb68b1828d46db7d686ad1ef33`.
 - Dependency fidelity: `local_real` built CLI, real Windows daemon processes,
   loopback, filesystem, recording, and existing controlled provider edges.
 - Cost: zero paid or remote-provider calls.
@@ -362,8 +364,8 @@ The focused procedure was:
 go test ./tests/functional/sessions/restart/... -count=1 -run '^TestBoardPersistenceCLIRestartRoundTrip$' -v
 ```
 
-It exited `0`; `TestBoardPersistenceCLIRestartRoundTrip` passed in `15.58s`
-and the package reported `ok ... 15.655s`. The test log showed one immutable
+It exited `0`; `TestBoardPersistenceCLIRestartRoundTrip` passed in `22.43s`
+and the package reported `ok ... 22.522s`. The test log showed one immutable
 package path and `builds=1`, followed by three live daemon session IDs and the
 initial active dispatch witness. The round-trip therefore crossed the real
 submit, readiness, Worker Session, clean-stop, replay/re-arm, release-file,
@@ -372,20 +374,37 @@ response, persistence, and second-restart boundaries with the shared binary.
 The complete post-guard package proof was also run:
 
 ```text
-go test ./tests/functional/sessions/restart/... -count=1 -v
+go test ./tests/functional/sessions/restart/... -count=1
 ```
 
-It exited `0` in `25.449s`; all seven existing selectors passed. Every board
-scenario log reused the same package binary path and reported `builds=1`. The
-helper selector's `SCRIPT_WORKER` branch asserted zero package builds, and the
-real helper children completed through their existing sentinel/release path.
+It exited `0` in `46.327s`; all eight selectors passed: the seven existing
+behavior selectors plus the direct partial-setup probe. Every board scenario
+log reused the same package binary path and reported `builds=1`. The helper
+selector's `SCRIPT_WORKER` branch asserted zero package builds, and the real
+helper children completed through their existing sentinel/release path.
 The three board scenarios retained one private Factory directory, HOME,
 recording, release path, port, daemon lifecycle, and expected-state map each;
 no mutable scenario state moved into the package fixture.
 
+The direct CASE-U08 procedure was also run:
+
+```text
+go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceSharedBinaryPartialSetupFailure$' -count=1 -v
+```
+
+It exited `0` in `0.124s`. The parent test launched an isolated copy of the
+package test binary with a test-only failure immediately after `MkdirTemp`,
+observed the child’s injected diagnostic and nonzero exit, decoded the reported
+temporary directory and partial artifact, and verified that both paths were
+absent after child exit. The scenario-start marker also remained absent, proving
+that setup failure prevented scenario execution while `TestMain` still cleaned
+the package-scoped partial state.
+
 The implementation is limited to
 `tests/functional/sessions/restart/board_persistence_process_test.go` and
-`tests/functional/sessions/restart/board_persistence_scenarios_test.go`:
+`tests/functional/sessions/restart/board_persistence_scenarios_test.go`, plus
+the test-only environment constants in
+`tests/functional/sessions/restart/board_persistence_fixtures_test.go`:
 
 - `sync.Once` creates one package-scoped temporary build directory and one
   `go build ./cmd/factory` artifact for the normal package process.
@@ -394,6 +413,9 @@ The implementation is limited to
   zero.
 - `TestMain` removes the package build directory after all test scenarios and
   child-process joins, including partial-build failure cleanup.
+- The partial-setup probe creates a deterministic partial artifact only in its
+  child-process fault mode and observes its removal without selecting any board
+  scenario.
 - No waits, timeouts, CLI contexts, assertions, public contracts, production
   code, shared support, or scenario-owned mutable resources changed.
 
@@ -401,18 +423,23 @@ The implementation is limited to
 
 - Story: `fto-c14-pkg-sessions-restart-002`
 - Status: **PASS for repeated fixture use and cleanup**.
-- Tested head: `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+- Tested head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`.
 
 The declared repeat procedure was run once:
 
 ```text
-go test ./tests/functional/sessions/restart/... -count=3 -v
+go test ./tests/functional/sessions/restart/... -count=3
 ```
 
-It exited `0` with package elapsed `179.353s`. All seven selectors passed in
+It exited `0` with package elapsed `82.570s`. All eight selectors passed in
 each of the three repetitions. The board logs reused one path,
-`you-restart-package-build-2685465539\\you.exe`, and every build log reported
-`builds=1`; the helper-role zero-build assertion passed in each helper child.
+and the one-build/helper-role assertions passed in each repetition; the direct
+partial-setup probe also passed in each repetition. A preceding verbose repeat
+on this same head exited `1` after an existing packaged-factory initialization
+failure reported as `CLI_COMMAND_FAILED` for `@you/quorum`; the clean-base
+focused selector passed in `13.101s`, and this bounded repeat rerun passed.
+That failed attempt is retained as host/package-install contamination, not
+treated as a restart-fixture regression.
 Each repetition retained six real daemon starts, thirteen built CLI
 subprocesses, and three helper children, for totals of eighteen daemon starts,
 thirty-nine built CLI subprocesses, and nine helper children across the run.
@@ -421,18 +448,18 @@ package `TestMain` cleanup ran only after the repeated daemon and helper
 processes had joined.
 
 This gate proves the structural one-build fixture, helper recursion guard,
-scenario isolation, and package teardown on the exact implementation head. It
-does not prove the final three-run performance median, supported race result,
-clean-room loopback, rebased-main ancestry, terminal PR CI, or merge; those
-remain owned by story `fto-c14-pkg-sessions-restart-003` and review.
+scenario isolation, direct partial-setup cleanup, and package teardown on the
+exact rebased implementation head. It does not prove the final three-run
+performance median, supported race result, clean-room loopback, terminal PR CI,
+or merge; those remain owned by story `fto-c14-pkg-sessions-restart-003` and
+review.
 
 ## GATE-PACKAGE
 
 - Story: `fto-c14-pkg-sessions-restart-003`
 - Status: **PASS for the complete final package behavior on the current
   implementation head**.
-- Tested head: `6d93bd20b3`; the implementation source is unchanged from the
-  focused/repeat head `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+- Tested head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`.
 - Dependency fidelity: `local_real` built CLI, real Windows daemon processes,
   loopback, filesystem, recording, and the existing controlled provider edges.
 - Cost: zero paid or remote-provider calls.
@@ -444,7 +471,7 @@ same command required by the PRD:
 go test ./tests/functional/sessions/restart/... -count=1
 ```
 
-All three runs exited `0` and exercised the seven selectors discovered by:
+All three runs exited `0` and exercised the eight selectors discovered by:
 
 ```text
 go test ./tests/functional/sessions/restart/... -list '^Test'
@@ -452,21 +479,22 @@ go test ./tests/functional/sessions/restart/... -list '^Test'
 
 The final package results were:
 
-| Run | Outer stopwatch seconds | Exit | Observable result |
-| ---: | ---: | ---: | --- |
-| 1 | `39.6764` | `0` | Seven selectors passed; package/scenario cleanup completed. |
-| 2 | `62.5393` | `0` | Seven selectors passed; package/scenario cleanup completed. |
-| 3 | `88.8193` | `0` | Seven selectors passed; package/scenario cleanup completed. |
+| Run | Outer stopwatch seconds | Package-reported elapsed | Exit | Observable result |
+| ---: | ---: | ---: | ---: | --- |
+| 1 | `60.00` | `51.955s` | `0` | Eight selectors passed; package/scenario cleanup completed. |
+| 2 | `36.20` | `31.716s` | `0` | Eight selectors passed; package/scenario cleanup completed. |
+| 3 | `40.13` | `35.566s` | `0` | Eight selectors passed; package/scenario cleanup completed. |
 
 The one-build log observations from `GATE-SPINE` and `GATE-REPEAT` remain
-applicable to this unchanged implementation: one package-scoped CLI build,
-zero helper builds, six real board-daemon starts, five production-composed
-server generations, thirteen built-CLI subprocesses, and three helper
-children per normal package run. The three board scenarios retain private
-Factory, HOME, recording, release-file, port, process, and expected-state
-ownership. The assertion denominator remains the seven-selector, 148 lexical
-failure-call-site inventory recorded by `GATE-CHAR`; no assertion or case row
-was removed or weakened.
+applicable to this implementation: one package-scoped CLI build, zero helper
+builds, six real board-daemon starts, five production-composed server
+generations, thirteen built-CLI subprocesses, three helper children, and one
+test-binary partial-setup probe child per normal package run. The three board
+scenarios retain private Factory, HOME, recording, release-file, port, process,
+and expected-state ownership. The pre-change seven-selector, 148 lexical
+failure-call-site assertion denominator recorded by `GATE-CHAR` remains intact;
+the added setup probe only adds direct cleanup assertions and removes no case
+row or existing witness.
 
 This gate proves complete local package behavior and topology on the final
 implementation source. It does not prove a quiet-host timing bound, terminal
@@ -476,7 +504,7 @@ hosted CI, or merge.
 
 - Story: `fto-c14-pkg-sessions-restart-003`
 - Status: **PASS**.
-- Tested head: `6d93bd20b3` implementation source.
+- Tested head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8` implementation source.
 - Dependency fidelity: `local_real` Windows/amd64 race-enabled test process.
 
 The supported race procedure was:
@@ -486,7 +514,7 @@ go test -race ./tests/functional/sessions/restart/... -count=1
 ```
 
 It exited `0` on `2026-08-29` with Go `go1.25.0`, `GOOS=windows`,
-`GOARCH=amd64`, and `CGO_ENABLED=1`; the package reported `ok` in `51.512s`.
+`GOARCH=amd64`, and `CGO_ENABLED=1`; the package reported `ok` in `63.771s`.
 No race report, test failure, helper recursion, orphan process, or cleanup
 failure was emitted. This proves the exercised package fixture and runtime
 test paths are race-clean on this supported platform, not all possible
@@ -496,21 +524,19 @@ concurrency behavior or unsupported platforms.
 
 - Story: `fto-c14-pkg-sessions-restart-003`
 - Status: **PASS via the permitted profile-backed measured-floor explanation;
-  the local timing sample itself is non-improving and host-contaminated**.
+  the local timing sample is below the 40% target and host-variable**.
 - Baseline: authoritative unchanged-source median `44.1461053s` from
   `GATE-CHAR`.
-- Final samples: `39.6764s`, `62.5393s`, and `88.8193s`, all exit `0` under
-  the exact package command; the sorted median is `62.5393s`.
-- Calculated change: `-41.66%` reduction (a `41.66%` median increase), so the
-  explicit 40% timing branch is not claimed.
+- Final samples: `60.00s`, `36.20s`, and `40.13s`, all exit `0` under the exact
+  package command; the sorted median is `40.1260758s`.
+- Calculated change: `9.10%` reduction, so the explicit 40% timing branch is
+  not claimed.
 
-The final timing spread is contaminated by a pre-existing unrelated
-`you.exe` process outside this worktree. A read-only process probe during the
-measurements observed PID `50008` at normal priority consuming approximately
-`2.125` CPU-seconds during one wall second, with all-processor affinity. The
-process was not terminated or modified. An above-normal-priority diagnostic
-run of the same package still passed but took `57.3838s`; this confirms the
-host-load finding is diagnostic context, not a substitute final median.
+The final timing spread is materially wider than the first two samples on this
+shared Windows host. The samples are retained exactly and are used only for the
+required comparable median; topology and dependency fidelity remain the
+primary bounded optimization evidence. No unrelated process was terminated or
+modified.
 
 The measured floor explanation is bounded by the post-change topology and
 source-backed wait inventory:
@@ -521,11 +547,11 @@ source-backed wait inventory:
    builds, and keeps its artifact package-scoped until `TestMain` cleanup.
 2. The final package still requires six real daemon generations, five
    production-composed server generations, thirteen built-CLI invocations,
-   three helper-child release boundaries, private mutable scenario state, and
-   every existing public HTTP, Factory Event, Worker Session, filesystem,
-   process, cancellation, malformed-state, missing-state, remap, resume, and
-   history observation. Removing any of those would remove or lower the
-   fidelity of a CASE row.
+   three helper-child release boundaries, one direct setup-failure child,
+   private mutable scenario state, and every existing public HTTP, Factory
+   Event, Worker Session, filesystem, process, cancellation, malformed-state,
+   missing-state, remap, resume, and history observation. Removing any of
+   those would remove or lower the fidelity of a CASE row.
 3. The existing bounded polls observe public/process/filesystem/log
    boundaries and carry failure diagnostics. The source profile found no
    owned fixed sleep or timeout padding safe to remove, and no second
@@ -544,32 +570,34 @@ wall-clock behavior or terminal PR CI.
 ## GATE-SCOPE
 
 - Story: `fto-c14-pkg-sessions-restart-003`
-- Status: **PENDING final-main synchronization and clean-room audit**.
+- Status: **PASS after the reviewer-requested rebase and scope audit**.
+- Tested head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`.
 
-The current three-dot path set is limited to the two owned restart test files
-and this C14 evidence ledger. `git diff --check` passes. The source scan found
+The current three-dot path set is limited to the three owned restart test files
+and the two C14 evidence documents. `git diff --check` passes, and
+`git merge-base --is-ancestor origin/main HEAD` exits `0`. The source scan found
 the same fresh 30-second per-operation CLI contexts in
 `board_persistence_cli_assertions_test.go`; no cumulative CLI context, new
 sleep, timeout increase, generated file, public contract, production file,
-shared support, workflow, or CI configuration is present. Final ancestry and
-the exact post-rebase path audit are recorded below after synchronization.
+shared support, workflow, or CI configuration is present.
 
 ## Evidence boundary and next gates
 
 `GATE-PACKAGE`, `GATE-RACE`, and the bounded `GATE-PERF` explanation prove the
 complete local behavior, supported race path, and owned topology decision on
-the current implementation source. `GATE-SCOPE` and `GATE-LOOPBACK` remain
-pending final-main synchronization and clean-room execution. `GATE-PR-CI`
-remains review-owned for terminal hosted CI and merge.
+the current implementation source. `GATE-SCOPE` is complete after the rebase;
+`GATE-LOOPBACK` remains the final clean-room gate, and `GATE-PR-CI` remains
+review-owned for terminal hosted CI and merge.
 
 ## GATE-SCOPE (final)
 
 - Story: `fto-c14-pkg-sessions-restart-003`
 - Status: **PASS** for the rebased implementation scope.
-- Rebased implementation head: `d7d296dbba` on current `origin/main`.
+- Rebased implementation head: `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`
+  on current `origin/main` `1552d3e3ef114eeb68b1828d46db7d686ad1ef33`.
 
 The final three-dot audit after synchronization reported only these owned
-paths: the two restart test files and the C14 evidence files under
+paths: the three restart test files and the two C14 evidence files under
 `docs/internal/development/functional-test-optimization/`. `git diff --check`
 passed. The final source scan confirms the C09 fresh per-operation
 30-second CLI contexts are unchanged; no cumulative deadline, new sleep,
@@ -587,19 +615,22 @@ CI or merge.
 - Story: `fto-c14-pkg-sessions-restart-003`
 - Status: **PASS for the local clean-room loopback**.
 - Dependency fidelity: `clean local_real` detached worktree at
-  `d7d296dbba`; no implementation repair was made.
+  `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`; no implementation repair was
+  made. The final pushed report refresh is documentation-only and does not
+  alter the validated implementation tree.
 - Report: `c14-pkg-sessions-restart-validation-loopback.md`.
 
 The exact procedure was:
 
 ```text
-git worktree add --detach <temporary-path> d7d296dbba
+git worktree add --detach <temporary-path> 15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8
 go test ./tests/functional/sessions/restart/... -count=1
 git worktree remove <temporary-path>
 ```
 
 The detached worktree was clean before removal. The package command exited `0`
-and reported `41.726s`; all seven selectors passed, including the real CLI,
+and reported `32.456s`; all eight selectors passed, including the direct
+partial-setup cleanup probe, real CLI,
 daemon/server, restart, persistence, malformed/missing state, remap, resume,
 history, cancellation, and cleanup witnesses. The canonical report records
 the criteria, customer journey, evidence boundary, host-timing finding, and
@@ -616,6 +647,6 @@ behavior.
 
 The implementation handoff must push the final head, open or update the named
 PR, confirm required CI has started on that exact head, and comment the
-authoritative before median `44.1461053s`, final local median `62.5393s`, and
+authoritative before median `44.1461053s`, final local median `40.1260758s`, and
 the PR CI run URL. Review owns terminal CI, any later conflict request, and
 merge; no CI result is committed to this branch.
