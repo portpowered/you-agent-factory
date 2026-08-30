@@ -139,6 +139,70 @@ The eight named witnesses were inspected against their owning assertions. Each r
 | `workers/mock` | `runBuiltYouBinary` (`compiled_cli_exit_codes_helpers_test.go:103`) | The built CLI's returned `ExitCode` is captured for caller assertions. | INTENTIONAL-OS — `exit-status` |
 | `workers/mock` | `mockACPCommandFactory` (`javascript_acp_test.go:74`) | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` asserts zero ACP starts and zero `ProviderCommandRunner` calls; no child stream is observed. | ACCIDENTAL-OS — preserve the zero-call proof and replace or remove the factory |
 
+### C15 canonical verdict selectors (Story 002)
+
+C15 consumers read only `osSpawnSites` from this canonical JSON inventory. A
+selector matches a record when `packagePath` equals one of its exact prefixes
+or starts with that prefix plus `/`; matching records are sorted by `siteId`.
+The normalized view emits `siteId`, `verdict`, `requiredProperty`, and
+`conversionObligation` exactly as recorded. A family with no matching records
+is emitted as `none (0 sites)`, and no row is inferred from `testRows`.
+
+The `providers` view intentionally consists of the ACP and Codex package
+prefixes shown below, which gives the requested 13/1 family total. The two
+direct `tests/functional/providers` process-tree sites remain in the complete
+static-site projection above and are not silently folded into this view.
+
+| C15 family | Exact package-prefix selector(s) | Intentional | Accidental | Total |
+| --- | --- | ---: | ---: | ---: |
+| `models-root` | `tests/functional/models/root_composition` | 6 | 0 | 6 |
+| `sessions` | `tests/functional/sessions` | 8 | 0 | 8 |
+| `providers` | `tests/functional/providers/acp`; `tests/functional/providers/codex` | 13 | 1 | 14 |
+| `work-submission` | `tests/functional/work/submission` | 0 | 0 | 0 |
+| `factory-packaged` | `tests/functional/factory/packaged` | 2 | 3 | 5 |
+
+The following is the stable, field-preserving row projection from those
+selectors. `null` is the literal JSON null value: intentional rows have no
+conversion obligation, while accidental rows have no required property and
+retain their canonical obligation.
+
+| C15 family | Site ID | Verdict | Required property | Conversion obligation |
+| --- | --- | --- | --- | --- |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-buildDeliveredYouBinary-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-runDeliveredCLI-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-buildDeliveredEmbedYouBinary-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-runDeliveredEmbedCLI-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `models-root` | `OSSPAWN-tests-functional-models-root-composition-forced-cleanup-test-runForcedModelsCleanupParent-01` | `INTENTIONAL-OS` | `descendant-cleanup` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `sessions` | `OSSPAWN-tests-functional-sessions-resume-from-recording-resume-from-recording-test-resumeFromRecordingScenario-startFirstProcess-01` | `INTENTIONAL-OS` | `descendant-cleanup` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-acp-error-test-TestACPCommandStartFailureMapsToDependencyFailure-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-acpHelperCommandFactoryWithProvider-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-acpHelperCommandFactoryWithProvider-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-03` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-packaged-conformance-test-packagedACPCommandFactory-01` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-packaged-conformance-test-packagedACPCommandFactory-02` | `INTENTIONAL-OS` | `stream-file-descriptor-behavior` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-acp-shared-process-status-windows-test-acpHelperProcessExited-01` | `INTENTIONAL-OS` | `descendant-cleanup` | `null` |
+| `providers` | `OSSPAWN-tests-functional-providers-codex-codex-untrusted-working-directory-test-initTrustedGitRepository-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/providers/codex/codex_untrusted_working_directory_test.go:188 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
+| `work-submission` | none | none | none | none (0 sites) |
+| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-fix-invocation-test-runPackagedFixGit-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/invocation_test.go:980 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
+| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-startPackagedFixGitSeed-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/shared_fixture_test.go:337 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
+| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/full_flow/invocation_test.go:390 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
+| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-runDeliveredFactoryTTSCLIWithArgs-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
+
 ### Retained isolated-row verdict projection
 
 Each of the 231 retained isolated rows has one nested `osBoundaryIntentionality` record in the paired JSON. The table repeats the identity, verdict, and proof/obligation so the human projection is complete.
