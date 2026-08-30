@@ -289,9 +289,6 @@ func (fixture *agyProcessFixture) setup(t *testing.T) (setupErr error) {
 	if err := fixture.startProcess(); err != nil {
 		return err
 	}
-	if err := fixture.waitForReady(t); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -426,14 +423,6 @@ func (fixture *agyProcessFixture) startProcess() error {
 	}
 	fixture.baseURL = baseURL
 	return nil
-}
-
-func (fixture *agyProcessFixture) waitForReady(t *testing.T) error {
-	// The production server reports readiness asynchronously after Process.Execute
-	// starts; this bounded public status observation cannot be replaced by the
-	// controlled command edge because it proves the real HTTP/session boundary.
-	t.Helper()
-	return waitForAgyRuntimeReady(fixture.baseURL, agySharedScenarioTimeout)
 }
 
 func (fixture *agyProcessFixture) scenario(t *testing.T, caseName string) *agySharedScenario {

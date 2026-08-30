@@ -35,6 +35,10 @@ func openAgyFactorySessionAt(
 	targetName string,
 ) factoryapi.OpenFactorySessionResponse {
 	t.Helper()
+	// WaitForBaseURL already proves the injected listener bound. A successful
+	// explicit-session POST proves the production handler/runtime is ready while
+	// opening the session needed by the scenario, so no separate /status
+	// handshake is required.
 	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
 		FolderPath: folderPath,
 		Target: &factoryapi.FactorySessionTargetRef{
@@ -60,36 +64,6 @@ func openAgyFactorySessionAt(
 		t.Fatalf("decode POST %s: %v", endpoint, err)
 	}
 	return opened
-}
-
-func waitForAgyRuntimeReady(baseURL string, timeout time.Duration) error {
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	// Process startup is asynchronous and this observer proves the public HTTP
-	// readiness boundary, so a controlled command result cannot replace it.
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
-	var lastErr error
-	for {
-		response, err := http.Get(endpoint)
-		if err == nil {
-			var status factoryapi.StatusResponse
-			decodeErr := json.NewDecoder(response.Body).Decode(&status)
-			closeErr := response.Body.Close()
-			if response.StatusCode == http.StatusOK && decodeErr == nil && closeErr == nil && strings.TrimSpace(status.RuntimeStatus) != "" {
-				return nil
-			}
-			lastErr = fmt.Errorf("status=%d decode=%v close=%v", response.StatusCode, decodeErr, closeErr)
-		} else {
-			lastErr = err
-		}
-		select {
-		case <-deadline.C:
-			return fmt.Errorf("timed out waiting for AGY runtime readiness at %s: %w", endpoint, lastErr)
-		case <-poll.C:
-		}
-	}
 }
 
 func waitForAgySessionFactoryEvents(
