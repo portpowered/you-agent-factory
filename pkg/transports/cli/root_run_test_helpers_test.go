@@ -573,6 +573,45 @@ func exerciseDemandedBatchSystemInitialization(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("demanded InitializeSystem calls = %d, want one", calls)
 	}
+
+	var concurrentCalls atomic.Int32
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	concurrentCmd := &cobra.Command{Use: "run"}
+	concurrentCmd.SetContext(context.Background())
+	concurrentCfg := runcli.RunConfig{
+		WorkFile: "one-work.json", MockWorkersEnabled: true,
+		DisableDefaultRecording: true, WithServer: true,
+	}
+	concurrentOptions := CommandFactory{initializer: startupcli.Functions{
+		InitializeSystemFunc: func(ctx context.Context, _ string) error {
+			concurrentCalls.Add(1)
+			entered <- struct{}{}
+			select {
+			case <-release:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	}}
+	if err := prepareRunFactoryStartup(concurrentCmd, &concurrentCfg, concurrentOptions, false); err != nil {
+		t.Fatalf("prepare concurrent demanded startup: %v", err)
+	}
+	results := make(chan error, 2)
+	for range 2 {
+		go func() { results <- concurrentCfg.StartupPreparation(context.Background(), false, nil) }()
+	}
+	awaitBatchColdStartProcessEntries(t, entered, 1)
+	close(release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("concurrent demanded startup error = %v", err)
+		}
+	}
+	if concurrentCalls.Load() != 1 {
+		t.Fatalf("concurrent demanded InitializeSystem calls = %d, want one", concurrentCalls.Load())
+	}
 }
 
 func exerciseDemandedBatchCommandDoesNotDispatch(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -368,7 +368,7 @@ func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, opt
 }
 
 type runStartupPreparation struct {
-	mu                    sync.Mutex
+	gate                  initializer.PreparationGate
 	cmd                   *cobra.Command
 	cfg                   *runcli.RunConfig
 	options               CommandFactory
@@ -398,27 +398,27 @@ func (preparation *runStartupPreparation) Prepare(ctx context.Context, discloseH
 	if preparation == nil || preparation.cfg == nil {
 		return errors.New("run startup preparation is required")
 	}
-	preparation.mu.Lock()
-	defer preparation.mu.Unlock()
-	if preparation.initializationErr != nil {
-		return preparation.initializationErr
-	}
-	if preparation.recordingInputBlocked {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.checkRecordingInput(discloseHome)
-	if preparation.recordingInputBlocked {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.checkFactoryActivation()
-	if !preparation.activationAllowed {
-		preparation.cfg.StartupPreflightBlocked = true
-		return nil
-	}
-	preparation.discloseHome(discloseHome, disclosureOutput)
-	return preparation.initialize(ctx)
+	return preparation.gate.Run(func() error {
+		if preparation.initializationErr != nil {
+			return preparation.initializationErr
+		}
+		if preparation.recordingInputBlocked {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.checkRecordingInput(discloseHome)
+		if preparation.recordingInputBlocked {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.checkFactoryActivation()
+		if !preparation.activationAllowed {
+			preparation.cfg.StartupPreflightBlocked = true
+			return nil
+		}
+		preparation.discloseHome(discloseHome, disclosureOutput)
+		return preparation.initialize(ctx)
+	})
 }
 
 func (preparation *runStartupPreparation) checkRecordingInput(discloseHome bool) {
