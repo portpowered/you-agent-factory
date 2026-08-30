@@ -543,16 +543,24 @@ func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T
 }
 
 func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{{
+	protocol, err := clihttp.NewProtocol(listDoerFunc(func(*http.Request) (*http.Response, error) {
+		payload, err := json.Marshal(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{{
 			WorkerSessionId: "worker-session-1", AttemptId: "attempt-1", WorkIds: []string{"work-1"},
 		}}})
-	}))
-	defer server.Close()
+		if err != nil {
+			return nil, err
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(payload)),
+		}, nil
+	}), testClock{})
+	if err != nil {
+		t.Fatalf("NewProtocol() error = %v", err)
+	}
 
-	err := NewList(testHTTPProtocol(t))(ListConfig{
-		Context: context.Background(), Server: server.URL, WorkID: "work-1", OutputFormat: "json",
+	err = NewList(protocol)(ListConfig{
+		Context: context.Background(), Server: "http://factory.test", WorkID: "work-1", OutputFormat: "json",
 		Output: listFailingWriter{err: errors.New("output sink unavailable")},
 	})
 	var typed *CLIError
