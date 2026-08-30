@@ -137,7 +137,11 @@ authoritative package scheduler, and the complete functional coverage lane
 remained green with its required artifacts. Final-head independent loopback
 and review-owned terminal CI/merge remain unproven here.
 
-## Story 001 verification
+## Historical C13 jobs-raise verification
+
+The following command evidence belongs to the earlier jobs-raise lane and is
+retained as historical context. The current post-C09 correction story's
+verification and blocker are recorded in the section below.
 
 Command:
 
@@ -152,3 +156,97 @@ width safety, hosted contention, memory behavior, or final-head CI.
 
 Remaining edges are owned by `CI-RAISED-01` (raised-width hosted behavior) and
 `REVIEW-CI-01` (terminal final-head CI).
+
+## Story 001 post-C09 characterization
+
+This section records the current correction lane's read-only characterization.
+The retained artifacts are all from `main`, `merge-full`, `short=false`, the
+Ubuntu 24.04 hosted runner, Go 1.25.0, and the schema-v2 diagnostic path. The
+selected-width log in each job reported `Functional CI runner:
+logical_cpus=4 jobs=12` and the functional command received
+`FUNCTIONAL_DEFAULT_JOBS: 12`. Run and job identities are retained here; raw
+URLs and downloaded artifacts remain PR evidence rather than repository files.
+
+### Comparable post-C09 runs
+
+| Run / Backend Functional Coverage job / head | Timing and inventory | Build/cache evidence | Critical path and outcome | Eligibility |
+| --- | --- | --- | --- | --- |
+| `33306288107` / `99243386085` / `767e28f06696102447d433076057f2ea4b5e7740` | Complete; `372.747s`; `149/149` packages; `1,079` tests: `1,076` pass / `2` fail / `1` skip | Schema v2; no cache match; `891` compiler + `147` linker = `1,038` build actions; `compile-work-observed`; command failed | Supervisor `10:22:39.442Z`–`10:31:14.844Z`; coverage `10:22:39.454Z`–`10:31:14.841Z`; quarantine `10:22:39.454Z`–`10:24:38.426Z`; statuses `0/0`; test-failure | Ineligible: red functional verdict; retained as ordinary-head failure evidence |
+| `33306504049` / `99244523859` / `76262db480315bbe915a9037bc25dc4edf337ae1` | Complete; `219.970s`; `149/149` packages; `1,079` tests: `1,077` pass / `1` fail / `1` skip | Schema v2; exact primary hit; `0` compiler + `74` linker = `74` build actions; `compile-work-observed`; command failed | Supervisor `10:33:32.140Z`–`10:37:39.603Z`; coverage `10:33:32.153Z`–`10:37:39.600Z`; quarantine `10:33:32.153Z`–`10:33:42.113Z`; statuses `0/0`; test-failure | Ineligible: red functional verdict; retained to separate cache state from success |
+| `33307796498` / `99247450066` / `8be2317b1ce84b1091038992bb3aa4ac7fd5d986` | Complete; `323.011s`; `149/149` packages; `1,079` tests: `1,078` pass / `0` fail / `1` skip | Schema v2; prefix match, `exactPrimaryHit=false`; `12` compiler + `141` linker = `153` build actions; `compile-work-observed`; command passed | Supervisor `11:01:25.167Z`–`11:07:15.952Z`; coverage `11:01:25.179Z`–`11:07:15.948Z`; quarantine `11:01:25.179Z`–`11:01:33.275Z`; statuses `0/0`; green | Eligible incident comparator and correction target |
+| `33308660159` / `99249678769` / `1117d2db599e21ef56c433ff626ae673328b3444` | Complete; `214.055s`; `149/149` packages; `1,079` tests: `1,078` pass / `0` fail / `1` skip | Schema v2; exact primary hit; `0` compiler + `73` linker = `73` build actions; `compile-work-observed`; command passed | Supervisor `11:21:32.235Z`–`11:25:28.426Z`; coverage `11:21:32.264Z`–`11:25:28.422Z`; quarantine `11:21:32.264Z`–`11:21:36.998Z`; statuses `0/0`; green | Eligible same-width green reuse comparator |
+| `33309463382` / `99251815827` / `745e2e88da2fa14e9a0d760c2dc0fb532314b7bd` | Complete; `226.886s`; `149/149` packages; `1,067` tests: `1,066` pass / `0` fail / `1` skip | Schema v2; prefix match, `exactPrimaryHit=false`; `2` compiler + `73` linker = `75` build actions; `compile-work-observed`; command passed | Supervisor `11:40:27.695Z`–`11:44:39.171Z`; coverage `11:40:27.700Z`–`11:44:39.167Z`; quarantine `11:40:27.700Z`–`11:40:32.964Z`; statuses `0/0`; green | Eligible current-inventory green comparator |
+| `33310295950` / `99254214168` / `a44ed015421b1ed42b919f1178531f38fd5087b5` | Complete; `173.204s`; `149/149` packages; `1,068` tests: `1,067` pass / `0` fail / `1` skip | Schema v2; prefix match, `exactPrimaryHit=false`; `2` compiler + `74` linker = `76` build actions; `compile-work-observed`; command passed | Supervisor `12:03:11.763Z`–`12:06:23.539Z`; coverage `12:03:11.773Z`–`12:06:23.536Z`; quarantine `12:03:11.773Z`–`12:03:15.814Z`; statuses `0/0`; green | Eligible current-inventory green comparator |
+
+The green `323.011s` and `214.055s` runs have the same selected width,
+schema, package accounting, test accounting, coverage outcome, quarantine
+outcome, and ACP outcome. Their numeric difference is `323.011 - 214.055 =
+108.956s` (`33.7%` of the slower run), while the incident threshold gap is
+`323.011 - 302.721 = 20.290s`. The slower run restored a non-exact cache
+prefix and executed `153` build actions; the faster run restored the exact
+invocation key and executed `73` link-only actions. The two observations make
+the reclaim envelope larger than the required target without mistaking a red
+run or an incomplete artifact for success.
+
+The package distribution supports the same conclusion. In the `323.011s`
+run, several packages that were near-zero in the exact-cache `214.055s` run
+expanded together: `workers/transports/cli/run/modes` was `65.857s` versus
+`0.020s`, `sessions/chat_sessions/root_composition` was `43.298s` versus
+`0.040s`, `workers/transports/cli/run/lifecycle` was `35.500s` versus
+`0.010s`, and `factory/packaged/catalog` was `29.550s` versus `0.070s`.
+`providers/agy` remained about `17`–`18s` in both runs. This is broad build or
+setup work, not one stable functional test tail. The later green runs also
+span `226.886s` and `173.204s` with the same `149/149` package accounting,
+which is additional host/cache variance evidence.
+
+### Controlled topology witness
+
+The current quarantine manifest contains eight package selectors and one
+test-level selector, `providers/agy#TestAgyLiveSmoke`. The production selection
+code in `cmd/gocoveragecheck/functional_quarantine.go` therefore creates an
+unrestricted package group and a precise `-run` group. The invocation builder
+in `cmd/gocoveragecheck/coverage_invocation.go` deliberately executes one
+coverage invocation per group so the test-level selector cannot be applied to
+unrelated packages.
+
+The existing controlled witness was run as:
+
+```text
+go test ./cmd/gocoveragecheck -run 'TestFunctionalCoverageSelectionSubtractsOnlyDeclaredSelectors|TestBuildFunctionalCoverageInvocationPlanKeepsRunGroupsSeparate' -count=1
+```
+
+It exited `0` (`0.034s`). The first test proves that declared package and test
+selectors produce one unrestricted and one precise group. The second proves
+that the groups remain separate, that only the precise group receives its
+`-run` pattern, and that intermediate coverage profiles are isolated. This
+confirms the current executable-spine topology, but it does not measure the
+hosted wall contribution of the second group.
+
+### Correction boundary and structured blocker
+
+The measured `108.956s` reclaim envelope is attributable to the
+source-sensitive Actions Go build-cache restore state: the repository-owned
+boundary is the functional cache restore/save key and prefix in
+`.github/workflows/ci.yml` (the `functional-coverage-build-*` block), not a
+package scheduling decision. The supervisor critical paths show quarantine
+finishing within roughly `5`–`10s` while the coverage child spans almost the
+entire supervised interval, so supervisor overlap is not a demonstrated
+`20.290s` contributor.
+
+**Structured blocker `C13-001-CHAR-01`:** no retained artifact contains
+per-group timing or another controlled observation that assigns the required
+`20.290s` to the internal two-group topology in
+`cmd/gocoveragecheck/coverage_invocation.go`. Changing that topology could
+alter the current per-package quarantine semantics, and claiming the whole
+cache-state delta as an internal Go correction would be unsupported. Story
+002 explicitly forbids editing `.github/workflows/ci.yml`, so the smallest
+safe delta plan is either (a) authorize the workflow cache restore/reuse
+boundary as the correction owner, or (b) add a bounded per-group setup
+measurement before selecting a `cmd/gocoveragecheck` correction. No runtime,
+workflow, configuration, selection, or failure policy was changed in this
+story.
+
+This satisfies the characterization story as a structured blocker. The
+correction behavior, final-head hosted wall, and post-merge main behavior
+remain unproven and are carried by GATE-FOCUSED, GATE-PR, and
+GATE-MAIN-LOOPBACK respectively.
