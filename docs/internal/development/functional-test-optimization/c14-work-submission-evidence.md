@@ -246,19 +246,38 @@ and merge (`GATE-DELIVERY`).
 
 ## Story-003 final local validation
 
-The final implementation, including the review corrections, was tested from a
-clean worktree at current head
-`bc73c00ff2b16bff2ab70e07c258da7405dd782a`. The ledger refresh does not alter
-the package artifact or its test sources. Environment was
+The blocking review finding at pushed head
+`ed70329018f9e869be49ce8e97171f62aa0fabd5` was reproduced in the staged-image
+witness and corrected in implementation head
+`74325347d97f67131b12fcdd3ade291363cb4dd8`. The corrected implementation was
+then tested from a detached clean worktree at that exact head. The evidence
+ledger update is documentation-only; it does not alter the package artifact or
+its test sources. Environment was
 `go version go1.25.0 windows/amd64`, Windows build `26200`, `amd64`, with the
 shared compute-saturated host described above. All validation used local
 production wiring and controlled provider/command-runner edges; remote product
 calls and paid validation remained at `0` and `$0`.
 
-The five review findings addressed at this head were: direct top-level
-endpoint evidence placement, request-batch boundary imports, real Codex
-provider wiring in the affected tests, removal of the unused completion waiter,
-and replacement of stale final-head evidence.
+The staged-image finding was caused by the shared HTTP cohort using a generic
+successful text result. The fix keeps the cohort shared, but uses the existing
+decision-envelope/input-preserving Factory configuration, a real Codex worker,
+and the controlled input-preserving command-runner edge. An accepted empty
+decision therefore leaves the staged image as the projected Work content while
+the other HTTP witnesses retain their public assertions.
+
+### Review finding and delta plan
+
+| ID | Severity | Reproduction | Expected | Actual | Smallest correction | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| FINDING-001 | blocking | At `ed703...`, the hosted `TestWorkBatchHTTPSubmission/TestAPIStageAndSubmitFileCreatesExpectedWork` witness ran in the shared batch fixture | Projected content remains one image with staged URL, media type, and file markers | Linux CI observed projected content type `text` because the generic controlled response completed before the GET | Use `submissionInputPreservingFactoryConfig`, configure `worker-a` as Codex, and use `submissionInputPreservingProviderRunner` for the shared HTTP cohort; keep the image assertion unchanged | Resolved locally at `74325347d9`; new PR CI required |
+
+The delta plan was limited to the owned submission package: change the shared
+fixture's configuration-compatible controlled edge, rerun the focused witness,
+default package, race, tagged, and clean-room package gates, then refresh this
+ledger and hand the new head to review. No production, shared-support,
+contract, generated, workflow, or assertion changes were needed. If the new
+hosted gate finds another behavioral defect, return a structured finding to
+implementation rather than weakening the witness.
 
 ### GATE-FINAL-MEDIAN — optimized three-run denominator
 
@@ -270,14 +289,14 @@ go test ./tests/functional/work/submission/... -count=1
 
 | Run | Commit | Result / exit | Package-reported time | PowerShell wall time |
 | ---: | --- | --- | ---: | ---: |
-| 1 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `25.561s` | `30.237s` |
-| 2 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `29.093s` | `34.327s` |
-| 3 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `28.488s` | `32.732s` |
+| 1 | `74325347d97f67131b12fcdd3ade291363cb4dd8` | PASS / `0` | `28.872s` | `32.8128s` |
+| 2 | `74325347d97f67131b12fcdd3ade291363cb4dd8` | PASS / `0` | `22.887s` | `26.8453s` |
+| 3 | `74325347d97f67131b12fcdd3ade291363cb4dd8` | PASS / `0` | `19.314s` | `22.6770s` |
 
-The final clean-worktree wall-time median is **`32.732s`**, versus the unchanged
-baseline median **`59.2423305s`**, for a **`44.75%` reduction**. The
-package-reported median is `28.488s` versus the unchanged `45.000s` median, a
-`36.69%` reduction. All three runs passed and the wall median clears the PRD's
+The corrected implementation wall-time median is **`26.8453s`**, versus the
+unchanged baseline median **`59.2423305s`**, for a **`54.69%` reduction**. The
+package-reported median is `22.887s` versus the unchanged `45.000s` median, a
+`49.14%` reduction. All three runs passed and the wall median clears the PRD's
 40% target. The wall spread is retained as host-contention diagnostic evidence;
 package-level behavior remains the primary verdict.
 
@@ -320,24 +339,25 @@ committed Work projections; the package adds no polling or timeout padding.
 
 ### GATE-PACKAGE, GATE-RACE, and GATE-LONG
 
-The named default package command passed in the final clean-worktree three-run
-set above. The supported race command also passed at the final head:
+The named default package command passed in the three-run set above. The
+corrected supported race command also passed at implementation head
+`74325347d97f67131b12fcdd3ade291363cb4dd8`:
 
 ```text
 go test -race ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, package-reported time `64.501s`; no race report was
+Result: PASS / exit `0`, package-reported time `79.687s`; no race report was
 emitted. The tagged command passed as well at the same clean head:
 
 ```text
 go test -tags=functionallong ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, package-reported time `36.846s`. This executed the two
+Result: PASS / exit `0`, package-reported time `51.712s`. This executed the two
 tagged witnesses and the shared optimized helpers. These gates prove local
 functional behavior and detected race safety for the changed package paths;
-they do not prove terminal PR CI or merge.
+they do not prove the new terminal PR CI or merge.
 
 The repository validators also passed at this head:
 
@@ -347,7 +367,15 @@ go run ./cmd/functionalboundarycheck
 ```
 
 The scenario validator emitted `154 reviewed scenarios are current`; the
-boundary validator exited `0` without diagnostics.
+boundary validator exited `0` without diagnostics. The focused correction
+selector also passed three times:
+
+```text
+go test ./tests/functional/work/submission -run '^TestWorkBatchHTTPSubmission/TestAPIStageAndSubmitFileCreatesExpectedWork$' -count=3 -v
+```
+
+All three focused runs exited `0`, and the complete HTTP cohort passed with
+`go test ./tests/functional/work/submission -run '^TestWorkBatchHTTPSubmission$' -count=1 -v`.
 
 ### GATE-ASSERTIONS — post-edit same-or-stronger audit
 
@@ -402,9 +430,10 @@ their assertions remain unchanged.
 
 ## Environment and artifact
 
-- Commit/build identifier: clean worktree at
-  `bc73c00ff2` (`bc73c00ff2b16bff2ab70e07c258da7405dd782a`); the tested
-  implementation is the optimized package plus the review corrections.
+- Commit/build identifier: corrected implementation head
+  `74325347d9` (`74325347d97f67131b12fcdd3ade291363cb4dd8`), also checked from
+  a detached clean worktree; the subsequent ledger refresh is documentation-
+  only.
 - Environment and configuration: `go version go1.25.0 windows/amd64`,
   Windows build `26200`, `amd64`, shared compute-saturated host; no test
   flags beyond the commands listed below.
@@ -418,21 +447,22 @@ their assertions remain unchanged.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3; all exit `0`, package median `28.488s`, wall median `32.732s` | Terminal PR CI and merge |
-| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, package time `64.501s`, no race report | Schedules outside this run |
-| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `36.846s` | Remote tagged workflow behavior |
+| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3 at `74325347d9`; all exit `0`, package median `22.887s`, wall median `26.8453s`; detached clean-worktree run also exited `0` (`23.902s` package, `49.0089s` wall) | New PR CI and merge |
+| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, package time `79.687s`, no race report | Schedules outside this run |
+| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `51.712s` | Remote tagged workflow behavior |
 | GATE-ASSERTIONS: CASE-SUB-001..031 | PASS | Post-edit same-or-stronger table above; all 31 rows mapped to retained observable assertions | Untested real-remote systems |
-| Scope and cleanup | PASS | Final source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
+| Scope and cleanup | PASS | Corrected source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
 
 ## Customer journey
 
-1. From the clean detached final artifact, run the exact default package
-   command. All 29 default Work-submission cases pass through assembled local
+1. From the clean detached corrected artifact at `74325347d9`, run the exact
+   default package command. All 29 default Work-submission cases pass through assembled local
    production wiring, including HTTP, live-root CLI, Work projection, event,
    persistence, failure, and controlled-edge assertions.
-2. Run the race and `functionallong` commands from the same clean artifact.
+2. Run the race and `functionallong` commands against the corrected artifact.
    Both pass, preserving the two tagged witnesses and detecting no race in the
-   changed package paths.
+   changed package paths. The staged-image witness now retains its image
+   projection under the shared input-preserving controlled edge.
 
 ## Cross-task integration and usability
 
@@ -453,8 +483,8 @@ their assertions remain unchanged.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| — | — | — | No loopback defect | No findings | All clean-room gates passed |
+| FINDING-001 | blocking, resolved | Shared HTTP staged-image witness at pushed head `ed703...` | One staged image remains projected | Corrected shared fixture at `74325347d9` preserves image projection; focused, package, race, tagged, and clean-worktree gates pass | Local loopback clean; new PR CI remains required |
 
 ## Verdict
 
-PASS
+PASS locally; pending new PR CI and review-owned merge.
