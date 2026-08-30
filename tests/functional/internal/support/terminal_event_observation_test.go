@@ -16,7 +16,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -164,7 +163,7 @@ func TestTerminalEventObservationSupportsConcurrentSessionStreamsAndDuplicateTer
 	duplicate := decodeTerminalObservationEvent(t, terminalObservationEventJSON(
 		"duplicate", firstSession, 3, 3, "RUN_RESPONSE", "FAILED",
 	))
-	if first.accept(duplicate) {
+	if terminalFactoryEventObservationAccept(first, duplicate) {
 		t.Fatal("duplicate RUN_RESPONSE was accepted after terminal completion")
 	}
 	first.mu.Lock()
@@ -206,6 +205,39 @@ func TestTerminalFactoryEventObservationTimeoutAndCloseReleaseStream(t *testing.
 	case <-observation.done:
 	default:
 		t.Fatal("closing terminal observation left its reader running")
+	}
+}
+
+func TestTerminalFactoryEventObservationBoundsResponseHeaders(t *testing.T) {
+	headerStarted := make(chan struct{})
+	requestEnded := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(headerStarted)
+		<-r.Context().Done()
+		close(requestEnded)
+	}))
+	defer server.Close()
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = 50 * time.Millisecond
+	client := &http.Client{Transport: transport}
+	startedAt := time.Now()
+	_, err := openTerminalFactoryEventObservation(server.URL, "delayed-header-session", client)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("delayed-header open error = %v, want response-header timeout", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed >= time.Second {
+		t.Fatalf("delayed-header open elapsed = %s, want bounded failure", elapsed)
+	}
+	select {
+	case <-headerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("delayed-header request was not established")
+	}
+	select {
+	case <-requestEnded:
+	case <-time.After(time.Second):
+		t.Fatal("delayed-header request was not canceled after timeout")
 	}
 }
 
@@ -287,19 +319,7 @@ func TestTerminalEventObservationSpineUsesRootProcessAndCanonicalRunResponse(t *
 	}
 	command.cancel()
 	event := observation.Wait(15 * time.Second)
-	if event.Type != factoryapi.FactoryEventTypeRunResponse {
-		t.Fatalf("root terminal event type = %q, want RUN_RESPONSE", event.Type)
-	}
-	if event.Context.SessionId != nil && *event.Context.SessionId != session.Id {
-		t.Fatalf("root terminal event session ID = %#v, want nil or %q", event.Context.SessionId, session.Id)
-	}
-	payload, err := event.Payload.AsRunResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode root terminal RUN_RESPONSE: %v", err)
-	}
-	if payload.State == nil || *payload.State != factoryapi.FactoryStateCompleted {
-		t.Fatalf("root terminal RUN_RESPONSE state = %#v, want COMPLETED", payload.State)
-	}
+	assertCanonicalTerminalRunResponse(t, event, session.Id)
 
 	completedSession := GetDefaultSession(t, baseURL)
 	if completedSession.Runtime.Status != factoryapi.FactorySessionStatusFINISHED {
@@ -318,6 +338,23 @@ func TestTerminalEventObservationSpineUsesRootProcessAndCanonicalRunResponse(t *
 	}
 	if err := command.Err(); err != nil {
 		t.Fatalf("root Process.Execute error = %v", err)
+	}
+}
+
+func assertCanonicalTerminalRunResponse(t *testing.T, event factoryapi.FactoryEvent, sessionID string) {
+	t.Helper()
+	if event.Type != factoryapi.FactoryEventTypeRunResponse {
+		t.Fatalf("root terminal event type = %q, want RUN_RESPONSE", event.Type)
+	}
+	if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
+		t.Fatalf("root terminal event session ID = %#v, want nil or %q", event.Context.SessionId, sessionID)
+	}
+	payload, err := event.Payload.AsRunResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode root terminal RUN_RESPONSE: %v", err)
+	}
+	if payload.State == nil || *payload.State != factoryapi.FactoryStateCompleted {
+		t.Fatalf("root terminal RUN_RESPONSE state = %#v, want COMPLETED", payload.State)
 	}
 }
 
@@ -388,7 +425,7 @@ func TestTerminalFactoryEventObservationRejectsInvalidStreamResponses(t *testing
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", test.contentType)
 				if test.retained != "" {
-					w.Header().Set(factorysessionshttp.SessionEventStreamRetainedCountHeader, test.retained)
+					w.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, test.retained)
 				}
 				w.WriteHeader(test.status)
 				_, _ = io.WriteString(w, "invalid stream response")
@@ -466,7 +503,7 @@ func newTerminalObservationTestServer(
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set(
-			factorysessionshttp.SessionEventStreamRetainedCountHeader,
+			factorysessions.SessionEventStreamRetainedCountHeader,
 			strconv.Itoa(retainedCount),
 		)
 		if flusher, ok := w.(http.Flusher); ok {

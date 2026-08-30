@@ -2,6 +2,7 @@ package support
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,11 @@ import (
 )
 
 const sessionStopObservationTimeout = 10 * time.Second
+
+const (
+	statusObservationInitialRetry = 5 * time.Millisecond
+	statusObservationMaxRetry     = 250 * time.Millisecond
+)
 
 func GetDefaultSession(t testing.TB, baseURL string) factoryapi.FactorySession {
 	t.Helper()
@@ -74,28 +80,10 @@ func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) fac
 	})
 }
 
-// GetDefaultSessionStatus reads the public status projection once. Callers
-// that need terminal synchronization must observe the canonical Factory Event
-// first, then use this helper for the status values they assert.
-func GetDefaultSessionStatus(t testing.TB, baseURL string) factoryapi.StatusResponse {
-	t.Helper()
-	return GetSessionStatus(t, baseURL, factorysessions.DefaultSessionID)
-}
-
-// GetSessionStatus reads one session-scoped public status projection once.
-func GetSessionStatus(t testing.TB, baseURL, sessionID string) factoryapi.StatusResponse {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
-	return GetJSON[factoryapi.StatusResponse](t, endpoint)
-}
-
-// WaitForTerminalStatus is a compatibility boundary for the excluded
-// provider, provider-session, and worker live lanes. Those callers remain
-// owner-controlled handoffs and are not migrated in this lane. Owned callers
-// must open TerminalFactoryEventObservation before their trigger instead.
-//
-// The compatibility path has no stable window; its eventual owner migration
-// can remove this symbol without changing the event-driven owned path.
+// WaitForTerminalStatus is retained only for excluded provider, provider-
+// session, and worker lanes. It is a compatibility name, not a legacy
+// polling implementation: the delegated session-scoped helper subscribes to
+// canonical Factory Events and has no stable-window success condition.
 func WaitForTerminalStatus(
 	t testing.TB,
 	baseURL string,
@@ -348,8 +336,10 @@ func SubmitSessionWorkAt(
 	return result
 }
 
-// WaitForSessionTerminalStatus polls one session-scoped status endpoint until
-// work becomes terminal.
+// WaitForSessionTerminalStatus is an event-driven compatibility boundary for
+// excluded callers that still need the terminal status projection. It reads
+// status once, subscribes to canonical Factory Events, closes the subscribe
+// handoff race with one more status read, and then waits for RUN_RESPONSE.
 func WaitForSessionTerminalStatus(
 	t testing.TB,
 	baseURL string,
@@ -364,30 +354,111 @@ func WaitForSessionTerminalStatus(
 	return status
 }
 
+var readSessionStatusUntil = func(
+	endpoint string,
+	deadline time.Time,
+) (factoryapi.StatusResponse, error) {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return factoryapi.StatusResponse{}, context.DeadlineExceeded
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), remaining)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return factoryapi.StatusResponse{}, fmt.Errorf("build status request: %w", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 8*1024))
+		return factoryapi.StatusResponse{}, fmt.Errorf(
+			"status = %d body = %q",
+			response.StatusCode,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	var status factoryapi.StatusResponse
+	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	return status, nil
+}
+
+var terminalSessionStatusIsComplete = func(status factoryapi.StatusResponse) bool {
+	completed := status.Categories.Terminal + status.Categories.Failed
+	if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
+		return false
+	}
+	switch status.RuntimeStatus {
+	case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
+		return true
+	default:
+		return false
+	}
+}
+
 func observeSessionTerminalStatus(
 	baseURL string,
 	sessionID string,
 	timeout time.Duration,
 ) (factoryapi.StatusResponse, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
-	status, err := waitForStatusAt(endpoint, timeout, func(status factoryapi.StatusResponse) bool {
-		completed := status.Categories.Terminal + status.Categories.Failed
-		if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
-			return false
-		}
-		switch status.RuntimeStatus {
-		case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
-			return true
-		default:
-			return false
-		}
-	})
+	if timeout <= 0 {
+		return factoryapi.StatusResponse{}, fmt.Errorf("terminal observation timeout must be positive")
+	}
+	deadline := time.Now().Add(timeout)
+	status, statusErr := readSessionStatusUntil(endpoint, deadline)
+	if statusErr == nil && terminalSessionStatusIsComplete(status) {
+		return status, nil
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return status, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, status, statusErr)
+	}
+	client := &http.Client{Timeout: remaining}
+	observation, err := openTerminalFactoryEventObservation(baseURL, sessionID, client)
+	if err != nil {
+		return status, fmt.Errorf("Factory Session %q at %s: subscribe to canonical events: %w", sessionID, endpoint, err)
+	}
+	defer observation.Close()
+	// A terminal event can be published between the first status read and the
+	// SSE response headers. This read covers that narrow handoff while the
+	// observer is already established; later completion is delivered by SSE.
+	statusAfterSubscribe, statusAfterSubscribeErr := readSessionStatusUntil(endpoint, deadline)
+	if statusAfterSubscribeErr == nil && terminalSessionStatusIsComplete(statusAfterSubscribe) {
+		return statusAfterSubscribe, nil
+	}
+	if statusAfterSubscribeErr == nil {
+		status = statusAfterSubscribe
+	} else {
+		statusErr = statusAfterSubscribeErr
+	}
+	remaining = time.Until(deadline)
+	if remaining <= 0 {
+		return status, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, status, statusErr)
+	}
+	if _, err := observation.wait(remaining); err != nil {
+		return status, fmt.Errorf("Factory Session %q at %s: %w; last=%#v status_error=%v", sessionID, endpoint, err, status, statusErr)
+	}
+	status, err = readSessionStatusUntil(endpoint, deadline)
 	if err != nil {
 		return status, fmt.Errorf(
 			"Factory Session %q at %s: %w",
 			sessionID,
 			endpoint,
 			err,
+		)
+	}
+	if !terminalSessionStatusIsComplete(status) {
+		return status, fmt.Errorf(
+			"Factory Session %q at %s: RUN_RESPONSE arrived before terminal status: %#v",
+			sessionID,
+			endpoint,
+			status,
 		)
 	}
 	return status, nil
@@ -400,8 +471,10 @@ func waitForStatusAt(
 ) (factoryapi.StatusResponse, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
+	// This generic readiness/stop helper is not a terminal completion barrier.
+	// Use bounded adaptive retries for those non-terminal predicates; terminal
+	// completion is synchronized through canonical Factory Events above.
+	retryDelay := statusObservationInitialRetry
 	var last factoryapi.StatusResponse
 	var lastErr error
 	for {
@@ -425,9 +498,22 @@ func waitForStatusAt(
 		} else {
 			lastErr = err
 		}
+		retry := time.NewTimer(retryDelay)
 		select {
-		case <-ticker.C:
+		case <-retry.C:
+			if retryDelay < statusObservationMaxRetry {
+				retryDelay *= 2
+				if retryDelay > statusObservationMaxRetry {
+					retryDelay = statusObservationMaxRetry
+				}
+			}
 		case <-deadline.C:
+			if !retry.Stop() {
+				select {
+				case <-retry.C:
+				default:
+				}
+			}
 			return last, fmt.Errorf("last=%#v error=%v", last, lastErr)
 		}
 	}

@@ -104,7 +104,7 @@ func RunFactoryToCompletionWithEdges(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 ) factoryapi.FactorySession {
-	session, _, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	session, _, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false, 0)
 	return session
 }
 
@@ -115,8 +115,16 @@ func RunFactoryToCompletionWithEdgesAndWork(
 	dir string,
 	overrides serviceedges.Edges,
 	timeout time.Duration,
+	expectedWorkCounts ...int,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
-	session, work, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	expectedWorkCount := 0
+	if len(expectedWorkCounts) > 1 {
+		t.Fatal("expected at most one Work admission count")
+	}
+	if len(expectedWorkCounts) == 1 {
+		expectedWorkCount = expectedWorkCounts[0]
+	}
+	session, work, _, _ := runFactoryToCompletion(t, dir, overrides, timeout, false, expectedWorkCount)
 	return session, work
 }
 
@@ -127,15 +135,23 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	dir string,
 	overrides serviceedges.Edges,
 	timeout time.Duration,
+	expectedWorkCounts ...int,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
-	session, work, events, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	expectedWorkCount := 0
+	if len(expectedWorkCounts) > 1 {
+		t.Fatal("expected at most one Work admission count")
+	}
+	if len(expectedWorkCounts) == 1 {
+		expectedWorkCount = expectedWorkCounts[0]
+	}
+	session, work, events, _ := runFactoryToCompletion(t, dir, overrides, timeout, false, expectedWorkCount)
 	return session, work, events
 }
 
 // RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose is retained
-// for the excluded ACP provider lane's compatibility handoff. Despite its
-// historical name, completion is correlated to the canonical terminal event;
-// no stable-window or status-polling path remains.
+// only as the excluded ACP provider lane's compatibility handoff. Its
+// historical stable-window behavior has been removed: completion is
+// correlated to canonical event observation before the pre-shutdown hook.
 func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 	t testing.TB,
 	dir string,
@@ -150,6 +166,7 @@ func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 		overrides,
 		timeout,
 		false,
+		0,
 		nil,
 		nil,
 		beforeClose,
@@ -173,6 +190,7 @@ func RunFactoryToCompletionWithConfiguredHome(
 		overrides,
 		timeout,
 		false,
+		0,
 		configure,
 		nil,
 		nil,
@@ -193,7 +211,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEvents(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
-	return runFactoryToCompletion(t, dir, overrides, timeout, true)
+	return runFactoryToCompletion(t, dir, overrides, timeout, true, 0)
 }
 
 // RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents also
@@ -219,6 +237,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 		overrides,
 		timeout,
 		true,
+		0,
 		nil,
 		func(baseURL string, listed factoryapi.ListWorkResponse) {
 			seen := make(map[string]struct{})
@@ -251,6 +270,7 @@ func runFactoryToCompletion(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 	captureResponseEvents bool,
+	expectedWorkCount int,
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -263,6 +283,7 @@ func runFactoryToCompletion(
 		overrides,
 		timeout,
 		captureResponseEvents,
+		expectedWorkCount,
 		nil,
 		nil,
 		nil,
@@ -276,6 +297,7 @@ func runFactoryToCompletionWithHome(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 	captureResponseEvents bool,
+	expectedWorkCount int,
 	configure func(string),
 	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
 	beforeClose func(),
@@ -288,6 +310,8 @@ func runFactoryToCompletionWithHome(
 	t.Helper()
 
 	server := NewProcessAPIServer()
+	startGate := make(chan struct{})
+	server.HoldStartUntilSignaled(startGate)
 	overrides.APIServerStarter = server.Start
 	process := BuildProcess(t, overrides)
 	inputs := FakeInputs(t.Context(), []string{
@@ -317,9 +341,26 @@ func runFactoryToCompletionWithHome(
 		}
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
+	startReleased := false
+	releaseStart := func() {
+		if startReleased {
+			return
+		}
+		close(startGate)
+		startReleased = true
+	}
+	// StartProcessCommand registers its own cleanup. Registering this release
+	// afterward makes a fatal observer-open failure unblock the command before
+	// that command cleanup tries to stop it.
+	t.Cleanup(releaseStart)
+	boundURL, err := server.WaitForBoundURL(processAPIServerReadyTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminalObservation := OpenDefaultSessionTerminalFactoryEventObservation(t, boundURL)
+	releaseStart()
 	baseURL := server.WaitForURL(t)
 	liveSession := GetDefaultSession(t, baseURL)
-	terminalObservation := OpenSessionTerminalFactoryEventObservation(t, baseURL, liveSession.Id)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -350,8 +391,29 @@ func runFactoryToCompletionWithHome(
 			t.Fatalf("start factory response-event capture: %v", err)
 		}
 	}
-	WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, liveSession.Id, timeout)
+	if expectedWorkCount > 0 {
+		WaitForSessionWorkCountTerminalFromFactoryEvents(t, baseURL, liveSession.Id, expectedWorkCount, timeout)
+	} else {
+		WaitForSessionWorkTerminalFromFactoryEvents(t, baseURL, liveSession.Id, timeout)
+	}
 
+	var responseStreamComplete bool
+	if beforeClose != nil {
+		beforeClose()
+	}
+	// Stop the root process after all projection and response observations have
+	// completed. Runtime shutdown records RUN_RESPONSE before the transport is
+	// allowed to close, so the already-open terminal observer receives the
+	// canonical completion event without a status-based success wait.
+	daemon.Stop(t)
+	terminalObservation.Wait(timeout)
+	if responseCaptureCancel != nil {
+		// Work completion and response-stream publication use separate observers.
+		// Wait for the stream's terminal event instead of relying on a scheduler
+		// sleep. The caller's deadline is a failure guard for a delayed response
+		// stream, not permission to return a partial event snapshot.
+		responseStreamComplete = waitForTerminalResponseEvent(responseActivity, timeout)
+	}
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
 	events := GetFactoryEventsAt(t, baseURL)
@@ -362,23 +424,6 @@ func runFactoryToCompletionWithHome(
 		captureWorkerSessionEvents(baseURL, work)
 	}
 	var responseEvents []factoryapi.FactoryResponseEvent
-	var responseStreamComplete bool
-	if responseCaptureCancel != nil {
-		// Work completion and response-stream publication use separate observers.
-		// Wait for the stream's terminal event instead of relying on a scheduler
-		// sleep. The caller's deadline is a failure guard for a delayed response
-		// stream, not permission to return a partial event snapshot.
-		responseStreamComplete = waitForTerminalResponseEvent(responseActivity, timeout)
-	}
-	if beforeClose != nil {
-		beforeClose()
-	}
-	// Stop the root process after all projection and response observations have
-	// completed. Runtime shutdown records RUN_RESPONSE before the transport is
-	// allowed to close, so the already-open terminal observer receives the
-	// canonical completion event without a status-based success wait.
-	daemon.Stop(t)
-	terminalObservation.Wait(timeout)
 	// Stop the root process before canceling the capture request. Process
 	// shutdown closes the session-owned response stream, which is the
 	// authoritative boundary after all response publishers have quiesced.

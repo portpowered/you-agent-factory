@@ -25,28 +25,6 @@ type FactoryEventStream struct {
 	errs   chan error
 }
 
-func (s *FactoryEventStream) nextEventContext(ctx context.Context) (factoryapi.FactoryEvent, error) {
-	if s == nil {
-		return factoryapi.FactoryEvent{}, errors.New("factory event stream is nil")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case event := <-s.events:
-		return event, nil
-	case err := <-s.errs:
-		if err == nil {
-			return factoryapi.FactoryEvent{}, errors.New("factory event stream failed")
-		}
-		return factoryapi.FactoryEvent{}, err
-	case <-s.done:
-		return factoryapi.FactoryEvent{}, errors.New("factory event stream closed")
-	case <-ctx.Done():
-		return factoryapi.FactoryEvent{}, ctx.Err()
-	}
-}
-
 // OpenFactoryEventStreamAt opens the canonical Factory Event SSE stream at
 // endpoint without reading until the stream becomes quiet.
 func OpenFactoryEventStreamAt(t testing.TB, endpoint string) *FactoryEventStream {

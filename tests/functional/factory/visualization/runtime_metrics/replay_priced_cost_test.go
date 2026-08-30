@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -51,7 +52,7 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 	})
 	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 15*time.Second)
-	status := support.GetDefaultSessionStatus(t, server.URL())
+	status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/~default/status")
 	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}

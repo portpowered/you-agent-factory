@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -46,31 +47,58 @@ func TestWaitForSessionTerminalStatusUsesExactSessionAndReturnsWithoutStabilityD
 
 func TestWaitForSessionTerminalStatusRejectsTransientActiveGap(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		request := requests.Add(1)
-		status := factoryapi.StatusResponse{
-			Categories:    factoryapi.StatusCategories{Terminal: 1},
-			RuntimeStatus: "ACTIVE",
-			TotalTokens:   1,
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/factory-sessions/session-transient/status":
+			request := requests.Add(1)
+			status := factoryapi.StatusResponse{
+				Categories:    factoryapi.StatusCategories{Processing: 1},
+				RuntimeStatus: "ACTIVE",
+				TotalTokens:   1,
+			}
+			if request == 1 {
+				status.Categories = factoryapi.StatusCategories{Terminal: 1}
+			}
+			if request >= 2 {
+				status.Categories = factoryapi.StatusCategories{Terminal: 1}
+				status.RuntimeStatus = "IDLE"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(status)
+		case "/factory-sessions/session-transient/events":
+			writeTerminalObservationTestSSE(t, w, factoryapi.FactoryEvent{Type: factoryapi.FactoryEventTypeRunResponse})
+			<-r.Context().Done()
+		default:
+			http.NotFound(w, r)
 		}
-		if request == 2 {
-			status.Categories = factoryapi.StatusCategories{Processing: 1}
-		}
-		if request >= 3 {
-			status.RuntimeStatus = "IDLE"
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(status)
 	}))
 	defer server.Close()
 
 	status := support.WaitForSessionTerminalStatus(t, server.URL, "session-transient", time.Second)
-	if requests.Load() < 3 {
-		t.Fatalf("status requests = %d, accepted transient active gap", requests.Load())
+	if requests.Load() < 2 {
+		t.Fatalf("status requests = %d, did not close the event/status handoff", requests.Load())
 	}
 	if status.RuntimeStatus != "IDLE" || status.Categories.Terminal != 1 {
 		t.Fatalf("terminal status = %#v", status)
 	}
+}
+
+func writeTerminalObservationTestSSE(t *testing.T, w http.ResponseWriter, event factoryapi.FactoryEvent) {
+	t.Helper()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "0")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		t.Fatal("test SSE writer does not flush")
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal test Factory Event: %v", err)
+	}
+	if _, err := io.WriteString(w, "data: "+string(data)+"\n\n"); err != nil {
+		t.Fatalf("write test Factory Event: %v", err)
+	}
+	flusher.Flush()
 }
 
 func TestUpsertDefaultSessionWorkRequest_PostsGeneratedWorkRequest(t *testing.T) {

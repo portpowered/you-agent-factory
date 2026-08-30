@@ -46,6 +46,7 @@ func TestWatcherSingleFileCompletesOneWork(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		1,
 	)
 
 	if provider.CallCount("processor") != 1 {
@@ -108,6 +109,7 @@ func TestWatcherSequentialFilesAllComplete(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		seedCount,
 	)
 
 	if provider.CallCount("processor") != seedCount {
@@ -175,6 +177,7 @@ func TestWatcherConcurrentFilesCompleteWithoutDuplicates(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		seedCount,
 	)
 
 	if provider.CallCount("processor") != seedCount {
@@ -248,6 +251,7 @@ func TestWatcherMixedOutcomesLeaveNoNonTerminalWorkLeak(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		seedCount,
 	)
 
 	if session.Runtime.Progress.Categories.Terminal != 3 || session.Runtime.Progress.Categories.Failed != 2 {
@@ -315,6 +319,7 @@ func TestWatcherDefaultChannelSubmission(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		1,
 	)
 
 	if provider.CallCount("processor") != 1 {
@@ -367,6 +372,7 @@ func TestWatcherExecutionIDDirectorySubmission(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		1,
 	)
 
 	if provider.CallCount("processor") != 1 {
@@ -416,6 +422,7 @@ func TestWatcherCombinedDefaultAndDynamicExecDirectory(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
+		2,
 	)
 
 	if provider.CallCount("processor") != 2 {
@@ -462,6 +469,7 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 		dir,
 		serviceedges.Edges{ProviderCommandRunner: runner},
 		15*time.Second,
+		3,
 	)
 
 	wantStates := map[string]int{

@@ -12,6 +12,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -45,7 +46,7 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 	})
 	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, server.URL())
 	support.WaitForSessionWorkTerminalFromFactoryEvents(t, server.URL(), "~default", 15*time.Second)
-	status := support.GetDefaultSessionStatus(t, server.URL())
+	status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/~default/status")
 	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
@@ -56,25 +57,7 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 	})
 	support.CleanupProcess(t, process)
 
-	beforeHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
-	t.Logf("before operator price row — human you metrics costs:\n%s", beforeHuman)
-	if !strings.Contains(beforeHuman, "Status: UNPRICED") ||
-		!strings.Contains(beforeHuman, "Cost (USD): ?? unknown") ||
-		!strings.Contains(beforeHuman, "CLAUDE/claude-sonnet-4-6") ||
-		!strings.Contains(beforeHuman, "Reason: no configured price") ||
-		!strings.Contains(beforeHuman, "Input tokens: 1200") ||
-		!strings.Contains(beforeHuman, "Output tokens: 300") ||
-		!strings.Contains(beforeHuman, "Total tokens: 1500") ||
-		strings.Contains(beforeHuman, "$0.00") || strings.Contains(beforeHuman, "Status: NO_USAGE") {
-		t.Fatalf("human replay costs output before configuration = %q, want truthful UNPRICED Claude usage", beforeHuman)
-	}
-	beforeCLIReport := decodeReplayCostsCLI(t, process, environment, server.URL())
-	assertUnpricedReplayCostsReport(t, beforeCLIReport)
-	beforeAPIReport := getReplayCostsHTTP(t, server.URL())
-	assertUnpricedReplayCostsReport(t, beforeAPIReport)
-	if got, want := beforeAPIReport, beforeCLIReport; !reportsHaveSameReplayCostFacts(got, want) {
-		t.Fatalf("HTTP and CLI before-configuration reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
-	}
+	assertReplayUnpricedCostsBeforeConfiguration(t, process, environment, server.URL())
 
 	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
 		Provider:               "claude",
@@ -82,48 +65,72 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 		InputPerMillionTokens:  "3",
 		OutputPerMillionTokens: "15",
 	})
-	configuredHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
-	t.Logf("configured operator price row — human you metrics costs:\n%s", configuredHuman)
-	if !strings.Contains(configuredHuman, "Status: PRICED") ||
-		!strings.Contains(configuredHuman, "Cost (USD): $0.01") ||
-		!strings.Contains(configuredHuman, "Priced amount (USD): 0.0081") ||
-		!strings.Contains(configuredHuman, "Price source: OPERATOR_SUPPLIED") ||
-		!strings.Contains(configuredHuman, "Total tokens: 1500") {
-		t.Fatalf("human replay costs output while configured = %q, want exact operator valuation and source", configuredHuman)
-	}
-	configuredCLIReport := decodeReplayCostsCLI(t, process, environment, server.URL())
-	assertOperatorPricedReplayCostsReport(t, configuredCLIReport)
-	configuredAPIReport := getReplayCostsHTTP(t, server.URL())
-	assertOperatorPricedReplayCostsReport(t, configuredAPIReport)
-	if got, want := configuredAPIReport, configuredCLIReport; !reportsHaveSameReplayCostFacts(got, want) {
-		t.Fatalf("HTTP and CLI configured reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
-	}
+	assertReplayConfiguredCosts(t, process, environment, server.URL())
 
 	writeReplayOperatorPriceTable(t, homeDir)
-	removedHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
-	t.Logf("removed operator price row — human you metrics costs:\n%s", removedHuman)
-	if !strings.Contains(removedHuman, "Status: UNPRICED") ||
-		!strings.Contains(removedHuman, "Reason: no configured price") ||
-		!strings.Contains(removedHuman, "Input tokens: 1200") ||
-		!strings.Contains(removedHuman, "Output tokens: 300") ||
-		!strings.Contains(removedHuman, "Total tokens: 1500") ||
-		strings.Contains(removedHuman, "Price source: OPERATOR_SUPPLIED") ||
-		strings.Contains(removedHuman, "$0.00") {
-		t.Fatalf("human replay costs output after removal = %q, want truthful reverted usage", removedHuman)
-	}
-	removedCLIReport := decodeReplayCostsCLI(t, process, environment, server.URL())
-	assertUnpricedReplayCostsReport(t, removedCLIReport)
-	removedAPIReport := getReplayCostsHTTP(t, server.URL())
-	assertUnpricedReplayCostsReport(t, removedAPIReport)
-	if got, want := removedAPIReport, removedCLIReport; !reportsHaveSameReplayCostFacts(got, want) {
-		t.Fatalf("HTTP and CLI after-removal reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
-	}
+	assertReplayUnpricedCostsAfterRemoval(t, process, environment, server.URL())
 
 	if providerRunner.CallCount() != 0 || scriptRunner.CallCount() != 0 {
 		t.Fatalf("replay external execution calls = provider:%d script:%d, want zero", providerRunner.CallCount(), scriptRunner.CallCount())
 	}
 	server.Stop(t)
 	terminalObservation.Wait(15 * time.Second)
+}
+
+func assertReplayUnpricedCostsBeforeConfiguration(t *testing.T, process support.Process, environment []string, serverURL string) {
+	t.Helper()
+	human := executeReplayCostsCLI(t, process, environment, serverURL, false)
+	t.Logf("before operator price row — human you metrics costs:\n%s", human)
+	if !strings.Contains(human, "Status: UNPRICED") || !strings.Contains(human, "Cost (USD): ?? unknown") ||
+		!strings.Contains(human, "CLAUDE/claude-sonnet-4-6") || !strings.Contains(human, "Reason: no configured price") ||
+		!strings.Contains(human, "Input tokens: 1200") || !strings.Contains(human, "Output tokens: 300") ||
+		!strings.Contains(human, "Total tokens: 1500") || strings.Contains(human, "$0.00") || strings.Contains(human, "Status: NO_USAGE") {
+		t.Fatalf("human replay costs output before configuration = %q, want truthful UNPRICED Claude usage", human)
+	}
+	cliReport := decodeReplayCostsCLI(t, process, environment, serverURL)
+	assertUnpricedReplayCostsReport(t, cliReport)
+	apiReport := getReplayCostsHTTP(t, serverURL)
+	assertUnpricedReplayCostsReport(t, apiReport)
+	if !reportsHaveSameReplayCostFacts(apiReport, cliReport) {
+		t.Fatalf("HTTP and CLI before-configuration reports differ:\nHTTP=%#v\nCLI=%#v", apiReport, cliReport)
+	}
+}
+
+func assertReplayConfiguredCosts(t *testing.T, process support.Process, environment []string, serverURL string) {
+	t.Helper()
+	human := executeReplayCostsCLI(t, process, environment, serverURL, false)
+	t.Logf("configured operator price row — human you metrics costs:\n%s", human)
+	if !strings.Contains(human, "Status: PRICED") || !strings.Contains(human, "Cost (USD): $0.01") ||
+		!strings.Contains(human, "Priced amount (USD): 0.0081") || !strings.Contains(human, "Price source: OPERATOR_SUPPLIED") ||
+		!strings.Contains(human, "Total tokens: 1500") {
+		t.Fatalf("human replay costs output while configured = %q, want exact operator valuation and source", human)
+	}
+	cliReport := decodeReplayCostsCLI(t, process, environment, serverURL)
+	assertOperatorPricedReplayCostsReport(t, cliReport)
+	apiReport := getReplayCostsHTTP(t, serverURL)
+	assertOperatorPricedReplayCostsReport(t, apiReport)
+	if !reportsHaveSameReplayCostFacts(apiReport, cliReport) {
+		t.Fatalf("HTTP and CLI configured reports differ:\nHTTP=%#v\nCLI=%#v", apiReport, cliReport)
+	}
+}
+
+func assertReplayUnpricedCostsAfterRemoval(t *testing.T, process support.Process, environment []string, serverURL string) {
+	t.Helper()
+	human := executeReplayCostsCLI(t, process, environment, serverURL, false)
+	t.Logf("removed operator price row — human you metrics costs:\n%s", human)
+	if !strings.Contains(human, "Status: UNPRICED") || !strings.Contains(human, "Reason: no configured price") ||
+		!strings.Contains(human, "Input tokens: 1200") || !strings.Contains(human, "Output tokens: 300") ||
+		!strings.Contains(human, "Total tokens: 1500") || strings.Contains(human, "Price source: OPERATOR_SUPPLIED") ||
+		strings.Contains(human, "$0.00") {
+		t.Fatalf("human replay costs output after removal = %q, want truthful reverted usage", human)
+	}
+	cliReport := decodeReplayCostsCLI(t, process, environment, serverURL)
+	assertUnpricedReplayCostsReport(t, cliReport)
+	apiReport := getReplayCostsHTTP(t, serverURL)
+	assertUnpricedReplayCostsReport(t, apiReport)
+	if !reportsHaveSameReplayCostFacts(apiReport, cliReport) {
+		t.Fatalf("HTTP and CLI after-removal reports differ:\nHTTP=%#v\nCLI=%#v", apiReport, cliReport)
+	}
 }
 
 func decodeReplayCostsCLI(

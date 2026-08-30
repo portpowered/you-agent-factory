@@ -72,18 +72,7 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	batchJSON := fmt.Sprintf(
-		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"role":"parent"}},{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"role":"child"}}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":%q,"targetWorkName":%q}]}`,
-		parentChildLineageRequestID,
-		parentChildLineageParent,
-		parentChildLineageParentID,
-		parentChildLineageWorkType,
-		parentChildLineageChild,
-		parentChildLineageChildID,
-		parentChildLineageWorkType,
-		parentChildLineageChild,
-		parentChildLineageParent,
-	)
+	batchJSON := parentChildLineageBatchJSON()
 	terminalObservation := support.OpenDefaultSessionTerminalFactoryEventObservation(t, baseURL)
 	submitOut, err := runParentChildCLI(ctx, processHarness, dir, baseURL,
 		"--json",
@@ -150,6 +139,21 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	assertParentChildRelationOnWork(t, shown, parentChildLineageParentID)
 	server.Stop(t)
 	terminalObservation.Wait(15 * time.Second)
+}
+
+func parentChildLineageBatchJSON() string {
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"role":"parent"}},{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"role":"child"}}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":%q,"targetWorkName":%q}]}`,
+		parentChildLineageRequestID,
+		parentChildLineageParent,
+		parentChildLineageParentID,
+		parentChildLineageWorkType,
+		parentChildLineageChild,
+		parentChildLineageChildID,
+		parentChildLineageWorkType,
+		parentChildLineageChild,
+		parentChildLineageParent,
+	)
 }
 
 // TestChildFailureProjectsToDocumentedParentView proves through public CLI

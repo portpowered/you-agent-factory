@@ -335,16 +335,49 @@ the observer, migration, after timings, or clean checkout.
 
 ## Story 003 — final census and after timing evidence
 
+### Review reconciliation
+
+The review feedback exposed an ownership conflict in the original literal
+family-audit wording: excluded provider, Provider Session, Worker, and ACP
+tests still compile against the old helper names, while the owned migration
+must remove their polling behavior. The smallest bounded resolution is an
+explicit compatibility exception at shared support: the old names remain only
+for those unchanged excluded callers, and delegate to the event-driven
+session-scoped implementation. They are not owned completion paths and do not
+contain a stable window. No excluded file is changed.
+
+The central process helper now establishes the terminal observer while the
+root-built API listener is held before invocation, waits for the canonical
+post-cursor `RUN_RESPONSE` before taking terminal snapshots or running capture
+callbacks, and uses an explicit Work admission count for continuous
+watcher/repeater callers. A delayed-admission regression proves that a
+terminal projection of the currently listed Work cannot end the wait before a
+known later admission.
+
+The observer's synchronous SSE open uses a bounded response-header policy,
+cancellation, response-body close, and idle-connection cleanup. A
+delayed-header test proves that an accepted connection cannot strand the test
+before `Wait` is reachable. The generic status helper remains only for
+non-terminal readiness/stop predicates and now uses bounded adaptive retries;
+terminal completion does not call it.
+
+The production-only deadcode checker cannot see callers in external functional
+test packages. The observer and Work-observation support entrypoints are
+therefore deliberately function-valued test-harness seams, with the raw Work
+stream/projection read kept local to that seam so unrelated legacy support
+functions do not become falsely live. This is an owned design exception; the
+shared deadcode baseline is unchanged.
+
 ### Final family census
 
-The final census was run after the caller migration with:
+The final census was rerun after the review fixes with:
 
     rg -n 'WaitForTerminalStatus|terminalObservationStableWindow|RunFactoryToCompletionWithEdgesAndWorkStable|RunFactoryToCompletionWithEdgesAndObservationsStable' tests/functional
 
 The owned result is zero direct `WaitForTerminalStatus` callers, zero owned
 `terminalObservationStableWindow` mode references, zero owned stable-only
 completion wrappers, and zero owned stable-wrapper callers. The final result
-retains only these owner-controlled handoffs:
+retains only these explicit compatibility handoffs:
 
 | Current hit | Owner/disposition |
 | --- | --- |
@@ -356,14 +389,17 @@ retains only these owner-controlled handoffs:
 | `tests/functional/provider_sessions/association/response_exec_metadata_test.go:206,262` | Provider Sessions live lane; excluded and unchanged |
 | `tests/functional/workers/script/execution_long_test.go:64` | Workers live lane; excluded and unchanged |
 | `tests/functional/providers/acp/packaged_conformance_test.go:83` | ACP live lane's before-close wrapper; excluded and unchanged |
-| `tests/functional/internal/support/http_observation.go:92,99` | Compatibility symbol required to compile the excluded direct callers; no stable window is implemented by the compatibility boundary |
-| `tests/functional/internal/support/process_factory.go:135,139` | Compatibility wrapper required by the excluded ACP caller; its implementation is event-driven and has no stable window |
+| `tests/functional/internal/support/http_observation.go:78,82` | Compatibility symbol required to compile the excluded direct callers; it delegates to event-driven session observation and implements no stable window |
+| `tests/functional/internal/support/process_factory.go:151,155` | Compatibility wrapper required by the excluded ACP caller; it waits on canonical event observation and implements no stable window |
 
 The two unrelated `stableWindow` constants remain at
 `tests/functional/workstations/watcher/files_test.go:676` and
 `tests/functional/factory/current/helpers_long_test.go:248`; they are watcher
 debounce/readiness behavior outside this terminal-observation family. No file
-under the excluded provider, provider-session, or worker directories changed.
+under the excluded provider, provider-session, worker, or ACP directories
+changed. The literal symbol-absence criterion is satisfied for owned paths;
+the retained names above are the documented delegated exception, not an
+unrecorded PASS claim for the excluded lanes.
 The four audit-time JavaScript locations remain absent as established by the
 Story 001 history reconciliation.
 

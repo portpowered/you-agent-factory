@@ -24,7 +24,7 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}, {Content: "done COMPLETE"}},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 1)
 
 	if provider.CallCount("exec-worker") < 3 {
 		t.Errorf("exec-worker call count = %d, want at least 3 interleaved iterations", provider.CallCount("exec-worker"))
@@ -47,7 +47,7 @@ func TestRepeater_ResourceReleaseBetweenIterations(t *testing.T) {
 		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
 		"finish-worker": {{Content: "done COMPLETE"}},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 1)
 
 	if provider.CallCount("exec-worker") != 3 {
 		t.Errorf("exec-worker call count = %d, want 3 reject-then-accept iterations", provider.CallCount("exec-worker"))
@@ -67,7 +67,7 @@ func TestRalphLoop_ConvergesOnReviewerAccept(t *testing.T) {
 		"executor-worker": {{Content: "code with missing error handling <COMPLETE>"}},
 		"reviewer-worker": {{Content: "code with missing error handling <COMPLETE>"}},
 	})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second, 1)
 
 	if provider.CallCount("executor-worker") != 1 {
 		t.Errorf("executor-worker call count = %d, want 1", provider.CallCount("executor-worker"))

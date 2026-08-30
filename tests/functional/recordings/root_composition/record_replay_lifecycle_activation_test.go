@@ -57,12 +57,7 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	}
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	if recordingsActivationEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
-		t.Fatal("recorded artifact missing dispatch request events")
-	}
-	if recordingsActivationEventCount(artifact, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
-		t.Fatal("recorded artifact missing dispatch response events")
-	}
+	assertRecordingActivationArtifact(t, artifact)
 
 	recordServer.Stop(t)
 	recordObservation.Wait(15 * time.Second)
@@ -75,18 +70,8 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 
 	support.WaitForSessionWorkTerminalFromFactoryEvents(t, replayServer.URL(), "~default", 15*time.Second)
 	replayedWork := support.ListDefaultSessionWork(t, replayServer.URL())
-	if got := support.CountWorkAtCustomerState(replayedWork, "task:complete"); got != 1 {
-		t.Fatalf(
-			"replayed work at task:complete = %d, want 1; listed=%#v",
-			got,
-			replayedWork.Results,
-		)
-	}
-
 	replayedEvents := replayServer.GetFactoryEvents(t)
-	if recordingsActivationLiveEventCount(replayedEvents, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
-		t.Fatal("replayed session missing dispatch response events")
-	}
+	assertReplayedRecordingActivation(t, replayedWork, replayedEvents)
 	replayServer.Stop(t)
 
 	support.ClearSeedInputs(t, dir)
@@ -103,22 +88,9 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 
 	support.WaitForSessionWorkTerminalFromFactoryEvents(t, resumeServer.URL(), "~default", 15*time.Second)
 	resumedSession := support.GetDefaultSession(t, resumeServer.URL())
-	if resumedSession.Id == "" {
-		t.Fatal("resumed session missing default session identity")
-	}
 	resumedWork := support.ListDefaultSessionWork(t, resumeServer.URL())
-	if got := support.CountWorkAtCustomerState(resumedWork, "task:complete"); got != 1 {
-		t.Fatalf(
-			"resumed work at task:complete = %d, want recorded terminal work; listed=%#v",
-			got,
-			resumedWork.Results,
-		)
-	}
-
 	resumeEvents := resumeServer.GetFactoryEvents(t)
-	if recordingsActivationLiveEventCount(resumeEvents, factoryapi.FactoryEventTypeRunResponse) == 0 {
-		t.Fatal("resumed session missing canonical RUN_RESPONSE event")
-	}
+	assertResumedRecordingActivation(t, resumedSession, resumedWork, resumeEvents)
 	resumeServer.Stop(t)
 	resumedArtifact, err := os.ReadFile(resumeArtifactPath)
 	if err != nil {
@@ -132,6 +104,39 @@ func TestRecordReplayLifecycleActivatesThroughRootBuildProcessAfterLifecycle(t *
 	}
 	if len(resumedRecording.Events) == 0 {
 		t.Fatal("live resume successor recording has no Factory Events")
+	}
+}
+
+func assertRecordingActivationArtifact(t *testing.T, artifact *interfaces.ReplayArtifact) {
+	t.Helper()
+	if recordingsActivationEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
+		t.Fatal("recorded artifact missing dispatch request events")
+	}
+	if recordingsActivationEventCount(artifact, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
+		t.Fatal("recorded artifact missing dispatch response events")
+	}
+}
+
+func assertReplayedRecordingActivation(t *testing.T, work factoryapi.ListWorkResponse, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if got := support.CountWorkAtCustomerState(work, "task:complete"); got != 1 {
+		t.Fatalf("replayed work at task:complete = %d, want 1; listed=%#v", got, work.Results)
+	}
+	if recordingsActivationLiveEventCount(events, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
+		t.Fatal("replayed session missing dispatch response events")
+	}
+}
+
+func assertResumedRecordingActivation(t *testing.T, session factoryapi.FactorySession, work factoryapi.ListWorkResponse, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if session.Id == "" {
+		t.Fatal("resumed session missing default session identity")
+	}
+	if got := support.CountWorkAtCustomerState(work, "task:complete"); got != 1 {
+		t.Fatalf("resumed work at task:complete = %d, want recorded terminal work; listed=%#v", got, work.Results)
+	}
+	if recordingsActivationLiveEventCount(events, factoryapi.FactoryEventTypeRunResponse) == 0 {
+		t.Fatal("resumed session missing canonical RUN_RESPONSE event")
 	}
 }
 
