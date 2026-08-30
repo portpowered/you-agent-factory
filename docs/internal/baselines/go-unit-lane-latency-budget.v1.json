@@ -3,7 +3,7 @@
   "owner": "backend-unit-lane",
   "entrypoint": "make test-unit-fresh",
   "reference": {
-    "baseCommit": "328a9f0a2b013f8ef68ee6f4c4d79c1453d6d009",
+    "baseCommit": "382ff450c32a3ae87f6be4b426199afb69b13f48",
     "runnerImage": "ubuntu-24.04",
     "goVersion": "go1.25.0",
     "unitDefaultJobs": 2,
@@ -11895,6 +11895,7 @@
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire/malformed_complete_record",
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire/terminal_before_header",
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire/unsupported_record",
+      "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayInputLoaderCarriesV2TerminalMetadataWithFullHistory",
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayInputLoaderClassifiesLegacyLoaderFailure",
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayInputLoaderClassifiesPortableRecording",
       "github.com/portpowered/infinite-you/pkg/services/recordings/wire::TestReplayInputLoaderClassifiesUnsupportedSchemaSeparately",
