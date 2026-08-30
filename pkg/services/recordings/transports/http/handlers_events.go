@@ -305,6 +305,11 @@ func (a *Adapter) streamFactoryEvents(
 		SessionEventStreamRetainedCountHeader,
 		strconv.Itoa(retainedEventCount),
 	)
+	// Publish the response headers before waiting for the first live event.
+	// A client uses the retained count as the boundary between replay and live
+	// delivery, so it must be able to establish that boundary even when the
+	// stream currently has no retained events.
+	flusher.Flush()
 
 	for {
 		if requestContextEnded(r.Context()) {
