@@ -547,6 +547,18 @@ passed at `5.252s`, the race package passed at `4.522s`, and backend-size plus
 `git diff --check` passed. These local timings are diagnostic only; a fresh
 hosted Backend Functional Coverage run is required on the pushed head.
 
+A further bounded package-local pass coalesces the Factory Event observation
+handshake. The initial retained-history SSE response now remains open when its
+retained count is short and receives newly published events on that same
+retained-then-live subscription; the prior close-and-reopen fallback is gone.
+The retained-count guard, exact 11/23 event order and correlation, Work
+projection, response EOF/no-extra-frame, session cleanup, route isolation, and
+zero-remote witnesses remain unchanged. On candidate head `1585c19b8f`, the
+exact package passed once (`1.909s`), the focused success/timeout `-count=3`
+repeat passed (`4.766s`), and the race package passed (`5.568s`). These local
+timings are diagnostic only; a fresh hosted Backend Functional Coverage result
+is required before the review-owned timing criterion can be dispositioned.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
