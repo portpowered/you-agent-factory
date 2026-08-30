@@ -66,103 +66,10 @@ func openAgyFactorySessionAt(
 	return opened
 }
 
-func waitForAgySessionFactoryEvents(
-	ctx context.Context,
-	baseURL string,
-	sessionID string,
-	want int,
-	timeout time.Duration,
-) ([]factoryapi.FactoryEvent, error) {
-	if want <= 0 {
-		return nil, fmt.Errorf("AGY Factory Event target count = %d, want positive count", want)
-	}
-	observeContext, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	endpoint := support.SessionEventsURL(baseURL, sessionID)
-	request, err := http.NewRequestWithContext(observeContext, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Keep one public retained-plus-live SSE subscription open. Reopening the
-	// endpoint every 10 ms rebuilt a subscription and decoded the retained
-	// ledger on every attempt, while this observer provides the same exact
-	// event-count barrier without repeated snapshot work.
-	eventsCh := make(chan factoryapi.FactoryEvent, want)
-	streamDone := make(chan error, 1)
-	go func() {
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			streamDone <- err
-			return
-		}
-
-		var streamErr error
-		if response.StatusCode != http.StatusOK {
-			body, readErr := io.ReadAll(response.Body)
-			streamErr = errors.Join(readErr, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body))))
-		} else {
-			retainedCount, parseErr := strconv.Atoi(strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader)))
-			switch {
-			case parseErr != nil:
-				streamErr = fmt.Errorf("GET %s retained event count: %w", endpoint, parseErr)
-			case retainedCount > want:
-				streamErr = fmt.Errorf("GET %s retained event count = %d, want at most %d", endpoint, retainedCount, want)
-			default:
-				scanner := bufio.NewScanner(response.Body)
-			readLoop:
-				for scanner.Scan() {
-					event, ok, decodeErr := decodeAgyFactoryEventLine(scanner.Bytes())
-					if decodeErr != nil {
-						streamErr = fmt.Errorf("decode factory event: %w", decodeErr)
-						break readLoop
-					}
-					if !ok {
-						continue
-					}
-					select {
-					case eventsCh <- event:
-					case <-observeContext.Done():
-						streamErr = observeContext.Err()
-						break readLoop
-					}
-				}
-				if streamErr == nil {
-					streamErr = scanner.Err()
-				}
-			}
-		}
-		streamErr = errors.Join(streamErr, response.Body.Close())
-		streamDone <- streamErr
-	}()
-
-	events := make([]factoryapi.FactoryEvent, 0, want)
-	for len(events) < want {
-		select {
-		case event := <-eventsCh:
-			events = append(events, event)
-		case streamErr := <-streamDone:
-			if observeContext.Err() != nil {
-				return nil, fmt.Errorf("Factory Session %q Factory Events: got %d, want %d: %w", sessionID, len(events), want, observeContext.Err())
-			}
-			return nil, fmt.Errorf("Factory Session %q Factory Events: got %d, want %d: %v", sessionID, len(events), want, streamErr)
-		case <-observeContext.Done():
-			streamErr := <-streamDone
-			return nil, fmt.Errorf("Factory Session %q Factory Events: got %d, want %d: %v", sessionID, len(events), want, streamErr)
-		}
-	}
-
-	cancel()
-	if streamErr := <-streamDone; streamErr != nil && !errors.Is(streamErr, context.Canceled) && !errors.Is(streamErr, context.DeadlineExceeded) {
-		return nil, fmt.Errorf("Factory Session %q Factory Events stream after %d events: %w", sessionID, len(events), streamErr)
-	}
-	return events, nil
-}
-
 // decodeAgyFactoryEventLine parses one SSE data line without converting the
 // scanner buffer to a string and back to bytes. The decoded event owns its
-// fields before the next Scan call, while the retained/live fallback avoids an
-// intermediate allocation per event.
+// fields before the next Scan call, while the single retained/live observer
+// avoids an intermediate allocation per event.
 func decodeAgyFactoryEventLine(line []byte) (factoryapi.FactoryEvent, bool, error) {
 	line = bytes.TrimSpace(line)
 	if !bytes.HasPrefix(line, []byte("data:")) {
@@ -176,85 +83,69 @@ func decodeAgyFactoryEventLine(line []byte) (factoryapi.FactoryEvent, bool, erro
 	return event, true, nil
 }
 
-// readAgyFactoryEventsAfterResponse uses the cheapest public observation that
-// can prove the expected terminal ledger. A retained snapshot is complete in
-// the usual case after all response frames have arrived; only a publication
-// race opens the retained-plus-live fallback stream.
+// readAgyFactoryEventsAfterResponse keeps one retained-then-live public SSE
+// subscription open until the exact terminal ledger is available. The
+// retained-count header still rejects an overfull ledger, while a short
+// retained history waits on the same response for newly published events.
+// Reusing that first response avoids a duplicate SSE handshake on a
+// publication race without changing the event-count/order barrier.
 func readAgyFactoryEventsAfterResponse(
 	ctx context.Context,
 	baseURL string,
 	sessionID string,
 	want int,
 	timeout time.Duration,
-) ([]factoryapi.FactoryEvent, error) {
+) (events []factoryapi.FactoryEvent, err error) {
 	if want <= 0 {
 		return nil, fmt.Errorf("AGY Factory Event target count = %d, want positive count", want)
 	}
 	observeContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	events, complete, err := readAgyFactoryEventSnapshot(observeContext, baseURL, sessionID, want)
+	endpoint := support.SessionEventsURL(baseURL, sessionID)
+	request, err := http.NewRequestWithContext(observeContext, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
-	if complete {
-		return events, nil
-	}
-	return waitForAgySessionFactoryEvents(observeContext, baseURL, sessionID, want, timeout)
-}
-
-func readAgyFactoryEventSnapshot(
-	ctx context.Context,
-	baseURL string,
-	sessionID string,
-	want int,
-) (events []factoryapi.FactoryEvent, complete bool, err error) {
-	endpoint := support.SessionEventsURL(baseURL, sessionID)
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, false, err
-	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	defer func() {
 		err = errors.Join(err, response.Body.Close())
 	}()
 	if response.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(response.Body)
-		return nil, false, errors.Join(readErr, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body))))
+		return nil, errors.Join(readErr, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body))))
 	}
 	retainedCount, err := strconv.Atoi(strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader)))
 	if err != nil {
-		return nil, false, fmt.Errorf("GET %s retained event count: %w", endpoint, err)
+		return nil, fmt.Errorf("GET %s retained event count: %w", endpoint, err)
 	}
 	if retainedCount > want {
-		return nil, false, fmt.Errorf("GET %s retained event count = %d, want at most %d", endpoint, retainedCount, want)
+		return nil, fmt.Errorf("GET %s retained event count = %d, want at most %d", endpoint, retainedCount, want)
 	}
-	if retainedCount != want {
-		// The retained-plus-live fallback will decode this history once. Do not
-		// decode a partial snapshot that the fallback would immediately replay.
-		return nil, false, nil
-	}
-	events = make([]factoryapi.FactoryEvent, 0, retainedCount)
+	events = make([]factoryapi.FactoryEvent, 0, want)
 	scanner := bufio.NewScanner(response.Body)
-	for len(events) < retainedCount && scanner.Scan() {
+	for len(events) < want && scanner.Scan() {
 		event, ok, decodeErr := decodeAgyFactoryEventLine(scanner.Bytes())
 		if decodeErr != nil {
-			return nil, false, fmt.Errorf("decode factory event: %w", decodeErr)
+			return nil, fmt.Errorf("decode factory event: %w", decodeErr)
 		}
 		if !ok {
 			continue
 		}
 		events = append(events, event)
 	}
+	if len(events) != want {
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("read factory events: %w", err)
+		}
+		return nil, fmt.Errorf("Factory Session %q Factory Events: got %d, want %d", sessionID, len(events), want)
+	}
 	if err := scanner.Err(); err != nil {
-		return nil, false, fmt.Errorf("read factory events: %w", err)
+		return nil, fmt.Errorf("read factory events: %w", err)
 	}
-	if len(events) != retainedCount {
-		return nil, false, fmt.Errorf("read factory events: got %d of %d retained events", len(events), retainedCount)
-	}
-	return events, true, nil
+	return events, nil
 }
 
 // readAgyTerminalObservations overlaps the independent public ledger and Work
