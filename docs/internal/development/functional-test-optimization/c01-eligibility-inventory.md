@@ -364,17 +364,34 @@ Each of the 231 retained isolated rows has one nested `osBoundaryIntentionality`
 
 ## CONVERSION REFERENCES
 
-These references are the named baseline and enabling infrastructure for gated c15 conversion lanes. They are guidance for choosing the mocking edge, not evidence that this audit converts a functional test.
+These references are the named baseline and enabling infrastructure for gated c15 conversion lanes. They are guidance for choosing the mocking edge, not evidence that this audit converts a functional test, and they do not change the Story 001/002 checker format, inventory fields, or verdict scope.
 
-- **PR #2379** — [`tests/functional/transport/cli/process`](https://github.com/portpowered/you-agent-factory/pull/2379) is the named conversion baseline: the functional process lane moved from 19.1s to 1.8s.
-- **`a46d174d9c42c54637bf7e4d990bf456ec20ddd0`** — `test: accelerate functional execution with mock gates`; added deterministic arrival/release files and bounded timeout semantics, enabling shared-root synchronization without arbitrary sleeps.
-- **`1cbb10171e56b6252a13814d2d0eb82ac57012b9`** — `test(workers/mock): share selection routing host`; routed mock command edges through a reusable shared process fixture.
-- **`fef77ee382cc949092fb05c3ece499bd67b6a732`** — `test(workers/mock): extend shared stateful spine`; extended the shared host to expected-artifact, mock-usage, and live-capacity cases while keeping scenario-specific environment/home ownership.
-- **`3386c1f6061e2edf44a9062b430824e1b4bd3ed3`** — `test(workers/mock): migrate drain lifecycle rows`; added shared session identity and cancellation hooks, and closed an active host before plain local activation so activate/re-ignore-style lifecycle semantics remain safe on a shared root.
+### Named conversion baseline
 
-**Optimal mocking.** Mock at the provider/command edge that owns the external effect; keep the application root, Factory, Factory Session, Work, and event projections real. Share a root only when the scenario has no owned process, stream, listener, port, or cleanup property. Use arrival/release gates for deterministic lifecycle coordination, and retain a real child process only for the allowed properties listed above.
+- [PR #2379](https://github.com/portpowered/you-agent-factory/pull/2379), `functional-test-optimization-c06-transport-cli-process`, is the named conversion baseline for `tests/functional/transport/cli/process`: its same-Windows package evidence moved from 19.055s to 1.791s, conventionally reported as **19.1s to 1.8s**. The conversion shared mock-backed worker outcome calls while retaining built-child witnesses for assertions that were actually about the operating-system boundary. The fixture reuse landed in [commit `9d36c06f67a1f8cb3101ccd876971f3205624fce`](https://github.com/portpowered/you-agent-factory/commit/9d36c06f67a1f8cb3101ccd876971f3205624fce); the merged PR is recorded at [commit `bb37276f74e9e904e637931c2c13a37a67b54ca8`](https://github.com/portpowered/you-agent-factory/commit/bb37276f74e9e904e637931c2c13a37a67b54ca8).
 
-**Customer ruling.** Reduce OS-level assertions wherever the verdict is `ACCIDENTAL-OS`; consolidate OS coverage into the `INTENTIONAL-OS` witnesses. The accidental records retain explicit c15 obligations so conversion lanes preserve customer behavior while removing incidental process launches.
+### Enabling infrastructure
+
+The following history-backed extensions made that shared-root conversion shape possible:
+
+- [commit `d77859cd7dfd1562bc7dbcf26ac9d2dd218c7962`](https://github.com/portpowered/you-agent-factory/commit/d77859cd7dfd1562bc7dbcf26ac9d2dd218c7962) — added detached `MockWorkersConfig.Clone` and request-scoped contextual mock runners, allowing one Workers root to be reused without retaining caller-owned mock state.
+- [commit `9e703aa17defcaa07c725d738c84e90776d48d88`](https://github.com/portpowered/you-agent-factory/commit/9e703aa17defcaa07c725d738c84e90776d48d88) — carried invocation output policy through the stateless mock path, keeping provider-shaped output valid for each reused call.
+- [commit `7c03a7bbd0b53e7e653c2ecfe5f357fc181736bd`](https://github.com/portpowered/you-agent-factory/commit/7c03a7bbd0b53e7e653c2ecfe5f357fc181736bd) — moved contextual mock interception behind the Workers wire while preserving the injected command runner and streaming effect boundary.
+- [commit `ae0c9baa48b37013728b464c7ee8f8c77f622c1e`](https://github.com/portpowered/you-agent-factory/commit/ae0c9baa48b37013728b464c7ee8f8c77f622c1e) — added the shaped `ProviderCommandRunner` support wrapper so controlled Codex/Claude results remain provider-native at the shared command edge.
+- [commit `3ac49c9ef5aba2ea23a299807453446b695d9eb6`](https://github.com/portpowered/you-agent-factory/commit/3ac49c9ef5aba2ea23a299807453446b695d9eb6) — added the Workers-wire `NewProviderCommandRunner` adapter, projecting the provider command edge into private worker requests while preserving lifecycle metadata.
+- [commit `6e81418fa36f1dd08919535d646de5942729576e`](https://github.com/portpowered/you-agent-factory/commit/6e81418fa36f1dd08919535d646de5942729576e) — added an explicit gate to the shared support command runner, allowing a test to hold an active mock dispatch until its lifecycle observation completes.
+- [commit `a46d174d9c42c54637bf7e4d990bf456ec20ddd0`](https://github.com/portpowered/you-agent-factory/commit/a46d174d9c42c54637bf7e4d990bf456ec20ddd0) — extended mock-worker configuration and functional support with bounded arrival/release gates plus an explicit filesystem edge, enabling deterministic activate-and-release lifecycle control without sleeps.
+- [commit `1cbb10171e56b6252a13814d2d0eb82ac57012b9`](https://github.com/portpowered/you-agent-factory/commit/1cbb10171e56b6252a13814d2d0eb82ac57012b9) — routed mock command effects through a reusable shared process fixture, enabling fresh selection scenarios on one root-built host.
+- [commit `fef77ee382cc949092fb05c3ece499bd67b6a732`](https://github.com/portpowered/you-agent-factory/commit/fef77ee382cc949092fb05c3ece499bd67b6a732) — extended the shared stateful spine to artifact, usage, and live-capacity cases while keeping scenario-specific environment and home ownership.
+- [commit `3386c1f6061e2edf44a9062b430824e1b4bd3ed3`](https://github.com/portpowered/you-agent-factory/commit/3386c1f6061e2edf44a9062b430824e1b4bd3ed3) — added shared session identity and cancellation hooks, closing an active host before plain local activation so activate/re-ignore-style lifecycle semantics remain safe on a shared root.
+
+### Optimal mocking note
+
+Mock at the provider/command edge that owns the external effect; keep the real `root.BuildProcess`, `Process.Execute`, CLI parsing, Factory, Factory Session, Work/state behavior, and public event/stream mapping. Share a root only when the scenario has no owned process, stream, listener, port, or cleanup property. Route scenarios by fresh invocation inputs such as prompt, working directory, or selector, clone retained configuration, and use explicit arrival/release signals for lifecycle ordering. Keep a built child or OS process when the assertion is actually about `exit-status`, `signal-delivery`, `stream-file-descriptor-behavior`, `pty`, `crash-isolation`, `descendant-cleanup`, or `executable-selection`.
+
+### Customer ruling
+
+Reduce OS-level assertions for every `ACCIDENTAL-OS` verdict. The c15 lanes should preserve public behavior through in-process root and owned-effect seams, consolidating OS-level coverage in the `INTENTIONAL-OS` witnesses that assert an allowed OS property; an accidental row's conversion obligation is not permission to retain its process boundary.
 
 ## Identity and count units
 
