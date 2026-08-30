@@ -113,17 +113,20 @@ func TestGuardTimeoutDiagnosticProducesFailedOutcome(t *testing.T) {
 func TestGuardPartialCompletionPreservesIndependentOutcome(t *testing.T) {
 	// CASE-G-008: one controlled success and one controlled error settle as
 	// independent terminal outcomes without replaying either dispatch.
-	dir := newSharedGuardScenario(t, sharedGuardSingleStepFactoryConfig(nil))
+	factoryConfig := sharedGuardSingleStepFactoryConfig(nil)
+	factoryConfig["workstations"].([]map[string]any)[0]["promptTemplate"] =
+		`guard-work={{ (index .Inputs 0).WorkID }}`
+	dir := newSharedGuardScenario(t, factoryConfig)
 	seedGuardWork(t, dir, "partial-complete", "guard-partial-complete", "task")
 	seedGuardWork(t, dir, "partial-failed", "guard-partial-failed", "task")
 	const diagnostic = "provider execution failed"
-	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: sharedGuardProviderSequence(
-		sharedGuardProviderOutput("COMPLETE"),
-		sharedGuardCommandResponse{result: platformprocess.CommandResult{
+	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: sharedGuardProviderByMarker(map[string]sharedGuardCommandResponse{
+		sharedGuardPartialCompleteMarker: sharedGuardProviderOutput("COMPLETE"),
+		sharedGuardPartialFailedMarker: {result: platformprocess.CommandResult{
 			Stderr:   []byte("partial guard failure"),
 			ExitCode: 31,
 		}},
-	)})
+	})})
 	supportWaitForGuardTerminal(t, session)
 	_, listed, events := readSharedGuardSession(t, session)
 
