@@ -3,6 +3,8 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -168,6 +170,76 @@ type concurrentWorkerSessionListResult struct {
 	response factoryapi.ListWorkerSessionsResponse
 	err      error
 	stderr   string
+}
+
+// TestWorkerSessionRouteFunctionalBadInputAndUnknownWork exercises the two
+// API-owned failure rows through the live root-built server and checks the
+// same unknown-Work outcome through Process.Execute.
+func TestWorkerSessionRouteFunctionalBadInputAndUnknownWork(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-failures")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	baseEndpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions/" + factorysessions.DefaultSessionID + "/worker-sessions"
+	for _, endpoint := range []string{baseEndpoint, baseEndpoint + "?workId="} {
+		errorResponse := getWorkerSessionRouteError(t, endpoint, http.StatusBadRequest)
+		if errorResponse.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+			t.Fatalf("blank Work endpoint %q error code = %q, want BAD_REQUEST", endpoint, errorResponse.Code)
+		}
+	}
+
+	unknownWork := getWorkerSessionRouteError(t, baseEndpoint+"?workId=unknown-work", http.StatusNotFound)
+	if unknownWork.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("unknown Work REST error code = %q, want NOT_FOUND", unknownWork.Code)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", "unknown-work",
+		"--server", server.URL(), "--output", "json",
+	})
+	if err := server.Execute(t, inputs.Input); err == nil {
+		t.Fatal("unknown Work CLI error = nil, want non-success")
+	}
+	cliOutput := strings.TrimSpace(inputs.Stdout())
+	if cliOutput == "" {
+		cliOutput = strings.TrimSpace(inputs.Stderr())
+	}
+	var cliError struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(cliOutput), &cliError); err != nil {
+		t.Fatalf("decode unknown Work CLI error: %v; stdout=%s; stderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if cliError.Code != "WORK_NOT_FOUND" {
+		t.Fatalf("unknown Work CLI error code = %q, want WORK_NOT_FOUND", cliError.Code)
+	}
+	if strings.Contains(cliOutput, `"sessions"`) {
+		t.Fatalf("unknown Work CLI output contains a success collection: %s", cliOutput)
+	}
+}
+
+func getWorkerSessionRouteError(t *testing.T, endpoint string, wantStatus int) factoryapi.ErrorResponse {
+	t.Helper()
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != wantStatus {
+		t.Fatalf("GET %s status = %d, want %d; body=%s", endpoint, response.StatusCode, wantStatus, strings.TrimSpace(string(body)))
+	}
+	var errorResponse factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &errorResponse); err != nil {
+		t.Fatalf("decode GET %s error: %v; body=%s", endpoint, err, string(body))
+	}
+	return errorResponse
 }
 
 func assertConcurrentWorkerSessionObservation(
