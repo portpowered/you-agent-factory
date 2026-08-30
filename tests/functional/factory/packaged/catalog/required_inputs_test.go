@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -34,7 +33,8 @@ type packagedFactoryMissingRequiredInputRun struct {
 // Factory directory, but do not repeatedly materialize the complete packaged
 // catalog when the only behavior under test is pre-provider input rejection.
 type catalogPackagedFactorySeed struct {
-	homeDir string
+	homeDir     string
+	factoryRoot string
 }
 
 func newCatalogPackagedFactorySeed(
@@ -46,11 +46,15 @@ func newCatalogPackagedFactorySeed(
 
 	homeDir := t.TempDir()
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
+	factoryDir := support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
 	if _, err := os.Stat(filepath.Join(homeDir, ".you-agent-factory", "config.json")); err != nil {
 		t.Fatalf("catalog seed system config: %v", err)
 	}
-	return catalogPackagedFactorySeed{homeDir: homeDir}
+	// Packaged names use the customer-facing @you/<name> layout. The support
+	// helper has already validated the returned Factory directory, so retain
+	// that public result instead of reaching into Factory Definitions policy.
+	factoryRoot := filepath.Dir(filepath.Dir(factoryDir))
+	return catalogPackagedFactorySeed{homeDir: homeDir, factoryRoot: factoryRoot}
 }
 
 func (seed catalogPackagedFactorySeed) copyInto(
@@ -60,11 +64,8 @@ func (seed catalogPackagedFactorySeed) copyInto(
 ) {
 	t.Helper()
 
-	seedFactoryDir := filepath.Join(
-		factorydefinitions.NamedFactoriesRoot(seed.homeDir),
-		filepath.FromSlash(factoryName),
-	)
-	if _, err := os.Stat(filepath.Join(seedFactoryDir, factorydefinitions.FactoryConfigFile)); err != nil {
+	seedFactoryDir := filepath.Join(seed.factoryRoot, filepath.FromSlash(factoryName))
+	if _, err := os.Stat(filepath.Join(seedFactoryDir, "factory.json")); err != nil {
 		t.Fatalf("catalog seed packaged Factory %q: %v", factoryName, err)
 	}
 	support.CopyFactoryAsNamed(t, seedFactoryDir, homeDir, factoryName)
