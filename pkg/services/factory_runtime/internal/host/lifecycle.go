@@ -220,7 +220,9 @@ func Stop(handle *Handle, clock factory.Clock) error {
 	handle.CancelRun()
 	runErr := handle.Wait()
 	finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})
-	return errors.Join(runErr, FinalizeArtifacts(handle.Bundle, clock))
+	finalizationErr := FinalizeArtifacts(handle.Bundle, clock)
+	closeRuntimeEventSubscriptions(handle.Bundle)
+	return errors.Join(runErr, finalizationErr)
 }
 
 // FinalizeArtifacts finishes replay recording and closes runtime log and metrics sinks.
@@ -248,6 +250,15 @@ func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func closeRuntimeEventSubscriptions(bundle *Bundle) {
+	if bundle == nil || bundle.EventHistory == nil {
+		return
+	}
+	if closer, ok := bundle.EventHistory.(interface{ CloseLiveSubscriptions() }); ok {
+		closer.CloseLiveSubscriptions()
+	}
 }
 
 func (bundle *Bundle) closeMetricsSink() error {

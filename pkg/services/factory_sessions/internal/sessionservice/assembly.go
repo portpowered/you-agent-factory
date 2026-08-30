@@ -412,11 +412,18 @@ func (a *Assembly) Complete(
 		LiveChangeAdmission:   runtimebinding.NewLiveChangeAdmission(startupRuntime.RuntimeService()),
 		LiveChangeLogger:      startupRuntime.RuntimeLogger(),
 	}
-	startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
-		if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
-			a.responseStreams.Complete(session.ResponseEvents)
-		}
-	})
+	completeResponseEvents := func() {
+		a.responseStreams.Complete(session.ResponseEvents)
+	}
+	if publisher, ok := startupRuntime.RecordingLedger().(recordings.DeferredSessionCompletionPublisher); ok {
+		publisher.AddDeferredSessionCompletionRecorder(completeResponseEvents)
+	} else {
+		startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
+			if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
+				completeResponseEvents()
+			}
+		})
+	}
 	a.registry.Upsert(session, true)
 
 	runtime := NewSessionRuntime(
@@ -518,6 +525,27 @@ func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.
 		return sourceID
 	}
 	return strings.TrimSpace(factorySessionID)
+}
+
+func retainedRuntimeMetricsSessionIDs(currentID, sourceID string) []string {
+	retained := make([]string, 0, 2)
+	for _, candidate := range []string{currentID, sourceID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		seen := false
+		for _, existing := range retained {
+			if existing == candidate {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			retained = append(retained, candidate)
+		}
+	}
+	return retained
 }
 
 type definitionHost struct {

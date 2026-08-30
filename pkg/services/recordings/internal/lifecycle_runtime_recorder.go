@@ -40,6 +40,7 @@ type lifecycleRuntimeRecorder struct {
 	initialProvenance  []recordings.RecordingSecret
 	seen               map[string]struct{}
 	nextSequence       recordings.CanonicalEventSequence
+	producerErr        error
 	finalizeErr        error
 	stopErr            error
 	pending            []pendingRuntimeRecording
@@ -159,6 +160,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 		if pending.event != nil {
 			if err := recorder.recordEventLockedWithProvenance(*pending.event, pending.provenance); err != nil {
 				recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
+				recorder.producerErr = errors.Join(recorder.producerErr, err)
 			}
 		} else {
 			recorder.recordErrorLocked(
@@ -211,6 +213,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordEventWithProvenance(
 	}
 	if err := recorder.recordEventLockedWithProvenance(event, provenance); err != nil {
 		recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
+		recorder.producerErr = errors.Join(recorder.producerErr, err)
 	}
 }
 
@@ -272,6 +275,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordError(err error) {
 		return
 	}
 	recorder.recordErrorLocked("producer_boundary_failed", "Factory event producer failed", err)
+	recorder.producerErr = errors.Join(recorder.producerErr, err)
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordErrorLocked(code, operation string, cause error) {
@@ -305,7 +309,7 @@ func (recorder *lifecycleRuntimeRecorder) Flush() error {
 	_, err := recorder.lifecycle.Flush(recordings.FlushLifecycleRequest{
 		RecordingID: recorder.recordingID,
 	})
-	return err
+	return errors.Join(err, recorder.producerErr)
 }
 
 // Err reports the last preserved cleanup or finalize failure. Stop failures
@@ -318,7 +322,7 @@ func (recorder *lifecycleRuntimeRecorder) Err() error {
 	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	return errors.Join(recorder.stopErr, recorder.finalizeErr)
+	return errors.Join(recorder.stopErr, recorder.producerErr, recorder.finalizeErr)
 }
 
 func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
@@ -335,6 +339,7 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	}
 	if err := recorder.recordEventLocked(recordingevents.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
 		recorder.recordErrorLocked("terminal_metadata_failed", "record terminal Factory event", err)
+		recorder.producerErr = errors.Join(recorder.producerErr, err)
 	}
 	_, recorder.finalizeErr = recorder.lifecycle.Finish(recordings.FinishLifecycleRequest{
 		RecordingID: recorder.recordingID,
@@ -739,7 +744,11 @@ func (service *combinedService) bindRuntimeRecorder(
 }
 
 func requestScope(request recordings.RuntimeScopeRequest) recordings.CanonicalEventScope {
-	return recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(request.FactorySessionID)}
+	sessionID := strings.TrimSpace(request.CanonicalSessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(request.FactorySessionID)
+	}
+	return recordings.CanonicalEventScope{FactorySessionID: sessionID}
 }
 
 func runtimeStreamGenerationID(request recordings.RuntimeScopeRequest) string {

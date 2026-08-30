@@ -65,6 +65,10 @@ type factoryImpl struct {
 	completeCh                  chan struct{}
 	completeOnce                sync.Once
 	runCancel                   context.CancelFunc
+	completionDurabilityGate    func() error
+	completionMu                sync.Mutex
+	completionResultRecorded    bool
+	completionEventRecorded     bool
 	operatorMoveRequests        map[string]appliedOperatorMove
 	resumeDrainPending          bool
 	workerSessionControlMu      sync.Mutex
@@ -436,18 +440,58 @@ func recordSessionLifecycleCompletionFromFactory(
 	factoryState interfaces.FactoryState,
 	reason string,
 	eventTime time.Time,
-) {
+) error {
 	if f == nil || f.eventHistory == nil || f.cfg == nil {
-		return
+		return nil
 	}
-	f.eventHistory.RecordSessionLifecycleCompletion(
-		sessionIDFromFactoryConfig(f.cfg),
-		factoryConfigFromFactoryConfig(f.cfg),
-		tick,
-		factoryState,
-		reason,
-		eventTime,
-	)
+	f.completionMu.Lock()
+	defer f.completionMu.Unlock()
+	sessionID := sessionIDFromFactoryConfig(f.cfg)
+	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
+	if phaser, ok := f.eventHistory.(recordings.SessionLifecycleCompletionPhaser); ok {
+		if !f.completionResultRecorded {
+			phaser.RecordSessionLifecycleResultUpdated(
+				sessionID, factoryCfg, tick, factoryState, reason, eventTime,
+			)
+			f.completionResultRecorded = true
+		}
+		if flush := f.completionDurabilityFlush(); flush != nil {
+			if err := flush(); err != nil {
+				return fmt.Errorf("flush Factory Session result before completion: %w", err)
+			}
+		}
+		if !f.completionEventRecorded {
+			phaser.RecordSessionLifecycleCompleted(
+				sessionID, factoryCfg, tick, factoryState, reason, eventTime,
+			)
+			f.completionEventRecorded = true
+		}
+		if flush := f.completionDurabilityFlush(); flush != nil {
+			if err := flush(); err != nil {
+				return fmt.Errorf("flush Factory Session completion: %w", err)
+			}
+		}
+		return nil
+	}
+	if !f.completionEventRecorded {
+		f.eventHistory.RecordSessionLifecycleCompletion(
+			sessionID, factoryCfg, tick, factoryState, reason, eventTime,
+		)
+		f.completionResultRecorded = true
+		f.completionEventRecorded = true
+	}
+	if flush := f.completionDurabilityFlush(); flush != nil {
+		if err := flush(); err != nil {
+			return fmt.Errorf("flush Factory Session completion: %w", err)
+		}
+	}
+	return nil
+}
+
+func publishDeferredSessionCompletion(eventHistory recordings.RuntimeLedger) {
+	if publisher, ok := eventHistory.(recordings.DeferredSessionCompletionPublisher); ok {
+		publisher.PublishDeferredSessionCompletion()
+	}
 }
 
 func (f *factoryImpl) recordSessionLifecyclePause() {
@@ -540,6 +584,28 @@ func newFactoryImpl(
 	}
 }
 
+// SetCompletionDurabilityGate binds the Recordings flush that must complete
+// before a terminal source session is advertised. The gate is optional so
+// in-memory runtime callers retain the established lifecycle behavior.
+func (f *factoryImpl) SetCompletionDurabilityGate(flush func() error) {
+	if f == nil {
+		return
+	}
+	f.mu.Lock()
+	f.completionDurabilityGate = flush
+	f.mu.Unlock()
+}
+
+func (f *factoryImpl) completionDurabilityFlush() func() error {
+	if f == nil {
+		return nil
+	}
+	f.mu.RLock()
+	flush := f.completionDurabilityGate
+	f.mu.RUnlock()
+	return flush
+}
+
 // Run starts the factory. Blocks until ctx is cancelled or the engine
 // terminates (all tokens terminal/failed, or deadlock detected).
 // Closes completeCh when Run returns so WaitToComplete() unblocks.
@@ -596,10 +662,14 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
 	completedAt := f.clock.Now()
 	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
-	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
-	closeRuntimeEventSubscriptions(f.eventHistory)
+	lifecycleErr := recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
+	finalErr = errors.Join(finalErr, lifecycleErr)
+	if lifecycleErr == nil {
+		publishDeferredSessionCompletion(f.eventHistory)
+		closeRuntimeEventSubscriptions(f.eventHistory)
+	}
 
-	if errors.Is(runErr, context.Canceled) && stopErr == nil {
+	if errors.Is(runErr, context.Canceled) && stopErr == nil && lifecycleErr == nil {
 		return nil
 	}
 	return finalErr

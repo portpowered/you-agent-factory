@@ -114,37 +114,40 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
-	mu                      sync.RWMutex
-	initialStructure        interfaces.InitialStructurePayload
-	runtimeConfig           interfaces.RuntimeDefinitionLookup
-	factoryRunner           string
-	initialFactory          *interfaces.FactorySnapshot
-	initialSecretProvenance []recordings.RecordingSecret
-	now                     func() time.Time
-	streamGenerationID      string
-	events                  []interfaces.FactoryEvent
-	secretProvenance        map[string][]recordings.RecordingSecret
-	sessionProjection       *projections.IncrementalSessionProjection
-	sessionProjectionErr    error
-	recorders               []func(interfaces.FactoryEvent)
-	eventTypeRecorders      []func(interfaces.FactoryEventType)
-	nextID                  int
-	streams                 map[int]*eventHistorySubscription
-	runRecordedAt           time.Time
-	hasRunRequest           bool
-	hasRunResponse          bool
-	hasInitialStructure     bool
-	sessionStartedAt        time.Time
-	hasSessionStarted       bool
-	hasSessionCompleted     bool
-	liveClosed              bool
-	sessionID               string
-	nextSessionSequence     int
-	canonicalEventsCalls    atomic.Uint64
-	canonicalEventsCopied   atomic.Uint64
-	fullHistoryReductions   atomic.Uint64
-	runtimeReadRecorder     recordings.RuntimeReadMetricsRecorder
-	durabilityReader        recordings.CompletedFlushWatermarkReader
+	mu                                 sync.RWMutex
+	initialStructure                   interfaces.InitialStructurePayload
+	runtimeConfig                      interfaces.RuntimeDefinitionLookup
+	factoryRunner                      string
+	initialFactory                     *interfaces.FactorySnapshot
+	initialSecretProvenance            []recordings.RecordingSecret
+	now                                func() time.Time
+	streamGenerationID                 string
+	events                             []interfaces.FactoryEvent
+	secretProvenance                   map[string][]recordings.RecordingSecret
+	sessionProjection                  *projections.IncrementalSessionProjection
+	sessionProjectionErr               error
+	recorders                          []func(interfaces.FactoryEvent)
+	eventTypeRecorders                 []func(interfaces.FactoryEventType)
+	deferredSessionCompletionRecorders []func()
+	deferredSessionCompletionPending   bool
+	deferredSessionCompletionPublished bool
+	nextID                             int
+	streams                            map[int]*eventHistorySubscription
+	runRecordedAt                      time.Time
+	hasRunRequest                      bool
+	hasRunResponse                     bool
+	hasInitialStructure                bool
+	sessionStartedAt                   time.Time
+	hasSessionStarted                  bool
+	hasSessionCompleted                bool
+	liveClosed                         bool
+	sessionID                          string
+	nextSessionSequence                int
+	canonicalEventsCalls               atomic.Uint64
+	canonicalEventsCopied              atomic.Uint64
+	fullHistoryReductions              atomic.Uint64
+	runtimeReadRecorder                recordings.RuntimeReadMetricsRecorder
+	durabilityReader                   recordings.CompletedFlushWatermarkReader
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -304,6 +307,49 @@ func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.Fact
 		recorder(eventType)
 	}
 	h.mu.Unlock()
+}
+
+// AddDeferredSessionCompletionRecorder registers a callback for the
+// transport-facing terminal signal. Unlike AddEventTypeRecorder, this callback
+// is held until the owner explicitly publishes the already-appended
+// SESSION_COMPLETED after its durability boundary has succeeded.
+func (h *FactoryEventHistory) AddDeferredSessionCompletionRecorder(recorder func()) {
+	if h == nil || recorder == nil {
+		return
+	}
+	h.mu.Lock()
+	if h.deferredSessionCompletionPublished && h.hasSessionCompleted {
+		h.mu.Unlock()
+		recorder()
+		return
+	}
+	h.deferredSessionCompletionRecorders = append(h.deferredSessionCompletionRecorders, recorder)
+	if h.hasSessionCompleted {
+		h.deferredSessionCompletionPending = true
+	}
+	h.mu.Unlock()
+}
+
+// PublishDeferredSessionCompletion releases the terminal callbacks exactly
+// once. Callers invoke it only after the existing SESSION_COMPLETED event has
+// crossed the required durable recording boundary.
+func (h *FactoryEventHistory) PublishDeferredSessionCompletion() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	if !h.deferredSessionCompletionPending || h.deferredSessionCompletionPublished {
+		h.mu.Unlock()
+		return
+	}
+	h.deferredSessionCompletionPublished = true
+	h.deferredSessionCompletionPending = false
+	recorders := append([]func(){}, h.deferredSessionCompletionRecorders...)
+	h.deferredSessionCompletionRecorders = nil
+	h.mu.Unlock()
+	for _, recorder := range recorders {
+		recorder()
+	}
 }
 
 // RecordInitialStructure records the static topology before work events.

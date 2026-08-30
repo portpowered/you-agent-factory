@@ -27,6 +27,24 @@ type CompletedFlushWatermarkReader interface {
 	CompletedFlushWatermark(streamGenerationID string) (CanonicalEventCursor, bool)
 }
 
+// SessionLifecycleCompletionPhaser is an optional RuntimeLedger capability
+// used when terminal lifecycle publication has a durable boundary between
+// result availability and the authoritative SESSION_COMPLETED marker.
+// RuntimeLedger deliberately remains compatible with older ledgers that only
+// implement RecordSessionLifecycleCompletion.
+type SessionLifecycleCompletionPhaser interface {
+	RecordSessionLifecycleResultUpdated(string, *interfaces.FactoryConfig, int, FactoryState, string, time.Time)
+	RecordSessionLifecycleCompleted(string, *interfaces.FactoryConfig, int, FactoryState, string, time.Time)
+}
+
+// DeferredSessionCompletionPublisher delays the transport-facing completion
+// notification until the canonical SESSION_COMPLETED event has crossed its
+// required durability boundary. It is an optional event-ledger capability.
+type DeferredSessionCompletionPublisher interface {
+	AddDeferredSessionCompletionRecorder(func())
+	PublishDeferredSessionCompletion()
+}
+
 // ErrReconnectCursorNotFound reports that an acknowledged cursor does not
 // identify an event in the selected ledger stream.
 var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
