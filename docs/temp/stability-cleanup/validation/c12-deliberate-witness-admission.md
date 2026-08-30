@@ -1,11 +1,12 @@
 # Stability cleanup C12: deliberate witness admission
 
-Status: **Story 002 decision complete: infeasible under the pinned admission; story 003 remains**
+Status: **Story 003 clean-room validation complete; implementation handoff pending**
 
-This report contains the story-001 factual ledger and the story-002 candidate
-decision. It does not change a baseline, alter a workflow, create an
-experimental branch or pull request, or implement a future source witness.
-Clean-room validation and the report pull request belong to story 003.
+This report contains the story-001 factual ledger, the story-002 candidate
+decision, and the story-003 clean-room loopback. It does not change a baseline,
+alter a workflow, implement a future source witness, or use a synthetic
+candidate. The final report-only branch push and pull-request handoff remain
+the implementation finish boundary; terminal CI and merge remain review-owned.
 
 ## Observation boundary
 
@@ -353,7 +354,8 @@ or manual merge repair is proposed.
 
 - The exact governing AC1 source-plan rule and its definition of a useful
   protected-main candidate remains unavailable because the plan returns 404.
-- The clean-room validator result and this report's own protected PR checks.
+- The report-only PR's terminal required checks and merge, which are review-owned
+  after implementation handoff.
 
 ## Story and project gate status
 
@@ -366,18 +368,173 @@ or manual merge repair is proposed.
 | Feasible result criterion | NOT APPLICABLE | No feasible witness exists under the pinned contract; package/file/symbol/test/owner fields are intentionally N/A. |
 | Infeasible result criterion | PASS | The pinned checker source, required contexts, exact merge-result selection, direct comparison outputs, safe-class matrix, and operator decision boundary are recorded above. |
 | Governing plan authority | BLOCKED / NON-DECISIVE | `docs/temp/stability-cleanup.md` is absent at the pin; the policy contradiction does not rely on reconstructing its “useful” definition. |
-| `VAL-001` | DEFERRED/BLOCKED | Clean-room validator is story 003. |
-| Report PR checks | DEFERRED/BLOCKED | No report PR is authorized until the remaining stories complete. |
+| `VAL-001` | PASS — clean-room replay | The story-003 validator independently replayed the pinned identities, checker behavior, merge tree, artifact checker, and safe-class contradiction; the missing plan and report-PR terminal state remain explicit unproven edges. |
+| Report PR handoff | READY | The report-only artifact is validated and ready for its final push; implementation must open the report PR and confirm required checks start. |
 
 ## Verdict and smallest next step
 
 **Verdict for story 001:** PASS as a factual ledger. **Verdict for story 002:**
 PASS with the infeasible result applicable and the feasible result explicitly
-not applicable. **Verdict for the overall lane:** INCOMPLETE; story 003 must
-perform the independent loopback and report handoff.
+not applicable. **Verdict for the overall lane:** STORY 003 VALIDATION
+COMPLETE; the report-only handoff is the remaining implementation finish step.
 
-The smallest safe next step is for story 003 to replay the policy contradiction
-and nine-class audit from a clean environment, preserve the missing-plan
-authority finding without silently repairing it, create the report-only PR, and
-start its required checks. No source or CI mutation is requested by this
-decision.
+The smallest safe next step is the story-003 report-only handoff: push the
+validated report, open its ordinary PR, and confirm that required checks start.
+No source or CI mutation is requested by this decision.
+
+## Story 003: clean-room validation and implementation handoff
+
+### Environment and artifact
+
+- Commit/build identifier: pinned protected-main commit
+  `995137125a6f90bec0284cbe2ea1783e70b5d063`; the validator used a fresh
+  detached checkout at
+  `C:\Users\andre\AppData\Local\Temp\c12-clean-room-3e2156c6c7f64aeca9f56cdd8141f7b1`.
+- Environment and configuration: Windows `amd64`, Git `2.44.0`, Go
+  `1.25.0`, Node `22.12.0`, GNU Make `4.4.1`, and GitHub CLI `2.88.0`.
+  The checkout resolved to the pinned SHA and
+  `git status --porcelain=v1` was empty after every read-only probe.
+- Customer entry point: a reviewer follows this report from its immutable
+  main pin through the protected GitHub rulesets, required CI comparison
+  units, existing source-to-regeneration history, and the report-only PR.
+- Real and substituted dependencies: GitHub REST, pull-request, check-run,
+  workflow-run, artifact, and ruleset reads were remote-real and read-only;
+  the disposable Git checkout and pinned Go/Node checkers were local-real.
+  No source PR, baseline, workflow, ruleset, branch, setting, provider, or
+  paid service was mutated. The local Windows deadcode run remains only a
+  platform diagnostic.
+- Cost/call budget used: `$0`; zero paid/provider calls. GitHub reads and one
+  hosted artifact download were used for evidence; no remote application
+  effect was invoked.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `GATE-PIN` and `GATE-LINEAGE` | PASS | Fresh checkout resolved to the pinned 40-character SHA with empty status. `gh api` independently returned tree `444f780c53deff8660ab87a1c2f8ce1fe0667dc4`, parent `a27ea892f5feb5ada9578d0da8159bfe3b590107`, all twelve recorded source/baseline blobs, the two active rulesets, repository merge settings, PR identities, run identities, jobs, artifacts, and the cited URLs. | A later main or ruleset change is outside this pinned replay and requires a new admission probe. |
+| Feasible result criterion | NOT APPLICABLE | The report's infeasible result is reproduced below; no package/file/symbol/test witness is counted. | A future policy change could create a different candidate space. |
+| Infeasible result criterion | PASS | Pinned policy tests passed 51/51. The exact hosted latency artifact from run `33278765602`, artifact `9722470916`, passed the pinned budget checker with three samples, 445 packages, 18,239 tests, 61.72% median improvement, and 6.26% maximum-above-median. The safe-class matrix and the required merge-result deadcode comparison still yield the same contradiction. | This lane does not run a future source PR; the contradiction is the authorized proof for the pinned policy. |
+| Exactly one result applies | PASS | The report explicitly marks `Infeasible result: PASS` and `Feasible result: NOT APPLICABLE`; no forbidden baseline or bypass route is included. | The operator-owned decision boundary remains whether the no-baseline-commit constraint changes in a new lane. |
+| Facts, inference, and unproven edges | PASS | The report keeps immutable observations, policy deductions, missing-plan authority, platform diagnostics, and review-owned delivery edges in separate sections. The validator reproduced the cited objects without converting missing evidence into success. | The governing `docs/temp/stability-cleanup.md` remains absent at the pin and returns 404. |
+| No repository/GitHub mutation outside the owned report and ordinary PR | PASS | The clean-room checkout stayed clean; all remote calls were reads; no source, generated baseline, workflow, ruleset, setting, branch, or experimental PR was changed. Final three-dot scope proof is required immediately before delivery. | Review may merge the ordinary report PR after implementation handoff. |
+| No weakened comparison, generated baseline commit, bypass, synthetic-only simulation, platform trick, or no-op test | PASS | Pinned unit tests include deadcode drift as a blocking no-allowance result and required-result propagation. The replay used the real hosted artifact and real merge tree; the Windows deadcode mismatch was retained as a non-authoritative diagnostic. | Hosted execution of an unimplemented future source witness is intentionally not proved. |
+| No local timing threshold | PASS | The validator replayed the existing hosted artifact through `make test-unit-latency-budget`; it introduced no wall-clock threshold or local performance claim. | Future source performance remains hosted package/PR CI evidence. |
+| `VAL-001` clean-room validator | PASS | Every project criterion has a PASS, NOT APPLICABLE, or BLOCKED/review-owned row, with exact evidence and an unproven edge. The shallow-ancestry merge-tree failure and absent governing plan are recorded as findings with no silent production repair. | The review-owned terminal CI comment and merge are not implementation-stage evidence. |
+| `GATE-REPORT-CI` implementation handoff | BLOCKED — REVIEW-OWNED TERMINAL | The report is ready for a final report-only push. The implementation finish condition is the final head pushed, an open PR, and required checks started; review must later record terminal Backend Lint and Verification Policy results in a PR comment. | At this report revision the ordinary report PR has not yet been opened; terminal checks and merge remain outside implementation ownership. |
+
+### Customer journey
+
+1. The validator created a fresh shallow checkout, fetched and detached at
+   `995137125a6f90bec0284cbe2ea1783e70b5d063`, confirmed the exact commit tree,
+   all recorded blobs, empty status, and absent governing plan. It then
+   deepened only that disposable checkout so the cited historical merge tips
+   shared ancestry.
+2. `go test ./cmd/deadcodecheck ./cmd/unitlanebudget` exited `0`. The targeted
+   policy/checker command
+   `node --test scripts/ci/backend-lint-report.test.mjs
+   scripts/ci/backend-lint-workflow.test.mjs
+   scripts/ci/unit-latency-workflow.test.mjs scripts/verification-policy.test.mjs`
+   exited `0` with 51 tests passed. `make test-ci-workflows` exited `0` with
+   169 tests, 168 passed, 1 skipped, and 0 failed.
+3. `gh run download 33278765602 --repo portpowered/you-agent-factory
+   --name backend-unit-latency-evidence --dir <fresh-artifact-directory>`
+   exited `0`. Running `make test-unit-latency-budget` with the three
+   downloaded `run-1.v2.json`, `run-2.v2.json`, and `run-3.v2.json` files
+   exited `0` and emitted:
+
+   ```text
+   Samples: [97.471,91.656,91.728]
+   Median wall time: 91.728s
+   Reference median wall time: 239.612s
+   Median improvement: 61.72%
+   Maximum run above median: 6.26%
+   Inventory: 445 packages, 18239 tests
+   Cache: 0 cached, 0 unknown
+   Result: pass
+   ```
+
+4. The first clean-room `git merge-tree --write-tree` attempt exited `128`
+   with `fatal: refusing to merge unrelated histories` because the shallow
+   checkout had the tips but not their common ancestry. After
+   `git fetch --unshallow origin` in that disposable checkout, the same
+   read-only procedure returned exit `0`, merge base
+   `fea2e30a499384182d2fabe7038767e3c2f9c5e5`, and result tree
+   `c05d9943274d8789dc0791d821f2bd1b76a56311`. The result matched
+   `a27ea892f5feb5ada9578d0da8159bfe3b590107^{tree}` exactly; status remained
+   empty.
+5. `make deadcode` in the Windows disposable checkout exited `2` with
+   `baseline findings: 3074, current findings: 3072` and
+   `LINT_VIOLATION_COUNT: 3072`. This is the same documented host diagnostic,
+   not protected Ubuntu evidence and not a candidate decision. No local
+   output was promoted to a baseline.
+6. Independent `gh api` reads returned the pinned commit, active
+   `main-protect`/`must-pass-pr` rulesets, exact merge settings, the PR
+   `#2462` source-to-bot identities, PR/check/run/artifact identities for the
+   predecessor chain, and the current-pin CI/regeneration identities already
+   recorded in the ledger. The reports' links remain immutable URLs; the
+   live `main` move is not substituted for the pin.
+7. The replayed contradiction is therefore unchanged: any ordinary source
+   merge with `D(M) != dB` is checked by required Backend Lint at merge-result
+   SHA `M` and fails the no-allowance deadcode policy, while `D(M) == dB`
+   cannot produce deadcode snapshot drift. Direct test-inventory, stale-base,
+   merge-method, call-graph, and existing-ordering classes cannot escape that
+   result.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the factual ledger, candidate matrix, and
+  clean-room validation are co-located at
+  `docs/temp/stability-cleanup/validation/c12-deliberate-witness-admission.md`;
+  the report is the sole intended delivery artifact.
+- Permission and error behavior: read-only GitHub queries succeeded with the
+  authenticated CLI; the legacy branch-protection endpoint returned the
+  recorded 404 and was not treated as authority. The shallow ancestry error
+  was surfaced, bounded to the disposable checkout, and corrected only by
+  fetching ancestry needed to reproduce the historical merge.
+- Persistence/reload behavior: immutable Git objects, hosted artifact
+  contents, and exact PR/run identities were re-read independently; no
+  mutable local report or generated snapshot was used as a substitute for
+  those objects.
+- Accessibility/keyboard/responsive behavior: not applicable; this story
+  changes no UI or browser surface.
+- Operational signals: every decisive command had an explicit exit status;
+  remote objects were bound to SHA, ID, and URL; missing plan authority,
+  shallow ancestry, Windows checker variance, and review-owned terminal CI
+  remain visible rather than being normalized away.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `VAL-C12-001` | Info | Run the initial shallow-checkout merge-tree command with the cited base and head tips. | A clean-room replay should have the common ancestry needed for the exact historical merge. | Git exited `128` with `fatal: refusing to merge unrelated histories`; `git fetch --unshallow origin` in the disposable checkout restored ancestry, after which the exact command exited `0` and matched the recorded result tree. | Clean-room command output and result-tree comparison above. |
+| `VAL-C12-002` | Blocked / non-decisive authority | Inspect `docs/temp/stability-cleanup.md` at the pinned SHA and query its immutable contents URL. | The PRD-named governing plan would be available to validate the source-plan wording. | `git ls-tree` returned no path and GitHub returned HTTP `404 Not Found`. The policy contradiction does not depend on reconstructing the missing plan, so no source or decision was silently repaired. | Pinned checkout inspection and `gh api repos/portpowered/you-agent-factory/contents/docs/temp/stability-cleanup.md?ref=995137125a6f90bec0284cbe2ea1783e70b5d063`. |
+| `VAL-C12-003` | Info | Run `make deadcode` on the Windows disposable checkout. | Local diagnostics must not be confused with hosted Ubuntu admission. | Exit `2`; current 3,072 findings versus 3,074 committed findings. The result is retained only as a platform boundary. | Exact command output above and hosted artifact `9722393303`/run `33278765602` recorded in the ledger. |
+| `VAL-C12-004` | Review-owned | Complete the clean-room replay before report delivery. | Review-owned GATE-REPORT-CI requires terminal Backend Lint and Verification Policy results recorded in a PR comment after handoff. | No report PR or terminal result exists at this report revision; implementation must create the ordinary report-only PR and stop once required checks start. | Implementation-stage boundary in the PRD and handoff row above. |
+
+### Verdict
+
+PASS for story 003's clean-room validation and implementation handoff
+readiness. The infeasible decision reproduces, the sole-file report is ready
+for delivery, and no silent repair or forbidden mutation occurred. The absent
+governing plan is a non-decisive authority gap; report-PR terminal checks and
+merge are review-owned unproven edges, not claims made by this replay.
+
+### Delta-plan request [Required for the BLOCKED finding]
+
+- Affected behavior and criterion: governing-plan provenance for
+  `GATE-CANDIDATE`/`VAL-001`, and any future admission probe that might rely on
+  the exact source-plan definition of “useful.”
+- Root-cause evidence or remaining uncertainty: the PRD-named
+  `docs/temp/stability-cleanup.md` path is absent from the pinned tree and its
+  immutable GitHub contents request returns 404. The current infeasibility
+  proof is independently grounded in the pinned checker and required policy,
+  but the plan wording cannot be validated.
+- Smallest recommended correction/prerequisite: the operator should restore
+  or explicitly repin the governing plan in a new admission probe, then rerun
+  only the plan-dependent candidate wording checks. Do not reconstruct the
+  plan from comments, weaken the comparison, or mutate this lane's source.
+- Dependencies and retest scope: a new plan pin would require a fresh
+  `GATE-PIN`/`GATE-LINEAGE` identity check and a focused review of the
+  `GATE-CANDIDATE` wording; the current checker contradiction, clean-room
+  replay, and report-only handoff evidence remain reusable only while their
+  pinned identities match.
