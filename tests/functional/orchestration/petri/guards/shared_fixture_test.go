@@ -506,6 +506,11 @@ type sharedGuardCommandResponse struct {
 	shapeProviderOutput bool
 }
 
+const (
+	sharedGuardPartialCompleteMarker = "guard-work=guard-partial-complete"
+	sharedGuardPartialFailedMarker   = "guard-work=guard-partial-failed"
+)
+
 func sharedGuardProviderOutput(content string) sharedGuardCommandResponse {
 	return sharedGuardCommandResponse{providerOutput: content, shapeProviderOutput: true}
 }
@@ -532,6 +537,148 @@ func sharedGuardProviderSequence(responses ...sharedGuardCommandResponse) shared
 			result.Stdout = sharedGuardProviderStdout(request.Command, response.providerOutput)
 		}
 		return result, response.err
+	}
+}
+
+func sharedGuardProviderByMarker(responses map[string]sharedGuardCommandResponse) sharedGuardCommandResponder {
+	markers := make([]string, 0, len(responses))
+	for marker := range responses {
+		if strings.TrimSpace(marker) != "" {
+			markers = append(markers, marker)
+		}
+	}
+	return func(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		if err := ctx.Err(); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		stdin := string(request.Stdin)
+		matchedMarker := ""
+		matchCount := 0
+		for _, marker := range markers {
+			occurrences := strings.Count(stdin, marker)
+			matchCount += occurrences
+			if occurrences == 1 {
+				matchedMarker = marker
+			}
+		}
+		if matchCount != 1 {
+			return platformprocess.CommandResult{}, fmt.Errorf(
+				"shared guard provider request must contain exactly one recognized synthetic Work marker (found %d)",
+				matchCount,
+			)
+		}
+		if err := ctx.Err(); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		return sharedGuardProviderResponse(request, responses[matchedMarker])
+	}
+}
+
+func sharedGuardProviderResponse(
+	request platformprocess.CommandRequest,
+	response sharedGuardCommandResponse,
+) (platformprocess.CommandResult, error) {
+	result := response.result
+	result.Stdout = append([]byte(nil), result.Stdout...)
+	result.Stderr = append([]byte(nil), result.Stderr...)
+	if response.shapeProviderOutput {
+		result.Stdout = sharedGuardProviderStdout(request.Command, response.providerOutput)
+	}
+	return result, response.err
+}
+
+func TestSharedGuardProviderByMarker(t *testing.T) {
+	const privatePrompt = `{"case":"unknown","secret":"do not disclose this prompt"}`
+	responder := sharedGuardProviderByMarker(map[string]sharedGuardCommandResponse{
+		sharedGuardPartialCompleteMarker: sharedGuardProviderOutput("COMPLETE"),
+		sharedGuardPartialFailedMarker: {result: platformprocess.CommandResult{
+			Stderr:   []byte("partial guard failure"),
+			ExitCode: 31,
+		}},
+	})
+
+	tests := []struct {
+		name                string
+		stdin               string
+		cancel              bool
+		wantError           error
+		wantErrorText       string
+		wantStdoutSubstring string
+		wantStderr          string
+		wantExitCode        int
+		wantEmptyResult     bool
+	}{
+		{
+			name:            "zero recognized markers",
+			stdin:           privatePrompt,
+			wantErrorText:   "found 0",
+			wantEmptyResult: true,
+		},
+		{
+			name:                "complete marker",
+			stdin:               sharedGuardPartialCompleteMarker,
+			wantStdoutSubstring: "COMPLETE",
+		},
+		{
+			name:         "failed marker",
+			stdin:        sharedGuardPartialFailedMarker,
+			wantStderr:   "partial guard failure",
+			wantExitCode: 31,
+		},
+		{
+			name:            "multiple recognized markers",
+			stdin:           sharedGuardPartialCompleteMarker + " " + sharedGuardPartialFailedMarker,
+			wantErrorText:   "found 2",
+			wantEmptyResult: true,
+		},
+		{
+			name:            "canceled before selection",
+			stdin:           sharedGuardPartialCompleteMarker,
+			cancel:          true,
+			wantError:       context.Canceled,
+			wantEmptyResult: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			if test.cancel {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			result, err := responder(ctx, platformprocess.CommandRequest{
+				Command: "codex",
+				Stdin:   []byte(test.stdin),
+			})
+			if test.wantError != nil {
+				if !errors.Is(err, test.wantError) {
+					t.Fatalf("responder error = %v, want %v", err, test.wantError)
+				}
+			} else if test.wantErrorText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErrorText) {
+					t.Fatalf("responder error = %v, want text %q", err, test.wantErrorText)
+				}
+				if strings.Contains(err.Error(), test.stdin) {
+					t.Fatalf("responder error disclosed full prompt %q: %v", test.stdin, err)
+				}
+			} else if err != nil {
+				t.Fatalf("responder error = %v, want nil", err)
+			}
+			if test.wantStdoutSubstring != "" && !strings.Contains(string(result.Stdout), test.wantStdoutSubstring) {
+				t.Fatalf("responder stdout = %q, want substring %q", result.Stdout, test.wantStdoutSubstring)
+			}
+			if test.wantStderr != "" && string(result.Stderr) != test.wantStderr {
+				t.Fatalf("responder stderr = %q, want %q", result.Stderr, test.wantStderr)
+			}
+			if result.ExitCode != test.wantExitCode {
+				t.Fatalf("responder exit code = %d, want %d", result.ExitCode, test.wantExitCode)
+			}
+			if test.wantEmptyResult && (len(result.Stdout) != 0 || len(result.Stderr) != 0 || result.ExitCode != 0 || result.CancellationReason != "") {
+				t.Fatalf("responder result = %#v, want empty result", result)
+			}
+		})
 	}
 }
 
@@ -705,7 +852,11 @@ func newSharedGuardScenario(t *testing.T, config map[string]any) string {
 		if name == "" || strings.EqualFold(kind, string(factoryinterfaces.WorkstationTypeLogical)) {
 			continue
 		}
-		support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n")
+		body := "Do the work."
+		if promptTemplate, ok := workstation["promptTemplate"].(string); ok && strings.TrimSpace(promptTemplate) != "" {
+			body = promptTemplate
+		}
+		support.WriteWorkstationConfig(t, dir, name, "---\ntype: MODEL_WORKSTATION\n---\n"+body+"\n")
 	}
 	return dir
 }
