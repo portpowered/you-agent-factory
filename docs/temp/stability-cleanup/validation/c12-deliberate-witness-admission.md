@@ -1,12 +1,11 @@
 # Stability cleanup C12: deliberate witness admission
 
-Status: **BLOCKED for the lane; factual ledger complete for story 001**
+Status: **Story 002 decision complete: infeasible under the pinned admission; story 003 remains**
 
-This is the story-001 evidence ledger. It pins the protected-main admission
-surface and records the two comparison units and their observed lineage. It
-does not select a candidate, change a baseline, alter a workflow, or create an
-experimental branch or pull request. Candidate classification belongs to story
-002; clean-room validation and the report pull request belong to story 003.
+This report contains the story-001 factual ledger and the story-002 candidate
+decision. It does not change a baseline, alter a workflow, create an
+experimental branch or pull request, or implement a future source witness.
+Clean-room validation and the report pull request belong to story 003.
 
 ## Observation boundary
 
@@ -150,19 +149,23 @@ produced the bot PR subsequently merged into the pinned `main`:
 
 The preceding failed regeneration [run 33278920011](https://github.com/portpowered/you-agent-factory/actions/runs/33278920011) is also retained as a failure record: its workflow-run payload supplied source SHA `7af39e5bc23c8fc74e1402da85981a438eb455c5`, run `33277914281`, conclusion `cancelled`, and stopped before checkout/generation/publication. The later successful run above used the completed `a27ea...` source CI and superseded this failed attempt; neither result establishes a dual-snapshot candidate.
 
-At the final observation boundary, the newly protected pin's own push CI was
-still running:
+The newly protected pin's own push CI has now completed:
 
-| Job | Result at `2026-08-29T22:55:26Z` |
+| Job | Observed result |
 | --- | --- |
-| [CI run 33279723467](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467) | `in_progress`, head SHA `995137125a6f90bec0284cbe2ea1783e70b5d063` |
+| [CI run 33279723467](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467) | `success`, head SHA `995137125a6f90bec0284cbe2ea1783e70b5d063`, completed `2026-08-29T23:04:29Z` |
 | Classify Verification | `success`, job `99172715424` |
-| Backend Unit Latency | `in_progress`, job `99172715384` |
-| Backend Lint | `in_progress`, job `99172715412` |
-| Post-merge regeneration | No newer regeneration run was present at the observation boundary; the latest was successful run `33279349933` for parent `a27ea...`. |
+| Backend Unit Latency | `success`, job `99172715384` |
+| Backend Lint | `success`, job `99172715412` |
+| Verification Policy | `success`, job `99173684923` |
+| Post-merge regeneration | [Run 33280105358](https://github.com/portpowered/you-agent-factory/actions/runs/33280105358), `success`, job `99173719289`; source SHA `995137125a6f90bec0284cbe2ea1783e70b5d063`, source run `33279723467`. |
 
-Therefore the post-merge `9951371...` artifacts, verification-policy result,
-and a subsequent regeneration decision are **unproven**, rather than failed.
+The post-merge regeneration log records one transient generated baseline file,
+then `SHARED_BASELINE_CHANGED=false paths=(none) quiescent=true` and
+`SHARED_BASELINE_RECONCILIATION action=noop publish=false`. No bot PR or
+post-merge snapshot drift resulted. The live `origin/main` ref subsequently
+moved to `dd963b68b4c94d16cf4317476202d9f5220a4140`; that later tree is not
+substituted for the pinned evidence in this report.
 
 ## Prior PR and c11 lead trace
 
@@ -202,10 +205,123 @@ run in disposable checkouts or against downloaded hosted artifacts:
 | `make -C <checkout> test-ci-workflows` | Exit 0; 169 tests, 168 pass, 1 skipped, 0 fail | Pinned workflow/helper policy tests pass locally; not a substitute for protected CI. |
 | `make test-unit-latency-budget` with the three downloaded run files from artifact `9722470916` | Exit 0; exact inventory, 61.72% median improvement, 6.26% maximum-above-median | Replays the authoritative hosted latency evidence through the pinned checker. |
 | `make deadcode` on Windows in the disposable checkout | Exit 1; generated 3,072 findings versus 3,074 baseline lines | Platform diagnostic only. The hosted Ubuntu artifact matched the baseline exactly, so this Windows result is not used to fail or pass the candidate. |
+| `node --test scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/unit-latency-workflow.test.mjs scripts/verification-policy.test.mjs` in the pinned disposable checkout | Exit 0; 51 tests passed | Pinned policy, merge-result selection, no-allowance deadcode failure, required-result propagation, and latency inventory wiring behave as traced; not hosted execution of a future source head. |
+| `git merge-tree --write-tree 7af39e5bc23c8fc74e1402da85981a438eb455c5 4571780148515d6cbc4f1cd9a5877f3f7f517cd2` in the pinned disposable checkout | Exit 0; result tree `c05d9943274d8789dc0791d821f2bd1b76a56311`, equal to committed merge `a27ea892f5feb5ada9578d0da8159bfe3b590107`'s tree | A real conflict-free source merge produces one merged content tree. Its base tree was `62f37dd42e1b82a4a1e4880c2915d9c841749e14` and head tree was `ea40d67e535f49ffd041fb4803ed83dece824720`; this characterizes merge-tree behavior, not a new candidate. |
+| `make test-ci-workflows` in the pinned disposable checkout | Exit 0; 169 tests, 168 pass, 1 skipped, 0 fail | Pinned workflow and reconciliation policy tests pass locally; not a substitute for protected CI. |
 
 The local environment was Git 2.44.0, Go 1.25.0, Node 22.12.0, GNU Make
 4.4.1, and GitHub CLI 2.88.0. No source, baseline, workflow, branch, or
 GitHub setting was changed by this story.
+
+## Story 002: candidate audit and decision
+
+### Authority, notation, and result
+
+The governing plan remains absent at the pinned SHA and returns HTTP 404, as
+recorded above. The `CAND-01` through `CAND-09` labels below are therefore an
+explicit partition of the nine classes named by story 002, not labels recovered
+from the missing plan.
+
+Let:
+
+- `B` be the pinned protected-main commit
+  `995137125a6f90bec0284cbe2ea1783e70b5d063`, with tree
+  `444f780c53deff8660ab87a1c2f8ce1fe0667dc4`.
+- `H` be a source pull-request head and `M` its conflict-free GitHub
+  merge-result commit.
+- `D(X)` be the normalized output of pinned `cmd/deadcodecheck` for tree `X`.
+- `dB` be the committed deadcode baseline in `B`, blob
+  `358716aeb0095882890819e58e0b98c09a8c9993`, SHA-256
+  `F31645C911B22D76E5A121E0DA0C47D5549DE16045E1D803E0003A254AFDFE13`.
+- `U(X)` be the pinned unit-lane package/test inventory and budget comparison
+  for tree `X`; `B` records 445 packages and 18,239 tests in
+  `go-unit-lane-latency-budget.v1.json`, blob
+  `695309991f927099fd24f98c1a18b2b74c273c77`.
+
+**Infeasible result: PASS. Feasible result: NOT APPLICABLE.** No feasible
+package/file/symbol/test witness is named because the pinned admission
+contract rules out every permitted dual-drift class before a useful witness
+could be admitted.
+
+The contradiction is direct and does not depend on the missing plan's
+definition of “useful”:
+
+1. A deliberate dual-drift route requires `D(M) != dB` after the ordinary
+   source merge, because protected regeneration uses the source CI's normalized
+   deadcode artifact to update the deadcode snapshot.
+2. The pinned pull-request Backend Lint job sets
+   `BACKEND_LINT_TESTED_SHA=${{ github.sha }}` and checks out that SHA. For a
+   pull request, `github.sha` is the merge-result identity selected by
+   `scripts/ci/backend-lint-workflow.mjs`; `cmd/deadcodecheck` then compares
+   `D(M)` exactly with the deadcode baseline present in `M`.
+3. The source route is forbidden from carrying either generated baseline. With
+   a clean current base, the baseline present in `M` is therefore `dB`. If
+   `D(M) != dB`, `cmd/deadcodecheck` exits 1 and emits
+   `LINT_VIOLATION_COUNT`; `deadcode` is a no-allowance target in the pinned
+   `scripts/ci/backend-lint-policy.mjs`, so the target is `new failure`.
+4. The pinned `Verification Policy` requires Backend Lint to be `success`.
+   Its selected-lane evaluator therefore fails the pull request. If instead
+   `D(M) == dB`, protected regeneration cannot change the deadcode snapshot.
+
+Thus every allowed source tree either fails the required pre-merge deadcode
+comparison or does not produce the required deadcode drift. Latency-only drift
+cannot satisfy the dual requirement.
+
+### Exhaustive safe-class audit
+
+| Class | Exact permitted class evaluated | PR-head / merge-result comparison | Verification Policy consequence | Disposition |
+| --- | --- | --- | --- | --- |
+| `CAND-01` | Direct production deadcode delta | `D(M) != dB`; pinned `cmd/deadcodecheck` exits 1 with `LINT_VIOLATION_COUNT`. | Backend Lint is `new failure`; selected result is not `success`; policy fails. | Infeasible by the contradiction above. |
+| `CAND-02` | Direct unit-test inventory delta | `D(M) == dB`, so deadcode does not drift. On `H`, `cmd/unitlanebudget` compares sorted package/test identities against the committed 445/18,239 inventory; a changed test identity exits 1 with an expected/actual inventory diagnostic. If the inventory remains equal, latency cannot drift from this class. | Backend Unit Latency is required on pull requests; a failed or incomplete result fails policy. | Infeasible for dual drift. |
+| `CAND-03` | Direct source delta intended to change both inventories | It contains `CAND-01`'s `D(M) != dB`, so Backend Lint exits 1 before any latency result can admit it. | Backend Lint failure is sufficient; any simultaneous latency failure also remains required. | Infeasible. |
+| `CAND-04` | Stale-base semantic composition with a conflict-free merge-result-only delta | Non-strict branch currency can add base changes to `M`, but Backend Lint checks `M`. A deadcode change in `M` is `CAND-01`; a test-only change visible only in `M` can at most change latency, not deadcode. A pre-existing base deadcode mismatch would contradict the clean pinned `B` and is not a candidate. | Any deadcode delta fails Backend Lint/Verification Policy; test-only merge drift cannot satisfy both snapshots. | Infeasible. |
+| `CAND-05` | Enabled normal squash merge | The real conflict-free fixture below produced result tree `c05d9943274d8789dc0791d821f2bd1b76a56311`; its hosted source checks were deadcode `success`, unit latency `success`, and no dual snapshot drift. A future `D(M) != dB` remains caught by Backend Lint. | Required checks pass only for the no-drift fixture; a dual-drift variant fails Backend Lint and policy. | No safe witness. |
+| `CAND-06` | Enabled normal merge-commit merge | The same conflict-free result tree is the content checked by the pull-request job; an extra commit parent does not hide a changed `D(M)`. | Same required-check consequence as `CAND-05`. | No safe witness. |
+| `CAND-07` | Enabled normal rebase merge | Rebase may change commit identity, but a conflict-free final content tree still contains the source delta and is checked before merge. | Same required-check consequence as `CAND-05`. | No safe witness. |
+| `CAND-08` | Ordinary platform-independent Go behavior or call-graph interaction | If the call graph changes `D(M)`, it is `CAND-01`; if it does not, the deadcode baseline cannot change. The pinned hosted Linux comparison is the authoritative platform, so the Windows diagnostic cannot create an alternate route. | No ordinary call-graph outcome escapes the required deadcode result. | Infeasible. |
+| `CAND-09` | Existing real ordering witnesses from source CI through regeneration and bot merge | The observed `a27ea... -> 33279349933 -> #2462 -> B` chain changed only the latency budget's `reference.baseCommit`; the later regeneration of `B` returned `SHARED_BASELINE_CHANGED=false` and `action=noop`. It is evidence of a latency-only path, not dual drift. | Existing successful checks do not establish a dual-drift source witness. | Rejected as non-witness evidence. |
+
+### Exact merge-tree characterization
+
+The local-real merge procedure used an existing conflict-free source merge in
+the pinned disposable checkout, without creating or pushing a new branch:
+
+```text
+git merge-tree --write-tree \
+  7af39e5bc23c8fc74e1402da85981a438eb455c5 \
+  4571780148515d6cbc4f1cd9a5877f3f7f517cd2
+# exit 0
+# c05d9943274d8789dc0791d821f2bd1b76a56311
+
+git rev-parse 7af39e5bc23c8fc74e1402da85981a438eb455c5^{tree}
+# 62f37dd42e1b82a4a1e4880c2915d9c841749e14
+git rev-parse 4571780148515d6cbc4f1cd9a5877f3f7f517cd2^{tree}
+# ea40d67e535f49ffd041fb4803ed83dece824720
+git rev-parse a27ea892f5feb5ada9578d0da8159bfe3b590107^{tree}
+# c05d9943274d8789dc0791d821f2bd1b76a56311
+git diff --quiet a27ea892f5feb5ada9578d0da8159bfe3b590107^{tree} \
+  c05d9943274d8789dc0791d821f2bd1b76a56311
+# exit 0
+```
+
+The fixture's source diff changed only the latency baseline among the two
+target snapshots; its hosted source run [33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602)
+recorded exact deadcode and unit-lane success. This is a tree/ordering
+characterization, not synthetic proof of a future candidate. For all three
+enabled conflict-free merge methods, the final content tree is what the
+pull-request Backend Lint job selects; commit-parent or commit-message
+differences do not make a changed deadcode report invisible.
+
+### Operator-owned decision boundary
+
+The smallest explicit decision is whether the “neither generated baseline is
+committed in the deliberate source change” constraint remains strict. If it
+remains strict, the AC1 dual-drift requirement is infeasible under the pinned
+rules. If the operator instead permits a reviewed deadcode baseline update in
+the source pull request, that is a new contract and must be planned and
+validated separately. This lane makes neither change. No bypass, direct push,
+comparison weakening, synthetic-only simulation, platform trick, no-op test,
+or manual merge repair is proposed.
 
 ## Facts, inferences, and unproven edges
 
@@ -218,8 +334,8 @@ GitHub setting was changed by this story.
 - Protected regeneration consumed that exact completed source run, generated
   only the latency-budget candidate, and opened bot PR #2462.
 - Bot PR #2462 passed its required checks and merged to the current pin.
-- The current pin's first push CI was still in progress at the observation
-  boundary.
+- The current pin's push CI and post-merge regeneration both completed
+  successfully; the regeneration run produced no publishable candidate.
 - The governing source plan is absent and returns 404 at the pin.
 
 ### Inferences, kept separate from facts
@@ -227,19 +343,16 @@ GitHub setting was changed by this story.
 - The observed completed chain demonstrates an admitted latency-only bot
   reconciliation path; it does not demonstrate admission of a dual-snapshot
   candidate.
-- The absence of a deadcode patch in #2462 is a patch fact; deciding whether
-  that makes the candidate feasible or infeasible requires the missing plan and
-  story-002 rule.
+- The absence of a deadcode patch in #2462 is a patch fact. Story 002's
+  policy-level contradiction independently proves that a source change causing
+  deadcode drift cannot pass the required pre-merge comparison without a
+  reviewed baseline change.
 - A legacy branch-protection 404 cannot override the active ruleset responses.
 
 ### Unproven / blocked
 
 - The exact governing AC1 source-plan rule and its definition of a useful
-  protected-main candidate.
-- A single candidate satisfying both comparison units with the required
-  baseline-change shape.
-- Terminal CI artifacts and Verification Policy for current pin `9951371...`.
-- A post-merge regeneration run for current pin `9951371...`.
+  protected-main candidate remains unavailable because the plan returns 404.
 - The clean-room validator result and this report's own protected PR checks.
 
 ## Story and project gate status
@@ -248,19 +361,23 @@ GitHub setting was changed by this story.
 | --- | --- | --- |
 | `GATE-PIN` | PASS | 40-character current-main pin, clean disposable checkout, immutable blobs and exact ruleset/merge evidence recorded. |
 | `GATE-ADMISSION` | PASS | Backend Lint/deadcode and Backend Unit Latency contracts, normalization, artifacts, and Verification Policy propagation recorded. |
-| `GATE-LINEAGE` | BLOCKED | The predecessor source-to-regeneration-to-bot-merge chain is factual, but current-pin CI/regeneration is still pending and the source plan is absent. |
-| `GATE-CANDIDATE` | DEFERRED/BLOCKED | Candidate selection is story 002 and cannot be inferred from the latency-only bot patch. |
+| `GATE-LINEAGE` | PASS | The predecessor source-to-regeneration-to-bot-merge chain and current-pin CI/regeneration results are bound to exact SHAs, runs, jobs, artifacts, and URLs. |
+| `GATE-CANDIDATE` | PASS — INFEASIBLE RESULT | All nine story-002 classes terminate in the exact deadcode pre-merge contradiction or fail to produce dual drift; no forbidden class is counted. |
+| Feasible result criterion | NOT APPLICABLE | No feasible witness exists under the pinned contract; package/file/symbol/test/owner fields are intentionally N/A. |
+| Infeasible result criterion | PASS | The pinned checker source, required contexts, exact merge-result selection, direct comparison outputs, safe-class matrix, and operator decision boundary are recorded above. |
+| Governing plan authority | BLOCKED / NON-DECISIVE | `docs/temp/stability-cleanup.md` is absent at the pin; the policy contradiction does not rely on reconstructing its “useful” definition. |
 | `VAL-001` | DEFERRED/BLOCKED | Clean-room validator is story 003. |
 | Report PR checks | DEFERRED/BLOCKED | No report PR is authorized until the remaining stories complete. |
 
 ## Verdict and smallest next step
 
-**Verdict for story 001:** PASS as a factual ledger, with the above blocked
-edges explicitly retained. **Verdict for the overall lane:** BLOCKED; no
-candidate or final validation-loopback conclusion is made.
+**Verdict for story 001:** PASS as a factual ledger. **Verdict for story 002:**
+PASS with the infeasible result applicable and the feasible result explicitly
+not applicable. **Verdict for the overall lane:** INCOMPLETE; story 003 must
+perform the independent loopback and report handoff.
 
-The smallest safe next step is to obtain or operator-amend the governing plan
-source, then let story 002 assess one exact candidate against it and the current
-protected-main lineage. Story 003 must independently run the clean-room
-validator, create the report-only PR, and start its required checks. No source
-or CI mutation is requested by this ledger.
+The smallest safe next step is for story 003 to replay the policy contradiction
+and nine-class audit from a clean environment, preserve the missing-plan
+authority finding without silently repairing it, create the report-only PR, and
+start its required checks. No source or CI mutation is requested by this
+decision.
