@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	metricsLineageInputTokens  int64 = 1_000_000
-	metricsLineageOutputTokens int64 = 2_000_000
+	metricsLineageInputTokens           int64 = 1_000_000
+	metricsLineageOutputTokens          int64 = 2_000_000
+	metricsLineageProviderLatencyMillis int64 = 1
 )
 
 // TestSingleDispatchMetricsStayScopedAcrossRecordingResume proves the
@@ -112,13 +113,16 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 }
 
 func newMetricsLineageProvider() *testutil.NativeMockProvider {
+	// Return provider duration as a diagnostic fact instead of waiting for host
+	// time. The live/resume assertion needs a positive latency sample, not a
+	// scheduling-dependent wall-clock interval.
 	return testutil.NewNativeMockProvider(providers.ExecuteResult{
 		Content: "single dispatch COMPLETE",
 		Diagnostics: &providers.ExecuteDiagnostics{
-			DurationMillis: 1,
+			DurationMillis: metricsLineageProviderLatencyMillis,
 			Metadata: map[string]string{
 				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
-				workerexecution.ProviderResponseMetadataDurationMS:         "1",
+				workerexecution.ProviderResponseMetadataDurationMS:         strconv.FormatInt(metricsLineageProviderLatencyMillis, 10),
 				workerexecution.ProviderResponseMetadataInputTokens:        strconv.FormatInt(metricsLineageInputTokens, 10),
 				workerexecution.ProviderResponseMetadataOutputTokens:       strconv.FormatInt(metricsLineageOutputTokens, 10),
 			},
