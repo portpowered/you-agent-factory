@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -169,4 +170,41 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsC
 		second.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCurrent {
 		t.Fatalf("second packaged factories = %#v, want one current @you/goal", second.PackagedFactories)
 	}
+}
+
+// TestBatchColdStartCharacterizationSystemInitializationCall records the
+// current pre-runtime operation's value and call count. It is the package
+// witness for the profile-selected system-initialization seam; it makes no
+// production deferral decision.
+func TestBatchColdStartCharacterizationSystemInitializationCall(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("controlled system initialization failure")
+	service := &batchColdStartSystemInitializationService{err: wantErr}
+	operation := provideSystemInitializationOperation(service)
+
+	err := operation(context.Background(), "isolated-home")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("system initialization error = %v, want %v", err, wantErr)
+	}
+	if service.calls != 1 || service.homeDir != "isolated-home" {
+		t.Fatalf("system initialization calls/home = %d/%q, want 1/isolated-home", service.calls, service.homeDir)
+	}
+	t.Logf("system initialization calls=%d home=%q error=%v", service.calls, service.homeDir, err)
+}
+
+type batchColdStartSystemInitializationService struct {
+	systeminitialization.Service
+	calls   int
+	homeDir string
+	err     error
+}
+
+func (service *batchColdStartSystemInitializationService) Initialize(
+	_ context.Context,
+	request systeminitialization.Request,
+) (systeminitialization.Result, error) {
+	service.calls++
+	service.homeDir = request.HomeDir
+	return systeminitialization.Result{HomeDir: request.HomeDir}, service.err
 }
