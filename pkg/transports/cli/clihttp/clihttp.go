@@ -276,6 +276,10 @@ func WithHTTPResponseStage(response *http.Response, cause error, stage string) e
 	if errors.As(cause, &metadata) {
 		return cause
 	}
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		return NewHTTPErrorFromResponse(response, cause)
+	}
 	statusCode := 0
 	method := ""
 	requestURL := ""
@@ -283,7 +287,7 @@ func WithHTTPResponseStage(response *http.Response, cause error, stage string) e
 		statusCode = response.StatusCode
 		method, requestURL = requestMetadata(response.Request)
 	}
-	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Stage: strings.TrimSpace(stage), Cause: cause}
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Stage: stage, Cause: cause}
 }
 
 func requestMetadata(request *http.Request) (string, string) {
