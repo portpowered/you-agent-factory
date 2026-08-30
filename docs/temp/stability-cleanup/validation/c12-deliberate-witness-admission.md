@@ -1,12 +1,13 @@
 # Stability cleanup C12: deliberate witness admission
 
-Status: **Story 003 clean-room validation complete; implementation handoff pending**
+Status: **Story 003 clean-room validation complete; review corrections applied; implementation handoff pending**
 
 This report contains the story-001 factual ledger, the story-002 candidate
 decision, and the story-003 clean-room loopback. It does not change a baseline,
 alter a workflow, implement a future source witness, or use a synthetic
-candidate. The final report-only branch push and pull-request handoff remain
-the implementation finish boundary; terminal CI and merge remain review-owned.
+candidate. The correction revision will be pushed to the existing report-only
+pull request; the final head/required-check handoff remains the implementation
+finish boundary; terminal CI and merge remain review-owned.
 
 ## Observation boundary
 
@@ -16,8 +17,9 @@ The live `origin/main` pin was observed at `2026-08-29T22:54:50.3876276Z`:
 995137125a6f90bec0284cbe2ea1783e70b5d063
 ```
 
-The pinned commit is a squash merge of bot PR [#2462](https://github.com/portpowered/you-agent-factory/pull/2462), with parent
-`a27ea892f5feb5ada9578d0da8159bfe3b590107`. Evidence below was collected
+The pinned commit is a squash merge of bot PR [#2462](https://github.com/portpowered/you-agent-factory/pull/2462), with
+merge commit [`995137125a6f90bec0284cbe2ea1783e70b5d063`](https://github.com/portpowered/you-agent-factory/commit/995137125a6f90bec0284cbe2ea1783e70b5d063) and parent
+[`a27ea892f5feb5ada9578d0da8159bfe3b590107`](https://github.com/portpowered/you-agent-factory/commit/a27ea892f5feb5ada9578d0da8159bfe3b590107). Evidence below was collected
 through `2026-08-29T22:55:26Z`; asynchronous checks still in progress at that
 boundary remain unproven.
 
@@ -57,18 +59,18 @@ The immutable source blobs inspected at the pin were:
 
 | Pinned path | Blob SHA |
 | --- | --- |
-| `.github/workflows/ci.yml` | `241d419b911556fb6212e68d7ef0844ae2f12287` |
-| `.github/workflows/regenerate-shared-ci-baselines.yml` | `ac9dafcbe4af0a93718674f161751f1b792af090` |
-| `scripts/ci/backend-lint-policy.mjs` | `a3ada462aa63638416f633845e335d70aa912e8c` |
-| `scripts/ci/backend-lint-report.mjs` | `014ee663f030f8ffa564e93aa5c4bee71af171d2` |
-| `scripts/ci/shared-baseline-regeneration-workflow.mjs` | `80c768e61de8d4a6e428ac13d3485baeb1e33486` |
-| `scripts/verification-policy.mjs` | `ab127508010ac583b98e9b0c943f50bb6a86bb00` |
-| `cmd/deadcodecheck/main.go` | `76fec8f267dea6649c845909c38a5e389ddf35e8` |
-| `cmd/unitlanebudget/main.go` | `ffa2267bf8d10ba162207f8091450bb0775f17ff` |
-| `cmd/unitlanebudget/budget.go` | `5d82792f8136239343c814d1b2d052ea5fe2cce4` |
-| `Makefile` | `6135fad496105721d86e7f0a1669622e691b72e7` |
-| `docs/internal/baselines/deadcode-baseline.txt` | `358716aeb0095882890819e58e0b98c09a8c9993` |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `695309991f927099fd24f98c1a18b2b74c273c77` |
+| [`.github/workflows/ci.yml`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/.github/workflows/ci.yml) | `241d419b911556fb6212e68d7ef0844ae2f12287` |
+| [`.github/workflows/regenerate-shared-ci-baselines.yml`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/.github/workflows/regenerate-shared-ci-baselines.yml) | `ac9dafcbe4af0a93718674f161751f1b792af090` |
+| [`scripts/ci/backend-lint-policy.mjs`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/scripts/ci/backend-lint-policy.mjs) | `a3ada462aa63638416f633845e335d70aa912e8c` |
+| [`scripts/ci/backend-lint-report.mjs`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/scripts/ci/backend-lint-report.mjs) | `014ee663f030f8ffa564e93aa5c4bee71af171d2` |
+| [`scripts/ci/shared-baseline-regeneration-workflow.mjs`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/scripts/ci/shared-baseline-regeneration-workflow.mjs) | `80c768e61de8d4a6e428ac13d3485baeb1e33486` |
+| [`scripts/verification-policy.mjs`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/scripts/verification-policy.mjs) | `ab127508010ac583b98e9b0c943f50bb6a86bb00` |
+| [`cmd/deadcodecheck/main.go`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/cmd/deadcodecheck/main.go) | `76fec8f267dea6649c845909c38a5e389ddf35e8` |
+| [`cmd/unitlanebudget/main.go`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/cmd/unitlanebudget/main.go) | `ffa2267bf8d10ba162207f8091450bb0775f17ff` |
+| [`cmd/unitlanebudget/budget.go`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/cmd/unitlanebudget/budget.go) | `5d82792f8136239343c814d1b2d052ea5fe2cce4` |
+| [`Makefile`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/Makefile) | `6135fad496105721d86e7f0a1669622e691b72e7` |
+| [`docs/internal/baselines/deadcode-baseline.txt`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/docs/internal/baselines/deadcode-baseline.txt) | `358716aeb0095882890819e58e0b98c09a8c9993` |
+| [`docs/internal/baselines/go-unit-lane-latency-budget.v1.json`](https://github.com/portpowered/you-agent-factory/blob/995137125a6f90bec0284cbe2ea1783e70b5d063/docs/internal/baselines/go-unit-lane-latency-budget.v1.json) | `695309991f927099fd24f98c1a18b2b74c273c77` |
 
 At this pin the deadcode baseline is 3,074 lines with SHA-256
 `F31645C911B22D76E5A121E0DA0C47D5549DE16045E1D803E0003A254AFDFE13`.
@@ -89,8 +91,8 @@ branch-targeted rulesets are the authority:
 
 | Ruleset | Exact observed protection |
 | --- | --- |
-| `main-protect` (`15809936`) | Active on the default branch; deletion and non-fast-forward rules; no bypass actors; current user cannot bypass. |
-| `must-pass-pr` (`15943501`) | Active on the default branch; deletion, non-fast-forward, and required-status-check rules; required contexts are exactly `Verification Policy` and `Backend Lint`; strict required-status policy is `false`; no bypass actors; current user cannot bypass. |
+| `main-protect` ([ruleset 15809936](https://api.github.com/repos/portpowered/you-agent-factory/rulesets/15809936)) | Active on the default branch; deletion and non-fast-forward rules; no bypass actors; current user cannot bypass. |
+| `must-pass-pr` ([ruleset 15943501](https://api.github.com/repos/portpowered/you-agent-factory/rulesets/15943501)) | Active on the default branch; deletion, non-fast-forward, and required-status-check rules; required contexts are exactly `Verification Policy` and `Backend Lint`; strict required-status policy is `false`; no bypass actors; current user cannot bypass. |
 
 The legacy `branches/main/protection` endpoint returned `404 Branch not
 protected`; that endpoint is not treated as evidence that the active rulesets
@@ -141,25 +143,25 @@ produced the bot PR subsequently merged into the pinned `main`:
 
 | Stage | Identity and result |
 | --- | --- |
-| Source push CI | [Run 33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602), SHA `a27ea892f5feb5ada9578d0da8159bfe3b590107`, completed `success`. Classify Verification, Backend Lint, Backend Unit Latency, and Verification Policy all succeeded. |
-| Deadcode witness | Artifact `backend-deadcode-evidence`, ID `9722393303`; SHA-256 exactly matched the committed 3,074-line baseline. |
-| Latency witness | Artifact `backend-unit-latency-evidence`, ID `9722470916`; three complete files had wall times 97.471, 91.656, and 91.728 seconds, exact identity/inventory, median improvement 61.72%, and maximum run above median 6.26%. |
-| Protected regeneration | [Run 33279349933](https://github.com/portpowered/you-agent-factory/actions/runs/33279349933), completed `success`. Its log records source SHA `a27ea892f5feb5ada9578d0da8159bfe3b590107`, source run `33278765602`, exact-source checkout, generated path `docs/internal/baselines/go-unit-lane-latency-budget.v1.json`, and `SHARED_BASELINE_RECONCILIATION action=merge-requested publish=true`. The helper reported `quiescent=false` because the source revision also contained three functional-worker test paths; this is recorded, not normalized away. |
-| Bot PR checks | [PR #2462](https://github.com/portpowered/you-agent-factory/pull/2462), base `a27ea892f5feb5ada9578d0da8159bfe3b590107`, head `2054022a7df746e271f7da597653844b7a801cdc`. Its exact patch was one line added/removed in the latency budget's `reference.baseCommit`; no deadcode-baseline change. Classify, Workflow Lint, Backend Unit Latency, Backend Lint, and Verification Policy all completed successfully. |
-| Bot merge | PR #2462 merged at `2026-08-29T22:54:47Z` as `995137125a6f90bec0284cbe2ea1783e70b5d063`. |
+| Source push CI | [Run 33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602), SHA [`a27ea892f5feb5ada9578d0da8159bfe3b590107`](https://github.com/portpowered/you-agent-factory/commit/a27ea892f5feb5ada9578d0da8159bfe3b590107), completed `success`. Classify Verification [job 99170600461](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/job/99170600461), Backend Lint [job 99170600489](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/job/99170600489), Backend Unit Latency [job 99170600477](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/job/99170600477), and Verification Policy [job 99171691695](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/job/99171691695) all succeeded. |
+| Deadcode witness | Artifact `backend-deadcode-evidence`, ID `9722393303` ([artifact page](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722393303); [API resource](https://api.github.com/repos/portpowered/you-agent-factory/actions/artifacts/9722393303)); SHA-256 exactly matched the committed 3,074-line baseline. |
+| Latency witness | Artifact `backend-unit-latency-evidence`, ID `9722470916` ([artifact page](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722470916); [API resource](https://api.github.com/repos/portpowered/you-agent-factory/actions/artifacts/9722470916)); three complete files had wall times 97.471, 91.656, and 91.728 seconds, exact identity/inventory, median improvement 61.72%, and maximum run above median 6.26%. |
+| Protected regeneration | [Run 33279349933](https://github.com/portpowered/you-agent-factory/actions/runs/33279349933), [job 99171730943](https://github.com/portpowered/you-agent-factory/actions/runs/33279349933/job/99171730943), completed `success`. Its log records source SHA [`a27ea892f5feb5ada9578d0da8159bfe3b590107`](https://github.com/portpowered/you-agent-factory/commit/a27ea892f5feb5ada9578d0da8159bfe3b590107), source run [33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602), exact-source checkout, generated path `docs/internal/baselines/go-unit-lane-latency-budget.v1.json`, and `SHARED_BASELINE_RECONCILIATION action=merge-requested publish=true`. The helper reported `quiescent=false` because the source revision also contained three functional-worker test paths; this is recorded, not normalized away. |
+| Bot PR checks | [PR #2462](https://github.com/portpowered/you-agent-factory/pull/2462), base [`a27ea892f5feb5ada9578d0da8159bfe3b590107`](https://github.com/portpowered/you-agent-factory/commit/a27ea892f5feb5ada9578d0da8159bfe3b590107), head [`2054022a7df746e271f7da597653844b7a801cdc`](https://github.com/portpowered/you-agent-factory/commit/2054022a7df746e271f7da597653844b7a801cdc), [generated diff](https://github.com/portpowered/you-agent-factory/pull/2462/files) ([raw diff](https://github.com/portpowered/you-agent-factory/pull/2462.diff)). Its exact patch was one line added/removed in the latency budget's `reference.baseCommit`; no deadcode-baseline change. The validation run [33279420389](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389) recorded Classify [job 99171916675](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389/job/99171916675), Workflow Lint [job 99171916709](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389/job/99171916709), Backend Unit Latency [job 99171916712](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389/job/99171916712), Backend Lint [job 99171916748](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389/job/99171916748), and Verification Policy [job 99172635713](https://github.com/portpowered/you-agent-factory/actions/runs/33279420389/job/99172635713), all completed successfully. |
+| Bot merge | PR #2462 merged at `2026-08-29T22:54:47Z` as [`995137125a6f90bec0284cbe2ea1783e70b5d063`](https://github.com/portpowered/you-agent-factory/commit/995137125a6f90bec0284cbe2ea1783e70b5d063). |
 
-The preceding failed regeneration [run 33278920011](https://github.com/portpowered/you-agent-factory/actions/runs/33278920011) is also retained as a failure record: its workflow-run payload supplied source SHA `7af39e5bc23c8fc74e1402da85981a438eb455c5`, run `33277914281`, conclusion `cancelled`, and stopped before checkout/generation/publication. The later successful run above used the completed `a27ea...` source CI and superseded this failed attempt; neither result establishes a dual-snapshot candidate.
+The preceding failed regeneration [run 33278920011](https://github.com/portpowered/you-agent-factory/actions/runs/33278920011), [job 99170605175](https://github.com/portpowered/you-agent-factory/actions/runs/33278920011/job/99170605175), is also retained as a failure record: its workflow-run payload supplied source SHA [`7af39e5bc23c8fc74e1402da85981a438eb455c`](https://github.com/portpowered/you-agent-factory/commit/7af39e5bc23c8fc74e1402da85981a438eb455c), source run [33277914281](https://github.com/portpowered/you-agent-factory/actions/runs/33277914281), conclusion `cancelled`, and stopped before checkout/generation/publication. The later successful run above used the completed `a27ea...` source CI and superseded this failed attempt; neither result establishes a dual-snapshot candidate.
 
 The newly protected pin's own push CI has now completed:
 
 | Job | Observed result |
 | --- | --- |
-| [CI run 33279723467](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467) | `success`, head SHA `995137125a6f90bec0284cbe2ea1783e70b5d063`, completed `2026-08-29T23:04:29Z` |
-| Classify Verification | `success`, job `99172715424` |
-| Backend Unit Latency | `success`, job `99172715384` |
-| Backend Lint | `success`, job `99172715412` |
-| Verification Policy | `success`, job `99173684923` |
-| Post-merge regeneration | [Run 33280105358](https://github.com/portpowered/you-agent-factory/actions/runs/33280105358), `success`, job `99173719289`; source SHA `995137125a6f90bec0284cbe2ea1783e70b5d063`, source run `33279723467`. |
+| [CI run 33279723467](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467) | `success`, head SHA [`995137125a6f90bec0284cbe2ea1783e70b5d063`](https://github.com/portpowered/you-agent-factory/commit/995137125a6f90bec0284cbe2ea1783e70b5d063), completed `2026-08-29T23:04:29Z` |
+| Classify Verification | `success`, [job 99172715424](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467/job/99172715424) |
+| Backend Unit Latency | `success`, [job 99172715384](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467/job/99172715384) |
+| Backend Lint | `success`, [job 99172715412](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467/job/99172715412) |
+| Verification Policy | `success`, [job 99173684923](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467/job/99173684923) |
+| Post-merge regeneration | [Run 33280105358](https://github.com/portpowered/you-agent-factory/actions/runs/33280105358), `success`, [job 99173719289](https://github.com/portpowered/you-agent-factory/actions/runs/33280105358/job/99173719289); source SHA [`995137125a6f90bec0284cbe2ea1783e70b5d063`](https://github.com/portpowered/you-agent-factory/commit/995137125a6f90bec0284cbe2ea1783e70b5d063), source run [33279723467](https://github.com/portpowered/you-agent-factory/actions/runs/33279723467). |
 
 The post-merge regeneration log records one transient generated baseline file,
 then `SHARED_BASELINE_CHANGED=false paths=(none) quiescent=true` and
@@ -175,13 +177,13 @@ merge identities:
 
 | Lead | Observed result and relevance |
 | --- | --- |
-| [PR #2347](https://github.com/portpowered/you-agent-factory/pull/2347) | Merged as `fee3da73388514cfb5975307d2cd1e07b345cd84`; head `26594fb95d34476d1e5473f0fc1e201e7cc44cb8`, base `6f6ad94c433d1fbec60c3fef0fe192094beae128`; run [33141331219](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219) had Backend Lint, Backend Unit Latency, Backend Functional Coverage, and Verification Policy success. Its eight changed files were workflow/Makefile/generator sources and tests; neither comparison baseline changed. |
-| [PR #2408](https://github.com/portpowered/you-agent-factory/pull/2408) | Merged as `182ccb00da13c159eda46caee7a75c8640c97067`; head `8115631237e0cb6a317113c9dee9ead9e05cee86`, base `0d56c18b386ab77e823bd7d2da7988c2fdd636d1`; run [33223243464](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464) had the relevant checks success. Its three changed files were workflow/helper/test files; neither comparison baseline changed. The operator's merge note explicitly treated the post-merge witness as follow-up, not merge-precondition evidence. |
-| [PR #2444](https://github.com/portpowered/you-agent-factory/pull/2444) | Merged source lead as `0228a6d5e081ea65b03f11ee9553f636071eaa01`; head `542bb48d169acbd18b912de5ee12edc264b6c7c7`, base `5b81ba3602c2875cf72fbabad759cac1687ee771`; run [33253550758](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758) relevant checks succeeded; five functional CLI-output test files, no comparison-baseline patch. |
-| [PR #2435](https://github.com/portpowered/you-agent-factory/pull/2435) | Merged bot lead as `3fa80f6e548a07ff7ec02a8047bffb37402a7039`; head `319583426d659c5ae29ef0ab3c6ee66fa199f404`, base `64f6c992091a79aad6b7ebce84f9a94fdb7168e3`; run [33240184371](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371) relevant checks succeeded; one latency-budget `reference.baseCommit` patch, no deadcode-baseline patch. |
-| [PR #2338](https://github.com/portpowered/you-agent-factory/pull/2338) | Closed unmerged; head `0989ac9a9320130ed5be2472442867e372dcfb43`, base `3d9bfe1d9ac891341639fff5e73bef39b5cb3b16`; run [33064719861](https://github.com/portpowered/you-agent-factory/actions/runs/33064719861) had Backend Unit Latency and Verification Policy failures. It is negative lineage evidence, not a merge. |
-| [PR #2345](https://github.com/portpowered/you-agent-factory/pull/2345) | Open unit-latency reference lead; head `a05a800aecdea0e60d1a6398a9eeda4b55e0f0eb`, base `6f6ad94c433d1fbec60c3fef0fe192094beae128`; run [33125634420](https://github.com/portpowered/you-agent-factory/actions/runs/33125634420) observed 13.27% improvement against the 25% policy and failed Unit Latency/Verification Policy. It is not an admitted candidate. |
-| [PR #2211](https://github.com/portpowered/you-agent-factory/pull/2211) | Open source/deadcode lead; head `ba3d766614437b88cf2fb65b7b432c5264cab85e`, base `5637f83a757d8727cc5acf3d7d5e8e87d25d1a10`; run [32638912321](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321) had Backend Lint success but Backend Functional Coverage and Verification Policy failures. It is not an admitted candidate. |
+| [PR #2347](https://github.com/portpowered/you-agent-factory/pull/2347) | Merged as [`fee3da73388514cfb5975307d2cd1e07b345cd84`](https://github.com/portpowered/you-agent-factory/commit/fee3da73388514cfb5975307d2cd1e07b345cd84); head [`26594fb95d34476d1e5473f0fc1e201e7cc44cb8`](https://github.com/portpowered/you-agent-factory/commit/26594fb95d34476d1e5473f0fc1e201e7cc44cb8), base [`6f6ad94c433d1fbec60c3fef0fe192094beae128`](https://github.com/portpowered/you-agent-factory/commit/6f6ad94c433d1fbec60c3fef0fe192094beae128); run [33141331219](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219) had Backend Lint [job 98754528854](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219/job/98754528854), Backend Unit Latency [job 98754529293](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219/job/98754529293), Backend Functional Coverage [job 98754525706](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219/job/98754525706), and Verification Policy [job 98755550143](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219/job/98755550143) success. Its eight changed files were workflow/Makefile/generator sources and tests; neither comparison baseline changed. |
+| [PR #2408](https://github.com/portpowered/you-agent-factory/pull/2408) | Merged as [`182ccb00da13c159eda46caee7a75c8640c97067`](https://github.com/portpowered/you-agent-factory/commit/182ccb00da13c159eda46caee7a75c8640c97067); head [`8115631237e0cb6a317113c9dee9ead9e05cee86`](https://github.com/portpowered/you-agent-factory/commit/8115631237e0cb6a317113c9dee9ead9e05cee86), base [`0d56c18b386ab77e823bd7d2da7988c2fdd636d1`](https://github.com/portpowered/you-agent-factory/commit/0d56c18b386ab77e823bd7d2da7988c2fdd636d1); run [33223243464](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464) had Backend Lint [job 99021591536](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464/job/99021591536), Backend Unit Latency [job 99021591539](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464/job/99021591539), Backend Functional Coverage [job 99021719418](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464/job/99021719418), and Verification Policy [job 99023240513](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464/job/99023240513) success. Its three changed files were workflow/helper/test files; neither comparison baseline changed. The operator's merge note explicitly treated the post-merge witness as follow-up, not merge-precondition evidence. |
+| [PR #2444](https://github.com/portpowered/you-agent-factory/pull/2444) | Merged source lead as [`0228a6d5e081ea65b03f11ee9553f636071eaa01`](https://github.com/portpowered/you-agent-factory/commit/0228a6d5e081ea65b03f11ee9553f636071eaa01); head [`542bb48d169acbd18b912de5ee12edc264b6c7c7`](https://github.com/portpowered/you-agent-factory/commit/542bb48d169acbd18b912de5ee12edc264b6c7c7), base [`5b81ba3602c2875cf72fbabad759cac1687ee771`](https://github.com/portpowered/you-agent-factory/commit/5b81ba3602c2875cf72fbabad759cac1687ee771); run [33253550758](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758) relevant checks—Backend Lint [job 99105658027](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758/job/99105658027), Backend Unit Latency [job 99105656477](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758/job/99105656477), Backend Functional Coverage [job 99105646497](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758/job/99105646497), and Verification Policy [job 99106515702](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758/job/99106515702)—succeeded; five functional CLI-output test files, no comparison-baseline patch. |
+| [PR #2435](https://github.com/portpowered/you-agent-factory/pull/2435) | Merged bot lead as [`3fa80f6e548a07ff7ec02a8047bffb37402a7039`](https://github.com/portpowered/you-agent-factory/commit/3fa80f6e548a07ff7ec02a8047bffb37402a7039); head [`319583426d659c5ae29ef0ab3c6ee66fa199f404`](https://github.com/portpowered/you-agent-factory/commit/319583426d659c5ae29ef0ab3c6ee66fa199f404), base [`64f6c992091a79aad6b7ebce84f9a94fdb7168e3`](https://github.com/portpowered/you-agent-factory/commit/64f6c992091a79aad6b7ebce84f9a94fdb7168e3); run [33240184371](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371) relevant checks—Backend Lint [job 99068071245](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371/job/99068071245), Backend Unit Latency [job 99068071400](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371/job/99068071400), and Verification Policy [job 99068934987](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371/job/99068934987)—succeeded; one latency-budget `reference.baseCommit` patch, no deadcode-baseline patch. |
+| [PR #2338](https://github.com/portpowered/you-agent-factory/pull/2338) | Closed unmerged; head [`0989ac9a9320130ed5be2472442867e372dcfb43`](https://github.com/portpowered/you-agent-factory/commit/0989ac9a9320130ed5be2472442867e372dcfb43), base [`3d9bfe1d9ac891341639fff5e73bef39b5cb3b16`](https://github.com/portpowered/you-agent-factory/commit/3d9bfe1d9ac891341639fff5e73bef39b5cb3b16); run [33064719861](https://github.com/portpowered/you-agent-factory/actions/runs/33064719861) had Backend Unit Latency [job 98724674884](https://github.com/portpowered/you-agent-factory/actions/runs/33064719861/job/98724674884) and Verification Policy [job 98726061660](https://github.com/portpowered/you-agent-factory/actions/runs/33064719861/job/98726061660) failures. It is negative lineage evidence, not a merge. |
+| [PR #2345](https://github.com/portpowered/you-agent-factory/pull/2345) | Open unit-latency reference lead; head [`a05a800aecdea0e60d1a6398a9eeda4b55e0f0eb`](https://github.com/portpowered/you-agent-factory/commit/a05a800aecdea0e60d1a6398a9eeda4b55e0f0eb), base [`6f6ad94c433d1fbec60c3fef0fe192094beae128`](https://github.com/portpowered/you-agent-factory/commit/6f6ad94c433d1fbec60c3fef0fe192094beae128); run [33125634420](https://github.com/portpowered/you-agent-factory/actions/runs/33125634420) observed 13.27% improvement against the 25% policy and failed Unit Latency [job 98702988665](https://github.com/portpowered/you-agent-factory/actions/runs/33125634420/job/98702988665)/Verification Policy [job 98705528185](https://github.com/portpowered/you-agent-factory/actions/runs/33125634420/job/98705528185). It is not an admitted candidate. |
+| [PR #2211](https://github.com/portpowered/you-agent-factory/pull/2211) | Open source/deadcode lead; head [`ba3d766614437b88cf2fb65b7b432c5264cab85e`](https://github.com/portpowered/you-agent-factory/commit/ba3d766614437b88cf2fb65b7b432c5264cab85e), base [`5637f83a757d8727cc5acf3d7d5e8e87d25d1a10`](https://github.com/portpowered/you-agent-factory/commit/5637f83a757d8727cc5acf3d7d5e8e87d25d1a10); run [32638912321](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321) had Backend Lint [job 97439735969](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321/job/97439735969) success but Backend Functional Coverage [job 97439735972](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321/job/97439735972) and Verification Policy [job 97442436163](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321/job/97442436163) failures. It is not an admitted candidate. |
 
 The selected bot-PR scan also inspected the following exact PR/base/head/merge
 lineages. Each patch changed only the latency budget's `reference.baseCommit`;
@@ -189,11 +191,11 @@ no dual deadcode-plus-latency snapshot was observed in that scan.
 
 | Bot PR | Base SHA | Head SHA | Merge SHA |
 | --- | --- | --- | --- |
-| [#2402](https://github.com/portpowered/you-agent-factory/pull/2402) | `7ca60f6098eca7eb87634d0277117b31900698dd` | `4ce6add416589c99b11ef14269cb2aaf17be840d` | `f1bc372c1c16ef5401f05cfca1d497d817bc891a` |
-| [#2404](https://github.com/portpowered/you-agent-factory/pull/2404) | `fbc67210656779076210bcb066db2ecfe6067c7f` | `4a657eccaa9a64be8298e1da60ee9e0f98856f9d` | `72003ae42b2608a8f5f8c967b783ede8e198fd93` |
-| [#2406](https://github.com/portpowered/you-agent-factory/pull/2406) | `72003ae42b2608a8f5f8c967b783ede8e198fd93` | `c9010161ac536ceff31dd90b5e965db19aa5ef34` | `51733a283a1ce79a17e45bc5cd7859f0399f518b` |
-| [#2407](https://github.com/portpowered/you-agent-factory/pull/2407) | `51733a283a1ce79a17e45bc5cd7859f0399f518b` | `dc584218fb7d6291f891c45f358f1f4e06b186d9` | `31ba882786d5d9427b43c1c7cee7996a152a2a4d` |
-| [#2460](https://github.com/portpowered/you-agent-factory/pull/2460) | `4b2a0582d6db24e66482c3117d378bb28be32717` | `1f207cb5333a9dd7f2e73a0b3f6793a75f723065` | `7af39e5bc23c8fc74e1402da85981a438eb455c5` |
+| [#2402](https://github.com/portpowered/you-agent-factory/pull/2402) | [`7ca60f6098eca7eb87634d0277117b31900698dd`](https://github.com/portpowered/you-agent-factory/commit/7ca60f6098eca7eb87634d0277117b31900698dd) | [`4ce6add416589c99b11ef14269cb2aaf17be840d`](https://github.com/portpowered/you-agent-factory/commit/4ce6add416589c99b11ef14269cb2aaf17be840d) | [`f1bc372c1c16ef5401f05cfca1d497d817bc891a`](https://github.com/portpowered/you-agent-factory/commit/f1bc372c1c16ef5401f05cfca1d497d817bc891a) |
+| [#2404](https://github.com/portpowered/you-agent-factory/pull/2404) | [`fbc67210656779076210bcb066db2ecfe6067c7f`](https://github.com/portpowered/you-agent-factory/commit/fbc67210656779076210bcb066db2ecfe6067c7f) | [`4a657eccaa9a64be8298e1da60ee9e0f98856f9d`](https://github.com/portpowered/you-agent-factory/commit/4a657eccaa9a64be8298e1da60ee9e0f98856f9d) | [`72003ae42b2608a8f5f8c967b783ede8e198fd93`](https://github.com/portpowered/you-agent-factory/commit/72003ae42b2608a8f5f8c967b783ede8e198fd93) |
+| [#2406](https://github.com/portpowered/you-agent-factory/pull/2406) | [`72003ae42b2608a8f5f8c967b783ede8e198fd93`](https://github.com/portpowered/you-agent-factory/commit/72003ae42b2608a8f5f8c967b783ede8e198fd93) | [`c9010161ac536ceff31dd90b5e965db19aa5ef34`](https://github.com/portpowered/you-agent-factory/commit/c9010161ac536ceff31dd90b5e965db19aa5ef34) | [`51733a283a1ce79a17e45bc5cd7859f0399f518b`](https://github.com/portpowered/you-agent-factory/commit/51733a283a1ce79a17e45bc5cd7859f0399f518b) |
+| [#2407](https://github.com/portpowered/you-agent-factory/pull/2407) | [`51733a283a1ce79a17e45bc5cd7859f0399f518b`](https://github.com/portpowered/you-agent-factory/commit/51733a283a1ce79a17e45bc5cd7859f0399f518b) | [`dc584218fb7d6291f891c45f358f1f4e06b186d9`](https://github.com/portpowered/you-agent-factory/commit/dc584218fb7d6291f891c45f358f1f4e06b186d9) | [`31ba882786d5d9427b43c1c7cee7996a152a2a4d`](https://github.com/portpowered/you-agent-factory/commit/31ba882786d5d9427b43c1c7cee7996a152a2a4d) |
+| [#2460](https://github.com/portpowered/you-agent-factory/pull/2460) | [`4b2a0582d6db24e66482c3117d378bb28be32717`](https://github.com/portpowered/you-agent-factory/commit/4b2a0582d6db24e66482c3117d378bb28be32717) | [`1f207cb5333a9dd7f2e73a0b3f6793a75f723065`](https://github.com/portpowered/you-agent-factory/commit/1f207cb5333a9dd7f2e73a0b3f6793a75f723065) | [`7af39e5bc23c8fc74e1402da85981a438eb455c5`](https://github.com/portpowered/you-agent-factory/commit/7af39e5bc23c8fc74e1402da85981a438eb455c5) |
 
 ## Local-real probes and evidence boundaries
 
@@ -204,8 +206,8 @@ run in disposable checkouts or against downloaded hosted artifacts:
 | --- | --- | --- |
 | `go test ./cmd/deadcodecheck ./cmd/unitlanebudget` in the pinned disposable checkout | Exit 0 | The two checker packages compile and their unit tests pass on the local host; not hosted Linux admission evidence. |
 | `make -C <checkout> test-ci-workflows` | Exit 0; 169 tests, 168 pass, 1 skipped, 0 fail | Pinned workflow/helper policy tests pass locally; not a substitute for protected CI. |
-| `make test-unit-latency-budget` with the three downloaded run files from artifact `9722470916` | Exit 0; exact inventory, 61.72% median improvement, 6.26% maximum-above-median | Replays the authoritative hosted latency evidence through the pinned checker. |
-| `make deadcode` on Windows in the disposable checkout | Exit 1; generated 3,072 findings versus 3,074 baseline lines | Platform diagnostic only. The hosted Ubuntu artifact matched the baseline exactly, so this Windows result is not used to fail or pass the candidate. |
+| `make test-unit-latency-budget` with the three downloaded run files from artifact `9722470916` ([artifact page](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722470916)) | Exit 0; exact inventory, 61.72% median improvement, 6.26% maximum-above-median | Replays the authoritative hosted latency evidence through the pinned checker. |
+| `make deadcode` on Windows in the disposable checkout | Exit 2; generated 3,072 findings versus 3,074 baseline lines | Platform diagnostic only. The hosted Ubuntu artifact matched the baseline exactly, so this Windows result is not used to fail or pass the candidate. The earlier report revision recorded Exit 1 for this same-named probe; that discrepancy is retained as `VAL-C12-005` below. |
 | `node --test scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/unit-latency-workflow.test.mjs scripts/verification-policy.test.mjs` in the pinned disposable checkout | Exit 0; 51 tests passed | Pinned policy, merge-result selection, no-allowance deadcode failure, required-result propagation, and latency inventory wiring behave as traced; not hosted execution of a future source head. |
 | `git merge-tree --write-tree 7af39e5bc23c8fc74e1402da85981a438eb455c5 4571780148515d6cbc4f1cd9a5877f3f7f517cd2` in the pinned disposable checkout | Exit 0; result tree `c05d9943274d8789dc0791d821f2bd1b76a56311`, equal to committed merge `a27ea892f5feb5ada9578d0da8159bfe3b590107`'s tree | A real conflict-free source merge produces one merged content tree. Its base tree was `62f37dd42e1b82a4a1e4880c2915d9c841749e14` and head tree was `ea40d67e535f49ffd041fb4803ed83dece824720`; this characterizes merge-tree behavior, not a new candidate. |
 | `make test-ci-workflows` in the pinned disposable checkout | Exit 0; 169 tests, 168 pass, 1 skipped, 0 fail | Pinned workflow and reconciliation policy tests pass locally; not a substitute for protected CI. |
@@ -286,6 +288,7 @@ cannot satisfy the dual requirement.
 
 The local-real merge procedure used an existing conflict-free source merge in
 the pinned disposable checkout, without creating or pushing a new branch:
+the base [`7af39e5bc23c8fc74e1402da85981a438eb455c5`](https://github.com/portpowered/you-agent-factory/commit/7af39e5bc23c8fc74e1402da85981a438eb455c5), head [`4571780148515d6cbc4f1cd9a5877f3f7f517cd2`](https://github.com/portpowered/you-agent-factory/commit/4571780148515d6cbc4f1cd9a5877f3f7f517cd2), and committed merge [`a27ea892f5feb5ada9578d0da8159bfe3b590107`](https://github.com/portpowered/you-agent-factory/commit/a27ea892f5feb5ada9578d0da8159bfe3b590107) are immutable commit objects.
 
 ```text
 git merge-tree --write-tree \
@@ -305,8 +308,8 @@ git diff --quiet a27ea892f5feb5ada9578d0da8159bfe3b590107^{tree} \
 # exit 0
 ```
 
-The fixture's source diff changed only the latency baseline among the two
-target snapshots; its hosted source run [33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602)
+The fixture's generated source-to-bot diff is the exact [PR #2462 generated diff](https://github.com/portpowered/you-agent-factory/pull/2462/files) ([raw diff](https://github.com/portpowered/you-agent-factory/pull/2462.diff)); it changed only the latency baseline among the two
+target snapshots. Its hosted source run [33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602)
 recorded exact deadcode and unit-lane success. This is a tree/ordering
 characterization, not synthetic proof of a future candidate. For all three
 enabled conflict-free merge methods, the final content tree is what the
@@ -356,6 +359,9 @@ or manual merge repair is proposed.
   protected-main candidate remains unavailable because the plan returns 404.
 - The report-only PR's terminal required checks and merge, which are review-owned
   after implementation handoff.
+- The review-correction Windows Go/`make deadcode` wrappers did not provide
+  bounded exit statuses on the saturated host; this is retained as
+  `VAL-C12-006` and does not replace the hosted evidence.
 
 ## Story and project gate status
 
@@ -368,8 +374,8 @@ or manual merge repair is proposed.
 | Feasible result criterion | NOT APPLICABLE | No feasible witness exists under the pinned contract; package/file/symbol/test/owner fields are intentionally N/A. |
 | Infeasible result criterion | PASS | The pinned checker source, required contexts, exact merge-result selection, direct comparison outputs, safe-class matrix, and operator decision boundary are recorded above. |
 | Governing plan authority | BLOCKED / NON-DECISIVE | `docs/temp/stability-cleanup.md` is absent at the pin; the policy contradiction does not rely on reconstructing its “useful” definition. |
-| `VAL-001` | PASS — clean-room replay | The story-003 validator independently replayed the pinned identities, checker behavior, merge tree, artifact checker, and safe-class contradiction; the missing plan and report-PR terminal state remain explicit unproven edges. |
-| Report PR handoff | READY | The report-only artifact is validated and ready for its final push; implementation must open the report PR and confirm required checks start. |
+| `VAL-001` | PASS — clean-room replay | The story-003 validator independently replayed the pinned identities, checker behavior, merge tree, artifact checker, safe-class contradiction, and the corrected Windows diagnostic; the missing plan and corrected report-PR terminal state remain explicit unproven edges. |
+| Report PR handoff | READY | Existing [PR #2469](https://github.com/portpowered/you-agent-factory/pull/2469) is the report-only delivery PR; the correction revision is ready for its final push and required-check start. |
 
 ## Verdict and smallest next step
 
@@ -413,14 +419,14 @@ No source or CI mutation is requested by this decision.
 | --- | --- | --- | --- |
 | `GATE-PIN` and `GATE-LINEAGE` | PASS | Fresh checkout resolved to the pinned 40-character SHA with empty status. `gh api` independently returned tree `444f780c53deff8660ab87a1c2f8ce1fe0667dc4`, parent `a27ea892f5feb5ada9578d0da8159bfe3b590107`, all twelve recorded source/baseline blobs, the two active rulesets, repository merge settings, PR identities, run identities, jobs, artifacts, and the cited URLs. | A later main or ruleset change is outside this pinned replay and requires a new admission probe. |
 | Feasible result criterion | NOT APPLICABLE | The report's infeasible result is reproduced below; no package/file/symbol/test witness is counted. | A future policy change could create a different candidate space. |
-| Infeasible result criterion | PASS | Pinned policy tests passed 51/51. The exact hosted latency artifact from run `33278765602`, artifact `9722470916`, passed the pinned budget checker with three samples, 445 packages, 18,239 tests, 61.72% median improvement, and 6.26% maximum-above-median. The safe-class matrix and the required merge-result deadcode comparison still yield the same contradiction. | This lane does not run a future source PR; the contradiction is the authorized proof for the pinned policy. |
+| Infeasible result criterion | PASS | Pinned policy tests passed 51/51. The exact hosted latency artifact from [run 33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602), [artifact 9722470916](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722470916), passed the pinned budget checker with three samples, 445 packages, 18,239 tests, 61.72% median improvement, and 6.26% maximum-above-median. The safe-class matrix and the required merge-result deadcode comparison still yield the same contradiction. | This lane does not run a future source PR; the contradiction is the authorized proof for the pinned policy. |
 | Exactly one result applies | PASS | The report explicitly marks `Infeasible result: PASS` and `Feasible result: NOT APPLICABLE`; no forbidden baseline or bypass route is included. | The operator-owned decision boundary remains whether the no-baseline-commit constraint changes in a new lane. |
 | Facts, inference, and unproven edges | PASS | The report keeps immutable observations, policy deductions, missing-plan authority, platform diagnostics, and review-owned delivery edges in separate sections. The validator reproduced the cited objects without converting missing evidence into success. | The governing `docs/temp/stability-cleanup.md` remains absent at the pin and returns 404. |
 | No repository/GitHub mutation outside the owned report and ordinary PR | PASS | The clean-room checkout stayed clean; all remote calls were reads; no source, generated baseline, workflow, ruleset, setting, branch, or experimental PR was changed. Final three-dot scope proof is required immediately before delivery. | Review may merge the ordinary report PR after implementation handoff. |
 | No weakened comparison, generated baseline commit, bypass, synthetic-only simulation, platform trick, or no-op test | PASS | Pinned unit tests include deadcode drift as a blocking no-allowance result and required-result propagation. The replay used the real hosted artifact and real merge tree; the Windows deadcode mismatch was retained as a non-authoritative diagnostic. | Hosted execution of an unimplemented future source witness is intentionally not proved. |
 | No local timing threshold | PASS | The validator replayed the existing hosted artifact through `make test-unit-latency-budget`; it introduced no wall-clock threshold or local performance claim. | Future source performance remains hosted package/PR CI evidence. |
-| `VAL-001` clean-room validator | PASS | Every project criterion has a PASS, NOT APPLICABLE, or BLOCKED/review-owned row, with exact evidence and an unproven edge. The shallow-ancestry merge-tree failure and absent governing plan are recorded as findings with no silent production repair. | The review-owned terminal CI comment and merge are not implementation-stage evidence. |
-| `GATE-REPORT-CI` implementation handoff | BLOCKED — REVIEW-OWNED TERMINAL | The report is ready for a final report-only push. The implementation finish condition is the final head pushed, an open PR, and required checks started; review must later record terminal Backend Lint and Verification Policy results in a PR comment. | At this report revision the ordinary report PR has not yet been opened; terminal checks and merge remain outside implementation ownership. |
+| `VAL-001` clean-room validator | PASS | Every project criterion has a PASS, NOT APPLICABLE, or BLOCKED/review-owned row, with exact evidence and an unproven edge. The shallow-ancestry merge-tree failure, absent governing plan, and corrected Exit 1/Exit 2 discrepancy are recorded as findings with no silent production repair. | The corrected report head's terminal CI and merge are not implementation-stage evidence. |
+| `GATE-REPORT-CI` implementation handoff | READY FOR HANDOFF | Existing [PR #2469](https://github.com/portpowered/you-agent-factory/pull/2469) is open. Its prior head [`d0c37a0a534a70637a664b7063aeaa0457307a6a`](https://github.com/portpowered/you-agent-factory/commit/d0c37a0a534a70637a664b7063aeaa0457307a6a) received terminal [Backend Lint job 99186042768](https://github.com/portpowered/you-agent-factory/actions/runs/33284808735/job/99186042768) and [Verification Policy job 99187187835](https://github.com/portpowered/you-agent-factory/actions/runs/33284808735/job/99187187835); the corrected head requires a new CI run. | Implementation stops after the corrected final head is pushed and required checks start; terminal checks and merge remain review-owned. |
 
 ### Customer journey
 
@@ -438,6 +444,7 @@ No source or CI mutation is requested by this decision.
    169 tests, 168 passed, 1 skipped, and 0 failed.
 3. `gh run download 33278765602 --repo portpowered/you-agent-factory
    --name backend-unit-latency-evidence --dir <fresh-artifact-directory>`
+   ([artifact 9722470916](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722470916))
    exited `0`. Running `make test-unit-latency-budget` with the three
    downloaded `run-1.v2.json`, `run-2.v2.json`, and `run-3.v2.json` files
    exited `0` and emitted:
@@ -471,14 +478,41 @@ No source or CI mutation is requested by this decision.
    `main-protect`/`must-pass-pr` rulesets, exact merge settings, the PR
    `#2462` source-to-bot identities, PR/check/run/artifact identities for the
    predecessor chain, and the current-pin CI/regeneration identities already
-   recorded in the ledger. The reports' links remain immutable URLs; the
-   live `main` move is not substituted for the pin.
+   recorded in the ledger. The report's direct links identify those immutable
+   objects; the live `main` move is not substituted for the pin.
 7. The replayed contradiction is therefore unchanged: any ordinary source
    merge with `D(M) != dB` is checked by required Backend Lint at merge-result
    SHA `M` and fails the no-allowance deadcode policy, while `D(M) == dB`
    cannot produce deadcode snapshot drift. Direct test-inventory, stale-base,
    merge-method, call-graph, and existing-ordering classes cannot escape that
    result.
+
+8. Review-correction replay: a fresh disposable checkout at
+   `C:\Users\andre\AppData\Local\Temp\c12-review-clean-room-20260830` was
+   detached at `995137125a6f90bec0284cbe2ea1783e70b5d063`; its initial
+   `git status --porcelain=v1` was empty. The independent Node policy command
+   exited `0` with 51/51 tests passed, and `make test-ci-workflows` exited `0`
+   with 169 tests, 168 passed, 1 skipped, and 0 failed. The real
+   `gh run download 33278765602 --repo portpowered/you-agent-factory
+   --name backend-unit-latency-evidence --dir .artifacts/unit-latency` command
+   exited `0` and produced the three version-2 samples plus their status,
+   stdout, and stderr files.
+9. The downloaded samples were checked by a binary compiled from the pinned
+   `cmd/unitlanebudget` source. Its direct invocation exited `0` and emitted
+   the recorded 97.471/91.656/91.728-second samples, 61.72% improvement,
+   6.26% maximum-above-median, 445-package/18,239-test inventory, zero cached
+   or unknown packages, and `Result: pass`. The same pinned checkout's
+   `git fetch --unshallow origin` exited `0`; `git merge-tree --write-tree`
+   exited `0` with result tree `c05d9943274d8789dc0791d821f2bd1b76a56311`,
+   and the result-versus-committed-merge tree comparison exited `0`.
+10. The Go `go test ./cmd/deadcodecheck ./cmd/unitlanebudget` and `make
+    test-unit-latency-budget` wrappers emitted their expected passing output
+    but did not return within the bounded host window; the direct compiled
+    latency checker above supplied the observed exit `0`. The exact Windows
+    `make deadcode` replay was separately bounded at 180 seconds and timed
+    out before producing a diagnostic. These are recorded as environment
+    boundaries, not converted into successful exit claims; the prior complete
+    clean-room `make deadcode` observation remains canonical Exit `2`.
 
 ### Cross-task integration and usability
 
@@ -499,8 +533,8 @@ No source or CI mutation is requested by this decision.
   changes no UI or browser surface.
 - Operational signals: every decisive command had an explicit exit status;
   remote objects were bound to SHA, ID, and URL; missing plan authority,
-  shallow ancestry, Windows checker variance, and review-owned terminal CI
-  remain visible rather than being normalized away.
+  shallow ancestry, Windows checker variance, Go-wrapper timeout, and
+  review-owned terminal CI remain visible rather than being normalized away.
 
 ### Findings
 
@@ -508,8 +542,10 @@ No source or CI mutation is requested by this decision.
 | --- | --- | --- | --- | --- | --- |
 | `VAL-C12-001` | Info | Run the initial shallow-checkout merge-tree command with the cited base and head tips. | A clean-room replay should have the common ancestry needed for the exact historical merge. | Git exited `128` with `fatal: refusing to merge unrelated histories`; `git fetch --unshallow origin` in the disposable checkout restored ancestry, after which the exact command exited `0` and matched the recorded result tree. | Clean-room command output and result-tree comparison above. |
 | `VAL-C12-002` | Blocked / non-decisive authority | Inspect `docs/temp/stability-cleanup.md` at the pinned SHA and query its immutable contents URL. | The PRD-named governing plan would be available to validate the source-plan wording. | `git ls-tree` returned no path and GitHub returned HTTP `404 Not Found`. The policy contradiction does not depend on reconstructing the missing plan, so no source or decision was silently repaired. | Pinned checkout inspection and `gh api repos/portpowered/you-agent-factory/contents/docs/temp/stability-cleanup.md?ref=995137125a6f90bec0284cbe2ea1783e70b5d063`. |
-| `VAL-C12-003` | Info | Run `make deadcode` on the Windows disposable checkout. | Local diagnostics must not be confused with hosted Ubuntu admission. | Exit `2`; current 3,072 findings versus 3,074 committed findings. The result is retained only as a platform boundary. | Exact command output above and hosted artifact `9722393303`/run `33278765602` recorded in the ledger. |
-| `VAL-C12-004` | Review-owned | Complete the clean-room replay before report delivery. | Review-owned GATE-REPORT-CI requires terminal Backend Lint and Verification Policy results recorded in a PR comment after handoff. | No report PR or terminal result exists at this report revision; implementation must create the ordinary report-only PR and stop once required checks start. | Implementation-stage boundary in the PRD and handoff row above. |
+| `VAL-C12-003` | Info | Run `make deadcode` on the Windows disposable checkout. | Local diagnostics must not be confused with hosted Ubuntu admission. | The complete prior clean-room observation was Exit `2`; current 3,072 findings versus 3,074 committed findings. The review-correction replay of the same wrapper timed out at 180 seconds before output, so no new exit status is inferred. The result is retained only as a platform boundary. | Exact command output above, bounded timeout in customer-journey step 10, and [hosted artifact 9722393303](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602/artifacts/9722393303) / [run 33278765602](https://github.com/portpowered/you-agent-factory/actions/runs/33278765602) recorded in the ledger. |
+| `VAL-C12-004` | Review-owned | Complete the clean-room replay before report delivery. | Review-owned GATE-REPORT-CI requires terminal Backend Lint and Verification Policy results recorded in a PR comment after handoff. | Existing [PR #2469](https://github.com/portpowered/you-agent-factory/pull/2469) had terminal checks on prior head [`d0c37a0a534a70637a664b7063aeaa0457307a6a`](https://github.com/portpowered/you-agent-factory/commit/d0c37a0a534a70637a664b7063aeaa0457307a6a); the corrected head must receive a new run, after which implementation stops once required checks start. | Prior [Backend Lint job 99186042768](https://github.com/portpowered/you-agent-factory/actions/runs/33284808735/job/99186042768), [Verification Policy job 99187187835](https://github.com/portpowered/you-agent-factory/actions/runs/33284808735/job/99187187835), and implementation-stage boundary above. |
+| `VAL-C12-005` | Info / corrected evidence | Compare the prior report revision's local-real probe with the final clean-room replay of the same-named `make deadcode` command. | A single command/context must have one recorded exit status, or distinct wrappers and contexts must be named. | The prior report revision recorded Exit `1`, while the final clean-room replay recorded Exit `2`; no distinct wrapper/context was recorded. The prior Exit `1` entry was stale/underspecified, so the current table and customer journey canonicalize the replayed Exit `2` and retain this discrepancy rather than merging the observations silently. | [Prior report line 208 at head d0c37a0a534a70637a664b7063aeaa0457307a6a](https://github.com/portpowered/you-agent-factory/blob/d0c37a0a534a70637a664b7063aeaa0457307a6a/docs/temp/stability-cleanup/validation/c12-deliberate-witness-admission.md#L208) and the final clean-room output in customer-journey step 5 above. |
+| `VAL-C12-006` | Blocked / environment | Rerun the Go wrappers and the exact Windows `make deadcode` command in the review-correction disposable checkout. | Each bounded command should return an observable exit status before the loopback claims completion. | The Go wrappers emitted expected passing output but did not return in the host window; the bounded `make deadcode` wrapper timed out at 180 seconds before emitting a diagnostic. The direct compiled latency checker, Node policy tests, workflow tests, artifact download, merge-tree replay, and tree comparison all returned their recorded statuses, so no wrapper timeout is promoted to an admission result. | Review-correction replay steps 8–10 above; status is retained as BLOCKED for this environment edge. |
 
 ### Verdict
 
@@ -538,3 +574,40 @@ merge are review-owned unproven edges, not claims made by this replay.
   `GATE-CANDIDATE` wording; the current checker contradiction, clean-room
   replay, and report-only handoff evidence remain reusable only while their
   pinned identities match.
+
+### Delta-plan request: `VAL-C12-005` corrected evidence
+
+- Affected behavior and criterion: exact command evidence for `VAL-001` and
+  the report's separation of authoritative hosted results from local platform
+  diagnostics.
+- Root-cause evidence or remaining uncertainty: the prior report revision at
+  [`d0c37a0a534a70637a664b7063aeaa0457307a6a`](https://github.com/portpowered/you-agent-factory/commit/d0c37a0a534a70637a664b7063aeaa0457307a6a) recorded Exit `1` for
+  `make deadcode`, while the later clean-room replay recorded Exit `2`; the
+  earlier entry did not preserve enough wrapper/context detail to establish a
+  distinct invocation.
+- Smallest recommended correction/prerequisite: retain Exit `2` as the
+  canonical final replay result, keep the discrepancy finding, and require
+  future local probes to record the shell, wrapper, checkout, and raw output
+  with the exit status. If the historical Exit `1` provenance becomes
+  decision-relevant, rerun that exact invocation in a fresh disposable checkout
+  rather than inferring its cause.
+- Dependencies and retest scope: rerun only the clean-room command ledger and
+  `VAL-001` evidence review when that provenance is needed; the hosted
+  deadcode artifact and pinned infeasibility contradiction are unchanged.
+
+### Delta-plan request: `VAL-C12-006` environment boundary
+
+- Affected behavior and criterion: bounded local command-exit evidence for
+  `VAL-001`; this does not alter the remote-real admission decision.
+- Root-cause evidence or remaining uncertainty: the Windows Go wrappers did
+  not return after emitting their final output on the saturated host, and the
+  exact `make deadcode` wrapper timed out after 180 seconds without output.
+  The direct compiled latency checker returned exit `0`; the prior complete
+  clean-room deadcode observation returned exit `2`.
+- Smallest recommended correction/prerequisite: retain the blocked wrapper
+  status and use direct compiled checker execution or a clean host when a
+  wrapper exit status is specifically required. Do not infer a deadcode result
+  from the timeout or change the hosted admission conclusion.
+- Dependencies and retest scope: rerun only the affected Windows command
+  ledger if a clean host becomes available; Node policy, artifact, merge-tree,
+  and pinned contradiction evidence remain independently valid.
