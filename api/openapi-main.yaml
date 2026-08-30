@@ -3189,6 +3189,8 @@ components:
       $ref: './components/schemas/events/payloads/AgentRunResponseEventPayload.yaml'
     DispatchResponseEventPayload:
       $ref: './components/schemas/events/payloads/DispatchResponseEventPayload.yaml'
+    DispatchResultIgnoredEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchResultIgnoredEventPayload.yaml'
     WorkStateChangeEventPayload:
       $ref: './components/schemas/events/payloads/WorkStateChangeEventPayload.yaml'
     FactoryStateResponseEventPayload:

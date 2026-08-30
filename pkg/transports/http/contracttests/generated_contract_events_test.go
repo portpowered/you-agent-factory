@@ -654,6 +654,26 @@ func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {
 				OutputWork:               &[]factoryapi.Work{work},
 			}),
 		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-result-ignored",
+			Type:          factoryapi.FactoryEventTypeDispatchResultIgnored,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:                 8,
+				Tick:                     3,
+				EventTime:                eventTime,
+				TraceIds:                 &traceIDs,
+				WorkIds:                  &workIDs,
+				DispatchId:               &scriptDispatchID,
+				CurrentChainingTraceId:   stringPtr("chain-current-1"),
+				PreviousChainingTraceIds: &[]string{"chain-a", "chain-z"},
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchResultIgnoredEventPayload{
+				Reason:        factoryapi.WORKALREADYTERMINAL,
+				ResultOutcome: factoryapi.WorkOutcomeFailed,
+				ObservedState: factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			}),
+		},
 	}
 }
 

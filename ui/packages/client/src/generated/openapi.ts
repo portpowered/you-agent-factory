@@ -5042,6 +5042,16 @@ export interface components {
       outputResources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["StringMap"];
     };
+    /** @description Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded. */
+    DispatchResultIgnoredEventPayload: {
+      /**
+       * @description Stable reason the result was not applied.
+       * @enum {string}
+       */
+      reason: DispatchResultIgnoredEventPayloadReason;
+      resultOutcome: components["schemas"]["WorkOutcome"];
+      observedState: components["schemas"]["WorkState"];
+    };
     /** @description Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
     WorkStateChangeEventPayload: {
       workId: string;
@@ -7714,16 +7724,6 @@ export interface components {
     DispatchCancellation: {
       /** @enum {string} */
       reason: DispatchCancellationReason;
-    };
-    /** @description Diagnostic for a correlated dispatch result that was retained in canonical history but not applied because the current Work state is terminal. Dispatch and Work identity live in FactoryEvent.context; raw worker output and error text are intentionally excluded. */
-    DispatchResultIgnoredEventPayload: {
-      /**
-       * @description Stable reason the result was not applied.
-       * @enum {string}
-       */
-      reason: DispatchResultIgnoredEventPayloadReason;
-      resultOutcome: components["schemas"]["WorkOutcome"];
-      observedState: components["schemas"]["WorkState"];
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
@@ -11398,6 +11398,11 @@ export const HumanApprovalRequestedEventPayloadStatus = {
 } as const;
 export type HumanApprovalRequestedEventPayloadStatus =
   (typeof HumanApprovalRequestedEventPayloadStatus)[keyof typeof HumanApprovalRequestedEventPayloadStatus];
+export const DispatchResultIgnoredEventPayloadReason = {
+  WORK_ALREADY_TERMINAL: "WORK_ALREADY_TERMINAL",
+} as const;
+export type DispatchResultIgnoredEventPayloadReason =
+  (typeof DispatchResultIgnoredEventPayloadReason)[keyof typeof DispatchResultIgnoredEventPayloadReason];
 export const InferenceOutcome = {
   // The provider attempt returned a successful response.
   InferenceOutcomeSucceeded: "SUCCEEDED",
@@ -12264,11 +12269,6 @@ export const DispatchCancellationReason = {
 } as const;
 export type DispatchCancellationReason =
   (typeof DispatchCancellationReason)[keyof typeof DispatchCancellationReason];
-export const DispatchResultIgnoredEventPayloadReason = {
-  WORK_ALREADY_TERMINAL: "WORK_ALREADY_TERMINAL",
-} as const;
-export type DispatchResultIgnoredEventPayloadReason =
-  (typeof DispatchResultIgnoredEventPayloadReason)[keyof typeof DispatchResultIgnoredEventPayloadReason];
 export const GlobalConfigACPIntegrationTransport = {
   stdio: "stdio",
 } as const;
