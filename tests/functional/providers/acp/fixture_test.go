@@ -201,7 +201,6 @@ func loadACPFixtureFromArgs() (config acpFixtureConfig, present bool, err error)
 // and that valid functional and golden payloads are accepted by their own
 // process entrypoints.
 func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
-	t.Parallel()
 	relativePath := filepath.Join("relative", "marker")
 	cases := []struct {
 		name    string
@@ -219,9 +218,7 @@ func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
 		{name: "unknown field", payload: base64.RawURLEncoding.EncodeToString([]byte(`{"kind":"functional","mode":"1","unexpected":true}`))},
 	}
 	for _, testCase := range cases {
-		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
 			command := exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$", "--", acpFixtureFlagPrefix+testCase.payload)
 			output, err := command.CombinedOutput()
 			if err == nil {
@@ -234,7 +231,6 @@ func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
 	}
 
 	t.Run("valid functional fixture decodes", func(t *testing.T) {
-		t.Parallel()
 		fixture := functionalACPFixture("serialize")
 		fixture.SessionID = "session-1"
 		fixture.PromptSignalPath = filepath.Join(t.TempDir(), "signal")
@@ -244,14 +240,13 @@ func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
 		}
 	})
 	t.Run("valid golden fixture selects golden peer", func(t *testing.T) {
-		t.Parallel()
 		command := exec.Command(os.Args[0], "-test.run=^TestACPGoldenRPCPeerProcess$", "--", acpFixtureFlagPrefix+encodeACPFixture(goldenACPFixture("success")))
+		t.Parallel()
 		if output, err := command.CombinedOutput(); err != nil {
 			t.Fatalf("golden peer rejected a valid invocation-scoped fixture: %v; output=%s", err, output)
 		}
 	})
 	t.Run("production secret stays out of fixture arguments", func(t *testing.T) {
-		t.Parallel()
 		const secret = "super-secret-token"
 		command := exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", functionalACPFixture("stderr"))...)
 		command.Env = append(os.Environ(), "ACP_TEST_API_TOKEN="+secret)
