@@ -94,6 +94,7 @@ func TestPrepareRunSystemInitializationDefersOnlyProfileSelectedBatch(t *testing
 	tests := []struct {
 		name         string
 		cfg          runcli.RunConfig
+		changedFlag  string
 		wantDeferred bool
 	}{
 		{
@@ -102,6 +103,7 @@ func TestPrepareRunSystemInitializationDefersOnlyProfileSelectedBatch(t *testing
 				WorkFile:                "one-work.json",
 				MockWorkersEnabled:      true,
 				DisableDefaultRecording: true,
+				Port:                    7437,
 			},
 			wantDeferred: true,
 		},
@@ -174,6 +176,26 @@ func TestPrepareRunSystemInitializationDefersOnlyProfileSelectedBatch(t *testing
 				ListenExplicit:          true,
 			},
 		},
+		{
+			name:        "explicit factory path",
+			changedFlag: "factory",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				FactoryConfigPath:       "factory.json",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+			},
+		},
+		{
+			name:        "explicit factory directory",
+			changedFlag: "dir",
+			cfg: runcli.RunConfig{
+				WorkFile:                "one-work.json",
+				Dir:                     "factory",
+				MockWorkersEnabled:      true,
+				DisableDefaultRecording: true,
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -181,6 +203,12 @@ func TestPrepareRunSystemInitializationDefersOnlyProfileSelectedBatch(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "run"}
 			cmd.SetContext(context.Background())
+			if test.changedFlag != "" {
+				cmd.Flags().String(test.changedFlag, "", "")
+				if err := cmd.Flags().Set(test.changedFlag, "selected"); err != nil {
+					t.Fatalf("set changed flag %q: %v", test.changedFlag, err)
+				}
+			}
 			options := CommandFactory{
 				initializer: startupcli.Functions{
 					InitializeSystemFunc: func(context.Context, string) error { return nil },
@@ -227,6 +255,41 @@ func TestDeferredBatchSystemInitializationDoesNotInvokeInitializer(t *testing.T)
 	}
 	if calls != 0 {
 		t.Fatalf("InitializeSystem calls = %d, want 0 for deferred batch", calls)
+	}
+}
+
+func TestExactFiniteMockBatchCommandDefersSystemInitialization(t *testing.T) {
+	var initialized int
+	var got runcli.RunConfig
+	workingDirectory := t.TempDir()
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error {
+				initialized++
+				return nil
+			},
+			RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+				got = testRunConfig(selection)
+				return nil
+			},
+		},
+	)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	root.SetArgs([]string{
+		"run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--no-record",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute finite mock batch command: %v", err)
+	}
+	if initialized != 0 {
+		t.Fatalf("InitializeSystem calls = %d, want 0 for exact finite mock batch command", initialized)
+	}
+	if got.WorkFile != "one-work.json" || !got.MockWorkersEnabled || got.MockWorkersConfigPath != "accept.json" || !got.DisableDefaultRecording {
+		t.Fatalf("parsed batch config = %+v, want work, mock worker, config path, and no-record inputs", got)
 	}
 }
 

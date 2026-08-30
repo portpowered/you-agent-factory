@@ -481,7 +481,7 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 	if options.initializer == nil {
 		return false, fmt.Errorf("system initializer is required")
 	}
-	if deferBatchSystemInitialization(*cfg) {
+	if deferBatchSystemInitialization(cmd, *cfg) {
 		return false, nil
 	}
 	return true, nil
@@ -494,7 +494,10 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 // request explicitly disables durable recording. Server, recording/replay,
 // named/bootstrap, continuous, and real-worker invocations retain the normal
 // initialization boundary.
-func deferBatchSystemInitialization(cfg runcli.RunConfig) bool {
+func deferBatchSystemInitialization(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	if cmd != nil && (cmd.Flags().Changed("dir") || cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")) {
+		return false
+	}
 	return strings.TrimSpace(cfg.WorkFile) != "" &&
 		!cfg.Continuously &&
 		cfg.MockWorkersEnabled &&
@@ -505,7 +508,6 @@ func deferBatchSystemInitialization(cfg runcli.RunConfig) bool {
 		!cfg.WithServer &&
 		!cfg.WithSite &&
 		!cfg.ListenExplicit &&
-		cfg.Port <= 0 &&
 		!cfg.Bootstrap &&
 		strings.TrimSpace(cfg.NamedFactoryName) == ""
 }
