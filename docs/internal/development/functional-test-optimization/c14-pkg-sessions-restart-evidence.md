@@ -732,8 +732,8 @@ and PR handoff gates.
 - Behavior lane: `BEH-C14-RESTART`.
 - Story: `fto-c14-pkg-sessions-restart-003`, with the exact shared-binary and
   partial-setup witnesses from story 002 rechecked as affected prerequisites.
-- Implementation/test head: `8a1f3edb09df6a99b452338dd6cec0ff79bf5d4d`.
-- Base: `origin/main` `c1e2884aeedb57949bf8208c5cc2aecac2e9e32d`.
+- Implementation/test head: `cc08b6377fe1008c38b20330255887f7cd713633`.
+- Base: `origin/main` `a9f108bef55aa9115191661c4b3fc3c2e5ebf619`.
 - Environment: Windows/amd64, Go `go1.25.0`, `CGO_ENABLED=1`.
 - Dependency fidelity: `local_real` built CLI, real daemon/server processes,
   loopback, filesystem, recording, child-process, and existing controlled
@@ -741,7 +741,7 @@ and PR handoff gates.
 - Cost: zero paid or remote-provider calls.
 
 This section supersedes the earlier exact-head sections that reference
-`977d6809`, `15f8c2fd`, `c9e3e727`, `1f6cd451`, or an earlier `origin/main`. The rebase
+`977d6809`, `15f8c2fd`, `c9e3e727`, `1f6cd451`, `8a1f3edb`, or an earlier `origin/main`. The rebase
 completed without conflict, and no implementation or shared-support repair was
 made while collecting the evidence below.
 
@@ -754,8 +754,8 @@ made while collecting the evidence below.
   go test ./tests/functional/sessions/restart/... -count=1 -run '^TestBoardPersistenceCLIRestartRoundTrip$' -v
   ```
 
-  Exit `0`; the real restart journey passed in `13.29s`, with package elapsed
-  `13.382s`. Its output showed one package-scoped immutable CLI path with
+  Exit `0`; the real restart journey passed in `10.33s`, with package elapsed
+  `10.397s`. Its output showed one package-scoped immutable CLI path with
   `builds=1`, three isolated daemon session IDs, and the initial active
   dispatch witness. The public submit, readiness, Worker Session, clean-stop,
   replay/re-arm, release-file, response, persistence, and second-restart
@@ -780,7 +780,7 @@ made while collecting the evidence below.
   go test ./tests/functional/sessions/restart/... -count=3 -v
   ```
 
-  Exit `0`; package elapsed `56.243s`. All eight selectors passed in all three
+  Exit `0`; package elapsed `81.243s`. All eight selectors passed in all three
   repetitions. Each normal process reused one package build (`builds=1`), the
   helper path observed zero package builds, and the partial-setup child kept
   its nonzero status, diagnostic, no-scenario marker, and cleanup assertions.
@@ -793,10 +793,10 @@ made while collecting the evidence below.
 - Procedure:
 
   ```text
-  go test ./tests/functional/sessions/restart/... -count=1 -v
+  go test ./tests/functional/sessions/restart/... -count=1
   ```
 
-  Exit `0`; package elapsed `50.933s`. The direct probe, helper selector, all
+  Exit `0`; package elapsed `21.108s`. The direct package proof, helper selector, all
   three board persistence/restart selectors, logical remap, resume, and
   history selectors passed. The package log showed one normal-process CLI
   build and no helper recursion. The pre-change seven-selector and 148
@@ -812,7 +812,7 @@ made while collecting the evidence below.
   go test -race ./tests/functional/sessions/restart/... -count=1 -v
   ```
 
-  Exit `0`; package elapsed `77.541s` on Windows/amd64 with Go `go1.25.0` and
+  Exit `0`; package elapsed `37.867s` on Windows/amd64 with Go `go1.25.0` and
   `CGO_ENABLED=1`. All eight selectors passed, including the bounded partial
   setup probe. No race report, helper recursion, orphan process, or cleanup
   failure was emitted.
@@ -825,8 +825,8 @@ made while collecting the evidence below.
 - Final isolated procedure: three sequential successful PowerShell stopwatch
   runs of `go test ./tests/functional/sessions/restart/... -count=1`, each
   with exit-code enforcement and captured package output.
-- Final outer samples: `57.45s`, `59.86s`, and `52.64s`; sorted median
-  `57.45s`, exit `0` for every run. The median is `30.14%` slower than the
+- Final outer samples: `35.25s`, `33.85s`, and `31.82s`; sorted median
+  `33.85s`, exit `0` for every run. The median is a `23.32%` reduction from the
   baseline, so no 40% reduction is claimed.
 - The bounded optimization remains profile-backed: the source and runtime
   topology reduce three identical package CLI builds to exactly one normal
@@ -856,13 +856,13 @@ made while collecting the evidence below.
 
 - Status: **PASS** for the clean local-real loopback.
 - A detached clean worktree at implementation/test head
-  `8a1f3edb09df6a99b452338dd6cec0ff79bf5d4d` ran:
+  `cc08b6377fe1008c38b20330255887f7cd713633` ran:
 
   ```text
   go test ./tests/functional/sessions/restart/... -count=1
   ```
 
-  The command exited `0` with package elapsed `20.266s`; the temporary
+  The command exited `0` with package elapsed `19.859s`; the temporary
   worktree was removed after the run. No implementation repair occurred. The
   complete package crossed the real CLI, daemon/server, restart, persistence,
   malformed/missing state, remap, resume, history, cancellation, and cleanup
@@ -874,8 +874,10 @@ made while collecting the evidence below.
 
 ### Repository quality gate
 
-- `make test` exited `0` on this head in `202.29s`. The unitlane report recorded
-  169 tests, 168 passed, 0 failed, and 1 skipped; the skip was an existing Windows
+- `make test` exited `0` in `202.29s` on the immediately preceding
+  code-equivalent rebased head. The latest ancestry-only rebase changed no
+  owned implementation or evidence path. The unitlane report recorded 169
+  tests, 168 passed, 0 failed, and 1 skipped; the skip was an existing Windows
   privilege/platform condition. No failure was caused by the restart-package
   diff.
 
