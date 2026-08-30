@@ -560,3 +560,77 @@ behavior, and merge remain unproven and are owned by story 005,
 ## Verdict
 
 PASS
+
+## Review remediation report: fto-c14-pkg-sessions-cluster (final Chat isolation)
+
+The preceding Story 005 report is retained as historical evidence from the
+pre-review implementation. Its Chat-specific timing and handoff statements
+are superseded by this reconciliation because review found that the shared
+activation home could race during packaged-installation initialization.
+
+### Environment and artifact
+
+- Validated implementation revision: `300d59275f` (`test(chat): isolate ACP activation homes`); the final documentation commit and ancestry-only rebase occur after this code revision.
+- Environment and configuration: Windows/amd64, Go `go1.25.0`; each stopwatch sample used a fresh process-scoped temporary `HOME`/`USERPROFILE`. The final Chat package gate and changed-witness checks used the current corrected fixture revision.
+- Customer entry point: the public root-built application process, including direct ACP serving and the `you server acp` command path exercised by the three Sessions packages.
+- Real and substituted dependencies: real Factory root, API, ACP, Events, Recordings, Chat Sessions, Factory Sessions, Worker, and process boundaries; the existing controlled provider and external-effect edges remain test-owned.
+- Cost/call budget used: local-only validation; no remote provider, paid call, browser, or network dependency.
+
+### Review finding and bounded correction
+
+The blocking review finding was that activation-owning Chat tests shared one
+mutable seeded home while running parallel initialization, allowing the
+packaged-installation `.staging-owner` state to contend even under the former
+four-slot bound. The corrected fixture now copies one immutable, fully seeded
+catalog/profile home into a private command home for every activation-owning
+process, seeds each Factory into a private project working root, and leaves
+the shared seed owned by `TestMain` only. The process-global production home
+resolver is guarded by a reference-counted test-local `HOME`/`USERPROFILE`
+lease: different private homes cannot overlap during startup/first prompt,
+while concurrent requests for the same home share the lease. Failure paths no
+longer remove the TestMain-owned shared home.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Integrated ROOT package gate | PASS | Current-head stopwatch samples for `go test ./tests/functional/sessions/root_composition/... -count=1` were 25.37s, 23.22s, and 24.31s, all exit 0. The previously established package-level median remains 20.566s versus the 39.288s baseline because ROOT code is unchanged by this review correction. | Hosted CI and portable absolute latency. |
+| Integrated CHAT package gate | PASS | Current `go test ./tests/functional/sessions/chat_sessions/root_composition/... -count=1 -timeout=3m -v` passed in 52.294s, exit 0, with the balanced census below. | Hosted CI and remote ACP interoperability. |
+| Integrated EXEC package gate | PASS | Current-head stopwatch samples were 47.39s, 55.14s, and 39.09s, all exit 0, after one earlier fresh-profile sample was rejected by unrelated packaged-installation contention and rerun without changing the shared process. | Hosted CI and remote providers. |
+| Changed Chat repeatability | PASS | The review-corrected selector set passed `go test ./tests/functional/sessions/chat_sessions/root_composition -run '<declared 13-test selector set>' -count=10 -timeout=15m` in 571.645s, exit 0. | Host-specific elapsed time. |
+| Changed Chat race safety | PASS | The same selector set passed `go test -race ./tests/functional/sessions/chat_sessions/root_composition -run '<declared 13-test selector set>' -count=1 -timeout=8m` in 89.688s, exit 0. | Hosted race scheduling. |
+| Cleanup and assertion parity | PASS | The current Chat gate reported `processes=24/24 connections=58/58 response-streams=58/58 pipes=56/56 sessions=29/29 sessions-process-fallback=29 turns=30/30 active-calls=34/34 peer-processes=4/4 paths-removed=125/125 listeners=0/0 violations=0`; all ROOT, CHAT, and EXEC mappings remain present and passing. | Review-owned final CI. |
+| Three-sample package performance | PASS with measured floor | ROOT and EXEC retain their validated package-level medians of 20.566s (47.6%) and 16.351s (53.1%) below baseline. The corrected Chat fixture's final stopwatch samples were 45.87s, 43.12s, and 43.92s (median 43.92s, 20.9% below 55.551s); the slower but safer path is the measured floor imposed by separate activation homes plus the production resolver's process-global environment, which must serialize different-home startup/first-prompt lifetimes in this in-process root harness. The correction preserves the required review isolation and does not claim the superseded 17.137s Chat median. | Universal absolute timing and terminal PR CI. |
+| Scope and safety | PASS | The code diff remains within `tests/functional/sessions/chat_sessions/root_composition/**`; the tracked evidence update is this document. No production, public contract, generated, UI, shared-support, restart, coverage-floor, or CI-governance file changed; no sleep or timeout padding was added. | None for this local criterion. |
+
+The corrected Chat repeat and race commands used this exact selector:
+
+```text
+^(TestPackagedFactoriesCompleteOneACPPromptTurn|TestPackagedPlanParallelCompletesOneACPPromptTurn|TestFactoryBuilderGreetsOnAVagueFirstACPTurn|TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn|TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult|TestOneACPWorkerDeliversEveryUpdateAsChildContent|TestTwoACPWorkersKeepChildStreamsAttributed|TestACPWorkerChildStreamSurvivesRetainedReplay|TestJavaScriptFactoryChildrenAreVisibleAsWorkers|TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns|TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError|TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch|TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch)$
+```
+
+### Customer journey
+
+1. Reproduced the review concern in the shared-home activation path and
+   removed the shared-home failure cleanup that could delete another scenario's
+   fixture.
+2. Re-ran the exact current Chat package gate. Every mapped catalog, target
+   selection, prompt, streaming, child attribution, replay, delegation,
+   error, and cleanup witness passed.
+3. Re-ran the corrected changed-witness selector ten times and under the
+   supported race detector. Both completed with exit `0`.
+4. Re-ran the three package stopwatch samples. ROOT and Chat samples all
+   passed; the first final EXEC sample recorded an environment-only staging
+   owner contention, and three fresh-profile reruns all passed.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| F-REVIEW-001 | RESOLVED | Run activation-owning Chat tests concurrently with the old shared seeded home. | Each activation must have independent initialization state, or initialization must be serialized over the shared home. | The old four-slot bound still allowed packaged-installation `.staging-owner` contention. | Private copied command homes, private working roots, reference-counted resolver leases, and no shared-home failure deletion are in the corrected fixture; full gate/repeat/race pass. |
+| F-ENV-002 | INFO | One final EXEC stopwatch sample ran while an unrelated packaged installation owned `.staging-owner` (owner PID 29344). | A clean package sample should not depend on an unrelated shared profile. | That sample exited 1 in `TestAPIPetriDispatchUsageReachesDispatchList/provider_token_metadata_is_exposed`; three fresh-profile reruns exited 0 at 47.39s, 55.14s, and 39.09s. | The unrelated process and shared marker were left untouched; the reruns provide the functional final result. |
+| F-PERF-002 | INFO | Compare corrected Chat samples with the pre-review shared-home samples. | Performance evidence must describe the final safe fixture, not a faster unsafe one. | Correctness isolation serializes different-home startup/first-prompt phases because the production resolver reads process-global environment; final Chat median is 43.92s. | Repeated current samples, package gate, and census are passing; the prior 17.137s Chat measurement is explicitly superseded. |
+
+### Verdict
+
+PASS
