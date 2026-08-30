@@ -486,17 +486,13 @@ func (fixture *agyProcessFixture) runScenario(
 	if scenario.selector == agySharedTimeoutSelector {
 		wantFactoryEvents = 23
 	}
-	factoryEvents, err := readAgyFactoryEventsAfterResponse(
-		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	factoryEvents, listed, err := readAgyTerminalObservations(
+		context.Background(), fixture.baseURL, session.Id, scenario.selector, wantFactoryEvents, agySharedScenarioTimeout,
 	)
 	if err != nil {
-		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, err)
+		t.Fatalf("AGY %q terminal observations: %v", scenario.selector, err)
 	}
 	run.terminalObserved = true
-	listed, err := readAgySessionWork(context.Background(), fixture.baseURL, session.Id)
-	if err != nil {
-		t.Fatalf("AGY %q session projections: %v", scenario.selector, err)
-	}
 	// Deletion followed by normal EOF proves no frame was hidden.
 	assertAgyResponseEventStreamClosed(t, run, agySharedScenarioTimeout, scenario.selector, len(responseEvents))
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)

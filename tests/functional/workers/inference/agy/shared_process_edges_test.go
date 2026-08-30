@@ -283,6 +283,63 @@ func readAgyFactoryEventSnapshot(
 	return events, true, nil
 }
 
+// readAgyTerminalObservations overlaps the independent public ledger and Work
+// projections after the response stream has delivered its expected terminal
+// frames. The Factory Event count remains the publication barrier; if the
+// concurrently-read Work listing is still pre-terminal, one bounded refresh
+// preserves the final-state witness without serializing the common path.
+func readAgyTerminalObservations(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	selector string,
+	wantFactoryEvents int,
+	timeout time.Duration,
+) ([]factoryapi.FactoryEvent, factoryapi.ListWorkResponse, error) {
+	type factoryEventResult struct {
+		events []factoryapi.FactoryEvent
+		err    error
+	}
+	type workResult struct {
+		listed factoryapi.ListWorkResponse
+		err    error
+	}
+	observeContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	factoryEventsCh := make(chan factoryEventResult, 1)
+	workCh := make(chan workResult, 1)
+	go func() {
+		events, err := readAgyFactoryEventsAfterResponse(
+			observeContext, baseURL, sessionID, wantFactoryEvents, timeout,
+		)
+		factoryEventsCh <- factoryEventResult{events: events, err: err}
+	}()
+	go func() {
+		listed, err := readAgySessionWork(observeContext, baseURL, sessionID)
+		workCh <- workResult{listed: listed, err: err}
+	}()
+	factoryEventsResult := <-factoryEventsCh
+	workObservation := <-workCh
+	if factoryEventsResult.err != nil || workObservation.err != nil {
+		return factoryEventsResult.events, workObservation.listed, errors.Join(
+			factoryEventsResult.err,
+			workObservation.err,
+		)
+	}
+	terminalState := "task:done"
+	if selector == agySharedTimeoutSelector {
+		terminalState = "task:failed"
+	}
+	if support.CountWorkAtCustomerState(workObservation.listed, terminalState) != 1 {
+		refreshed, err := readAgySessionWork(observeContext, baseURL, sessionID)
+		if err != nil {
+			return factoryEventsResult.events, workObservation.listed, fmt.Errorf("refresh Work projection: %w", err)
+		}
+		workObservation.listed = refreshed
+	}
+	return factoryEventsResult.events, workObservation.listed, nil
+}
+
 func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
 	return readAgyJSON[factoryapi.ListWorkResponse](ctx, endpoint)

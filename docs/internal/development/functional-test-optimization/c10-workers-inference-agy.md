@@ -538,6 +538,15 @@ passed when rerun once in isolation. No unrelated CI code was changed. Hosted
 timing remains the authoritative verdict and requires a fresh Backend
 Functional Coverage run on the pushed head.
 
+The latest bounded pass overlaps the final public Factory Event ledger read
+with the Work projection read after the exact response frames arrive. The
+retained event count remains the publication barrier; if the concurrent Work
+read is still pre-terminal, one bounded refresh preserves the final-state
+witness. The exact package run passed at `2.025s`, the focused `-count=3` run
+passed at `5.252s`, the race package passed at `4.522s`, and backend-size plus
+`git diff --check` passed. These local timings are diagnostic only; a fresh
+hosted Backend Functional Coverage run is required on the pushed head.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
