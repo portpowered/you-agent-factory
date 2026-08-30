@@ -35,6 +35,7 @@ export const FACTORY_EVENT_TYPES = {
   dispatchQueued: "DISPATCH_QUEUED",
   dispatchInterrupted: "DISPATCH_INTERRUPTED",
   dispatchReconciled: "DISPATCH_RECONCILED",
+  dispatchResultIgnored: "DISPATCH_RESULT_IGNORED",
   javascriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
   javascriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
   artifactCreated: "ARTIFACT_CREATED",
