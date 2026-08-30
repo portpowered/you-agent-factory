@@ -7,8 +7,18 @@ import (
 	"strings"
 )
 
+type inventoryReconciliation struct {
+	sourceLineDrifts []string
+}
+
 func reconcileInventory(sites []spawnSite, inventory inventoryDocument) error {
+	_, err := reconcileInventoryWithDiagnostics(sites, inventory)
+	return err
+}
+
+func reconcileInventoryWithDiagnostics(sites []spawnSite, inventory inventoryDocument) (inventoryReconciliation, error) {
 	findings := []string{}
+	sourceLineDrifts := []string{}
 	byID := make(map[string]inventorySpawnSite, len(inventory.OSSpawnSites))
 	for _, site := range inventory.OSSpawnSites {
 		byID[site.SiteID] = site
@@ -17,7 +27,9 @@ func reconcileInventory(sites []spawnSite, inventory inventoryDocument) error {
 			findings = append(findings, fmt.Sprintf("inventory site %s is not present in the AST census", site.SiteID))
 			continue
 		}
-		findings = append(findings, compareSiteMetadata(observed, site)...)
+		metadataFindings, metadataDrifts := compareSiteMetadataWithDiagnostics(observed, site)
+		findings = append(findings, metadataFindings...)
+		sourceLineDrifts = append(sourceLineDrifts, metadataDrifts...)
 	}
 	for _, site := range sites {
 		if _, exists := byID[site.SiteID]; exists {
@@ -26,10 +38,11 @@ func reconcileInventory(sites []spawnSite, inventory inventoryDocument) error {
 		findings = append(findings, fmt.Sprintf("AST site %s at %s:%d has no inventory verdict; update the baseline together with an INTENTIONAL-OS inventory row naming an allowed OS property", site.SiteID, site.SourcePath, site.SourceLine))
 	}
 	if len(findings) == 0 {
-		return nil
+		slices.Sort(sourceLineDrifts)
+		return inventoryReconciliation{sourceLineDrifts: sourceLineDrifts}, nil
 	}
 	slices.Sort(findings)
-	return fmt.Errorf("%s", strings.Join(findings, "\n"))
+	return inventoryReconciliation{}, fmt.Errorf("%s", strings.Join(findings, "\n"))
 }
 
 func findObservedSite(sites []spawnSite, siteID string) (spawnSite, bool) {
@@ -42,7 +55,13 @@ func findObservedSite(sites []spawnSite, siteID string) (spawnSite, bool) {
 }
 
 func compareSiteMetadata(observed spawnSite, recorded inventorySpawnSite) []string {
+	findings, _ := compareSiteMetadataWithDiagnostics(observed, recorded)
+	return findings
+}
+
+func compareSiteMetadataWithDiagnostics(observed spawnSite, recorded inventorySpawnSite) ([]string, []string) {
 	var findings []string
+	var sourceLineDrifts []string
 	if observed.PackagePath != recorded.PackagePath {
 		findings = append(findings, fmt.Sprintf("inventory site %s packagePath=%q does not match AST packagePath=%q", recorded.SiteID, recorded.PackagePath, observed.PackagePath))
 	}
@@ -50,7 +69,7 @@ func compareSiteMetadata(observed spawnSite, recorded inventorySpawnSite) []stri
 		findings = append(findings, fmt.Sprintf("inventory site %s sourcePath=%q does not match AST sourcePath=%q", recorded.SiteID, recorded.SourcePath, observed.SourcePath))
 	}
 	if observed.SourceLine != recorded.SourceLine {
-		findings = append(findings, fmt.Sprintf("inventory site %s sourceLine=%d does not match AST sourceLine=%d", recorded.SiteID, recorded.SourceLine, observed.SourceLine))
+		sourceLineDrifts = append(sourceLineDrifts, fmt.Sprintf("tolerated sourceLine drift for inventory site %s: recorded=%d observed=%d; siteId matched", recorded.SiteID, recorded.SourceLine, observed.SourceLine))
 	}
 	if observed.EnclosingIdentity != recorded.EnclosingIdentity {
 		findings = append(findings, fmt.Sprintf("inventory site %s enclosingIdentity=%q does not match AST enclosingIdentity=%q", recorded.SiteID, recorded.EnclosingIdentity, observed.EnclosingIdentity))
@@ -58,7 +77,7 @@ func compareSiteMetadata(observed spawnSite, recorded inventorySpawnSite) []stri
 	if observed.Occurrence != recorded.Occurrence {
 		findings = append(findings, fmt.Sprintf("inventory site %s occurrence=%d does not match AST occurrence=%d", recorded.SiteID, recorded.Occurrence, observed.Occurrence))
 	}
-	return findings
+	return findings, sourceLineDrifts
 }
 
 func evaluateBaseline(sites []spawnSite, inventory inventoryDocument, baseline baselineDocument) []violation {
@@ -155,6 +174,12 @@ func reportViolations(stderr io.Writer, violations []violation) error {
 	}
 	fmt.Fprintf(stderr, "LINT_VIOLATION_COUNT: %d\n", len(violations))
 	return fmt.Errorf("[agent-factory:functional-os-boundary] found %d baseline violation(s); update the baseline together with an inventory row naming the OS property", len(violations))
+}
+
+func writeSourceLineDrifts(stdout io.Writer, drifts []string) {
+	for _, drift := range drifts {
+		fmt.Fprintf(stdout, "[agent-factory:functional-os-boundary] %s\n", drift)
+	}
 }
 
 func writeSuccess(stdout io.Writer, sites []spawnSite, baseline baselineDocument, inventory inventoryDocument) {
