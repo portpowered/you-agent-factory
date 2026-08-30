@@ -650,3 +650,52 @@ PR, confirm required CI has started on that exact head, and comment the
 authoritative before median `44.1461053s`, final local median `40.1260758s`, and
 the PR CI run URL. Review owns terminal CI, any later conflict request, and
 merge; no CI result is committed to this branch.
+
+## Review follow-up: exact rebased head `c9e3e727d5f6`
+
+- Story: `fto-c14-pkg-sessions-restart-002` and
+  `fto-c14-pkg-sessions-restart-003`
+- Status: **BLOCKED pending exact post-rebase real-process package gates**.
+- Base: current fetched `origin/main` `47285a02c116394b0bdf3078cdd59909dc12e825`;
+  `git merge-base --is-ancestor origin/main HEAD` exited `0` and the three-dot
+  scope remains the three restart test files plus these two C14 documents.
+- Code correction: the direct CASE-U08 child probe now starts the test binary,
+  waits on one result channel with the test-only 20-second bound, kills on
+  expiry, and joins before reporting phase/output diagnostics. The nonzero
+  status, injected diagnostic, no-scenario marker, and partial-directory/
+  artifact cleanup assertions remain unchanged.
+
+The direct exact-head CASE-U08 procedure passed:
+
+```text
+go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceSharedBinaryPartialSetupFailure$' -count=1 -v
+```
+
+It exited `0` in `0.108s` on Windows/amd64. The child reported the injected
+failure, exited nonzero, wrote the allocated directory and artifact paths, and
+the parent observed both paths plus the scenario marker absent after child
+exit.
+
+The required focused real-process procedure was attempted twice on this exact
+head:
+
+```text
+go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceCLIRestartRoundTrip$' -count=1 -v
+```
+
+Both attempts exited `1` only after the existing `10m0s` Go test bound, before
+the scenario reached a daemon or any behavior assertion. The timeout stack was
+inside `buildBoardPersistenceBinary` waiting for its unchanged
+`exec.CommandContext(..., "go", "build", "-o", path, "./cmd/factory")` child.
+The shared Windows host had dozens of unrelated Go test/build processes; a
+separate real `go build ./cmd/factory` diagnostic produced a valid
+`75,951,616`-byte artifact but its Go command also failed to return under that
+host load. No package or scenario assertion failed, and no test timeout or
+sleep was changed.
+
+Consequently, the historical `GATE-SPINE`, `GATE-REPEAT`, `GATE-PACKAGE`,
+`GATE-RACE`, `GATE-PERF`, and `GATE-LOOPBACK` observations above are retained
+as prior-head evidence but do not satisfy the exact current-head gates. The
+current implementation remains blocked on a successful exact package build;
+the next run must repeat the complete package, supported race, clean-room
+loopback, and final PR handoff evidence without using a build substitute.

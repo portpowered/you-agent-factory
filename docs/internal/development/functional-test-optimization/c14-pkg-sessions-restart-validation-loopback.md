@@ -3,45 +3,50 @@
 ## Environment and artifact
 
 - Commit/build identifier: rebased implementation/test head
-  `15f8c2fd7bd4ab1d9aed55930ec2619086dc41c8`, validated in the clean-room
-  worktree below; this report-only refresh is included in the exact pushed PR
-  head and does not alter the implementation tree.
+  `c9e3e727d5f6b22e00e0f2b5cdedc2f847ef567d`; exact post-rebase runtime proof
+  remains blocked by the shared host's Go build completion failure.
 - Environment and configuration: Windows/amd64, Go `go1.25.0`,
   `CGO_ENABLED=1`, package command with `-count=1`; no paid or remote
   provider calls.
 - Customer entry point: the restart functional package's real `you` CLI and
   production-composed daemon/server boundaries.
-- Real and substituted dependencies: real local CLI build, OS processes,
-  loopback HTTP, filesystem, recording, and lifecycle boundaries; only the
-  existing controlled provider/test edges remain substituted.
+- Real and substituted dependencies: the direct CASE-U08 probe used the real
+  test binary, filesystem, and process boundary; the full restart journey was
+  not reached because its real CLI build command did not return on the shared
+  host. Existing controlled provider/test edges remain the only substitutes.
 - Cost/call budget used: `$0`; zero paid or remote-provider calls.
 
 ## Project criteria
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| One guarded package CLI build | PASS | `GATE-SPINE` and `GATE-REPEAT` logs show exactly one normal-process package build, zero `SCRIPT_WORKER` helper builds, and package teardown after child joins. | Hosted-runner topology. |
-| Restart behavior and assertion denominator | PASS | The final package's eight selectors passed: seven original behavior selectors plus the direct partial-setup probe. The seven-selector/148 lexical failure-call-site pre-change denominator and CASE-H01-H09, CASE-U01-U08, CASE-R01, and CASE-B01-B06 mapping remain intact; the probe adds only setup-cleanup assertions. | Unexercised future selectors. |
-| Complete package proof | PASS | From the clean-room worktree at the rebased implementation head, `go test ./tests/functional/sessions/restart/... -count=1` exited `0` and reported `32.456s`; the final package samples were also all successful. | Terminal PR CI and merge. |
-| Supported race proof | PASS | `go test -race ./tests/functional/sessions/restart/... -count=1` exited `0` on Windows/amd64 and reported `63.771s` on the rebased implementation head. | Unsupported platforms and all possible races. |
-| Performance or measured floor | PASS | The exact final three-run samples passed at `60.00s`, `36.20s`, and `40.13s`; median `40.1260758s` versus the `44.1461053s` baseline is a `9.10%` reduction. The bounded profile identifies one authorized setup optimization and classifies the remaining real process, state, wait, and assertion boundaries as required, so the permitted measured-floor branch is used rather than claiming 40%. | Portable wall-clock behavior; review-host package timing. |
+| One guarded package CLI build | BLOCKED | Direct CASE-U08 passed and the new probe is bounded, but two exact focused runs timed out inside the unchanged normal-process `go build ./cmd/factory` before package build completion could be observed. | Normal-process one-build topology on this exact head. |
+| Restart behavior and assertion denominator | BLOCKED | The prior-head seven-selector/148 lexical failure-call-site denominator and case mapping remain unchanged; exact post-rebase full-selector behavior was not reached. | All CASE-H/U/R/B runtime witnesses on this exact head. |
+| Complete package proof | BLOCKED | The required focused package attempt exited `1` after the existing `10m0s` test bound, before daemon/scenario execution. | Complete package behavior and cleanup. |
+| Supported race proof | BLOCKED | Not rerun after the rebase because the exact package build cannot complete on the shared host. | Race behavior on the exact head. |
+| Performance or measured floor | BLOCKED | Prior implementation-head samples remain historical evidence only; no comparable final samples were collected for `c9e3e727d5f6`. | Exact-head median/floor and PR package latency. |
 | Scope and C09 preservation | PASS | The rebased three-dot diff is limited to the three restart test files and C14 evidence files; fresh 30-second per-operation CLI contexts, no new sleeps, and no public/production/shared-support changes remain. | A future GitHub conflict request. |
-| Clean-room reproducibility | PASS | This report was produced after the exact-head detached worktree passed the complete package without repair; the worktree was clean before removal. | Future host behavior. |
+| Clean-room reproducibility | BLOCKED | The exact-head clean-room package proof was not run because the same real CLI build completion is unavailable under current host contention. | Clean checkout/worktree package proof. |
 | Security, privacy, compatibility, and cost | PASS | The loopback is local and sanitized, public contracts/generated files are unchanged, existing failure/cleanup diagnostics pass, and paid/remote calls are zero. | Unrelated system-wide controls. |
-| PR handoff | PASS | The final PR head is pushed/open with required CI started; the handoff comment records the baseline/final medians and the CI URL. | Review-owned terminal CI, conflict resolution, and merge. |
+| PR handoff | BLOCKED | PR #2455 remains open on the prior pushed head; this rebased head is not pushed and has no new CI run. | Final push, CI start, terminal CI, conflict resolution, and merge. |
 
 ## Customer journey
 
-1. A clean detached worktree at rebased implementation head `15f8c2fd7b`
-   (the exact final PR head's implementation parent) ran
-   `go test ./tests/functional/sessions/restart/... -count=1`; it exited `0`
-   after all eight selectors exercised the shared binary, real daemon/server
-   boundaries, restart/replay/persistence/failure paths, and teardown.
-2. The package logs retained one immutable CLI artifact per test process while
-   each board scenario kept its own Factory, HOME, recording, release path,
-   port, daemon lifecycle, and mutable expectations.
-3. The supported race command exited `0`; no data-race report, orphan process,
-   helper recursion, or cleanup failure was observed.
+1. The direct exact-head CASE-U08 command
+   `go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceSharedBinaryPartialSetupFailure$' -count=1 -v`
+   exited `0` in `0.108s`. It launched an isolated child copy of the test
+   binary, observed the injected nonzero setup failure and diagnostic, decoded
+   the allocated directory/artifact report, and verified both paths plus the
+   scenario marker were absent after child exit.
+2. The required focused real-process command
+   `go test ./tests/functional/sessions/restart/... -run '^TestBoardPersistenceCLIRestartRoundTrip$' -count=1 -v`
+   was attempted twice. Both attempts exited `1` after `10m0s` while waiting
+   for the unchanged `go build ./cmd/factory` child; neither reached a daemon,
+   CLI operation, or restart assertion.
+3. A separate real `go build ./cmd/factory` diagnostic produced a
+   `75,951,616`-byte artifact, but its command also failed to return under the
+   shared host's concurrent unrelated Go workloads. No build substitute was
+   used to claim the missing package proof.
 
 ## Cross-task integration and usability
 
@@ -51,28 +56,37 @@
 - Permission and error behavior: not changed; the existing public malformed,
   missing, timeout, cancellation, restart, remap, resume, and history
   diagnostics remain asserted.
-- Persistence/reload behavior: the real board recording, durable snapshot,
-  replay, logical identity, dispatch, and event-prefix witnesses remain in
-  the package proof.
+- Persistence/reload behavior: not exercised on this exact head; historical
+  prior-head evidence remains explicitly separated in the ledger.
 - Accessibility/keyboard/responsive behavior: not applicable; no UI or
   customer prose behavior changed.
-- Operational signals: process output, exit status, phase/last-observation
-  diagnostics, helper release boundaries, build count, and package cleanup
-  remain observable.
+- Operational signals: the bounded probe reports timeout phase, kill/join
+  outcome, and captured output; the package's existing daemon observations were
+  not altered.
 
 ## Findings
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| `FINDING-001` | INFO | Compare the final exact package samples with the unchanged-source baseline on the shared Windows host. | Local timing may vary under host load; topology remains the primary bounded optimization signal. | Final samples were `60.00s`, `36.20s`, and `40.13s`; all passed, with the required median `40.1260758s`. No unrelated process was terminated or modified. | `GATE-PERF` in the C14 evidence ledger. |
+| `FINDING-001` | BLOCKING | Run the exact focused selector twice on the rebased head under the current shared Windows host. | The package-owned CLI build returns and the real restart journey begins within the existing test bound. | Both runs reached the existing `10m0s` Go test timeout in `buildBoardPersistenceBinary` before scenario execution; the host had dozens of unrelated Go test/build processes. | C14 evidence ledger review-follow-up section. |
+| `FINDING-002` | BLOCKING | Attempt the exact-head clean-room package proof. | The clean worktree reports the complete package and race/cleanup evidence. | Deferred because the required real CLI build completion is currently unavailable; no substitute was used. | Project criteria above. |
 
 ## Verdict
 
-**PASS** for the local implementation-stage loopback. The final package, direct
-partial-setup cleanup probe, and race evidence are complete; the only owned
-redundant setup has been removed and no implementation defect was found. PR CI
-and merge remain review-owned.
+**BLOCKED** pending a successful exact post-rebase real-process package build and
+the resulting package, race, clean-room, performance, and PR handoff gates.
 
 ## Delta-plan request [Required for FAIL/BLOCKED]
 
-None; no FAIL or BLOCKED finding was identified.
+- Affected behavior and criterion: BEH-C14-RESTART, project criteria for the
+  exact package/race/loopback proof and final delivery handoff.
+- Root-cause evidence or remaining uncertainty: the unchanged nested
+  `go build ./cmd/factory` command creates a valid artifact but does not return
+  within the existing `10m0s` test bound while unrelated Go jobs saturate the
+  shared Windows host; the direct bounded CASE-U08 correction itself passes.
+- Smallest recommended correction/prerequisite: rerun the exact focused and
+  complete package commands when the shared Go build queue permits command
+  completion, then run supported race, clean-room loopback, final timing, push,
+  and CI-start handoff. Do not change the test timeout or substitute the build.
+- Dependencies and retest scope: GATE-SPINE, GATE-REPEAT, GATE-PACKAGE,
+  GATE-RACE, GATE-PERF, GATE-LOOPBACK, and GATE-PR-CI on the pushed exact head.
