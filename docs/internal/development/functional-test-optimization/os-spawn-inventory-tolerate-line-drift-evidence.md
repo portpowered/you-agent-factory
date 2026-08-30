@@ -8,16 +8,18 @@
   identity, metadata, count, and admission failures remain closed.
 - Status: **PASS for story 001 local evidence**. Story 002 owns the rebased
   real-repository, Make/lint, clean-room, and PR handoff gates.
-- Source plan: `null` in `prd.json`; no operator amendment is present.
+- Source plan: `null` in `prd.json`; operator amendment 1 authorizes the
+  narrowly scoped main-red inventory/baseline repair recorded below.
 - Branch: `os-spawn-inventory-tolerate-line-drift`.
 - Dependency fidelity: controlled temporary repositories through the
   production scanner, JSON loaders, reconciliation, baseline evaluator, and
   output boundary.
 - Cost and network: 0 remote calls, `$0` paid cost, no subprocesses started by
   the checker.
-- Scope audit: only `cmd/functionalosboundarycheck` and this ledger are
-  implementation-owned; no inventory, baseline, `tests/functional`, Make,
-  OpenAPI, generated, UI, or verdict data changed.
+- Scope audit: the operator amendment additionally authorizes the canonical
+  inventory/baseline maintenance required by the merged sessions-restart
+  spawn. No `tests/functional`, Make, OpenAPI, generated, UI, or existing
+  verdict data changed.
 
 ## Decision record
 
@@ -36,6 +38,30 @@ reviewer navigation; `sourcePath`, `packagePath`, `enclosingIdentity`, and
 The checker still performs one bounded filesystem walk and AST scan. Drift
 collection adds only bounded in-memory records and no new process, network,
 write, sleep, timing, or mutable package state.
+
+## AMENDMENT-MAIN-RED — merged-source reconciliation
+
+The operator amendment identified a real merge-boundary failure on `origin/main`
+after sessions-restart merge #2455. Running the unmodified checker from the
+clean `origin/main` worktree at `8b2c6ef8ea` produced exactly these three
+violations: the new `TestBoardPersistenceSharedBinaryPartialSetupFailure` call
+at line 169 had no inventory verdict; the existing
+`buildBoardPersistenceBinary` identity had recorded line 47 but observed line
+121; and the existing `startBoardPersistenceDaemonProcess` identity had
+recorded line 74 but observed line 252. The checker reported
+`LINT_VIOLATION_COUNT: 3` and exited nonzero. The first repair commit,
+`38c1d06879`, added the new `INTENTIONAL-OS` `exit-status` row, retained every
+existing verdict, refreshed the two moved source-line references, and raised
+the sessions/restart baseline from 3 to 4. The real `make
+functional-os-boundary-check` then exited 0 with
+`observed=70 baseline=70 packages=23 intentional=62 accidental=8 decreased=0`
+and `reconciled 70 inventory OS-spawn records`.
+
+Systemic recommendation: this gate pins a per-site inventory that any merge
+touching `tests/functional` can invalidate after that merge's own CI has
+passed; the repository should add either a post-merge `main` self-heal or a
+merge-queue re-check for this checker. This lane recommends that follow-up but
+does not build it.
 
 ## CHAR-CURRENT — pre-change characterization
 
@@ -117,13 +143,13 @@ Observed result: `PASS`, exit code `0`; package-reported result was
 existing schema, scanner, admission, metadata, ordering, recovery, and
 read-only regressions at controlled package fidelity.
 
-It does not prove the actual 69-site authored census, Make/lint-driver wiring,
-clean final-commit reproduction, hosted CI, or merge.
+It does not prove the amended actual 70-site authored census, Make/lint-driver
+wiring, clean final-commit reproduction, hosted CI, or merge.
 
 ## Remaining gates
 
-- Actual authored 69-site inventory/baseline reconciliation and exact
-  `69/69`, `23`, `61/8`, `decreased=0` counts -> `INT-REAL`.
+- Actual amended 70-site inventory/baseline reconciliation and exact
+  `70/70`, `23`, `62/8`, `decreased=0` counts -> `INT-REAL`.
 - Existing Make and lint-driver invocation -> `INT-LINT`.
 - Clean final-commit, read-only validation-loopback report ->
   `VAL-CLEAN-ROOM`.
@@ -131,4 +157,6 @@ clean final-commit reproduction, hosted CI, or merge.
   after implementation handoff.
 - Merge -> `REVIEW-MERGE`, review-owned.
 
-No hosted-CI result is claimed or recorded in this ledger.
+No current PR hosted-CI result is claimed or recorded in this ledger; the
+operator-supplied pre-fix `main` failure is recorded above as the scope
+amendment's finding.
