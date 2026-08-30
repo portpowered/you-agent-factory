@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -482,6 +483,95 @@ func TestListRejectsUnsupportedOutputFormat(t *testing.T) {
 		t.Fatalf("error = %v, want OUTPUT_UNSUPPORTED", err)
 	}
 }
+
+func TestListFailureDiagnosticsIdentifyTransportBodyAndDecodeStages(t *testing.T) {
+	secret := "secret-response-payload"
+	tests := []struct {
+		name      string
+		doer      clihttp.Doer
+		wantStage string
+	}{
+		{
+			name: "transport",
+			doer: listDoerFunc(func(*http.Request) (*http.Response, error) {
+				return nil, errors.New(secret)
+			}),
+			wantStage: "transport",
+		},
+		{
+			name: "body",
+			doer: listDoerFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(listFailingReader{err: errors.New(secret)})}, nil
+			}),
+			wantStage: "body",
+		},
+		{
+			name: "decode",
+			doer: listDoerFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{"))}, nil
+			}),
+			wantStage: "decode",
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			protocol, err := clihttp.NewProtocol(testCase.doer, testClock{})
+			if err != nil {
+				t.Fatalf("NewProtocol() error = %v", err)
+			}
+			var output bytes.Buffer
+			var diagnostics bytes.Buffer
+			err = NewList(protocol)(ListConfig{
+				Context: context.Background(), Server: "http://factory.test", WorkID: "work-1",
+				OutputFormat: "json", Output: &output, Diagnostics: &diagnostics, Verbose: true,
+			})
+			var typed *CLIError
+			if !errors.As(err, &typed) || typed.Code != "FACTORY_UNREACHABLE" {
+				t.Fatalf("error = %v, want FACTORY_UNREACHABLE", err)
+			}
+			if !strings.Contains(diagnostics.String(), "errorStage="+testCase.wantStage) {
+				t.Fatalf("diagnostics = %q, want errorStage=%s", diagnostics.String(), testCase.wantStage)
+			}
+			if strings.Contains(diagnostics.String(), secret) || strings.Contains(output.String(), secret) {
+				t.Fatalf("failure exposed response payload: diagnostics=%q output=%q", diagnostics.String(), output.String())
+			}
+			if strings.Contains(output.String(), `"sessions"`) {
+				t.Fatalf("failure output contains a success collection: %q", output.String())
+			}
+		})
+	}
+}
+
+func TestListOutputWriterFailureIsTypedAndDoesNotReportSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{{
+			WorkerSessionId: "worker-session-1", AttemptId: "attempt-1", WorkIds: []string{"work-1"},
+		}}})
+	}))
+	defer server.Close()
+
+	err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", OutputFormat: "json",
+		Output: listFailingWriter{err: errors.New("output sink unavailable")},
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_OUTPUT_FAILED" {
+		t.Fatalf("error = %v, want WORKER_SESSION_OUTPUT_FAILED", err)
+	}
+}
+
+type listDoerFunc func(*http.Request) (*http.Response, error)
+
+func (f listDoerFunc) Do(request *http.Request) (*http.Response, error) { return f(request) }
+
+type listFailingReader struct{ err error }
+
+func (reader listFailingReader) Read([]byte) (int, error) { return 0, reader.err }
+
+type listFailingWriter struct{ err error }
+
+func (writer listFailingWriter) Write([]byte) (int, error) { return 0, writer.err }
 
 type testClock struct{}
 
