@@ -21,7 +21,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
 	scenario, listed := runSharedProviderFactory(t, dir, support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch"), runner, 10*time.Second)
 	assertCursorProviderCompleted(t, listed)
 
@@ -46,12 +46,12 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
 	scenario, listed := runSharedProviderFactory(t, dir, support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch"), runner, 10*time.Second)
 	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
-	assertCommandArgs(t, req, []string{"exec", "--model", "test-codex-model", "-"})
+	assertCommandArgs(t, req, []string{"exec", "--json", "--model", "test-codex-model", "-"})
 	assertProviderStdin(t, req, executionTemplateWantPrompt(dir))
 	assertProviderExecutionFields(t, dir, req)
 	scenario.Stop(t)
