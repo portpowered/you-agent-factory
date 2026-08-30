@@ -267,6 +267,20 @@ func TestInspectRuntimeCacheRejectsIncompleteGenericManifest(t *testing.T) {
 func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testing.T) {
 	t.Parallel()
 
+	scope, service := newStalePinnedGenericRuntimeFixture(t)
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "embed",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	assertStalePinnedGenericRuntimeInspection(t, inspection)
+	assertStalePinnedGenericRuntimeUnavailable(t, service, scope)
+}
+
+func newStalePinnedGenericRuntimeFixture(t *testing.T) (models.RuntimeScopeRef, *service) {
+	t.Helper()
 	cacheDirectory := t.TempDir()
 	modelDirectory := filepath.Join(cacheDirectory, canonicalModelName("embed"))
 	staleRevision := strings.Repeat("a", 40)
@@ -278,16 +292,7 @@ func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testi
 	if err := os.WriteFile(filepath.Join(revisionDirectory, "model.safetensors"), staleBody, 0o644); err != nil {
 		t.Fatalf("write stale generic model artifact: %v", err)
 	}
-	metadata, err := json.Marshal(cacheMetadata{
-		ModelName: "embed",
-		Revision:  staleRevision,
-		Files: []metadataFile{{
-			Path: "model.safetensors", Bytes: int64(len(staleBody)), SHA256: sha256Hex(staleBody),
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal stale generic metadata: %v", err)
-	}
+	metadata := stalePinnedGenericRuntimeMetadata(t, staleRevision, staleBody)
 	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
 		t.Fatalf("write stale generic metadata: %v", err)
 	}
@@ -298,13 +303,26 @@ func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testi
 		t.Fatal("source-mismatched generic inspection used the network")
 		return nil, nil
 	}), func(string) string { return "" })
-	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope,
-		Name:  "embed",
+	return scope, service
+}
+
+func stalePinnedGenericRuntimeMetadata(t *testing.T, revision string, body []byte) []byte {
+	t.Helper()
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: "embed",
+		Revision:  revision,
+		Files: []metadataFile{{
+			Path: "model.safetensors", Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
 	})
 	if err != nil {
-		t.Fatalf("InspectRuntimeCache: %v", err)
+		t.Fatalf("marshal stale generic metadata: %v", err)
 	}
+	return metadata
+}
+
+func assertStalePinnedGenericRuntimeInspection(t *testing.T, inspection assets.RuntimeCacheInspection) {
+	t.Helper()
 	if !inspection.Supported || !inspection.ManifestPresent || !inspection.ManifestValid ||
 		inspection.Installed || inspection.IntegrityVerified ||
 		inspection.FailureReason != "managed cache does not match configured source" {
@@ -316,6 +334,14 @@ func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testi
 		inspection.MissingAssets[0] != "Qwen3-Embedding-0.6B-f16.gguf" {
 		t.Fatalf("source-mismatched artifact facts = %#v, want pinned GGUF missing", inspection)
 	}
+}
+
+func assertStalePinnedGenericRuntimeUnavailable(
+	t *testing.T,
+	service *service,
+	scope models.RuntimeScopeRef,
+) {
+	t.Helper()
 	if _, err := service.ResolveRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
 		Scope: scope,
 		Name:  "embed",
