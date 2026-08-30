@@ -182,6 +182,41 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result work
 	}
 }
 
+func replayDispatchResultIgnoredEvent(
+	t *testing.T,
+	dispatchID string,
+	workIDs []string,
+	outcome workerexecution.WorkOutcome,
+	tick int,
+) factoryapi.FactoryEvent {
+	t.Helper()
+
+	payload := factoryapi.DispatchResultIgnoredEventPayload{
+		ObservedState: factoryapi.WorkState{
+			Name: "done",
+			Type: factoryapi.WorkStateTypeTERMINAL,
+		},
+		Reason:        factoryapi.WORKALREADYTERMINAL,
+		ResultOutcome: factoryapi.WorkOutcome(outcome),
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchResultIgnoredEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch result ignored payload: %v", err)
+	}
+	return factoryapi.FactoryEvent{
+		Id:            fmt.Sprintf("factory-event/dispatch-result-ignored/%s", dispatchID),
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchResultIgnored,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, time.April, 10, 12, 0, tick, 0, time.UTC),
+			Tick:       tick,
+			DispatchId: stringPtrIfNotEmpty(dispatchID),
+			WorkIds:    slicePtr(uniqueNonEmpty(workIDs)),
+		},
+		Payload: union,
+	}
+}
+
 func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Work {
 	if len(items) == 0 {
 		return nil

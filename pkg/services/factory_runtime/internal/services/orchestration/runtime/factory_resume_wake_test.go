@@ -214,6 +214,51 @@ func TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement(t
 	}
 }
 
+func TestNew_WithRestoredTerminalWorkSkipsStaleActiveDispatchPlacement(t *testing.T) {
+	terminal := work.FactoryWorkItem{ID: "work-terminal", WorkTypeID: "task", State: "done"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			terminal.ID: terminal,
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			terminal.ID: {WorkItem: terminal, Status: "TERMINAL"},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-late": {
+				DispatchID:  "dispatch-late",
+				WorkItemIDs: []string{terminal.ID},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  terminal.ID,
+					PlaceID:  "task:init",
+					WorkItem: &work.FactoryWorkItem{ID: terminal.ID},
+				}},
+			},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{terminal.ID}, TokenCount: 1},
+		},
+	}
+
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withClock(platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if tokens := snapshot.Marking.TokensInPlace("task:init"); len(tokens) != 0 {
+		t.Fatalf("stale active-dispatch Work tokens = %#v, want no token at task:init", tokens)
+	}
+	if tokens := snapshot.Marking.TokensInPlace("task:done"); len(tokens) != 1 {
+		t.Fatalf("terminal Work tokens = %#v, want one token at task:done", tokens)
+	}
+}
+
 func TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement(t *testing.T) {
 	cronWork := work.FactoryWorkItem{
 		ID: "completed-cron-with-recovered-place", WorkTypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState,

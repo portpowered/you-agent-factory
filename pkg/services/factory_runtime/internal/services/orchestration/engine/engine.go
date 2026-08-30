@@ -935,6 +935,20 @@ func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.Marking
 		}
 		token, ok := e.runtimeState.Marking.Tokens[mutation.TokenID]
 		if !ok || token == nil {
+			restored, err := restoreActiveDispatchTokenForMutation(
+				e.runtimeState.Marking,
+				e.state.Places,
+				e.runtimeState.Dispatches,
+				mutation.TokenID,
+			)
+			if err != nil {
+				return err
+			}
+			if restored {
+				token, ok = e.runtimeState.Marking.Tokens[mutation.TokenID]
+			}
+		}
+		if !ok || token == nil {
 			continue
 		}
 		fromState := stateValueForPlace(e.state, mutation.FromPlace)

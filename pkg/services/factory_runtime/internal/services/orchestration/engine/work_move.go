@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -242,6 +243,42 @@ func restoreActiveDispatchTokens(
 		marking.AddToken(&cloned)
 	}
 	return nil
+}
+
+func restoreActiveDispatchTokenForMutation(
+	marking *petri.Marking,
+	places map[string]*petri.Place,
+	dispatches map[string]*interfaces.DispatchEntry,
+	tokenID string,
+) (bool, error) {
+	if marking == nil || strings.TrimSpace(tokenID) == "" || len(dispatches) == 0 {
+		return false, nil
+	}
+	if token, ok := marking.Tokens[tokenID]; ok && token != nil {
+		return true, nil
+	}
+	keys := make([]string, 0, len(dispatches))
+	for dispatchID, entry := range dispatches {
+		if entry == nil {
+			continue
+		}
+		keys = append(keys, dispatchID)
+	}
+	sort.Strings(keys)
+	for _, dispatchID := range keys {
+		entry := dispatches[dispatchID]
+		for _, token := range entry.ConsumedTokens {
+			if token.ID != tokenID {
+				continue
+			}
+			if err := restoreActiveDispatchTokens(marking, places, []*interfaces.DispatchEntry{entry}); err != nil {
+				return false, err
+			}
+			_, restored := marking.Tokens[tokenID]
+			return restored, nil
+		}
+	}
+	return false, nil
 }
 
 func resolveTargetPlace(net *state.Net, workTypeID, stateName string) (string, error) {

@@ -182,11 +182,22 @@ func addRestoredOccupancyPlacements(
 func addRestoredDispatchPlacements(
 	placements map[string]string,
 	dispatches map[string]interfaces.FactoryWorldDispatch,
+	restored *interfaces.FactoryWorldState,
 ) error {
 	for _, dispatchID := range sortedRestoredDispatchIDs(dispatches) {
 		for _, input := range dispatches[dispatchID].Inputs {
 			workID, ok := restoredDispatchWorkID(input)
 			if !ok || input.PlaceID == "" {
+				continue
+			}
+			// A successful operator move can commit a terminal/failed Work
+			// placement before the invalidated worker publishes its late
+			// result. The canonical diagnostic is deliberately a projection
+			// no-op, so the historical ActiveDispatches entry remains useful
+			// for replay correlation even though its consumed input is no
+			// longer a live placement. Current terminal/failed Work wins during
+			// restore; the dispatch fact is retained for replay bookkeeping.
+			if restoredWorkIsTerminalOrFailed(restored, workID) {
 				continue
 			}
 			if err := addRestoredPlacement(placements, workID, input.PlaceID); err != nil {
@@ -195,6 +206,17 @@ func addRestoredDispatchPlacements(
 		}
 	}
 	return nil
+}
+
+func restoredWorkIsTerminalOrFailed(restored *interfaces.FactoryWorldState, workID string) bool {
+	if restored == nil || workID == "" {
+		return false
+	}
+	if _, ok := restored.TerminalWorkByID[workID]; ok {
+		return true
+	}
+	_, ok := restored.FailedWorkItemsByID[workID]
+	return ok
 }
 
 func restoredCompletedDispatchPlacements(

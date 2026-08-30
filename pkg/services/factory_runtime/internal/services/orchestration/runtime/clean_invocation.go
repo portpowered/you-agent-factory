@@ -415,7 +415,16 @@ func validateRestoredDispatchInputs(
 	seenDispatchWork := make(map[string]string)
 	for dispatchID, dispatch := range restored.ActiveDispatches {
 		for _, input := range dispatch.Inputs {
-			if err := validateRestoredDispatchInput(dispatchID, input, placements, occupiedWorkIDs, items, seenDispatchWork); err != nil {
+			workID, _ := restoredDispatchWorkID(input)
+			if err := validateRestoredDispatchInput(
+				dispatchID,
+				input,
+				placements,
+				occupiedWorkIDs,
+				items,
+				seenDispatchWork,
+				restoredWorkIsTerminalOrFailed(restored, workID),
+			); err != nil {
 				return err
 			}
 		}
@@ -430,6 +439,7 @@ func validateRestoredDispatchInput(
 	occupiedWorkIDs map[string]string,
 	items map[string]work.FactoryWorkItem,
 	seenDispatchWork map[string]string,
+	superseded bool,
 ) error {
 	workID, ok := restoredDispatchWorkID(input)
 	if !ok {
@@ -445,6 +455,9 @@ func validateRestoredDispatchInput(
 			input.TokenID,
 			input.WorkItem.ID,
 		)
+	}
+	if superseded {
+		return nil
 	}
 	if input.PlaceID == "" {
 		return fmt.Errorf("restore Work board: active dispatch %q input for Work %q has no logical place", dispatchID, workID)
@@ -659,7 +672,7 @@ func restoredWorkPlacements(
 	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID); err != nil {
 		return nil, err
 	}
-	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches); err != nil {
+	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches, restored); err != nil {
 		return nil, err
 	}
 	if err := addRestoredWorkStateChangePlacements(placements, restored.WorkStateChangesByWorkID); err != nil {

@@ -297,6 +297,40 @@ func TestCompletionDeliveryPlan_MissingCompletionDispatchCanBeSkippedAfterRepair
 	}
 }
 
+func TestCompletionDeliveryPlan_ReplaysIgnoredCanceledDispatchAsCanceledResult(t *testing.T) {
+	dispatch := replayTestDispatch("dispatch-ignored", "process", 2, "trace-ignored", "work-ignored", "tok-ignored")
+	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, testReplayArtifact(
+		t,
+		replayDispatchCreatedEvent(t, dispatch, 2),
+		replayDispatchResultIgnoredEvent(t, dispatch.DispatchID, dispatch.Execution.WorkIDs, workerexecution.OutcomeCanceled, 5),
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	deliveryTick, ok, err := plan.DeliveryTickForDispatch(dispatch)
+	if err != nil {
+		t.Fatalf("DeliveryTickForDispatch: %v", err)
+	}
+	if !ok || deliveryTick != 5 {
+		t.Fatalf("delivery match = (%t, %d), want (true, 5)", ok, deliveryTick)
+	}
+
+	planned, ok, err := plan.PlannedResultForDispatch(dispatch)
+	if err != nil {
+		t.Fatalf("PlannedResultForDispatch: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected planned canceled result for ignored dispatch")
+	}
+	if planned.Outcome != workerexecution.OutcomeCanceled || planned.DispatchID != dispatch.DispatchID {
+		t.Fatalf("planned result = %#v, want canceled result for %q", planned, dispatch.DispatchID)
+	}
+	if planned.Cancellation == nil || planned.Cancellation.Reason != workerexecution.DispatchCancellationReasonCanceled {
+		t.Fatalf("planned cancellation = %#v, want CANCELED", planned.Cancellation)
+	}
+}
+
 func TestCompletionDeliveryPlan_DispatchIdentityMismatchReportsDivergence(t *testing.T) {
 	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
 		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
@@ -586,6 +620,33 @@ func TestWorkStateChangeHook_ReplaysOperatorMoveAtRecordedTick(t *testing.T) {
 	}
 	if mutation.FromPlace != "task:failed" || mutation.ToPlace != "task:init" {
 		t.Fatalf("mutation places = %q -> %q, want task:failed -> task:init", mutation.FromPlace, mutation.ToPlace)
+	}
+}
+
+func TestWorkStateChangeHook_ReplaysMoveFromConsumedDispatchToken(t *testing.T) {
+	hook, err := NewWorkStateChangeHook(testFactorySnapshotDecoder, testRuntimeConfigDecoder, testReplayArtifact(
+		t,
+		replayWorkStateChangeEvent(t, "work-in-flight", "init", "complete", "task:init", "task:complete", factoryapi.WorkStateChangeSourceAPI, 4),
+	))
+	if err != nil {
+		t.Fatalf("NewWorkStateChangeHook: %v", err)
+	}
+
+	input := replaySubmissionHookContext(4)
+	input.ConsumedTokenByWorkID = map[string]recordingcontracts.ReplayWorkToken{
+		"work-in-flight": {TokenID: "token-in-flight", PlaceID: "task:init"},
+	}
+	got, err := hook.OnTick(context.Background(), input)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(got.MarkingMutations) != 1 {
+		t.Fatalf("marking mutations = %#v, want one operator move", got.MarkingMutations)
+	}
+	mutation := got.MarkingMutations[0]
+	if mutation.Type != interfaces.MutationMove || mutation.TokenID != "token-in-flight" ||
+		mutation.FromPlace != "task:init" || mutation.ToPlace != "task:complete" {
+		t.Fatalf("mutation = %#v, want in-flight token move task:init -> task:complete", mutation)
 	}
 }
 

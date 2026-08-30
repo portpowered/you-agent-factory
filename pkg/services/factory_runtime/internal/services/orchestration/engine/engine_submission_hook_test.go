@@ -386,6 +386,44 @@ func TestSubmissionHook_AppliesMarkingMutationsAndRecordsSubmissionID(t *testing
 	}
 }
 
+func TestSubmissionHook_RestoresConsumedDispatchTokenBeforeReplayMove(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	token := newMoveTestToken("tok-replay-move", "work-replay-move", "task:init")
+	marking.AddToken(token)
+
+	eng := newTestFactoryEngine(n, marking, nil,
+		WithSubmissionHook(&testSubmissionHook{
+			name:     factoryruntime.ReplayWorkStateChangeHookName,
+			priority: -100,
+			onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[submissionSnapshot]) (interfaces.SubmissionHookResult, error) {
+				return interfaces.SubmissionHookResult{MarkingMutations: []interfaces.MarkingMutation{{
+					Type:      interfaces.MutationMove,
+					TokenID:   token.ID,
+					FromPlace: "task:init",
+					ToPlace:   "task:complete",
+				}}}, nil
+			},
+		}),
+	)
+	eng.runtimeState.Dispatches["dispatch-replay-move"] = &interfaces.DispatchEntry{
+		DispatchID:     "dispatch-replay-move",
+		ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{*token}),
+	}
+	marking.RemoveToken(token.ID)
+
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	moved, ok := eng.GetMarking().Tokens[token.ID]
+	if !ok || moved.PlaceID != "task:complete" {
+		t.Fatalf("replayed move token = %#v, want %q", moved, "task:complete")
+	}
+	if _, ok := eng.runtimeState.Dispatches["dispatch-replay-move"]; !ok {
+		t.Fatal("replayed move removed dispatch tombstone needed for late-result correlation")
+	}
+}
+
 func replaySubmissionBatch(requestID string, workIDs ...string) work.GeneratedSubmissionBatch {
 	works := make([]work.Work, 0, len(workIDs))
 	for _, workID := range workIDs {

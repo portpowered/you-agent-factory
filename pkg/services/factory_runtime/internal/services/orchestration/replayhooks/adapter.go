@@ -2,6 +2,7 @@ package replayhooks
 
 import (
 	"context"
+	"sort"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -51,8 +52,9 @@ func (a replayHookAdapter) OnTick(
 	input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]],
 ) (interfaces.SubmissionHookResult, error) {
 	result, err := a.hook.OnTick(ctx, recordings.ReplaySnapshot{
-		Tick:          input.Snapshot.TickCount,
-		TokenByWorkID: replayTokensByWorkID(input.Snapshot.Marking.Tokens),
+		Tick:                  input.Snapshot.TickCount,
+		TokenByWorkID:         replayTokensByWorkID(input.Snapshot.Marking.Tokens),
+		ConsumedTokenByWorkID: replayConsumedTokensByWorkID(input.Snapshot.Dispatches),
 	})
 	if err != nil {
 		return interfaces.SubmissionHookResult{}, err
@@ -62,6 +64,41 @@ func (a replayHookAdapter) OnTick(
 		MarkingMutations: result.MarkingMutations,
 		KeepAlive:        result.KeepAlive,
 	}, nil
+}
+
+func replayConsumedTokensByWorkID(
+	dispatches map[string]*interfaces.DispatchEntry,
+) map[string]recordings.ReplayWorkToken {
+	if len(dispatches) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(dispatches))
+	for dispatchID, dispatch := range dispatches {
+		if dispatch == nil {
+			continue
+		}
+		keys = append(keys, dispatchID)
+	}
+	sort.Strings(keys)
+	byWorkID := make(map[string]recordings.ReplayWorkToken)
+	for _, dispatchID := range keys {
+		for _, token := range dispatches[dispatchID].ConsumedTokens {
+			if token.Color.WorkID == "" || token.Color.DataType == factorytoken.DataTypeResource {
+				continue
+			}
+			if _, exists := byWorkID[token.Color.WorkID]; exists {
+				continue
+			}
+			byWorkID[token.Color.WorkID] = recordings.ReplayWorkToken{
+				TokenID: token.ID,
+				PlaceID: token.State,
+			}
+		}
+	}
+	if len(byWorkID) == 0 {
+		return nil
+	}
+	return byWorkID
 }
 
 func replayTokensByWorkID(tokens map[string]*factorytoken.Token) map[string]recordings.ReplayWorkToken {

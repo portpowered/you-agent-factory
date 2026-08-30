@@ -1765,8 +1765,9 @@ type DispatchRecorder func(FactoryDispatchRecord)
 // ReplaySnapshot contains only the runtime facts a replay hook needs. Runtime
 // implementations adapt their concrete engine snapshot at the service edge.
 type ReplaySnapshot struct {
-	Tick          int
-	TokenByWorkID map[string]ReplayWorkToken
+	Tick                  int
+	TokenByWorkID         map[string]ReplayWorkToken
+	ConsumedTokenByWorkID map[string]ReplayWorkToken
 }
 
 // ReplayWorkToken identifies the live non-resource token for recorded Work.

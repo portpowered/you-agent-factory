@@ -22,6 +22,7 @@ type replayEventLog struct {
 	Dispatches       []replayDispatch
 	WorkerSessionIDs map[string]string
 	Completions      []replayCompletion
+	IgnoredResults   map[string]replayIgnoredResult
 	WorkStateChanges []replayWorkStateChange
 	Diagnostics      interfaces.ReplayDiagnostics
 	WallClock        *interfaces.ReplayWallClockMetadata
@@ -58,6 +59,14 @@ type replayCompletion struct {
 	diagnostics  *workerexecution.WorkDiagnostics
 }
 
+type replayIgnoredResult struct {
+	eventID       string
+	dispatchID    string
+	observedTick  int
+	resultOutcome workerexecution.WorkOutcome
+	observedState interfaces.ObservedWorkState
+}
+
 type replayInferenceAttempt struct {
 	attempt         int
 	providerSession *providers.SessionMetadata
@@ -78,7 +87,10 @@ func reduceReplayEvents(
 	if decodeFactorySnapshot == nil {
 		return nil, fmt.Errorf("Factory snapshot decoder is required")
 	}
-	reduced := &replayEventLog{WorkerSessionIDs: make(map[string]string)}
+	reduced := &replayEventLog{
+		WorkerSessionIDs: make(map[string]string),
+		IgnoredResults:   make(map[string]replayIgnoredResult),
+	}
 	inferenceAttemptsByDispatchID := make(map[string]replayInferenceAttempt)
 	workByID := make(map[string]work.Work)
 	for _, event := range artifact.Events {
@@ -128,6 +140,8 @@ func reduceReplayEvent(
 	case interfaces.FactoryEventTypeInferenceResponse,
 		interfaces.FactoryEventTypeModelResponse:
 		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
+	case interfaces.FactoryEventTypeDispatchResultIgnored:
+		return applyReplayDispatchResultIgnored(reduced, event)
 	}
 	switch event.Type {
 	case interfaces.FactoryEventTypeDispatchResponse:
@@ -135,6 +149,34 @@ func reduceReplayEvent(
 	default:
 		return nil
 	}
+}
+
+func applyReplayDispatchResultIgnored(reduced *replayEventLog, event interfaces.FactoryEvent) error {
+	if reduced == nil {
+		return fmt.Errorf("replay event log is required")
+	}
+	dispatchID := strings.TrimSpace(stringValue(event.Context.DispatchID))
+	if dispatchID == "" {
+		return fmt.Errorf("dispatch result ignored event %q context.dispatchId is required", event.Id)
+	}
+	var payload interfaces.DispatchResultIgnoredEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		return fmt.Errorf("decode dispatch result ignored event %q: %w", event.Id, err)
+	}
+	if payload.ResultOutcome == "" {
+		return fmt.Errorf("dispatch result ignored event %q resultOutcome is required", event.Id)
+	}
+	if strings.TrimSpace(payload.ObservedState.Name) == "" || payload.ObservedState.Type == "" {
+		return fmt.Errorf("dispatch result ignored event %q observedState is required", event.Id)
+	}
+	reduced.IgnoredResults[dispatchID] = replayIgnoredResult{
+		eventID:       event.Id,
+		dispatchID:    dispatchID,
+		observedTick:  event.Context.Tick,
+		resultOutcome: payload.ResultOutcome,
+		observedState: payload.ObservedState,
+	}
+	return nil
 }
 
 func applyReplayWorkerSessionAssociation(reduced *replayEventLog, event interfaces.FactoryEvent) error {

@@ -375,6 +375,13 @@ func replayWorkStateChangeMutation(
 		return interfaces.MarkingMutation{}, false
 	}
 	token, ok := snapshot.TokenByWorkID[change.WorkID]
+	if !ok {
+		// An operator move may be recorded while the Work token is consumed by
+		// an active dispatch. Runtime exposes that exact consumed token to the
+		// replay hook so the move can restore and relocate it before the late
+		// result is delivered.
+		token, ok = snapshot.ConsumedTokenByWorkID[change.WorkID]
+	}
 	if !ok || token.TokenID == "" {
 		return interfaces.MarkingMutation{}, false
 	}
@@ -446,6 +453,18 @@ func NewCompletionDeliveryPlan(
 		}
 		completions[completion.dispatchID] = completion
 	}
+	for dispatchID, ignored := range eventLog.IgnoredResults {
+		if _, ok := dispatches[dispatchID]; !ok {
+			return nil, newDivergenceError(
+				DivergenceCategoryMissingDispatch,
+				ignored.observedTick,
+				dispatchID,
+				"recorded dispatch for ignored result",
+				"ignored result references unknown dispatch",
+				withExpectedEventID(ignored.eventID),
+			)
+		}
+	}
 
 	records := make([]completionDeliveryRecord, 0, len(eventLog.Dispatches))
 	for _, dispatch := range eventLog.Dispatches {
@@ -454,6 +473,14 @@ func NewCompletionDeliveryPlan(
 			completionCopy := completion
 			record.completion = &completionCopy
 			record.deliveryDelay = completion.observedTick - dispatch.createdTick
+			if record.deliveryDelay < 0 {
+				record.deliveryDelay = 0
+			}
+			record.hasCompletion = true
+		} else if ignored, ok := eventLog.IgnoredResults[dispatch.dispatchID]; ok {
+			completion := replayCompletionFromIgnoredResult(dispatch, ignored)
+			record.completion = &completion
+			record.deliveryDelay = ignored.observedTick - dispatch.createdTick
 			if record.deliveryDelay < 0 {
 				record.deliveryDelay = 0
 			}
@@ -481,6 +508,30 @@ func NewCompletionDeliveryPlan(
 		workerSessionIDs:            workerSessionIDs,
 		workerSessionIDsByReplayKey: workerSessionIDsByReplayKey,
 	}, nil
+}
+
+func replayCompletionFromIgnoredResult(
+	dispatch replayDispatch,
+	ignored replayIgnoredResult,
+) replayCompletion {
+	result := workerexecution.WorkResult{
+		DispatchID:   dispatch.dispatchID,
+		TransitionID: dispatch.dispatch.TransitionID,
+		Outcome:      ignored.resultOutcome,
+	}
+	if ignored.resultOutcome == workerexecution.OutcomeCanceled {
+		result.Cancellation = &workerexecution.DispatchCancellation{
+			Reason: workerexecution.DispatchCancellationReasonCanceled,
+		}
+		result.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	}
+	return replayCompletion{
+		eventID:      ignored.eventID,
+		completionID: ignored.eventID,
+		dispatchID:   dispatch.dispatchID,
+		observedTick: ignored.observedTick,
+		result:       result,
+	}
 }
 
 // WorkerSessionIDForDispatch returns the identity recorded alongside one

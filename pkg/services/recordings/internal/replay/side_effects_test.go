@@ -411,6 +411,38 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 	}
 }
 
+func TestSideEffects_IgnoredCanceledDispatchReturnsCancellation(t *testing.T) {
+	dispatch := work.WorkDispatch{
+		DispatchID:      "dispatch-ignored",
+		TransitionID:    "process",
+		WorkerType:      "worker-a",
+		WorkstationName: "process",
+		Execution: work.ExecutionMetadata{
+			ReplayKey: "process/trace-ignored/work-ignored",
+			TraceID:   "trace-ignored",
+			WorkIDs:   []string{"work-ignored"},
+		},
+	}
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCreatedEvent(t, dispatch, 2),
+		replayDispatchResultIgnoredEvent(t, dispatch.DispatchID, dispatch.Execution.WorkIDs, workerexecution.OutcomeCanceled, 5),
+	)
+	sideEffects, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+
+	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:        dispatch,
+		WorkstationType: "process",
+		WorkerType:      "worker-a",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Infer error = %v, want context.Canceled", err)
+	}
+}
+
 func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 	artifact, _, _ := replaySideEffectArtifactWithDiagnostics(t)
 	return artifact

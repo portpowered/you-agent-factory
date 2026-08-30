@@ -361,6 +361,7 @@ func replayExecuteFailure(err error) error {
 type sideEffectRecord struct {
 	dispatch      replayDispatch
 	completion    *replayCompletion
+	ignored       *replayIgnoredResult
 	hasCompletion bool
 	usedBy        string
 }
@@ -408,9 +409,14 @@ func NewSideEffects(
 			record.completion = &completionCopy
 			record.hasCompletion = true
 		}
+		if ignored, ok := eventLog.IgnoredResults[dispatch.dispatchID]; ok {
+			ignoredCopy := ignored
+			record.ignored = &ignoredCopy
+		}
 		records = append(records, sideEffectRecord{
 			dispatch:      record.dispatch,
 			completion:    record.completion,
+			ignored:       record.ignored,
 			hasCompletion: record.hasCompletion,
 		})
 	}
@@ -426,6 +432,9 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 	})
 	if err != nil {
 		return workerexecution.InferenceResponse{}, err
+	}
+	if record.ignored != nil {
+		return workerexecution.InferenceResponse{}, ignoredReplaySideEffectError(*record.ignored)
 	}
 	if !record.hasCompletion {
 		return workerexecution.InferenceResponse{}, missingCompletionError(record.dispatch)
@@ -646,6 +655,9 @@ func (s *SideEffects) Run(ctx context.Context, req platformprocess.CommandReques
 	if err != nil {
 		return platformprocess.CommandResult{}, err
 	}
+	if record.ignored != nil {
+		return platformprocess.CommandResult{}, ignoredReplaySideEffectError(*record.ignored)
+	}
 	if !record.hasCompletion {
 		return platformprocess.CommandResult{}, missingCompletionError(record.dispatch)
 	}
@@ -674,6 +686,13 @@ func (s *SideEffects) Run(ctx context.Context, req platformprocess.CommandReques
 
 func missingCompletionError(dispatch replayDispatch) error {
 	return fmt.Errorf("recorded dispatch %q for transition %q has no completion", dispatch.dispatchID, dispatch.dispatch.TransitionID)
+}
+
+func ignoredReplaySideEffectError(ignored replayIgnoredResult) error {
+	if ignored.resultOutcome == workerexecution.OutcomeCanceled {
+		return context.Canceled
+	}
+	return fmt.Errorf("recorded ignored dispatch %q has unsupported outcome %q", ignored.dispatchID, ignored.resultOutcome)
 }
 
 func (s *SideEffects) claim(ctx context.Context, kind string, matches func(sideEffectRecord) bool) (sideEffectRecord, error) {
