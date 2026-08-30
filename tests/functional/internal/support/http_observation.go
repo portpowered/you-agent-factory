@@ -82,7 +82,7 @@ func WaitForRuntimeIdle(t testing.TB, baseURL string, timeout time.Duration) fac
 
 // WaitForTerminalStatus is retained only for excluded provider, provider-
 // session, and worker lanes. It is a compatibility name, not a legacy
-// polling implementation: the delegated session-scoped helper subscribes to
+// polling implementation: this default-session boundary subscribes to
 // canonical Factory Events and has no stable-window success condition.
 func WaitForTerminalStatus(
 	t testing.TB,
@@ -90,7 +90,11 @@ func WaitForTerminalStatus(
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	return WaitForSessionTerminalStatus(t, baseURL, factorysessions.DefaultSessionID, timeout)
+	status, err := observeSessionTerminalStatus(baseURL, factorysessions.DefaultSessionID, timeout)
+	if err != nil {
+		t.Fatalf("timed out waiting for terminal %v", err)
+	}
+	return status
 }
 
 func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkResponse {
@@ -336,10 +340,10 @@ func SubmitSessionWorkAt(
 	return result
 }
 
-// WaitForSessionTerminalStatus is an event-driven compatibility boundary for
-// excluded callers that still need the terminal status projection. It reads
-// status once, subscribes to canonical Factory Events, closes the subscribe
-// handoff race with one more status read, and then waits for RUN_RESPONSE.
+// WaitForSessionTerminalStatus retains the pre-existing session-scoped status
+// contract used by live/shared-session callers. Its adaptive retry is bounded
+// and has no fixed polling interval or stable-window success condition. The
+// standalone default-session migration uses WaitForTerminalStatus above.
 func WaitForSessionTerminalStatus(
 	t testing.TB,
 	baseURL string,
@@ -347,11 +351,29 @@ func WaitForSessionTerminalStatus(
 	timeout time.Duration,
 ) factoryapi.StatusResponse {
 	t.Helper()
-	status, err := observeSessionTerminalStatus(baseURL, sessionID, timeout)
+	status, err := observeSessionTerminalStatusByStatus(baseURL, sessionID, timeout)
 	if err != nil {
 		t.Fatalf("timed out waiting for terminal %v", err)
 	}
 	return status
+}
+
+func observeSessionTerminalStatusByStatus(
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) (factoryapi.StatusResponse, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	status, err := waitForStatusAt(endpoint, timeout, terminalSessionStatusIsComplete)
+	if err != nil {
+		return status, fmt.Errorf(
+			"Factory Session %q at %s: %w",
+			sessionID,
+			endpoint,
+			err,
+		)
+	}
+	return status, nil
 }
 
 var readSessionStatusUntil = func(

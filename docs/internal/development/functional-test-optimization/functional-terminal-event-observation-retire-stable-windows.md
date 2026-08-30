@@ -337,14 +337,18 @@ the observer, migration, after timings, or clean checkout.
 
 ### Review reconciliation
 
-The review feedback exposed an ownership conflict in the original literal
-family-audit wording: excluded provider, Provider Session, Worker, and ACP
-tests still compile against the old helper names, while the owned migration
-must remove their polling behavior. The smallest bounded resolution is an
-explicit compatibility exception at shared support: the old names remain only
-for those unchanged excluded callers, and delegate to the event-driven
-session-scoped implementation. They are not owned completion paths and do not
-contain a stable window. No excluded file is changed.
+The review feedback exposed two distinct support boundaries that the original
+literal family audit had conflated. First, excluded provider, Provider
+Session, Worker, and ACP tests still compile against the old
+`WaitForTerminalStatus` and stable-wrapper names. Those names remain only for
+the unchanged excluded callers and delegate to event-driven support without a
+stable window. Second, `WaitForSessionTerminalStatus` is a pre-existing
+session-scoped status-projection contract used by live/shared-session tests;
+those sessions can finish their current Work while remaining live and do not
+publish the standalone process `RUN_RESPONSE` boundary. It therefore retains
+its status semantics through bounded adaptive retries, with no fixed poll
+interval or stable window. It is outside the direct `WaitForTerminalStatus`
+family audited here. No excluded file is changed.
 
 The central process helper now establishes the terminal observer while the
 root-built API listener is held before invocation, waits for the canonical
@@ -357,9 +361,10 @@ known later admission.
 The observer's synchronous SSE open uses a bounded response-header policy,
 cancellation, response-body close, and idle-connection cleanup. A
 delayed-header test proves that an accepted connection cannot strand the test
-before `Wait` is reachable. The generic status helper remains only for
-non-terminal readiness/stop predicates and now uses bounded adaptive retries;
-terminal completion does not call it.
+before `Wait` is reachable. The generic status helper now uses bounded adaptive
+retries for readiness/stop predicates and for the separate live/shared-session
+status contract; the owned standalone terminal completion path does not call
+it.
 
 The production-only deadcode checker cannot see callers in external functional
 test packages. The observer and Work-observation support entrypoints are
@@ -376,8 +381,10 @@ The final census was rerun after the review fixes with:
 
 The owned result is zero direct `WaitForTerminalStatus` callers, zero owned
 `terminalObservationStableWindow` mode references, zero owned stable-only
-completion wrappers, and zero owned stable-wrapper callers. The final result
-retains only these explicit compatibility handoffs:
+completion wrappers, and zero owned stable-wrapper callers. The separate
+session-scoped status helper remains an explicit non-family compatibility
+boundary for live/shared-session callers and has no fixed interval or stable
+window. The final result retains these explicit compatibility handoffs:
 
 | Current hit | Owner/disposition |
 | --- | --- |
@@ -389,7 +396,7 @@ retains only these explicit compatibility handoffs:
 | `tests/functional/provider_sessions/association/response_exec_metadata_test.go:206,262` | Provider Sessions live lane; excluded and unchanged |
 | `tests/functional/workers/script/execution_long_test.go:64` | Workers live lane; excluded and unchanged |
 | `tests/functional/providers/acp/packaged_conformance_test.go:83` | ACP live lane's before-close wrapper; excluded and unchanged |
-| `tests/functional/internal/support/http_observation.go:78,82` | Compatibility symbol required to compile the excluded direct callers; it delegates to event-driven session observation and implements no stable window |
+| `tests/functional/internal/support/http_observation.go` | `WaitForTerminalStatus` is the compatibility symbol required to compile excluded direct callers; it delegates to event-driven session observation and implements no stable window. `WaitForSessionTerminalStatus` separately preserves the live/shared-session status projection contract with bounded adaptive retries. |
 | `tests/functional/internal/support/process_factory.go:151,155` | Compatibility wrapper required by the excluded ACP caller; it waits on canonical event observation and implements no stable window |
 
 The two unrelated `stableWindow` constants remain at
@@ -397,9 +404,12 @@ The two unrelated `stableWindow` constants remain at
 `tests/functional/factory/current/helpers_long_test.go:248`; they are watcher
 debounce/readiness behavior outside this terminal-observation family. No file
 under the excluded provider, provider-session, worker, or ACP directories
-changed. The literal symbol-absence criterion is satisfied for owned paths;
-the retained names above are the documented delegated exception, not an
-unrecorded PASS claim for the excluded lanes.
+changed. The literal symbol-absence criterion is satisfied for the audited
+owned family; the retained names above are documented delegated boundaries,
+not an unrecorded PASS claim for the excluded lanes. The live/shared-session
+status contract is intentionally not presented as a post-cursor
+`RUN_RESPONSE` journey: its existing callers need to observe a live host's
+status projection.
 The four audit-time JavaScript locations remain absent as established by the
 Story 001 history reconciliation.
 
