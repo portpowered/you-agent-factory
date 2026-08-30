@@ -560,3 +560,90 @@ It exited 1 because this worktree has no retained hosted samples at
 The hosted exact-inventory gate must be rerun on the pushed head; the checked
 reference was not changed and no local substitute is claimed. The canonical
 validation report remains the next story's tracked deliverable.
+
+## Story 003 — current rebased validation after review fix
+
+The review's package-boundary blocker was resolved before this validation. The
+startup-preparation mutex now lives in the initializer-owned
+`initializer.PreparationGate`; `pkg/transports/cli` retains the batch selection
+policy and invokes that lifecycle gate. The concurrent-first-demand witness
+remains folded into the existing `TestRunCommand_ContinuouslyFlag` identity,
+so the exact hosted unit-test inventory does not gain a test or subtest
+identity. `go run ./cmd/pkgboundarycheck --root .` reports zero production or
+test-only violations.
+
+The implementation was rebased onto current `origin/main`
+`a44ed015421b1ed42b919f1178531f38fd5087b5`. The validated source head is
+`1dc12f20f7ef812d7924e0e2e6d65d39ee4d585a`; its ancestry is clean. The
+compiled artifact
+`.artifacts/batch-coldstart-probe/validation-1dc12f20f7ef.exe` has SHA-256
+`5D3F6B408C7B265E79763805C2620C1665E3BA8F747DEC98AF5A02255EE831EC`.
+No Go, functional-test, API, generated, or Wire source changed after this
+validated source head.
+
+`GATE-PERF-001: PASS.` The exact command
+
+~~~
+run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
+~~~
+
+ran in three fresh child fixture/home directories in `325.043 ms`,
+`313.562 ms`, and `314.721 ms`; sorted median `314.721 ms`. Against the
+story-001 `1318.610 ms` baseline, this is `1003.889 ms` and `76.13%` lower
+(`0.2387x` the baseline). Every child exited `0`, reported
+`HasExited=True`, wrote exact stdout `Batch completed successfully.\\n`,
+empty stderr, and left zero packaged-Factory files. Each durable snapshot
+contained `one-work` at `prompt-task:complete`, state `complete`, outcome
+`ACCEPTED`, and transition `process-prompt`. Snapshot hashes for runs 1–3
+were `9C79D2831A60D48BDC98F0322B0CAD84F5FD18EE2073D822732AB4C2D2C939C6`,
+`5BD6DAE1830E42BC2758592321DBBAF19A90E79DBA1CFDAD5BA650AE6FF66E1E`, and
+`01A420FE0A3B6228529AC7793D71BDC6C5FB38E6F449AE4A56832F7782B8BC8C`.
+Fixture hashes remained unchanged: Factory
+`AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
+`CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, and
+accepting mock workers
+`69A0CE360F450CF9E71D4C9935345D1B2CF6A734A4E79DAE534E836F6218D3C3`.
+
+`GATE-SPINE-001`, `GATE-RACE-001`, and `GATE-SERVER-001: PASS` for the
+changed selectors and direct consumers. The focused normal package command,
+five-repeat CLI and process-lifecycle race selectors, initializer/
+application/Wire/runtime-hosting/recording/replay consumers, isolated
+workers/mock selector, `make pkg-maint`, `make backend-size`, and
+`make pkg-file-count` all exited `0`. The direct concurrent demand witness
+observed exactly one preparation call, while adverse failure, cancellation,
+sequential reuse, fresh recovery, lifecycle order, reverse unwind, and
+exactly-once cleanup witnesses remained green. The unrelated broad ACP
+idle-stdin cancellation race edge remains qualified and is not claimed as
+fixed by this lane.
+
+`GATE-FUNC-001: PASS.` The complete unchanged functional inventory was run
+with `FUNCTIONAL_DEFAULT_JOBS=1`, isolated `HOME`/`USERPROFILE`, and
+`YOU_NO_BROWSER_OPEN=1` through `make test-functional-fresh`; it exited `0`.
+Packaged factories, server/session/event paths, recordings/process, CLI
+process, and workers/mock all passed. No shared lease, functional test, or
+unrelated source was removed or changed.
+
+`Quality gates: PASS with a native-platform qualification.` `make test`
+exited `0` with 447 Go packages (one platform-conditional skip) and 169
+workflow tests (168 pass, one skip). Package/boundary/structure/cycle/catalog/
+generation checks passed, as did maintainability, backend-size, and file-count
+checks. Native `make lint` passed every target except the Windows build-tag
+deadcode comparison: current `3072` findings versus the committed baseline's
+`3074`. The baseline and unrelated source were not changed. No Wire authorship
+changed, so `make generate-wire` was not applicable.
+
+The canonical loopback report is present at
+`docs/internal/development/functional-test-optimization/validation/c14-cli-batch-run-cold-start-latency-validation.md`.
+It records the exact source/build, environment, customer entry point, real and
+substituted dependencies, zero paid cost, criteria, journey, cross-task
+integration, findings, and unproven edges. The only discarded result was a
+manual visible-only fixture copy that correctly failed closed with
+`CURRENT_FACTORY_NOT_FOUND`; the authoritative complete-tree probe above is
+the sole product result.
+
+`GATE-LOOP-001: READY FOR HANDOFF.` Local-real validation is complete. The
+remaining implementation action is to push this rebased head to the named
+open PR, start required CI, and address any blocking review feedback. Terminal
+CI, conflict resolution after handoff, and merge remain review-owned.
+
+---
