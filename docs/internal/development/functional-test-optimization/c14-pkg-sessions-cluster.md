@@ -513,3 +513,50 @@ clean-room cluster, hosted PR performance, terminal CI, remote provider
 behavior, and merge remain unproven and are owned by story 005,
 `GATE-ROOT-001`, `GATE-CHAT-001`, `GATE-EXEC-001`, `GATE-RACE-001`,
 `GATE-PR-001`, and `VAL-001`.
+
+# Validation report: fto-c14-pkg-sessions-cluster (VAL-001)
+
+## Environment and artifact
+
+- Commit/build identifier: implementation head `f0afe9aa5d730e172d2a3799f4d9dc1893c86bb0`, before the required handoff rebase; the rebase is limited to ancestry synchronization after this report and does not change the validated package files.
+- Environment and configuration: Windows/amd64, Go `go1.25.0`; exact `go test ./tests/functional/sessions/<package>/... -count=1` commands were run with process-scoped temporary `HOME`/`USERPROFILE` profiles for clean-room execution. Same-host contention from unrelated active `you`/test processes is recorded under Findings.
+- Customer entry point: the public root-built application process exercised by the three Sessions functional package commands.
+- Real and substituted dependencies: real Factory root, API, ACP, event, recording, session, worker, and process boundaries; controlled static provider and external-effect edges supplied by the existing functional fixtures.
+- Cost/call budget used: local-only validation; no remote provider, paid call, browser, or network dependency.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Integrated ROOT package gate | PASS | `go test ./tests/functional/sessions/root_composition/... -count=1` passed three times in an isolated profile: 27.170s, 27.829s, 25.972s; every exit code was 0. | Hosted CI and portable absolute latency. |
+| Integrated CHAT package gate | PASS | `go test ./tests/functional/sessions/chat_sessions/root_composition/... -count=1` passed three times in an isolated profile: 33.135s, 23.058s, 23.167s; every exit code was 0. | Hosted CI and remote ACP interoperability. |
+| Integrated EXEC package gate | PASS | `go test ./tests/functional/sessions/execution/... -count=1` passed in an isolated profile in 17.566s, exit 0; the three final isolated timing samples were 18.451s, 17.559s, and 16.625s, all exit 0. | Hosted CI and remote providers. |
+| Three-sample package performance | PASS | Primary package-level medians on the final package revisions remain ROOT 20.566s vs 39.288s (47.6%), CHAT 17.137s vs 55.551s (69.2%), and EXEC 16.351s vs 34.896s (53.1%). The clean-room samples are retained as operational timing evidence; host/profile contention makes them directional rather than a replacement performance verdict. | Universal absolute timing and terminal PR CI. |
+| Assertion parity and cleanup | PASS | The ledger maps ROOT-001..ROOT-029, CHAT-001..CHAT-025, and EXEC-001..EXEC-015 to passing witnesses; prior final-head repeat/race runs and the Chat census remain passing with zero violations. | Review-owned final CI. |
+| Scope and safety | PASS | Tracked diff is limited to the three owned functional subtrees and this evidence ledger; no production, public contract, generated, UI, shared-support, restart, coverage-floor, or CI-governance file changed. | None for this local criterion. |
+
+## Customer journey
+
+1. Ran the exact ROOT package command three times in a fresh process-scoped profile; all mapped lifecycle, replay, redaction, routing, cancellation, failure, and cleanup witnesses passed.
+2. Ran the exact Chat root-composition package command three times in a fresh process-scoped profile; all mapped ACP catalog, streaming, child attribution, replay, error, and cleanup witnesses passed.
+3. Ran the exact EXEC package command in a fresh process-scoped profile; all mapped usage, drain, invocation, timeout, cancellation, partial-result, visibility, dispatch, and API/CLI parity witnesses passed.
+4. Reused the final package revision's declared changed-witness repeat and supported-race evidence: ROOT repeat/race exited 0, Chat repeat/race exited 0 with balanced `24/24` processes, `58/58` connections, `56/56` pipes, `29/29` sessions, `30/30` turns, `34/34` calls, `4/4` peers, and `91/91` paths, and EXEC repeat/race exited 0.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: this report and the complete assertion/performance ledger are in the canonical development evidence document.
+- Permission and error behavior: bad input, provider failure, timeout, cancellation, unresolved output, non-terminal drain, and cleanup-failure outcomes remain mapped and asserted.
+- Persistence/reload behavior: recording replay/resume and durable result witnesses remain mapped and passing.
+- Accessibility/keyboard/responsive behavior: not applicable; this is a backend functional-test optimization lane with no UI change.
+- Operational signals: cleanup census and existing listener/process cleanup assertions remain balanced; no shared state was forcibly stopped or deleted.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| F-ENV-001 | INFO | Run `go test ./tests/functional/sessions/execution/... -count=1` under the shared default profile while unrelated `you`/test processes were active. | The package completes without shared-profile installation contention. | Sample 1 exited 1 after 46.073s because packaged installation reported `indeterminate-contention` for `.you--full-flow.staging-owner` with owner PID 6224; the affected CLI visibility witness reported the same installation contention. PID 6224 was absent when inspected. | The same exact EXEC command passed in 17.566s, exit 0, with a fresh process-scoped profile. The shared long-running process and stale shared marker were left untouched. |
+| F-PERF-001 | INFO | Compare the clean-room timing samples with the package-level optimized samples while other local agents were running. | Same-host timing should reflect intrinsic package work. | ROOT clean-room median was 27.170s and the contaminated shared-profile median was 56.339s; both sets passed functionally, demonstrating host/profile noise rather than an assertion regression. | The package-level medians above are the primary performance verdict, per the lane rule; no production or test workaround was added. |
+
+## Verdict
+
+PASS
