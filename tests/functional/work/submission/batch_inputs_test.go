@@ -79,9 +79,9 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 // request and Work identities, so the shared list and event history remain
 // unambiguous.
 func TestWorkBatchHTTPSubmission(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
-	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
+	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
 	defer server.Stop(t)
 
 	t.Run("TestAPISubmitBatchThenListAndGetWork", func(t *testing.T) {
