@@ -30,6 +30,35 @@ type (
 	liveFactorySession       = livesession.LiveSession
 )
 
+type completionSessionIdentity struct {
+	id        string
+	isDefault bool
+	target    factorysessions.TargetRef
+	runtimeID string
+}
+
+func selectCompletionSessionIdentity(factorySessionID string, startupSpec factory.SessionBuildSpec) completionSessionIdentity {
+	sessionID := strings.TrimSpace(factorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	isDefault := sessionID == factorysessions.DefaultSessionID
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
+	if isDefault {
+		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
+	}
+	runtimeID := ""
+	if isDefault {
+		metricsID := strings.TrimSpace(startupSpec.MetricsSessionID)
+		if metricsID != "" && metricsID != factorysessions.DefaultSessionID {
+			runtimeID = metricsID
+		} else if livesession.IsUUIDID(startupSpec.SessionID) {
+			runtimeID = strings.TrimSpace(startupSpec.SessionID)
+		}
+	}
+	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
+}
+
 // BindRuntime publishes the opaque activation capability for one live
 // Factory Session. The session keeps the hosted service only as a migration
 // fallback; all subsequent domain operations resolve the binding first.

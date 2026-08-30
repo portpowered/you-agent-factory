@@ -304,6 +304,7 @@ func (s *Service) Register(registration Registration) string {
 	if sessionID == "" {
 		return ""
 	}
+	previous := s.registry.Get(sessionID)
 	isDefault := registration.Default || logicaltarget.IsLiveSessionDefaultSelector(sessionID)
 	var retainedMetricsSessionIDs []string
 	if existing := s.Resolve(sessionID); existing != nil {
@@ -315,6 +316,9 @@ func (s *Service) Register(registration Registration) string {
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID
+			if previous == nil {
+				previous = existing
+			}
 			if strings.TrimSpace(registration.RuntimeFactorySessionID) == "" {
 				registration.RuntimeFactorySessionID = strings.TrimSpace(existing.RuntimeFactorySessionID)
 			}

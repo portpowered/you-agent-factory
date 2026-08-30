@@ -351,6 +351,8 @@ func TestPriceTableDecodeRejectsInvalidContractValues(t *testing.T) {
 		{name: "unsupported currency", payload: `{"priceTable":{"currency":"EUR","models":[]}}`, want: "unsupported"},
 		{name: "missing currency", payload: `{"priceTable":{"models":[]}}`, want: "currency is required"},
 		{name: "negative rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"-1","outputPerMillionTokens":"2"}]}}`, want: "non-negative decimal"},
+		{name: "negative cached rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"1","outputPerMillionTokens":"2","cachedInputPerMillionTokens":"-0.1"}]}}`, want: "non-negative decimal"},
+		{name: "malformed cached rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","inputPerMillionTokens":"1","outputPerMillionTokens":"2","cachedInputPerMillionTokens":"1e-3"}]}}`, want: "non-negative decimal"},
 		{name: "missing base rate", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","model":"gpt-5","outputPerMillionTokens":"2"}]}}`, want: "inputPerMillionTokens"},
 		{name: "missing model identity", payload: `{"priceTable":{"currency":"USD","models":[{"provider":"CODEX","inputPerMillionTokens":"1","outputPerMillionTokens":"2"}]}}`, want: "model must be non-empty"},
 	}

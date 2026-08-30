@@ -13,6 +13,7 @@ import (
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -21,6 +22,9 @@ import (
 const (
 	endToEndPricedModel   = "gpt-5-codex"
 	endToEndUnpricedModel = "mystery-model"
+	cachedPricingInput    = int64(10_000)
+	cachedPricingCached   = int64(9_984)
+	cachedPricingOutput   = int64(100)
 )
 
 // TestRuntimeCostsEndToEndFromProviderCompletion proves the corrected public
@@ -100,6 +104,134 @@ func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
 	}
 	t.Logf("captured canonical provider usage records: %s", encodedRecords)
 	t.Logf("captured public costs rollup: %s", strings.TrimSpace(output))
+}
+
+// TestRuntimeCostsCachedInputConfigurationMatrix proves one recorded usage
+// row is valued from the built-in cached rate, a complete operator replacement,
+// an omitted cached rate, and an explicit zero without another provider call.
+func TestRuntimeCostsCachedInputConfigurationMatrix(t *testing.T) {
+	factoryDir := support.ScaffoldSingleStepFactory(t, "cached-input-pricing-functional")
+	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig("codex", endToEndPricedModel))
+	testutil.WriteSeedFile(t, factoryDir, "task", []byte(`{"title":"cached cost rollup"}`))
+	providerRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdoutWithUsage(
+			"cached COMPLETE", cachedPricingInput, cachedPricingOutput, cachedPricingCached,
+		),
+	})
+
+	var homeDir string
+	session, listed, _ := support.RunFactoryToCompletionWithConfiguredHome(
+		t,
+		factoryDir,
+		serviceedges.Edges{ProviderCommandRunner: providerRunner},
+		30*time.Second,
+		func(configuredHome string) { homeDir = configuredHome },
+	)
+	if homeDir == "" {
+		t.Fatal("configured home directory was not returned")
+	}
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("session progress = %+v, want one terminal work item and no failures", session.Runtime.Progress.Categories)
+	}
+	if len(listed.Results) != 1 {
+		t.Fatalf("listed work = %d, want one completed work item", len(listed.Results))
+	}
+	if providerRunner.CallCount() != 1 {
+		t.Fatalf("provider command calls after recording = %d, want exactly one", providerRunner.CallCount())
+	}
+
+	defaultReport, _ := queryCostsReport(t, factoryDir, homeDir, "")
+	assertCachedPricingReport(t, defaultReport, "PRICED", "0.002268", "BUILT_IN", "")
+
+	cachedRate := "0.50"
+	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
+		Provider:                    "codex",
+		Model:                       endToEndPricedModel,
+		InputPerMillionTokens:       "1.25",
+		OutputPerMillionTokens:      "10",
+		CachedInputPerMillionTokens: &cachedRate,
+	})
+	overrideReport, _ := queryCostsReport(t, factoryDir, homeDir, "")
+	assertCachedPricingReport(t, overrideReport, "PRICED", "0.006012", "OPERATOR_SUPPLIED", "")
+	if providerRunner.CallCount() != 1 {
+		t.Fatalf("provider command calls after operator override query = %d, want one recorded call", providerRunner.CallCount())
+	}
+
+	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
+		Provider:               "codex",
+		Model:                  endToEndPricedModel,
+		InputPerMillionTokens:  "1.25",
+		OutputPerMillionTokens: "10",
+	})
+	omittedReport, _ := queryCostsReport(t, factoryDir, homeDir, "")
+	assertCachedPricingReport(t, omittedReport, "UNPRICED", "", "", "cached-input rate is not configured")
+
+	zeroRate := "0"
+	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
+		Provider:                    "codex",
+		Model:                       endToEndPricedModel,
+		InputPerMillionTokens:       "1.25",
+		OutputPerMillionTokens:      "10",
+		CachedInputPerMillionTokens: &zeroRate,
+	})
+	zeroReport, _ := queryCostsReport(t, factoryDir, homeDir, "")
+	// Cost amounts use the shortest exact decimal representation, so the
+	// mathematically exact $0.001020 result is serialized as $0.00102.
+	assertCachedPricingReport(t, zeroReport, "PRICED", "0.00102", "OPERATOR_SUPPLIED", "")
+	if providerRunner.CallCount() != 1 {
+		t.Fatalf("provider command calls after zero-rate query = %d, want one recorded call", providerRunner.CallCount())
+	}
+}
+
+func assertCachedPricingReport(
+	t *testing.T,
+	report generatedclient.CostsReport,
+	wantStatus generatedclient.CostsReportStatus,
+	wantCost string,
+	wantSource generatedclient.CostsLineItemPriceSource,
+	wantReason string,
+) {
+	t.Helper()
+	if report.Status != wantStatus {
+		t.Fatalf("cached cost report status = %q, want %q", report.Status, wantStatus)
+	}
+	if len(report.LineItems) != 1 {
+		t.Fatalf("cached cost line items = %d, want one: %#v", len(report.LineItems), report.LineItems)
+	}
+	item := report.LineItems[0]
+	if item.InputTokens == nil || *item.InputTokens != cachedPricingInput ||
+		item.CachedInputTokens == nil || *item.CachedInputTokens != cachedPricingCached ||
+		item.OutputTokens == nil || *item.OutputTokens != cachedPricingOutput {
+		t.Fatalf("cached cost usage = input:%v cached:%v output:%v, want %d/%d/%d", item.InputTokens, item.CachedInputTokens, item.OutputTokens, cachedPricingInput, cachedPricingCached, cachedPricingOutput)
+	}
+	if wantCost == "" {
+		if report.KnownCost != nil || item.PricedAmount != nil {
+			t.Fatalf("unpriced cached cost = report:%v line:%v, want null amounts", report.KnownCost, item.PricedAmount)
+		}
+		if item.Reason == nil || !strings.Contains(*item.Reason, wantReason) {
+			t.Fatalf("unpriced cached cost reason = %v, want %q", item.Reason, wantReason)
+		}
+		if item.PriceSource != nil {
+			t.Fatalf("unpriced cached cost source = %v, want absent", item.PriceSource)
+		}
+		return
+	}
+	if report.KnownCost == nil || *report.KnownCost != wantCost || item.PricedAmount == nil || *item.PricedAmount != wantCost {
+		t.Fatalf("cached cost amount = report:%v line:%v, want exact %s", stringPointerValue(report.KnownCost), stringPointerValue(item.PricedAmount), wantCost)
+	}
+	if item.PriceSource == nil || *item.PriceSource != wantSource {
+		t.Fatalf("cached cost source = %v, want %q", item.PriceSource, wantSource)
+	}
+	if item.Reason != nil {
+		t.Fatalf("priced cached cost reason = %v, want absent", item.Reason)
+	}
+}
+
+func stringPointerValue(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 // TestRuntimeCostsNoUsageThroughPublicCLI proves an empty metrics root is a

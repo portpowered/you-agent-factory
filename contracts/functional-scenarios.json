@@ -1123,6 +1123,10 @@
         {
           "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/factory/visualization/runtime_metrics/successor_lineage_test.go::TestRuntimeMetricsSuccessorLineageAfterSourceLifecycleClose",
+          "boundary": "rest"
         }
       ]
     },

@@ -15,6 +15,14 @@ import (
 // at least one event in the requested generation.
 type CompletedFlushWatermarkReader = recordingcontracts.CompletedFlushWatermarkReader
 
+// SessionLifecycleCompletionPhaser is an optional runtime-ledger capability
+// for placing durable flushes between terminal result and close events.
+type SessionLifecycleCompletionPhaser = recordingcontracts.SessionLifecycleCompletionPhaser
+
+// DeferredSessionCompletionPublisher is an optional runtime-ledger capability
+// for delaying transport completion until SESSION_COMPLETED is durable.
+type DeferredSessionCompletionPublisher = recordingcontracts.DeferredSessionCompletionPublisher
+
 // RecordingLifecycle is a narrow, Recordings-owned capability for peers that
 // only need to begin or bind a canonical recording, append ordered Factory
 // Events, record failures, flush durable positions, stop periodic work, and

@@ -202,6 +202,7 @@ func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.Facto
 		h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
 	case interfaces.FactoryEventTypeSessionCompleted:
 		h.hasSessionCompleted = true
+		h.deferredSessionCompletionPending = true
 	}
 	if event.Context.SessionID != nil {
 		if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
@@ -393,8 +394,11 @@ func (h *FactoryEventHistory) RecordSessionLifecycleFromFactoryConfig(
 	h.RecordSessionStarted(input, eventTime)
 }
 
-// RecordSessionLifecycleCompletion records terminal session result and completion events.
-func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
+// RecordSessionLifecycleResultUpdated records the terminal result portion of
+// the runtime lifecycle. It is split from SESSION_COMPLETED so callers that
+// need separate append control can place the result before the authoritative
+// close marker; the runtime terminal path persists both in one snapshot.
+func (h *FactoryEventHistory) RecordSessionLifecycleResultUpdated(
 	sessionID string,
 	factoryCfg *interfaces.FactoryConfig,
 	tick int,
@@ -405,6 +409,116 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 	if h == nil {
 		return
 	}
+	sessionID, orchestratorKind, _, resultStatus, _ := sessionLifecycleCompletionFacts(
+		sessionID, factoryCfg, factoryState, reason,
+	)
+	h.RecordSessionResultUpdated(SessionLifecycleResultInput{
+		SessionID:        sessionID,
+		OrchestratorKind: orchestratorKind,
+		Source:           "runtime",
+		Tick:             tick,
+		ResultStatus:     resultStatus,
+	}, eventTime)
+}
+
+// RecordSessionLifecycleCompleted records the authoritative close portion of
+// the runtime lifecycle. Duplicate calls remain idempotent at the event
+// history boundary.
+func (h *FactoryEventHistory) RecordSessionLifecycleCompleted(
+	sessionID string,
+	factoryCfg *interfaces.FactoryConfig,
+	tick int,
+	factoryState interfaces.FactoryState,
+	reason string,
+	eventTime time.Time,
+) {
+	if h == nil {
+		return
+	}
+	sessionID, orchestratorKind, failureDetail, resultStatus, finalStatus := sessionLifecycleCompletionFacts(
+		sessionID, factoryCfg, factoryState, reason,
+	)
+	h.RecordSessionCompleted(SessionLifecycleCompleteInput{
+		SessionID:        sessionID,
+		OrchestratorKind: orchestratorKind,
+		Source:           "runtime",
+		Tick:             tick,
+		FinalStatus:      finalStatus,
+		ResultStatus:     &resultStatus,
+		FailureDetail:    failureDetail,
+	}, eventTime)
+}
+
+// RecordSessionLifecycleCompletion records terminal session result and
+// completion events for callers that do not need a durability boundary
+// between the two existing event types.
+func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
+	sessionID string,
+	factoryCfg *interfaces.FactoryConfig,
+	tick int,
+	factoryState interfaces.FactoryState,
+	reason string,
+	eventTime time.Time,
+) {
+	h.RecordSessionLifecycleResultUpdated(sessionID, factoryCfg, tick, factoryState, reason, eventTime)
+	h.RecordSessionLifecycleCompleted(sessionID, factoryCfg, tick, factoryState, reason, eventTime)
+}
+
+// AddDeferredSessionCompletionRecorder registers a callback for the
+// transport-facing terminal signal. Unlike AddEventTypeRecorder, this callback
+// is held until the owner explicitly publishes the already-appended
+// SESSION_COMPLETED after its durability boundary has succeeded.
+func (h *FactoryEventHistory) AddDeferredSessionCompletionRecorder(recorder func()) {
+	if h == nil || recorder == nil {
+		return
+	}
+	h.mu.Lock()
+	if h.deferredSessionCompletionPublished && h.hasSessionCompleted {
+		h.mu.Unlock()
+		recorder()
+		return
+	}
+	h.deferredSessionCompletionRecorders = append(h.deferredSessionCompletionRecorders, recorder)
+	if h.hasSessionCompleted {
+		h.deferredSessionCompletionPending = true
+	}
+	h.mu.Unlock()
+}
+
+// PublishDeferredSessionCompletion releases the terminal callbacks exactly
+// once. Callers invoke it only after the existing SESSION_COMPLETED event has
+// crossed the required durable recording boundary.
+func (h *FactoryEventHistory) PublishDeferredSessionCompletion() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	if !h.deferredSessionCompletionPending || h.deferredSessionCompletionPublished {
+		h.mu.Unlock()
+		return
+	}
+	h.deferredSessionCompletionPublished = true
+	h.deferredSessionCompletionPending = false
+	recorders := append([]func(){}, h.deferredSessionCompletionRecorders...)
+	h.deferredSessionCompletionRecorders = nil
+	h.mu.Unlock()
+	for _, recorder := range recorders {
+		recorder()
+	}
+}
+
+func sessionLifecycleCompletionFacts(
+	sessionID string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryState interfaces.FactoryState,
+	reason string,
+) (
+	string,
+	string,
+	*workerexecution.FailureDetail,
+	interfaces.FactorySessionResultStatus,
+	interfaces.FactorySessionLifecycleStatus,
+) {
 	if strings.TrimSpace(sessionID) == "" {
 		sessionID = workerexecution.DefaultSessionID
 	}
@@ -419,23 +533,7 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 			failureDetail = &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: reason}
 		}
 	}
-	result := resultStatus
-	h.RecordSessionResultUpdated(SessionLifecycleResultInput{
-		SessionID:        sessionID,
-		OrchestratorKind: orchestratorKind,
-		Source:           "runtime",
-		Tick:             tick,
-		ResultStatus:     resultStatus,
-	}, eventTime)
-	h.RecordSessionCompleted(SessionLifecycleCompleteInput{
-		SessionID:        sessionID,
-		OrchestratorKind: orchestratorKind,
-		Source:           "runtime",
-		Tick:             tick,
-		FinalStatus:      finalStatus,
-		ResultStatus:     &result,
-		FailureDetail:    failureDetail,
-	}, eventTime)
+	return sessionID, orchestratorKind, failureDetail, resultStatus, finalStatus
 }
 
 // RecordSessionLifecycleControl records one accepted pause or resume control on the
@@ -676,6 +774,9 @@ func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
 		}
 	}
 	h.events = append(h.events, event)
+	if event.Type == interfaces.FactoryEventTypeSessionCompleted {
+		h.deferredSessionCompletionPending = true
+	}
 	h.recordAppendedEventFactsLocked(event, provenance)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {

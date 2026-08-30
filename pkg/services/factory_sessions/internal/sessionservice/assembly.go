@@ -412,11 +412,18 @@ func (a *Assembly) Complete(
 		LiveChangeAdmission:   runtimebinding.NewLiveChangeAdmission(startupRuntime.RuntimeService()),
 		LiveChangeLogger:      startupRuntime.RuntimeLogger(),
 	}
-	startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
-		if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
-			a.responseStreams.Complete(session.ResponseEvents)
-		}
-	})
+	completeResponseEvents := func() {
+		a.responseStreams.Complete(session.ResponseEvents)
+	}
+	if publisher, ok := startupRuntime.RecordingLedger().(recordings.DeferredSessionCompletionPublisher); ok {
+		publisher.AddDeferredSessionCompletionRecorder(completeResponseEvents)
+	} else {
+		startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
+			if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {
+				completeResponseEvents()
+			}
+		})
+	}
 	a.registry.Upsert(session, true)
 
 	runtime := NewSessionRuntime(
@@ -482,35 +489,6 @@ func (a *Assembly) Complete(
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
-}
-
-type completionSessionIdentity struct {
-	id        string
-	isDefault bool
-	target    factorysessions.TargetRef
-	runtimeID string
-}
-
-func selectCompletionSessionIdentity(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) completionSessionIdentity {
-	sessionID := strings.TrimSpace(factorySessionID)
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
-	isDefault := sessionID == factorysessions.DefaultSessionID
-	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
-	if isDefault {
-		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
-	}
-	runtimeID := ""
-	if isDefault {
-		metricsSessionID := strings.TrimSpace(startupSpec.MetricsSessionID)
-		if metricsSessionID != "" && metricsSessionID != factorysessions.DefaultSessionID {
-			runtimeID = metricsSessionID
-		} else if livesession.IsUUIDID(startupSpec.SessionID) {
-			runtimeID = strings.TrimSpace(startupSpec.SessionID)
-		}
-	}
-	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }
 
 func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) string {

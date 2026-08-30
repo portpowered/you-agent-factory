@@ -25,6 +25,12 @@ func NewPriceTableReader() (providers.PriceTableReaderFunc, error) {
 // Source as-of: 2026-08-21. The source publishes $1.25 input, $0.125 cached
 // input, and $10 output per million tokens. It does not publish a separate
 // reasoning-output rate, so equality with output is explicit in the data.
+//
+// Claude Sonnet 5 source: https://platform.claude.com/docs/en/about-claude/pricing
+// Source as-of: 2026-08-29. The source publishes the introductory $2 input,
+// $0.20 cache-hit, and $10 output rates in effect through 2026-08-31. It does
+// not publish a separate reasoning-output rate, so equality with output is
+// explicit in the data.
 func defaultPriceTable() providers.PriceTable {
 	return providers.PriceTable{
 		Currency: providers.PriceTableCurrencyUSD,
@@ -51,6 +57,7 @@ func defaultPriceTable() providers.PriceTable {
 			// cached input, and $1.20 output per million tokens, with no distinct
 			// reasoning-output rate.
 			defaultCodexPriceModel("gpt-5.6-luna", "0.20", "0.02", "1.20", "https://developers.openai.com/api/docs/models/gpt-5.6-luna", "2026-08-26"),
+			defaultClaudePriceModel("claude-sonnet-5", "2", "0.20", "10", "https://platform.claude.com/docs/en/about-claude/pricing", "2026-08-29"),
 		},
 	}
 }
@@ -59,6 +66,21 @@ func defaultCodexPriceModel(model, input, cachedInput, output, sourceURL, asOfDa
 	reasoningOutput := output
 	return providers.PriceTableModel{
 		Provider:                        providers.IDCodex,
+		Model:                           model,
+		InputPerMillionTokens:           input,
+		OutputPerMillionTokens:          output,
+		CachedInputPerMillionTokens:     &cachedInput,
+		ReasoningOutputPerMillionTokens: &reasoningOutput,
+		SourceURL:                       sourceURL,
+		AsOfDate:                        asOfDate,
+		EqualRateClasses:                []providers.PriceClass{providers.PriceClassReasoningOutput},
+	}
+}
+
+func defaultClaudePriceModel(model, input, cachedInput, output, sourceURL, asOfDate string) providers.PriceTableModel {
+	reasoningOutput := output
+	return providers.PriceTableModel{
+		Provider:                        providers.IDClaude,
 		Model:                           model,
 		InputPerMillionTokens:           input,
 		OutputPerMillionTokens:          output,

@@ -441,6 +441,7 @@ func TestResumeSourceCanonicalSessionIDUsesAutomaticRecordingPath(t *testing.T) 
 		Legacy: &factorydefinitions.ReplayArtifact{
 			Events: []factorydefinitions.FactoryEvent{
 				{Context: factorydefinitions.FactoryEventContext{SessionID: &alias}},
+				{Type: factorydefinitions.FactoryEventTypeSessionCompleted},
 			},
 		},
 	}
@@ -519,7 +520,10 @@ func TestResumeSourceCanonicalSessionIDAllowsAliasAlongsideCanonicalEventIdentit
 func TestLoadResumeInputCarriesV2MetadataIdentityWithoutChangingHistory(t *testing.T) {
 	fullInput := recordings.LoadReplayInputResult{
 		Legacy: &factorydefinitions.ReplayArtifact{
-			Events: []factorydefinitions.FactoryEvent{{Id: "resume-event"}},
+			Events: []factorydefinitions.FactoryEvent{
+				{Id: "resume-event"},
+				{Type: factorydefinitions.FactoryEventTypeSessionCompleted},
+			},
 		},
 	}
 	metadataInput := recordings.LoadReplayInputResult{
@@ -540,7 +544,7 @@ func TestLoadResumeInputCarriesV2MetadataIdentityWithoutChangingHistory(t *testi
 	if got.SourceCanonicalSessionID != resumeSourceSessionID {
 		t.Fatalf("source canonical session ID = %q, want %q", got.SourceCanonicalSessionID, resumeSourceSessionID)
 	}
-	if got.Input.Legacy == nil || len(got.Input.Legacy.Events) != 1 || got.Input.Legacy.Events[0].Id != "resume-event" {
+	if got.Input.Legacy == nil || len(got.Input.Legacy.Events) != 2 || got.Input.Legacy.Events[0].Id != "resume-event" {
 		t.Fatalf("resume history = %#v, want unchanged legacy history", got.Input.Legacy)
 	}
 }
@@ -549,10 +553,13 @@ func TestLoadResumeInputUsesAutomaticPathIdentityForLegacyAliasHistory(t *testin
 	alias := "~default"
 	fullInput := recordings.LoadReplayInputResult{
 		Legacy: &factorydefinitions.ReplayArtifact{
-			Events: []factorydefinitions.FactoryEvent{{
-				Id:      "resume-event",
-				Context: factorydefinitions.FactoryEventContext{SessionID: &alias},
-			}},
+			Events: []factorydefinitions.FactoryEvent{
+				{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{SessionID: &alias},
+				},
+				{Type: factorydefinitions.FactoryEventTypeSessionCompleted},
+			},
 		},
 	}
 	loader := replayInputLoaderFunc(func(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {

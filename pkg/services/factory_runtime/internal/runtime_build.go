@@ -229,6 +229,7 @@ func NewRuntimeBuild(
 	recordPath string,
 	workflowID string,
 	defaultSessionID string,
+	metricsSessionID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
 	providerOverride providers.Service,
 	providerCommandRunner platformprocess.CommandRunner,

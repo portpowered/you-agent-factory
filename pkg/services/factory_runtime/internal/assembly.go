@@ -135,6 +135,7 @@ func (a *Assembly) Assemble(
 		recordPath,
 		workflowID,
 		defaultSessionID,
+		metricsSessionID,
 		workstationLoader,
 		providerOverride,
 		providerCommandRunner,

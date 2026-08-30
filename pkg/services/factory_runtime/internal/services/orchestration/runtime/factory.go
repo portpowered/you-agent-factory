@@ -65,6 +65,10 @@ type factoryImpl struct {
 	completeCh                  chan struct{}
 	completeOnce                sync.Once
 	runCancel                   context.CancelFunc
+	completionDurabilityGate    func() error
+	completionMu                sync.Mutex
+	completionResultRecorded    bool
+	completionEventRecorded     bool
 	operatorMoveRequests        map[string]appliedOperatorMove
 	resumeDrainPending          bool
 	workerSessionControlMu      sync.Mutex
@@ -430,26 +434,6 @@ func recordSessionStartedFromFactoryConfig(cfg *runtimeConfig, eventHistory reco
 	)
 }
 
-func recordSessionLifecycleCompletionFromFactory(
-	f *factoryImpl,
-	tick int,
-	factoryState interfaces.FactoryState,
-	reason string,
-	eventTime time.Time,
-) {
-	if f == nil || f.eventHistory == nil || f.cfg == nil {
-		return
-	}
-	f.eventHistory.RecordSessionLifecycleCompletion(
-		sessionIDFromFactoryConfig(f.cfg),
-		factoryConfigFromFactoryConfig(f.cfg),
-		tick,
-		factoryState,
-		reason,
-		eventTime,
-	)
-}
-
 func (f *factoryImpl) recordSessionLifecyclePause() {
 	if f == nil || f.eventHistory == nil || f.cfg == nil {
 		return
@@ -596,10 +580,14 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
 	completedAt := f.clock.Now()
 	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
-	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
-	closeRuntimeEventSubscriptions(f.eventHistory)
+	lifecycleErr := recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
+	finalErr = errors.Join(finalErr, lifecycleErr)
+	if lifecycleErr == nil {
+		publishDeferredSessionCompletion(f.eventHistory)
+		closeRuntimeEventSubscriptions(f.eventHistory)
+	}
 
-	if errors.Is(runErr, context.Canceled) && stopErr == nil {
+	if errors.Is(runErr, context.Canceled) && stopErr == nil && lifecycleErr == nil {
 		return nil
 	}
 	return finalErr

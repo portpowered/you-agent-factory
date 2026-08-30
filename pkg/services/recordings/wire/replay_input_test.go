@@ -11,10 +11,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -137,6 +139,41 @@ func TestReplayInputLoaderMetadataModeReadsOnlyV2Header(t *testing.T) {
 	}
 	if openCalls != 2 {
 		t.Fatalf("streaming opener calls = %d, want classification and metadata reads", openCalls)
+	}
+}
+
+func TestReplayInputLoaderCarriesV2TerminalMetadataWithFullHistory(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "00000000-0000-4000-8000-000000000099"
+	header := []byte(`{"recordType":"header","schemaVersion":"agent-factory.replay.v2","recordedAt":"2026-08-24T00:00:00Z","sessionId":"` + sessionID + `","factoryIdentity":{"id":"factory","name":"factory","factoryDirectory":"factory","sourceDirectory":"factory"},"hashes":{"factory_hash":"sha256:factory","workers_hash":"sha256:workers","workstations_hash":"sha256:workstations","runtime_config_hash":"sha256:runtime"}}` + "\n")
+	terminal, err := replayimpl.MarshalReplayV2Terminal(
+		time.Date(2026, 8, 24, 0, 1, 0, 0, time.UTC),
+		"completed",
+		replayimpl.ReplayV2FlushDiagnostics{},
+	)
+	if err != nil {
+		t.Fatalf("marshal replay v2 terminal: %v", err)
+	}
+	payload := append(append([]byte(nil), header...), terminal...)
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) { return payload, nil },
+		func(string) (*recordings.ReplayArtifact, error) { return &recordings.ReplayArtifact{}, nil },
+		logging.NoopLogger{},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.jsonl"})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if result.Legacy == nil {
+		t.Fatal("Legacy = nil, want normalized full history")
+	}
+	if result.Metadata == nil || result.Metadata.FactorySessionID != sessionID {
+		t.Fatalf("metadata = %#v, want canonical session %q", result.Metadata, sessionID)
+	}
+	if !result.Metadata.Completed {
+		t.Fatalf("metadata = %#v, want completed V2 framing marker", result.Metadata)
 	}
 }
 

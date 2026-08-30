@@ -291,8 +291,9 @@ func (fixture *packagedFixCLIProcessFixture) close() error {
 }
 
 // packagedFixGitSeed is an immutable real Git repository used only as a
-// metadata seed. Each scenario receives a distinct copied .git directory and
-// retains real Git worktree creation and failure behavior.
+// metadata seed. Each scenario receives a distinct real Git clone and retains
+// real Git worktree creation and failure behavior without copying transient
+// administrative lock files.
 type packagedFixGitSeed struct {
 	rootDir string
 
@@ -331,12 +332,12 @@ func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
 		{"init"},
 		{"config", "user.email", "fix-functional@example.com"},
 		{"config", "user.name", "fix functional"},
+		{"config", "gc.auto", "0"},
+		{"config", "maintenance.auto", "false"},
 		{"commit", "--allow-empty", "-m", "initial Fix functional repository"},
 	}
 	for _, args := range commands {
-		command := exec.Command("git", args...)
-		command.Dir = rootDir
-		if output, err := command.CombinedOutput(); err != nil {
+		if output, err := runPackagedFixGitCommand(rootDir, args...); err != nil {
 			cleanupRoot()
 			return nil, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, output)
 		}
@@ -344,13 +345,32 @@ func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
 	return &packagedFixGitSeed{rootDir: rootDir}, nil
 }
 
+func runPackagedFixGitCommand(workspace string, args ...string) ([]byte, error) {
+	command := exec.Command("git", args...)
+	command.Dir = workspace
+	return command.CombinedOutput()
+}
+
 func (seed *packagedFixGitSeed) copyMetadata(t *testing.T, workspace string) {
 	t.Helper()
-	if err := os.CopyFS(
-		filepath.Join(workspace, ".git"),
-		os.DirFS(filepath.Join(seed.rootDir, ".git")),
+	cloneDir, err := os.MkdirTemp("", "you-functional-packaged-fix-git-clone-")
+	if err != nil {
+		t.Fatalf("create temporary packaged Fix Git clone: %v", err)
+	}
+	defer os.RemoveAll(cloneDir)
+	if output, err := runPackagedFixGitCommand(
+		"", "clone", "--quiet", "--no-local", "--no-checkout",
+		"--config", "gc.auto=0",
+		"--config", "maintenance.auto=false",
+		"--config", "user.email=fix-functional@example.com",
+		"--config", "user.name=fix functional",
+		seed.rootDir,
+		cloneDir,
 	); err != nil {
-		t.Fatalf("copy packaged Fix Git metadata: %v", err)
+		t.Fatalf("clone packaged Fix Git metadata: %v\n%s", err, output)
+	}
+	if err := os.Rename(filepath.Join(cloneDir, ".git"), filepath.Join(workspace, ".git")); err != nil {
+		t.Fatalf("install cloned packaged Fix Git metadata: %v", err)
 	}
 	seed.mu.Lock()
 	seed.metadataCopies++

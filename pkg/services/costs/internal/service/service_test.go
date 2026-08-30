@@ -81,6 +81,58 @@ func TestQueryCostsUsesRetainedFactorySessionIDsAsAuthoritativeFilter(t *testing
 	}
 }
 
+func TestQueryInvalidCachedInputMeasurementsRemainUnpriced(t *testing.T) {
+	t.Parallel()
+
+	cachedRate := "0.5"
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{
+			testPriceModel("gpt-5", "1", "2", &cachedRate, nil),
+		},
+	}}
+	rows := []factoryvisualization.RuntimeMetricsUsageRow{
+		usageRow("session", "work-negative", "dispatch-negative", "worker-negative", "codex", "gpt-5", 10, 2, int64Ptr(-1), nil),
+		usageRow("session", "work-exceeds", "dispatch-exceeds", "worker-exceeds", "codex", "gpt-5", 10, 2, int64Ptr(11), nil),
+	}
+	query, err := New(pricing, operatorSettingsStub(), metricsQueryStub(rows, nil), logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	report, err := query.Query(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if report.Status != costs.StatusUnpriced || report.KnownCost != nil || report.Coverage.EncounteredRows != 2 || report.Coverage.UnpricedRows != 2 {
+		t.Fatalf("invalid cached-input report = %#v, want wholly unpriced two-row coverage", report)
+	}
+	if len(report.LineItems) != 2 {
+		t.Fatalf("invalid cached-input line items = %#v, want two distinct work rows", report.LineItems)
+	}
+	for _, want := range []struct {
+		work   string
+		reason string
+	}{
+		{work: "work-negative", reason: "cached-input token count is negative"},
+		{work: "work-exceeds", reason: "cached-input token count exceeds input token count"},
+	} {
+		found := false
+		for _, line := range report.LineItems {
+			if line.WorkID != want.work {
+				continue
+			}
+			found = true
+			if line.Status != costs.StatusUnpriced || line.PricedAmount != nil || line.Reason != want.reason {
+				t.Fatalf("invalid cached-input line for %q = %#v, want UNPRICED with reason %q", want.work, line, want.reason)
+			}
+		}
+		if !found {
+			t.Fatalf("invalid cached-input line for %q not found in %#v", want.work, report.LineItems)
+		}
+	}
+}
+
 func assertExactReport(t *testing.T, report costs.Report) {
 	t.Helper()
 	if report.Scope.Kind != costs.ScopeAllFactorySessions || report.Currency != "USD" {

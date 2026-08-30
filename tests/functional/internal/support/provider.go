@@ -90,7 +90,7 @@ func CodexSuccessStdout(result string) []byte {
 // CodexSuccessStdoutWithUsage emits the same sanitized Codex JSONL fixture as
 // CodexSuccessStdout while allowing a functional test to prove provider usage
 // metadata at the command-runner edge.
-func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64) []byte {
+func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64, cachedInputTokens ...int64) []byte {
 	if result == "" {
 		result = "Done. COMPLETE"
 	}
@@ -105,12 +105,16 @@ func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64)
 	if err != nil {
 		panic(err)
 	}
+	usage := map[string]any{
+		"input_tokens":  inputTokens,
+		"output_tokens": outputTokens,
+	}
+	if len(cachedInputTokens) > 0 {
+		usage["cached_input_tokens"] = cachedInputTokens[0]
+	}
 	turnCompleted, err := json.Marshal(map[string]any{
-		"type": "turn.completed",
-		"usage": map[string]any{
-			"input_tokens":  inputTokens,
-			"output_tokens": outputTokens,
-		},
+		"type":  "turn.completed",
+		"usage": usage,
 	})
 	if err != nil {
 		panic(err)

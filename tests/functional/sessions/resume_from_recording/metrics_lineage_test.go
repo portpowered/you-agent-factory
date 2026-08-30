@@ -75,6 +75,7 @@ func TestSingleDispatchMetricsStayScopedAcrossRecordingResume(t *testing.T) {
 		t.Fatalf("source provider calls = %d, want exactly one", got)
 	}
 
+	source.Stop(t)
 	source.Close(t)
 	if _, err := os.Stat(sourceRecording); err != nil {
 		t.Fatalf("source recording after close: %v", err)

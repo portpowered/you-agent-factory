@@ -160,6 +160,10 @@ func (f *RuntimeFactory) Build(
 	if sessionID == "" {
 		sessionID = defaultSessionID
 	}
+	metricsSessionID = strings.TrimSpace(metricsSessionID)
+	if metricsSessionID == "" {
+		metricsSessionID = sessionID
+	}
 	if f == nil || f.loggerFactory == nil {
 		return nil, fmt.Errorf("runtime logger factory is required")
 	}
@@ -452,6 +456,13 @@ func assembleRuntimeBundle(
 		SetPromptSourceReader(func(string) ([]byte, error))
 	}); ok && inputFiles != nil {
 		configurable.SetPromptSourceReader(inputFiles.ReadFile)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetCompletionDurabilityGate(func() error)
+	}); ok && recording != nil {
+		configurable.SetCompletionDurabilityGate(func() error {
+			return recording.Finalize(clock.Now().UTC())
+		})
 	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err

@@ -14,6 +14,12 @@
       ]
     },
     {
+      "test": "tests/functional/factory/visualization/runtime_metrics/successor_lineage_test.go::TestRuntimeMetricsSuccessorLineageAfterSourceLifecycleClose",
+      "stableIds": [
+        "rest/getMetrics"
+      ]
+    },
+    {
       "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
       "stableIds": [
         "rest/invokeGenericModel"

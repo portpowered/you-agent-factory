@@ -4,10 +4,9 @@
   "packages": [
     {
       "packagePath": "tests/functional/factory/packaged/fix",
-      "count": 2,
+      "count": 1,
       "siteIds": [
-        "OSSPAWN-tests-functional-factory-packaged-fix-invocation-test-runPackagedFixGit-01",
-        "OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-startPackagedFixGitSeed-01"
+        "OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-runPackagedFixGitCommand-01"
       ]
     },
     {
@@ -124,9 +123,10 @@
     },
     {
       "packagePath": "tests/functional/sessions/restart",
-      "count": 3,
+      "count": 4,
       "siteIds": [
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01",
+        "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-TestBoardPersistenceSharedBinaryPartialSetupFailure-01",
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01",
         "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01"
       ]

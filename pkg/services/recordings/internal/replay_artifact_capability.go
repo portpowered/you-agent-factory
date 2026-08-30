@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 var _ recordings.RecordingReplayArtifacts = (*combinedService)(nil)
@@ -198,7 +200,7 @@ func (loader *replayInputLoader) LoadReplayInput(
 	if isPortableReplayInput(data) {
 		return loader.loadPortableReplayInput(data)
 	}
-	return loader.loadLegacyReplayInput(request.Path)
+	return loader.loadLegacyReplayInput(request.Path, data)
 }
 
 func isPortableReplayInput(data []byte) bool {
@@ -254,6 +256,7 @@ func (loader *replayInputLoader) loadPortableReplayInput(
 
 func (loader *replayInputLoader) loadLegacyReplayInput(
 	path string,
+	data []byte,
 ) (recordings.LoadReplayInputResult, error) {
 	if loader.loadLegacy == nil {
 		return loader.replayInputDependencyFailure("legacy_loader_unavailable", fmt.Errorf("replay artifact loader is required"))
@@ -267,8 +270,35 @@ func (loader *replayInputLoader) loadLegacyReplayInput(
 		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), "")
 		return recordings.LoadReplayInputResult{}, failure
 	}
+	metadata, metadataErr := replayV2InputMetadata(data)
+	if metadataErr != nil {
+		failure := newReplayInputError(
+			recordings.ReplayInputFamilyLegacy,
+			fmt.Errorf("parse replay artifact framing: %w", metadataErr),
+		)
+		loader.logReplayInputOutcome("validation_failure", string(failure.Diagnostic.Code), string(recordings.ReplayInputFamilyLegacy))
+		return recordings.LoadReplayInputResult{}, failure
+	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy))
-	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+	return recordings.LoadReplayInputResult{Legacy: artifact, Metadata: metadata}, nil
+}
+
+// replayV2InputMetadata preserves framing facts that are intentionally absent
+// from the normalized legacy artifact. The full-input path already has the
+// durable bytes, so it can retain the terminal marker without widening the
+// replay artifact model or making metadata-only reads materialize history.
+func replayV2InputMetadata(data []byte) (*recordings.ReplayInputMetadata, error) {
+	if !replayimpl.IsReplayV2Artifact(data) {
+		return nil, nil
+	}
+	stream, err := replayimpl.ParseReplayV2(data)
+	if err != nil {
+		return nil, err
+	}
+	return &recordings.ReplayInputMetadata{
+		FactorySessionID: strings.TrimSpace(stream.Header.SessionID),
+		Completed:        stream.Terminal != nil,
+	}, nil
 }
 
 func (loader *replayInputLoader) loadReplayInputMetadata(
