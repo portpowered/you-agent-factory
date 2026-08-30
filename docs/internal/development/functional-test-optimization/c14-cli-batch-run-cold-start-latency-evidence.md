@@ -575,9 +575,11 @@ test-only violations.
 The implementation was rebased onto current `origin/main`
 `a44ed015421b1ed42b919f1178531f38fd5087b5`. The validated source head is
 `1dc12f20f7ef812d7924e0e2e6d65d39ee4d585a`; its ancestry is clean. The
-compiled artifact
-`.artifacts/batch-coldstart-probe/validation-1dc12f20f7ef.exe` has SHA-256
-`5D3F6B408C7B265E79763805C2620C1665E3BA8F747DEC98AF5A02255EE831EC`.
+final evidence-head artifact
+`.artifacts/batch-coldstart-probe/validation-9d1ffa7653-novcs.exe` was built
+from evidence head `9d1ffa765342fdef4b565825562ec71fface455e` with
+`go build -buildvcs=false -o ... ./cmd/factory` and has SHA-256
+`BA6D1E721E97EBE98BA17C921DD659BC8710FBFD68CD5DC3413FC8612D887FFE`.
 No Go, functional-test, API, generated, or Wire source changed after this
 validated source head.
 
@@ -587,17 +589,17 @@ validated source head.
 run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
 ~~~
 
-ran in three fresh child fixture/home directories in `325.043 ms`,
-`313.562 ms`, and `314.721 ms`; sorted median `314.721 ms`. Against the
-story-001 `1318.610 ms` baseline, this is `1003.889 ms` and `76.13%` lower
-(`0.2387x` the baseline). Every child exited `0`, reported
-`HasExited=True`, wrote exact stdout `Batch completed successfully.\\n`,
+ran in three fresh child fixture/home directories in `461.502 ms`,
+`348.449 ms`, and `350.666 ms`; sorted median `350.666 ms`. Against the
+story-001 `1318.610 ms` baseline, this is `967.944 ms` and `73.41%` lower
+(`0.2659x` the baseline). Every child exited `0`, reported
+`HasExited=True`, wrote exact stdout `Batch completed successfully.\n`,
 empty stderr, and left zero packaged-Factory files. Each durable snapshot
 contained `one-work` at `prompt-task:complete`, state `complete`, outcome
 `ACCEPTED`, and transition `process-prompt`. Snapshot hashes for runs 1–3
-were `9C79D2831A60D48BDC98F0322B0CAD84F5FD18EE2073D822732AB4C2D2C939C6`,
-`5BD6DAE1830E42BC2758592321DBBAF19A90E79DBA1CFDAD5BA650AE6FF66E1E`, and
-`01A420FE0A3B6228529AC7793D71BDC6C5FB38E6F449AE4A56832F7782B8BC8C`.
+were `A5AD7E388B2E57E964E315F41DBB91F1DA834873C7314D13930C83C50FB41B06`,
+`67A7FC11E2FD496E4376FD4495B5778D1E9650C17013BE6FC6A9474CEC3B8F05`, and
+`9C13B65C4868C2A60DEC1001D616A1A676EF7EC88F9AC43A9AFC1F2644EB47D4`.
 Fixture hashes remained unchanged: Factory
 `AD247CDAD555A29A73149E109B57AD3270FB1F705E3C805C9805B55493B9F978`, Work
 `CA3828653379C6BA4DA77FA2C887C03EBE65A846ADFB4FDAA2E7C2083D84DCC4`, and

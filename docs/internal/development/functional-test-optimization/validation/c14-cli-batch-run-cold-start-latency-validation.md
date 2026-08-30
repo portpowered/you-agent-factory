@@ -4,16 +4,18 @@
 
 - Validation source head: `1dc12f20f7ef812d7924e0e2e6d65d39ee4d585a`, rebased
   onto `origin/main` `a44ed015421b1ed42b919f1178531f38fd5087b5`. The final
-  evidence changes are documentation/scaffolding only; no Go, functional-test,
-  API, generated, or Wire source changed after this validation source head.
+  evidence commits are documentation only; no Go, functional-test, API,
+  generated, or Wire source changed after this validation source head.
 - Environment: Microsoft Windows 10.0.26200, `go1.25.0 windows/amd64`, Node
   `v22.12.0`, Bun `1.4.0`, PowerShell `7.6.5`, and 24 logical CPUs. Probe
   children used isolated `HOME`/`USERPROFILE` directories and
   `YOU_NO_BROWSER_OPEN=1`.
 - Customer entry point: the compiled `./cmd/factory` binary, invoked with the
   exact one-Work batch command recorded below.
-- Customer artifact: `.artifacts/batch-coldstart-probe/validation-1dc12f20f7ef.exe`,
-  SHA-256 `5D3F6B408C7B265E79763805C2620C1665E3BA8F747DEC98AF5A02255EE831EC`.
+- Customer artifact: `.artifacts/batch-coldstart-probe/validation-9d1ffa7653-novcs.exe`,
+  built from evidence head `9d1ffa765342fdef4b565825562ec71fface455e` with
+  `go build -buildvcs=false -o ... ./cmd/factory`; SHA-256
+  `BA6D1E721E97EBE98BA17C921DD659BC8710FBFD68CD5DC3413FC8612D887FFE`.
 - Real and substituted dependencies: the real compiled CLI, Go runtime,
   filesystem, child-process creation, durable snapshot writer, and local
   lifecycle were exercised. The Work worker was the repository's accepting
@@ -34,7 +36,7 @@
 | GATE-CHAR-001 | PASS | The story-001 pre-change binary, exact fixture hashes, baseline median `1318.610 ms`, terminal Work, cleanup, and CPU-profile attribution remain in the tracked evidence ledger. | Future hosts and non-mock providers. |
 | GATE-SPINE-001 | PASS | Changed CLI/process-lifecycle tests, direct initializer/application/Wire/runtime-hosting/recording/replay consumers, demanded-initializer failure, lifecycle order, same-preparation concurrency, reuse, recovery, and cleanup witnesses passed. | The broad unchanged ACP idle-stdin cancellation edge remains qualified below. |
 | GATE-RACE-001 | PASS, qualified | The changed CLI and process-lifecycle race selectors passed five repetitions; the direct same-preparation demand witness proves one initializer call for concurrent first demand. | An unrelated broad ACP idle-stdin cancellation selector remains unproven. |
-| GATE-PERF-001 | PASS | Three exact fresh child invocations from the validated source head had median `314.721 ms`, `76.13%` below the `1318.610 ms` baseline, with exact output, exit, accepted terminal Work, exited children, and zero packaged-Factory files. | Other machines and later source drift. |
+| GATE-PERF-001 | PASS | Three exact fresh child invocations from the final evidence head had median `350.666 ms`, `73.41%` below the `1318.610 ms` baseline, with exact output, exit, accepted terminal Work, exited children, and zero packaged-Factory files. | Other machines and later source drift. |
 | GATE-SERVER-001 | PASS | Runtime-hosting, recording/replay, readiness/failure/cancellation, lifecycle, and server-preservation selectors passed; the serialized functional inventory also passed unchanged server/session/event paths. | No browser criterion applies to this backend/compiled-CLI change. |
 | GATE-FUNC-001 | PASS, serialized | `FUNCTIONAL_DEFAULT_JOBS=1 make test-functional-fresh` exited `0` with isolated homes and `YOU_NO_BROWSER_OPEN=1`; the complete unchanged inventory passed, including packaged factories, server/session/event, recordings/process, and workers/mock. | The default parallel runner remains sensitive to shared staging ownership. |
 | Quality gates | PASS, platform-qualified | `make test` exited `0`; package, boundary, structure, cycle, catalog, generation, package-maintainability, backend-size, and file-count checks passed. Native aggregate lint passed every target except the pre-existing Windows build-tag deadcode comparison (`3072` current findings versus `3074` baseline); no baseline or unrelated source was changed. | The shared deadcode baseline is not changed in this lane. |
@@ -50,19 +52,19 @@ isolated child fixture/home directories:
 run --work one-work.json --with-mock-workers=accept.json --no-record --quiet
 ~~~
 
-The observed wall times were `325.043 ms`, `313.562 ms`, and `314.721 ms`;
-the sorted median was `314.721 ms`. Against the characterized baseline of
-`1318.610 ms`, the median is `1003.889 ms` lower, or `76.13%` lower
-(`0.2387x` the baseline). Every process exited `0`, reported
+The observed wall times were `461.502 ms`, `348.449 ms`, and `350.666 ms`;
+the sorted median was `350.666 ms`. Against the characterized baseline of
+`1318.610 ms`, the median is `967.944 ms` lower, or `73.41%` lower
+(`0.2659x` the baseline). Every process exited `0`, reported
 `HasExited=True`, wrote exact stdout `Batch completed successfully.\n`
 (30 UTF-8 bytes), and wrote empty stderr.
 
 Each durable snapshot contained Work `one-work` at
 `prompt-task:complete`, state `complete`, outcome `ACCEPTED`, and
 transition `process-prompt`. Snapshot hashes for runs 1–3 were
-`9C79D2831A60D48BDC98F0322B0CAD84F5FD18EE2073D822732AB4C2D2C939C6`,
-`5BD6DAE1830E42BC2758592321DBBAF19A90E79DBA1CFDAD5BA650AE6FF66E1E`, and
-`01A420FE0A3B6228529AC7793D71BDC6C5FB38E6F449AE4A56832F7782B8BC8C`.
+`A5AD7E388B2E57E964E315F41DBB91F1DA834873C7314D13930C83C50FB41B06`,
+`67A7FC11E2FD496E4376FD4495B5778D1E9650C17013BE6FC6A9474CEC3B8F05`, and
+`9C13B65C4868C2A60DEC1001D616A1A676EF7EC88F9AC43A9AFC1F2644EB47D4`.
 Each isolated packaged-Factory root contained zero files.
 
 The changed-package and direct-consumer commands exited successfully:
