@@ -578,6 +578,17 @@ baseline-regeneration `TASK-002` failure caused by its clean-worktree fixture
 observing this in-progress diff and generated `.cache/` artifacts; no
 unrelated source was changed.
 
+The next bounded package-local pass starts the retained-plus-live Factory Event
+observer before opening the independent response SSE, coalescing their serial
+public handshakes while keeping Work submission behind response-stream
+readiness. The exact Factory Event count remains the publication barrier; Work,
+provider, response EOF/no-extra-frame, session cleanup, immutable routing, and
+zero-remote witnesses are unchanged. The edited package passed exactly once
+(`4.630s`), the focused success/timeout `-count=3` repeat passed (`10.070s`),
+and the race package passed (`8.885s`). These local timings are diagnostic only;
+fresh hosted Backend Functional Coverage remains the review-owned timing
+verdict.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
