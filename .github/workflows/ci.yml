@@ -606,6 +606,23 @@ jobs:
       - name: Verify pinned backend release assets
         run: make test-backend-conformance-live
 
+  backend-integration:
+    name: Backend Integration
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Run backend integration tests
+        run: make test-integration
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -833,7 +850,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-conformance, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-conformance, backend-integration, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -876,7 +893,7 @@ jobs:
           FRONTEND_COVERAGE_RESULT: ${{ needs.ui-coverage.result }}
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
-          BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
           RUN_BACKEND_UNIT_LATENCY: "true"
           BACKEND_UNIT_LATENCY_REASON: "The canonical three-sample uncached unit-lane latency budget is required on every pull request and push to main."
           BACKEND_UNIT_LATENCY_RESULT: ${{ needs.backend-unit-latency.result }}
