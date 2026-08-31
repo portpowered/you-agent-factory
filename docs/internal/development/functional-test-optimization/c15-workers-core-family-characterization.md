@@ -83,7 +83,7 @@ Exit status was `0`. The observed default top-level selector set was:
 
 | Package | Listed top-level selectors |
 | --- | --- |
-| `mock` | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome`, `TestBuiltCLIBatchExitCodesAggregateFailureCauses`, `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected`, `TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot`, `TestSharedProcessWorkersMock` |
+| `mock` | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome`, `TestBuiltCLIBatchExitCodesAggregateFailureCauses`, `TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot`, `TestSharedProcessWorkersMock` |
 | `agent` | `TestAgentSharedProcess` |
 | `invoke_continue` | `TestInvokeContinueForcedAssertionCleansOwnedResources`, `TestDWROS8ManagerInterruptsOnlyOneRemoteWorker`, `TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers`, `TestInvokeContinueSharedProcess` |
 | `inference/claude` | `TestClaudeForcedAssertionFailureCleansOwnedResources`, `TestClaudeDefaultLaneSharedProcess`, `TestClaudeCommandRouterFailsClosed` |
@@ -91,7 +91,7 @@ Exit status was `0`. The observed default top-level selector set was:
 | `script` | `TestScriptCommandRouterRejectsUnknownAndDuplicateSelectors`, `TestScriptWorkerSharedSuccessSpine` |
 | `transports/cli/run/help` | `TestCLIRunHelpShowsInvocationSignatureForNamedFactory`, `TestCLIRunHelpDistinguishesRequiredAndOptionalParameters`, `TestCLIRunHelpDoesNotDispatchExternalWork`, `TestCLISessionHelpPublishesRunnablePlacementExamples`, `TestCLIRunHelpCoversGenericAndExplicitFactorySelections`, `TestCLIRunHelpResetsEmptyAndInvalidSelections` |
 
-The default selector census contains `25` top-level declarations. The tagged
+The default selector census contains `24` top-level declarations. The tagged
 `functionallong` rows are catalogued below as retained witnesses but do not
 appear in this default list; the later long/clean-room gate owns their
 execution.
@@ -109,7 +109,7 @@ baseline.
 
 | Package | Default root construction | Default API starts | Test-owned build / executable runs | Cleanup owner and census witness |
 | --- | --- | ---: | --- | --- |
-| `mock` | `2`: shared `StartFunctionalAPIServer` plus direct ACP `BuildProcess` | `1` shared server | `1` `go build` compiler through `compiledCLIBinary.once`; `6` `runBuiltYouBinary` executions (three single-batch children, one aggregate child, two named children) | Shared fixture/session cleanup; `TestMain` temporary binary cleanup; M-19 proves no ACP command factory invocation |
+| `mock` | `1` shared `StartFunctionalAPIServer` | `1` shared server | `1` `go build` compiler through `compiledCLIBinary.once`; `6` `runBuiltYouBinary` executions (three single-batch children, one aggregate child, two named children) | Shared fixture/session cleanup; `TestMain` temporary binary cleanup; M-19 proves no counted ACP command-factory or provider-runner invocation |
 | `agent` | `2`: shared fixture plus the isolated malformed-configuration probe | `1` on the shared fixture | none | `agentSharedProcessFixture.close`; the forced-cleanup child has its own one-build/one-listener report |
 | `invoke_continue` | `1` package fixture | `1` package fixture | none | package `TestMain`/fixture close, session and response-stream counters; forced child report requires one build and one API start |
 | `inference/claude` | `1` shared conductor fixture | `1` shared server | none | `assertSharedProcessCleanup` and `removeClaudeOwnedDirectories`; forced child separately proves one process/listener teardown |
@@ -140,7 +140,7 @@ across 23 packages.
 | `OSSPAWN-tests-functional-workers-inference-claude-conductor-forced-cleanup-test-TestClaudeForcedAssertionFailureCleansOwnedResources-01` | `inference/claude/conductor_forced_cleanup_test.go:27`, `TestClaudeForcedAssertionFailureCleansOwnedResources` | Parent observes original assertion failure and resource teardown | one site / one forced child | forced-child fixture report | `INTENTIONAL-OS` — `descendant-cleanup` |
 | `OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-buildYouBinary-01` | `mock/compiled_cli_exit_codes_helpers_test.go:86`, `buildYouBinary` | Selects a test-owned delivered `./cmd/factory` executable | one site / one compiler child due to `sync.Once` | `TestMain` temporary binary directory cleanup | `INTENTIONAL-OS` — `executable-selection` |
 | `OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-runBuiltYouBinary-01` | `mock/compiled_cli_exit_codes_helpers_test.go:103`, `runBuiltYouBinary` | Captures real stdout/stderr and OS exit status | one site / six binary executions | each built-CLI session plus `TestMain` | `INTENTIONAL-OS` — `exit-status` |
-| `OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01` | `mock/javascript_acp_test.go:74`, `mockACPCommandFactory` | The returned command is unreachable when MockWorkers intercepts ACP; M-19 asserts ACP starts and provider calls are zero | one site / zero executions | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` | `ACCIDENTAL-OS` — remove in Story 002 while retaining the zero-call assertion |
+| `OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01` | pre-change `mock/javascript_acp_test.go:74`, removed `mockACPCommandFactory` | The former returned command was unreachable when MockWorkers intercepted ACP; current M-19 retains the zero-call proof through a counted non-spawning command-factory edge | one pre-change site / zero executions | `TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` | `ACCIDENTAL-OS` — removed in Story 002; no replacement spawn |
 | `OSSPAWN-tests-functional-workers-inference-codex-worktree-workstation-test-cleanupCodexWorktreeScenario-01` | `inference/codex/worktree_workstation_test.go:502`, `cleanupCodexWorktreeScenario` | Direct `git worktree remove` fixture cleanup | one site / two normal cleanup commands for two scenarios | `cleanupCodexWorktreeScenario` | `ACCIDENTAL-OS` — replace with the approved repository/filesystem edge in Story 004 |
 | `OSSPAWN-tests-functional-workers-inference-codex-worktree-workstation-test-runGitForCodexWorktreeFunctionalTest-01` | `inference/codex/worktree_workstation_test.go:610`, `runGitForCodexWorktreeFunctionalTest` | Direct `git init/config/commit` fixture setup | one site / eight normal setup commands for two scenarios | scenario repository temp-root cleanup | `ACCIDENTAL-OS` — replace with the approved repository/filesystem edge in Story 004 |
 
@@ -196,7 +196,7 @@ gate; they are not silently omitted from the matrix.
 | M-16 | `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome/{failed terminal Work exits nonzero with human detail,failed terminal Work JSON is parseable}` | `runCompiledBatchHumanFailure` and `runCompiledBatchJSONFailure` check nonzero exit, human detail, and parseable complete JSON failure | `mock/batch_invocation_exit_codes_test.go:48,53` |
 | M-17 | `TestBuiltCLIBatchExitCodesAggregateFailureCauses/all submitted Work failures have a complete JSON collection` | `runCompiledBatchAllFailedJSON` checks nonzero exit and both failures exactly once in deterministic order | `mock/batch_invocation_exit_codes_test.go:64,71` |
 | M-18 | `TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot/{success preserves primary result,terminal failure preserves JSON detail}` | The two named one-shot helpers check primary success/zero exit and typed terminal JSON failure/nonzero exit | `mock/named_invocation_exit_codes_test.go:23,30,57` |
-| M-19 | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` | The test checks successful MockWorkers completion with ACP starts and `ProviderCommandRunner` calls both zero; `mockACPCommandFactory` is never invoked | `mock/javascript_acp_test.go:21,74` |
+| M-19 | `TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` | The nested test checks successful MockWorkers completion with the counted non-spawning `PlatformProcessCommandFactory` and `ProviderCommandRunner` both at zero; the shared root remains reusable and no host command can be launched by this edge | `mock/shared_process_test.go:89`; `mock/javascript_acp_test.go:19,41` |
 
 ### Agent: A-01–A-14
 
@@ -311,14 +311,14 @@ a changed helper to masquerade as the same witness.
 | `tests/functional/workers/mock/service_config_override_alignment_test.go` | `df5eaec194705f36e57122bf55f4befe276c14d2` |
 | `tests/functional/workers/mock/artifact_registry_test.go` | `88765a8d09d6683457b4dd0c07ee140f9f7b5339` |
 | `tests/functional/workers/mock/usage_costs_test.go` | `c676ebd8e317df00403b2fe10e36dd8be052c50a` |
-| `tests/functional/workers/mock/shared_process_test.go` | `7f51c10f3c8c139890f3d9a4e36bae8a753f4afd` |
+| `tests/functional/workers/mock/shared_process_test.go` | `27a230ed5bcdfe155e4da8dee2505542fb635923` |
 | `tests/functional/workers/mock/batch_invocation_shared_test.go` | `58f8341cc60617e75dbf103c549a5a48d400b5b2` |
 | `tests/functional/workers/mock/plain_batch_drain_test.go` | `1e7b3a63ea49e57cddc9c850750b8f5c4b4e1ad5` |
 | `tests/functional/workers/mock/live_capacity_javascript_test.go` | `53519b757459572668ea0debc8077e249ae830c4` |
 | `tests/functional/workers/mock/live_capacity_test.go` | `62606b1ad88fc15b07905359b9094de9b9776961` |
 | `tests/functional/workers/mock/batch_invocation_exit_codes_test.go` | `a7294a97c2bb5fd7302f6cd85fed5192642b716e` |
 | `tests/functional/workers/mock/named_invocation_exit_codes_test.go` | `072286a529e4faf67ff286ea7bec7c7d4b3a437b` |
-| `tests/functional/workers/mock/javascript_acp_test.go` | `508b5e5887a3545893583c84a4ef9922126be6eb` |
+| `tests/functional/workers/mock/javascript_acp_test.go` | `5547ac7779dcb10194a3baa2933be2f5398483c2` |
 | `tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go` | `178840888d01c6e7d207014cec29225b9df7fcda` |
 | `tests/functional/workers/mock/gate_timeout_test.go` | `aef94478f6e7c1ea6ad10f8b6aa8d1f2618c7a6c` |
 | `tests/functional/workers/agent/shared_process_test.go` | `fbe23f6b272aa580d2895a6d0958437c68f4904c` |

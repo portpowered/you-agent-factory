@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -96,20 +97,50 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 }
 
 type sharedWorkersMockFixture struct {
-	server               *support.FunctionalAPIServer
-	providerEdge         *sharedWorkersMockCommandRunner
-	scriptEdge           *sharedWorkersMockCommandRunner
-	gate                 *support.MockWorkerGate
-	runtimeLogDir        string
-	sessionIDGenerator   *sharedWorkersMockSessionIDGenerator
-	inputDirectoryWalker *sharedWorkersMockInputDirectoryWalker
-	activationMu         sync.Mutex
-	localReady           bool
+	server                *support.FunctionalAPIServer
+	providerEdge          *sharedWorkersMockCommandRunner
+	scriptEdge            *sharedWorkersMockCommandRunner
+	processCommandFactory *sharedWorkersMockCommandFactory
+	gate                  *support.MockWorkerGate
+	runtimeLogDir         string
+	sessionIDGenerator    *sharedWorkersMockSessionIDGenerator
+	inputDirectoryWalker  *sharedWorkersMockInputDirectoryWalker
+	activationMu          sync.Mutex
+	localReady            bool
 }
 
 type sharedWorkersMockCommandRunner struct {
 	mu       sync.RWMutex
 	delegate platformprocess.CommandRunner
+}
+
+// sharedWorkersMockCommandFactory is a counted, non-spawning ACP command edge.
+// The mock package must be able to prove that MockWorkers intercepts an ACP
+// selection before the provider constructs a host command. Returning an inert
+// command keeps an accidental call from launching a process; M-19 fails on
+// the count even if a future caller changes the resulting error path.
+type sharedWorkersMockCommandFactory struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (factory *sharedWorkersMockCommandFactory) NewCommand(string, ...string) *exec.Cmd {
+	factory.mu.Lock()
+	factory.calls++
+	factory.mu.Unlock()
+	return &exec.Cmd{}
+}
+
+func (factory *sharedWorkersMockCommandFactory) reset() {
+	factory.mu.Lock()
+	factory.calls = 0
+	factory.mu.Unlock()
+}
+
+func (factory *sharedWorkersMockCommandFactory) CallCount() int {
+	factory.mu.Lock()
+	defer factory.mu.Unlock()
+	return factory.calls
 }
 
 func newSharedWorkersMockCommandRunner() *sharedWorkersMockCommandRunner {
@@ -249,6 +280,7 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 
 	providerEdge := newSharedWorkersMockCommandRunner()
 	scriptEdge := newSharedWorkersMockCommandRunner()
+	processCommandFactory := &sharedWorkersMockCommandFactory{}
 	gate := support.NewMockWorkerGate(t)
 	sessionIDGenerator := &sharedWorkersMockSessionIDGenerator{}
 	inputDirectoryWalker := &sharedWorkersMockInputDirectoryWalker{}
@@ -263,6 +295,7 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 			"--runtime-log-dir", runtimeLogDir,
 		},
 		Edges: serviceedges.Edges{
+			PlatformProcessCommandFactory:      processCommandFactory.NewCommand,
 			ProviderCommandRunner:              providerEdge,
 			ScriptCommandRunner:                scriptEdge,
 			FactorySessionIDGenerator:          sessionIDGenerator.Generate,
@@ -271,13 +304,14 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 	})
 
 	return &sharedWorkersMockFixture{
-		server:               server,
-		providerEdge:         providerEdge,
-		scriptEdge:           scriptEdge,
-		gate:                 gate,
-		runtimeLogDir:        runtimeLogDir,
-		sessionIDGenerator:   sessionIDGenerator,
-		inputDirectoryWalker: inputDirectoryWalker,
+		server:                server,
+		providerEdge:          providerEdge,
+		scriptEdge:            scriptEdge,
+		processCommandFactory: processCommandFactory,
+		gate:                  gate,
+		runtimeLogDir:         runtimeLogDir,
+		sessionIDGenerator:    sessionIDGenerator,
+		inputDirectoryWalker:  inputDirectoryWalker,
 	}
 }
 

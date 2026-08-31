@@ -2035,7 +2035,7 @@
       "directory": "tests/functional/workers/mock",
       "historicalCandidateStatus": "executable-candidate",
       "package": "github.com/portpowered/infinite-you/tests/functional/workers/mock",
-      "namedScenarioCount": 9,
+      "namedScenarioCount": 10,
       "packageId": "F059",
       "sourceFiles": [
         {
@@ -2064,7 +2064,7 @@
         },
         {
           "path": "tests/functional/workers/mock/javascript_acp_test.go",
-          "sha256": "5e95b7ac055135480b0db003417275102fe148ad674e700543167c6184baf843"
+          "sha256": "ed6daa389709101da036f0f109d15b60a436177bd10075c7935d8cbb3c64f9ba"
         },
         {
           "path": "tests/functional/workers/mock/live_capacity_javascript_test.go",
@@ -2100,14 +2100,14 @@
         },
         {
           "path": "tests/functional/workers/mock/shared_process_test.go",
-          "sha256": "e4fd04c3baee809b626c8deb9aa5bbec918422da644179d27a3bd18994a8a4d2"
+          "sha256": "4bac151a39fca5795e2def2243283f5127bfa1f4892e8567e2df834d46eab442"
         },
         {
           "path": "tests/functional/workers/mock/usage_costs_test.go",
           "sha256": "3b63240ae70d0e718314fb73d1f319924acb3489ae8f02274daf7c92ae766400"
         }
       ],
-      "topLevelDeclarationCount": 5,
+      "topLevelDeclarationCount": 4,
       "classificationCounts": {
         "shareable": 0,
         "shareableWithMock": 2,
@@ -2773,11 +2773,11 @@
       "command": "for each resolved package: go test $RESOLVED_PACKAGE -list '^Test' -count=0",
       "exitCode": 0,
       "failedPackages": null,
-      "listedTopLevelCount": 595,
+      "listedTopLevelCount": 594,
       "packageCount": 77,
       "propertyNotProved": "Every final identity now has a source/hash-backed classification and a reconciled source-body/public witness; full-suite runtime parity remains outside Story 003.",
-      "propertyProved": "The real Go test executable listed all 595 top-level identities across the resolved packages; source reconciliation retains 217 named scenarios.",
-      "sourceDeclaredTopLevelCount": 595,
+      "propertyProved": "The real Go test executable listed all 594 top-level identities across the resolved packages; source reconciliation retains 218 named scenarios.",
+      "sourceDeclaredTopLevelCount": 594,
       "status": "pass",
       "unlistedTopLevelCount": 0
     },
@@ -2929,12 +2929,12 @@
     "countUnits": [
       {
         "unit": "top-level-declaration",
-        "count": 595,
+        "count": 594,
         "source": "go test -list '^Test'"
       },
       {
         "unit": "named-scenario",
-        "count": 217,
+        "count": 218,
         "source": "source t.Run identity plus parent-selector confirmation"
       },
       {
@@ -2947,10 +2947,10 @@
       "classificationStatus": "complete-story-004-clean-room",
       "finalRowCount": 812,
       "historicalExecutableCandidateDirectories": 72,
-      "namedScenarios": 217,
+      "namedScenarios": 218,
       "processStartObservations": 206,
       "resolvedPackageDirectories": 77,
-      "topLevelDeclarations": 595,
+      "topLevelDeclarations": 594,
       "packages": 77
     }
   },
@@ -2964,8 +2964,8 @@
   "countUnits": {
     "resolvedPackageDirectories": 77,
     "historicalExecutableCandidateDirectories": 72,
-    "topLevelDeclarations": 595,
-    "namedScenarios": 217,
+    "topLevelDeclarations": 594,
+    "namedScenarios": 218,
     "processStartObservations": 206,
     "finalClassifiedRows": 812,
     "shareableRows": 44,
@@ -6083,10 +6083,10 @@
         "C01-P028-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
       ],
       "mappingKind": "one-to-one",
-      "finalStableIdentities": [
-        "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
-      ],
-      "evidence": "Prior C01 identity=github.com/portpowered/infinite-you/tests/functional/providers/acp::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected; prior source=tests/functional/providers/acp/javascript_factory_run_test.go:50; prior classification=shareable-with-mock; disposition=moved; public witness=The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog.; surfaces=Work, Factory Session, Factory Event, provider selection, controlled worker edge; final stable identities=github.com/portpowered/infinite-you/tests/functional/workers/mock::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected."
+        "finalStableIdentities": [
+          "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
+        ],
+        "evidence": "Prior C01 identity=github.com/portpowered/infinite-you/tests/functional/providers/acp::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected; prior source=tests/functional/providers/acp/javascript_factory_run_test.go:50; prior classification=shareable-with-mock; disposition=moved; public witness=The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog.; surfaces=Work, Factory Session, Factory Event, provider selection, controlled worker edge; final stable identities=github.com/portpowered/infinite-you/tests/functional/workers/mock::TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected."
     },
     {
       "priorC01RowIds": [
@@ -47489,19 +47489,19 @@
       }
     },
     {
-      "stableIdentity": "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
-      "rowKind": "top-level-test",
+      "stableIdentity": "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
+      "rowKind": "named-scenario",
       "package": "github.com/portpowered/infinite-you/tests/functional/workers/mock",
-      "sourcePath": "tests/functional/workers/mock/javascript_acp_test.go",
-      "sourceHashSha256": "5e95b7ac055135480b0db003417275102fe148ad674e700543167c6184baf843",
+      "sourcePath": "tests/functional/workers/mock/shared_process_test.go",
+      "sourceHashSha256": "4bac151a39fca5795e2def2243283f5127bfa1f4892e8567e2df834d46eab442",
       "classification": "shareable-with-mock",
       "publicWitness": {
         "evidenceGate": "EDGE-003",
-        "executableReference": "tests/functional/workers/mock/javascript_acp_test.go:21",
-        "observedOutcome": "passed: the story-003 package run completed this row without a skip or failure.",
-        "property": "The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog.",
+        "executableReference": "tests/functional/workers/mock/shared_process_test.go:89",
+        "observedOutcome": "passed: the focused nested M-19 selector completed without a skip or failure and asserted zero counted ACP process-command factory calls and zero provider-runner calls.",
+        "property": "The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog, without constructing an ACP process command.",
         "scope": "functional",
-        "selectorCommand": "go test -json github.com/portpowered/infinite-you/tests/functional/providers/acp -run '^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$' -count=1 -timeout=5m",
+        "selectorCommand": "go test -json github.com/portpowered/infinite-you/tests/functional/workers/mock -run '^TestSharedProcessWorkersMock$/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$' -count=1 -timeout=5m",
         "status": "confirmed",
         "surfaces": [
           "Work",
@@ -47510,19 +47510,19 @@
           "provider selection",
           "controlled worker edge"
         ],
-        "sourceHashSha256": "5e95b7ac055135480b0db003417275102fe148ad674e700543167c6184baf843",
-        "fidelity": "root.BuildProcess with a controlled provider/command/protocol edge",
-        "currentEvidence": "Final source identity and SHA-256 verified; package evidence: docs/internal/development/functional-test-optimization/c07-cleanup-workers-providers-models.md.",
-        "controlledEdge": "controlled worker/provider command edge at root.BuildProcess"
+        "sourceHashSha256": "4bac151a39fca5795e2def2243283f5127bfa1f4892e8567e2df834d46eab442",
+        "fidelity": "root.BuildProcess with counted non-spawning PlatformProcessCommandFactory and controlled ProviderCommandRunner edges",
+        "currentEvidence": "Final nested source identity and SHA-256 verified; focused M-19 evidence asserts both external-effect counts are zero; package evidence: docs/internal/development/functional-test-optimization/c07-cleanup-workers-providers-models.md.",
+        "controlledEdge": "counted non-spawning PlatformProcessCommandFactory plus controlled worker/provider command edge at root.BuildProcess"
       },
       "isolation": null,
       "processStartObservationIds": [],
       "fixtureDifference": null,
-      "rowId": "C07-F059-top-level-test-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
+      "rowId": "C07-F059-named-scenario-TestSharedProcessWorkersMock-JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
       "packageId": "F059",
-      "sourceLine": 21,
-      "testName": "TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
-      "testSelector": "^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
+      "sourceLine": 89,
+      "testName": "TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
+      "testSelector": "^TestSharedProcessWorkersMock$/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
       "lineage": {
         "priorC01RowIds": [
           "C01-P028-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
@@ -47535,24 +47535,24 @@
         "executable-selection"
       ],
       "evidence": {
-        "sourceReference": "tests/functional/workers/mock/javascript_acp_test.go:21",
-        "sourceHashSha256": "5e95b7ac055135480b0db003417275102fe148ad674e700543167c6184baf843",
+        "sourceReference": "tests/functional/workers/mock/shared_process_test.go:89",
+        "sourceHashSha256": "4bac151a39fca5795e2def2243283f5127bfa1f4892e8567e2df834d46eab442",
         "discovery": {
-          "method": "go test -list '^Test'",
+          "method": "source t.Run declaration",
           "status": "confirmed"
         },
         "packageLedger": "docs/internal/development/functional-test-optimization/c07-cleanup-workers-providers-models.md",
-        "focusedSelector": "^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
-        "classificationBasis": "legacy C01 row evidence retained and source hash rechecked",
+        "focusedSelector": "^TestSharedProcessWorkersMock$/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
+        "classificationBasis": "legacy C01 row retained as a named scenario under the shared process; source hash rechecked",
         "processStartObservationIds": [],
-        "propertyProved": "The row uses a shareable process-free or controlled edge; no process-specific isolation claim is made.",
-        "propertyNotProved": "Full-suite runtime parity, unsupported Unix/signal behavior, remote-provider behavior, clean-room validation, and current-head PR CI remain outside Story 003.",
-        "controlledEdge": "controlled worker/provider command edge at root.BuildProcess",
-        "edgeFidelity": "root.BuildProcess is real; only the named external effect edge is controlled."
+        "propertyProved": "MockWorkers completes the ACP-selected JavaScript child while both the counted non-spawning PlatformProcessCommandFactory and controlled ProviderCommandRunner remain at zero.",
+        "propertyNotProved": "Full-suite runtime parity, unsupported Unix/signal behavior, remote-provider behavior, clean-room validation, and current-head PR CI remain outside Story 002.",
+        "controlledEdge": "counted non-spawning PlatformProcessCommandFactory plus controlled worker/provider command edge at root.BuildProcess",
+        "edgeFidelity": "root.BuildProcess is real; the ACP process factory and provider runner are controlled named external-effect edges."
       },
-      "controlledEdge": "controlled worker/provider command edge at root.BuildProcess",
+      "controlledEdge": "counted non-spawning PlatformProcessCommandFactory plus controlled worker/provider command edge at root.BuildProcess",
       "discovery": {
-        "method": "go test -list '^Test'",
+        "method": "source t.Run declaration",
         "status": "confirmed"
       }
     },
@@ -69191,11 +69191,11 @@
       "compared": 812,
       "mappedFromC01": 200,
       "addedAfterC01": 612,
-      "topLevelDeclarations": 595,
-      "namedScenarios": 217,
+      "topLevelDeclarations": 594,
+      "namedScenarios": 218,
       "exactFinalSourceReferences": 812,
       "sourceHashPairsChecked": 812,
-      "exactNamedParentReferences": 217,
+      "exactNamedParentReferences": 218,
       "unresolved": 0
     },
     "c01Mappings": {
@@ -69237,9 +69237,9 @@
         "mappingKind": "moved",
         "priorC01RowId": "C01-P028-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
         "oldReference": "tests/functional/providers/acp/javascript_factory_run_test.go:50",
-        "finalIdentity": "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
-        "finalReference": "tests/functional/workers/mock/javascript_acp_test.go:21",
-        "publicWitnessProperty": "The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog.",
+        "finalIdentity": "github.com/portpowered/infinite-you/tests/functional/workers/mock::TestSharedProcessWorkersMock/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected",
+        "finalReference": "tests/functional/workers/mock/shared_process_test.go:89",
+        "publicWitnessProperty": "The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog, without constructing an ACP process command.",
         "publicWitnessSurfaces": [
           "Work",
           "Factory Session",
@@ -69247,7 +69247,7 @@
           "provider selection",
           "controlled worker edge"
         ],
-        "comparison": "Exact public-witness property and surfaces; the focused final selector passed with exitCode=0.",
+        "comparison": "Exact public-witness property and surfaces; the focused nested final selector passed with exitCode=0 and asserted zero counted ACP process-command factory and provider-runner calls.",
         "fixtureDifferenceId": "FIX-WORKERS-001"
       },
       {
@@ -69279,10 +69279,10 @@
       },
       {
         "package": "./tests/functional/workers/mock",
-        "selector": "^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
+        "selector": "^TestSharedProcessWorkersMock$/JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$",
         "exitCode": 0,
-        "fidelity": "local-real root.BuildProcess with controlled ACP command edge",
-        "property": "The moved compatibility/mock route remains fake and does not invoke the live ACP provider."
+        "fidelity": "local-real root.BuildProcess with counted non-spawning ACP command-factory and controlled provider edges",
+        "property": "The moved compatibility/mock route remains fake, constructs no ACP process command, and does not invoke the live ACP provider."
       },
       {
         "package": "./tests/functional/workers/inference",

@@ -23,6 +23,8 @@ func testJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(
 	dir := writeMockJavaScriptACPFactory(t)
 	providerRunner := support.NewRecordingCommandRunner("live provider route was unexpectedly invoked")
 	fixture.prepareLocalActivation(t)
+	// Reset after shared setup so this nested row's no-command proof is isolated.
+	fixture.processCommandFactory.reset()
 	fixture.useCommandRunners(providerRunner, nil)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--factory", filepath.Join(dir, "acp.js"), "--with-mock-workers", "--no-record",
@@ -35,6 +37,9 @@ func testJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(
 	}
 	if providerRunner.CallCount() != 0 {
 		t.Fatalf("mock execution reached the provider runner %d times, want zero live calls", providerRunner.CallCount())
+	}
+	if fixture.processCommandFactory.CallCount() != 0 {
+		t.Fatalf("mock execution constructed the ACP process command %d times, want zero", fixture.processCommandFactory.CallCount())
 	}
 	if !strings.Contains(inputs.Stdout(), " completed (SUCCEEDED).") {
 		t.Fatalf("mock JavaScript Factory did not succeed: %s", inputs.Stdout())
