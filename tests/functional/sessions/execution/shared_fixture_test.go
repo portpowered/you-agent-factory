@@ -136,7 +136,55 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 	api := support.NewProcessAPIServer()
 	router := newSharedExecutionCommandRouter()
 	identity := &sharedExecutionIdentity{}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := newSharedExecutionProcess(api, router, identity)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("build root process: %w", err)
+	}
+
+	fixture := &sharedExecutionFixture{
+		rootDir:          rootDir,
+		homeDir:          homeDir,
+		bootstrapDir:     bootstrapDir,
+		process:          process,
+		api:              api,
+		router:           router,
+		identity:         identity,
+		openedSessionIDs: make(map[string]struct{}),
+		closedSessionIDs: make(map[string]struct{}),
+	}
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", bootstrapDir,
+		"--continuously", "--with-server", "--server", "http://127.0.0.1:1",
+		"--quiet", "--record", filepath.Join(rootDir, "execution-shared.recording.json"),
+	})
+	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	inputs.Input.WorkingDirectory = bootstrapDir
+	fixture.command = startSharedExecutionHostedCommand(process, inputs.Input)
+	baseURL, err := api.WaitForBaseURL(sharedExecutionFixtureTimeout)
+	if err != nil {
+		fixture.command.mu.Lock()
+		commandErr := fixture.command.err
+		fixture.command.mu.Unlock()
+		_ = fixture.close()
+		cleanup()
+		return nil, fmt.Errorf("wait for loopback API: %w (Process.Execute error: %v)", err, commandErr)
+	}
+	fixture.baseURL = baseURL
+	if err := waitForSharedExecutionRuntime(baseURL, sharedExecutionFixtureTimeout); err != nil {
+		_ = fixture.close()
+		cleanup()
+		return nil, err
+	}
+	return fixture, nil
+}
+
+func newSharedExecutionProcess(
+	api *support.ProcessAPIServer,
+	router *sharedExecutionCommandRouter,
+	identity *sharedExecutionIdentity,
+) (support.ApplicationProcess, error) {
+	return support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return api.Start(ctx, request)
 		},
@@ -182,46 +230,6 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 		ProviderCommandRunner: router,
 		ScriptCommandRunner:   router,
 	})
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("build root process: %w", err)
-	}
-
-	fixture := &sharedExecutionFixture{
-		rootDir:          rootDir,
-		homeDir:          homeDir,
-		bootstrapDir:     bootstrapDir,
-		process:          process,
-		api:              api,
-		router:           router,
-		identity:         identity,
-		openedSessionIDs: make(map[string]struct{}),
-		closedSessionIDs: make(map[string]struct{}),
-	}
-	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "run", "--dir", bootstrapDir,
-		"--continuously", "--with-server", "--server", "http://127.0.0.1:1",
-		"--quiet", "--record", filepath.Join(rootDir, "execution-shared.recording.json"),
-	})
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	inputs.Input.WorkingDirectory = bootstrapDir
-	fixture.command = startSharedExecutionHostedCommand(process, inputs.Input)
-	baseURL, err := api.WaitForBaseURL(sharedExecutionFixtureTimeout)
-	if err != nil {
-		fixture.command.mu.Lock()
-		commandErr := fixture.command.err
-		fixture.command.mu.Unlock()
-		_ = fixture.close()
-		cleanup()
-		return nil, fmt.Errorf("wait for loopback API: %w (Process.Execute error: %v)", err, commandErr)
-	}
-	fixture.baseURL = baseURL
-	if err := waitForSharedExecutionRuntime(baseURL, sharedExecutionFixtureTimeout); err != nil {
-		_ = fixture.close()
-		cleanup()
-		return nil, err
-	}
-	return fixture, nil
 }
 
 func writeSharedExecutionBootstrapFactory(dir string) error {
