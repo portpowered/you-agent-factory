@@ -7323,21 +7323,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-providers-codex-codex-untrusted-working-directory-test-initTrustedGitRepository-01",
-      "packagePath": "tests/functional/providers/codex",
-      "sourcePath": "tests/functional/providers/codex/codex_untrusted_working_directory_test.go",
-      "sourceLine": 188,
-      "enclosingIdentity": "initTrustedGitRepository",
-      "launcherKind": "fixture-git-command",
-      "occurrence": 1,
-      "verdict": "ACCIDENTAL-OS",
-      "requiredProperty": null,
-      "assertionEvidence": "The call at tests/functional/providers/codex/codex_untrusted_working_directory_test.go:188 launches Git to prepare or inspect fixture repository state; the owning assertion observes repository/filesystem or Factory behavior, not an OS-process property.",
-      "conversionObligation": "Replace the direct Git subprocess at tests/functional/providers/codex/codex_untrusted_working_directory_test.go:188 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch.",
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-recordings-process-built-cli-test-buildYouBinary-01",
       "packagePath": "tests/functional/recordings/process",
       "sourcePath": "tests/functional/recordings/process/built_cli_test.go",

@@ -94,10 +94,8 @@
     },
     {
       "packagePath": "tests/functional/providers/codex",
-      "count": 1,
-      "siteIds": [
-        "OSSPAWN-tests-functional-providers-codex-codex-untrusted-working-directory-test-initTrustedGitRepository-01"
-      ]
+      "count": 0,
+      "siteIds": []
     },
     {
       "packagePath": "tests/functional/recordings/process",
