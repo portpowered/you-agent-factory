@@ -23,8 +23,12 @@ func TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction(t *testin
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
+	// This root remains private because the zero-effect assertion is evaluated
+	// during this exact BuildProcess call; the package-hosted shared root has
+	// already crossed that construction boundary before any test can inspect it.
 	recorder := newSessionEffectRecorder()
-	_ = support.BuildProcess(t, recorder.edges())
+	process := support.BuildProcess(t, recorder.edges())
+	support.CleanupProcess(t, process)
 
 	if got := recorder.totalLifecycle(); got != 0 {
 		t.Fatalf("lifecycle effect calls = %d during BuildProcess, want 0", got)

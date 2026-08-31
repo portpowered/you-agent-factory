@@ -5,10 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestDetachedOperationsFunctionalContract drives the public detached value
@@ -19,8 +17,10 @@ func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	// The detached owner assertions are stateful service-contract behavior; the
+	// package root is supplied by the shared spine and is not rebuilt for this
+	// case.
+	_ = rootCompositionSharedProcess(t)
 
 	owner := newFunctionalDetachedOwner()
 	operations, err := (&factorysessions.DetachedOperations{}).Bind(owner)

@@ -3,17 +3,11 @@ package root_composition_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
-	"os"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -29,18 +23,10 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	recorder := newSessionActivationRecorder(t)
+	fixture := rootCompositionSharedProcess(t)
 	dir := support.ScaffoldFactory(t, sessionsLifecycleRuntimeOpeningFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     recorder.edges(),
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := server.URL()
-	lifecycleBefore := recorder.totalLifecycle()
+	baseURL := fixture.baseURL
+	lifecycleBefore := fixture.effects.lifecycleCount()
 
 	defaultSession := support.GetDefaultSession(t, baseURL)
 	if !defaultSession.IsDefault || defaultSession.Id == "" {
@@ -96,6 +82,7 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatalf("opened live session = %#v, want canonical session identity", opened)
 	}
+	fixture.trackSession(t, opened.Session.Id)
 	if opened.Session.Id == defaultSession.Id {
 		t.Fatalf("opened session id = %q, want distinct live identity from default", opened.Session.Id)
 	}
@@ -120,13 +107,13 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 		t.Fatalf("list sessions after open = %#v, want opened session %q", afterOpen.Sessions, opened.Session.Id)
 	}
 
-	closeSessionsSession(t, baseURL, opened.Session.Id)
+	fixture.closeSession(t, opened.Session.Id)
 	assertSessionsSessionNotFound(t, baseURL, opened.Session.Id)
 
-	if got := recorder.totalLifecycle() - lifecycleBefore; got <= 0 {
+	if got := fixture.effects.lifecycleCount() - lifecycleBefore; got <= 0 {
 		t.Fatalf("lifecycle effect calls after public session operations = %d, want > 0 via edges", got)
 	}
-	if got := recorder.runtimeID.Load(); got <= 0 {
+	if got := fixture.effects.runtimeID.Load(); got <= 0 {
 		t.Fatalf("runtime instance id generations = %d, want > 0 via edges during runtime opening", got)
 	}
 }
@@ -243,194 +230,3 @@ func assertSessionsSessionNotFound(t *testing.T, baseURL, sessionID string) {
 		t.Fatalf("GET closed Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, payload)
 	}
 }
-
-type sessionActivationRecorder struct {
-	home             string
-	local            platformfilesystem.Local
-	workingDirectory atomic.Int32
-	executionGetwd   atomic.Int32
-	executionStat    atomic.Int32
-	directoryStat    atomic.Int32
-	directoryReadDir atomic.Int32
-	resolveHome      atomic.Int32
-	resolveSymlinks  atomic.Int32
-	sessionID        atomic.Int32
-	runtimeID        atomic.Int32
-	cursorMkdirAll   atomic.Int32
-	cursorReadFile   atomic.Int32
-	cursorRemove     atomic.Int32
-	cursorRename     atomic.Int32
-	cursorTempFile   atomic.Int32
-	runtimeMkdirAll  atomic.Int32
-	runtimeReadFile  atomic.Int32
-	runtimeWriteFile atomic.Int32
-	contractFixture  atomic.Int32
-	replayRecording  atomic.Int32
-	runtimeHost      atomic.Int32
-}
-
-func newSessionActivationRecorder(t *testing.T) *sessionActivationRecorder {
-	t.Helper()
-	return &sessionActivationRecorder{home: t.TempDir()}
-}
-
-func (recorder *sessionActivationRecorder) edges() serviceedges.Edges {
-	return serviceedges.Edges{
-		FactorySessionsWorkingDirectory:            &sessionActivationWorkingDirectory{recorder: recorder},
-		FactorySessionExecutionOpeningFileSystem:   &sessionActivationExecutionOpening{recorder: recorder},
-		FactorySessionDirectoryInspection:          &sessionActivationDirectoryInspection{recorder: recorder},
-		FactorySessionResolveHomeDirectory:         recorder.resolveHomeDirectory,
-		FactorySessionResolveLogicalTargetSymlinks: recorder.resolveLogicalTargetSymlinks,
-		FactorySessionIDGenerator:                  recorder.generateSessionID,
-		FactorySessionRuntimeInstanceIDGenerator:   recorder.generateRuntimeID,
-		FactorySessionCursorPersistenceFileSystem:  &sessionActivationCursorPersistence{recorder: recorder},
-		FactorySessionCursorCreateTemporaryFile:    recorder.createCursorTempFile,
-		FactorySessionRuntimePersistenceFileSystem: &sessionActivationRuntimePersistence{recorder: recorder},
-		FactorySessionContractFixtureReader:        recorder.readContractFixture,
-		FactorySessionReplayRecordingReader:        recorder.readReplayRecording,
-		RuntimeHostObserver:                        recorder.observeRuntimeHost,
-	}
-}
-
-func (recorder *sessionActivationRecorder) totalLifecycle() int32 {
-	return recorder.resolveHome.Load() +
-		recorder.resolveSymlinks.Load() +
-		recorder.sessionID.Load() +
-		recorder.runtimeID.Load() +
-		recorder.directoryStat.Load() +
-		recorder.directoryReadDir.Load() +
-		recorder.cursorMkdirAll.Load() +
-		recorder.cursorReadFile.Load() +
-		recorder.cursorRemove.Load() +
-		recorder.cursorRename.Load() +
-		recorder.cursorTempFile.Load() +
-		recorder.runtimeMkdirAll.Load() +
-		recorder.runtimeReadFile.Load() +
-		recorder.runtimeWriteFile.Load() +
-		recorder.runtimeHost.Load()
-}
-
-type sessionActivationWorkingDirectory struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationWorkingDirectory) Getwd() (string, error) {
-	adapter.recorder.workingDirectory.Add(1)
-	return adapter.recorder.local.Getwd()
-}
-
-type sessionActivationExecutionOpening struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationExecutionOpening) Getwd() (string, error) {
-	adapter.recorder.executionGetwd.Add(1)
-	return adapter.recorder.local.Getwd()
-}
-
-func (adapter *sessionActivationExecutionOpening) Stat(path string) (fs.FileInfo, error) {
-	adapter.recorder.executionStat.Add(1)
-	return adapter.recorder.local.Stat(path)
-}
-
-type sessionActivationDirectoryInspection struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationDirectoryInspection) Stat(path string) (fs.FileInfo, error) {
-	adapter.recorder.directoryStat.Add(1)
-	return adapter.recorder.local.Stat(path)
-}
-
-func (adapter *sessionActivationDirectoryInspection) ReadDir(path string) ([]fs.DirEntry, error) {
-	adapter.recorder.directoryReadDir.Add(1)
-	return adapter.recorder.local.ReadDir(path)
-}
-
-type sessionActivationCursorPersistence struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationCursorPersistence) MkdirAll(path string, mode fs.FileMode) error {
-	adapter.recorder.cursorMkdirAll.Add(1)
-	return adapter.recorder.local.MkdirAll(path, mode)
-}
-
-func (adapter *sessionActivationCursorPersistence) ReadFile(path string) ([]byte, error) {
-	adapter.recorder.cursorReadFile.Add(1)
-	return adapter.recorder.local.ReadFile(path)
-}
-
-func (adapter *sessionActivationCursorPersistence) Remove(path string) error {
-	adapter.recorder.cursorRemove.Add(1)
-	return adapter.recorder.local.Remove(path)
-}
-
-func (adapter *sessionActivationCursorPersistence) Rename(oldPath, newPath string) error {
-	adapter.recorder.cursorRename.Add(1)
-	return adapter.recorder.local.Rename(oldPath, newPath)
-}
-
-type sessionActivationRuntimePersistence struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationRuntimePersistence) MkdirAll(path string, mode fs.FileMode) error {
-	adapter.recorder.runtimeMkdirAll.Add(1)
-	return adapter.recorder.local.MkdirAll(path, mode)
-}
-
-func (adapter *sessionActivationRuntimePersistence) ReadFile(path string) ([]byte, error) {
-	adapter.recorder.runtimeReadFile.Add(1)
-	return adapter.recorder.local.ReadFile(path)
-}
-
-func (adapter *sessionActivationRuntimePersistence) WriteFile(path string, data []byte, mode fs.FileMode) error {
-	adapter.recorder.runtimeWriteFile.Add(1)
-	return adapter.recorder.local.WriteFile(path, data, mode)
-}
-
-func (recorder *sessionActivationRecorder) resolveHomeDirectory() (string, error) {
-	recorder.resolveHome.Add(1)
-	return recorder.home, nil
-}
-
-func (recorder *sessionActivationRecorder) resolveLogicalTargetSymlinks(path string) (string, error) {
-	recorder.resolveSymlinks.Add(1)
-	return path, nil
-}
-
-func (recorder *sessionActivationRecorder) generateSessionID() string {
-	next := recorder.sessionID.Add(1)
-	return fmt.Sprintf("fun-sessions-edge-session-%d", next)
-}
-
-func (recorder *sessionActivationRecorder) generateRuntimeID() string {
-	next := recorder.runtimeID.Add(1)
-	return fmt.Sprintf("fun-sessions-edge-runtime-%d", next)
-}
-
-func (recorder *sessionActivationRecorder) createCursorTempFile(dir, pattern string) (factorysessions.CursorPersistenceTemporaryFile, error) {
-	recorder.cursorTempFile.Add(1)
-	return os.CreateTemp(dir, pattern)
-}
-
-func (recorder *sessionActivationRecorder) readContractFixture(path string) ([]byte, error) {
-	recorder.contractFixture.Add(1)
-	return os.ReadFile(path)
-}
-
-func (recorder *sessionActivationRecorder) readReplayRecording(path string) ([]byte, error) {
-	recorder.replayRecording.Add(1)
-	return os.ReadFile(path)
-}
-
-func (recorder *sessionActivationRecorder) observeRuntimeHost(factorysessions.RuntimeHostBinding) {
-	recorder.runtimeHost.Add(1)
-}
-
-var _ platformfilesystem.WorkingDirectory = (*sessionActivationWorkingDirectory)(nil)
-var _ factorysessions.ExecutionOpeningFileSystem = (*sessionActivationExecutionOpening)(nil)
-var _ factorysessions.DirectoryInspection = (*sessionActivationDirectoryInspection)(nil)
-var _ factorysessions.CursorPersistenceFileSystem = (*sessionActivationCursorPersistence)(nil)
-var _ factorysessions.RuntimePersistenceFileSystem = (*sessionActivationRuntimePersistence)(nil)

@@ -5,11 +5,9 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,12 +31,10 @@ const (
 
 // TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances
 // proves a single Factory Runtime build constructed only through
-// root.BuildProcess (support.RunFactoryToCompletionWithEdgesAndResponseEvents
-// composes the process through exactly one such call) uses the exact injected
-// provider command runner, script command runner, and session progress
-// publisher for the full lifetime of the built runtime, with no
-// post-construction mutation, derived Workers view, or second Workers-root
-// construction.
+// root.BuildProcess uses the exact injected provider command runner, script
+// command runner, and session progress publisher for the full lifetime of the
+// built runtime, with no post-construction mutation, derived Workers view, or
+// second Workers-root construction.
 //
 // A provider-backed dispatch and a script-backed dispatch both run against
 // the SAME root-built process. Provider identity is proven directly: the
@@ -54,16 +50,15 @@ const (
 // that out, but the dispatch's public primary result is asserted to be the
 // literal tagged output only the injected scriptRunner instance returns
 // (which is different from the AGENTS.md-configured real echo argument).
-// Progress publisher identity is proven behaviorally: the provider fixture
-// stdout streams a multi-record partial turn, and the resulting PROGRESS
-// response events are asserted to reach the SAME session's public
-// response-event stream that support.RunFactoryToCompletionWithEdgesAndResponseEvents
-// subscribes to before dispatch, which is only possible if the progress
-// publisher supplied to this exact Workers construction was the one that
-// received progress fragments during execution.
+// Progress publisher identity is proven behaviorally: the script-backed
+// dispatch emits stdout progress, and the resulting PROGRESS response event
+// is asserted to reach that Session's public response-event stream subscribed
+// to before Work admission. That is only possible if the progress publisher
+// supplied to this exact Workers construction received the execution fragment.
 func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
+	fixture := rootCompositionSharedProcess(t)
 
 	loaded := loadRunnerIdentityCodexGoldenCase(t)
 	dir := support.ScaffoldFactory(t, runnerIdentityFactoryConfig())
@@ -74,9 +69,6 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
 	)
 	support.WriteAgentConfig(t, dir, "script-worker", runnerIdentityScriptWorkerAgentConfig)
-	testutil.WriteSeedFile(t, dir, "provider-task", []byte("runner-identity-provider-seed"))
-	testutil.WriteSeedFile(t, dir, "script-task", []byte("runner-identity-script-seed"))
-
 	exitCode := 0
 	if loaded.Process.ExitCode != nil {
 		exitCode = *loaded.Process.ExitCode
@@ -87,28 +79,8 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 		ExitCode: exitCode,
 	})
 	scriptRunner := support.NewRecordingCommandRunner(runnerIdentityScriptOutput)
-
-	// RunFactoryToCompletionWithEdgesAndResponseEvents waits for BOTH the
-	// provider-backed and script-backed dispatches through
-	// support.WaitForSessionTerminalStatus, a short HTTP polling loop. This
-	// scenario cannot substitute a single deterministic edge/event wait for
-	// that readiness signal: the injected runner CallCount()/dispatch-output
-	// observations below prove a runner was invoked, not that the resulting
-	// terminal Factory Event and public Work projection have been recorded for
-	// BOTH of two independently scheduled workstations, and the captured
-	// response-event stream's own terminal marker
-	// (support.waitForTerminalResponseEvent) only observes the FIRST terminal
-	// RUN/ERROR event, not the second, independent script dispatch. Polling
-	// the public status projection is this harness's only existing
-	// cross-dispatch completion signal.
-	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{
-			ProviderCommandRunner: providerRunner,
-			ScriptCommandRunner:   scriptRunner,
-		},
-		20*time.Second,
+	listed, factoryEvents, responseEvents := runRunnerIdentitySharedCase(
+		t, fixture, dir, providerRunner, scriptRunner, true,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "provider-task:complete"); got != 1 {
@@ -157,6 +129,7 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInstance(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
+	fixture := rootCompositionSharedProcess(t)
 
 	dir := support.ScaffoldFactory(t, runnerIdentityFactoryConfig())
 	support.WriteAgentConfig(
@@ -166,9 +139,6 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, runnerIdentityFailureModel),
 	)
 	support.WriteAgentConfig(t, dir, "script-worker", runnerIdentityScriptWorkerAgentConfig)
-	testutil.WriteSeedFile(t, dir, "provider-task", []byte("runner-identity-provider-failure-seed"))
-	testutil.WriteSeedFile(t, dir, "script-task", []byte("runner-identity-script-failure-seed"))
-
 	providerRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stderr:   []byte(runnerIdentityProviderFailureStderr),
 		ExitCode: 1,
@@ -178,20 +148,8 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 		exitCode: 1,
 	}
 
-	// See the identical justification comment in
-	// TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances:
-	// this scenario also has two independently scheduled dispatches, so the
-	// public status projection polled by
-	// RunFactoryToCompletionWithEdgesAndResponseEvents remains the only
-	// existing cross-dispatch completion signal available to this harness.
-	_, listed, factoryEvents, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{
-			ProviderCommandRunner: providerRunner,
-			ScriptCommandRunner:   scriptRunner,
-		},
-		20*time.Second,
+	listed, factoryEvents, _ := runRunnerIdentitySharedCase(
+		t, fixture, dir, providerRunner, scriptRunner, false,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "provider-task:failed"); got != 1 {
@@ -225,6 +183,112 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 	assertRunnerIdentityFailedDispatchCount(t, factoryEvents, 2)
 	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "provider-task", factoryapi.WorkOutcomeFailed)
 	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "script-task", factoryapi.WorkOutcomeFailed)
+}
+
+func runRunnerIdentitySharedCase(
+	t *testing.T,
+	fixture *rootCompositionSharedFixture,
+	dir string,
+	providerRunner platformprocess.CommandRunner,
+	scriptRunner platformprocess.CommandRunner,
+	captureProviderResponse bool,
+) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, []factoryapi.FactoryResponseEvent) {
+	t.Helper()
+	// Keep the two scenario-owned Factory targets separate so their
+	// workstation definitions and command routes remain independently owned.
+	// The process and API host remain package-shared; only the target
+	// directories and Sessions are duplicated.
+	providerDir := dir
+	scriptDir := filepath.Join(t.TempDir(), "script-factory")
+	if err := copyRootCompositionDirectory(dir, scriptDir); err != nil {
+		t.Fatalf("copy runner identity script Factory: %v", err)
+	}
+	fixture.registerCommandRunners(t, providerDir, providerRunner, nil)
+	fixture.registerCommandRunners(t, scriptDir, nil, scriptRunner)
+	providerSessionID := fixture.openSession(t, providerDir)
+	scriptSessionID := fixture.openSession(t, scriptDir)
+	baseURL := fixture.baseURL
+	providerEvents := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, providerSessionID))
+	scriptEvents := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, scriptSessionID))
+	t.Cleanup(func() {
+		providerEvents.Close()
+		scriptEvents.Close()
+	})
+	var providerResponse *support.FactoryResponseEventStream
+	var scriptResponse *support.FactoryResponseEventStream
+	if captureProviderResponse {
+		providerResponse = support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(baseURL, providerSessionID),
+		)
+		scriptResponse = support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(baseURL, scriptSessionID),
+		)
+		t.Cleanup(func() {
+			providerResponse.Close()
+			scriptResponse.Close()
+		})
+	}
+
+	providerWorkName := "runner-identity-provider-work"
+	providerSubmitted := support.SubmitSessionWorkAt(t, baseURL, providerSessionID, factoryapi.SubmitWorkRequest{
+		Name:         &providerWorkName,
+		WorkTypeName: "provider-task",
+		Payload:      map[string]string{"source": "shared-session"},
+	})
+	scriptWorkName := "runner-identity-script-work"
+	scriptSubmitted := support.SubmitSessionWorkAt(t, baseURL, scriptSessionID, factoryapi.SubmitWorkRequest{
+		Name:         &scriptWorkName,
+		WorkTypeName: "script-task",
+		Payload:      map[string]string{"source": "shared-session"},
+	})
+	providerWorkID := support.StringPointerValue(providerSubmitted.WorkId)
+	scriptWorkID := support.StringPointerValue(scriptSubmitted.WorkId)
+	if providerWorkID == "" || scriptWorkID == "" {
+		t.Fatalf("submitted runner identity Work IDs = %q and %q, want canonical identities", providerWorkID, scriptWorkID)
+	}
+	waitForRootCompositionTerminalDispatch(t, providerEvents, providerWorkID)
+	waitForRootCompositionTerminalDispatch(t, scriptEvents, scriptWorkID)
+
+	providerListed := listRunnerIdentityWork(t, baseURL, providerSessionID)
+	scriptListed := listRunnerIdentityWork(t, baseURL, scriptSessionID)
+	listed := factoryapi.ListWorkResponse{
+		Results: append(append([]factoryapi.Work(nil), providerListed.Results...), scriptListed.Results...),
+	}
+	factoryEvents := append(
+		support.GetFactoryEventsForSessionAt(t, baseURL, providerSessionID),
+		support.GetFactoryEventsForSessionAt(t, baseURL, scriptSessionID)...,
+	)
+	if providerResponse == nil {
+		return listed, factoryEvents, nil
+	}
+	responseEvents := make([]factoryapi.FactoryResponseEvent, 0, len(runnerIdentityExpectedNativeStreamEvents)+1)
+	for index := 0; index < len(runnerIdentityExpectedNativeStreamEvents); index++ {
+		result := providerResponse.TryNextFrameResult(rootCompositionSharedShutdownTimeout)
+		if result.Outcome != support.FactoryResponseEventStreamOutcomeFrame {
+			t.Fatalf("provider response stream ended after %d frames: %s; events=%#v", index, result.Diagnostic(), responseEvents)
+		}
+		responseEvents = append(responseEvents, result.Frame.Event)
+	}
+	result := scriptResponse.TryNextFrameResult(rootCompositionSharedShutdownTimeout)
+	if result.Outcome != support.FactoryResponseEventStreamOutcomeFrame {
+		t.Fatalf("script response stream did not publish its stdout progress marker: %s; events=%#v", result.Diagnostic(), responseEvents)
+	}
+	responseEvents = append(responseEvents, result.Frame.Event)
+	return listed, factoryEvents, responseEvents
+}
+
+func listRunnerIdentityWork(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	return support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID+"/work",
+	)
 }
 
 // runnerIdentityFailingScriptCommandRunner is a minimal script-worker
@@ -392,15 +456,13 @@ type runnerIdentityKindPhase struct {
 
 // assertRunnerIdentityProviderResponseEventSequence proves both exactly-once
 // progress delivery and the relevant ordered response-event sequence for the
-// provider dispatch. The dispatch's own generic "work started" PROGRESS
-// marker is published from the Factory Session progress publisher
-// independently of the provider's native stream fragments, so its position
-// relative to the native-stream events is not itself ordered by any public
-// contract -- repeated runs of this exact scenario observe it at every
-// position from first to last. Its COUNT (exactly one) is what proves
-// exactly-once delivery; the five native-stream events (which share one
-// ordered source) are asserted in their exact relative sequence with the
-// PROGRESS marker filtered out.
+// provider dispatch. The script dispatch's stdout PROGRESS marker is
+// published from the Factory Session progress publisher independently of the
+// provider's native stream fragments, so its position relative to the
+// native-stream events is not itself ordered by any public contract. Its COUNT
+// (exactly one) proves exactly-once delivery; the five native-stream events
+// (which share one ordered source) are asserted in their exact relative
+// sequence with the PROGRESS marker filtered out.
 func assertRunnerIdentityProviderResponseEventSequence(
 	t *testing.T,
 	events []factoryapi.FactoryResponseEvent,

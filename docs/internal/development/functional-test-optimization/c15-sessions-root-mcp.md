@@ -12,7 +12,7 @@
 - Dependency fidelity: local-real root, Factory Session, Recordings, API, and
   MCP stdio boundaries with controlled provider/worker edges; zero remote or
   paid calls.
-- Status: **PASS — GATE-CHAR complete; stories 002–004 remain open.**
+- Status: **PASS — GATE-CHAR and GATE-ROOT complete; stories 003–004 remain open.**
 
 This is an additive before-state record. Story 001 changes no test behavior,
 production code, public contract, generated output, UI, shared functional
@@ -103,29 +103,29 @@ the assertion set; no assertion is inferred from a file or function name.
 
 | Case | Exact current selector/witness | Classification for later conversion | Observable assertion retained |
 | --- | --- | --- | --- |
-| ROOT-001 | `TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction` | Shared inert root | `BuildProcess` causes zero lifecycle, runtime-opening, Work-admission, response-stream, or API-start effects. |
-| ROOT-002 | `TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection` | Shared with controlled replay/API edge; fresh factory, home, and recording | Replayed automation Work restores occupancy and lineage exactly once. |
-| ROOT-003 | `TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix` | Shared/pure platform reservation | Same UTC date reserves distinct safe paths and gives the second artifact the explicit `-2` suffix. |
-| ROOT-004 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess/default recording reserves distinct dated UUID artifacts and replays` | Shared root with fresh homes, artifacts, and session state | Two default recordings are distinct dated UUID artifacts and replay to equivalent facts without changing live artifacts. |
-| ROOT-005 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess/explicit JSONL recording appends through root process` | Shared root with fresh recording path and session state | Explicit JSONL recording contains valid records and preserves the trailing newline. |
-| ROOT-006 | `TestDetachedOperationsFunctionalContract` (`testDetachedStartsAndInvocation`) | Shared inert root; stateful owner observation remains case-local | Live, durable async, and durable sync starts, invocation, activation, normalized IDs, correlations, and results match the public detached contract. |
-| ROOT-007 | `TestDetachedOperationsFunctionalContract` (`testDetachedReadsAndControls`, `testDetachedResultsAndPreparation`) | Shared inert root; stateful owner observation remains case-local | Get/list/control/result/subscribe/prepare preserve mode, session, correlation, request, and not-ready facts. |
-| ROOT-008 | `TestDetachedOperationsFunctionalValidation` | Shared inert root; validation has no external effects | Nil service, invalid mode/ID/control, empty activation, negative value, and invalid request cases return typed validation errors without mutation. |
-| ROOT-009 | `TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThroughPublicDurableControl` | Shared root with a fresh held-worker/provider edge and session | Durable cancellation reaches the published worker and does not report false success. |
+| ROOT-001 | `TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction` | Private exact `BuildProcess` construction witness; shared host has already crossed construction | `BuildProcess` causes zero lifecycle, runtime-opening, Work-admission, response-stream, or API-start effects. |
+| ROOT-002 | `TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection` | Private `Process.Execute` replay/resume root; automatic default Session, recording, and home ownership are the assertion boundary | Replayed automation Work restores occupancy and lineage exactly once. |
+| ROOT-003 | `TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix` | No root; pure platform reservation | Same UTC date reserves distinct safe paths and gives the second artifact the explicit `-2` suffix. |
+| ROOT-004 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess/default recording reserves distinct dated UUID artifacts and replays` | Private reusable `Process.Execute` root; automatic default Session and recording/home/artifact ownership are asserted | Two default recordings are distinct dated UUID artifacts and replay to equivalent facts without changing live artifacts. |
+| ROOT-005 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess/explicit JSONL recording appends through root process` | Private reusable `Process.Execute` root; explicit recording is attached to the automatic default Session | Explicit JSONL recording contains valid records and preserves the trailing newline. |
+| ROOT-006 | `TestDetachedOperationsFunctionalContract` (`testDetachedStartsAndInvocation`) | Shared package spine acquired; detached owner state remains case-local and does not rebuild the root | Live, durable async, and durable sync starts, invocation, activation, normalized IDs, correlations, and results match the public detached contract. |
+| ROOT-007 | `TestDetachedOperationsFunctionalContract` (`testDetachedReadsAndControls`, `testDetachedResultsAndPreparation`) | Shared package spine acquired; detached owner state remains case-local and does not rebuild the root | Get/list/control/result/subscribe/prepare preserve mode, session, correlation, request, and not-ready facts. |
+| ROOT-008 | `TestDetachedOperationsFunctionalValidation` | No root; pure detached validation has no external effects | Nil service, invalid mode/ID/control, empty activation, negative value, and invalid request cases return typed validation errors without mutation. |
+| ROOT-009 | `TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThroughPublicDurableControl` | Private root/API: `ProviderOverride` is a construction-time service identity for the held durable cancellation witness and cannot be switched per Session without changing ordinary runner semantics | Durable cancellation reaches the published worker and does not report false success. |
 | ROOT-010 | `TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle` | Shared root with fresh lifecycle/runtime-opening/API edge state | Injected lifecycle precedes runtime opening and public Factory Session facts appear. |
-| ROOT-011 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation/isolated sessions reach one terminal outcome and replay equivalent facts` | Private root process for the cross-process replay witness | Two independently activated root processes produce isolated identities, one terminal outcome each, and equivalent replayed canonical facts. |
-| ROOT-012 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation/provider failure terminalizes as failed and is never reported as success`; `/cancellation stops the held dispatch and releases the activated process` | Private process lifecycle in the composite selector; held dispatch and shutdown release are the irreducible property | Provider failure remains FAILED with no false success; held cancellation observes release and cleanup. |
-| ROOT-013 | `TestSessionsPackagedRootShapeMatchesCanonicalServiceLayout` | Shared/pure package-shape observation | The packaged Sessions root retains the canonical service layout. |
-| ROOT-014 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/opens requested Factory Session` | Shared root with fresh factory, home, API listener, and Session | `Process.Execute` opens the requested Factory Session before completion and publishes its canonical stream identity. |
-| ROOT-015 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/corrupt current-board recording stops opening` | Shared root with fresh corrupt recording and input state | Corrupt current-board input returns the expected diagnostic and does not open a live session. |
-| ROOT-016 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/unavailable Factory does not register session`; `/replay loader failure stops before live activation` | Shared root with fresh unavailable/replay-loader edges | Unavailable Factory and replay-loader failure do not register or activate a live session. |
+| ROOT-011 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation/isolated sessions reach one terminal outcome and replay equivalent facts` | Private independent root processes; cross-process identity and replay isolation are the assertion | Two independently activated root processes produce isolated identities, one terminal outcome each, and equivalent replayed canonical facts. |
+| ROOT-012 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation/provider failure terminalizes as failed and is never reported as success`; `/cancellation stops the held dispatch and releases the activated process` | Private process lifecycle in the composite selector; held dispatch and shutdown release are the irreducible properties | Provider failure remains FAILED with no false success; held cancellation observes release and cleanup. |
+| ROOT-013 | `TestSessionsPackagedRootShapeMatchesCanonicalServiceLayout` | No root; pure package-shape observation | The packaged Sessions root retains the canonical service layout. |
+| ROOT-014 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/opens requested Factory Session` | Private reusable `Process.Execute` root; automatic requested/default Session opening and its API listener are the assertion boundary | `Process.Execute` opens the requested Factory Session before completion and publishes its canonical stream identity. |
+| ROOT-015 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/corrupt current-board recording stops opening` | Private reusable `Process.Execute` root; corrupt persisted input must fail before automatic live activation | Corrupt current-board input returns the expected diagnostic and does not open a live session. |
+| ROOT-016 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess/unavailable Factory does not register session`; `/replay loader failure stops before live activation` | Private reusable `Process.Execute` root; unavailable Factory/replay-loader edges are pre-activation failure witnesses | Unavailable Factory and replay-loader failure do not register or activate a live session. |
 | ROOT-017 | `TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure` | Private Process close lifecycle | A command failure remains the primary error while close still runs. |
 | ROOT-018 | `TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure` | Private Process close lifecycle | Successful command close reports no failure, including on repeated close. |
-| ROOT-019 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` | Shared root with fresh Session, workspace, event stream, response stream, and edge state | One inert process serves two sessions with distinct session/stream identities and matching outcomes. |
-| ROOT-020 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions/direct JavaScript transport start failure` | Shared root with a fresh direct-start failure edge | Direct JavaScript transport-start failure returns without fallback. |
-| ROOT-021 | `TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary`; `TestRecordedFactoryRedactsSecretStepsAcrossLifecycle/secret step`; `/inline secret step` | Shared root with fresh recording/home/input state and controlled runner | Declared, secret-step, and inline-secret values are absent from records/replay while plain values survive. |
-| ROOT-022 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession/in-flight tail` | Shared root with fresh seeded replay payload, home, and Session | Unfinished seeded replay materializes one Work item and resumes at the expected initial state without redispatch. |
-| ROOT-023 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession/finished recording` | Shared root with fresh seeded replay payload, home, and Session | Finished seeded replay remains terminal and does not redispatch. |
+| ROOT-019 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` | Private root; exact inert construction plus two automatic `Process.Execute` Sessions are the root/reuse witness | One inert process serves two sessions with distinct session/stream identities and matching outcomes. |
+| ROOT-020 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions/direct JavaScript transport start failure` | Private root within the construction/reuse selector; direct transport-start failure and no fallback are asserted | Direct JavaScript transport-start failure returns without fallback. |
+| ROOT-021 | `TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary`; `TestRecordedFactoryRedactsSecretStepsAcrossLifecycle/secret step`; `/inline secret step` | Private `Process.Execute` recording root; automatic default Session, recording artifact, and redaction write boundary are asserted | Declared, secret-step, and inline-secret values are absent from records/replay while plain values survive. |
+| ROOT-022 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession/in-flight tail` | Private `Process.Execute` replay root; seeded replay loader and automatic default Session activation are the exact witness | Unfinished seeded replay materializes one Work item and resumes at the expected initial state without redispatch. |
+| ROOT-023 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession/finished recording` | Private `Process.Execute` replay root; seeded replay loader and automatic default Session activation are the exact witness | Finished seeded replay remains terminal and does not redispatch. |
 | ROOT-024 | `TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle` | Shared root with fresh API listener, Session, Work, and response stream | Work admission and response events appear through public Session reads after lifecycle opening. |
 | ROOT-025 | `TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances` | Shared root with fresh controlled provider/script runner edges and Work | Provider and script Work publish the expected runner identities and outputs. |
 | ROOT-026 | `TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInstance` | Shared root with fresh failing runner edge and Session | Injected runner failure terminalizes the dispatch as FAILED with expected facts. |
@@ -134,10 +134,52 @@ the assertion set; no assertion is inferred from a file or function name.
 | ROOT-029 | `runtime_api_fixture/TestRuntimeAPIPackageFixtureCleanupIsIdempotentAndPreservesFailures/reachable listener fails the cleanup probe` | Private cleanup fixture: listener reachability is the asserted boundary | A reachable listener is reported as a cleanup failure rather than accepted as closed. |
 
 The private ROOT rows are not broad exemptions. Their reasons are the exact
-properties named in the assertion column: independent root-process replay,
-Process close ownership, or listener/root cleanup and error-joining. Any later
-split or shared conversion must preserve those properties or update this
-ledger before claiming eligibility.
+properties named in the assertion column: construction-time inertness,
+automatic `Process.Execute` default-Session/recording behavior, independent
+root-process replay, a construction-time provider override, Process close
+ownership, or listener/root cleanup and error-joining. Any later split or
+shared conversion must preserve those properties or update this ledger before
+claiming eligibility.
+
+## GATE-ROOT / Story 002 evidence
+
+Story 002 added a lazy package-owned fixture in
+`tests/functional/sessions/root_composition/shared_fixture_test.go`. It builds
+one production-composed root, starts one continuous API listener through the
+root's `APIServerStarter`, routes provider and script command effects by
+scenario-owned Factory directory, and closes every explicitly opened Factory
+Session before `TestMain` stops the host and removes the temporary root.
+
+ROOT-006/007 acquire that package spine for detached contract observations;
+ROOT-010 uses the hosted default Session plus a fresh explicit Session; and
+ROOT-024/025/026 use fresh explicit Sessions with subscribe-before-act Factory
+Event/response streams and exact Work correlations. ROOT-025 uses separate
+scenario-owned Factory directories so provider and script runner routes cannot
+cross, while the process and API host remain shared. The runner failure case
+proves both injected failures remain FAILED on that same host. ROOT-001,
+ROOT-002, ROOT-004/005, ROOT-009, ROOT-011/012, ROOT-014–016,
+ROOT-017/018, ROOT-019–023, and ROOT-027–029 remain private only for the exact
+construction, automatic `Process.Execute`, cross-root, provider-override, close, or cleanup properties
+listed in their ledger rows; ROOT-003/008/013 have no root to share.
+
+Changed-selector verification on the delivered implementation:
+
+```text
+go test ./tests/functional/sessions/root_composition -run '^(TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction|TestDetachedOperationsFunctionalContract|TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle|TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle|TestRootBuildProcess(RoutesProviderAndScriptWorkThroughInjectedRunnerInstances|RunnerFailureRoutesToFailedDispatchThroughInjectedInstance))$' -count=1
+ok
+
+go test -race ./tests/functional/sessions/root_composition -run '^(TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle|TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle|TestRootBuildProcess(RoutesProviderAndScriptWorkThroughInjectedRunnerInstances|RunnerFailureRoutesToFailedDispatchThroughInjectedInstance))$' -count=1
+ok
+
+go test ./tests/functional/sessions/root_composition/runtime_api_fixture -run '^TestRuntimeAPIPackageFixtureCleanupIsIdempotentAndPreservesFailures$' -count=1
+ok
+```
+
+These checks prove the converted shared root, fresh Session routing, canonical
+terminal-event waits, injected success/failure edges, and the retained cleanup
+witness. They do not prove the MCP package, the final unfiltered ROOT run,
+coverage, PR timing, or terminal CI; those remain owned by stories 003/004 and
+VAL-001.
 
 ### MCP-001 through MCP-007
 
@@ -169,13 +211,13 @@ implementations hidden in the excluded shared-support package.
 | ROOT top-level selectors | 20 | `go test .../root_composition/... -list '^Test'`; the parent package reports 20. |
 | ROOT nested cleanup selector | 1 top-level / 3 named subtests | `runtime_api_fixture` reports one selector; its three subtests are ROOT-027..029. |
 | ROOT behavioral cases | 29 | The C14 parity ledger plus the three nested cleanup subtests map every current assertion to ROOT-001..029. |
-| ROOT direct `BuildProcess*` calls | 13 | 12 `support.BuildProcess*` calls and one direct `root.BuildProcess` call across the owned subtree, including one nested-fixture call; support helpers that build internally are not silently expanded. |
-| ROOT `StartFunctionalAPIServer` call sites | 3 | Lifecycle opening, dispatch cancellation, and Work/response-stream tests use the shared functional helper. |
+| ROOT direct `BuildProcess*` calls | 13 | 12 `support.BuildProcess*` calls and one direct `root.BuildProcess` call across the owned subtree, including one package-shared root and one nested-fixture call; support helpers that build internally are not silently expanded. |
+| ROOT `StartFunctionalAPIServer` call sites | 1 | The retained dispatch-cancellation witness uses one private functional helper because its construction-time `ProviderOverride` is the asserted edge. |
 | ROOT `StartProcessCommand` call sites | 5 | Automation recovery, Process.Execute opening, reusable-root, P3/P7, and seeded replay witnesses. |
-| ROOT `RunFactoryToCompletionWithEdgesAndResponseEvents` call sites | 2 | Provider and script runner identity/failure assertions; each call hides its support-owned process setup. |
-| ROOT `NewProcessAPIServer` call sites | 6 | Five parent-package observation boundaries and one runtime API package fixture boundary. |
+| ROOT `RunFactoryToCompletionWithEdgesAndResponseEvents` call sites | 0 | Runner identity and failure assertions now submit Work through the shared API host and consume Session-scoped terminal streams directly. |
+| ROOT `NewProcessAPIServer` call sites | 7 | Six parent-package observation boundaries, including one package-shared API host, and one runtime API package fixture boundary. |
 | ROOT `os.Pipe` call sites | 0 | Root composition uses `Process.Execute` and in-process API/event boundaries; no child process or stdio pipe is asserted here. |
-| ROOT fixed sleep sites | 2 | Two pre-existing `time.Sleep(25 * time.Millisecond)` sites: Work admission response observation and retained canonical dispatch observation. Story 001 adds none. |
+| ROOT fixed sleep sites | 1 | One retained pre-existing `time.Sleep(25 * time.Millisecond)` site in the private canonical dispatch observation; Work admission now consumes a Session-scoped terminal event. |
 | ROOT explicit ticker/timeout guards | 1 ticker, 3 `time.After` guards | The nested cleanup fixture polls public Session stop status at 10ms; P3/P7 and fixture shutdown use bounded failure guards. These are current evidence, not new waits. |
 | ROOT public status wait call sites | 5 | Three `WaitForStatus`/`WaitForSessionTerminalStatus` calls and one `WaitForSessionStopped` path plus the nested stop-status ticker; readiness waits are recorded separately from completion claims. |
 | MCP top-level selectors/cases | 7 / 7 | `go test .../mcp/... -list '^Test'`; each selector is one matrix case. |
