@@ -60,13 +60,15 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 	if secondSessionID == sessionID {
 		t.Fatalf("reusable ACP session identities reused %q across distinct session/new workspaces", sessionID)
 	}
+	fixture.closeActiveSession(t, connection, sessionID)
 }
 
 type reusableACPCase struct {
-	name   string
-	marker string
-	prompt string
-	output string
+	name          string
+	marker        string
+	prompt        string
+	output        string
+	blockProvider bool
 }
 
 type reusableACPFixture struct {
@@ -199,6 +201,13 @@ func (connection *reusableACPConnection) request(
 	params any,
 ) (reusableACPFrame, []acpsdk.SessionNotification) {
 	t.Helper()
+	wantID := connection.writeRequest(t, method, params)
+	responses, notifications := connection.readResponses(t, wantID)
+	return responses[wantID], notifications
+}
+
+func (connection *reusableACPConnection) writeRequest(t *testing.T, method string, params any) uint64 {
+	t.Helper()
 	connection.nextID++
 	wantID := connection.nextID
 	encodedParams, err := json.Marshal(params)
@@ -208,29 +217,48 @@ func (connection *reusableACPConnection) request(
 	if _, err := fmt.Fprintf(connection.stdin, `{"jsonrpc":"2.0","id":%d,"method":%q,"params":%s}`+"\n", wantID, method, encodedParams); err != nil {
 		t.Fatalf("write ACP %s request: %v", method, err)
 	}
+	return wantID
+}
+
+func (connection *reusableACPConnection) readResponses(
+	t *testing.T,
+	wantIDs ...uint64,
+) (map[uint64]reusableACPFrame, []acpsdk.SessionNotification) {
+	t.Helper()
+	pending := make(map[uint64]struct{}, len(wantIDs))
+	for _, wantID := range wantIDs {
+		pending[wantID] = struct{}{}
+	}
+	responses := make(map[uint64]reusableACPFrame, len(wantIDs))
 	var notifications []acpsdk.SessionNotification
-	for {
+	for len(pending) > 0 {
 		line, err := connection.stdout.ReadBytes('\n')
 		if err != nil {
-			t.Fatalf("read ACP %s response: %v", method, err)
+			t.Fatalf("read ACP response: %v", err)
 		}
 		var frame reusableACPFrame
 		if err := json.Unmarshal(bytes.TrimSpace(line), &frame); err != nil {
-			t.Fatalf("decode ACP %s frame %q: %v", method, line, err)
+			t.Fatalf("decode ACP frame %q: %v", line, err)
 		}
 		if frame.Method == "session/update" {
 			var notification acpsdk.SessionNotification
 			if err := json.Unmarshal(frame.Params, &notification); err != nil {
-				t.Fatalf("decode ACP %s session/update: %v", method, err)
+				t.Fatalf("decode ACP session/update: %v", err)
 			}
 			notifications = append(notifications, notification)
 			continue
 		}
-		if string(frame.ID) != strconv.FormatUint(wantID, 10) {
-			t.Fatalf("ACP %s response id = %s, want %d", method, frame.ID, wantID)
+		responseID, err := strconv.ParseUint(string(frame.ID), 10, 64)
+		if err != nil {
+			t.Fatalf("ACP response id = %s: %v", frame.ID, err)
 		}
-		return frame, notifications
+		if _, ok := pending[responseID]; !ok {
+			t.Fatalf("unexpected ACP response id = %d, want one of %v", responseID, wantIDs)
+		}
+		responses[responseID] = frame
+		delete(pending, responseID)
 	}
+	return responses, notifications
 }
 
 func (fixture *reusableACPFixture) runTurn(
@@ -240,7 +268,7 @@ func (fixture *reusableACPFixture) runTurn(
 	testCase reusableACPCase,
 ) reusableACPObservation {
 	t.Helper()
-	fixture.provider.begin(testCase.marker, testCase.output)
+	fixture.provider.begin(testCase.marker, testCase.output, testCase.blockProvider)
 	defer fixture.provider.end(testCase.marker)
 	frame, notifications := connection.request(t, "session/prompt", map[string]any{
 		"sessionId": sessionID,
@@ -266,6 +294,57 @@ func (fixture *reusableACPFixture) runTurn(
 		}
 	}
 	return reusableACPObservation{assistantText: assistantText}
+}
+
+func (fixture *reusableACPFixture) closeActiveSession(
+	t *testing.T,
+	connection *reusableACPConnection,
+	sessionID string,
+) {
+	t.Helper()
+	testCase := reusableACPCase{
+		name:          "close active session",
+		marker:        "charlie3",
+		prompt:        "xxxxxxxxxxxxxxc3",
+		output:        "charlie3 reusable ACP result",
+		blockProvider: true,
+	}
+	fixture.provider.begin(testCase.marker, testCase.output, testCase.blockProvider)
+	defer fixture.provider.end(testCase.marker)
+	promptID := connection.writeRequest(t, "session/prompt", map[string]any{
+		"sessionId": sessionID,
+		"prompt":    []map[string]string{{"type": "text", "text": testCase.prompt}},
+	})
+	fixture.provider.waitForStart(t, testCase.marker)
+	closeID := connection.writeRequest(t, "session/close", map[string]string{"sessionId": sessionID})
+	responses, _ := connection.readResponses(t, promptID, closeID)
+	assertReusableACPStopReason(t, responses[promptID], acpsdk.StopReasonCancelled)
+	assertReusableACPCloseResponse(t, responses[closeID])
+}
+
+func assertReusableACPStopReason(t *testing.T, frame reusableACPFrame, want acpsdk.StopReason) {
+	t.Helper()
+	if frame.Error != nil {
+		t.Fatalf("session/prompt response error = %+v, want stop reason %q", frame.Error, want)
+	}
+	var result acpsdk.PromptResponse
+	if err := json.Unmarshal(frame.Result, &result); err != nil {
+		t.Fatalf("decode session/prompt result: %v", err)
+	}
+	if result.StopReason != want {
+		t.Fatalf("session/prompt stopReason = %q, want %q", result.StopReason, want)
+	}
+}
+
+func assertReusableACPCloseResponse(t *testing.T, frame reusableACPFrame) {
+	t.Helper()
+	if frame.Error != nil {
+		t.Fatalf("session/close response error = %+v, want success", frame.Error)
+	}
+	var result acpsdk.CloseSessionResponse
+	if err := json.Unmarshal(frame.Result, &result); err != nil {
+		t.Fatalf("decode session/close result: %v", err)
+	}
 }
 
 type reusableACPObservation struct {
@@ -358,9 +437,12 @@ type reusableACPProviderRunner struct {
 	outputs         map[string]string
 	calls           map[string]int
 	providerMarkers map[string][]string
+	block           map[string]bool
+	started         map[string]chan struct{}
+	startOnce       map[string]*sync.Once
 }
 
-func (runner *reusableACPProviderRunner) begin(marker, output string) {
+func (runner *reusableACPProviderRunner) begin(marker, output string, block bool) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	if runner.active != "" {
@@ -370,11 +452,19 @@ func (runner *reusableACPProviderRunner) begin(marker, output string) {
 		runner.outputs = make(map[string]string)
 		runner.calls = make(map[string]int)
 		runner.providerMarkers = make(map[string][]string)
+		runner.block = make(map[string]bool)
+		runner.started = make(map[string]chan struct{})
+		runner.startOnce = make(map[string]*sync.Once)
 	}
 	runner.active = marker
 	runner.outputs[marker] = output
 	runner.calls[marker] = 0
 	runner.providerMarkers[marker] = nil
+	runner.block[marker] = block
+	if runner.block[marker] {
+		runner.started[marker] = make(chan struct{})
+		runner.startOnce[marker] = &sync.Once{}
+	}
 }
 
 func (runner *reusableACPProviderRunner) end(marker string) {
@@ -393,6 +483,9 @@ func (runner *reusableACPProviderRunner) Run(
 	runner.mu.Lock()
 	marker := runner.active
 	output := runner.outputs[marker]
+	block := runner.block[marker]
+	started := runner.started[marker]
+	startOnce := runner.startOnce[marker]
 	if marker != "" {
 		runner.calls[marker]++
 		runner.providerMarkers[marker] = append(runner.providerMarkers[marker], deterministicProviderName)
@@ -404,10 +497,28 @@ func (runner *reusableACPProviderRunner) Run(
 	if marker == "" {
 		return platformprocess.CommandResult{}, fmt.Errorf("reusable ACP provider request has no active case")
 	}
+	if block {
+		startOnce.Do(func() { close(started) })
+		select {
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	}
 	if strings.Contains(strings.ToLower(string(request.Stdin)), "return exactly one lowercase label") {
 		output = "help"
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
+}
+
+func (runner *reusableACPProviderRunner) waitForStart(t *testing.T, marker string) {
+	t.Helper()
+	runner.mu.Lock()
+	started := runner.started[marker]
+	runner.mu.Unlock()
+	if started == nil {
+		t.Fatalf("provider marker %q was not configured as a blocking case", marker)
+	}
+	<-started
 }
 
 func (runner *reusableACPProviderRunner) count(marker string) int {
