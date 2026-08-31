@@ -16,7 +16,7 @@ func TestRetiredSessionDispatchesCommandIsUnknown(t *testing.T) {
 		"you", "session", "dispatches", "session-customer",
 	})
 
-	err := parameterProcesses.observerProcess.Execute(inputs.Input)
+	err := parameterProcesses.observerRuntime.execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), `unknown command "dispatches"`) {
 		t.Fatalf("retired session dispatches error = %v, want unknown command", err)
 	}
@@ -97,7 +97,7 @@ func TestCLIUnknownFlagFailsBeforeLifecycleStart(t *testing.T) {
 		"you", "init", "--legacy-scaffold", "legacy-factory",
 	})
 
-	executeErr := parameterProcesses.observerProcess.Execute(inputs.Input)
+	executeErr := parameterProcesses.observerRuntime.execute(inputs.Input)
 	if executeErr == nil || !strings.Contains(executeErr.Error(), "unknown flag: --legacy-scaffold") {
 		t.Fatalf(
 			"unknown init flag error = %v, want unknown flag: --legacy-scaffold; stdout=%q stderr=%q",

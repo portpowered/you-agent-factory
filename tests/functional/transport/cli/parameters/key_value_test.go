@@ -31,7 +31,7 @@ func TestRunKeyValueParametersReachFactoryInvocation(t *testing.T) {
 		"--priority=" + priorityValue,
 	})
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -73,7 +73,7 @@ func TestRunKeyValuePreservesEqualsInValue(t *testing.T) {
 		"--callback=" + callbackValue,
 	})
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(embedded-equals key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -116,7 +116,7 @@ func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
 		"--tag=" + secondTagValue,
 	})
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(duplicate key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -185,7 +185,7 @@ func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 			}
 			inputs := parameterInputs(t, append(base, test.invocationArgs...))
 
-			executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
+			executeErr := parameterProcesses.handlerRuntime.execute(inputs.Input)
 			if executeErr == nil {
 				t.Fatalf(
 					"Process.Execute(malformed key=value) succeeded; stdout:\n%s\nstderr:\n%s",

@@ -3,6 +3,7 @@ package parameters_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,9 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/google/uuid"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -27,22 +29,21 @@ import (
 const parameterProcessCloseTimeout = 5 * time.Second
 
 type parameterProcessFixture struct {
-	observerProcess     support.ApplicationProcess
-	fullHandlerProcess  support.ApplicationProcess
-	missingAssetProcess support.ApplicationProcess
-	observations        *cliObservationLog
-	submissions         *invocationSubmissionObservation
-	providerRunner      *support.ShapedProviderCommandRunner
-	missingProvider     *testutil.ProviderCommandRunner
-	lifecycleEffects    *atomic.Int32
-	operatorMutations   *atomic.Int32
+	observerRuntime   *parameterRuntime
+	handlerRuntime    *parameterRuntime
+	observations      *cliObservationLog
+	submissions       *invocationSubmissionObservation
+	providerRunner    *support.ShapedProviderCommandRunner
+	lifecycleEffects  *atomic.Int32
+	operatorMutations *atomic.Int32
 }
 
 var parameterProcesses *parameterProcessFixture
 
-// TestMain constructs the three immutable process variants once for the
-// package. Every normal leaf executes sequentially through one of these roots;
-// only the missing-asset witness receives lifecycle-observation edges.
+// TestMain constructs the two immutable process variants once for the package.
+// The observer root remains separate because CLIObserver intercepts handler
+// execution; all handler cases, including the missing-asset witness, share the
+// handler root with fresh inputs and serialized Process.Execute calls.
 func TestMain(m *testing.M) {
 	fixture, err := buildParameterProcessFixture()
 	if err != nil {
@@ -79,19 +80,10 @@ func buildParameterProcessFixture() (*parameterProcessFixture, error) {
 		return nil, fmt.Errorf("build observer process: %w", err)
 	}
 
-	fullHandlerProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	lifecycleEffects := &atomic.Int32{}
+	handlerRuntime, err := newParameterRuntime(serviceedges.Edges{
 		ProviderCommandRunner: providerRunner,
 		SubmissionRecorder:    submissions.observe,
-	})
-	if err != nil {
-		_ = observerProcess.Close(context.Background())
-		return nil, fmt.Errorf("build full-handler process: %w", err)
-	}
-
-	lifecycleEffects := &atomic.Int32{}
-	missingProvider := testutil.NewProviderCommandRunner()
-	missingAssetProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: missingProvider,
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			lifecycleEffects.Add(1)
 			return nil
@@ -105,26 +97,75 @@ func buildParameterProcessFixture() (*parameterProcessFixture, error) {
 		},
 		FactorySessionIDGenerator: func() string {
 			lifecycleEffects.Add(1)
-			return "unexpected-session"
+			return uuid.NewString()
 		},
 	})
 	if err != nil {
 		_ = observerProcess.Close(context.Background())
-		_ = fullHandlerProcess.Close(context.Background())
-		return nil, fmt.Errorf("build missing-asset process: %w", err)
+		return nil, fmt.Errorf("build handler process: %w", err)
 	}
 
 	return &parameterProcessFixture{
-		observerProcess:     observerProcess,
-		fullHandlerProcess:  fullHandlerProcess,
-		missingAssetProcess: missingAssetProcess,
-		observations:        observations,
-		submissions:         submissions,
-		providerRunner:      providerRunner,
-		missingProvider:     missingProvider,
-		lifecycleEffects:    lifecycleEffects,
-		operatorMutations:   operatorMutations,
+		observerRuntime:   newParameterRuntimeFromProcess(observerProcess),
+		handlerRuntime:    handlerRuntime,
+		observations:      observations,
+		submissions:       submissions,
+		providerRunner:    providerRunner,
+		lifecycleEffects:  lifecycleEffects,
+		operatorMutations: operatorMutations,
 	}, nil
+}
+
+// parameterRuntime owns one package-level production graph. Its execution
+// lock keeps mutable service state from overlapping while each caller still
+// supplies fresh input, streams, environment, and working-directory state.
+type parameterRuntime struct {
+	process support.ApplicationProcess
+
+	mu        sync.Mutex
+	closed    bool
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func newParameterRuntime(edges serviceedges.Edges) (*parameterRuntime, error) {
+	process, err := support.BuildProcessWithContext(context.Background(), edges)
+	if err != nil {
+		return nil, err
+	}
+	return newParameterRuntimeFromProcess(process), nil
+}
+
+func newParameterRuntimeFromProcess(process support.ApplicationProcess) *parameterRuntime {
+	return &parameterRuntime{process: process}
+}
+
+func (runtime *parameterRuntime) execute(input root.Input) error {
+	if runtime == nil || runtime.process == nil {
+		return errors.New("parameter functional runtime is nil")
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if runtime.closed {
+		return errors.New("parameter functional runtime is closed")
+	}
+	return runtime.process.Execute(input)
+}
+
+func (runtime *parameterRuntime) close(ctx context.Context) error {
+	if runtime == nil || runtime.process == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runtime.closeOnce.Do(func() {
+		runtime.mu.Lock()
+		defer runtime.mu.Unlock()
+		runtime.closed = true
+		runtime.closeErr = runtime.process.Close(ctx)
+	})
+	return runtime.closeErr
 }
 
 func successfulProviderResults(count int) []platformprocess.CommandResult {
@@ -140,17 +181,16 @@ func (fixture *parameterProcessFixture) close() error {
 	defer cancel()
 
 	var closeErr error
-	processes := []struct {
+	runtimes := []struct {
 		name    string
-		process support.ApplicationProcess
+		runtime *parameterRuntime
 	}{
-		{name: "observer", process: fixture.observerProcess},
-		{name: "full-handler", process: fixture.fullHandlerProcess},
-		{name: "missing-asset", process: fixture.missingAssetProcess},
+		{name: "observer", runtime: fixture.observerRuntime},
+		{name: "handler", runtime: fixture.handlerRuntime},
 	}
-	for _, entry := range processes {
-		name, process := entry.name, entry.process
-		if err := process.Close(ctx); err != nil {
+	for _, entry := range runtimes {
+		name, runtime := entry.name, entry.runtime
+		if err := runtime.close(ctx); err != nil {
 			closeErr = fmt.Errorf("%s process: %w", name, err)
 		}
 	}
@@ -194,7 +234,7 @@ func executeParameterObservation(t *testing.T, args []string) cliobservation.Res
 	}
 	before := len(parameterProcesses.observations.snapshot())
 	inputs := parameterInputs(t, args)
-	if err := parameterProcesses.observerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.observerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(parser observation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -279,7 +319,7 @@ func testFullHandlerSubmitsCombinedSignature(t *testing.T) {
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	inputs := spineInputs(t, combinedSignatureArgs(factoryPath))
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 

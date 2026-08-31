@@ -57,7 +57,7 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 		"second prompt",
 	})
 
-	executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
+	executeErr := parameterProcesses.handlerRuntime.execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(extra positional prompts) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -111,7 +111,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 			"session", "pause",
 		})
 
-		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause default targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,
@@ -140,7 +140,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 			"session", "pause", overrideSessionID,
 		})
 
-		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause override targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,

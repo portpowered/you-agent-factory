@@ -33,7 +33,7 @@ func TestCLIJSONParameterPreservesNestedObjectAndArray(t *testing.T) {
 		"--items=" + itemsValue,
 	})
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(JSON parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -96,7 +96,7 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		"--items=" + validItemsValue,
 	})
 
-	executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
+	executeErr := parameterProcesses.handlerRuntime.execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(invalid JSON parameter) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -156,7 +156,7 @@ func TestCLIJSONNullAndEmptyValuesRemainDistinct(t *testing.T) {
 		"--emptyArray=" + emptyArrayValue,
 	})
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.handlerRuntime.execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(null and empty JSON parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
