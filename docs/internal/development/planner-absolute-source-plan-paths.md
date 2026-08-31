@@ -104,6 +104,34 @@ packet discovery and copy behavior. This change does not edit its files, does
 not edit live PRDs, and does not add recursive worktree discovery or filesystem
 authority. The three-dot overlap check remains a later contention gate.
 
+## Project authoring — story 002 / GATE-SP-WRITING
+
+The Project Lead prompt now recognizes both Windows drive-letter spellings,
+preserves explicitly absolute `sourcePlan` and `projectRoot` values, resolves
+relative admissions and the default Project root from one absolute repository
+root before durable use, requires a full regular-file source-plan read, and
+blocks invalid or unauthorized admissions. Child ideas carry the resolved
+absolute `sourcePlan`; the prompt example no longer emits a relative value.
+The Projects guide's minimal admission now shows absolute `sourcePlan` and
+`projectRoot` values and explains how to substitute the repository root.
+
+CASE-SP-016 evidence:
+
+```text
+python -m unittest discover -s tests/factory/planner -p "test_project_authoring_paths.py"
+```
+
+Observed result: exit `0`; all four tests passed. The test decodes the actual
+Project Lead batch example and minimal Project admission, checks the authored
+resolution/preservation/default/error contract, and reads exact fixture bytes
+after changing cwd to a consumer directory. This is controlled prompt and
+local-real filesystem evidence; it does not prove a live Project Lead model
+will follow the prompt or the integrated actual-planner provider boundary.
+
+The story-002 edits remain limited to the Project Lead prompt, Projects guide,
+its focused authoring test, and this ledger section. They do not edit
+setup-workspace packet discovery, worktree-copy logic, or live PRDs.
+
 ## Budget and remaining edge
 
 The lane budget is at most four paid calls, USD `$2`, and 20 minutes. The

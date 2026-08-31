@@ -21,12 +21,50 @@ you work list --session {{.Context.SessionID}}
 
 The Project Work payload is the only required admission artifact. It always
 carries `sourcePlan` and `request`; when it omits the rest, apply the
-defaults: `projectRoot` is `docs/temp/{{ (index .Inputs 0).Name }}/`,
+defaults: `projectRoot` is the absolute repository-root path
+`<repository-root>/docs/temp/{{ (index .Inputs 0).Name }}/`,
 `contractRevision` is `{{ (index .Inputs 0).Name }}-v1`, and the acceptance
-criteria are the acceptance-criteria section of the source plan. On the first
-dispatch, create the root directory and bootstrap its files from the admitted
-payload and source plan. Do not require the meta-planner, operator, or
-admission batch to pre-create anything under `docs/temp`.
+criteria are the acceptance-criteria section of the source plan. Resolve the
+path defaults before creating durable state or emitting an idea.
+
+### Cross-stage path contract
+
+Resolve the admitted paths once at Project bootstrap and use the resolved
+values for every durable projection and emitted idea:
+
+1. Treat `^[A-Za-z]:[\\/]` as an absolute Windows drive-letter path,
+   including both `C:\\...` and `C:/...`. Do not require a leading `/` to
+   recognize an absolute path.
+2. Preserve an absolute `sourcePlan` or explicitly supplied `projectRoot`
+   verbatim as the decoded string used for reads and durable references. Do
+   not join it to the current directory, re-relativize it, or normalize its
+   slash direction.
+3. For a relative `sourcePlan` or `projectRoot`, run
+   `git rev-parse --show-toplevel` once to obtain the absolute repository root,
+   then resolve
+   the original value against that root before reading, bootstrapping, or
+   emitting an idea. The default `projectRoot` is resolved the same way.
+4. Read the named `sourcePlan` in full and require an existing regular file
+   before planning the first cycle. An empty, missing, directory-valued,
+   unreadable, unauthorized, or repository-escaping source plan is a blocking
+   admission error. Do not fall back to a worktree search, emit an idea, set
+   the path to `null`, or continue with a partial projection.
+5. Every emitted idea must carry the resolved absolute `sourcePlan` value. If
+   the Project payload supplied a relative value, never reintroduce that raw
+   relative value into an idea, `request.md`, `acceptance.md`, `state.md`, or
+   `progress.md`. These are path references only; do not copy source-plan
+   contents into diagnostics or payload metadata.
+
+If path resolution or the required source-plan read fails, record the bounded
+path/error evidence in `state.md` and emit a `blocked` Project cycle. Do not
+create a usable partial Project packet. Explicit paths remain subject to the
+existing authorized-workspace policy; this contract adds no filesystem
+authority and does not permit arbitrary host paths.
+
+On the first dispatch, create the resolved root directory and bootstrap its
+files from the admitted payload and source plan. Do not require the
+meta-planner, operator, or admission batch to pre-create anything under the
+conceptual `docs/temp` location.
 
 Bootstrap ownership as follows:
 
@@ -140,11 +178,11 @@ proof of completion. Before issuing new implementation Work:
    owned packages/shared surfaces, excluded surfaces, and merge risks. Direct
    the plan workstation to keep the idea within that ownership boundary rather
    than turning sibling packages into sequential stories.
-   Every idea payload must carry `sourcePlan` (the Project's source plan path)
-   and the exact plan sections or requirement IDs the idea implements, and must
-   instruct the plan workstation to trace each user story back to those
-   sections. An idea the source plan cannot account for is a contract question
-   for `state.md`, not a silent addition.
+   Every idea payload must carry `sourcePlan` (the resolved absolute Project
+   source-plan path) and the exact plan sections or requirement IDs the idea
+   implements, and must instruct the plan workstation to trace each user story
+   back to those sections. An idea the source plan cannot account for is a
+   contract question for `state.md`, not a silent addition.
    For ideas whose acceptance includes measured performance, instruct planning
    and execution to proceed when an established optimization pattern materially
    removes expensive work and behavior remains intact. Do not request fixed
@@ -220,7 +258,7 @@ which ideas run now and which wait. The cycle must depend on every emitted idea
 reaching `complete`:
 
 ```json
-{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"PROJECT-c01-slice","workTypeName":"idea","state":"init","payload":{"title":"A standalone behavior slice","project":"PROJECT","sourcePlan":"path/from/project/request","requestedOutcome":"Observable outcome and complete implementation/validation constraints"}},{"name":"PROJECT","workTypeName":"project-cycle","state":"init","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"PROJECT","targetWorkName":"PROJECT-c01-slice","requiredState":"complete"}]}}
+{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"PROJECT-c01-slice","workTypeName":"idea","state":"init","payload":{"title":"A standalone behavior slice","project":"PROJECT","sourcePlan":"C:/absolute/repository/root/docs/temp/project-plan.md","requestedOutcome":"Observable outcome and complete implementation/validation constraints"}},{"name":"PROJECT","workTypeName":"project-cycle","state":"init","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"PROJECT","targetWorkName":"PROJECT-c01-slice","requiredState":"complete"}]}}
 ```
 
 Replace every `PROJECT` with `{{ (index .Inputs 0).Name }}`. Add exactly one

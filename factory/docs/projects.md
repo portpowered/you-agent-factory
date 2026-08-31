@@ -15,10 +15,12 @@ Project acceptance criteria are proven.
 The runtime Project Work and Factory Event stream are authoritative for
 lifecycle. Project admission does not pre-create local state. On its first
 dispatch, the Project Lead bootstraps this ignored working-memory directory from
-the admitted payload and source plan:
+the admitted payload and source plan. The layout below is shown relative to the
+repository root; the durable `projectRoot` value is the corresponding absolute
+path:
 
 ```txt
-docs/temp/<project-name>/
+<absolute-repository-root>/docs/temp/<project-name>/
   request.md
   acceptance.md
   state.md
@@ -40,16 +42,29 @@ criteria is admissible through the same shape, and no workstation prompt may
 carry policy specific to one Project — Project-specific policy travels in the
 payload and source plan.
 
-The payload must identify `sourcePlan` and the authorized `request`. The other
-fields default: `projectRoot` defaults to `docs/temp/<project-name>/`,
-`contractRevision` defaults to `<project-name>-v1`, and when `acceptance` is
-omitted the acceptance criteria are the acceptance-criteria section of the
-source plan, extracted verbatim by the Project Lead at bootstrap. The source
-plan file is the source of truth either way. Contract or plan revisions are
-recorded as dated addenda in `addenda.md` under the Project root; that file
-is the Project's revision history. The meta-planner must not create or
-populate `projectRoot`. Separate Projects have separate roots and no Work
-relation unless their outcomes have a real semantic dependency.
+The payload must identify `sourcePlan` and the authorized `request`. Before
+bootstrap, the Project Lead resolves both cross-stage paths against the
+absolute repository root reported by `git rev-parse --show-toplevel`:
+
+- An absolute path is recognized by `^[A-Za-z]:[\\/]` on Windows, including
+  both `C:\\...` and `C:/...`, and is preserved verbatim.
+- A relative `sourcePlan` or `projectRoot` remains accepted for compatibility,
+  but the original value is resolved to an absolute repository-root path before
+  it is read, persisted, or emitted to a child idea. The default `projectRoot`
+  is `<absolute-repository-root>/docs/temp/<project-name>/`.
+- The named source plan must be a readable regular file and must be read in
+  full. Empty, missing, directory-valued, unauthorized, escaped, or unreadable
+  paths block admission; there is no worktree search or fallback path.
+
+The other fields default: `contractRevision` defaults to `<project-name>-v1`,
+and when `acceptance` is omitted the acceptance criteria are the
+acceptance-criteria section of the source plan, extracted verbatim by the
+Project Lead at bootstrap. The source plan file is the source of truth either
+way. Contract or plan revisions are recorded as dated addenda in `addenda.md`
+under the Project root; that file is the Project's revision history. The
+meta-planner must not create or populate `projectRoot`. Separate Projects have
+separate roots and no Work relation unless their outcomes have a real semantic
+dependency.
 
 Minimal admission — point a Project at a plan file and let it run end to end:
 
@@ -62,7 +77,8 @@ Minimal admission — point a Project at a plan file and let it run end to end:
       "workTypeName": "project",
       "state": "init",
       "payload": {
-        "sourcePlan": "docs/temp/test-functional-improvement.md",
+        "sourcePlan": "C:/absolute/repository/root/docs/temp/test-functional-improvement.md",
+        "projectRoot": "C:/absolute/repository/root/docs/temp/test-functional-improvement/",
         "request": "Read the source plan and implement it end to end. Continue cycling until every acceptance criterion in the plan is independently proven."
       }
     }
@@ -70,6 +86,10 @@ Minimal admission — point a Project at a plan file and let it run end to end:
   "relations": []
 }
 ```
+
+Replace `C:/absolute/repository/root` with the absolute value returned by
+`git rev-parse --show-toplevel`. A relative admission remains compatible, but
+the Project Lead resolves it before it becomes durable state or a child idea.
 
 A fully explicit admission may additionally pin `projectRoot`,
 `contractRevision`, an inline `acceptance` array, and a `recovery` object for
