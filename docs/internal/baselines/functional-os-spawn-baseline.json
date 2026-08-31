@@ -4,9 +4,8 @@
   "packages": [
     {
       "packagePath": "tests/functional/factory/packaged/fix",
-      "count": 2,
+      "count": 1,
       "siteIds": [
-        "OSSPAWN-tests-functional-factory-packaged-fix-invocation-test-runPackagedFixGit-01",
         "OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-startPackagedFixGitSeed-01"
       ]
     },

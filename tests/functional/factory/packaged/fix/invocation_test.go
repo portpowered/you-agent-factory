@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -977,9 +976,7 @@ func createPackagedFixWorktree(t *testing.T, workspace, name string) string {
 
 func runPackagedFixGit(t *testing.T, workspace string, args ...string) {
 	t.Helper()
-	command := exec.Command("git", args...)
-	command.Dir = workspace
-	if output, err := command.CombinedOutput(); err != nil {
+	if output, err := sharedPackagedFixGitSeed(t).run(workspace, args...); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
 	}
 }
