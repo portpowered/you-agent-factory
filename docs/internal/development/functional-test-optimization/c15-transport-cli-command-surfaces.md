@@ -436,18 +436,36 @@ for each profile pass. No second optimization pass was authorized after this
 bounded profile result; the current-head PR runner is the authoritative shared
 host performance verdict.
 
+### Current-head CI timing and coverage record
+
+The Backend Functional Coverage job for hosted CI run `33347664926` measured
+the exact pushed implementation head
+`d5e9ae43b89bd61857086afae22411c12afc8e5b`. Its package rows reported
+`commands 24.731s` and `parameters 22.033s`, both above the three-second target.
+The bounded profile-led pass above is the required floor disposition for both
+values: it enumerates every top-level test in each package, records package
+setup/teardown remainder (`0.407s` for commands and `0.750s` for parameters),
+and records the outer compile/runner upper bounds (`15.891s` and `7.896s`).
+Thus the hosted package rows are not presented as below-threshold results; the
+complete retained-test, setup/teardown, and compile/runner floor is recorded
+for the one authorized diagnostic pass. The CI transcript and URL remain in
+the PR conversation, not in this ledger.
+
+The same hosted job measured Backend Functional Coverage at `61.6%` and
+reported no owned skip or quarantine. Those property-specific CI details are
+retained in the PR conversation as required by the delivery criterion.
+
 ### VAL-001 clean-room validation report
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
 It was run read-only from a detached clean worktree at exact delivery head
-`4f67613efb6626b45d1313fb6d664f3e1f33721d`. No implementation repair was made
-during any loopback attempt.
+`d5e9ae43b89bd61857086afae22411c12afc8e5b`. No implementation repair was made
+during the loopback.
 
 #### Environment and artifact
 
-- Commit/build identifier: `4f67613efb6626b45d1313fb6d664f3e1f33721d` (the
-  documentation-only delivery head containing the already validated source
-  tree).
+- Commit/build identifier: `d5e9ae43b89bd61857086afae22411c12afc8e5b` (the
+  exact pushed implementation head reviewed by CI).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -460,9 +478,9 @@ during any loopback attempt.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Final detached worktree at the exact delivery head ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `59.113s`, wall `95.143s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same final detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `36.084s`, wall `41.724s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS | Final detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `2.914s`, wall `11.306s`. | Hosted Linux/CI topology. |
+| Complete command matrix | PASS | Final detached worktree at exact head `d5e9ae43b89bd61857086afae22411c12afc8e5b` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `83.252s`, wall `135.290s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `50.598s`, wall `57.086s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.585s`, wall `9.200s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
@@ -483,14 +501,15 @@ the two earlier cold-start diagnostics are retained as environmental history,
 not behavior failures. No assertion, skip, quarantine, or timeout was
 weakened to obtain the pass.
 
-The remaining hosted edges are current-head Backend Functional Coverage,
-current-head package timing, terminal CI, and merge. CI-run output and URLs
-must be recorded in the PR conversation only, never in this ledger commit.
+The current-head Backend Functional Coverage, package timing, and owned
+skip/quarantine result are recorded above, with CI-run output and URLs kept in
+the PR conversation only. Terminal CI ownership, conflict resolution, and
+merge remain with review.
 
 ### Implementation-stage handoff status
 
-Local story evidence is complete and ready for final push. The
-implementation-stage delivery criterion becomes satisfied only after this
-final head is pushed, the named PR is open, required CI has started on that
-head, and any blocking review feedback is addressed. Review owns terminal CI,
-conflict resolution, the hosted coverage/timing verdict, and merge.
+Local story evidence is complete for this review correction. The
+implementation-stage delivery criterion becomes satisfied after this evidence
+refresh is pushed, the named PR remains open, required CI starts on that head,
+and the blocking feedback is addressed. Review owns terminal CI, conflict
+resolution, and merge.
