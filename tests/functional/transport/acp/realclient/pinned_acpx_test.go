@@ -445,9 +445,11 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 	}
 	tree, err := attachCommandProcessTree(command)
 	if err != nil {
-		_ = terminateCommandProcessTree(command, nil)
-		_ = command.Wait()
-		return nil, fmt.Errorf("real ACP evidence failed during %s: process ownership", phase)
+		return nil, cleanupStartedCommandAfterOwnershipFailure(
+			phase,
+			func() error { return terminateCommandProcessTree(command, nil) },
+			command.Wait,
+		)
 	}
 	defer closeCommandProcessTree(command, tree)
 	completed := make(chan error, 1)
@@ -473,6 +475,16 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 		}
 		return nil, fmt.Errorf("real ACP evidence failed during %s: timeout", phase)
 	}
+}
+
+func cleanupStartedCommandAfterOwnershipFailure(
+	phase string,
+	terminate func() error,
+	wait func() error,
+) error {
+	_ = terminate()
+	_ = wait()
+	return fmt.Errorf("real ACP evidence failed during %s: process ownership", phase)
 }
 
 func nodeSupportsPinnedAcpx() bool {

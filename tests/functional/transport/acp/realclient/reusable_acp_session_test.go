@@ -40,7 +40,7 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatalf("create reusable ACP workspace: %v", err)
 	}
-	sessionID := fixture.newSession(t, connection, workspace, defaultFactoryBuilderTarget)
+	session := fixture.newSession(t, connection, workspace, defaultFactoryBuilderTarget)
 
 	for _, testCase := range []reusableACPCase{
 		{name: "first isolated turn", marker: "alpha1", prompt: "xxxxxxxxxxxxxxa1", output: "alpha1 reusable ACP result"},
@@ -53,30 +53,33 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			fixture.runTurn(t, connection, sessionID, testCase)
+			fixture.runTurn(t, connection, session, testCase)
 		})
 	}
 	secondWorkspace := filepath.Join(t.TempDir(), "second-reusable-acp-workspace")
 	if err := os.MkdirAll(secondWorkspace, 0o755); err != nil {
 		t.Fatalf("create second reusable ACP workspace: %v", err)
 	}
-	secondSessionID := fixture.newSession(t, connection, secondWorkspace, defaultFactoryBuilderTarget)
-	if secondSessionID == sessionID {
-		t.Fatalf("reusable ACP session identities reused %q across distinct session/new workspaces", sessionID)
+	secondSession := fixture.newSession(t, connection, secondWorkspace, defaultFactoryBuilderTarget)
+	if secondSession.id == session.id {
+		t.Fatalf("reusable ACP session identities reused %q across distinct session/new workspaces", session.id)
+	}
+	if filepath.Clean(secondSession.workspace) == filepath.Clean(session.workspace) {
+		t.Fatalf("reusable ACP session workspaces reused %q across distinct session/new requests", session.workspace)
 	}
 	// Creating the second Chat Session is safe while the first Factory runtime
 	// is retained; its first turn must wait until the first active runtime has
 	// been canceled and closed because the on-demand target owns one retained
 	// default runtime at a time.
-	fixture.closeActiveSession(t, connection, sessionID)
-	fixture.runTurn(t, connection, secondSessionID, reusableACPCase{
+	fixture.closeActiveSession(t, connection, session)
+	fixture.runTurn(t, connection, secondSession, reusableACPCase{
 		name:             "second isolated session turn",
 		marker:           "delta4",
 		prompt:           "xxxxxxxxxxxxxxd4",
 		output:           "delta4 reusable ACP result",
 		forbiddenMarkers: []string{"alpha1", "bravo2"},
 	})
-	fixture.closeActiveSession(t, connection, secondSessionID)
+	fixture.closeActiveSession(t, connection, secondSession)
 }
 
 type reusableACPCase struct {
@@ -88,10 +91,17 @@ type reusableACPCase struct {
 	forbiddenMarkers []string
 }
 
+type reusableACPSession struct {
+	id              string
+	workspace       string
+	providerWorkDir string
+}
+
 type reusableACPFixture struct {
-	home     string
-	process  support.ApplicationProcess
-	provider *reusableACPProviderRunner
+	home       string
+	factoryDir string
+	process    support.ApplicationProcess
+	provider   *reusableACPProviderRunner
 }
 
 func newReusableACPFixture(t *testing.T) *reusableACPFixture {
@@ -118,7 +128,7 @@ func newReusableACPFixture(t *testing.T) *reusableACPFixture {
 		t.Fatalf("create reusable ACP bootstrap directory: %v", err)
 	}
 	env := reusableACPEnvironment(baseHome)
-	support.InstallPackagedFactoryWithProcess(
+	factoryDir := support.InstallPackagedFactoryWithProcess(
 		t,
 		process,
 		env,
@@ -126,6 +136,7 @@ func newReusableACPFixture(t *testing.T) *reusableACPFixture {
 		"@you/factory-builder",
 	)
 	support.SeedACPAgentProfile(t, baseHome, defaultFactoryBuilderTarget, []string{defaultFactoryBuilderTarget})
+	fixture.factoryDir = factoryDir
 	fixture.process = process
 	return fixture
 }
@@ -288,14 +299,20 @@ func (connection *reusableACPConnection) readResponses(
 func (fixture *reusableACPFixture) runTurn(
 	t *testing.T,
 	connection *reusableACPConnection,
-	sessionID string,
+	session reusableACPSession,
 	testCase reusableACPCase,
 ) reusableACPObservation {
 	t.Helper()
-	fixture.provider.begin(testCase.marker, testCase.output, testCase.blockProvider)
+	fixture.provider.begin(
+		testCase.marker,
+		testCase.output,
+		session.providerWorkDir,
+		testCase.prompt,
+		testCase.blockProvider,
+	)
 	defer fixture.provider.end(testCase.marker)
 	frame, notifications := connection.request(t, "session/prompt", map[string]any{
-		"sessionId": sessionID,
+		"sessionId": session.id,
 		"prompt":    []map[string]string{{"type": "text", "text": testCase.prompt}},
 	})
 	if frame.Error != nil {
@@ -308,10 +325,11 @@ func (fixture *reusableACPFixture) runTurn(
 	if result.StopReason != acpsdk.StopReasonEndTurn {
 		t.Fatalf("%s stopReason = %q, want %q", testCase.name, result.StopReason, acpsdk.StopReasonEndTurn)
 	}
-	assistantText := assertReusableACPNotifications(t, sessionID, testCase, notifications)
+	assistantText := assertReusableACPNotifications(t, session.id, testCase, notifications)
 	if got := fixture.provider.count(testCase.marker); got != 2 {
 		t.Fatalf("%s provider invocations = %d, want exactly 2", testCase.name, got)
 	}
+	assertReusableACPProviderRequests(t, session, testCase, fixture.provider.observations(testCase.marker))
 	for index, marker := range fixture.provider.markers(testCase.marker) {
 		if marker != deterministicProviderName {
 			t.Fatalf("%s provider marker %d = %q, want %q", testCase.name, index, marker, deterministicProviderName)
@@ -323,7 +341,7 @@ func (fixture *reusableACPFixture) runTurn(
 func (fixture *reusableACPFixture) closeActiveSession(
 	t *testing.T,
 	connection *reusableACPConnection,
-	sessionID string,
+	session reusableACPSession,
 ) {
 	t.Helper()
 	testCase := reusableACPCase{
@@ -333,17 +351,24 @@ func (fixture *reusableACPFixture) closeActiveSession(
 		output:        "charlie3 reusable ACP result",
 		blockProvider: true,
 	}
-	fixture.provider.begin(testCase.marker, testCase.output, testCase.blockProvider)
+	fixture.provider.begin(
+		testCase.marker,
+		testCase.output,
+		session.providerWorkDir,
+		testCase.prompt,
+		testCase.blockProvider,
+	)
 	defer fixture.provider.end(testCase.marker)
 	promptID := connection.writeRequest(t, "session/prompt", map[string]any{
-		"sessionId": sessionID,
+		"sessionId": session.id,
 		"prompt":    []map[string]string{{"type": "text", "text": testCase.prompt}},
 	})
 	fixture.provider.waitForStart(t, testCase.marker)
-	closeID := connection.writeRequest(t, "session/close", map[string]string{"sessionId": sessionID})
+	closeID := connection.writeRequest(t, "session/close", map[string]string{"sessionId": session.id})
 	responses, _ := connection.readResponses(t, promptID, closeID)
 	assertReusableACPStopReason(t, responses[promptID], acpsdk.StopReasonCancelled)
 	assertReusableACPCloseResponse(t, responses[closeID])
+	assertReusableACPProviderRequests(t, session, testCase, fixture.provider.observations(testCase.marker))
 }
 
 func assertReusableACPStopReason(t *testing.T, frame reusableACPFrame, want acpsdk.StopReason) {
@@ -380,7 +405,7 @@ func (fixture *reusableACPFixture) newSession(
 	connection *reusableACPConnection,
 	cwd string,
 	wantTarget string,
-) string {
+) reusableACPSession {
 	t.Helper()
 	frame, _ := connection.request(t, "session/new", map[string]any{
 		"cwd":        cwd,
@@ -402,7 +427,59 @@ func (fixture *reusableACPFixture) newSession(
 	if got := string(created.ConfigOptions[0].Select.CurrentValue); got != wantTarget {
 		t.Fatalf("session/new target = %q, want %q", got, wantTarget)
 	}
-	return string(created.SessionId)
+	return reusableACPSession{
+		id:              string(created.SessionId),
+		workspace:       filepath.Clean(cwd),
+		providerWorkDir: filepath.Clean(fixture.factoryDir),
+	}
+}
+
+type reusableACPProviderObservation struct {
+	workDir string
+	prompt  string
+	marker  string
+}
+
+func assertReusableACPProviderRequests(
+	t *testing.T,
+	session reusableACPSession,
+	testCase reusableACPCase,
+	observations []reusableACPProviderObservation,
+) {
+	t.Helper()
+	if len(observations) == 0 {
+		t.Fatalf("%s provider edge recorded no requests for session %q", testCase.name, session.id)
+	}
+	for index, observation := range observations {
+		if filepath.Clean(observation.workDir) != filepath.Clean(session.providerWorkDir) {
+			t.Fatalf(
+				"%s provider request %d WorkDir = %q, want session %q provider workspace %q (client workspace %q)",
+				testCase.name,
+				index,
+				observation.workDir,
+				session.id,
+				session.providerWorkDir,
+				session.workspace,
+			)
+		}
+		if !strings.Contains(observation.prompt, testCase.prompt) {
+			t.Fatalf(
+				"%s provider request %d prompt omitted expected input %q",
+				testCase.name,
+				index,
+				testCase.prompt,
+			)
+		}
+		if observation.marker != testCase.marker {
+			t.Fatalf(
+				"%s provider request %d marker = %q, want case marker %q",
+				testCase.name,
+				index,
+				observation.marker,
+				testCase.marker,
+			)
+		}
+	}
 }
 
 func assertReusableACPNotifications(
@@ -465,17 +542,22 @@ func summarizeReusableACPNotifications(notifications []acpsdk.SessionNotificatio
 }
 
 type reusableACPProviderRunner struct {
-	mu              sync.Mutex
-	active          string
-	outputs         map[string]string
-	calls           map[string]int
-	providerMarkers map[string][]string
-	block           map[string]bool
-	started         map[string]chan struct{}
-	startOnce       map[string]*sync.Once
+	mu                   sync.Mutex
+	active               string
+	outputs              map[string]string
+	calls                map[string]int
+	providerMarkers      map[string][]string
+	block                map[string]bool
+	started              map[string]chan struct{}
+	startOnce            map[string]*sync.Once
+	expectedWorkDirs     map[string]string
+	expectedPrompts      map[string]string
+	providerObservations map[string][]reusableACPProviderObservation
 }
 
-func (runner *reusableACPProviderRunner) begin(marker, output string, block bool) {
+func (runner *reusableACPProviderRunner) begin(
+	marker, output, workspace, prompt string, block bool,
+) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	if runner.active != "" {
@@ -488,12 +570,18 @@ func (runner *reusableACPProviderRunner) begin(marker, output string, block bool
 		runner.block = make(map[string]bool)
 		runner.started = make(map[string]chan struct{})
 		runner.startOnce = make(map[string]*sync.Once)
+		runner.expectedWorkDirs = make(map[string]string)
+		runner.expectedPrompts = make(map[string]string)
+		runner.providerObservations = make(map[string][]reusableACPProviderObservation)
 	}
 	runner.active = marker
 	runner.outputs[marker] = output
 	runner.calls[marker] = 0
 	runner.providerMarkers[marker] = nil
 	runner.block[marker] = block
+	runner.expectedWorkDirs[marker] = workspace
+	runner.expectedPrompts[marker] = prompt
+	runner.providerObservations[marker] = nil
 	if runner.block[marker] {
 		runner.started[marker] = make(chan struct{})
 		runner.startOnce[marker] = &sync.Once{}
@@ -519,9 +607,19 @@ func (runner *reusableACPProviderRunner) Run(
 	block := runner.block[marker]
 	started := runner.started[marker]
 	startOnce := runner.startOnce[marker]
+	expectedWorkDir := runner.expectedWorkDirs[marker]
+	expectedPrompt := runner.expectedPrompts[marker]
 	if marker != "" {
 		runner.calls[marker]++
 		runner.providerMarkers[marker] = append(runner.providerMarkers[marker], deterministicProviderName)
+		runner.providerObservations[marker] = append(
+			runner.providerObservations[marker],
+			reusableACPProviderObservation{
+				workDir: request.WorkDir,
+				prompt:  reusableACPProviderPrompt(request),
+				marker:  marker,
+			},
+		)
 	}
 	runner.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -531,7 +629,26 @@ func (runner *reusableACPProviderRunner) Run(
 		return platformprocess.CommandResult{}, fmt.Errorf("reusable ACP provider request has no active case")
 	}
 	if block {
+		// Signal that the blocking provider reached the edge before validating
+		// its request. This lets the caller issue session/close even when a
+		// characterization mismatch is the failure being reported.
 		startOnce.Do(func() { close(started) })
+	}
+	prompt := reusableACPProviderPrompt(request)
+	if filepath.Clean(request.WorkDir) != filepath.Clean(expectedWorkDir) {
+		return platformprocess.CommandResult{}, fmt.Errorf(
+			"reusable ACP provider request WorkDir %q does not match case workspace %q",
+			request.WorkDir,
+			expectedWorkDir,
+		)
+	}
+	if !strings.Contains(prompt, expectedPrompt) {
+		return platformprocess.CommandResult{}, fmt.Errorf(
+			"reusable ACP provider request omitted expected prompt %q",
+			expectedPrompt,
+		)
+	}
+	if block {
 		select {
 		case <-ctx.Done():
 			return platformprocess.CommandResult{}, ctx.Err()
@@ -541,6 +658,13 @@ func (runner *reusableACPProviderRunner) Run(
 		output = "help"
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
+}
+
+func reusableACPProviderPrompt(request platformprocess.CommandRequest) string {
+	if len(request.Stdin) > 0 {
+		return string(request.Stdin)
+	}
+	return strings.Join(request.Args, " ")
 }
 
 func (runner *reusableACPProviderRunner) waitForStart(t *testing.T, marker string) {
@@ -564,6 +688,12 @@ func (runner *reusableACPProviderRunner) markers(marker string) []string {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return append([]string(nil), runner.providerMarkers[marker]...)
+}
+
+func (runner *reusableACPProviderRunner) observations(marker string) []reusableACPProviderObservation {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]reusableACPProviderObservation(nil), runner.providerObservations[marker]...)
 }
 
 var _ platformprocess.CommandRunner = (*reusableACPProviderRunner)(nil)
