@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -60,20 +59,38 @@ func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T)
 func TestRecordingFormatsRemainObservableThroughReusableRootProcess(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	fixture := ensureRootCompositionFixture(t)
 	t.Run("default recording reserves distinct dated UUID artifacts and replays", func(t *testing.T) {
-		testDefaultRecordingContract(t, process)
+		homeDir := t.TempDir()
+		factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
+		fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+			label:      "default-recording",
+			homeDir:    homeDir,
+			workingDir: factoryDir,
+			// The replay helper deliberately selects a fresh working directory;
+			// keep that sibling inside this scenario's owned temporary root.
+			extraPaths: []string{filepath.Dir(homeDir)},
+		}, func() {
+			testDefaultRecordingContract(t, fixture.process, homeDir, factoryDir)
+		})
 	})
 	t.Run("explicit JSONL recording appends through root process", func(t *testing.T) {
-		testExplicitJSONLRecordingContract(t, process)
+		homeDir := t.TempDir()
+		factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-explicit-jsonl-recording")
+		recordingPath := filepath.Join(t.TempDir(), "explicit.replay.jsonl")
+		fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+			label:      "explicit-jsonl-recording",
+			homeDir:    homeDir,
+			workingDir: factoryDir,
+			extraPaths: []string{filepath.Dir(recordingPath)},
+		}, func() {
+			testExplicitJSONLRecordingContract(t, fixture.process, homeDir, factoryDir, recordingPath)
+		})
 	})
 }
 
-func testDefaultRecordingContract(t *testing.T, process support.Process) {
+func testDefaultRecordingContract(t *testing.T, process support.Process, homeDir, factoryDir string) {
 	t.Helper()
-	homeDir := t.TempDir()
-	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	wantDate := time.Now().UTC().Format("2006/01/02")
 
@@ -121,11 +138,8 @@ func testDefaultRecordingContract(t *testing.T, process support.Process) {
 	}
 }
 
-func testExplicitJSONLRecordingContract(t *testing.T, process support.Process) {
+func testExplicitJSONLRecordingContract(t *testing.T, process support.Process, homeDir, factoryDir, recordingPath string) {
 	t.Helper()
-	homeDir := t.TempDir()
-	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-explicit-jsonl-recording")
-	recordingPath := filepath.Join(t.TempDir(), "explicit.replay.jsonl")
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", factoryDir, "--record", recordingPath})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
