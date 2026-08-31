@@ -11,7 +11,6 @@ import (
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -30,19 +29,14 @@ func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	fixture := ensureSharedOperatorSettingsFixture(t)
-	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-http-transport")
-	fixture.withFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"HTTP settings transport",
 		homeDir,
-		factoryDir,
+		homeDir,
 		identityActivationGeneratedUUID,
 		nil,
-		func(session *sharedOperatorSettingsSession) {
-			session.closeFactorySession(t)
-			session.command.Stop(t)
-			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
-
+		func(_ *operatorSettingsEffectRoute) {
 			beforeTransport := fixture.router.readFileCalls.Load()
 			settingsRoot := newRoutedOperatorSettingsRoot(t, fixture)
 			adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: settingsRoot})
@@ -80,19 +74,14 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	fixture := ensureSharedOperatorSettingsFixture(t)
-	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-mcp-transport")
-	fixture.withFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"MCP settings transport",
 		homeDir,
-		factoryDir,
+		homeDir,
 		identityActivationGeneratedUUID,
 		nil,
-		func(session *sharedOperatorSettingsSession) {
-			session.closeFactorySession(t)
-			session.command.Stop(t)
-			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
-
+		func(_ *operatorSettingsEffectRoute) {
 			beforeTransport := fixture.router.readFileCalls.Load()
 			settingsRoot := newRoutedOperatorSettingsRoot(t, fixture)
 			operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: settingsRoot})

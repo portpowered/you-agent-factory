@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/root"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
@@ -32,23 +31,18 @@ func TestBackendScopeIdentityGeneratesThroughRootBuildProcessAfterLifecycle(t *t
 
 	homeDir := t.TempDir()
 	fixture := ensureSharedOperatorSettingsFixture(t)
-	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-generated-scope")
 	constructionIDCalls := fixture.constructionEffectSnapshot().operatorIDCalls
-	fixture.withFactorySession(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"generated backend scope",
 		homeDir,
-		factoryDir,
+		homeDir,
 		identityActivationGeneratedUUID,
 		nil,
-		func(sessionID string) {
-			if sessionID == factorysessions.DefaultSessionID {
-				t.Fatalf("routed Factory Session unexpectedly used the default session ID")
-			}
+		func(_ *operatorSettingsEffectRoute) {
 			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
-
 			if got := fixture.router.operatorIDCalls.Load(); got <= constructionIDCalls {
-				t.Fatalf("IDGenerator calls after Factory Session lifecycle = %d, want > construction count %d", got, constructionIDCalls)
+				t.Fatalf("IDGenerator calls after lifecycle = %d, want > construction count %d", got, constructionIDCalls)
 			}
 
 			wantScope := operatorsettings.LocalBackendScopePrefix + identityActivationGeneratedUUID
@@ -67,17 +61,14 @@ func TestBackendScopeIdentityReusesExistingScopeThroughRootBuildProcessAfterLife
 
 	homeDir := writeOperatorConfigWithBackendScope(t, identityActivationExistingScope)
 	fixture := ensureSharedOperatorSettingsFixture(t)
-	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-existing-scope")
-	fixture.withFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"existing backend scope",
 		homeDir,
-		factoryDir,
+		homeDir,
 		identityActivationExistingScope,
 		nil,
-		func(session *sharedOperatorSettingsSession) {
-			session.closeFactorySession(t)
-			session.command.Stop(t)
+		func(_ *operatorSettingsEffectRoute) {
 			beforeID := fixture.router.operatorIDCalls.Load()
 			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
 
@@ -100,19 +91,14 @@ func TestOperatorInputInventoryActivatesThroughRootBuildProcessAfterLifecycle(t 
 
 	homeDir := writeOperatorConfigWithBackendScope(t, identityActivationExistingScope)
 	fixture := ensureSharedOperatorSettingsFixture(t)
-	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-input-inventory")
-	fixture.withFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"input inventory",
 		homeDir,
-		factoryDir,
+		homeDir,
 		identityActivationExistingScope,
 		nil,
-		func(session *sharedOperatorSettingsSession) {
-			session.closeFactorySession(t)
-			session.command.Stop(t)
-			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
-
+		func(_ *operatorSettingsEffectRoute) {
 			providersRoot, err := providerswire.NewService()
 			if err != nil {
 				t.Fatalf("providerswire.NewService() error = %v", err)

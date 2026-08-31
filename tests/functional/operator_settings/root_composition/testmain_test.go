@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,28 +13,14 @@ import (
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const sharedOperatorSettingsProcessTimeout = 15 * time.Second
-
-type operatorSettingsRouteContextKey struct{}
-
-func withOperatorSettingsRoute(ctx context.Context, selector string) context.Context {
-	return context.WithValue(ctx, operatorSettingsRouteContextKey{}, selector)
-}
-
-func operatorSettingsRouteSelector(ctx context.Context) string {
-	selector, _ := ctx.Value(operatorSettingsRouteContextKey{}).(string)
-	return selector
-}
 
 var sharedOperatorSettingsFixtureState struct {
 	sync.Once
@@ -44,19 +29,14 @@ var sharedOperatorSettingsFixtureState struct {
 }
 
 // sharedOperatorSettingsFixture owns the one production-composed process for
-// this package. Invocation-local paths select a route; only the home, session
-// ID, and settings ID callbacks use the bounded lease because their contracts
-// do not carry a selector.
+// this package. Invocation-local paths select a route; the home and settings
+// ID callbacks use the bounded lease because their contracts do not carry a
+// selector.
 type sharedOperatorSettingsFixture struct {
 	process support.ApplicationProcess
 	router  *operatorSettingsEffectRouter
 
 	construction operatorSettingsEffectSnapshot
-
-	sessionMu     sync.Mutex
-	activeSession map[string]string
-	opened        atomic.Int64
-	closed        atomic.Int64
 }
 
 type operatorSettingsEffectSnapshot struct {
@@ -64,8 +44,6 @@ type operatorSettingsEffectSnapshot struct {
 	readFileCalls        int64
 	createTemporaryCalls int64
 	operatorIDCalls      int64
-	sessionIDCalls       int64
-	apiStartCalls        int64
 	providerRunnerCalls  int64
 	unmatchedRouteCalls  int64
 }
@@ -75,14 +53,11 @@ type operatorSettingsEffectRouter struct {
 	routes map[string]*operatorSettingsEffectRoute
 	active *operatorSettingsEffectRoute
 	lease  chan struct{}
-	nextID atomic.Uint64
 
 	fileSystemCalls      atomic.Int64
 	readFileCalls        atomic.Int64
 	createTemporaryCalls atomic.Int64
 	operatorIDCalls      atomic.Int64
-	sessionIDCalls       atomic.Int64
-	apiStartCalls        atomic.Int64
 	providerRunnerCalls  atomic.Int64
 	unmatchedRouteCalls  atomic.Int64
 }
@@ -105,23 +80,10 @@ type operatorSettingsEffectRoute struct {
 	workingDir     string
 	generatedID    string
 	providerRunner platformprocess.CommandRunner
-	apiServer      *support.ProcessAPIServer
 
 	mu        sync.Mutex
 	closed    bool
 	temporary map[string]struct{}
-}
-
-type sharedOperatorSettingsSession struct {
-	fixture              *sharedOperatorSettingsFixture
-	route                *operatorSettingsEffectRoute
-	baseURL              string
-	session              string
-	command              *support.ProcessCommand
-	tracked              bool
-	factorySessionClosed bool
-
-	closeOnce sync.Once
 }
 
 func ensureSharedOperatorSettingsFixture(t testing.TB) *sharedOperatorSettingsFixture {
@@ -142,11 +104,7 @@ func newSharedOperatorSettingsFixture() (_ *sharedOperatorSettingsFixture, err e
 		OperatorSettingsFileSystem:          router,
 		OperatorSettingsCreateTemporaryFile: router.createTemporaryFile,
 		OperatorSettingsIDGenerator:         router.generateOperatorID,
-
-		FactorySessionResolveHomeDirectory: router.resolveHome,
-		FactorySessionIDGenerator:          router.generateSessionID,
-		APIServerStarter:                   router.startAPIServer,
-		ProviderCommandRunner:              operatorSettingsProviderRunner(router.runProvider),
+		ProviderCommandRunner:               operatorSettingsProviderRunner(router.runProvider),
 	})
 	if buildErr != nil {
 		return nil, fmt.Errorf("compose shared Operator Settings process: %w", buildErr)
@@ -156,10 +114,9 @@ func newSharedOperatorSettingsFixture() (_ *sharedOperatorSettingsFixture, err e
 	}
 
 	return &sharedOperatorSettingsFixture{
-		process:       process,
-		router:        router,
-		construction:  router.snapshot(),
-		activeSession: make(map[string]string),
+		process:      process,
+		router:       router,
+		construction: router.snapshot(),
 	}, nil
 }
 
@@ -176,8 +133,6 @@ func (router *operatorSettingsEffectRouter) snapshot() operatorSettingsEffectSna
 		readFileCalls:        router.readFileCalls.Load(),
 		createTemporaryCalls: router.createTemporaryCalls.Load(),
 		operatorIDCalls:      router.operatorIDCalls.Load(),
-		sessionIDCalls:       router.sessionIDCalls.Load(),
-		apiStartCalls:        router.apiStartCalls.Load(),
 		providerRunnerCalls:  router.providerRunnerCalls.Load(),
 		unmatchedRouteCalls:  router.unmatchedRouteCalls.Load(),
 	}
@@ -208,7 +163,6 @@ func (router *operatorSettingsEffectRouter) register(
 		label: label, homeDir: homeDir, workingDir: workingDir,
 		generatedID:    generatedID,
 		providerRunner: providerRunner,
-		apiServer:      support.NewProcessAPIServer(),
 		temporary:      make(map[string]struct{}),
 	}
 
@@ -365,15 +319,6 @@ func (router *operatorSettingsEffectRouter) generateOperatorID() string {
 	return route.generatedID
 }
 
-func (router *operatorSettingsEffectRouter) generateSessionID() string {
-	if _, err := router.activeRoute(); err != nil {
-		router.unmatchedRouteError("Factory Session ID", err)
-		return ""
-	}
-	router.sessionIDCalls.Add(1)
-	return fmt.Sprintf("00000000-0000-4000-8000-%012x", router.nextID.Add(1))
-}
-
 func (router *operatorSettingsEffectRouter) routeForEffectPath(path string) (*operatorSettingsEffectRoute, error) {
 	route, err := router.routeForPath(path)
 	if err != nil {
@@ -466,19 +411,6 @@ func (router *operatorSettingsEffectRouter) createTemporaryFile(
 	return temporary, nil
 }
 
-func (router *operatorSettingsEffectRouter) startAPIServer(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	selector := operatorSettingsRouteSelector(ctx)
-	route, err := router.routeForEffectPath(selector)
-	if err != nil {
-		return fmt.Errorf("start routed Operator Settings API server: %w", err)
-	}
-	router.apiStartCalls.Add(1)
-	return route.apiServer.Start(ctx, request)
-}
-
 func (router *operatorSettingsEffectRouter) runProvider(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -569,224 +501,32 @@ func (route *operatorSettingsEffectRoute) isClosed() bool {
 	return route.closed
 }
 
-func (fixture *sharedOperatorSettingsFixture) withFactorySession(
+// withOperatorSettingsRoute gives a test the synchronized external-effect
+// route without starting a live Factory Session.
+func (fixture *sharedOperatorSettingsFixture) withOperatorSettingsRoute(
 	t *testing.T,
 	label, homeDir, workingDir, generatedID string,
 	providerRunner platformprocess.CommandRunner,
-	run func(string),
+	run func(*operatorSettingsEffectRoute),
 ) {
 	t.Helper()
-	fixture.withFactorySessionHandle(
-		t,
-		label,
-		homeDir,
-		workingDir,
-		generatedID,
-		providerRunner,
-		func(session *sharedOperatorSettingsSession) {
-			run(session.session)
-		},
-	)
-}
-
-// withFactorySessionHandle gives a migrated test access to the session-owned
-// command and URL when it must stop one public invocation before issuing the
-// next one through the same immutable process.
-func (fixture *sharedOperatorSettingsFixture) withFactorySessionHandle(
-	t *testing.T,
-	label, homeDir, workingDir, generatedID string,
-	providerRunner platformprocess.CommandRunner,
-	run func(*sharedOperatorSettingsSession),
-) {
-	t.Helper()
-	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
-	fixture.withFactorySessionHandlePaths(
-		t,
-		label,
-		homeDir,
-		bootstrapDir,
-		workingDir,
-		generatedID,
-		providerRunner,
-		nil,
-		false,
-		run,
-	)
-}
-
-// withDefaultFactorySessionHandle preserves a scenario whose observable
-// behavior belongs to the CLI's default session while still opening a unique
-// public Factory Session for the shared-process lifecycle witness. The opened
-// session uses a no-work bootstrap Factory, so it cannot duplicate the CLI
-// scenario's provider dispatch.
-func (fixture *sharedOperatorSettingsFixture) withDefaultFactorySessionHandle(
-	t *testing.T,
-	label, homeDir, workingDir, generatedID string,
-	providerRunner platformprocess.CommandRunner,
-	runArgs []string,
-	run func(*sharedOperatorSettingsSession),
-) {
-	t.Helper()
-	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
-	fixture.withFactorySessionHandlePaths(
-		t,
-		label,
-		homeDir,
-		workingDir,
-		bootstrapDir,
-		generatedID,
-		providerRunner,
-		runArgs,
-		true,
-		run,
-	)
-}
-
-func (fixture *sharedOperatorSettingsFixture) withFactorySessionHandlePaths(
-	t *testing.T,
-	label, homeDir, runDirectory, sessionDirectory, generatedID string,
-	providerRunner platformprocess.CommandRunner,
-	runArgs []string,
-	waitForDefaultTerminal bool,
-	run func(*sharedOperatorSettingsSession),
-) {
-	t.Helper()
-	route, err := fixture.router.register(label, homeDir, runDirectory, generatedID, providerRunner)
+	route, err := fixture.router.register(label, homeDir, workingDir, generatedID, providerRunner)
 	if err != nil {
-		t.Fatalf("register Operator Settings Factory Session route: %v", err)
+		t.Fatalf("register Operator Settings route: %v", err)
 	}
 	if err := fixture.router.acquire(t.Context(), route); err != nil {
 		_ = fixture.router.unregister(route)
-		t.Fatalf("acquire Operator Settings Factory Session route: %v", err)
+		t.Fatalf("acquire Operator Settings route: %v", err)
 	}
-	var command *support.ProcessCommand
-	cleanupRoute := true
 	defer func() {
-		if cleanupRoute {
-			if command != nil {
-				command.Stop(t)
-			}
-			if err := fixture.router.release(route); err != nil {
-				t.Errorf("release Operator Settings route after setup failure: %v", err)
-			}
-			if err := fixture.router.unregister(route); err != nil {
-				t.Errorf("unregister Operator Settings route after setup failure: %v", err)
-			}
+		if err := fixture.router.release(route); err != nil {
+			t.Errorf("release Operator Settings route: %v", err)
+		}
+		if err := fixture.router.unregister(route); err != nil {
+			t.Errorf("unregister Operator Settings route: %v", err)
 		}
 	}()
-
-	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
-	if err := writeOperatorSettingsBootstrapFactory(bootstrapDir); err != nil {
-		t.Fatalf("write Operator Settings bootstrap Factory: %v", err)
-	}
-	args := []string{
-		"you", "run", "--dir", runDirectory, "--continuously", "--with-server", "--quiet", "--no-record",
-	}
-	args = append(args, runArgs...)
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Context = withOperatorSettingsRoute(inputs.Input.Context, runDirectory)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = runDirectory
-	command = support.StartProcessCommand(t, fixture.process, inputs.Input)
-	baseURL := route.apiServer.WaitForURL(t)
-	if waitForDefaultTerminal {
-		support.WaitForTerminalStatus(t, baseURL, sharedOperatorSettingsProcessTimeout)
-	} else {
-		support.WaitForStatus(t, baseURL, sharedOperatorSettingsProcessTimeout, func(status factoryapi.StatusResponse) bool {
-			return strings.TrimSpace(status.RuntimeStatus) != ""
-		})
-	}
-
-	opened := support.OpenFactorySessionAt(t, baseURL, sessionDirectory)
-	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" ||
-		opened.Session.Id == factorysessions.DefaultSessionID {
-		t.Fatalf("open routed Factory Session %q returned invalid session %#v", label, opened.Session)
-	}
-
-	session := &sharedOperatorSettingsSession{
-		fixture: fixture,
-		route:   route,
-		baseURL: baseURL,
-		session: opened.Session.Id,
-		command: command,
-	}
-	fixture.sessionMu.Lock()
-	if _, exists := fixture.activeSession[opened.Session.Id]; exists {
-		fixture.sessionMu.Unlock()
-		session.close(t)
-		t.Fatalf("open routed Factory Session %q reused session ID %q", label, opened.Session.Id)
-	}
-	fixture.activeSession[opened.Session.Id] = label
-	fixture.opened.Add(1)
-	session.tracked = true
-	fixture.sessionMu.Unlock()
-	cleanupRoute = false
-
-	defer func() {
-		session.close(t)
-	}()
-	run(session)
-}
-
-func writeOperatorSettingsBootstrapFactory(directory string) error {
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return err
-	}
-	const factoryConfig = `{"name":"operator-settings-bootstrap","workTypes":[{"name":"bootstrap","states":[{"name":"ready","type":"INITIAL"}]}],"workers":[],"workstations":[]}`
-	return os.WriteFile(filepath.Join(directory, "factory.json"), []byte(factoryConfig), 0o644)
-}
-
-func (session *sharedOperatorSettingsSession) close(t testing.TB) {
-	if session == nil {
-		return
-	}
-	session.closeOnce.Do(func() {
-		t.Helper()
-		defer func() {
-			if session.command != nil {
-				session.command.Stop(t)
-			}
-			if err := session.fixture.router.release(session.route); err != nil {
-				t.Errorf("release Operator Settings route for session %q: %v", session.session, err)
-			}
-			if err := session.fixture.router.unregister(session.route); err != nil {
-				t.Errorf("unregister Operator Settings route for session %q: %v", session.session, err)
-			}
-			if session.tracked {
-				session.fixture.sessionMu.Lock()
-				delete(session.fixture.activeSession, session.session)
-				session.fixture.closed.Add(1)
-				session.fixture.sessionMu.Unlock()
-			}
-		}()
-		session.closeFactorySession(t)
-	})
-}
-
-// closeFactorySession deletes the public session while its owning API server
-// is still serving. Tests that need to stop the daemon before a follow-up
-// Process.Execute call use this before stopping the session command.
-func (session *sharedOperatorSettingsSession) closeFactorySession(t testing.TB) {
-	t.Helper()
-	if session.factorySessionClosed {
-		return
-	}
-	support.CloseFactorySessionAt(t, session.baseURL, session.session)
-	verifyOperatorSettingsSessionDeleted(t, session.baseURL, session.session)
-	session.factorySessionClosed = true
-}
-
-func verifyOperatorSettingsSessionDeleted(t testing.TB, baseURL, sessionID string) {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET deleted routed Factory Session %q: %v", sessionID, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		t.Fatalf("GET deleted routed Factory Session %q status = %d, want 404", sessionID, response.StatusCode)
-	}
+	run(route)
 }
 
 func closeSharedOperatorSettingsFixture() error {
@@ -795,14 +535,6 @@ func closeSharedOperatorSettingsFixture() error {
 		return nil
 	}
 	var errs []error
-	fixture.sessionMu.Lock()
-	if len(fixture.activeSession) != 0 {
-		errs = append(errs, fmt.Errorf("active routed Factory Sessions after cleanup = %d", len(fixture.activeSession)))
-	}
-	fixture.sessionMu.Unlock()
-	if got, want := fixture.opened.Load(), fixture.closed.Load(); got != want {
-		errs = append(errs, fmt.Errorf("routed Factory Session opens = %d, closes = %d", got, want))
-	}
 	if got := fixture.router.routeCount(); got != 0 {
 		errs = append(errs, fmt.Errorf("routed Operator Settings routes after cleanup = %d", got))
 	}

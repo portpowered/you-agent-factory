@@ -7,14 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -55,18 +53,26 @@ Process the input task.
 		t.Fatalf("operator-config CreateTemporaryFile calls = %d during process construction, want 0", construction.createTemporaryCalls)
 	}
 	beforeRead := fixture.router.readFileCalls.Load()
-	fixture.withDefaultFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"operator config defaults activation",
 		homeDir,
 		dir,
 		identityActivationGeneratedUUID,
 		runner,
-		[]string{"--model", activationOverrideModel},
-		func(session *sharedOperatorSettingsSession) {
-			support.WaitForTerminalStatus(t, session.baseURL, 15*time.Second)
-			session.closeFactorySession(t)
-			session.command.Stop(t)
+		func(_ *operatorSettingsEffectRoute) {
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "run",
+				"--dir", dir,
+				"--quiet",
+				"--no-record",
+				"--model", activationOverrideModel,
+			})
+			inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			inputs.Input.WorkingDirectory = dir
+			if err := fixture.process.Execute(inputs.Input); err != nil {
+				t.Fatalf("Process.Execute(provider dispatch) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+			}
 
 			if got := fixture.router.readFileCalls.Load() - beforeRead; got == 0 {
 				t.Fatalf("operator-config ReadFile calls after runtime lifecycle = %d, want > 0 via edges", got)
@@ -86,27 +92,21 @@ Process the input task.
 // TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISurface
 // proves persisted provider-model updates activate through the public you init CLI
 // surface on the same canonical process composition path with edges.Edges effect
-// replacement after runtime lifecycle has started and stopped on that process.
+// replacement after process lifecycle initialization has been exercised.
 func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISurface(t *testing.T) {
 	t.Parallel()
 
 	homeDir := writeOperatorConfigForActivation(t, activationConfigProviderAlias, activationConfigModel)
 	fixture := ensureSharedOperatorSettingsFixture(t)
 	dir := support.ScaffoldSingleStepFactory(t, "operator-config-update")
-	fixture.withFactorySessionHandle(
+	fixture.withOperatorSettingsRoute(
 		t,
 		"operator config document update",
 		homeDir,
 		dir,
 		identityActivationGeneratedUUID,
 		nil,
-		func(session *sharedOperatorSettingsSession) {
-			support.WaitForStatus(t, session.baseURL, 5*time.Second, func(status factoryapi.StatusResponse) bool {
-				return status.RuntimeStatus != ""
-			})
-			session.closeFactorySession(t)
-			session.command.Stop(t)
-
+		func(_ *operatorSettingsEffectRoute) {
 			beforeUpdate := fixture.router.fileSystemCalls.Load()
 			beforeTemporary := fixture.router.createTemporaryCalls.Load()
 			var stdout bytes.Buffer
