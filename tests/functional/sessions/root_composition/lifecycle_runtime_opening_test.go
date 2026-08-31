@@ -29,106 +29,115 @@ func TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterL
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	recorder := newSessionActivationRecorder(t)
 	dir := support.ScaffoldFactory(t, sessionsLifecycleRuntimeOpeningFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     recorder.edges(),
+	fixture := ensureRootCompositionFixture(t)
+	fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+		label:      "lifecycle-runtime-opening",
+		homeDir:    t.TempDir(),
+		workingDir: dir,
+		api:        support.NewProcessAPIServer(),
+	}, func() {
+		server := startRootCompositionServer(t, fixture, support.NewProcessAPIServer(), []string{
+			"you", "run", "--continuously", "--with-server", "--quiet", "--dir", dir, "--no-record",
+		}, nil, dir)
+		defer server.Stop(t)
+
+		baseURL := server.URL(t)
+		sessionID := server.SessionID(t)
+		waitForRootCompositionSessionStatus(t, baseURL, sessionID, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+			return status.RuntimeStatus != ""
+		})
+		lifecycleBefore := fixture.effects.liveSnapshot()
+
+		session := getRootCompositionSession(t, baseURL, sessionID)
+		if session.IsDefault || session.Id == "" {
+			t.Fatalf("shared live session = %#v, want non-default explicit session identity", session)
+		}
+
+		listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+		if !sessionSummaryContains(listed.Sessions, session.Id) {
+			t.Fatalf("list sessions = %#v, want shared session %q", listed.Sessions, session.Id)
+		}
+
+		pause := postSessionsLifecycleControl(
+			t,
+			baseURL,
+			sessionID,
+			factoryapi.FactorySessionLifecycleControlKindPause,
+		)
+		if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+			pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			t.Fatalf("pause response = %#v, want accepted pause", pause)
+		}
+		paused := getRootCompositionSession(t, baseURL, sessionID)
+		if paused.Runtime.LifecycleControlStatus == nil ||
+			*paused.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+			t.Fatalf(
+				"paused live session lifecycleControlStatus = %#v, want %q",
+				paused.Runtime.LifecycleControlStatus,
+				factoryapi.FactorySessionDurableLifecycleStatusPaused,
+			)
+		}
+
+		resume := postSessionsLifecycleControl(
+			t,
+			baseURL,
+			sessionID,
+			factoryapi.FactorySessionLifecycleControlKindResume,
+		)
+		if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+			resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			t.Fatalf("resume response = %#v, want accepted resume", resume)
+		}
+		running := getRootCompositionSession(t, baseURL, sessionID)
+		if running.Runtime.LifecycleControlStatus == nil ||
+			*running.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+			t.Fatalf(
+				"resumed live session lifecycleControlStatus = %#v, want %q",
+				running.Runtime.LifecycleControlStatus,
+				factoryapi.FactorySessionDurableLifecycleStatusRunning,
+			)
+		}
+
+		opened := postSessionsOpen(t, baseURL, dir)
+		if opened.Session == nil || opened.Session.Id == "" {
+			t.Fatalf("opened live session = %#v, want canonical session identity", opened)
+		}
+		if opened.Session.Id == session.Id {
+			t.Fatalf("opened session id = %q, want distinct live identity from shared session", opened.Session.Id)
+		}
+
+		selected := support.GetJSON[factoryapi.FactorySessionGetResponse](
+			t,
+			baseURL+"/factory-sessions/"+opened.Session.Id,
+		)
+		resolved, err := selected.AsFactorySession()
+		if err != nil {
+			t.Fatalf("decode opened live session: %v", err)
+		}
+		if resolved.Id != opened.Session.Id {
+			t.Fatalf("selected session id = %q, want %q", resolved.Id, opened.Session.Id)
+		}
+		if resolved.Runtime.Status == "" {
+			t.Fatalf("opened session missing runtime-opening status markers: %#v", resolved)
+		}
+
+		afterOpen := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
+		if !sessionSummaryContains(afterOpen.Sessions, opened.Session.Id) {
+			t.Fatalf("list sessions after open = %#v, want opened session %q", afterOpen.Sessions, opened.Session.Id)
+		}
+
+		closeSessionsSession(t, baseURL, opened.Session.Id)
+		assertSessionsSessionNotFound(t, baseURL, opened.Session.Id)
+
+		lifecycleAfter := fixture.effects.liveSnapshot()
+		if got := lifecycleAfter.totalLifecycle() - lifecycleBefore.totalLifecycle(); got <= 0 {
+			t.Fatalf("lifecycle effect calls after public session operations = %d, want > 0 via edges", got)
+		}
+		if lifecycleAfter.runtimeID <= 0 {
+			t.Fatalf("runtime instance id generations = %d, want > 0 via edges during runtime opening", lifecycleAfter.runtimeID)
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := server.URL()
-	lifecycleBefore := recorder.totalLifecycle()
-
-	defaultSession := support.GetDefaultSession(t, baseURL)
-	if !defaultSession.IsDefault || defaultSession.Id == "" {
-		t.Fatalf("default live session = %#v, want non-empty default session identity", defaultSession)
-	}
-
-	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
-	if !sessionSummaryContains(listed.Sessions, defaultSession.Id) {
-		t.Fatalf("list sessions = %#v, want default session %q", listed.Sessions, defaultSession.Id)
-	}
-
-	pause := postSessionsLifecycleControl(
-		t,
-		baseURL,
-		factorysessions.DefaultSessionID,
-		factoryapi.FactorySessionLifecycleControlKindPause,
-	)
-	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
-		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("pause response = %#v, want accepted pause", pause)
-	}
-	paused := support.GetDefaultSession(t, baseURL)
-	if paused.Runtime.LifecycleControlStatus == nil ||
-		*paused.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
-		t.Fatalf(
-			"paused live session lifecycleControlStatus = %#v, want %q",
-			paused.Runtime.LifecycleControlStatus,
-			factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		)
-	}
-
-	resume := postSessionsLifecycleControl(
-		t,
-		baseURL,
-		factorysessions.DefaultSessionID,
-		factoryapi.FactorySessionLifecycleControlKindResume,
-	)
-	if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
-		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("resume response = %#v, want accepted resume", resume)
-	}
-	running := support.GetDefaultSession(t, baseURL)
-	if running.Runtime.LifecycleControlStatus == nil ||
-		*running.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf(
-			"resumed live session lifecycleControlStatus = %#v, want %q",
-			running.Runtime.LifecycleControlStatus,
-			factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		)
-	}
-
-	opened := postSessionsOpen(t, baseURL, dir)
-	if opened.Session == nil || opened.Session.Id == "" {
-		t.Fatalf("opened live session = %#v, want canonical session identity", opened)
-	}
-	if opened.Session.Id == defaultSession.Id {
-		t.Fatalf("opened session id = %q, want distinct live identity from default", opened.Session.Id)
-	}
-
-	selected := support.GetJSON[factoryapi.FactorySessionGetResponse](
-		t,
-		baseURL+"/factory-sessions/"+opened.Session.Id,
-	)
-	resolved, err := selected.AsFactorySession()
-	if err != nil {
-		t.Fatalf("decode opened live session: %v", err)
-	}
-	if resolved.Id != opened.Session.Id {
-		t.Fatalf("selected session id = %q, want %q", resolved.Id, opened.Session.Id)
-	}
-	if resolved.Runtime.Status == "" {
-		t.Fatalf("opened session missing runtime-opening status markers: %#v", resolved)
-	}
-
-	afterOpen := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
-	if !sessionSummaryContains(afterOpen.Sessions, opened.Session.Id) {
-		t.Fatalf("list sessions after open = %#v, want opened session %q", afterOpen.Sessions, opened.Session.Id)
-	}
-
-	closeSessionsSession(t, baseURL, opened.Session.Id)
-	assertSessionsSessionNotFound(t, baseURL, opened.Session.Id)
-
-	if got := recorder.totalLifecycle() - lifecycleBefore; got <= 0 {
-		t.Fatalf("lifecycle effect calls after public session operations = %d, want > 0 via edges", got)
-	}
-	if got := recorder.runtimeID.Load(); got <= 0 {
-		t.Fatalf("runtime instance id generations = %d, want > 0 via edges during runtime opening", got)
-	}
 }
 
 func sessionsLifecycleRuntimeOpeningFactoryConfig() map[string]any {

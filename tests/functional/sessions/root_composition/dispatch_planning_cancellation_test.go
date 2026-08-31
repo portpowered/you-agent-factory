@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -39,64 +38,119 @@ func TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThrough
 	dir := support.ScaffoldFactory(t, dispatchPlanningCancellationFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderOverride: provider},
+	fixture := ensureRootCompositionFixture(t)
+	fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+		label:        "dispatch-planning-cancellation",
+		homeDir:      t.TempDir(),
+		workingDir:   dir,
+		providerRoot: fixture.hostDir,
+		provider:     provider,
+	}, func() {
+		server := startRootCompositionServer(t, fixture, support.NewProcessAPIServer(), []string{
+			"you", "run", "--continuously", "--with-server", "--quiet", "--dir", dir, "--no-record",
+		}, nil, dir)
+		defer server.Stop(t)
+
+		baseURL := server.URL(t)
+		started := startDispatchPlanningCancellationSession(t, baseURL)
+		if started.SessionId == "" {
+			t.Fatalf("async Factory Session response has empty session id: %#v", started)
+		}
+		sessionID := started.SessionId
+
+		request := provider.waitStarted(t)
+		dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+			t,
+			strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
+		)
+		if len(dispatches.Dispatches) != 1 {
+			t.Fatalf("durable dispatch count = %d, want one published dispatch: %#v", len(dispatches.Dispatches), dispatches.Dispatches)
+		}
+		dispatch := dispatches.Dispatches[0]
+		if dispatch.Status != factoryapi.FactoryDispatchStatusRUNNING {
+			t.Fatalf("durable dispatch status = %q, want RUNNING before cancellation", dispatch.Status)
+		}
+		if dispatch.Id == "" {
+			t.Fatal("durable dispatch ID is empty")
+		}
+		wantWorkerSessionID := sessionID + "/" + dispatch.Id
+		if request.Correlation.DispatchID != wantWorkerSessionID {
+			t.Fatalf("provider worker-session ID = %q, want session-qualified public dispatch ID %q", request.Correlation.DispatchID, wantWorkerSessionID)
+		}
+
+		cancel := postDispatchPlanningCancellation(t, baseURL, sessionID, "dispatch-planning-cancel-once")
+		if cancel.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
+			cancel.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+			cancel.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
+			t.Fatalf("cancel response = %#v, want accepted CANCELING control", cancel)
+		}
+
+		cancelled := provider.waitCancelled(t)
+		if cancelled.Correlation.DispatchID != wantWorkerSessionID {
+			t.Fatalf("cancelled provider worker-session ID = %q, want %q", cancelled.Correlation.DispatchID, wantWorkerSessionID)
+		}
+		if provider.cancellationCount() != 1 {
+			t.Fatalf("provider cancellation observations = %d, want one", provider.cancellationCount())
+		}
+
+		// A second supported stop request reaches the runtime while the first
+		// cancellation is already in flight. The public lifecycle state makes it a
+		// deterministic no-op, and the provider edge remains canceled exactly once.
+		replayed := postDispatchPlanningCancellation(t, baseURL, sessionID, "dispatch-planning-cancel-twice")
+		if replayed.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
+			replayed.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+			t.Fatalf("repeated cancel response = %#v, want NO_OP while cancellation is in flight", replayed)
+		}
+		if provider.cancellationCount() != 1 {
+			t.Fatalf("provider cancellation observations after replay = %d, want one", provider.cancellationCount())
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
+}
 
-	started := startDispatchPlanningCancellationSession(t, server.URL())
-	if started.SessionId == "" {
-		t.Fatalf("async Factory Session response has empty session id: %#v", started)
+func startDispatchPlanningCancellationSession(
+	t *testing.T,
+	baseURL string,
+) factoryapi.FactorySessionExecutionResponse {
+	t.Helper()
+
+	dialect := "you-workflow-v1"
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "dispatch-planning-cancellation-session",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect: &dialect,
+				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+					Inline:   dispatchPlanningCancellationWorkflow,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal dispatch-planning cancellation request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/async"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build dispatch-planning cancellation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start dispatch-planning cancellation session: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("start dispatch-planning cancellation session status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	request := provider.waitStarted(t)
-	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
-	)
-	if len(dispatches.Dispatches) != 1 {
-		t.Fatalf("durable dispatch count = %d, want one published child dispatch: %#v", len(dispatches.Dispatches), dispatches.Dispatches)
+	var started factoryapi.FactorySessionExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode dispatch-planning cancellation session response: %v", err)
 	}
-	dispatch := dispatches.Dispatches[0]
-	if dispatch.Status != factoryapi.FactoryDispatchStatusRUNNING {
-		t.Fatalf("durable dispatch status = %q, want RUNNING before cancellation", dispatch.Status)
-	}
-	if dispatch.Id == "" {
-		t.Fatal("durable dispatch ID is empty")
-	}
-	wantWorkerSessionID := started.SessionId + "/" + dispatch.Id
-	if request.Correlation.DispatchID != wantWorkerSessionID {
-		t.Fatalf("provider worker-session ID = %q, want session-qualified public dispatch ID %q", request.Correlation.DispatchID, wantWorkerSessionID)
-	}
-
-	cancel := postDispatchPlanningCancellation(t, server.URL(), started.SessionId, "dispatch-planning-cancel-once")
-	if cancel.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
-		cancel.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
-		cancel.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
-		t.Fatalf("cancel response = %#v, want accepted CANCELING control", cancel)
-	}
-
-	cancelled := provider.waitCancelled(t)
-	if cancelled.Correlation.DispatchID != wantWorkerSessionID {
-		t.Fatalf("cancelled provider worker-session ID = %q, want %q", cancelled.Correlation.DispatchID, wantWorkerSessionID)
-	}
-	if provider.cancellationCount() != 1 {
-		t.Fatalf("provider cancellation observations = %d, want one", provider.cancellationCount())
-	}
-
-	// A second supported stop request reaches the runtime while the first
-	// cancellation is already in flight. The public lifecycle state makes it a
-	// deterministic no-op, and the provider edge remains canceled exactly once.
-	replayed := postDispatchPlanningCancellation(t, server.URL(), started.SessionId, "dispatch-planning-cancel-twice")
-	if replayed.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
-		replayed.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
-		t.Fatalf("repeated cancel response = %#v, want NO_OP while cancellation is in flight", replayed)
-	}
-	if provider.cancellationCount() != 1 {
-		t.Fatalf("provider cancellation observations after replay = %d, want one", provider.cancellationCount())
-	}
+	return started
 }
 
 func dispatchPlanningCancellationFactoryConfig() map[string]any {
@@ -123,53 +177,6 @@ func dispatchPlanningCancellationFactoryConfig() map[string]any {
 			},
 		},
 	}
-}
-
-func startDispatchPlanningCancellationSession(
-	t *testing.T,
-	baseURL string,
-) factoryapi.FactorySessionExecutionResponse {
-	t.Helper()
-
-	dialect := "you-workflow-v1"
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "dispatch-planning-cancellation-session",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
-			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
-				Dialect: &dialect,
-				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
-					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
-					Inline:   dispatchPlanningCancellationWorkflow,
-				},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal dispatch-planning cancellation request: %v", err)
-	}
-
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/async"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build dispatch-planning cancellation request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start dispatch-planning cancellation session: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("start dispatch-planning cancellation session status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var started factoryapi.FactorySessionExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode dispatch-planning cancellation session response: %v", err)
-	}
-	return started
 }
 
 func postDispatchPlanningCancellation(

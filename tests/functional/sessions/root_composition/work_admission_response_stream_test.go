@@ -47,51 +47,65 @@ func TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAf
 		Payload:    json.RawMessage(`{"title": "fun-sessions work admission"}`),
 	})
 
-	recorder := newSessionWorkAdmissionResponseStreamRecorder(t)
-	edges := recorder.edges()
-	support.ConfigureWorkerCommands(
-		t,
-		&edges,
-		support.NewStaticSuccessCommandRunner(workAdmissionResponseStreamPrimaryResult),
-		nil,
-	)
+	fixture := ensureRootCompositionFixture(t)
+	fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+		label:          "work-admission-response-stream",
+		homeDir:        t.TempDir(),
+		workingDir:     dir,
+		providerRunner: support.NewStaticSuccessCommandRunner(workAdmissionResponseStreamPrimaryResult),
+	}, func() {
+		before := fixture.effects.liveSnapshot()
+		server := startRootCompositionServer(t, fixture, support.NewProcessAPIServer(), []string{
+			"you", "run", "--continuously", "--with-server", "--quiet", "--dir", dir,
+			"--no-record", "--work", workFilePath,
+		}, nil, dir)
+		defer server.Stop(t)
 
-	workAdmissionBefore := recorder.totalWorkAdmission()
-	responseStreamBefore := recorder.totalResponseStream()
+		baseURL := server.URL(t)
+		sessionID := server.SessionID(t)
+		waitForRootCompositionSessionStatus(t, baseURL, sessionID, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+			return status.RuntimeStatus != ""
+		})
+		initialPayload, err := os.ReadFile(workFilePath)
+		if err != nil {
+			t.Fatalf("read initial Work request: %v", err)
+		}
+		var initialRequest work.SubmitRequest
+		if err := json.Unmarshal(initialPayload, &initialRequest); err != nil {
+			t.Fatalf("decode initial Work request: %v", err)
+		}
+		support.SubmitSessionWorkAt(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
+			WorkTypeName: initialRequest.WorkTypeID,
+			Payload:      json.RawMessage(initialRequest.Payload),
+		})
+		waitForDefaultSessionWorkCount(t, baseURL, sessionID, 1, 10*time.Second)
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--work", workFilePath},
-		Edges:                     edges,
+		invocation := postSessionsInvocation(
+			t,
+			baseURL,
+			sessionID,
+			sessionsTextInvocationRequest(t, "prove work-admission and response-stream activation"),
+		)
+		assertSessionsInvocationPrimaryResultText(t, invocation, workAdmissionResponseStreamPrimaryResult)
+
+		responseEvents := support.GetFactoryResponseEventsAt(
+			t,
+			baseURL,
+			sessionID,
+		)
+		t.Logf("shared record path=%q session artifact=%q", fixture.hostRecordPath, filepath.Join(filepath.Dir(fixture.hostRecordPath), "session-"+sessionID+".replay.json"))
+		if len(responseEvents) == 0 {
+			t.Fatalf("response events = 0, want observable response-stream records after invocation")
+		}
+
+		after := fixture.effects.liveSnapshot()
+		if got := after.workRequestID - before.workRequestID; got <= 0 {
+			t.Fatalf("Work request IDs after public session operations = %d, want > 0 via the Work admission edge", got)
+		}
+		if got := after.totalResponseStream() - before.totalResponseStream(); got <= 0 {
+			t.Fatalf("response-stream effect calls after public session operations = %d, want > 0 via edges", got)
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := server.URL()
-	waitForDefaultSessionWorkCount(t, baseURL, 1, 10*time.Second)
-
-	invocation := postSessionsInvocation(
-		t,
-		baseURL,
-		sessionsTextInvocationRequest(t, "prove work-admission and response-stream activation"),
-	)
-	assertSessionsInvocationPrimaryResultText(t, invocation, workAdmissionResponseStreamPrimaryResult)
-
-	responseEvents := support.GetFactoryResponseEventsAt(
-		t,
-		baseURL,
-		factorysessions.DefaultSessionID,
-	)
-	if len(responseEvents) == 0 {
-		t.Fatalf("response events = 0, want observable response-stream records after invocation")
-	}
-
-	if got := recorder.totalWorkAdmission() - workAdmissionBefore; got <= 0 {
-		t.Fatalf("work-admission effect calls after public session operations = %d, want > 0 via edges", got)
-	}
-	if got := recorder.totalResponseStream() - responseStreamBefore; got <= 0 {
-		t.Fatalf("response-stream effect calls after public session operations = %d, want > 0 via edges", got)
-	}
 }
 
 func sessionsWorkAdmissionResponseStreamFactoryConfig() map[string]any {
@@ -105,7 +119,7 @@ func sessionsWorkAdmissionResponseStreamFactoryConfig() map[string]any {
 			},
 			"handlingBehavior": []string{"DEFAULT"},
 		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
+		"workers": []map[string]string{{"name": "worker-a", "executorProvider": "codex"}},
 		"workstations": []map[string]any{{
 			"name":      "process",
 			"worker":    "worker-a",
@@ -119,6 +133,7 @@ func sessionsWorkAdmissionResponseStreamFactoryConfig() map[string]any {
 func waitForDefaultSessionWorkCount(
 	t *testing.T,
 	baseURL string,
+	sessionID string,
 	wantCount int,
 	timeout time.Duration,
 ) {
@@ -126,14 +141,14 @@ func waitForDefaultSessionWorkCount(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, rootCompositionSessionWorkURL(baseURL, sessionID, "/work"))
 		if len(listed.Results) == wantCount {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf("default session work count = %d, want %d within %s", len(listed.Results), wantCount, timeout)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, rootCompositionSessionWorkURL(baseURL, sessionID, "/work"))
+	t.Fatalf("session %q work count = %d, want %d within %s", sessionID, len(listed.Results), wantCount, timeout)
 }
 
 func sessionsTextInvocationRequest(t *testing.T, text string) factoryapi.InvocationRequest {
@@ -157,6 +172,7 @@ func sessionsTextInvocationRequest(t *testing.T, text string) factoryapi.Invocat
 func postSessionsInvocation(
 	t *testing.T,
 	baseURL string,
+	sessionID string,
 	request factoryapi.InvocationRequest,
 ) factoryapi.InvocationResponse {
 	t.Helper()
@@ -165,7 +181,7 @@ func postSessionsInvocation(
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
-	endpoint := baseURL + "/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	endpoint := rootCompositionSessionWorkURL(baseURL, sessionID, "/invocations")
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)

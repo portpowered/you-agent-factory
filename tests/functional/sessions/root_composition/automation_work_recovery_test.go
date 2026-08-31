@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -29,69 +28,75 @@ const (
 // dispatch output is intermediate and is superseded by a later canonical state
 // change.
 func TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
 	fixturePath := testutil.MustRepoPath(t, automationRecoveryFixture)
-	fixture := testutil.LoadReplayArtifact(t, fixturePath)
-	assertAutomationRecoveryFixture(t, fixture)
+	replayFixture := testutil.LoadReplayArtifact(t, fixturePath)
+	assertAutomationRecoveryFixture(t, replayFixture)
 
 	factoryDir := support.ScaffoldFactory(t, automationRecoveryFactoryConfig())
 	reusable := newAutomationRecoveryProcess(t)
-	replay := reusable.run(
-		t,
-		factoryDir,
-		"--replay", fixturePath, "--no-record",
-	)
-	replayed := waitForRecoveredAutomationWork(t, replay.url)
-	assertRecoveredAutomationWorkList(t, replayed)
-	replay.daemon.Stop(t)
-
 	successorPath := filepath.Join(t.TempDir(), "automation-work-missing-occupancy-successor.replay.json")
-	resumed := reusable.run(
-		t,
-		factoryDir,
-		"--resume", fixturePath, "--record", successorPath,
-	)
-	resumedWork := waitForRecoveredAutomationWork(t, resumed.url)
-	assertRecoveredAutomationWorkList(t, resumedWork)
-	resumed.daemon.Stop(t)
+	fixture := ensureRootCompositionFixture(t)
+	fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+		label:      "automation-work-recovery",
+		homeDir:    t.TempDir(),
+		workingDir: factoryDir,
+		extraPaths: []string{fixturePath, filepath.Dir(successorPath), filepath.Dir(reusable.mockWorkersPath)},
+	}, func() {
+		replay := reusable.run(
+			t,
+			factoryDir,
+			support.NewProcessAPIServer(),
+			"--replay", fixturePath, "--no-record",
+		)
+		replayed := waitForRecoveredAutomationWork(t, replay.url)
+		assertRecoveredAutomationWorkList(t, replayed)
+		replay.daemon.Stop(t)
 
-	successor := testutil.LoadReplayArtifact(t, successorPath)
-	dailyRefreshDispatches := 0
-	for _, event := range successor.Events {
-		if event.Type != interfaces.FactoryEventTypeDispatchRequest {
-			continue
+		resumed := reusable.run(
+			t,
+			factoryDir,
+			support.NewProcessAPIServer(),
+			"--resume", fixturePath, "--record", successorPath,
+		)
+		resumedWork := waitForRecoveredAutomationWork(t, resumed.url)
+		assertRecoveredAutomationWorkList(t, resumedWork)
+		resumed.daemon.Stop(t)
+
+		successor := testutil.LoadReplayArtifact(t, successorPath)
+		dailyRefreshDispatches := 0
+		for _, event := range successor.Events {
+			if event.Type != interfaces.FactoryEventTypeDispatchRequest {
+				continue
+			}
+			var payload interfaces.DispatchRequestEventPayload
+			if err := event.DecodePayload(&payload); err != nil {
+				t.Fatalf("decode successor dispatch request %q: %v", event.Id, err)
+			}
+			if payload.TransitionID == "daily-refresh" {
+				dailyRefreshDispatches++
+			}
 		}
-		var payload interfaces.DispatchRequestEventPayload
-		if err := event.DecodePayload(&payload); err != nil {
-			t.Fatalf("decode successor dispatch request %q: %v", event.Id, err)
+		if dailyRefreshDispatches != 1 {
+			t.Fatalf("successor daily-refresh dispatch count = %d, want the one recorded completion without a redispatch", dailyRefreshDispatches)
 		}
-		if payload.TransitionID == "daily-refresh" {
-			dailyRefreshDispatches++
-		}
-	}
-	if dailyRefreshDispatches != 1 {
-		t.Fatalf("successor daily-refresh dispatch count = %d, want the one recorded completion without a redispatch", dailyRefreshDispatches)
-	}
+	})
 }
 
 type automationRecoveryProcess struct {
-	process         support.Process
-	router          *reusableRootAPIServerStarter
 	mockWorkersPath string
+	fixture         *rootCompositionFixture
 }
 
 type automationRecoveryRun struct {
 	url    string
-	daemon *support.ProcessCommand
+	daemon *rootCompositionServer
 }
 
 func newAutomationRecoveryProcess(t *testing.T) *automationRecoveryProcess {
 	t.Helper()
-	router := &reusableRootAPIServerStarter{}
-	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: router.start})
-	support.CleanupProcess(t, process)
+	fixture := ensureRootCompositionFixture(t)
 	mockWorkersPath := filepath.Join(t.TempDir(), "mock-workers.json")
 	payload, err := json.Marshal(workerexecution.NewEmptyMockWorkersConfig())
 	if err != nil {
@@ -101,8 +106,7 @@ func newAutomationRecoveryProcess(t *testing.T) *automationRecoveryProcess {
 		t.Fatalf("write empty mock-worker configuration: %v", err)
 	}
 	return &automationRecoveryProcess{
-		process:         process,
-		router:          router,
+		fixture:         fixture,
 		mockWorkersPath: mockWorkersPath,
 	}
 }
@@ -110,30 +114,17 @@ func newAutomationRecoveryProcess(t *testing.T) *automationRecoveryProcess {
 func (reusable *automationRecoveryProcess) run(
 	t *testing.T,
 	factoryDir string,
+	api *support.ProcessAPIServer,
 	extraArgs ...string,
 ) automationRecoveryRun {
 	t.Helper()
-	api := support.NewProcessAPIServer()
-	reusable.router.setCurrent(api)
 	args := append([]string{
 		"you", "run",
 		"--continuously", "--with-server", "--quiet", "--dir", factoryDir,
 		"--with-mock-workers", reusable.mockWorkersPath,
 	}, extraArgs...)
-	inputs := support.FakeInputs(t.Context(), args)
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = factoryDir
-	t.Cleanup(func() {
-		if !t.Failed() {
-			return
-		}
-		if stderr := inputs.Stderr(); stderr != "" {
-			t.Logf("automation recovery daemon stderr: %s", stderr)
-		}
-	})
-	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	baseURL := api.WaitForURL(t)
+	daemon := startRootCompositionServer(t, reusable.fixture, api, args, nil, factoryDir)
+	baseURL := daemon.URL(t)
 	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.RuntimeStatus != ""
 	})

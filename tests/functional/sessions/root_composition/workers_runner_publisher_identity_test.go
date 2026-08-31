@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -88,27 +87,8 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 	})
 	scriptRunner := support.NewRecordingCommandRunner(runnerIdentityScriptOutput)
 
-	// RunFactoryToCompletionWithEdgesAndResponseEvents waits for BOTH the
-	// provider-backed and script-backed dispatches through
-	// support.WaitForSessionTerminalStatus, a short HTTP polling loop. This
-	// scenario cannot substitute a single deterministic edge/event wait for
-	// that readiness signal: the injected runner CallCount()/dispatch-output
-	// observations below prove a runner was invoked, not that the resulting
-	// terminal Factory Event and public Work projection have been recorded for
-	// BOTH of two independently scheduled workstations, and the captured
-	// response-event stream's own terminal marker
-	// (support.waitForTerminalResponseEvent) only observes the FIRST terminal
-	// RUN/ERROR event, not the second, independent script dispatch. Polling
-	// the public status projection is this harness's only existing
-	// cross-dispatch completion signal.
-	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{
-			ProviderCommandRunner: providerRunner,
-			ScriptCommandRunner:   scriptRunner,
-		},
-		20*time.Second,
+	_, listed, factoryEvents, responseEvents := runRunnerIdentityScenario(
+		t, dir, providerRunner, scriptRunner, false,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "provider-task:complete"); got != 1 {
@@ -178,20 +158,8 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 		exitCode: 1,
 	}
 
-	// See the identical justification comment in
-	// TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances:
-	// this scenario also has two independently scheduled dispatches, so the
-	// public status projection polled by
-	// RunFactoryToCompletionWithEdgesAndResponseEvents remains the only
-	// existing cross-dispatch completion signal available to this harness.
-	_, listed, factoryEvents, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{
-			ProviderCommandRunner: providerRunner,
-			ScriptCommandRunner:   scriptRunner,
-		},
-		20*time.Second,
+	_, listed, factoryEvents, _ := runRunnerIdentityScenario(
+		t, dir, providerRunner, scriptRunner, true,
 	)
 
 	if got := support.CountWorkAtCustomerState(listed, "provider-task:failed"); got != 1 {
@@ -225,6 +193,114 @@ func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInsta
 	assertRunnerIdentityFailedDispatchCount(t, factoryEvents, 2)
 	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "provider-task", factoryapi.WorkOutcomeFailed)
 	assertRunnerIdentityDispatchSequence(t, factoryEvents, listed, "script-task", factoryapi.WorkOutcomeFailed)
+}
+
+// runRunnerIdentityScenario runs the original two-seed dispatch scenario on
+// one long-lived package process. Each scenario owns a distinct public
+// Factory Session while the route selects the exact provider and script
+// runner by the Factory path.
+func runRunnerIdentityScenario(
+	t *testing.T,
+	dir string,
+	providerRunner platformprocess.CommandRunner,
+	scriptRunner platformprocess.CommandRunner,
+	failure bool,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, []factoryapi.FactoryResponseEvent) {
+	t.Helper()
+	fixture := ensureRootCompositionFixture(t)
+	var session factoryapi.FactorySession
+	var listed factoryapi.ListWorkResponse
+	var factoryEvents []factoryapi.FactoryEvent
+	var responseEvents []factoryapi.FactoryResponseEvent
+	label := "runner-identity-success"
+	if failure {
+		label = "runner-identity-failure"
+	}
+	providerGate := &runnerIdentityReleaseGate{
+		next:    providerRunner,
+		release: make(chan struct{}),
+	}
+	scriptGate := &runnerIdentityReleaseGate{
+		next:    scriptRunner,
+		release: make(chan struct{}),
+	}
+	fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+		label:          label,
+		homeDir:        t.TempDir(),
+		workingDir:     dir,
+		providerRunner: providerGate,
+		scriptRunner:   scriptGate,
+	}, func() {
+		server := startRootCompositionServer(t, fixture, support.NewProcessAPIServer(), []string{
+			"you", "run",
+			"--dir", dir,
+			"--continuously",
+			"--with-server",
+			"--quiet",
+			"--no-record",
+		}, nil, dir)
+		baseURL := server.URL(t)
+		sessionID := server.SessionID(t)
+		responseStream := support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(baseURL, sessionID),
+		)
+		providerGate.Release()
+		scriptGate.Release()
+		// The two seed files preserve the original discovery semantics; the
+		// response stream is opened before waiting for their dispatches.
+		waitForDefaultSessionWorkCount(t, baseURL, sessionID, 2, 10*time.Second)
+		support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 20*time.Second)
+		session = getRootCompositionSession(t, baseURL, sessionID)
+		listed = support.GetJSON[factoryapi.ListWorkResponse](t, rootCompositionSessionWorkURL(baseURL, sessionID, "/work"))
+		factoryEvents = support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+		if !failure {
+			// The Work projection can become terminal before the session-owned
+			// response publisher has flushed the provider's final native record
+			// and the dispatch progress marker. Read the complete expected
+			// success stream while the session is still live; canceling at the
+			// projection boundary can otherwise discard that last publication
+			// under race-detector scheduling.
+			for range len(runnerIdentityExpectedNativeStreamEvents) + 1 {
+				responseEvents = append(responseEvents, responseStream.NextFrame(10*time.Second).Event)
+			}
+		}
+		server.Stop(t)
+		responseStream.WaitClosed(5 * time.Second)
+		for {
+			frame, ok := responseStream.TryNextFrame(time.Nanosecond)
+			if !ok {
+				break
+			}
+			responseEvents = append(responseEvents, frame.Event)
+		}
+	})
+	return session, listed, factoryEvents, responseEvents
+}
+
+// runnerIdentityReleaseGate holds the provider effect until the public
+// response-event subscription is established, preserving the original
+// pre-dispatch capture boundary when Process.Execute is reused.
+type runnerIdentityReleaseGate struct {
+	next    platformprocess.CommandRunner
+	release chan struct{}
+	once    sync.Once
+}
+
+func (gate *runnerIdentityReleaseGate) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	select {
+	case <-gate.release:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return gate.next.Run(ctx, request)
+}
+
+func (gate *runnerIdentityReleaseGate) Release() {
+	gate.once.Do(func() { close(gate.release) })
 }
 
 // runnerIdentityFailingScriptCommandRunner is a minimal script-worker
@@ -306,7 +382,7 @@ func runnerIdentityFactoryConfig() map[string]any {
 			},
 		},
 		"workers": []map[string]string{
-			{"name": "provider-worker"},
+			{"name": "provider-worker", "executorProvider": "codex"},
 			{"name": "script-worker"},
 		},
 		"workstations": []map[string]any{

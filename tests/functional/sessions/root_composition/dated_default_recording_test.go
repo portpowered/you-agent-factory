@@ -57,7 +57,6 @@ func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T)
 // reusable root process. The subtests retain separate homes, factories, and
 // artifacts, while the immutable process wiring is constructed once.
 func TestRecordingFormatsRemainObservableThroughReusableRootProcess(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 	fixture := ensureRootCompositionFixture(t)
 	t.Run("default recording reserves distinct dated UUID artifacts and replays", func(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -45,6 +47,7 @@ type ApplicationProcess interface {
 	ACPServer() ACPServer
 	ProviderRegistry() ProviderRegistry
 	WorkerRecordingReader() recordings.WorkerRecordingReader
+	ExecutionRuntimeOpening() factorysessions.ExecutionRuntimeOpeningFunc
 }
 
 type applicationProcess struct {
@@ -53,6 +56,7 @@ type applicationProcess struct {
 	acpServer        ACPServer
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
+	executionOpening factorysessions.ExecutionRuntimeOpeningFunc
 }
 
 func (p applicationProcess) Close(ctx context.Context) error {
@@ -69,6 +73,16 @@ func (p applicationProcess) ProviderRegistry() ProviderRegistry {
 
 func (p applicationProcess) WorkerRecordingReader() recordings.WorkerRecordingReader {
 	return p.recordingReader
+}
+
+// ExecutionRuntimeOpening returns the exact public durable-runtime opening
+// capability already exposed by the root-built process. Functional tests use
+// this only for scenarios whose original assertion enters the runtime through
+// the Process.Execute opening boundary (for example seeded replay); it does
+// not construct a second service graph or retain runtime state in the support
+// wrapper.
+func (p applicationProcess) ExecutionRuntimeOpening() factorysessions.ExecutionRuntimeOpeningFunc {
+	return p.executionOpening
 }
 
 // BuildProcess constructs the same reusable process used by the production
@@ -122,12 +136,24 @@ func buildProcessWithContext(
 		return nil, nil, err
 	}
 	recordingReader := root.WorkerRecordingReaderFromProcess(process)
+	var executionOpening factorysessions.ExecutionRuntimeOpeningFunc
+	if capability := process.ExecutionRuntimeOpening(); capability != nil {
+		var ok bool
+		executionOpening, ok = capability.ExecutionRuntimeOpening().(factorysessions.ExecutionRuntimeOpeningFunc)
+		if !ok || executionOpening == nil {
+			return nil, nil, fmt.Errorf(
+				"root process execution opening = %T, want factorysessions.ExecutionRuntimeOpeningFunc",
+				capability.ExecutionRuntimeOpening(),
+			)
+		}
+	}
 	functionalProcess := applicationProcess{
 		Process:          process,
 		close:            process.Close,
 		acpServer:        process.ACPServer(),
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
+		executionOpening: executionOpening,
 	}
 	return functionalProcess, recordingReader, nil
 }
