@@ -26,7 +26,7 @@ The paired machine baseline at `docs/internal/baselines/functional-os-spawn-base
 | Package | Static sites |
 | --- | ---: |
 | `tests/functional/factory/packaged/fix` | 2 |
-| `tests/functional/factory/packaged/full_flow` | 1 |
+| `tests/functional/factory/packaged/full_flow` | 0 |
 | `tests/functional/factory/packaged/tts` | 2 |
 | `tests/functional/models/root_composition` | 6 |
 | `tests/functional/observability/coverage` | 1 |
@@ -56,7 +56,6 @@ The paired machine baseline at `docs/internal/baselines/functional-os-spawn-base
 | --- | --- | --- | --- | --- |
 | `OSSPAWN-tests-functional-factory-packaged-fix-invocation-test-runPackagedFixGit-01` | `tests/functional/factory/packaged/fix/invocation_test.go:980` | `runPackagedFixGit` | ACCIDENTAL-OS | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/invocation_test.go:980 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
 | `OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-startPackagedFixGitSeed-01` | `tests/functional/factory/packaged/fix/shared_fixture_test.go:337` | `startPackagedFixGitSeed` | ACCIDENTAL-OS | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/shared_fixture_test.go:337 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
-| `OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01` | `tests/functional/factory/packaged/full_flow/invocation_test.go:390` | `fullFlowGit` | ACCIDENTAL-OS | Replace the direct Git subprocess at tests/functional/factory/packaged/full_flow/invocation_test.go:390 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
 | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01` | `tests/functional/factory/packaged/tts/models_replay_test.go:208` | `buildDeliveredFactoryTTSBinary` | INTENTIONAL-OS | executable-selection |
 | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-runDeliveredFactoryTTSCLIWithArgs-01` | `tests/functional/factory/packaged/tts/models_replay_test.go:225` | `runDeliveredFactoryTTSCLIWithArgs` | INTENTIONAL-OS | executable-selection |
 | `OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-buildDeliveredYouBinary-01` | `tests/functional/models/root_composition/delivered_cli_story_test.go:144` | `buildDeliveredYouBinary` | INTENTIONAL-OS | executable-selection |
@@ -199,7 +198,6 @@ retain their canonical obligation.
 | `work-submission` | none | none | none | none (0 sites) |
 | `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-fix-invocation-test-runPackagedFixGit-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/invocation_test.go:980 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
 | `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-fix-shared-fixture-test-startPackagedFixGitSeed-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/fix/shared_fixture_test.go:337 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
-| `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01` | `ACCIDENTAL-OS` | `null` | Replace the direct Git subprocess at tests/functional/factory/packaged/full_flow/invocation_test.go:390 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch. |
 | `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
 | `factory-packaged` | `OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-runDeliveredFactoryTTSCLIWithArgs-01` | `INTENTIONAL-OS` | `executable-selection` | `null` |
 

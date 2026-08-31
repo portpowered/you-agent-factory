@@ -6760,23 +6760,6 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01",
-      "packagePath": "tests/functional/factory/packaged/full_flow",
-      "sourcePath": "tests/functional/factory/packaged/full_flow/invocation_test.go",
-      "sourceLine": 390,
-      "enclosingIdentity": "fullFlowGit",
-      "launcherKind": "fixture-git-command",
-      "occurrence": 1,
-      "verdict": "ACCIDENTAL-OS",
-      "requiredProperty": null,
-      "assertionEvidence": "The call at tests/functional/factory/packaged/full_flow/invocation_test.go:390 launches Git to prepare or inspect fixture repository state; the owning assertion observes repository/filesystem or Factory behavior, not an OS-process property.",
-      "conversionObligation": "Replace the direct Git subprocess at tests/functional/factory/packaged/full_flow/invocation_test.go:390 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch.",
-      "testRowIds": [
-        "C07-F007-top-level-test-TestPackagedFullFlow",
-        "C07-F007-top-level-test-TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01",
       "packagePath": "tests/functional/factory/packaged/tts",
       "sourcePath": "tests/functional/factory/packaged/tts/models_replay_test.go",

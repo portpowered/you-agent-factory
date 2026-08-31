@@ -12,10 +12,8 @@
     },
     {
       "packagePath": "tests/functional/factory/packaged/full_flow",
-      "count": 1,
-      "siteIds": [
-        "OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01"
-      ]
+      "count": 0,
+      "siteIds": []
     },
     {
       "packagePath": "tests/functional/factory/packaged/tts",

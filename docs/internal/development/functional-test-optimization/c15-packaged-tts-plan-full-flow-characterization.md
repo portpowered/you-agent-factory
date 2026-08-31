@@ -3,7 +3,9 @@
 Status: Story 001's pre-change record is complete and retains its historical
 U02 blocker; Story 002 supplied the explicitly scoped smallest delta and now
 passes the complete TTS gate; Story 003 preserves the plan-execute witness and
-adds explicit runner-workspace and shared-host cleanup evidence. The
+adds explicit runner-workspace and shared-host cleanup evidence; Story 004 now
+passes after the operator-authorized Full Flow OS-spawn bookkeeping
+reconciliation. Story 005 remains the integrated promotion story. The
 unchanged-head table below must not be read as claiming that U02 existed before
 the implementation change.
 
@@ -259,7 +261,7 @@ non-root child directories (`.you-agent-factory`, `inputs`, `workers`, and
 provider behavior, aggregate coverage/package floors, three-package
 coexistence, clean-room loopback, terminal CI, and merge remain later gates.
 
-## Story 004 — Full Flow repository-edge result (partial)
+## Story 004 — Full Flow repository-edge result
 
 The Full Flow fixture now supplies one shared `WorkersWorktreeGit` edge and
 one script command edge to the root-built process. The edge performs the
@@ -292,29 +294,72 @@ two task commits, two `diff --check` calls, two merges, and the persisted
 An independent source cross-check found no `exec.Command` or
 `exec.CommandContext` match under `tests/functional/factory/packaged/full_flow`
 and counted 69 remaining functional matches repository-wide, down from the
-70-site characterization. The required boundary command was also run:
+70-site characterization. The required boundary command was run before the
+operator-authorized bookkeeping reconciliation and failed only because the
+removed site remained in the frozen records:
 
 ```text
 make functional-os-boundary-check
 ```
 
 It exited 1 before reporting the decreased count because the frozen inventory
-still contains the removed site
+still contained the removed site
 `OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01`:
 `inventory site ... is not present in the AST census` and
 `LINT_VIOLATION_COUNT: 1`. The baseline and inventory files remain unchanged,
 as required by this story's current scope. Real Git executable semantics,
 combined clean-room coverage, terminal CI, and merge remain unproven.
 
-### Story 004 blocker and smallest plan delta
+### Operator-authorized OS bookkeeping reconciliation
 
-GATE-OS is blocked by a direct contract contradiction: the story requires the
-sole Full Flow AST site to be removed and explicitly places inventory and
-baseline edits out of scope, while `functional-os-boundary-check` rejects any
-historical inventory row that is no longer present. The smallest authorized
-delta is to remove the obsolete Full Flow `osSpawnSites` row and its matching
-Full Flow baseline `siteIds` entry/count (or, alternatively, authorize a
-deletion-tolerant checker change); no such delta was applied here.
+The `operatorAmendment` dated 2026-08-31 authorizes reconciliation of exactly
+`OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01`.
+No checker code, tolerance, test, assertion, fixture, or other OS-spawn site
+was changed.
+
+| Authorized location | Before | After |
+| --- | --- | --- |
+| `docs/internal/baselines/functional-os-spawn-baseline.json`, Full Flow package row | `count=1`, `siteIds=[OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01]` | `count=0`, `siteIds=[]` |
+| `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.json`, `osSpawnSites` | One `fullFlowGit` `ACCIDENTAL-OS` object | Object removed; 69 inventory records remain |
+| `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md`, complete static-site projection | One `fullFlowGit` row | Row removed |
+| `docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md`, retained isolated-row verdict projection | One `fullFlowGit` row | Row removed |
+
+The derived human package summary in the same Markdown inventory changed from
+Full Flow `1` to `0` so it agrees with the four reconciled locations. No other
+site was reconciled.
+
+The required source and count evidence on the reconciled head was:
+
+```text
+rg -n 'os/exec' tests/functional/factory/packaged/full_flow
+exit 1; no matches
+
+rg -n 'exec\.Command(?:Context)?\s*\(' tests/functional/factory/packaged/full_flow
+exit 1; no direct process launch matches
+```
+
+The total-site ratchet is explicit: the checked-in baseline decreased from
+`70` to `69`, and the inventory decreased from `70` to `69` OS-spawn records.
+The post-source-migration AST census was already `69` before reconciliation,
+with zero Full Flow sites; reconciliation made all three records agree.
+
+The final boundary command was:
+
+```text
+make functional-os-boundary-check
+```
+
+It exited `0` and reported:
+
+```text
+[agent-factory:functional-os-boundary] static OS-spawn baseline holds: observed=69 baseline=69 packages=22 intentional=62 accidental=7 decreased=0
+[agent-factory:functional-os-boundary] reconciled 69 inventory OS-spawn records
+```
+
+The focused Full Flow package, repeat, and race evidence above remains valid
+because this reconciliation changed only governance data; the final integrated
+clean-room, coverage, PR timing, terminal CI, real Git executable semantics,
+and merge remain Story 005 or review-stage evidence.
 
 ## Source hash register
 
