@@ -2,8 +2,8 @@
   "schema": "you-agent-factory.unit-coverage-cost-attribution.v1",
   "version": 1,
   "sourcePlan": "docs/internal/development/unit-test-optimization/README.md",
-  "story": "unit-test-optimization-c01-unit-coverage-build-diagnostics-001",
-  "status": "baseline",
+  "story": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002",
+  "status": "blocked",
   "governingRequirements": [
     "UTO-TARGET",
     "UTO-C01-ATTRIBUTION",
@@ -18,22 +18,11 @@
   "storyTrace": [
     {
       "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-001",
-      "requirements": [
-        "UTO-TARGET",
-        "UTO-C01-ATTRIBUTION",
-        "UTO-C01-PACKAGE-CLASSIFICATION",
-        "UTO-C01-PILOT-DISPOSITION",
-        "UTO-C01-CHARTER"
-      ],
-      "outcome": "Charter and conservative v1 inventory structure established from the reference baseline."
+      "requirements": ["UTO-C01-U01", "UTO-LOOPBACK"],
+      "outcome": "Default-compatible unit-coverage diagnostic forwarding and hosted artifact publication established."
     },
     {
       "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002",
-      "requirements": ["UTO-C01-U01", "UTO-LOOPBACK"],
-      "outcome": "Optional Make and workflow diagnostic wiring preserves the default path and publishes the existing artifact."
-    },
-    {
-      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-003",
       "requirements": [
         "UTO-C01-ATTRIBUTION",
         "UTO-C01-PARALLELISM-EXPERIMENT",
@@ -41,10 +30,10 @@
         "UTO-C01-PILOT-DISPOSITION",
         "UTO-C01-EVIDENCE"
       ],
-      "outcome": "Same-head hosted attribution, parallelism, medians, and 445 package classifications are reconciled."
+      "outcome": "Hosted evidence was attempted and rejected before attribution because inherited timing invariants and selectable jobs controls were unavailable."
     },
     {
-      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-004",
+      "storyId": "unit-test-optimization-c01-unit-coverage-build-diagnostics-003",
       "requirements": ["UTO-LOOPBACK", "UTO-C01-EVIDENCE", "UTO-TARGET"],
       "outcome": "Clean-room behavior, red-path sensitivity, scope isolation, and review handoff are independently validated."
     }
@@ -55,6 +44,56 @@
     "source": "operator-supplied hosted Backend Unit Coverage observation",
     "status": "reference-only"
   },
+  "hostedEvidenceAttempts": [
+    {
+      "headSha": "8f810fc94ceb449e90d7733394078e57f4da44a3",
+      "runId": 33345809127,
+      "jobId": 99349658743,
+      "artifact": {
+        "name": "unit-coverage-diagnostics",
+        "id": 9742044437,
+        "path": "coverage-build-diagnostics.json",
+        "retrievable": true
+      },
+      "runner": {
+        "provider": "github-actions",
+        "image": "ubuntu-latest",
+        "goVersion": "go1.25.0"
+      },
+      "diagnostic": {
+        "status": "complete",
+        "commandResult": "passed",
+        "wallSeconds": 239.885,
+        "expectedPackages": 445,
+        "compilerCommands": 2087,
+        "linkerCommands": 445,
+        "buildActions": 2532,
+        "cacheReuse": "compile-work-observed"
+      },
+      "coverage": {
+        "coveragePercent": 80.7,
+        "coveredStatements": 107586,
+        "measurableStatements": 133294,
+        "measuredPackageCount": 480
+      },
+      "timing": {
+        "complete": false,
+        "packageCount": 445,
+        "testCount": 11560,
+        "testFailCount": 0,
+        "testSkipCount": 57,
+        "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+      },
+      "admission": "rejected",
+      "blockedBy": [
+        "timing capture incomplete",
+        "test count 11560 does not preserve the 18273-test invariant",
+        "skip count 57 is not below the exclusive ceiling",
+        "coverage summary contains 480 measured packages rather than the required 445-package evidence universe",
+        "ci workflow has no selectable UNIT_COVERAGE_JOBS control for -p=1 and -p=4 cohorts"
+      ]
+    }
+  ],
   "baseline": {
     "jobWallSeconds": 649.0,
     "coverageStepWallSeconds": 607.0,
@@ -102,8 +141,8 @@
     ],
     "identityRule": "Each captured bucket identity is stable and unique.",
     "measurementRule": "Captured seconds are finite and non-negative, and the source identifies a retrievable artifact, command, run, and job.",
-    "emptyState": "No stage measurement is captured until U01-G2 supplies same-head hosted evidence.",
-    "owner": "U01-G2"
+    "emptyState": "No stage measurement is admitted until valid same-head hosted evidence preserves every inherited invariant.",
+    "owner": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002"
   },
   "packages": [],
   "packageContract": {
@@ -128,8 +167,8 @@
       "KEEP-AS-IS",
       "OUT-OF-SCOPE"
     ],
-    "emptyState": "The expected count and row contract are recorded; package rows await U01-G2 classification.",
-    "owner": "U01-G2"
+    "emptyState": "The expected count and row contract are recorded; package rows await valid same-head classification.",
+    "owner": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002"
   },
   "parallelismExperiment": {
     "status": "not-captured",
@@ -137,7 +176,7 @@
     "p1": null,
     "p4": null,
     "collapsedParallelismVerdict": null,
-    "owner": "U01-G2"
+    "owner": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002"
   },
   "pilotDisposition": {
     "identity": "factory-sessions-execution",
@@ -163,11 +202,11 @@
     "committedArtifacts": "aggregates and identifiers only; no raw traces, secrets, credentials, absolute runner paths, or test payloads"
   },
   "ownership": {
-    "charterAndInventory": "U01 story 001",
-    "makeInvocation": "U01 story 002",
-    "workflowPublication": "U01 story 002",
-    "hostedAttributionAndClassification": "U01 story 003",
-    "cleanRoomValidation": "U01 story 004",
+    "charterAndInventory": "U01 story 001/002",
+    "makeInvocation": "U01 story 001",
+    "workflowPublication": "U01 story 001",
+    "hostedAttributionAndClassification": "U01 story 002",
+    "cleanRoomValidation": "U01 story 003",
     "reviewTerminalCiAndMerge": "review stage"
   }
 }

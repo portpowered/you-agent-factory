@@ -1,6 +1,8 @@
 # Unit Test Optimization — Cycle 01 Charter
 
-Status: baseline charter established; hosted measurements are not yet captured.
+Status: baseline charter established; the first hosted diagnostic was captured
+but rejected for U01 attribution because the inherited timing invariants were
+not complete and the workflow has no selectable jobs control.
 
 This file is the governing source plan for Cycle 01. The path named by the
 execution packet was absent from the base checkout, so this charter is created
@@ -23,8 +25,12 @@ Backend Unit Coverage environment
   -> reconciled attribution inventory and evidence ledger
 ```
 
-This first task establishes the meaning of the evidence. It does not wire the
-Make target or workflow and does not make a performance claim.
+The default-off wrapper, Make forwarding, and unit CI artifact upload are now
+present. The first same-head hosted observation proved that the existing
+diagnostic writer reaches the published artifact, but it is not a valid U01
+cohort: the timing capture is incomplete, the observed test count is below the
+charter invariant, and the workflow cannot select `-p=1` or `-p=4`. No stage or
+package optimization claim is made.
 
 ## Problem and desired outcome
 
@@ -89,10 +95,9 @@ these identifiers.
 
 | Story | Outcome | Governing identifiers |
 | --- | --- | --- |
-| `unit-test-optimization-c01-unit-coverage-build-diagnostics-001` | Establish this charter and the conservative v1 inventory structure from the reference baseline. | `UTO-TARGET`, `UTO-C01-ATTRIBUTION`, `UTO-C01-PACKAGE-CLASSIFICATION`, `UTO-C01-PILOT-DISPOSITION`, `UTO-C01-CHARTER` |
-| `unit-test-optimization-c01-unit-coverage-build-diagnostics-002` | Extend the owned Make/workflow spine with optional diagnostic forwarding and publication while preserving default behavior. | `UTO-C01-U01`, `UTO-LOOPBACK` |
-| `unit-test-optimization-c01-unit-coverage-build-diagnostics-003` | Reconcile same-head hosted attribution, parallelism, medians, and all package classifications. | `UTO-C01-ATTRIBUTION`, `UTO-C01-PARALLELISM-EXPERIMENT`, `UTO-C01-PACKAGE-CLASSIFICATION`, `UTO-C01-PILOT-DISPOSITION`, `UTO-C01-EVIDENCE` |
-| `unit-test-optimization-c01-unit-coverage-build-diagnostics-004` | Independently validate the integrated lane, deliberate red path, scope isolation, and review handoff. | `UTO-LOOPBACK`, `UTO-C01-EVIDENCE`, `UTO-TARGET` |
+| `unit-test-optimization-c01-unit-coverage-build-diagnostics-001` | Publish one canonical, default-compatible unit-coverage build diagnostic. | `UTO-C01-U01`, `UTO-LOOPBACK` |
+| `unit-test-optimization-c01-unit-coverage-build-diagnostics-002` | Reconcile valid same-head hosted attribution, parallelism, medians, and all package classifications; retain rejected attempts as blockers. | `UTO-C01-ATTRIBUTION`, `UTO-C01-PARALLELISM-EXPERIMENT`, `UTO-C01-PACKAGE-CLASSIFICATION`, `UTO-C01-PILOT-DISPOSITION`, `UTO-C01-EVIDENCE` |
+| `unit-test-optimization-c01-unit-coverage-build-diagnostics-003` | Independently validate the integrated lane, deliberate red path, scope isolation, and review handoff. | `UTO-LOOPBACK`, `UTO-C01-EVIDENCE`, `UTO-TARGET` |
 
 ## Baseline characterization
 
@@ -123,11 +128,11 @@ runner stability, or an optimization.
 ## Inventory contract
 
 `c01-cost-attribution-inventory.json` is the canonical v1 record.
-`c01-cost-attribution-inventory.md` is its human-readable projection. This
-task defines the contract and records reference constants; the `buckets` and
-`packages` arrays are intentionally empty until their owning hosted evidence
-exists. Empty collections are an explicit baseline state, not zero-cost
-measurements.
+`c01-cost-attribution-inventory.md` is its human-readable projection. The
+contract records reference constants and retains rejected hosted attempts;
+the `buckets` and `packages` arrays remain empty until valid same-head evidence
+preserves every inherited invariant. Empty collections are an explicit blocked
+state, not zero-cost measurements.
 
 ### Attribution buckets
 
@@ -147,9 +152,10 @@ not remain inferred when U01-G2 completes. The only verdicts are:
 `INFRASTRUCTURE-FIX`, `NEEDS-EXPERIMENT`, `CONVERT`, `KEEP-AS-IS`, and
 `OUT-OF-SCOPE`.
 
-No bucket row is emitted by this baseline task because no stage measurement is
-available yet. U01-G2 owns the first populated rows and must reject duplicate
-identities, missing fields, cross-head evidence, and unsupported verdicts.
+No bucket row is admitted because the first hosted observation failed the
+inherited timing/test invariants. The hosted evidence owner must reject
+duplicate identities, missing fields, cross-head evidence, and unsupported
+verdicts rather than turning the rejected observation into a measurement.
 
 ### Package classifications
 
@@ -157,16 +163,41 @@ The package classification contract expects exactly 445 unique Go import-path
 rows. Each row uses the same identity, seconds, source, status, verdict,
 owner, and blocker fields; its bucket is `fixed-package-overhead`. The
 classification basis is 0.322 seconds per package. The baseline records the
-expected count and contract only; U01-G2 owns the complete row set. A package
-conversion or consolidation is not justified by the count alone.
+expected count and contract only; the rejected hosted observation cannot
+supply the complete row set. A package conversion or consolidation is not
+justified by the count alone.
 
 ### Parallelism and pilot state
 
 The required parallelism experiment has two inputs, hosted `-p=1` and hosted
-`-p=4`. Neither has been captured in this baseline, so no collapsed-
-parallelism verdict is recorded. Story 003 must retain each raw wall time with
-its run and job identity and then state whether collapsed parallelism is
-confirmed or refuted.
+`-p=4`. Neither has been captured. The current CI workflow exposes one unit
+matrix entry without a jobs input, so it cannot produce those cells without a
+small, explicitly authorized hosted-run configuration delta. No collapsed-
+parallelism verdict is recorded.
+
+## Hosted evidence attempt (not admitted)
+
+The first hosted run on the implementation head published the diagnostic
+artifact, but the observation is retained only as a rejection record in the
+canonical JSON. It is not a cohort sample, median input, bucket measurement,
+or package-classification source.
+
+| Field | Observation |
+| --- | --- |
+| Head SHA | `8f810fc94ceb449e90d7733394078e57f4da44a3` |
+| Run / job | `33345809127` / `99349658743` |
+| Artifact | `unit-coverage-diagnostics` / `9742044437` |
+| Diagnostic path | `coverage-build-diagnostics.json` |
+| Go version | `go1.25.0` |
+| Diagnostic result | `complete`, `commandResult=passed`, `wallSeconds=239.885` |
+| Build observations | `compilerCommands=2087`, `linkerCommands=445`, `buildActions=2532`, `expectedPackages=445` |
+| Coverage observation | `80.7%`, `107586/133294` statements, 480 measured coverage packages |
+| Timing observation | `complete=false`, 445 package rows, `testCount=11560`, `testFailCount=0`, `testSkipCount=57` |
+| Admission verdict | rejected: expected 18,273 tests, skips below 57, and a valid 445-package evidence universe |
+
+The detailed run and artifact links are retained in the PR comment. Raw logs,
+profiles, traces, runner paths, credentials, and test payloads are not
+committed.
 
 The factory-sessions execution pilot is already measured at 10.63 seconds and
 has the disposition `KEEP-AS-IS`. Its cost cannot materially reduce the
@@ -187,8 +218,8 @@ classification.
   and repository quota; no paid API call is required.
 - `Makefile` owns local invocation configuration. `.github/workflows/ci.yml`
   owns hosted environment and artifact publication. The diagnostic writer owns
-  its JSON output. Story 001 owns this charter and the v1 inventory structure;
-  Story 002 may inspect them but must not edit them.
+  its JSON output. Story 001 owns the implementation spine; Story 002 owns
+  valid hosted evidence and this charter/inventory projection.
 - No setup/cache, latency, floor, test-body, package-membership, generated
   contract, product API, UI, or runtime-state changes belong to Cycle 01.
 - The optional path is fail-closed for probe and test errors, preserves the
@@ -198,7 +229,7 @@ classification.
   contain raw build traces, secrets, credentials, absolute runner paths, or
   test payloads.
 
-## Verification for this baseline task
+## Verification boundary
 
 The local-real witness for Story 001 parses the JSON, checks the schema and
 version, validates required top-level fields and corpus constants, verifies
@@ -209,19 +240,20 @@ missing row field, or unsupported verdict must be rejected in memory without
 rewriting the committed artifact.
 
 This proves that the evidence contract is machine-readable, complete, and
-conservative before wiring. It does not prove hosted diagnostic production,
-artifact upload, parallelism, performance, coverage preservation after a
-change, or the clean-room red path. Those edges belong to U01-G1 through
-U01-G4 as listed above.
+conservative before admitting measurements. The hosted attempt additionally
+proves default-path diagnostic publication and preserves the aggregate 80.7%
+coverage observation, but it does not prove valid cohorts, package
+classification, stage attribution, or performance. Those edges remain blocked
+until the timing/invariant capture and selectable jobs control are resolved.
 
 ## Delivery sequence
 
-1. Story 001 establishes this charter and baseline inventory.
-2. Story 002 extends the Make/workflow executable spine and proves FT-01
-   through FT-07 with controlled behavior tests.
-3. Story 003 captures same-head hosted evidence, attributes cost, classifies
-   all packages, and publishes detailed CI evidence in a PR comment.
-4. Story 004 runs the validation-loopback template, checks invariants and the
+1. Story 001 establishes this charter, baseline inventory, and the
+   default-compatible diagnostic spine.
+2. Story 002 captures and validates same-head hosted evidence, attributes cost,
+   classifies all packages, and publishes detailed CI evidence in a PR
+   comment. Rejected observations remain explicit blockers.
+3. Story 003 runs the validation-loopback template, checks invariants and the
    uncommitted red path, and hands the final pushed head to review.
 
 The review stage owns terminal CI, conflict resolution, and merge. The

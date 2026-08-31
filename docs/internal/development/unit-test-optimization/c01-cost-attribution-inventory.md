@@ -1,7 +1,7 @@
 # Cycle 01 cost-attribution inventory v1
 
-Status: baseline contract established; hosted stage and package rows are not
-yet captured.
+Status: baseline contract established; the first hosted diagnostic was
+captured but rejected, so no stage or package rows are admitted.
 
 Canonical source: [`c01-cost-attribution-inventory.json`](c01-cost-attribution-inventory.json)
 
@@ -46,9 +46,9 @@ make that target neither achievable nor acceptable as a Cycle 01 claim.
 
 ## Attribution contract
 
-The canonical JSON currently has zero captured bucket rows and records this
-explicitly as its baseline state. The only allowed future bucket identities
-are:
+The canonical JSON currently has zero admitted bucket rows and records this
+explicitly. The hosted attempt below is retained as rejected evidence, not as
+a bucket measurement. The only allowed future bucket identities are:
 
 | Bucket identity | Required evidence owner | Baseline state |
 | --- | --- | --- |
@@ -71,10 +71,10 @@ seconds cannot remain inferred at U01-G2 completion. Allowed verdicts are:
 
 The inventory expects exactly 445 unique Go import-path rows under the
 `fixed-package-overhead` bucket. The classification basis is 0.322 seconds
-per package. The package array is empty in this baseline because complete
-classification belongs to U01-G2; the expected count and row fields are still
-canonical and reviewable. A conversion or consolidation is not justified by
-the count alone.
+per package. The package array is empty because the only hosted timing
+artifact was incomplete and failed the inherited test/skip invariants. The
+expected count and row fields remain canonical and reviewable. A conversion or
+consolidation is not justified by the count alone.
 
 ## Parallelism experiment
 
@@ -86,8 +86,26 @@ The required hosted pair is:
 | `-p=4` | not captured | not captured |
 
 The collapsed-parallelism verdict is intentionally not recorded until both
-same-head cells complete. Story 003 owns the pair and must retain each raw
-wall with its run and job IDs.
+same-head cells complete. The current workflow has no jobs input or matrix
+entry for these cells; adding one is an explicit scope/owner delta, not a
+local timing substitute.
+
+## Hosted evidence attempt (not admitted)
+
+| Field | Observation |
+| --- | --- |
+| Head SHA | `8f810fc94ceb449e90d7733394078e57f4da44a3` |
+| Run / job | `33345809127` / `99349658743` |
+| Artifact ID | `9742044437` (`unit-coverage-diagnostics`) |
+| Go version | `go1.25.0` |
+| Diagnostic | complete; wall `239.885s`; compiler `2087`; linker `445`; build actions `2532`; expected packages `445` |
+| Coverage | `80.7%`; `107586/133294` statements; `480` measured coverage packages |
+| Timing | incomplete; `445` package rows; `11560` tests; `0` failures; `57` skips |
+| Verdict | rejected before cohort, median, bucket, or package admission |
+
+The timing record fails the charter invariants of 18,273 tests and skips below
+57. The detailed CI run and artifact links are in the PR comment; raw logs and
+profiles are not committed.
 
 ## Pilot disposition
 
@@ -117,7 +135,8 @@ empty-state declarations, pilot disposition, and Markdown agreement. A
 negative in-memory copy with a duplicate identity, missing field, or
 unsupported verdict must fail validation without rewriting the committed file.
 
-This proves the v1 evidence contract before wiring. It does not prove hosted
-diagnostic publication, artifact upload, `-p` behavior, performance, coverage
-preservation after a change, or the clean-room red path; those are owned by
-U01-G1 through U01-G4.
+This proves the v1 evidence contract before admitting measurements. The hosted
+attempt proves default-path diagnostic publication, but it does not prove
+valid cohorts, `-p` behavior, package classification, stage attribution,
+performance, or the clean-room red path; those remain blocked by the rejected
+invariants and missing jobs control.
