@@ -243,43 +243,43 @@
       "name": "TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes"
     },
     {
-      "file": "cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "file": "transport/mcp/resume/serve_runtime_resume_smoke_test.go",
       "name": "TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay"
     },
     {
-      "file": "cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "file": "transport/mcp/resume/serve_runtime_resume_smoke_test.go",
       "name": "TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl"
     },
     {
-      "file": "cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "file": "transport/mcp/resume/serve_runtime_resume_smoke_test.go",
       "name": "TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead"
     },
     {
-      "file": "cli/mcp_resume/serve_runtime_resume_smoke_test.go",
+      "file": "transport/mcp/resume/serve_runtime_resume_smoke_test.go",
       "name": "TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead"
     },
     {
-      "file": "cli/mcp_resume/serve_runtime_smoke_test.go",
+      "file": "transport/mcp/resume/serve_runtime_smoke_test.go",
       "name": "TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult"
     },
     {
-      "file": "cli/session_resume/resume_non_regression_test.go",
+      "file": "transport/cli/session_resume/resume_non_regression_test.go",
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },
     {
-      "file": "cli/session_resume/resume_smoke_test.go",
+      "file": "transport/cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay"
     },
     {
-      "file": "cli/session_resume/resume_smoke_test.go",
+      "file": "transport/cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands"
     },
     {
-      "file": "cli/session_resume/resume_smoke_test.go",
+      "file": "transport/cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead"
     },
     {
-      "file": "cli/session_resume/resume_smoke_test.go",
+      "file": "transport/cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead"
     },
     {

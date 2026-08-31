@@ -1,13 +1,11 @@
 package mcp_resume_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP server smoke fixture: terminal async completion.
@@ -22,39 +20,21 @@ return {
 `
 
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	t.Parallel()
+	fixture := mcpResumePackageFixtureForTest(t)
+	client := fixture.client
 
-	projectRoot := runtimeSmokeProjectRoot(t)
-	client, shutdown := startRunServeRuntimeSmokeServer(t, projectRoot)
-	assertInstallSmokeInitialize(t, client)
-
-	sessionID := assertRuntimeSmokeAsyncStart(t, client)
+	sessionID := assertRuntimeSmokeAsyncStart(t, client, fixture, fixture.nextRequestID("runtime-smoke"))
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
 	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
-	shutdown()
-}
-
-func runtimeSmokeProjectRoot(t *testing.T) string {
-	t.Helper()
-	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-runtime-smoke")
-	t.Cleanup(func() {
-		// Remove the full project root before t.TempDir teardown so runtime-backed
-		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.
-		_ = os.RemoveAll(projectRoot)
-	})
-	return projectRoot
-}
-
-func startRunServeRuntimeSmokeServer(
-	t *testing.T,
-	projectRoot string,
-) (*stdioMCPClient, func()) {
-	t.Helper()
-	return startRootRuntimeMCPServer(t, projectRoot, nil)
 }
 
 func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
 	t.Helper()
+
+	// The public session read and final result are the observable async
+	// completion witnesses. The provider edge cannot prove that persistence and
+	// result projection are complete, so this bounded poll intentionally yields
+	// between public reads instead of using a fixed startup wait.
 	deadline := time.Now().Add(5 * time.Second)
 	mode := factoryapi.FactorySessionResultModeFinal
 	for time.Now().Before(deadline) {
@@ -73,26 +53,39 @@ func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, se
 	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
 }
 
-func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient) string {
+func assertRuntimeSmokeAsyncStart(
+	t *testing.T,
+	client *stdioMCPClient,
+	fixture *mcpResumePackageFixture,
+	requestID string,
+) string {
 	t.Helper()
 	asyncStart := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest()),
+		client.callTool(mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest(requestID)),
 	)
 	if asyncStart.Error != nil || asyncStart.Result == nil {
 		t.Fatalf("start_async = %#v, want success", asyncStart)
 	}
-	if asyncStart.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("start_async status = %q, want RUNNING", asyncStart.Result.Status)
-	}
 	if asyncStart.Result.SessionId == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
-	return asyncStart.Result.SessionId
+	sessionID := asyncStart.Result.SessionId
+	// Register cleanup before checking any post-start state so a failed status
+	// or result observation cannot leave this durable session unowned.
+	fixture.trackSession(t, client, sessionID)
+	if asyncStart.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("start_async status = %q, want RUNNING", asyncStart.Result.Status)
+	}
+	return sessionID
 }
 
 func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdioMCPClient, sessionID string) {
 	t.Helper()
+
+	// This checks the customer-visible RUNNING/not-ready and terminal/result
+	// sequence. A provider completion signal cannot prove either public read
+	// model, so the bounded poll must observe those MCP responses directly.
 	deadline := time.Now().Add(5 * time.Second)
 	mode := factoryapi.FactorySessionResultModeFinal
 	observedRunningNotReady := false
@@ -217,7 +210,7 @@ func assertRuntimeSmokeTerminalResult(
 	}
 }
 
-func runtimeSmokeInlineAsyncRequest() factoryapi.FactorySessionExecutionRequest {
+func runtimeSmokeInlineAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
 	dialect := "you-workflow-v1"
 	metadata := factoryapi.StringMap{
 		"name":        "runtime-mcp-serve-smoke",
@@ -229,7 +222,7 @@ func runtimeSmokeInlineAsyncRequest() factoryapi.FactorySessionExecutionRequest 
 		"prefix":  "you",
 	}
 	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-mcp-runtime-serve-smoke-001",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
 			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{

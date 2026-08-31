@@ -38,9 +38,7 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 func TestCLIResumeSmokeLane_RetiredDispatchCommandLeavesRESTReadAvailable(t *testing.T) {
 	t.Parallel()
 
-	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	serverURL, process := startRootCLIResumeAPIServer(t, projectRoot, nil)
-	harness := &cliResumeSmokeHarness{serverURL: serverURL, projectRoot: projectRoot, process: process}
+	harness := newCLIResumeSmokeSucceededHarness(t)
 
 	_, err := harness.executeCLI(t, "session", "dispatches", "session-beta")
 	if err == nil || !strings.Contains(err.Error(), `unknown command "dispatches"`) {
@@ -48,8 +46,8 @@ func TestCLIResumeSmokeLane_RetiredDispatchCommandLeavesRESTReadAvailable(t *tes
 	}
 
 	workflowName := "simple-final"
-	started := startDurableSessionViaHTTP(t, serverURL, factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-cli-resume-scope-001",
+	started := harness.startDurableSession(t, factoryapi.FactorySessionExecutionRequest{
+		RequestId: harness.fixture.nextRequestID("retired-command"),
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 			WorkflowName: &workflowName,

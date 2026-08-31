@@ -13,9 +13,9 @@ Run these seven package commands in this order for every sequential sample:
 | --- | --- |
 | Automations | `./tests/functional/automations` |
 | CLI factory-run output | `./tests/functional/cli/factory_run/output` |
-| CLI MCP resume | `./tests/functional/cli/mcp_resume` |
-| CLI root discovery | `./tests/functional/cli/root_discovery` |
-| CLI session resume | `./tests/functional/cli/session_resume` |
+| CLI MCP resume | `./tests/functional/transport/mcp/resume` |
+| CLI root discovery | `./tests/functional/transport/cli/root_discovery` |
+| CLI session resume | `./tests/functional/transport/cli/session_resume` |
 | Factory Events | `./tests/functional/events/factory_events` |
 | Response Events | `./tests/functional/events/response_events` |
 
@@ -38,9 +38,9 @@ standard five-minute timeout:
 $packages = [ordered]@{
   "automations" = "./tests/functional/automations"
   "cli-factory-run-output" = "./tests/functional/cli/factory_run/output"
-  "cli-mcp-resume" = "./tests/functional/cli/mcp_resume"
-  "cli-root-discovery" = "./tests/functional/cli/root_discovery"
-  "cli-session-resume" = "./tests/functional/cli/session_resume"
+  "cli-mcp-resume" = "./tests/functional/transport/mcp/resume"
+  "cli-root-discovery" = "./tests/functional/transport/cli/root_discovery"
+  "cli-session-resume" = "./tests/functional/transport/cli/session_resume"
   "factory-events" = "./tests/functional/events/factory_events"
   "response-events" = "./tests/functional/events/response_events"
 }

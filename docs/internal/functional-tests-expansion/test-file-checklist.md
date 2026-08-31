@@ -1497,8 +1497,8 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Current-tree destination refresh
 
-- [x] `tests/functional/cli/root_discovery/root_discovery_test.go`
-- [x] `tests/functional/cli/session_resume/resume_non_regression_test.go`
+- [x] `tests/functional/transport/cli/root_discovery/root_discovery_test.go`
+- [x] `tests/functional/transport/cli/session_resume/resume_non_regression_test.go`
 - [x] `tests/functional/factory/definitions/authored_layout_test.go`
 - [x] `tests/functional/factory/definitions/compilation_test.go`
 - [x] `tests/functional/factory/definitions/example_corpus_test.go`

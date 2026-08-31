@@ -50,10 +50,7 @@ func pathUnderDirectory(path, directory string) bool {
 func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing.T) {
 	t.Parallel()
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	fixture := rootDiscoverySharedFixtureForTest(t)
 	workingDirectory := t.TempDir()
 	unavailableServer := "http://127.0.0.1:1"
 	cases := [][]string{
@@ -68,13 +65,13 @@ func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing
 		{"you", "--server", unavailableServer, "worker-sessions", "list", "--json"},
 	}
 	for _, args := range cases {
-		_, _, executeErr := executeFactoryArgs(
+		_, _, executeErr := fixture.executeArgs(
 			t,
-			process,
 			workingDirectory,
 			args,
 			false,
 			t.Context(),
+			nil,
 		)
 		if executeErr == nil {
 			t.Fatalf("%v unexpectedly succeeded against unavailable server", args)
@@ -173,31 +170,15 @@ func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testi
 	t.Parallel()
 
 	workingDirectory := t.TempDir()
+	fixture := rootDiscoverySharedFixtureForTest(t)
 	var effects atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			effects.Add(1)
-			return nil
-		},
-		BrowserOpener: func(context.Context, string) error {
-			effects.Add(1)
-			return nil
-		},
-		FactorySessionIDGenerator: func() string {
-			effects.Add(1)
-			return "unexpected-session"
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	stdout, stderr, executeErr := executeFactoryArgs(
+	stdout, stderr, executeErr := fixture.executeArgsWithSessionID(
 		t,
-		process,
 		workingDirectory,
 		[]string{"you", "run", "--no-record", "--with-site"},
 		false,
 		t.Context(),
+		&effects,
 	)
 	if executeErr == nil {
 		t.Fatalf("missing Current Factory succeeded; stdout=%q stderr=%q", stdout, stderr)
@@ -229,30 +210,16 @@ func runCurrentFactoryFailureCaseForCommand(
 	}
 	prepare(t, factoryDir)
 
+	fixture := rootDiscoverySharedFixtureForTest(t)
 	var effects atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			effects.Add(1)
-			return nil
-		},
-		BrowserOpener: func(context.Context, string) error {
-			effects.Add(1)
-			return nil
-		},
-		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-			effects.Add(1)
-		},
-		FactorySessionIDGenerator: func() string {
-			effects.Add(1)
-			return "unexpected-session"
-		},
-		ProviderOverride: newCountingProvider(&effects),
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-
-	stdout, stderr, executeErr := executeFactoryCommand(t, process, workingDirectory, command, false)
+	stdout, stderr, executeErr := fixture.executeCommandWithSessionID(
+		t,
+		workingDirectory,
+		command,
+		false,
+		t.Context(),
+		&effects,
+	)
 	if executeErr == nil {
 		t.Fatalf("Process.Execute(Current Factory) succeeded; stdout=%q stderr=%q", stdout, stderr)
 	}
@@ -300,6 +267,8 @@ func runServerLifecycleCase(t *testing.T) {
 	defer cancel()
 	serverStopped := make(chan struct{})
 	var bound, browserCalls, providerCalls atomic.Int32
+	// Isolated: each iteration proves listener readiness and joins its own
+	// cancellation-owned server; a shared root would conflate those witnesses.
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Handler == nil || request.OnBound == nil {
@@ -327,6 +296,7 @@ func runServerLifecycleCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 
 	stdout, stderr, executeErr := executeFactoryCommandWithContext(
 		t, process, workingDirectory, "server", false, ctx,
@@ -381,6 +351,8 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 		t.Fatalf("NewStarter() error = %v", err)
 	}
 	var browserCalls, readinessCalls atomic.Int32
+	// Isolated: this injects a unique listener factory and asserts exact bind
+	// attempts plus the absence of readiness effects after terminal failure.
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: starter,
 		BrowserOpener: func(context.Context, string) error {
@@ -394,6 +366,7 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 
 	stdout, stderr, executeErr := executeFactoryArgs(
 		t,
@@ -439,6 +412,7 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	t.Parallel()
 
 	workingDirectory := t.TempDir()
+	fixture := rootDiscoverySharedFixtureForTest(t)
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("create Current Factory directory: %v", err)
@@ -455,25 +429,14 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	}
 
 	var effects atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			effects.Add(1)
-			return nil
-		},
-		BrowserOpener: func(context.Context, string) error {
-			effects.Add(1)
-			return nil
-		},
-		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-			effects.Add(1)
-		},
-		ProviderOverride: newCountingProvider(&effects),
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-
-	stdout, stderr, executeErr := executeCurrentFactory(t, process, workingDirectory)
+	stdout, stderr, executeErr := fixture.executeCommand(
+		t,
+		workingDirectory,
+		"run",
+		false,
+		t.Context(),
+		&effects,
+	)
 	if executeErr != nil {
 		t.Fatalf("Process.Execute(Current Factory) error = %v; stdout=%q stderr=%q", executeErr, stdout, stderr)
 	}
@@ -510,6 +473,8 @@ func TestLocalRunDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	events := make([]string, 0, 2)
 	stdout := &orderedStartupOutput{events: &events}
 	var stderr bytes.Buffer
+	// Isolated: HOME and startup-artifact ordering are invocation-owned
+	// environment witnesses that must not share process initialization state.
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
 			events = append(events, "initialize:"+path)
@@ -519,6 +484,7 @@ func TestLocalRunDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 	stdinIsTTY := true
 	stdoutIsTTY := false
 	err = process.Execute(root.Input{
@@ -608,6 +574,8 @@ func TestServerDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	startupSeen := make(chan struct{})
 	stdout := &orderedStartupOutput{events: &events, startupSeen: startupSeen}
 	var stderr bytes.Buffer
+	// Isolated: this combines HOME/startup ordering with a listener bind, so its
+	// readiness and cancellation witness must remain invocation-owned.
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
 			events = append(events, "initialize:"+path)
@@ -628,6 +596,7 @@ func TestServerDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 	stdinIsTTY := true
 	stdoutIsTTY := false
 	err = process.Execute(root.Input{
@@ -694,6 +663,8 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 
 			serverStopped := make(chan struct{})
 			var bound, browserCalls atomic.Int32
+			// Isolated per mode: the assertion covers one-shot listener lifetime,
+			// readiness, and browser behavior for this invocation.
 			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					bound.Store(1)
@@ -713,6 +684,7 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 			if err != nil {
 				t.Fatalf("BuildProcess() error = %v", err)
 			}
+			support.CleanupProcess(t, process)
 
 			stdout, stderr, executeErr := executeFactoryArgs(
 				t,
@@ -760,6 +732,8 @@ func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	serverStopped := make(chan struct{})
+	// Isolated: continuous hosting must retain this invocation's listener until
+	// its cancellation and prove that listener shutdown joins deterministically.
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
 			request.OnBound(platformhttpserver.Binding{Port: request.Port})
@@ -775,6 +749,7 @@ func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 	stdout, stderr, executeErr := executeFactoryArgs(
 		t,
 		process,
@@ -794,14 +769,6 @@ func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("continuous cancellation did not join the owned listener")
 	}
-}
-
-func executeCurrentFactory(
-	t *testing.T,
-	process interface{ Execute(root.Input) error },
-	workingDirectory string,
-) (string, string, error) {
-	return executeFactoryCommand(t, process, workingDirectory, "run", false)
 }
 
 func executeFactoryCommand(
