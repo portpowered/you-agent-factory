@@ -103,7 +103,23 @@ func NewProcessWithRuntimeCostsAndExecutionAndMCP(
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 	mcpServer processcontract.MCPServerFactory,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, mcpServer)
+	process, err := NewProcessWithRuntimeCostsAndExecution(
+		commandFactory,
+		initializer,
+		providers,
+		lifecycle,
+		acpServer,
+		workerReader,
+		detachedOps,
+		runtimeMetrics,
+		executionOpen,
+		runtimeCosts,
+	)
+	if err != nil {
+		return nil, err
+	}
+	process.mcpServer = mcpServer
+	return process, nil
 }
 
 func newProcess(

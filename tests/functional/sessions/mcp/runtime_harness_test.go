@@ -126,7 +126,12 @@ func startRootRuntimeMCPServer(
 	})
 	events := make(chan factorydefinitions.FactoryEvent, 256)
 	opened, observedExecution := openObservedMCPExecution(t, fixture, projectRoot, homeDir, events)
-	server, err := root.MCPServerForExecution(fixture.process, observedExecution)
+	serverFactory := fixture.process.MCPServerFactory()
+	if serverFactory == nil {
+		_ = opened.Close()
+		t.Fatalf("build MCP server: process MCP server factory is required")
+	}
+	server, err := serverFactory(observedExecution)
 	if err != nil {
 		_ = opened.Close()
 		t.Fatalf("build MCP server: %v", err)
