@@ -61,6 +61,8 @@ var (
 	boardPersistenceBinaryBuilds atomic.Int64
 )
 
+// TestMain runs the restart package tests, removes any package-scoped CLI
+// build directory, and exits with the resulting status.
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if boardPersistenceBinaryDir != "" {
