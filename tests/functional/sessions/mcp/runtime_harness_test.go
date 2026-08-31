@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -23,8 +23,13 @@ import (
 )
 
 type mcpSharedFixture struct {
-	process     *initializerapplication.Process
-	openRuntime factorysessions.ExecutionRuntimeOpeningFunc
+	close         func(context.Context) error
+	openRuntime   factorysessions.ExecutionRuntimeOpeningFunc
+	serverFactory func(any) (mcpServer, error)
+}
+
+type mcpServer interface {
+	ServeStdio(context.Context, io.Reader, io.Writer) error
 }
 
 type mcpRuntimeHost struct {
@@ -58,8 +63,8 @@ var mcpSharedFixtureState struct {
 
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
-	if fixture := mcpSharedFixtureState.fixture; fixture != nil && fixture.process != nil {
-		if err := fixture.process.Close(context.Background()); err != nil {
+	if fixture := mcpSharedFixtureState.fixture; fixture != nil && fixture.close != nil {
+		if err := fixture.close(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "close shared MCP process: %v\n", err)
 			if exitCode == 0 {
 				exitCode = 1
@@ -100,8 +105,18 @@ func newMCPSharedFixture() (*mcpSharedFixture, error) {
 	if !ok || opening == nil {
 		return nil, fmt.Errorf("shared MCP process execution runtime opening has type %T, want factorysessions.ExecutionRuntimeOpeningFunc", capability.ExecutionRuntimeOpening())
 	}
+	serverFactory := process.MCPServerFactory()
+	if serverFactory == nil {
+		return nil, fmt.Errorf("shared MCP process did not expose MCP server factory")
+	}
 	closeOnError = false
-	return &mcpSharedFixture{process: process, openRuntime: opening}, nil
+	return &mcpSharedFixture{
+		close:       process.Close,
+		openRuntime: opening,
+		serverFactory: func(execution any) (mcpServer, error) {
+			return serverFactory(execution)
+		},
+	}, nil
 }
 
 func startRootRuntimeMCPServer(
@@ -126,12 +141,7 @@ func startRootRuntimeMCPServer(
 	})
 	events := make(chan factorydefinitions.FactoryEvent, 256)
 	opened, observedExecution := openObservedMCPExecution(t, fixture, projectRoot, homeDir, events)
-	serverFactory := fixture.process.MCPServerFactory()
-	if serverFactory == nil {
-		_ = opened.Close()
-		t.Fatalf("build MCP server: process MCP server factory is required")
-	}
-	server, err := serverFactory(observedExecution)
+	server, err := fixture.serverFactory(observedExecution)
 	if err != nil {
 		_ = opened.Close()
 		t.Fatalf("build MCP server: %v", err)
