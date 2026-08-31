@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -175,27 +176,23 @@ Process the input task.
 
 func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails(t *testing.T) {
 	support.SkipLongFunctional(t, "slow partial-batch throttled-provider failure sweep")
-	enterSharedGuardsScenario(t)
-	dir := sharedGuardsScenario(t, "worktree_passthrough")
-	configureThrottledProviderFailureFixture(t, dir)
-	_, listed := runSharedGuardsFactoryToCompletionWithRouteAndWork(t, dir, sharedGuardsRouteConfig{
-		provider: sharedGuardsProviderSequence(
-			sharedGuardsCommandResult(support.ProviderErrorCommandResult(t, "claude_rate_limit_error")),
-			sharedGuardsCommandResult(support.ProviderErrorCommandResult(t, "claude_rate_limit_error")),
-			sharedGuardsCommandResult(support.ProviderErrorCommandResult(t, "claude_rate_limit_error")),
-		),
+	dir, runner := throttledProviderFailureFixture(t)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
 	}, 5*time.Second)
 	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
-	if got := len(sharedGuardsProviderRequests(t, dir)); got != 4 {
-		t.Fatalf("expected provider runner called 4 times, got %d", got)
+	if runner.CallCount() != 4 {
+		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())
 	}
 
 	assertListedFailedWorkID(t, listed, "work-provider-throttle-requeue")
 }
 
-func configureThrottledProviderFailureFixture(t *testing.T, dir string) {
+func throttledProviderFailureFixture(t *testing.T) (string, *testutil.ProviderCommandRunner) {
 	t.Helper()
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "provider-throttle-requeue",
@@ -213,6 +210,11 @@ stopToken: COMPLETE
 ---
 Process the input task.
 `)
+	runner := testutil.NewProviderCommandRunner(
+		support.RepeatedProviderErrorCommandResults(t, "claude_rate_limit_error", 3)...,
+	)
+
+	return dir, runner
 }
 
 func assertListedFailedWorkID(t *testing.T, response factoryapi.ListWorkResponse, wantWorkID string) {

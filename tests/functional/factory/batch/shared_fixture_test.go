@@ -244,7 +244,11 @@ func copyBTRCBatchDirectory(t *testing.T, sourceDir, destinationDir string) {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(destination, contents, entry.Type().Perm())
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destination, contents, info.Mode().Perm())
 	}); err != nil {
 		t.Fatalf("copy batch fixture: %v", err)
 	}

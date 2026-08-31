@@ -252,6 +252,9 @@ func (command *sharedGuardsHostedCommand) stop() error {
 		return nil
 	}
 	command.cancel()
+	// This bounded wait protects fixture teardown if the hosted process misses
+	// cancellation; the done channel is the actual process-exit observation,
+	// and this wait is never used to synchronize workflow behavior.
 	select {
 	case <-command.done:
 		command.mu.Lock()
@@ -288,6 +291,8 @@ func (fixture *sharedGuardsProcessFixture) close() error {
 		}
 	}
 	if fixture.apiStarts.Load() != 0 {
+		// Process.Close is the deterministic stop request; this bounded wait
+		// observes the hosted API's actual exit during teardown only.
 		select {
 		case <-fixture.apiStops:
 		case <-time.After(sharedGuardsFixtureShutdownTimeout):
@@ -707,21 +712,36 @@ func (session *sharedGuardsSession) finishCleanup(t testing.TB) {
 func deleteSharedGuardsSessionAfterTerminate(t testing.TB, baseURL, sessionID string) {
 	t.Helper()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	deadline := time.NewTimer(sharedGuardsFixtureShutdownTimeout)
+	// A terminal Work/Event observation proves the scenario is complete, but a
+	// continuously hosted Factory Session remains live after that observation.
+	// The public terminate operation has no completion event for this test to
+	// consume, so DELETE is the state-driven probe for the asynchronous stop.
+	// Keep this teardown-only polling bounded and give every request the same
+	// deadline; it must not become workflow synchronization or hang on a blocked
+	// HTTP call.
+	stopAt := time.Now().Add(sharedGuardsFixtureShutdownTimeout)
+	deadline := time.NewTimer(time.Until(stopAt))
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		request, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+		requestContext, cancel := context.WithDeadline(context.Background(), stopAt)
+		request, err := http.NewRequestWithContext(requestContext, http.MethodDelete, endpoint, nil)
 		if err != nil {
+			cancel()
 			t.Fatalf("build DELETE Factory Session request: %v", err)
 		}
 		response, err := http.DefaultClient.Do(request)
 		if err != nil {
+			cancel()
+			if errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("timed out deleting Factory Session %q", sessionID)
+			}
 			t.Fatalf("DELETE Factory Session %q: %v", sessionID, err)
 		}
 		body, readErr := io.ReadAll(response.Body)
 		response.Body.Close()
+		cancel()
 		if readErr != nil {
 			t.Fatalf("read DELETE Factory Session %q response: %v", sessionID, readErr)
 		}
