@@ -293,8 +293,11 @@ func (fixture *packagedFixCLIProcessFixture) close() error {
 // packagedFixGitSeed is an immutable real Git repository used only as a
 // metadata seed. Each scenario receives a distinct copied .git directory and
 // retains real Git worktree creation and failure behavior.
+type packagedFixGitCommand func(workspace string, args ...string) ([]byte, error)
+
 type packagedFixGitSeed struct {
 	rootDir string
+	command packagedFixGitCommand
 
 	mu              sync.Mutex
 	metadataCopies  int
@@ -333,15 +336,22 @@ func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
 		{"config", "user.name", "fix functional"},
 		{"commit", "--allow-empty", "-m", "initial Fix functional repository"},
 	}
-	for _, args := range commands {
+	runGit := func(workspace string, args ...string) ([]byte, error) {
 		command := exec.Command("git", args...)
-		command.Dir = rootDir
-		if output, err := command.CombinedOutput(); err != nil {
+		command.Dir = workspace
+		return command.CombinedOutput()
+	}
+	for _, args := range commands {
+		if output, err := runGit(rootDir, args...); err != nil {
 			cleanupRoot()
 			return nil, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, output)
 		}
 	}
-	return &packagedFixGitSeed{rootDir: rootDir}, nil
+	return &packagedFixGitSeed{rootDir: rootDir, command: runGit}, nil
+}
+
+func (seed *packagedFixGitSeed) run(workspace string, args ...string) ([]byte, error) {
+	return seed.command(workspace, args...)
 }
 
 func (seed *packagedFixGitSeed) copyMetadata(t *testing.T, workspace string) {
