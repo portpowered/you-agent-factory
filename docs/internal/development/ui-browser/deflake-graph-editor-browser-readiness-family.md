@@ -337,3 +337,27 @@ BLOCKED
   `bun run typecheck`, `bun run check`, and `make ui-integration-test` before
   rebase/push/PR/CI handoff. Terminal CI, conflicts, and merge remain review-
   owned.
+
+## Operator-authorized implementation disposition
+
+On 2026-08-31 the operator amended the story-003 finish decision to
+`PASS-WITH-DOCUMENTED-EXCLUSION` and authorized the PR handoff without changing
+the accessibility contract or taking ownership of the unrelated full-tier
+timeout. The validation evidence and delta plans above remain unchanged:
+
+- `LOOPBACK-NESTED-DIALOG-FOCUS` is a real Chromium accessibility finding:
+  nested Add → Workstation Escape closed the portaled dialog but left focus on
+  `BODY` after the originating menu item unmounted. This lane does not change
+  component focus behavior or weaken the assertion; a separate owning decision
+  is required before any accessibility correction.
+- `LOOPBACK-FULL-BROWSER-BASELINE` is outside this diff. The only full-tier
+  failure was the untouched dashboard session-recovery restart-cursor test;
+  this lane does not re-run or deflake that behavior.
+- `LOOPBACK-UI-QUALITY-BASELINE` was run once and reported 174 diagnostics in
+  untouched baseline files. This lane does not repair the shared baseline.
+
+These exclusions are explicitly documented implementation-stage dispositions,
+not claims that the excluded criteria passed. No runtime or test assertion was
+changed to obtain the disposition. The final handoff therefore proceeds with
+the exact validated head; terminal CI, later conflicts, and merge remain
+review-owned.
