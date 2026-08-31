@@ -24,13 +24,50 @@ Do not ask the customer questions in this autonomous workstation. Record a
 genuinely unresolved decision under open questions and state the safe assumption
 used to continue.
 
-When the customer ask names a `sourcePlan` (a governing plan file), read it in
-full before planning. The source plan is the source of truth: the PRD you
-write is a derived execution artifact for one slice of it. Reference the
-source plan path in the PRD, trace every task to the plan section or
-requirement it implements, and stay within the sections the ask assigns. If
-the ask or repository reality contradicts the source plan, record the conflict
-as an open question with your safe assumption — never silently resolve it by
+## Source-plan input contract
+
+When the customer ask names a `sourcePlan` (a governing plan file), resolve and
+read it in full before planning. This is a required input contract:
+
+1. Treat `^[A-Za-z]:[\\/]` as a Windows drive-letter absolute path. This
+   recognizes both `C:\...` and `C:/...` forms, including paths whose first
+   character is not `/`.
+2. Preserve an absolute input verbatim as the decoded string used for the read
+   and later written to the PRD. Do not join it to another directory,
+   relativize it, normalize its slash direction, or replace it with a
+   repository-relative value.
+3. For a relative input, run `git rev-parse --show-toplevel` once. Join the
+   original relative value to that absolute repository root, resolve it for the
+   existing workspace authorization check, and persist the resulting absolute
+   path in the PRD. Do not scan worktrees or search alternate locations.
+4. Require the resolved path to be an existing regular file and complete the
+   full read before planning. An empty or missing value, missing file,
+   directory, unreadable file, unauthorized path, or escaped relative path is
+   a blocking input error. Do not fall back, emit a partial packet, set the
+   value to `null`, or emit the completion marker.
+5. Store the exact decoded value in `context.sourcePlan` in the JSON PRD. In
+   the Markdown PRD, include one `Source plan: \`<exact decoded value>\`` line.
+   Both artifacts must use the same resolved value.
+6. For every named source plan, add this diagnostic object to the JSON PRD's
+   `context` before returning:
+
+   ```json
+   "sourcePlanResolution": {
+     "rawSourcePlan": "<exact decoded input>",
+     "persistedSourcePlan": "<exact decoded context.sourcePlan value>"
+   }
+   ```
+
+   `rawSourcePlan` records the inbound value and `persistedSourcePlan` records
+   the exact value written to `context.sourcePlan`. Record paths only. Never
+   copy source-plan contents into the diagnostic object.
+
+The source plan is the source of truth: the PRD you write is a derived
+execution artifact for one slice of it. Reference the resolved source plan
+path in the PRD, trace every task to the plan section or requirement it
+implements, and stay within the sections the ask assigns. If the ask or
+repository reality contradicts the source plan, record the conflict as an
+open question with your safe assumption — never silently resolve it by
 weakening or reinterpreting the plan.
 
 Write `tasks/todo/{{ (index .Inputs 0).Name }}.md` using the plan template.
@@ -104,8 +141,11 @@ Mechanically convert the Markdown plan into
 - `branchName` exactly equal to `{{ (index .Inputs 0).Name }}`
 - `description`
 - `context.customerAsk`
-- `context.sourcePlan` — the governing plan path from the ask, or `null` only
-  when the ask names none
+- `context.sourcePlan` — the exact absolute input string when the ask supplies
+  an absolute path, the repository-root-resolved absolute path when it supplies
+  a relative path, or `null` only when the ask names none. For a named source
+  plan, also include the required `context.sourcePlanResolution` diagnostic
+  object from the source-plan input contract.
 - `context.problem`
 - `context.solution`
 - `acceptanceCriteria` containing the project criteria, relevant named quality
