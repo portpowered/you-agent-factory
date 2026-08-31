@@ -258,19 +258,38 @@ func TestService_SubscribeFactoryEventsForSession_StampsResolvedCanonicalID(t *t
 	}
 }
 
+type legacyEventSubscriptionFailureCase struct {
+	name          string
+	host          *lifecycleGatewayHost
+	ctx           context.Context
+	wantStream    bool
+	wantError     error
+	wantFactoryID string
+}
+
 func TestService_SubscribeFactoryEventsForSession_DoesNotFabricateIdentityOnFailure(t *testing.T) {
 	t.Parallel()
-
 	resolvedSession := &livesession.LiveSession{ID: "session-legacy-failure-001"}
-	subscriptionErr := errors.New("subscription failed")
-	for _, test := range []struct {
-		name          string
-		host          *lifecycleGatewayHost
-		context       context.Context
-		wantStream    bool
-		wantError     error
-		wantFactoryID string
-	}{
+	cases := legacyEventSubscriptionFailureCases(resolvedSession, errors.New("subscription failed"))
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertLegacyEventSubscriptionFailure(t, test)
+		})
+	}
+}
+
+func legacyEventSubscriptionFailureCases(
+	resolvedSession *livesession.LiveSession,
+	subscriptionErr error,
+) []legacyEventSubscriptionFailureCase {
+	canceledContext := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}()
+	return []legacyEventSubscriptionFailureCase{
 		{
 			name: "unknown session",
 			host: &lifecycleGatewayHost{
@@ -289,11 +308,7 @@ func TestService_SubscribeFactoryEventsForSession_DoesNotFabricateIdentityOnFail
 					},
 				},
 			},
-			context: func() context.Context {
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel()
-				return ctx
-			}(),
+			ctx:       canceledContext,
 			wantError: context.Canceled,
 		},
 		{
@@ -327,39 +342,38 @@ func TestService_SubscribeFactoryEventsForSession_DoesNotFabricateIdentityOnFail
 			},
 			wantStream: true,
 		},
-	} {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			gateway := newServiceTestGateway(test.host)
-			ctx := test.context
-			if ctx == nil {
-				ctx = context.Background()
-			}
-			sessionID := "session-legacy-unknown-001"
-			if test.host.openTestHost.requireSession != nil {
-				sessionID = test.host.openTestHost.requireSession.ID
-			}
-			stream, err := gateway.SubscribeFactoryEventsForSession(ctx, sessionID, nil)
-			if test.wantError != nil {
-				if !errors.Is(err, test.wantError) {
-					t.Fatalf("error = %v, want %v", err, test.wantError)
-				}
-				if stream != nil {
-					t.Fatalf("stream = %#v on failed subscription, want nil", stream)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
-			}
-			if (stream != nil) != test.wantStream {
-				t.Fatalf("stream present = %t, want %t", stream != nil, test.wantStream)
-			}
-			if stream != nil && stream.FactorySessionID != test.wantFactoryID {
-				t.Fatalf("FactorySessionID = %q, want %q", stream.FactorySessionID, test.wantFactoryID)
-			}
-		})
+	}
+}
+
+func assertLegacyEventSubscriptionFailure(t *testing.T, test legacyEventSubscriptionFailureCase) {
+	t.Helper()
+	gateway := newServiceTestGateway(test.host)
+	ctx := test.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	sessionID := "session-legacy-unknown-001"
+	if test.host.openTestHost.requireSession != nil {
+		sessionID = test.host.openTestHost.requireSession.ID
+	}
+	stream, err := gateway.SubscribeFactoryEventsForSession(ctx, sessionID, nil)
+	if test.wantError != nil {
+		if !errors.Is(err, test.wantError) {
+			t.Fatalf("error = %v, want %v", err, test.wantError)
+		}
+		if stream != nil {
+			t.Fatalf("stream = %#v on failed subscription, want nil", stream)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+	}
+	if (stream != nil) != test.wantStream {
+		t.Fatalf("stream present = %t, want %t", stream != nil, test.wantStream)
+	}
+	if stream != nil && stream.FactorySessionID != test.wantFactoryID {
+		t.Fatalf("FactorySessionID = %q, want %q", stream.FactorySessionID, test.wantFactoryID)
 	}
 }
 
