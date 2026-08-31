@@ -94,13 +94,16 @@ func appendInvokeContinueScenario(
 	return nil
 }
 
-func newInvokeContinueScenarioSetup(t *testing.T, rootDir, homeDir string) (invokeContinueScenarioSetup, error) {
+func newInvokeContinueScenarioSetup(t *testing.T, rootDir, homeDir string, cleanupOnly bool) (invokeContinueScenarioSetup, error) {
 	t.Helper()
+	if cleanupOnly {
+		return newInvokeContinueManagerScenarioSetup(t, rootDir, homeDir, false)
+	}
 	direct, err := newInvokeContinueDirectScenarioSetup(t, rootDir)
 	if err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	manager, err := newInvokeContinueManagerScenarioSetup(t, rootDir, homeDir)
+	manager, err := newInvokeContinueManagerScenarioSetup(t, rootDir, homeDir, true)
 	if err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
@@ -184,7 +187,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	return setup, nil
 }
 
-func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string) (invokeContinueScenarioSetup, error) {
+func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string, includeInterrupt bool) (invokeContinueScenarioSetup, error) {
 	t.Helper()
 	managerRepositoryA, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", "manager-isolation-a"), s8RepositoryAMarker)
 	if err != nil {
@@ -216,6 +219,9 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryA.path, runner: managerRunner},
 		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryB.path, runner: managerRunner},
 	)
+	if !includeInterrupt {
+		return setup, nil
+	}
 	interruptRepositoryA, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", "manager-interrupt-a"), s8RepositoryAMarker)
 	if err != nil {
 		return invokeContinueScenarioSetup{}, fmt.Errorf("create manager interrupt repository A: %w", err)

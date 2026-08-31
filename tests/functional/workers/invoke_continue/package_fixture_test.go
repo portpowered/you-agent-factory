@@ -118,6 +118,16 @@ func TestMain(m *testing.M) {
 
 func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixture {
 	t.Helper()
+	return ensureInvokeContinuePackageFixtureMode(t, false)
+}
+
+func ensureInvokeContinueForcedCleanupFixture(t *testing.T) *invokeContinuePackageFixture {
+	t.Helper()
+	return ensureInvokeContinuePackageFixtureMode(t, true)
+}
+
+func ensureInvokeContinuePackageFixtureMode(t *testing.T, cleanupOnly bool) *invokeContinuePackageFixture {
+	t.Helper()
 
 	invokeContinuePackageFixtureState.Lock()
 	fixture := invokeContinuePackageFixtureState.fixture
@@ -126,7 +136,7 @@ func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixt
 		return fixture
 	}
 
-	created, err := newInvokeContinuePackageFixture(t)
+	created, err := newInvokeContinuePackageFixture(t, cleanupOnly)
 	if err != nil {
 		t.Fatalf("set up invoke/continue package fixture: %v", err)
 	}
@@ -142,7 +152,7 @@ func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixt
 	return fixture
 }
 
-func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixture, error) {
+func newInvokeContinuePackageFixture(t *testing.T, cleanupOnly bool) (*invokeContinuePackageFixture, error) {
 	t.Helper()
 	rootDir, err := os.MkdirTemp("", "c11-invoke-continue-")
 	if err != nil {
@@ -158,24 +168,27 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	if err != nil {
 		return nil, err
 	}
-	setup, err := newInvokeContinueScenarioSetup(t, rootDir, homeDir)
+	setup, err := newInvokeContinueScenarioSetup(t, rootDir, homeDir, cleanupOnly)
 	if err != nil {
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	unsupportedProvider, err := providerswire.NewService(
-		providerswire.WithCommandRunner(route),
-		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
-			Provider:     providers.IDCodex,
-			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
-	}
-	for index := range setup.scenarios {
-		if setup.scenarios[index].name == "unsupported-provider" {
-			setup.scenarios[index].unsupportedProvider = unsupportedProvider
+	var unsupportedProvider providers.Service
+	if !cleanupOnly {
+		unsupportedProvider, err = providerswire.NewService(
+			providerswire.WithCommandRunner(route),
+			providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
+				Provider:     providers.IDCodex,
+				Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+			}),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
+		}
+		for index := range setup.scenarios {
+			if setup.scenarios[index].name == "unsupported-provider" {
+				setup.scenarios[index].unsupportedProvider = unsupportedProvider
+			}
 		}
 	}
 	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, unsupportedProvider)

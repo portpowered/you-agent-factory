@@ -84,7 +84,10 @@ func runInvokeContinueForcedAssertionChild(t *testing.T) {
 		t.Fatal("forced invoke/continue cleanup report path is required")
 	}
 
-	fixture := ensureInvokeContinuePackageFixture(t)
+	// This child proves teardown after one completed remote Worker Session. It
+	// does not need the direct-invoke matrix or interrupt fixture that the
+	// parent package tests already exercise.
+	fixture := ensureInvokeContinueForcedCleanupFixture(t)
 	scenario := fixture.scenario(t, "manager-isolation")
 	t.Cleanup(fixture.managerRunner.releaseAll)
 	ids := newS8ScenarioIdentities("manager", scenario.runNumber)
