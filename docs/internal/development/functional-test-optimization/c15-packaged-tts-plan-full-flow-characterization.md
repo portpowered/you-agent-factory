@@ -1,9 +1,9 @@
 # C15 packaged TTS, plan-execute, and Full Flow characterization ledger
 
-Status: Story 001 is **BLOCKED**, not passed. The unchanged head passes the
-three owned packages, but the PRD's TTS-U02 missing-input case has no
-executable source row. The current `required_input` row is a valid-input
-success case and is not counted as evidence for the failure contract.
+Status: Story 001's pre-change record is complete and retains its historical
+U02 blocker; Story 002 supplied the explicitly scoped smallest delta and now
+passes the complete TTS gate. The unchanged-head table below must not be read
+as claiming that U02 existed before the implementation change.
 
 ## Authority and boundary
 
@@ -125,22 +125,87 @@ holds. The lane's customer acceptance reference is aggregate coverage at
 least `61.6%`; no aggregate coverage measurement was claimed by this
 characterization-only story and PR coverage remains a later gate.
 
-## Story result, blocker, and next step
+## Story 001 historical result
 
-Story 001 cannot be marked `passes:true` because the required TTS-U02
-behavioral witness is absent. This is a plan/source contradiction, not a
-test failure caused by this work. Safe work completed: the unchanged
-three-package run, static OS check, selector/assertion mapping, topology
-census, quarantine inspection, and coverage-reference inventory are recorded
-above. The smallest delta is for Story 002, which owns
-`tests/functional/factory/packaged/tts/**`, to add the missing empty/omitted
-text scenario with the PRD's exact pre-execution failure and zero-call
-assertions, then rerun the TTS characterization before claiming GATE-TTS.
+At the characterized head (`42eeee4472`), Story 001 recorded a source/PRD
+contradiction rather than silently counting the positive `required_input` row
+as U02. The unchanged three-package run, OS check, selector/assertion mapping,
+topology census, quarantine inspection, and coverage-reference inventory above
+remain the pre-change evidence. Story 002 is the recorded smallest delta that
+resolved the missing executable witness.
 
-Unproven later edges: TTS-U02, post-optimization TTS/plan/Full Flow behavior,
-the Full Flow direct-Git removal, PR timing, aggregate/package-floor
-measurement on the delivered PR head, clean-room loopback, terminal CI, and
-merge.
+## Story 002 — reusable TTS matrix result
+
+The implementation stays within `tests/functional/factory/packaged/tts/**`.
+The command-edge cases now use one package-scoped immutable `root.BuildProcess`
+and one packaged Factory seed. The no-server H01 row routes its unique working
+directory to the shared command runner; the HTTP matrix starts one persistent
+server command and gives every scenario a fresh home, Factory copy, explicit
+Factory Session, route, outcome/artifact root, and cleanup. Repeating the
+shared parent keeps that server alive until `TestMain`, because the application
+process intentionally cannot restart its API server after shutdown. Managed
+Models setup remains one process/installation/cache seed with fresh live/replay
+copies and backend/recording state; the local-runtime, root-Models, and
+delivered-binary rows remain isolated because their host, edge, or artifact
+properties are incompatible.
+
+The missing U02 witness is now
+`^TestPackagedTTSSharedScenarios/missing_required_input$` at
+`tts/shared_fixture_test.go:526`, with two exact admission cases:
+
+| Variant | HTTP result | Execution proof |
+| --- | --- | --- |
+| omitted required text | `400`, `INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT` | zero command calls, no dispatch/model execution events, no artifact |
+| explicit empty text | `400`, `INVOCATION_INPUT_EMPTY` | zero command calls, no dispatch/model execution events, no artifact |
+
+The positive `required_input` row remains enabled and unchanged as a success
+witness. Together with H01, H02, R01, R02, R03/U01, H03, H04, U03, U04, and
+C01, the package executes all twelve PRD TTS cases. No TTS source row was
+skipped or quarantined.
+
+### Story 002 verification evidence
+
+All procedures used local-real production composition with controlled provider,
+model, protocol, and artifact edges. Each command exited 0:
+
+```text
+go test -count=1 -timeout 10m ./tests/functional/factory/packaged/tts -run '^TestPackagedTTSNoServerPromptUsesCanonicalInputContract$'
+go test -count=1 -timeout 10m ./tests/functional/factory/packaged/tts -run '^TestPackagedTTSSharedScenarios$'
+go test -count=3 -timeout 10m ./tests/functional/factory/packaged/tts -run '^TestPackagedTTSSharedScenarios$'
+go test -race -count=1 -timeout 10m ./tests/functional/factory/packaged/tts -run '^TestPackagedTTSSharedScenarios$'
+go test -json -count=1 -timeout 10m ./tests/functional/factory/packaged/tts
+```
+
+The focused observations were H01 `4.576s`, shared matrix `13.408s`, shared
+repeat three-count `29.847s`, and race-enabled shared matrix `14.422s`. The
+final full-package run passed all twelve cases at `112.411s` package-reported
+on a contaminated Windows host. An earlier bounded run before that host
+slowdown reported `60.265s`, versus the unchanged diagnostic `72.033s`; the
+customer-supplied TTS baseline is `35.224s`. The optimization is therefore
+structurally material (one shared command-edge root/build/install) but does not
+claim a portable local wall-time threshold.
+
+The final full-package per-row measurements provide the required residual
+irreducibility record:
+
+| Residual row/group | Measured cost | Exact property that prevents further compatible collapse |
+| --- | ---: | --- |
+| TTS-H01 no-server prompt | `2.58s` | Exact CLI prompt, consumed Work identity, command arguments, metadata, and bytes; shares only the command-compatible edge. |
+| TTS-H02 local runtime | `4.93s` | Real local model-host readiness/lifecycle and exact joined Models payload; its host edge cannot share the managed Models or command fixture. |
+| TTS-R01 delivered protocol/replay | `34.86s` | Delivered `you` build plus binary live/replay protocol boundary and one-call replay proof; the artifact boundary is intentionally isolated. |
+| TTS-R02 root Models recording | `13.69s` | Root `Process.Execute` recording, Work/Event lineage, digest, metadata, and artifact property on the Models edge. |
+| TTS-R03 success/failure replay pair | `41.56s` | Two live/replay projections with independent backend/cache/recording state and distinct success/failure semantics; sharing those mutable resources would erase the isolation proof. |
+| TTS-H03/H04/U02/U03/U04/C01 shared matrix | `13.93s` | One API/server lifecycle is shared, but each row retains fresh sessions/copies/routes/outcomes and the concurrent pair retains distinct overlap and cleanup assertions. |
+
+The shared fixture asserts immutable setup counts of one process, one packaged
+install, and one API start per package process; route count and active
+session/artifact counts are zero after the matrix. The managed Models fixture
+logs `roots=1 installs=1 factoryCopies=2 cacheSeeds=1 cacheCopies=2
+liveRecordings=2 modelHostStarts=2 modelHostStops=2`. TestMain stops the
+persistent command, closes the process, verifies the listener is unreachable,
+and removes the package-owned root. Remote model availability, audio quality,
+aggregate coverage/package floors, three-package coexistence, PR timing, clean
+room loopback, terminal CI, and merge remain later gates.
 
 ## Source hash register
 
@@ -151,13 +216,13 @@ SHA-256 hashes tie this read-only ledger to the characterized source:
 | `tests/functional/factory/packaged/tts/characterization_assertions_test.go` | `3caf03d8171212709655e21deb5ee596fca6b8ba8b0dc00b4c06fbd6b15fa0b4` |
 | `tests/functional/factory/packaged/tts/factory_scaffolds_test.go` | `60472c68dc4be28fa568c15d7f630344839021964607bd9fff19902ab3301b02` |
 | `tests/functional/factory/packaged/tts/fixtures_test.go` | `3ae578684a6926256b52b30563cdc2e721dda8443cf20d2ec16f5f458a41bf4b` |
-| `tests/functional/factory/packaged/tts/invocation_test.go` | `e78c5084588882fd885c804d1d07ba12d084cb9d915862d4437cf46a6ed22672` |
+| `tests/functional/factory/packaged/tts/invocation_test.go` | `874b3ca268d469b7fc7750c25911ef4c2649060d3c976f7011d474da174216e` |
 | `tests/functional/factory/packaged/tts/local_runtime_invocation_test.go` | `ded1cd867f329bad5cf7e48815e6e55be01cbd958b716d2c5e7a7a697329b96a` |
 | `tests/functional/factory/packaged/tts/models_replay_helpers_test.go` | `5503dc8c3ece2cdaadae04bdc7faaaa0f2c2be1443173610bd8386a338e1f9f5` |
 | `tests/functional/factory/packaged/tts/models_replay_test.go` | `5fd863efde65b6fd7a61b29cd2d4c8dd6e214662bfd0d6c81fa4ac1792c14b9c` |
 | `tests/functional/factory/packaged/tts/shared_command_runner_test.go` | `253016f4dff475794cf81924c39bfbe9acb5f7f64120192c9d4c46584c1c0f47` |
 | `tests/functional/factory/packaged/tts/shared_concurrency_test.go` | `d9beae4d8d67c462a83fd2299f46e0a4c16186c4a454364a06121f82344a7155` |
-| `tests/functional/factory/packaged/tts/shared_fixture_test.go` | `1e6f39f73840981f09e36b2e2ef4853d09c48bee41436c5461a21262f11c5729` |
+| `tests/functional/factory/packaged/tts/shared_fixture_test.go` | `280e65ac62b81601faf157603e21141784d69085c284747ec2bf8ef145b7907b` |
 | `tests/functional/factory/packaged/plan_execute/invocation_test.go` | `a1a8d4d7b9afe0814f99d3e41941c661e66284d909ec0bafe2fc6282cf8d65cd` |
 | `tests/functional/factory/packaged/plan_execute/shared_fixture_test.go` | `f35f5e52ab0b26e3e7a05a377582cbb31e73fa14a9e858c7fe93dbd7ad1ed921` |
 | `tests/functional/factory/packaged/full_flow/invocation_test.go` | `34cd8ae792108eae46a98114460080f8000a3a61d4513bc370081cb62d62143f` |

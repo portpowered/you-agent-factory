@@ -3,13 +3,10 @@ package tts
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -24,29 +21,13 @@ const packagedTTSFakeAudioFixture = "RIFF....WAVEpayload"
 // binding that the TTS operation consumes.
 func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	text := "The release is ready, with the complete bound sentence preserved."
+	fixture := newPackagedTTSSharedFixture(t)
 	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedTTSFactoryName,
-	)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
+	factoryDir := support.CopyFactoryAsNamed(t, fixture.baseFactoryDir, homeDir, "@test/tts")
 	overwritePackagedTTSFactoryWithCommandRunnerTopology(t, factoryDir)
 	factoryName := "@test/tts"
-	audioPath := filepath.Join(t.TempDir(), "packaged-tts-command-runner.wav")
-	if err := os.WriteFile(audioPath, []byte(packagedTTSFakeAudioFixture), 0o644); err != nil {
-		t.Fatalf("write command-runner audio fixture: %v", err)
-	}
-	audioContent, err := json.Marshal([]work.WorkContentPart{{
-		Type:        work.WorkContentPartTypeAudio,
-		File:        audioPath,
-		ContentType: "audio/wav",
-		Slot:        "audio",
-	}})
-	if err != nil {
-		t.Fatalf("marshal command-runner audio content: %v", err)
-	}
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: audioContent})
+	selector := "tts-no-server-prompt"
+	outcome := newPackagedTTSSuccessOutcome(t, []byte(packagedTTSFakeAudioFixture))
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--named", factoryName,
@@ -56,10 +37,16 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := fixture.commandRunner.register(selector, inputs.Input.WorkingDirectory, outcome); err != nil {
+		t.Fatalf("register packaged TTS no-server route: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.commandRunner.unregister(selector); err != nil {
+			t.Errorf("unregister packaged TTS no-server route: %v", err)
+		}
+	})
 
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(packaged TTS) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
@@ -68,10 +55,10 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	}
 	assertPackagedTTSInvocationResponseIdentity(t, response)
 
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command call count = %d, want one named packaged invocation", runner.CallCount())
+	if outcome.callCount() != 1 {
+		t.Fatalf("provider command call count = %d, want one named packaged invocation", outcome.callCount())
 	}
-	request := runner.LastRequest()
+	request := outcome.lastRequest()
 	assertPackagedTTSCommandRequest(t, request, inputs.Input.WorkingDirectory, text, "", "")
 	if request.Command != "codex" {
 		t.Fatalf("provider command = %q, want codex", request.Command)
@@ -96,6 +83,7 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	if !primaryResultContainsTTSArtifactMetadata(t, response.PrimaryResult) {
 		t.Fatalf("primary result = %#v, want command-runner audio metadata", response.PrimaryResult)
 	}
+	audioPath := outcome.lastAudioPath()
 	if got, err := os.ReadFile(audioPath); err != nil || string(got) != packagedTTSFakeAudioFixture {
 		t.Fatalf("command-runner audio artifact = %q, %v; want fixture", got, err)
 	}

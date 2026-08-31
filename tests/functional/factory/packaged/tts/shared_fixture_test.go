@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -61,6 +63,14 @@ func (server *packagedTTSSharedHTTPServer) startCount() int {
 	return server.starts
 }
 
+func (server *packagedTTSSharedHTTPServer) prepareStart() {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	server.starts = 0
+	server.done = make(chan struct{})
+	server.doneOnce = sync.Once{}
+}
+
 func (server *packagedTTSSharedHTTPServer) waitClosed(ctx context.Context) error {
 	select {
 	case <-server.done:
@@ -72,43 +82,139 @@ func (server *packagedTTSSharedHTTPServer) waitClosed(ctx context.Context) error
 
 type packagedTTSSharedFixture struct {
 	rootDir         string
+	baseHomeDir     string
 	baseFactoryDir  string
 	baseURL         string
 	process         support.ApplicationProcess
-	command         *support.ProcessCommand
+	command         *packagedTTSSharedProcessCommand
 	api             *packagedTTSSharedHTTPServer
 	commandRunner   *packagedTTSSharedCommandRunner
 	mu              sync.Mutex
 	childSessionIDs []string
 	artifactRoots   []string
 	processBuilds   int
+	factoryInstalls int
+	serverStarted   bool
 	closeOnce       sync.Once
-	finalizeOnce    sync.Once
+}
+
+type packagedTTSSharedProcessCommand struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	mu  sync.Mutex
+	err error
+}
+
+func startPackagedTTSSharedProcessCommand(
+	process support.Process,
+	input root.Input,
+) *packagedTTSSharedProcessCommand {
+	parent := input.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	input.Context = ctx
+	command := &packagedTTSSharedProcessCommand{
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
+	go func() {
+		err := process.Execute(input)
+		command.mu.Lock()
+		command.err = err
+		command.mu.Unlock()
+		close(command.done)
+	}()
+	return command
+}
+
+func (command *packagedTTSSharedProcessCommand) stop() error {
+	if command == nil {
+		return nil
+	}
+	command.cancel()
+	select {
+	case <-command.done:
+		command.mu.Lock()
+		err := command.err
+		command.mu.Unlock()
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return err
+		}
+		return nil
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("timed out waiting for shared TTS Process.Execute shutdown")
+	}
+}
+
+var (
+	packagedTTSFixtureOnce sync.Once
+	packagedTTSFixture     *packagedTTSSharedFixture
+	packagedTTSFixtureErr  error
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if packagedTTSFixture != nil {
+		if err := packagedTTSFixture.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared packaged TTS fixture: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
+		}
+	}
+	os.Exit(code)
 }
 
 func newPackagedTTSSharedFixture(t *testing.T) *packagedTTSSharedFixture {
 	t.Helper()
+	packagedTTSFixtureOnce.Do(func() {
+		packagedTTSFixture, packagedTTSFixtureErr = startPackagedTTSSharedFixture(t)
+	})
+	if packagedTTSFixtureErr != nil {
+		t.Fatalf("start shared packaged TTS fixture: %v", packagedTTSFixtureErr)
+	}
+	if packagedTTSFixture == nil {
+		t.Fatal("shared packaged TTS fixture is unavailable")
+	}
+	return packagedTTSFixture
+}
 
-	rootDir := t.TempDir()
+func startPackagedTTSSharedFixture(t *testing.T) (*packagedTTSSharedFixture, error) {
+	t.Helper()
+	rootDir, err := os.MkdirTemp("", "you-functional-packaged-tts-")
+	if err != nil {
+		return nil, fmt.Errorf("create shared TTS fixture root: %w", err)
+	}
+	cleanupRoot := func() { _ = os.RemoveAll(rootDir) }
 	homeDir := filepath.Join(rootDir, "home")
 	workingDir := filepath.Join(rootDir, "work")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
-		t.Fatalf("create shared TTS home: %v", err)
+		cleanupRoot()
+		return nil, fmt.Errorf("create shared TTS home: %w", err)
 	}
 	if err := os.MkdirAll(workingDir, 0o755); err != nil {
-		t.Fatalf("create shared TTS working directory: %v", err)
+		cleanupRoot()
+		return nil, fmt.Errorf("create shared TTS working directory: %w", err)
 	}
 
 	api := newPackagedTTSSharedHTTPServer()
 	commandRunner := newPackagedTTSSharedCommandRunner()
 	processBuilds := 0
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      api.start,
 		ProviderCommandRunner: commandRunner,
 	})
+	if err != nil {
+		cleanupRoot()
+		return nil, fmt.Errorf("build shared TTS process: %w", err)
+	}
 	processBuilds++
 	fixture := &packagedTTSSharedFixture{
 		rootDir:       rootDir,
+		baseHomeDir:   homeDir,
 		process:       process,
 		api:           api,
 		commandRunner: commandRunner,
@@ -123,8 +229,16 @@ func newPackagedTTSSharedFixture(t *testing.T) *packagedTTSSharedFixture {
 		workingDir,
 		factorydefinitions.PackagedTTSFactoryName,
 	)
-	support.CleanupProcess(t, process)
+	fixture.factoryInstalls++
+	return fixture, nil
+}
 
+func (fixture *packagedTTSSharedFixture) startServer(t *testing.T) {
+	t.Helper()
+	if fixture.serverStarted {
+		return
+	}
+	fixture.api.prepareStart()
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--dir", fixture.baseFactoryDir,
@@ -133,16 +247,15 @@ func newPackagedTTSSharedFixture(t *testing.T) *packagedTTSSharedFixture {
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = env
+	inputs.Input.Env = append(os.Environ(), "HOME="+fixture.baseHomeDir, "USERPROFILE="+fixture.baseHomeDir)
 	inputs.Input.WorkingDirectory = fixture.baseFactoryDir
-	fixture.command = support.StartProcessCommand(t, process, inputs.Input)
-	t.Cleanup(func() { fixture.finalize(t) })
+	fixture.command = startPackagedTTSSharedProcessCommand(fixture.process, inputs.Input)
+	fixture.serverStarted = true
 
-	fixture.baseURL = api.server.WaitForURL(t)
+	fixture.baseURL = fixture.api.server.WaitForURL(t)
 	support.WaitForStatus(t, fixture.baseURL, packagedTTSSharedFixtureTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
-	return fixture
 }
 
 type packagedTTSSharedScenario struct {
@@ -336,34 +449,37 @@ func removePackagedTTSOwnedPath(t testing.TB, path string) {
 	}
 }
 
-func (fixture *packagedTTSSharedFixture) close(t testing.TB) {
-	t.Helper()
+func (fixture *packagedTTSSharedFixture) close() error {
+	var closeErr error
 	fixture.closeOnce.Do(func() {
 		if fixture.command != nil {
-			fixture.command.Stop(t)
+			if err := fixture.command.stop(); err != nil {
+				closeErr = errors.Join(closeErr, fmt.Errorf("stop shared TTS server command: %w", err))
+			}
 		}
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := fixture.process.Close(closeCtx); err != nil {
-			t.Errorf("close shared TTS application process: %v", err)
+			closeErr = errors.Join(closeErr, fmt.Errorf("close shared TTS application process: %w", err))
 		}
-		if err := fixture.api.waitClosed(closeCtx); err != nil {
-			t.Errorf("wait for shared TTS API server shutdown: %v", err)
+		if fixture.serverStarted {
+			if err := fixture.api.waitClosed(closeCtx); err != nil {
+				closeErr = errors.Join(closeErr, fmt.Errorf("wait for shared TTS API server shutdown: %w", err))
+			}
+			if err := packagedTTSListenerClosed(fixture.baseURL); err != nil {
+				closeErr = errors.Join(closeErr, err)
+			}
+		}
+		if err := os.RemoveAll(fixture.rootDir); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("remove shared TTS fixture root: %w", err))
+		} else if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
+			closeErr = errors.Join(closeErr, fmt.Errorf("shared TTS fixture root %q remains; stat error: %v", fixture.rootDir, err))
 		}
 	})
+	return closeErr
 }
 
-func (fixture *packagedTTSSharedFixture) finalize(t testing.TB) {
-	t.Helper()
-	fixture.finalizeOnce.Do(func() {
-		fixture.close(t)
-		assertPackagedTTSListenerClosed(t, fixture.baseURL)
-		removePackagedTTSOwnedPath(t, fixture.rootDir)
-	})
-}
-
-func assertPackagedTTSListenerClosed(t testing.TB, baseURL string) {
-	t.Helper()
+func packagedTTSListenerClosed(baseURL string) error {
 	// fixture.api.waitClosed observes the injected starter returning before this
 	// single connection check. A process-stop signal is deterministic here; a
 	// polling/sleep loop would only hide a lifecycle race.
@@ -372,11 +488,11 @@ func assertPackagedTTSListenerClosed(t testing.TB, baseURL string) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
 	response, err := client.Get(endpoint)
 	if err != nil {
-		return
+		return nil
 	}
 	defer response.Body.Close()
 	body, readErr := io.ReadAll(response.Body)
-	t.Errorf("shared TTS listener at %s remains reachable after process cleanup: status=%d body=%q readError=%v", endpoint, response.StatusCode, strings.TrimSpace(string(body)), readErr)
+	return fmt.Errorf("shared TTS listener at %s remains reachable after process cleanup: status=%d body=%q readError=%v", endpoint, response.StatusCode, strings.TrimSpace(string(body)), readErr)
 }
 
 func removeString(values []string, target string) []string {
@@ -390,6 +506,7 @@ func removeString(values []string, target string) []string {
 
 func TestPackagedTTSSharedScenarios(t *testing.T) {
 	fixture := newPackagedTTSSharedFixture(t)
+	fixture.startServer(t)
 	if err := fixture.assertDuplicateRouteRejected(t); err != nil {
 		t.Fatal(err)
 	}
@@ -398,6 +515,9 @@ func TestPackagedTTSSharedScenarios(t *testing.T) {
 	var evidence []packagedTTSSharedEvidence
 	t.Run("required_input", func(t *testing.T) {
 		evidence = append(evidence, runPackagedTTSSharedRequiredInput(t, fixture))
+	})
+	t.Run("missing_required_input", func(t *testing.T) {
+		runPackagedTTSSharedMissingRequiredInput(t, fixture)
 	})
 	t.Run("success_work_events", func(t *testing.T) {
 		evidence = append(evidence, runPackagedTTSSharedWorkEvents(t, fixture))
@@ -419,7 +539,6 @@ func TestPackagedTTSSharedScenarios(t *testing.T) {
 		return
 	}
 	fixture.assertSharedEligibleEvidence(t, evidence)
-	fixture.finalize(t)
 }
 
 func runPackagedTTSSharedRequiredInput(
@@ -455,6 +574,110 @@ func runPackagedTTSSharedRequiredInput(
 	)
 	assertPackagedTTSResponseCorrelatesWithEventsForSession(t, response, events, scenario.sessionID)
 	return sharedTTSSharedEvidence(t, "required_input", scenario, requestID, outputWork, events, artifactPath)
+}
+
+// runPackagedTTSSharedMissingRequiredInput proves invocation admission rejects
+// absent and empty required text before the TTS workstation can reach the
+// ProviderCommandRunner edge. Each variant owns a fresh session and route so
+// the zero-call assertion also proves that a rejected request does not poison
+// the next reusable scenario.
+func runPackagedTTSSharedMissingRequiredInput(
+	t *testing.T,
+	fixture *packagedTTSSharedFixture,
+) {
+	t.Helper()
+	cases := []struct {
+		name     string
+		request  factoryapi.InvocationRequest
+		wantCode factoryapi.ErrorResponseCode
+	}{
+		{
+			name: "omitted",
+			request: factoryapi.InvocationRequest{
+				Args: func() *map[string]any {
+					args := map[string]any{}
+					return &args
+				}(),
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT"),
+		},
+		{
+			name: "empty",
+			request: factoryapi.InvocationRequest{
+				SourceKind: invocationTextSourceKindPtr(),
+				Content:    invocationTextContentPtr(""),
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_INPUT_EMPTY"),
+		},
+	}
+	for _, testcase := range cases {
+		testcase := testcase
+		t.Run(testcase.name, func(t *testing.T) {
+			requestID := "tts-shared-missing-required-input-" + testcase.name
+			scenario := fixture.openPackagedScenario(t, requestID, false)
+			testcase.request.RequestId = &requestID
+			status, body := postPackagedTTSInvocationRequestAt(
+				t,
+				fixture.baseURL,
+				scenario.sessionID,
+				testcase.request,
+			)
+			if status != http.StatusBadRequest {
+				t.Fatalf("missing required text HTTP status = %d body=%q, want 400", status, body)
+			}
+			var errorResponse factoryapi.ErrorResponse
+			if err := json.Unmarshal(body, &errorResponse); err != nil {
+				t.Fatalf("decode missing required text ErrorResponse: %v body=%q", err, body)
+			}
+			if errorResponse.Code != testcase.wantCode {
+				t.Fatalf("missing required text errorResponse = %#v, want code %q", errorResponse, testcase.wantCode)
+			}
+			if scenario.outcome.callCount() != 0 {
+				t.Fatalf("missing required text command calls = %d, want zero before TTS execution", scenario.outcome.callCount())
+			}
+			assertPackagedTTSNoArtifact(t, scenario.outcome)
+			assertPackagedTTSNoExecutionEvents(t, fixture.baseURL, scenario.sessionID)
+		})
+	}
+}
+
+func postPackagedTTSInvocationRequestAt(
+	t testing.TB,
+	baseURL, sessionID string,
+	request factoryapi.InvocationRequest,
+) (int, []byte) {
+	t.Helper()
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
+	}
+	return response.StatusCode, responseBody
+}
+
+func assertPackagedTTSNoExecutionEvents(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest,
+			factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+			factoryapi.FactoryEventTypeModelRequest,
+			factoryapi.FactoryEventTypeModelResponse,
+			factoryapi.FactoryEventTypeDispatchResponse:
+			t.Fatalf("missing required text emitted execution event = %#v, want no dispatch/model events", event)
+		}
+	}
 }
 
 func runPackagedTTSSharedWorkEvents(
@@ -777,8 +1000,8 @@ func (fixture *packagedTTSSharedFixture) assertSharedEligibleEvidence(
 	evidence []packagedTTSSharedEvidence,
 ) {
 	t.Helper()
-	if fixture.processBuilds != 1 || fixture.api.startCount() != 1 {
-		t.Fatalf("shared TTS process starts = root:%d http:%d, want one each", fixture.processBuilds, fixture.api.startCount())
+	if fixture.processBuilds != 1 || fixture.factoryInstalls != 1 || fixture.api.startCount() != 1 {
+		t.Fatalf("shared TTS immutable setup counts = roots:%d installs:%d http:%d, want one each", fixture.processBuilds, fixture.factoryInstalls, fixture.api.startCount())
 	}
 	if len(evidence) != 5 {
 		t.Fatalf("shared TTS eligible evidence count = %d, want five success/failure child scenarios", len(evidence))
