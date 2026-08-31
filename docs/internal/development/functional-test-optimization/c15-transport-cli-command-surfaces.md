@@ -438,10 +438,10 @@ host performance verdict.
 
 ### Current-head CI timing and coverage record
 
-The Backend Functional Coverage job for hosted CI run `33352199369` measured
-the exact final delivery head
-`74e5244a948428ddd681e49fdd9c52ae1f902118`. Its package rows reported
-`commands 29.073s` and `parameters 27.420s`, both above the three-second target.
+The Backend Functional Coverage job for hosted CI run `33354015121` measured
+the exact final implementation head
+`45b3aab5a9eeaee039dd3feed9ac8130d5d0de84`. Its latest bounded retry reported
+`commands 24.040s` and `parameters 22.596s`, both above the three-second target.
 The bounded profile-led pass above is the required floor disposition for both
 values under this exact source-identity reuse key: implementation/test source
 commit `9c89ba607f57ff68f08bd6e314220fbc228cc7a2`, the changed-source
@@ -458,21 +458,26 @@ results; the complete retained-test, setup/teardown, and compile/runner floor
 is recorded for the one authorized diagnostic pass. The CI transcript and URL
 remain in the PR conversation, not in this ledger.
 
-The same hosted job measured Backend Functional Coverage at `61.6%` and
-reported no owned skip or quarantine. Those property-specific CI details are
-retained in the PR conversation as required by the delivery criterion.
+The initial hosted attempt failed in the untouched
+`tests/functional/providers/acp` package while waiting for the shared ACP peer
+to exit. The one permitted `--failed` retry completed the owned packages but
+failed in the untouched `tests/functional/transport/acp/stdio` package at
+`TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession`; its report
+therefore says coverage was not evaluated and package floors were not checked.
+No current-head `61.6%` coverage pass is claimed. The run, job, diagnostic
+artifact, and both failure records are retained in the PR conversation only.
 
 ### VAL-001 clean-room validation report
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
-It was run read-only from a detached clean worktree at exact delivery head
-`74e5244a948428ddd681e49fdd9c52ae1f902118`. No implementation repair was made
-during the loopback.
+It was run read-only from a detached clean worktree at exact implementation
+head `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84`. No implementation repair was
+made during the loopback.
 
 #### Environment and artifact
 
-- Commit/build identifier: `74e5244a948428ddd681e49fdd9c52ae1f902118` (the
-  exact final delivery head under review).
+- Commit/build identifier: `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84` (the
+  exact implementation head under review).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -485,9 +490,9 @@ during the loopback.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Final detached worktree at exact head `74e5244a948428ddd681e49fdd9c52ae1f902118` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `81.147s`, wall `142.434s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `51.813s`, wall `59.536s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.684s`, wall `11.091s`. | Hosted Linux/CI topology. |
+| Complete command matrix | PASS | Final detached worktree at exact head `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `24.909s`, wall `42.484s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `49.787s`, wall `56.434s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `2.697s`, wall `7.582s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
@@ -508,15 +513,17 @@ the two earlier cold-start diagnostics are retained as environmental history,
 not behavior failures. No assertion, skip, quarantine, or timeout was
 weakened to obtain the pass.
 
-The current-head Backend Functional Coverage, package timing, and owned
-skip/quarantine result are recorded above, with CI-run output and URLs kept in
-the PR conversation only. Terminal CI ownership, conflict resolution, and
-merge remain with review.
+The current-head package timing is recorded above, but the latest required
+coverage run did not reach measurement because of the untouched ACP failure.
+No owned skip or quarantine was introduced. CI-run output and URLs remain in
+the PR conversation only. The implementation handoff is blocked on a green
+current-head coverage run; terminal CI, conflict resolution, and merge remain
+with review after that blocker is resolved.
 
 ### Implementation-stage handoff status
 
-Local story evidence is complete for this review correction. The
-implementation-stage delivery criterion becomes satisfied after this evidence
-refresh is pushed, the named PR remains open, required CI starts on that head,
-and the blocking feedback is addressed. Review owns terminal CI, conflict
-resolution, and merge.
+Local story evidence and exact-head VAL-001 are complete for this review
+correction. The implementation-stage delivery criterion remains blocked until
+the required current-head coverage run reaches measurement at or above 61.6%
+and the review feedback is cleared. Review owns terminal CI, conflict
+resolution, and merge once that required gate is green.
