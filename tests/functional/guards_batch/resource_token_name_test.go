@@ -5,29 +5,26 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestResourceGated_DispatchTokenName(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
+	enterSharedGuardsScenario(t)
+	dir := sharedGuardsScenario(t, "resource_contention")
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "item-alpha", WorkTypeID: "task", Payload: []byte("alpha")})
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "item-beta", WorkTypeID: "task", Payload: []byte("beta")})
 
-	provider := testutil.NewMockProvider(
-		support.AcceptedProviderResponse(),
-		support.AcceptedProviderResponse(),
-	)
-	session, listedWork, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
+	session, listedWork, events := runSharedGuardsFactoryToCompletionWithRouteAndObservations(t, dir, sharedGuardsRouteConfig{
+		provider: sharedGuardsProviderSequence(
+			sharedGuardsProviderOutput(support.AcceptedProviderResponse().Content),
+			sharedGuardsProviderOutput(support.AcceptedProviderResponse().Content),
+		),
+	}, 10*time.Second)
 	assertGuardSessionPlaces(t, listedWork, map[string]int{"task:complete": 2, "task:init": 0})
 	assertGuardResourceAvailability(t, session, "slot", 1)
+	assertSharedGuardsProviderCalls(t, dir, 2)
 
 	dispatchedWorkIDs := map[string]bool{}
 	for _, dispatch := range support.ObserveDispatchEvents(t, events) {

@@ -5,30 +5,25 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 func TestConfigDriven_ResourceContention(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
+	enterSharedGuardsScenario(t)
+	dir := sharedGuardsScenario(t, "resource_contention")
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Work item A"}`))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Work item B"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-	)
-
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := runSharedGuardsFactoryToCompletionWithRouteAndWork(t, dir, sharedGuardsRouteConfig{
+		provider: sharedGuardsProviderSequence(
+			sharedGuardsProviderOutput("Done. COMPLETE"),
+			sharedGuardsProviderOutput("Done. COMPLETE"),
+		),
+	}, 10*time.Second)
 	assertGuardSessionPlaces(t, listed, map[string]int{"task:complete": 2})
-
-	if provider.CallCount() != 2 {
-		t.Errorf("expected provider called 2 times total, got %d", provider.CallCount())
-	}
+	assertSharedGuardsProviderCalls(t, dir, 2)
 }
 
 func assertGuardSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
