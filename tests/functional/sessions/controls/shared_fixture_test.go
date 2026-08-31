@@ -18,7 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -111,11 +111,6 @@ func newSharedControlsFixture() (*sharedControlsFixture, error) {
 		cleanup()
 		return nil, err
 	}
-	mockWorkersPath, err := writeSharedControlsMockWorkers(rootDir)
-	if err != nil {
-		cleanup()
-		return nil, err
-	}
 
 	api := support.NewProcessAPIServer()
 	router := newSharedControlsCommandRouter()
@@ -143,7 +138,7 @@ func newSharedControlsFixture() (*sharedControlsFixture, error) {
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", bootstrapDir,
 		"--continuously", "--with-server", "--server", "http://127.0.0.1:1",
-		"--quiet", "--no-record", "--with-mock-workers", mockWorkersPath,
+		"--quiet", "--no-record",
 	})
 	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 	inputs.Input.WorkingDirectory = bootstrapDir
@@ -181,7 +176,7 @@ func writeSharedControlsBootstrapFactory(dir string) error {
 	}
 	if err := os.WriteFile(
 		filepath.Join(dir, "workers", "mock-worker", "AGENTS.md"),
-		[]byte("---\ntype: MODEL_WORKER\n---\nProcess the input task.\n"),
+		[]byte(support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")),
 		0o644,
 	); err != nil {
 		return fmt.Errorf("write bootstrap worker instructions: %w", err)
@@ -207,36 +202,6 @@ func writeSharedControlsBootstrapFactory(dir string) error {
 	return nil
 }
 
-func writeSharedControlsMockWorkers(rootDir string) (string, error) {
-	accept := workers.MockWorkerConfig{
-		WorkerName:      "mock-worker",
-		WorkstationName: pauseResumeProcessTaskWorkstation,
-		RunType:         workers.MockWorkerRunTypeAccept,
-	}
-	interrupted := workers.MockWorkerConfig{
-		WorkerName:      "mock-worker",
-		WorkstationName: interruptedInspectReviewWorkstation,
-		RunType:         workers.MockWorkerRunTypeScript,
-		ScriptConfig: &workers.MockWorkerScriptConfig{
-			Command: "/bin/echo",
-			Args:    []string{"interrupted"},
-		},
-	}
-	config := &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers:             []workers.MockWorkerConfig{accept, interrupted},
-	}
-	payload, err := json.Marshal(config)
-	if err != nil {
-		return "", fmt.Errorf("marshal shared mock workers config: %w", err)
-	}
-	path := filepath.Join(rootDir, "mock-workers.json")
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		return "", fmt.Errorf("write shared mock workers config: %w", err)
-	}
-	return path, nil
-}
-
 func startSharedControlsHostedCommand(process support.ApplicationProcess, input root.Input) *sharedControlsHostedCommand {
 	parent := input.Context
 	if parent == nil {
@@ -256,12 +221,24 @@ func startSharedControlsHostedCommand(process support.ApplicationProcess, input 
 }
 
 func waitForSharedControlsRuntime(baseURL string, timeout time.Duration) error {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	statusURL := strings.TrimSuffix(baseURL, "/") + "/status"
+	var lastErr error
+
+	// /status is the only public signal that the continuously hosted process has
+	// attached its runtime. Listener readiness does not establish that state,
+	// and startup emits no Factory Event or injected command-edge signal. Keep
+	// this retry as a bounded diagnostic readiness guard; the request context
+	// shares the deadline so a stalled handler cannot outlive the helper.
 	for {
-		response, err := http.Get(strings.TrimSuffix(baseURL, "/") + "/status")
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
+		if err != nil {
+			return fmt.Errorf("build shared controls runtime request: %w", err)
+		}
+		response, err := http.DefaultClient.Do(request)
 		if err == nil {
 			var status factoryapi.StatusResponse
 			decodeErr := json.NewDecoder(response.Body).Decode(&status)
@@ -269,11 +246,16 @@ func waitForSharedControlsRuntime(baseURL string, timeout time.Duration) error {
 			if decodeErr == nil && strings.TrimSpace(status.RuntimeStatus) != "" {
 				return nil
 			}
+			if decodeErr != nil {
+				lastErr = decodeErr
+			}
+		} else {
+			lastErr = err
 		}
 		select {
-		case <-deadline.C:
-			if err != nil {
-				return fmt.Errorf("wait for shared controls runtime: %w", err)
+		case <-ctx.Done():
+			if lastErr != nil {
+				return fmt.Errorf("wait for shared controls runtime: %w", lastErr)
 			}
 			return fmt.Errorf("wait for shared controls runtime: status remained unavailable")
 		case <-ticker.C:
@@ -311,6 +293,11 @@ func (command *sharedControlsHostedCommand) stop() error {
 		return nil
 	}
 	command.cancel()
+	// Host shutdown is a process/lifecycle boundary, not a completion path. The
+	// bounded timer only prevents a broken Process.Execute from hanging package
+	// teardown; successful shutdown still requires the command's done signal.
+	shutdownDeadline := time.NewTimer(sharedControlsFixtureTimeout)
+	defer shutdownDeadline.Stop()
 	select {
 	case <-command.done:
 		command.mu.Lock()
@@ -320,7 +307,7 @@ func (command *sharedControlsHostedCommand) stop() error {
 			return err
 		}
 		return nil
-	case <-time.After(sharedControlsFixtureTimeout):
+	case <-shutdownDeadline.C:
 		return fmt.Errorf("timed out waiting for shared controls host shutdown")
 	}
 }
