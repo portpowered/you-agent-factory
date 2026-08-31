@@ -440,7 +440,8 @@ host performance verdict.
 
 The Backend Functional Coverage job for hosted CI run `33347664926` measured
 the exact pushed implementation head
-`d5e9ae43b89bd61857086afae22411c12afc8e5b`. Its package rows reported
+`d5e9ae43b89bd61857086afae22411c12afc8e5b` before the required base
+synchronization. Its package rows reported
 `commands 24.731s` and `parameters 22.033s`, both above the three-second target.
 The bounded profile-led pass above is the required floor disposition for both
 values: it enumerates every top-level test in each package, records package
@@ -459,13 +460,13 @@ retained in the PR conversation as required by the delivery criterion.
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
 It was run read-only from a detached clean worktree at exact delivery head
-`d5e9ae43b89bd61857086afae22411c12afc8e5b`. No implementation repair was made
+`5ca89fab3f159914979d57ed964722cffec86402`. No implementation repair was made
 during the loopback.
 
 #### Environment and artifact
 
-- Commit/build identifier: `d5e9ae43b89bd61857086afae22411c12afc8e5b` (the
-  exact pushed implementation head reviewed by CI).
+- Commit/build identifier: `5ca89fab3f159914979d57ed964722cffec86402` (the
+  exact synchronized implementation head before this evidence refresh).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -478,9 +479,9 @@ during the loopback.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Final detached worktree at exact head `d5e9ae43b89bd61857086afae22411c12afc8e5b` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `83.252s`, wall `135.290s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `50.598s`, wall `57.086s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.585s`, wall `9.200s`. | Hosted Linux/CI topology. |
+| Complete command matrix | PASS | Final detached worktree at exact head `5ca89fab3f159914979d57ed964722cffec86402` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `53.575s`, wall `95.396s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `31.601s`, wall `35.732s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.748s`, wall `7.835s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
