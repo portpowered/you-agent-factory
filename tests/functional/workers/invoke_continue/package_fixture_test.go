@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -589,36 +587,5 @@ func writeInvokeContinueExecution(
 		factorySessionID: sessionID,
 		workingDirectory: workingDirectory,
 		userMessage:      "initial direct prompt",
-	})
-}
-
-func copyInvokeContinueDirectory(sourceDir, targetDir string) error {
-	return filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(sourceDir, path)
-		if err != nil {
-			return err
-		}
-		if relative == "." {
-			return os.MkdirAll(targetDir, 0o755)
-		}
-		targetPath := filepath.Join(targetDir, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(targetPath, 0o755)
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(targetPath, data, info.Mode().Perm())
 	})
 }

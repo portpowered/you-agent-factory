@@ -2,6 +2,7 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,16 +43,38 @@ type invokeContinueStartedProcess struct {
 func prepareInvokeContinuePackageRoot(t *testing.T, rootDir string) (string, string, error) {
 	t.Helper()
 	hostDir := filepath.Join(rootDir, "host-factory")
+	config := map[string]any{
+		"name": "invoke-continue-host",
+		"workTypes": []any{map[string]any{
+			"name": "task",
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "done", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{map[string]any{"name": "worker"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker",
+			"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs":   []any{map[string]any{"workType": "task", "state": "done"}},
+			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+		}},
+	}
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("create host Factory %q: %w", hostDir, err)
+	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal host Factory: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(hostDir, factoryinterfaces.FactoryConfigFile), raw, 0o644); err != nil {
+		return "", "", fmt.Errorf("write host Factory: %w", err)
+	}
+	support.WriteAgentConfig(t, hostDir, "worker", "---\nmodel: test-model\nstopToken: COMPLETE\ntype: MODEL_WORKER\n---\nTest worker.\n")
+	support.WriteWorkstationConfig(t, hostDir, "process", "---\ntype: MODEL_WORKSTATION\n---\nTest workstation.\n")
 	homeDir := filepath.Join(rootDir, "home")
-	if err := copyInvokeContinueDirectory(support.LegacyFixtureDir(t, "executor_success"), hostDir); err != nil {
-		return "", "", fmt.Errorf("copy host Factory: %w", err)
-	}
-	// The copied fixture is used only to provide a valid Factory definition for
-	// the explicit session. Removing its seed inputs prevents the hosted
-	// default session from consuming the CASE-01 provider results at startup.
-	if err := os.RemoveAll(filepath.Join(hostDir, factoryinterfaces.InputsDir)); err != nil {
-		return "", "", fmt.Errorf("clear host Factory seed inputs: %w", err)
-	}
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("create package fixture home %q: %w", homeDir, err)
 	}
