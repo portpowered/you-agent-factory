@@ -214,12 +214,7 @@ func materializeCodexGoldenScenario(
 ) codexGoldenScenario {
 	t.Helper()
 
-	dir := copyCodexFixtureDir(
-		t,
-		support.LegacyFixtureDir(t, "executor_success"),
-		rootDir,
-		"golden-"+definition.name,
-	)
+	dir := newCodexInferenceFactoryDirAt(t, rootDir, "golden-"+definition.name)
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		definition.model,
@@ -253,11 +248,7 @@ func materializeCodexGoldenScenario(
 
 func resetCodexGoldenScenario(t *testing.T, scenario codexGoldenScenario) {
 	t.Helper()
-	overwriteCodexFixtureDir(
-		t,
-		support.LegacyFixtureDir(t, "executor_success"),
-		scenario.factoryDir,
-	)
+	resetCodexInferenceFactoryDir(t, scenario.factoryDir)
 	support.WriteAgentConfig(t, scenario.factoryDir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		scenario.model,

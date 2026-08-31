@@ -48,7 +48,7 @@ func TestClaudeGoldenToolLifecycleAndSessionIdentity(t *testing.T) {
 func replayClaudeGoldenCase(t *testing.T, loaded support.ProviderSessionCase) support.ProviderSessionObservedGoldens {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	dir := newClaudeFactoryDir(t, "claude-golden-"+loaded.Process.Model)
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
 		support.BuildModelWorkerConfig(modelprovider.ProviderClaude, loaded.Process.Model),
 		"stopToken: COMPLETE",

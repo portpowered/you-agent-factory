@@ -7716,38 +7716,6 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-workers-inference-codex-worktree-workstation-test-cleanupCodexWorktreeScenario-01",
-      "packagePath": "tests/functional/workers/inference/codex",
-      "sourcePath": "tests/functional/workers/inference/codex/worktree_workstation_test.go",
-      "sourceLine": 502,
-      "enclosingIdentity": "cleanupCodexWorktreeScenario",
-      "launcherKind": "fixture-git-command",
-      "occurrence": 1,
-      "verdict": "ACCIDENTAL-OS",
-      "requiredProperty": null,
-      "assertionEvidence": "The call at tests/functional/workers/inference/codex/worktree_workstation_test.go:502 launches Git to prepare or inspect fixture repository state; the owning assertion observes repository/filesystem or Factory behavior, not an OS-process property.",
-      "conversionObligation": "Replace the direct Git subprocess at tests/functional/workers/inference/codex/worktree_workstation_test.go:502 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch.",
-      "testRowIds": [
-        "C07-F057-top-level-test-TestCodexWorktreeWorkstationDispatch-MaterializesCheckoutAndOmitsCLIWorktreeFlag"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-inference-codex-worktree-workstation-test-runGitForCodexWorktreeFunctionalTest-01",
-      "packagePath": "tests/functional/workers/inference/codex",
-      "sourcePath": "tests/functional/workers/inference/codex/worktree_workstation_test.go",
-      "sourceLine": 610,
-      "enclosingIdentity": "runGitForCodexWorktreeFunctionalTest",
-      "launcherKind": "fixture-git-command",
-      "occurrence": 1,
-      "verdict": "ACCIDENTAL-OS",
-      "requiredProperty": null,
-      "assertionEvidence": "The call at tests/functional/workers/inference/codex/worktree_workstation_test.go:610 launches Git to prepare or inspect fixture repository state; the owning assertion observes repository/filesystem or Factory behavior, not an OS-process property.",
-      "conversionObligation": "Replace the direct Git subprocess at tests/functional/workers/inference/codex/worktree_workstation_test.go:610 with the c15 repository/filesystem edge; preserve the fixture and public Factory assertion, then remove this OS launch.",
-      "testRowIds": [
-        "C07-F057-top-level-test-TestCodexWorktreeWorkstationDispatch-MaterializesCheckoutAndOmitsCLIWorktreeFlag"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-workers-inference-forced-cleanup-test-runForcedInferenceCleanupParent-01",
       "packagePath": "tests/functional/workers/inference",
       "sourcePath": "tests/functional/workers/inference/forced_cleanup_test.go",

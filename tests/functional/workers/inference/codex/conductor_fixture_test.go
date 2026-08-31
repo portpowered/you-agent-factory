@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -121,12 +122,7 @@ func newCodexScenariosAt(t *testing.T, rootDir string) []codexConductorScenario 
 
 	scenarios := make([]codexConductorScenario, 0, len(fixtures))
 	for _, fixture := range fixtures {
-		dir := copyCodexFixtureDir(
-			t,
-			support.LegacyFixtureDir(t, "executor_success"),
-			rootDir,
-			"conductor-"+fixture.name,
-		)
+		dir := newCodexInferenceFactoryDirAt(t, rootDir, "conductor-"+fixture.name)
 		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 			modelprovider.ProviderCodex,
 			codexConductorModel,
@@ -165,11 +161,7 @@ func newCodexScenariosAt(t *testing.T, rootDir string) []codexConductorScenario 
 
 func resetCodexConductorScenario(t *testing.T, scenario codexConductorScenario) {
 	t.Helper()
-	overwriteCodexFixtureDir(
-		t,
-		support.LegacyFixtureDir(t, "executor_success"),
-		scenario.factoryDir,
-	)
+	resetCodexInferenceFactoryDir(t, scenario.factoryDir)
 	support.WriteAgentConfig(t, scenario.factoryDir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		codexConductorModel,
@@ -187,17 +179,70 @@ func resetCodexConductorScenario(t *testing.T, scenario codexConductorScenario) 
 func newCodexHostDirAt(t *testing.T, rootDir string) string {
 	t.Helper()
 
-	hostDir := copyCodexFixtureDir(
-		t,
-		support.LegacyFixtureDir(t, "executor_success"),
-		rootDir,
-		"host",
-	)
+	hostDir := newCodexInferenceFactoryDirAt(t, rootDir, "host")
 	support.WriteAgentConfig(t, hostDir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		codexConductorModel,
 	))
 	return hostDir
+}
+
+func newCodexInferenceFactoryDirAt(t *testing.T, parentDir, label string) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp(parentDir, label+"-")
+	if err != nil {
+		t.Fatalf("create Codex inference Factory directory: %v", err)
+	}
+	writeCodexInferenceFactoryFiles(t, dir)
+	return dir
+}
+
+func resetCodexInferenceFactoryDir(t *testing.T, dir string) {
+	t.Helper()
+
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove Codex inference Factory directory %q for reset: %v", dir, err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("recreate Codex inference Factory directory %q: %v", dir, err)
+	}
+	writeCodexInferenceFactoryFiles(t, dir)
+}
+
+func writeCodexInferenceFactoryFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	config := `{
+  "name": "codex_inference",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "done", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "worker" }
+  ],
+  "workstations": [
+    {
+      "name": "process",
+      "worker": "worker",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "done" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }]
+    }
+  ]
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write Codex inference factory.json: %v", err)
+	}
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nTest workstation.\n")
 }
 
 func configureCodexProcessInputs(

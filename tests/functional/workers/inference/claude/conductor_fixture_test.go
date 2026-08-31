@@ -254,10 +254,36 @@ func repeatedClaudeCommandResult(result platformprocess.CommandResult, count int
 	return results
 }
 
+func newClaudeFactoryDir(t *testing.T, name string) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": name,
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "done"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	})
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nTest workstation.\n")
+	return dir
+}
+
 func newClaudeHostDir(t *testing.T) string {
 	t.Helper()
 
-	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	hostDir := newClaudeFactoryDir(t, "claude-host")
 	support.WriteAgentConfig(t, hostDir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderClaude,
 		claudeConductorModel,
@@ -287,7 +313,7 @@ func newClaudeScenario(
 ) (claudeScenario, claudeCommandRoute) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	dir := newClaudeFactoryDir(t, "claude-"+fixture.name)
 	workerConfig := support.BuildModelWorkerConfig(modelprovider.ProviderClaude, fixture.model)
 	if fixture.golden != nil {
 		workerConfig = strings.Replace(workerConfig, "stopToken: COMPLETE", "skipPermissions: true\nstopToken: COMPLETE", 1)

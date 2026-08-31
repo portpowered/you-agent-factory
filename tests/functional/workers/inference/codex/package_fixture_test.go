@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -345,72 +344,4 @@ func closeCodexPackageFixture() error {
 		errs = append(errs, fmt.Errorf("shared Codex package root %q remains after cleanup: %v", fixture.rootDir, err))
 	}
 	return errors.Join(errs...)
-}
-
-func copyCodexFixtureDir(t *testing.T, srcDir, parentDir, label string) string {
-	t.Helper()
-
-	dst, err := os.MkdirTemp(parentDir, label+"-")
-	if err != nil {
-		t.Fatalf("create Codex fixture directory: %v", err)
-	}
-	err = filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		if relative == "." {
-			return nil
-		}
-		target := filepath.Join(dst, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
-	if err != nil {
-		t.Fatalf("copy Codex fixture %q: %v", srcDir, err)
-	}
-	return dst
-}
-
-func overwriteCodexFixtureDir(t *testing.T, srcDir, dstDir string) {
-	t.Helper()
-	if err := os.RemoveAll(dstDir); err != nil {
-		t.Fatalf("remove Codex fixture directory %q for reset: %v", dstDir, err)
-	}
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
-		t.Fatalf("recreate Codex fixture directory %q: %v", dstDir, err)
-	}
-	err := filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		if relative == "." {
-			return nil
-		}
-		target := filepath.Join(dstDir, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
-	if err != nil {
-		t.Fatalf("reset Codex fixture %q: %v", dstDir, err)
-	}
 }

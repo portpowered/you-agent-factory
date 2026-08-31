@@ -1,11 +1,14 @@
 package codex
 
 import (
+	"bytes"
+	"compress/zlib"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -499,18 +502,7 @@ func cleanupCodexWorktreeScenario(t *testing.T, scenario codexWorktreeScenario) 
 	t.Helper()
 
 	if _, err := os.Stat(scenario.checkoutPath); err == nil {
-		cmd := exec.Command("git", "worktree", "remove", "--force", scenario.checkoutPath)
-		cmd.Dir = scenario.repoRoot
-		output, runErr := cmd.CombinedOutput()
-		if runErr != nil {
-			t.Errorf(
-				"remove Codex worktree %q from %q: %v\n%s",
-				scenario.checkoutPath,
-				scenario.repoRoot,
-				runErr,
-				strings.TrimSpace(string(output)),
-			)
-		}
+		removeCodexWorktreePath(t, scenario.checkoutPath)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("inspect Codex worktree %q during cleanup: %v", scenario.checkoutPath, err)
 	}
@@ -592,26 +584,66 @@ func initGitRepositoryForCodexWorktreeFunctionalTestAt(t *testing.T, rootDir str
 
 func initializeCodexGitRepository(t *testing.T, repoRoot string) {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available in PATH")
-	}
 	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
 		t.Fatalf("create Codex worktree repository root: %v", err)
 	}
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "init")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.email", "codex-worktree-functional@example.com")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.name", "codex worktree functional")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "commit", "--allow-empty", "-m", "init")
+
+	gitDir := filepath.Join(repoRoot, ".git")
+	for _, dir := range []string{
+		filepath.Join(gitDir, "objects", "info"),
+		filepath.Join(gitDir, "objects", "pack"),
+		filepath.Join(gitDir, "refs", "heads"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create Codex Git directory %q: %v", dir, err)
+		}
+	}
+	writeCodexGitFile(t, filepath.Join(gitDir, "HEAD"), "ref: refs/heads/main\n")
+	writeCodexGitFile(t, filepath.Join(gitDir, "config"), `[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+`)
+	commit := []byte("tree " + codexEmptyGitTreeObject + "\n" +
+		"author codex worktree functional <codex-worktree-functional@example.com> 1700000000 +0000\n" +
+		"committer codex worktree functional <codex-worktree-functional@example.com> 1700000000 +0000\n\n" +
+		"init\n")
+	commitObjectID := writeCodexGitObject(t, gitDir, "commit", commit)
+	writeCodexGitFile(t, filepath.Join(gitDir, "refs", "heads", "main"), commitObjectID+"\n")
 }
 
-func runGitForCodexWorktreeFunctionalTest(t *testing.T, dir string, args ...string) {
+const codexEmptyGitTreeObject = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+func writeCodexGitObject(t *testing.T, gitDir, objectType string, content []byte) string {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, output)
+	header := []byte(fmt.Sprintf("%s %d\x00", objectType, len(content)))
+	object := append(header, content...)
+	objectID := sha1.Sum(object)
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	if _, err := writer.Write(object); err != nil {
+		t.Fatalf("compress Codex Git %s object: %v", objectType, err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close Codex Git %s object: %v", objectType, err)
+	}
+	hexID := hex.EncodeToString(objectID[:])
+	objectPath := filepath.Join(gitDir, "objects", hexID[:2], hexID[2:])
+	if err := os.MkdirAll(filepath.Dir(objectPath), 0o755); err != nil {
+		t.Fatalf("create Codex Git object directory: %v", err)
+	}
+	if err := os.WriteFile(objectPath, compressed.Bytes(), 0o644); err != nil {
+		t.Fatalf("write Codex Git %s object: %v", objectType, err)
+	}
+	return hexID
+}
+
+func writeCodexGitFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write Codex Git file %q: %v", path, err)
 	}
 }
 
