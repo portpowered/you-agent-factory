@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,115 +17,328 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const sessionCLIProcessCloseTimeout = 5 * time.Second
+
+var (
+	sharedSessionCLICompositionOnce  sync.Once
+	sharedSessionCLICompositionValue *sessionCLIComposition
+	sharedSessionCLICompositionErr   error
+	sharedSessionCLIScenarioSlot     = make(chan struct{}, 1)
+	sharedSessionCLITopology         sessionCLITopologyLedger
+)
+
+// sessionCLIComposition owns the immutable root wiring and schema-level HTTP
+// responder shared by this package. Process.Execute still receives fresh
+// invocation-local input for every top-level case.
+type sessionCLIComposition struct {
+	process  support.ApplicationProcess
+	server   *httptest.Server
+	requests *sessionRequests
+
+	closeOnce sync.Once
+	closeErr  error
+}
+
+// sessionCLITopologyLedger records the package-owned resources without
+// reaching into production state. The request ledger is reset at each case
+// boundary, while the root and responder are closed once by TestMain.
+type sessionCLITopologyLedger struct {
+	sync.Mutex
+	rootBuilds       int
+	rootCloses       int
+	responderStarts  int
+	responderCloses  int
+	scenariosStarted int
+	scenariosEnded   int
+}
+
+// TestMain closes the package-scoped root and responder after all CLI cases
+// have released their invocation-local state.
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+	if sharedSessionCLICompositionValue != nil {
+		if err := sharedSessionCLICompositionValue.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared Session CLI composition: %v\n", err)
+			if exitCode == 0 {
+				exitCode = 1
+			}
+		}
+	}
+	if err := sharedSessionCLITopology.cleanupError(); err != nil {
+		fmt.Fprintf(os.Stderr, "Session CLI cleanup accounting: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+	fmt.Fprintf(os.Stderr, "GATE-CLI topology: %s\n", sharedSessionCLITopology.summary())
+	os.Exit(exitCode)
+}
+
+func sharedSessionCLIComposition(t testing.TB) *sessionCLIComposition {
+	t.Helper()
+	sharedSessionCLICompositionOnce.Do(func() {
+		sharedSessionCLICompositionValue, sharedSessionCLICompositionErr = newSessionCLIComposition()
+	})
+	if sharedSessionCLICompositionErr != nil {
+		t.Fatalf("start shared Session CLI composition: %v", sharedSessionCLICompositionErr)
+	}
+	if sharedSessionCLICompositionValue == nil {
+		t.Fatal("shared Session CLI composition is unavailable")
+	}
+	return sharedSessionCLICompositionValue
+}
+
+func newSessionCLIComposition() (*sessionCLIComposition, error) {
+	requests := &sessionRequests{}
+	server := httptest.NewServer(http.HandlerFunc(requests.handle))
+	sharedSessionCLITopology.recordResponderStarted()
+
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		server.Close()
+		sharedSessionCLITopology.recordResponderClosed()
+		return nil, fmt.Errorf("build root process: %w", err)
+	}
+	sharedSessionCLITopology.recordRootBuilt()
+	return &sessionCLIComposition{
+		process:  process,
+		server:   server,
+		requests: requests,
+	}, nil
+}
+
+func (composition *sessionCLIComposition) beginScenario(t testing.TB) *sessionCLIInvocation {
+	t.Helper()
+	sharedSessionCLIScenarioSlot <- struct{}{}
+	composition.requests.reset()
+	sharedSessionCLITopology.recordScenarioStarted()
+	t.Cleanup(func() {
+		composition.requests.reset()
+		sharedSessionCLITopology.recordScenarioEnded()
+		<-sharedSessionCLIScenarioSlot
+	})
+	return &sessionCLIInvocation{
+		composition:      composition,
+		home:             t.TempDir(),
+		workingDirectory: t.TempDir(),
+	}
+}
+
+func (composition *sessionCLIComposition) close() error {
+	if composition == nil {
+		return nil
+	}
+	composition.closeOnce.Do(func() {
+		var closeErrors []error
+		if composition.process != nil {
+			closeContext, cancel := context.WithTimeout(context.Background(), sessionCLIProcessCloseTimeout)
+			closeErrors = append(closeErrors, composition.process.Close(closeContext))
+			cancel()
+			sharedSessionCLITopology.recordRootClosed()
+		}
+		if composition.server != nil {
+			composition.server.Close()
+			sharedSessionCLITopology.recordResponderClosed()
+		}
+		if got := composition.requests.count(); got != 0 {
+			closeErrors = append(closeErrors, fmt.Errorf(
+				"request ledger retained %d records after scenario cleanup", got,
+			))
+		}
+		composition.closeErr = errors.Join(closeErrors...)
+	})
+	return composition.closeErr
+}
+
+func (ledger *sessionCLITopologyLedger) recordRootBuilt() {
+	ledger.Lock()
+	ledger.rootBuilds++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) recordRootClosed() {
+	ledger.Lock()
+	ledger.rootCloses++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) recordResponderStarted() {
+	ledger.Lock()
+	ledger.responderStarts++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) recordResponderClosed() {
+	ledger.Lock()
+	ledger.responderCloses++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) recordScenarioStarted() {
+	ledger.Lock()
+	ledger.scenariosStarted++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) recordScenarioEnded() {
+	ledger.Lock()
+	ledger.scenariosEnded++
+	ledger.Unlock()
+}
+
+func (ledger *sessionCLITopologyLedger) cleanupError() error {
+	ledger.Lock()
+	defer ledger.Unlock()
+	var cleanupErrors []error
+	if ledger.rootBuilds != ledger.rootCloses {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"root builds=%d closes=%d", ledger.rootBuilds, ledger.rootCloses,
+		))
+	}
+	if ledger.responderStarts != ledger.responderCloses {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"responder starts=%d closes=%d", ledger.responderStarts, ledger.responderCloses,
+		))
+	}
+	if ledger.scenariosStarted != ledger.scenariosEnded {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"scenarios started=%d ended=%d", ledger.scenariosStarted, ledger.scenariosEnded,
+		))
+	}
+	if ledger.scenariosStarted > 0 && ledger.rootBuilds != 1 {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"root builds=%d, want exactly one shared build", ledger.rootBuilds,
+		))
+	}
+	if ledger.scenariosStarted > 0 && ledger.responderStarts != 1 {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"responder starts=%d, want exactly one shared responder", ledger.responderStarts,
+		))
+	}
+	return errors.Join(cleanupErrors...)
+}
+
+func (ledger *sessionCLITopologyLedger) summary() string {
+	ledger.Lock()
+	defer ledger.Unlock()
+	return fmt.Sprintf(
+		"root_builds=%d root_closes=%d responder_starts=%d responder_closes=%d scenarios=%d/%d",
+		ledger.rootBuilds,
+		ledger.rootCloses,
+		ledger.responderStarts,
+		ledger.responderCloses,
+		ledger.scenariosStarted,
+		ledger.scenariosEnded,
+	)
+}
+
+type sessionCLIInvocation struct {
+	composition      *sessionCLIComposition
+	home             string
+	workingDirectory string
+}
+
+type sessionCLIResult struct {
+	stdout bytes.Buffer
+	stderr bytes.Buffer
+	err    error
+}
+
+func (invocation *sessionCLIInvocation) execute(args []string) sessionCLIResult {
+	var result sessionCLIResult
+	result.err = invocation.composition.process.Execute(root.Input{
+		Args:             args,
+		Env:              testHomeEnvironment(invocation.home),
+		Stdout:           &result.stdout,
+		Stderr:           &result.stderr,
+		Context:          context.Background(),
+		WorkingDirectory: invocation.workingDirectory,
+	})
+	return result
+}
+
 // TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition proves
 // every public session CLI leaf command executes through root.BuildProcess against
 // the resolved production composition without bypassing the customer process boundary.
 func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(t *testing.T) {
-	var requests sessionRequests
-	server := httptest.NewServer(http.HandlerFunc(requests.handle))
-	defer server.Close()
+	composition := sharedSessionCLIComposition(t)
+	invocation := composition.beginScenario(t)
 
-	port := testServerPort(t, server.URL)
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	home := t.TempDir()
-	workingDirectory := t.TempDir()
+	port := testServerPort(t, composition.server.URL)
 	invocations := [][]string{
-		{"you", "--json", "session", "create", "--dir", workingDirectory,
+		{"you", "--json", "session", "create", "--dir", invocation.workingDirectory,
 			"--port", port, "--target-kind", "named", "--target-name", "alpha"},
-		{"you", "--server", server.URL, "--json", "session", "delete", "session-delete"},
-		{"you", "--server", server.URL, "--json", "--debug", "session", "list"},
-		{"you", "--server", server.URL, "--json", "session", "show", "session-show"},
-		{"you", "--remote", "--server", server.URL, "--json", "session", "pause"},
-		{"you", "--remote", "--server", server.URL, "--json", "session", "resume", "session-resume"},
+		{"you", "--server", composition.server.URL, "--json", "session", "delete", "session-delete"},
+		{"you", "--server", composition.server.URL, "--json", "--debug", "session", "list"},
+		{"you", "--server", composition.server.URL, "--json", "session", "show", "session-show"},
+		{"you", "--remote", "--server", composition.server.URL, "--json", "session", "pause"},
+		{"you", "--remote", "--server", composition.server.URL, "--json", "session", "resume", "session-resume"},
 	}
 	for _, args := range invocations {
-		var stdout, stderr bytes.Buffer
-		if err := process.Execute(root.Input{
-			Args: args, Env: testHomeEnvironment(home),
-			Stdout: &stdout, Stderr: &stderr,
-			Context: context.Background(), WorkingDirectory: workingDirectory,
-		}); err != nil {
-			t.Fatalf("Process.Execute(%v) error = %v; stderr=%q", args, err, stderr.String())
+		result := invocation.execute(args)
+		if result.err != nil {
+			t.Fatalf("Process.Execute(%v) error = %v; stderr=%q", args, result.err, result.stderr.String())
 		}
-		if stdout.Len() == 0 {
+		if result.stdout.Len() == 0 {
 			t.Fatalf("Process.Execute(%v) stdout is empty", args)
 		}
 	}
 
-	var failedShowOutput bytes.Buffer
-	err = process.Execute(root.Input{
-		Args: []string{
-			"you", "--server", server.URL, "session", "show",
-		},
-		Env: testHomeEnvironment(home), Stdout: &failedShowOutput,
-		Context: context.Background(), WorkingDirectory: workingDirectory,
+	failedShow := invocation.execute([]string{
+		"you", "--server", composition.server.URL, "session", "show",
 	})
-	if err == nil {
+	if failedShow.err == nil {
 		t.Fatal("Process.Execute(default session show) error = nil")
 	}
-	if failedShowOutput.Len() != 0 {
-		t.Fatalf("default session show stdout = %q, want empty", failedShowOutput.String())
+	if failedShow.stdout.Len() != 0 {
+		t.Fatalf("default session show stdout = %q, want empty", failedShow.stdout.String())
 	}
 
-	requests.assert(t)
-	before := requests.count()
-	var rejectedOutput bytes.Buffer
-	err = process.Execute(root.Input{
-		Args: []string{
-			"you", "--server", server.URL, "session", "show",
-			"--port", port, "session-rejected",
-		},
-		Env: testHomeEnvironment(home), Stdout: &rejectedOutput,
-		Context: context.Background(), WorkingDirectory: workingDirectory,
+	composition.requests.assert(t)
+	before := composition.requests.count()
+	rejected := invocation.execute([]string{
+		"you", "--server", composition.server.URL, "session", "show",
+		"--port", port, "session-rejected",
 	})
-	if err == nil {
+	if rejected.err == nil {
 		t.Fatal("Process.Execute(deprecated port) error = nil")
 	}
-	if requests.count() != before {
-		t.Fatalf("deprecated port request count = %d, want %d", requests.count(), before)
+	if composition.requests.count() != before {
+		t.Fatalf("deprecated port request count = %d, want %d", composition.requests.count(), before)
 	}
-	if rejectedOutput.Len() != 0 {
-		t.Fatalf("deprecated port stdout = %q, want empty", rejectedOutput.String())
+	if rejected.stdout.Len() != 0 {
+		t.Fatalf("deprecated port stdout = %q, want empty", rejected.stdout.String())
 	}
 }
 
 // TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch proves submit rejects
 // deprecated --port wiring before any dispatch attempt and directs callers to --server.
 func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	home := t.TempDir()
+	composition := sharedSessionCLIComposition(t)
+	invocation := composition.beginScenario(t)
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("must not be submitted"), 0o600); err != nil {
 		t.Fatalf("write payload: %v", err)
 	}
-	var stdout bytes.Buffer
-	err = process.Execute(root.Input{
-		Args: []string{
-			"you", "submit", "--port", "9090", "--name", "rejected",
-			"--work-type-name", "task", "--payload", payloadPath,
-		},
-		Env:              testHomeEnvironment(home),
-		Stdout:           &stdout,
-		Context:          context.Background(),
-		WorkingDirectory: home,
+	result := invocation.execute([]string{
+		"you", "submit", "--port", "9090", "--name", "rejected",
+		"--work-type-name", "task", "--payload", payloadPath,
 	})
-	if err == nil || !strings.Contains(err.Error(), "--port is no longer supported; use --server") {
-		t.Fatalf("deprecated port error = %v", err)
+	if result.err == nil || !strings.Contains(result.err.Error(), "--port is no longer supported; use --server") {
+		t.Fatalf("deprecated port error = %v", result.err)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("deprecated port stdout = %q, want empty", stdout.String())
+	if composition.requests.count() != 0 {
+		t.Fatalf("deprecated submit request count = %d, want 0", composition.requests.count())
+	}
+	if result.stdout.Len() != 0 {
+		t.Fatalf("deprecated port stdout = %q, want empty", result.stdout.String())
 	}
 }
 
@@ -138,6 +352,12 @@ type capturedRequest struct {
 type sessionRequests struct {
 	mu       sync.Mutex
 	requests []capturedRequest
+}
+
+func (requests *sessionRequests) reset() {
+	requests.mu.Lock()
+	requests.requests = nil
+	requests.mu.Unlock()
 }
 
 func (requests *sessionRequests) handle(writer http.ResponseWriter, request *http.Request) {
