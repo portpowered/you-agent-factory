@@ -17,12 +17,9 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock"
 )
 
@@ -38,42 +35,24 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 		name        string
 		site        bool
 		file        bool
+		caseID      string
 		stdin       string
 		input       []string
 		wantBrowser int32
 	}{
-		{name: "named positional server", input: []string{"server-scoped goal"}},
+		{name: "named positional server", caseID: "RS-01", input: []string{"server-scoped goal"}},
 		{
-			name: "file stdin site", site: true, file: true,
+			name: "file stdin site", caseID: "RS-02", site: true, file: true,
 			stdin: "site-scoped goal\n", input: []string{"-"}, wantBrowser: 1,
 		},
 	}
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			scenario := newRunScopedControlledCase(t, test.caseID)
 			homeDir := t.TempDir()
 			workingDirectory := t.TempDir()
-			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-				Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
-			})
-			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-					listenerStarts.Add(1)
-					request.OnBound(platformhttpserver.Binding{Port: request.Port})
-					<-ctx.Done()
-					listenerStops.Add(1)
-					return ctx.Err()
-				},
-				BrowserOpener: func(context.Context, string) error {
-					browserCalls.Add(1)
-					return nil
-				},
-				ProviderCommandRunner: providerRunner,
-			})
-			if err != nil {
-				t.Fatalf("BuildProcess() error = %v", err)
-			}
+			process := scenario.process
 			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 			factoryDir := initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
 			selection := []string{"--named", goalFactoryName}
@@ -104,15 +83,15 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 				!strings.Contains(stderr, "worker ") {
 				t.Fatalf("invocation progress stderr=%q", stderr)
 			}
-			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+			if scenario.listenerStarts.Load() != 1 || scenario.listenerStops.Load() != 1 {
 				t.Fatalf(
 					"listener lifecycle = starts:%d stops:%d, want exactly one joined server",
-					listenerStarts.Load(),
-					listenerStops.Load(),
+					scenario.listenerStarts.Load(),
+					scenario.listenerStops.Load(),
 				)
 			}
-			if browserCalls.Load() != test.wantBrowser {
-				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
+			if scenario.browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", scenario.browserCalls.Load(), test.wantBrowser)
 			}
 		})
 	}
@@ -122,36 +101,29 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 	for _, test := range []struct {
 		name        string
+		caseID      string
 		mode        string
 		wantBrowser int32
 	}{
-		{name: "server", mode: "--with-server"},
-		{name: "site", mode: "--with-site", wantBrowser: 1},
+		{name: "server", caseID: "RS-03", mode: "--with-server"},
+		{name: "site", caseID: "RS-04", mode: "--with-site", wantBrowser: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			scenario := newRunScopedControlledCase(t, test.caseID)
 			workingDirectory := t.TempDir()
 			workflowPath := filepath.Join(workingDirectory, "workflow.js")
 			if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 				t.Fatalf("write workflow: %v", err)
 			}
-			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-					listenerStarts.Add(1)
-					assertDashboardHandler(t, request.Handler)
+			scenario.start = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+				assertDashboardHandler(t, request.Handler)
+				if request.OnBound != nil {
 					request.OnBound(platformhttpserver.Binding{Port: request.Port})
-					<-ctx.Done()
-					listenerStops.Add(1)
-					return ctx.Err()
-				},
-				BrowserOpener: func(context.Context, string) error {
-					browserCalls.Add(1)
-					return nil
-				},
-			})
-			if err != nil {
-				t.Fatalf("BuildProcess() error = %v", err)
+				}
+				<-ctx.Done()
+				return ctx.Err()
 			}
+			process := scenario.process
 			homeDir := t.TempDir()
 			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 			stdout, stderr := execute(t, process, environment, workingDirectory, []string{
@@ -160,14 +132,14 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 			if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
 				t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
 			}
-			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
+			if scenario.listenerStarts.Load() != 1 || scenario.listenerStops.Load() != 1 {
 				t.Fatalf(
 					"listener lifecycle = starts:%d stops:%d, want exactly one joined server",
-					listenerStarts.Load(), listenerStops.Load(),
+					scenario.listenerStarts.Load(), scenario.listenerStops.Load(),
 				)
 			}
-			if browserCalls.Load() != test.wantBrowser {
-				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
+			if scenario.browserCalls.Load() != test.wantBrowser {
+				t.Fatalf("browser calls = %d, want %d", scenario.browserCalls.Load(), test.wantBrowser)
 			}
 		})
 	}
@@ -180,6 +152,7 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 // this is the functional exception for the unavailable-owner composition
 // without constructing transporthttp.NewServer in a functional test.
 func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *testing.T) {
+	scenario := newRunScopedControlledCase(t, "RS-05")
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
@@ -192,32 +165,28 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 		err      error
 	}
 	probes := make(chan probeResult, 1)
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			server := httptest.NewServer(request.Handler)
-			defer server.Close()
+	scenario.start = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		server := httptest.NewServer(request.Handler)
+		defer server.Close()
 
-			client := &http.Client{Timeout: 5 * time.Second}
-			response, requestErr := client.Get(server.URL + "/factory-sessions/~default/worker-sessions/worker-missing/events")
-			if requestErr != nil {
-				probes <- probeResult{err: requestErr}
-			} else {
-				defer response.Body.Close()
-				var payload factoryapi.ErrorResponse
-				decodeErr := json.NewDecoder(response.Body).Decode(&payload)
-				probes <- probeResult{status: response.StatusCode, response: payload, err: decodeErr}
-			}
+		client := &http.Client{Timeout: 5 * time.Second}
+		response, requestErr := client.Get(server.URL + "/factory-sessions/~default/worker-sessions/worker-missing/events")
+		if requestErr != nil {
+			probes <- probeResult{err: requestErr}
+		} else {
+			defer response.Body.Close()
+			var payload factoryapi.ErrorResponse
+			decodeErr := json.NewDecoder(response.Body).Decode(&payload)
+			probes <- probeResult{status: response.StatusCode, response: payload, err: decodeErr}
+		}
 
-			if request.OnBound != nil {
-				request.OnBound(platformhttpserver.Binding{Port: request.Port})
-			}
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
+		if request.OnBound != nil {
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+		}
+		<-ctx.Done()
+		return ctx.Err()
 	}
+	process := scenario.process
 
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
@@ -246,6 +215,7 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 // TestRunScopedServerUsesProductionListenerAndReportsFallback proves the
 // customer CLI path binds, reports, and joins the concrete HTTP server.
 func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
+	scenario := newRunScopedProductionCase(t, "RS-06")
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve requested loopback port: %v", err)
@@ -261,10 +231,7 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
@@ -302,16 +269,14 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 // TestRunScopedServerUsesExactListenAddress proves --listen binds the requested
 // loopback port without entering the legacy ascending fallback path.
 func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
+	scenario := newRunScopedProductionCase(t, "RS-07")
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
 	requestedPort := reserveExactPort(t)
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
@@ -337,6 +302,7 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 // run sends its normalized prompt to the selected server without starting a
 // local listener or invoking the local runtime.
 func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
+	scenario := newRunScopedValidationCase(t, "RS-08")
 	var gotRequest factoryapi.FactorySessionExecutionRequest
 	var startRequests atomic.Int32
 	var resultRequests atomic.Int32
@@ -382,16 +348,10 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 	if err := os.WriteFile(factoryPath, []byte(remotePlacementFactoryJSON), 0o600); err != nil {
 		t.Fatalf("write remote factory: %v", err)
 	}
-	var localStarts atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			localStarts.Add(1)
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
+	scenario.start = func(context.Context, platformhttpserver.StartRequest) error {
+		return nil
 	}
+	process := scenario.process
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
@@ -401,8 +361,8 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 	if stderr != "" || stdout != "remote result" {
 		t.Fatalf("remote stdout=%q stderr=%q, want remote result and no diagnostics", stdout, stderr)
 	}
-	if startRequests.Load() != 1 || resultRequests.Load() != 1 || localStarts.Load() != 0 {
-		t.Fatalf("dispatch effects = durable starts:%d results:%d local listeners:%d, want 1/1/0", startRequests.Load(), resultRequests.Load(), localStarts.Load())
+	if startRequests.Load() != 1 || resultRequests.Load() != 1 || scenario.listenerStarts.Load() != 0 {
+		t.Fatalf("dispatch effects = durable starts:%d results:%d local listeners:%d, want 1/1/0", startRequests.Load(), resultRequests.Load(), scenario.listenerStarts.Load())
 	}
 	if gotRequest.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryInline || gotRequest.Source.FactoryInline == nil {
 		t.Fatalf("remote source = %#v, want normalized inline Factory source", gotRequest.Source)
@@ -413,6 +373,7 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 }
 
 func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
+	scenario := newRunScopedProductionCase(t, "RS-09")
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve exact listener port: %v", err)
@@ -424,10 +385,7 @@ func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr bytes.Buffer
@@ -450,6 +408,7 @@ func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
 // TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary proves remote bind
 // targets fail at the customer CLI boundary before listener startup.
 func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
+	scenario := newRunScopedValidationCase(t, "RS-10")
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
@@ -457,12 +416,9 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 	}
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 	var stdout, stderr bytes.Buffer
-	err = process.Execute(root.Input{
+	err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--server", "https://remote.example.com:7443",
 			"run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
@@ -485,27 +441,11 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 // public process rejects contradictory placement before any local or remote
 // runtime effect can start, regardless of persistent-flag position.
 func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
+	scenario := newRunScopedValidationCase(t, "RS-11-12")
 	const wantCode = factoryapi.ErrorResponseCode("REMOTE_LOCAL_HOSTING_CONFLICT")
 	const wantMessage = "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind"
 
-	var effects atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			effects.Add(1)
-			return nil
-		},
-		BrowserOpener: func(context.Context, string) error {
-			effects.Add(1)
-			return nil
-		},
-		FactorySessionIDGenerator: func() string {
-			effects.Add(1)
-			return "unexpected-session"
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 
 	for _, test := range []struct {
 		name string
@@ -551,24 +491,19 @@ func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
 			}
 		})
 	}
-	if effects.Load() != 0 {
-		t.Fatalf("placement conflict effects = %d, want no listener, browser, or session effects", effects.Load())
+	if scenario.edgeEffects.Load() != 0 {
+		t.Fatalf("placement conflict effects = %d, want no listener, browser, or session effects", scenario.edgeEffects.Load())
 	}
 }
 
 // TestRemotePlacementRejectsLocalOnlyServerCommand proves remote placement
 // remains explicit for commands that can only own local listener state.
 func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
-	var listenerStarts atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			listenerStarts.Add(1)
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
+	scenario := newRunScopedValidationCase(t, "RS-13")
+	scenario.start = func(context.Context, platformhttpserver.StartRequest) error {
+		return nil
 	}
+	process := scenario.process
 
 	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
 		t,
@@ -578,8 +513,8 @@ func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
 	if executeErr == nil || !strings.Contains(executeErr.Error(), "supports local placement only") {
 		t.Fatalf("remote server error = %v, want local-placement guidance; stdout=%q stderr=%q", executeErr, stdout, stderr)
 	}
-	if listenerStarts.Load() != 0 {
-		t.Fatalf("listener starts = %d, want 0", listenerStarts.Load())
+	if scenario.listenerStarts.Load() != 0 {
+		t.Fatalf("listener starts = %d, want 0", scenario.listenerStarts.Load())
 	}
 }
 
@@ -587,10 +522,8 @@ func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
 // local-only commands fail at the generic placement boundary before their
 // handler can inspect the requested file.
 func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	scenario := newRunScopedValidationCase(t, "RS-14")
+	process := scenario.process
 
 	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
 		t,
@@ -608,16 +541,11 @@ func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
 // TestRunRejectsMalformedExactListenAddress proves --listen is parsed as an
 // exact local host:port before the listener or Factory runtime starts.
 func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
-	var listenerStarts atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			listenerStarts.Add(1)
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
+	scenario := newRunScopedValidationCase(t, "RS-15")
+	scenario.start = func(context.Context, platformhttpserver.StartRequest) error {
+		return nil
 	}
+	process := scenario.process
 
 	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
 		t,
@@ -627,23 +555,21 @@ func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
 	if executeErr == nil || !strings.Contains(executeErr.Error(), "invalid --listen address") {
 		t.Fatalf("malformed listen error = %v, want exact-address guidance; stdout=%q stderr=%q", executeErr, stdout, stderr)
 	}
-	if listenerStarts.Load() != 0 {
-		t.Fatalf("listener starts = %d, want 0", listenerStarts.Load())
+	if scenario.listenerStarts.Load() != 0 {
+		t.Fatalf("listener starts = %d, want 0", scenario.listenerStarts.Load())
 	}
 }
 
 // TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary proves port
 // exhaustion is reported through the customer CLI contract.
 func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
+	scenario := newRunScopedProductionCase(t, "RS-16")
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 
 	// Coordinate with the built-executable server_binding package before
 	// opening the shared terminal endpoint. The lock is cross-process because
@@ -692,25 +618,10 @@ func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) 
 
 // TestRunScopedServerOwnsReplayLifecycle proves replay hosting joins its listener at terminal completion.
 func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
+	scenario := newRunScopedControlledCase(t, "RS-17")
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	var listenerStarts, listenerStops, browserCalls atomic.Int32
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			listenerStarts.Add(1)
-			request.OnBound(platformhttpserver.Binding{Port: request.Port})
-			<-ctx.Done()
-			listenerStops.Add(1)
-			return ctx.Err()
-		},
-		BrowserOpener: func(context.Context, string) error {
-			browserCalls.Add(1)
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := scenario.process
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
 	mockWorkersPath := writeMockWorkersConfig(t)
@@ -725,10 +636,10 @@ func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
 	if stderr != "" || stdout == "" {
 		t.Fatalf("replay stdout=%q stderr=%q", stdout, stderr)
 	}
-	if listenerStarts.Load() != 1 || listenerStops.Load() != 1 || browserCalls.Load() != 0 {
+	if scenario.listenerStarts.Load() != 1 || scenario.listenerStops.Load() != 1 || scenario.browserCalls.Load() != 0 {
 		t.Fatalf(
 			"replay lifecycle = starts:%d stops:%d browsers:%d",
-			listenerStarts.Load(), listenerStops.Load(), browserCalls.Load(),
+			scenario.listenerStarts.Load(), scenario.listenerStops.Load(), scenario.browserCalls.Load(),
 		)
 	}
 }

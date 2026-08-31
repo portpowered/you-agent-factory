@@ -103,3 +103,56 @@ worktree. The PRD/task packet supplies the matrix used here; no source-plan or
 c01 canonical inventory file was edited. If the inventory owner requires
 current source-body hashes after this lane's baseline, the narrow delta is to
 refresh the c01 source/hash rows for this package only.
+
+## TASK-002 post-change topology and focused evidence
+
+Implementation commit: `c9f63c74a9` (`test: share run-scoped transport roots`).
+The prior source had 14 `BuildProcessWithContext` call sites and created 16
+root instances when the 17 matrix rows were executed (the two two-row table
+tests each built one root per subtest). The implementation uses three lazy,
+edge-compatible package cohorts when all rows are selected:
+
+| Cohort | Rows | Root topology | Retained real boundary |
+| --- | --- | --- | --- |
+| controlled hosted/provider | RS-01..05, RS-17 | one shared root; fresh case context, HOME, working directory, streams, Factory state, and edge counters | RS-05 local-real handler probe; controlled server lifecycle for the other hosted rows |
+| controlled placement | RS-08, RS-10..15 | one shared root; fresh case context and validation inputs | RS-08 local `httptest.Server`; zero-local-effect validation |
+| production listener | RS-06, RS-07, RS-09, RS-16 | one shared root; fresh case inputs and serialized `Process.Execute` calls | production listener bind/fallback/rebind, exact bind failure, and terminal-port exhaustion |
+
+The package fixture's final counters report one build/close per used cohort,
+balanced controlled listener starts/stops, zero active controlled listeners,
+and per-case listener/browser/edge-effect assertions. The package-level
+fixture close is owned by `TestMain`; no root is closed between compatible
+rows, while every `Process.Execute` still receives fresh invocation inputs and
+a case-local context route. No assertion, skip, quarantine, timeout, sleep, or
+genuine listener boundary was removed.
+
+Focused functional evidence on commit `c9f63c74a9` (Windows local-real
+functional dependency fidelity; all commands exited 0):
+
+```text
+go test -v -run '^(TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles|TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness|TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner|TestRunScopedServerOwnsReplayLifecycle)$' -count=1 -timeout=5m ./tests/functional/transport/run_scoped_server
+PASS; controlled roots=1/1, listeners=6/6, active=0, browsers=2
+
+go test -v -run '^(TestRunScopedServerUsesProductionListenerAndReportsFallback|TestRunScopedServerUsesExactListenAddress|TestRunScopedServerRejectsUnavailableExactListenAddress|TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary)$' -count=1 -timeout=5m ./tests/functional/transport/run_scoped_server
+PASS; production roots=1/1; all real bind/rebind/exhaustion assertions passed
+
+go test -v -run '^(TestRemotePlacementDispatchesThroughSelectedServer|TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary|TestRemotePlacementRejectsLocalHostingBeforeInitialization|TestRemotePlacementRejectsLocalOnlyServerCommand|TestRemotePlacementRejectsLocalOnlyFactoryCommand|TestRunRejectsMalformedExactListenAddress)$' -count=1 -timeout=5m ./tests/functional/transport/run_scoped_server
+PASS; validation roots=1/1, listeners=0/0, active=0
+```
+
+The changed shared fixture also passed the declared bounded gates:
+
+```text
+go test -v -run '^TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles$' -count=3 -timeout=10m ./tests/functional/transport/run_scoped_server
+PASS; one controlled root, six balanced listeners, active=0
+
+go test -race -v -run '^TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles$' -count=1 -timeout=10m ./tests/functional/transport/run_scoped_server
+PASS; no race report; one controlled root, two balanced listeners, active=0
+```
+
+These focused runs prove RS-01..17 parity at the declared functional level,
+fresh shared-fixture isolation, cleanup balance, and material root reduction.
+They do not prove the comparable PR-CI under-three-second timing gate,
+functional coverage, the story-005 single final full-package run, clean-room
+loopback, terminal CI, or merge; those remain GATE-PERF, GATE-COVERAGE,
+GATE-LOOP, and GATE-PR inputs.
