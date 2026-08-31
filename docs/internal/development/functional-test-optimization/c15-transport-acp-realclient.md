@@ -1,16 +1,15 @@
 # C15 — transport/acp/realclient characterization ledger
 
-Status: CHARACTERIZED FOR TASK-001. The current-head diagnostic and focused
-failure characterization are recorded below. The diagnostic reached the real
-production binary build but hit the existing one-minute phase bound under host
-load before ACPX acquisition; it is retained as diagnostic evidence, not as a
-real-client success claim.
+Status: TASK-002 COMPLETE; TASK-003 REMAINS. The pre-edit diagnostic,
+focused failure characterization, reusable-session conversion, and final
+focused local-real witnesses are recorded below. The earlier diagnostic hit
+the existing one-minute phase bound under host load before ACPX acquisition;
+the later committed-head witness completed successfully.
 
 This ledger owns the baseline, assertion map, C01 reconciliation, process
-profile, and focused characterization for
-`functional-test-optimization-c15-transport-acp-realclient-001`. It does not
-authorize the reusable-session conversion owned by TASK-002 or final package
-and PR validation owned by TASK-003.
+profile, focused characterization, and TASK-002 topology for
+`functional-test-optimization-c15-transport-acp-realclient`. Final package
+and PR validation remain TASK-003 scope.
 
 ## Authority and scope
 
@@ -355,3 +354,90 @@ cannot be admitted after the first activation because production retains the
 fixed `~default` runtime scope. Story 002 therefore remains blocked pending
 the previously recorded lifecycle/placement decision; no production or
 shared-support change was made.
+
+## TASK-002 final conversion evidence
+
+The final reusable witness keeps one package-scoped `root.BuildProcess`, one
+`Process.Execute` ACP server, one ACP connection, and one injected
+`ProviderCommandRunner`. It first drives two marker-isolated turns through one
+session, then creates a second session with a distinct workspace and identity.
+The first session is canceled and closed while its provider call is in flight;
+only after that close does the second session receive its first prompt. The
+second prompt returns its own marker, Worker updates, and exact provider count.
+Every retained prompt update is checked for the requested session identity,
+and later turns reject earlier output markers. This proves the supported
+serial isolation topology without claiming concurrent retained runtimes.
+
+The public close contract requires an active turn. The reusable test therefore
+uses the in-flight prompt/`session/close` pair for cancellation and successful
+close; a completed prompt followed by `session/close` is not treated as a
+normal-close witness. The pinned ACPX witness retains the real
+`session_closed` identity and zero queue-owner assertion.
+
+Focused procedures on committed head `6abbfeb9a1dae0464d76cd30843b0a38b6152621`:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=10m -v
+```
+
+With Node `v24.19.0` from the preinstalled Codex runtime prepended to `PATH`
+and both real-client gates set to `1`, the exact `acpx@0.13.0` witness exited
+`0`; package wall was `117.457s`. It logged the committed revision, negotiated
+initialization, created session, target `factory:@you/factory-builder`,
+non-empty assistant result, `end_turn`, exactly two `codex` provider
+invocations, complete cleanup, and outcome `passed`. The elapsed time is
+contaminated by host contention and is retained as local-real OS-client
+evidence, not as the package-level performance verdict.
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=2 -timeout=15m -v
+```
+
+The changed stateful selector exited `0`; both repetitions passed with package
+wall `67.814s`. The command used distinct temporary session workspaces and
+per-marker provider observations on each repetition. The package-local race
+gate also exited `0` with no race report:
+
+```text
+go test -race ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+Its package wall was `36.326s`. The focused failure and OS gate exited `0` in
+`3.154s`:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^(TestCharacterizePinnedAcpxFailureClassifications|TestRunBoundedCommand)' \
+  -count=1 -timeout=5m -v
+```
+
+That gate passed malformed session/prompt JSON, protocol error, missing
+action, missing and duplicate terminal results, launch and ownership
+classification, partial-session cleanup, queue-owner cleanup, timeout tree
+termination, non-zero crash cleanup, and descendant inactivity. No production
+or shared-support file changed. The earlier retained-runtime probe remains a
+historical boundary observation; the close-before-next-activation sequence is
+the final supported shared-process topology.
+
+### TASK-002 retained-process irreducibility
+
+The converted session witness has no test-owned child process or private root;
+its application process is built once and its ACP stream is driven through
+`Process.Execute`. The remaining local-real rows are:
+
+| Retained phase/witness | Measured cost | Exact property | Why reuse cannot prove it |
+| --- | ---: | --- | --- |
+| `node --version` admission | included in the `117.457s` package wall; no standalone trace on the final run | Select a Node executable meeting the pinned ACPX minimum before startup | An in-process root cannot establish the external Node executable/version boundary. |
+| `git rev-parse HEAD` | included in the `117.457s` package wall; no standalone trace on the final run | Attach sanitized evidence to the current source revision | The evidence contract requires the repository revision from the current checkout. |
+| `go build -o <temp>/you[.exe] ./cmd/factory` | included in the `117.457s` package wall; no standalone trace on the final run | Start the current production executable through ACPX-configured argv | `root.BuildProcess` is the controlled application path and cannot prove the shipped executable boundary. |
+| `npx --yes --package acpx@0.13.0 acpx --version` | included in the `117.457s` package wall; no standalone trace on the final run | Acquire and verify the exact third-party ACPX package | A reusable application process cannot prove npm resolution or the pinned external client. |
+| ACPX `sessions new`, `prompt`, and `sessions close` direct Node phases | included in the `117.457s` package wall; no standalone trace on the final run | Real ACP stdio framing, persisted client session, provider stream, close identity, and queue-owner shutdown | The controlled connection proves server behavior but cannot prove the independently packaged ACPX client and its queue owner. |
+| `TestRunBoundedCommandTerminatesScenarioDescendants` | `1.70s` | Real timeout, process-tree ownership, and descendant inactivity | Sharing would remove the held OS parent/descendant boundary. |
+| `TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `0.62s` | Real non-zero crash classification, tree cleanup, and descendant inactivity | Sharing would remove the non-zero exit and process-tree boundary. |
+
+The final package timing and PR functional coverage remain TASK-003 evidence;
+this table records why the retained OS/client rows cannot be replaced by the
+reusable controlled witness.
