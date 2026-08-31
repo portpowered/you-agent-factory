@@ -17,7 +17,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,18 +32,12 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 ) {
 	t.Parallel()
 
-	recorder := newFactoryRuntimeDelegatingRecorder(t)
+	enterSharedRootCompositionScenario(t)
+	fixture := sharedRootCompositionFixtureForTest(t)
 	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     recorder.edges(),
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	baseURL := server.URL()
-	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
+	session := openSharedRootCompositionLiveSession(t, dir)
+	baseURL := fixture.baseURL
+	recorder := fixture.recorder
 
 	if got := recorder.totalControl(); got <= 0 {
 		t.Fatalf("control effect calls after runtime lifecycle = %d, want > 0 via edges", got)
@@ -55,7 +48,7 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 
 	dispatchBefore := recorder.totalDispatchPlan()
 
-	status := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
+	status := sharedRootCompositionSessionStatus(t, fixture, session.sessionID)
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("GET /status factoryState = %q, want RUNNING", status.FactoryState)
 	}
@@ -69,14 +62,14 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 	pause := postFactoryRuntimeLifecycleControl(
 		t,
 		baseURL,
-		factorysessions.DefaultSessionID,
+		session.sessionID,
 		factoryapi.FactorySessionLifecycleControlKindPause,
 	)
 	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
 		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
-	pausedSession := support.GetDefaultSession(t, baseURL)
+	pausedSession := sharedRootCompositionSessionRead(t, fixture, session.sessionID)
 	if pausedSession.Runtime.LifecycleControlStatus == nil ||
 		*pausedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf(
@@ -89,14 +82,14 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 	resume := postFactoryRuntimeLifecycleControl(
 		t,
 		baseURL,
-		factorysessions.DefaultSessionID,
+		session.sessionID,
 		factoryapi.FactorySessionLifecycleControlKindResume,
 	)
 	if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
 		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("resume response = %#v, want accepted resume", resume)
 	}
-	runningSession := support.GetDefaultSession(t, baseURL)
+	runningSession := sharedRootCompositionSessionRead(t, fixture, session.sessionID)
 	if runningSession.Runtime.LifecycleControlStatus == nil ||
 		*runningSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf(
@@ -106,7 +99,7 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 		)
 	}
 
-	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitSessionWorkAt(t, baseURL, session.sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("factory-runtime-lifecycle-activation"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "activate dispatch-plan through public process"},
@@ -116,8 +109,8 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 		t.Fatalf("submit work missing work id: %#v", submitted)
 	}
 
-	support.WaitForRuntimeIdle(t, baseURL, 15*time.Second)
-	completedStatus := support.GetJSON[factoryapi.StatusResponse](t, baseURL+"/status")
+	support.WaitForSessionTerminalStatus(t, baseURL, session.sessionID, 15*time.Second)
+	completedStatus := sharedRootCompositionSessionStatus(t, fixture, session.sessionID)
 	if completedStatus.Categories.Terminal != 1 {
 		t.Fatalf("GET /status terminal count = %d, want 1 after dispatch", completedStatus.Categories.Terminal)
 	}
@@ -128,12 +121,12 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 		t.Fatalf("dispatch-plan effect calls after work submission = %d, want > 0 via edges", got)
 	}
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := sharedRootCompositionSessionWork(t, fixture, session.sessionID)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("work %q did not reach task:complete: %#v", workID, listed.Results)
 	}
 
-	events := support.GetFactoryEventsAt(t, baseURL)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, session.sessionID)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	foundCompleted := false
 	for _, dispatch := range dispatches {
@@ -145,6 +138,7 @@ func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuild
 	if !foundCompleted {
 		t.Fatalf("public Factory Events missing completed dispatch for work %q", workID)
 	}
+	session.close(t)
 }
 
 func factoryRuntimeLifecycleActivationFactoryConfig() map[string]any {
@@ -238,15 +232,6 @@ type factoryRuntimeDelegatingRecorder struct {
 	workflowSymlink   atomic.Int32
 	workflowHomeCalls atomic.Int32
 	scriptCommand     atomic.Int32
-}
-
-func newFactoryRuntimeDelegatingRecorder(t *testing.T, workflowHome ...string) *factoryRuntimeDelegatingRecorder {
-	t.Helper()
-	home := t.TempDir()
-	if len(workflowHome) > 0 && workflowHome[0] != "" {
-		home = workflowHome[0]
-	}
-	return &factoryRuntimeDelegatingRecorder{workflowHome: home}
 }
 
 func (recorder *factoryRuntimeDelegatingRecorder) edges() serviceedges.Edges {
