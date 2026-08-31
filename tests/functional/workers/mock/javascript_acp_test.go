@@ -2,45 +2,39 @@ package mock
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected keeps the
-// MockWorkers ownership proof with the Workers mock cell. The counted ACP
-// command edge and provider command runner make a regression observable while
-// ensuring this compatibility route never reaches a live provider.
-func TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(t *testing.T) {
+// testJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected keeps the
+// MockWorkers ownership proof with the shared Workers mock process. It runs
+// after the session-backed rows have stopped the hosted invocation, so the
+// same root can execute this one-shot JavaScript compatibility path without a
+// second application graph. MockWorkers intercepts the ACP child before any
+// provider or process edge is reached.
+func testJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := writeMockJavaScriptACPFactory(t)
-	support.SetWorkingDirectory(t, dir)
-
-	var acpStarts atomic.Int32
 	providerRunner := support.NewRecordingCommandRunner("live provider route was unexpectedly invoked")
+	fixture.prepareLocalActivation(t)
+	fixture.useCommandRunners(providerRunner, nil)
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", "./acp.js", "--with-mock-workers", "--no-record",
+		"you", "run", "--factory", filepath.Join(dir, "acp.js"), "--with-mock-workers", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = os.Environ()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		PlatformProcessCommandFactory: mockACPCommandFactory(&acpStarts),
-		ProvidersExecutableLocator:    mockACPExecutableLocator{},
-		ProviderCommandRunner:         providerRunner,
-	})
-	support.CleanupProcess(t, process)
+	inputs.Input.Env = sharedWorkersMockEnvironment(t, writeSharedWorkersMockOperatorHome(t))
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.executeLocal(t, inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(mock JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	if acpStarts.Load() != 0 || providerRunner.CallCount() != 0 {
-		t.Fatalf("mock execution started live providers ACP=%d providerRunner=%d, want zero live calls", acpStarts.Load(), providerRunner.CallCount())
+	if providerRunner.CallCount() != 0 {
+		t.Fatalf("mock execution reached the provider runner %d times, want zero live calls", providerRunner.CallCount())
 	}
 	if !strings.Contains(inputs.Stdout(), " completed (SUCCEEDED).") {
 		t.Fatalf("mock JavaScript Factory did not succeed: %s", inputs.Stdout())
@@ -64,19 +58,4 @@ func writeMockJavaScriptACPFactory(t *testing.T) string {
 		t.Fatalf("write mock JavaScript ACP Factory: %v", err)
 	}
 	return dir
-}
-
-func mockACPCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {
-	return func(string, ...string) *exec.Cmd {
-		starts.Add(1)
-		// If MockWorkers stops intercepting the ACP child, the no-test command
-		// exits immediately and the counted edge makes the failure explicit.
-		return exec.Command(os.Args[0], "-test.run=^$")
-	}
-}
-
-type mockACPExecutableLocator struct{}
-
-func (mockACPExecutableLocator) LookPath(file string) (string, error) {
-	return file, nil
 }

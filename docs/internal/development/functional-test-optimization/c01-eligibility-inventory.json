@@ -7829,22 +7829,6 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01",
-      "packagePath": "tests/functional/workers/mock",
-      "sourcePath": "tests/functional/workers/mock/javascript_acp_test.go",
-      "sourceLine": 74,
-      "enclosingIdentity": "mockACPCommandFactory",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "ACCIDENTAL-OS",
-      "requiredProperty": null,
-      "assertionEvidence": "TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected asserts acpStarts == 0 and ProviderCommandRunner calls == 0; it does not invoke mockACPCommandFactory or observe child stdio, stream completion, or file-descriptor behavior.",
-      "conversionObligation": "Preserve the zero-call provider-selection assertion through root.BuildProcess and Process.Execute, then replace mockACPCommandFactory with a non-spawning sentinel or remove the unreachable command factory in the owning c15 conversion lane.",
-      "testRowIds": [
-        "C07-F059-top-level-test-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-workers-transports-cli-run-lifecycle-lifecycle-forced-cleanup-test-runForcedLifecycleCleanupParent-01",
       "packagePath": "tests/functional/workers/transports/cli/run/lifecycle",
       "sourcePath": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_forced_cleanup_test.go",

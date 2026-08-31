@@ -85,6 +85,7 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "PlainBatchDrainCounterexamples", run: testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples},
 		{name: "PlainBatchDrainRejectsPreActivationCancellation", run: testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation},
 		{name: "PlainBatchDrainStopsAfterWorkerActivationCancellation", run: testPlainBatchDrainStopsAfterWorkerActivationCancellation},
+		{name: "JavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected", run: testJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
