@@ -25,6 +25,10 @@ func TestRunBoundedCommandTerminatesScenarioDescendants(t *testing.T) {
 	if runProcessTreeHelper(t) {
 		return
 	}
+	started := time.Now()
+	defer func() {
+		t.Logf("real ACP evidence witness: property=timeout-process-tree-descendant-cleanup duration=%s", time.Since(started))
+	}()
 	pid := runTimedOutProcessTreeScenario(t)
 	waitForProcessExit(t, pid)
 }
@@ -33,6 +37,10 @@ func TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit(t *testing.T) {
 	if runProcessTreeHelper(t) {
 		return
 	}
+	started := time.Now()
+	defer func() {
+		t.Logf("real ACP evidence witness: property=non-zero-process-tree-descendant-cleanup duration=%s", time.Since(started))
+	}()
 	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
 	_, err := runBoundedCommandWithTimeout(
 		t.TempDir(),
