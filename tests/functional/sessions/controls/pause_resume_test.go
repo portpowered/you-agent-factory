@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -60,7 +59,7 @@ func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
 // accepts submitted work through the public session-control boundary while
 // keeping that work buffered instead of advancing it into active processing.
 func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	factoryDir := scaffoldPauseResumeControlsFactory(t)
 
 	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{})
 	baseURL := session.baseURL()
@@ -114,7 +113,7 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 // buffered during pause in submission order through public session-control and
 // dispatch observation boundaries.
 func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	factoryDir := scaffoldPauseResumeControlsFactory(t)
 
 	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{})
 	baseURL := session.baseURL()
@@ -175,13 +174,7 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 // the public session-control boundary leave durable SESSION_LIFECYCLE_CONTROL
 // Factory Events in chronological order with public control operation kinds.
 func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
-	support.WriteAgentConfig(
-		t,
-		factoryDir,
-		"mock-worker",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-	)
+	factoryDir := scaffoldPauseResumeControlsFactory(t)
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("buffered task accepted COMPLETE"),
 	})

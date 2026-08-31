@@ -284,19 +284,28 @@ func startSharedExecutionHostedCommand(process support.ApplicationProcess, input
 }
 
 func waitForSharedExecutionRuntime(baseURL string, timeout time.Duration) error {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	statusURL := strings.TrimSuffix(baseURL, "/") + "/status"
+	var lastErr error
+
+	// /status is the only public signal that the continuously hosted process has
+	// attached its runtime. Listener readiness does not establish that state,
+	// and startup emits no Factory Event or injected command-edge signal. Keep
+	// this retry as a bounded diagnostic readiness guard; the request context
+	// shares the deadline so a stalled handler cannot outlive the helper.
 	for {
-		response, err := httpGetSharedExecutionStatus(baseURL)
+		response, err := httpGetSharedExecutionStatus(ctx, statusURL)
 		if err == nil && strings.TrimSpace(response.RuntimeStatus) != "" {
 			return nil
 		}
+		lastErr = err
 		select {
-		case <-deadline.C:
-			if err != nil {
-				return fmt.Errorf("wait for shared execution runtime: %w", err)
+		case <-ctx.Done():
+			if lastErr != nil {
+				return fmt.Errorf("wait for shared execution runtime: %w", lastErr)
 			}
 			return fmt.Errorf("wait for shared execution runtime: status remained unavailable")
 		case <-ticker.C:
@@ -304,8 +313,12 @@ func waitForSharedExecutionRuntime(baseURL string, timeout time.Duration) error 
 	}
 }
 
-func httpGetSharedExecutionStatus(baseURL string) (factoryapi.StatusResponse, error) {
-	response, err := http.Get(strings.TrimSuffix(baseURL, "/") + "/status")
+func httpGetSharedExecutionStatus(ctx context.Context, statusURL string) (factoryapi.StatusResponse, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
+	if err != nil {
+		return factoryapi.StatusResponse{}, err
+	}
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return factoryapi.StatusResponse{}, err
 	}

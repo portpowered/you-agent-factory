@@ -139,6 +139,7 @@ func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	support.WriteAgentConfig(t, dir, "mock-worker", pauseResumeControlsWorkerConfig())
 	workflowDir := filepath.Join(dir, ".claude", "workflows")
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)

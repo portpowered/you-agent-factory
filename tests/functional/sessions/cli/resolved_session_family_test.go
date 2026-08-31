@@ -323,7 +323,9 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
 	composition := sharedSessionCLIComposition(t)
 	invocation := composition.beginScenario(t)
-	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	// Keep the payload in the already fresh case-owned working directory so the
+	// deprecated-option witness does not need a third temporary root.
+	payloadPath := filepath.Join(invocation.workingDirectory, "request.md")
 	if err := os.WriteFile(payloadPath, []byte("must not be submitted"), 0o600); err != nil {
 		t.Fatalf("write payload: %v", err)
 	}

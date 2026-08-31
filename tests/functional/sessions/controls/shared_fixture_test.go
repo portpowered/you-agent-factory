@@ -202,6 +202,18 @@ func writeSharedControlsBootstrapFactory(dir string) error {
 	return nil
 }
 
+func scaffoldPauseResumeControlsFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	support.WriteAgentConfig(t, dir, "mock-worker", pauseResumeControlsWorkerConfig())
+	return dir
+}
+
+func pauseResumeControlsWorkerConfig() string {
+	return support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")
+}
+
 func startSharedControlsHostedCommand(process support.ApplicationProcess, input root.Input) *sharedControlsHostedCommand {
 	parent := input.Context
 	if parent == nil {
@@ -352,8 +364,9 @@ type sharedControlsRouteConfig struct {
 }
 
 type sharedControlsCommandRouter struct {
-	mu     sync.Mutex
-	routes map[string]*sharedControlsRoute
+	mu              sync.Mutex
+	routes          map[string]*sharedControlsRoute
+	defaultProvider platformprocess.CommandRunner
 }
 
 type sharedControlsRoute struct {
@@ -364,7 +377,10 @@ type sharedControlsRoute struct {
 }
 
 func newSharedControlsCommandRouter() *sharedControlsCommandRouter {
-	return &sharedControlsCommandRouter{routes: make(map[string]*sharedControlsRoute)}
+	return &sharedControlsCommandRouter{
+		routes:          make(map[string]*sharedControlsRoute),
+		defaultProvider: support.NewStaticSuccessCommandRunner("accepted COMPLETE"),
+	}
 }
 
 func (router *sharedControlsCommandRouter) register(factoryDir string, config sharedControlsRouteConfig) error {
@@ -412,6 +428,9 @@ func (router *sharedControlsCommandRouter) Run(
 	if route != nil {
 		if isSharedControlsProviderCommand(request.Command) {
 			runner = route.provider
+			if runner == nil {
+				runner = router.defaultProvider
+			}
 		} else {
 			runner = route.script
 		}
