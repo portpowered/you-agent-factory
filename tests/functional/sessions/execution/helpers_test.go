@@ -295,6 +295,15 @@ func postInvocationExpectStatus(
 	request factoryapi.InvocationRequest,
 	wantStatus int,
 ) factoryapi.ErrorResponse {
+	return postInvocationExpectStatusAt(t, serverURL, factorysessions.DefaultSessionID, request, wantStatus)
+}
+
+func postInvocationExpectStatusAt(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.InvocationRequest,
+	wantStatus int,
+) factoryapi.ErrorResponse {
 	t.Helper()
 
 	body, err := json.Marshal(request)
@@ -302,18 +311,19 @@ func postInvocationExpectStatus(
 		t.Fatalf("marshal invocation request: %v", err)
 	}
 	response, err := http.Post(
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		invocationEndpoint(serverURL, sessionID),
 		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST /factory-sessions/%s/invocations: %v", sessionID, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != wantStatus {
 		payload, _ := io.ReadAll(response.Body)
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d, want %d: %s",
+			"POST /factory-sessions/%s/invocations status = %d, want %d: %s",
+			sessionID,
 			response.StatusCode,
 			wantStatus,
 			strings.TrimSpace(string(payload)),
@@ -328,6 +338,14 @@ func postInvocationExpectStatus(
 }
 
 func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
+	return postInvocationAt(t, serverURL, factorysessions.DefaultSessionID, request)
+}
+
+func postInvocationAt(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.InvocationRequest,
+) factoryapi.InvocationResponse {
 	t.Helper()
 
 	body, err := json.Marshal(request)
@@ -335,18 +353,19 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 		t.Fatalf("marshal invocation request: %v", err)
 	}
 	response, err := http.Post(
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		invocationEndpoint(serverURL, sessionID),
 		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST /factory-sessions/%s/invocations: %v", sessionID, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		payload, _ := io.ReadAll(response.Body)
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d: %s",
+			"POST /factory-sessions/%s/invocations status = %d: %s",
+			sessionID,
 			response.StatusCode,
 			strings.TrimSpace(string(payload)),
 		)
@@ -357,6 +376,10 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 		t.Fatalf("decode invocation response: %v", err)
 	}
 	return decoded
+}
+
+func invocationEndpoint(serverURL, sessionID string) string {
+	return strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/invocations"
 }
 
 func startDispatchCorrelationSync(
@@ -771,9 +794,16 @@ func assertTerminalWorkPrimaryText(
 	t *testing.T,
 	serverURL, wantText string,
 ) {
+	assertTerminalWorkPrimaryTextAt(t, serverURL, factorysessions.DefaultSessionID, wantText)
+}
+
+func assertTerminalWorkPrimaryTextAt(
+	t *testing.T,
+	serverURL, sessionID, wantText string,
+) {
 	t.Helper()
 
-	ok, diagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+	ok, diagnostic := tryReadTerminalWorkPrimaryTextAt(serverURL, sessionID, wantText)
 	if !ok {
 		t.Fatal(diagnostic)
 	}
@@ -868,7 +898,11 @@ func tryGetDefaultSession(serverURL string) (factoryapi.FactorySession, bool, st
 }
 
 func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
-	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
+	return tryReadTerminalWorkPrimaryTextAt(serverURL, factorysessions.DefaultSessionID, wantText)
+}
+
+func tryReadTerminalWorkPrimaryTextAt(serverURL, sessionID, wantText string) (bool, string) {
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/work"
 	response, err := http.Get(endpoint)
 	if err != nil {
 		return false, fmt.Sprintf("GET %s: %v", endpoint, err)

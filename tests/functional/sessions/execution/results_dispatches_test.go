@@ -11,7 +11,6 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -26,19 +25,17 @@ import (
 func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
+	acquireSharedExecutionScenarioSlot(t)
 
 	t.Run("successfulInvocationExposesPrimaryResultOnInvocationAndWorkReads", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)
-		server := startInvocationServer(
-			t,
-			dir,
-			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
-			nil,
-		)
+		session := openSharedExecutionLiveSession(t, dir, sharedExecutionRouteConfig{
+			provider: support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+		})
 
-		response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+		response := postInvocationAt(t, session.fixture.baseURL, session.sessionID, textInvocationRequest(t, "invoke this", nil))
 		assertInvocationPrimaryResultText(t, response, terminalSuccessPrimaryResult)
-		assertTerminalWorkPrimaryText(t, server.URL(), terminalSuccessPrimaryResult)
+		assertTerminalWorkPrimaryTextAt(t, session.fixture.baseURL, session.sessionID, terminalSuccessPrimaryResult)
 	})
 
 	t.Run("unresolvedPrimaryResultReturnsFailedTerminalStatus", func(t *testing.T) {
@@ -57,14 +54,11 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 				},
 			}),
 		})
-		server := startInvocationServer(
-			t,
-			dir,
-			support.NewStaticSuccessCommandRunner("task output COMPLETE"),
-			nil,
-		)
+		session := openSharedExecutionLiveSession(t, dir, sharedExecutionRouteConfig{
+			provider: support.NewStaticSuccessCommandRunner("task output COMPLETE"),
+		})
 
-		response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+		response := postInvocationAt(t, session.fixture.baseURL, session.sessionID, textInvocationRequest(t, "invoke this", nil))
 		if response.Status != factoryapi.InvocationTerminalStatusFailed {
 			t.Fatalf("invocation status = %q, want FAILED", response.Status)
 		}
@@ -79,12 +73,13 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	t.Run("timeoutReturnsTimedOutTerminalStatus", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)
 		blocking := newBlockingInvocationRunner()
-		server := startInvocationServer(t, dir, blocking, nil)
+		session := openSharedExecutionLiveSession(t, dir, sharedExecutionRouteConfig{provider: blocking})
 
 		timeoutMillis := int64(10)
-		response := postInvocation(
+		response := postInvocationAt(
 			t,
-			server.URL(),
+			session.fixture.baseURL,
+			session.sessionID,
 			textInvocationRequest(t, "invoke this", &timeoutMillis),
 		)
 		if response.Status != factoryapi.InvocationTerminalStatusTimedOut {
@@ -100,17 +95,15 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	validationDir := scaffoldInvocationFactory(t, nil)
-	validationServer := startInvocationServer(
-		t,
-		validationDir,
-		support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
-		nil,
-	)
+	validationSession := openSharedExecutionLiveSession(t, validationDir, sharedExecutionRouteConfig{
+		provider: support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+	})
 
 	t.Run("rejectsWhitespaceOnlyTextWithTypedPublicError", func(t *testing.T) {
-		response := postInvocationExpectStatus(
+		response := postInvocationExpectStatusAt(
 			t,
-			validationServer.URL(),
+			validationSession.fixture.baseURL,
+			validationSession.sessionID,
 			textInvocationRequest(t, "   ", nil),
 			http.StatusBadRequest,
 		)
@@ -120,9 +113,10 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	t.Run("rejectsArgsWithoutActiveSignatureWithTypedPublicError", func(t *testing.T) {
-		response := postInvocationExpectStatus(
+		response := postInvocationExpectStatusAt(
 			t,
-			validationServer.URL(),
+			validationSession.fixture.baseURL,
+			validationSession.sessionID,
 			factoryapi.InvocationRequest{
 				Args: &map[string]any{"input": "hello"},
 			},
@@ -137,9 +131,10 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	})
 
 	t.Run("rejectsInvalidStructuredArgValueShapeWithTypedPublicError", func(t *testing.T) {
-		response := postInvocationExpectStatus(
+		response := postInvocationExpectStatusAt(
 			t,
-			validationServer.URL(),
+			validationSession.fixture.baseURL,
+			validationSession.sessionID,
 			factoryapi.InvocationRequest{
 				Args: &map[string]any{"input": 7},
 			},
@@ -153,7 +148,7 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	t.Run("canceledRequestContextStopsInFlightInvocation", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)
 		blocking := newBlockingInvocationRunner()
-		server := startInvocationServer(t, dir, blocking, nil)
+		session := openSharedExecutionLiveSession(t, dir, sharedExecutionRouteConfig{provider: blocking})
 
 		body, err := json.Marshal(textInvocationRequest(t, "invoke this", nil))
 		if err != nil {
@@ -164,7 +159,7 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 		request, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+			invocationEndpoint(session.fixture.baseURL, session.sessionID),
 			bytes.NewReader(body),
 		)
 		if err != nil {
@@ -196,16 +191,12 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 
 	t.Run("durableResultsReadExposesFinalPrimaryResult", func(t *testing.T) {
 		dir := scaffoldInlineJavaScriptFactory(t)
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			UseMockWorkers:            true,
-			Edges: serviceedges.Edges{
-				ProviderCommandRunner: support.NewRecordingCommandRunner("unexpected live provider execution"),
-			},
+		fixture := sharedExecutionProcess(t)
+		registerSharedExecutionRoute(t, dir, sharedExecutionRouteConfig{
+			provider: support.NewRecordingCommandRunner("unexpected live provider execution"),
 		})
 
-		started := startInlineJavaScriptSync(t, server.URL(), dir)
+		started := startInlineJavaScriptSync(t, fixture.baseURL, dir)
 		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 			t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 		}
@@ -214,7 +205,7 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 		}
 		assertFactorySessionResultPrimaryText(t, *started.Result, terminalSuccessPrimaryResult)
 
-		finalResult := readDurableSessionResult(t, server.URL(), started.SessionId)
+		finalResult := readDurableSessionResult(t, fixture.baseURL, started.SessionId)
 		if finalResult.SessionId != started.SessionId {
 			t.Fatalf("result sessionId = %q, want %q", finalResult.SessionId, started.SessionId)
 		}

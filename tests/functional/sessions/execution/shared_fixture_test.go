@@ -27,6 +27,19 @@ const sharedExecutionFixtureTimeout = 15 * time.Second
 
 const sharedExecutionScenarioConcurrency = 2
 
+type sharedExecutionSessionKind uint8
+
+const (
+	sharedExecutionSessionDurable sharedExecutionSessionKind = iota
+	sharedExecutionSessionLive
+)
+
+type sharedExecutionIdentity struct {
+	mu                  sync.Mutex
+	pendingSessionIDs   []string
+	pendingSessionKinds []sharedExecutionSessionKind
+}
+
 var (
 	sharedExecutionFixtureOnce  sync.Once
 	sharedExecutionFixtureValue *sharedExecutionFixture
@@ -54,6 +67,12 @@ func sharedExecutionProcess(t testing.TB) *sharedExecutionFixture {
 func enterSharedExecutionScenario(t *testing.T) {
 	t.Helper()
 	t.Parallel()
+	sharedExecutionScenarioSlot <- struct{}{}
+	t.Cleanup(func() { <-sharedExecutionScenarioSlot })
+}
+
+func acquireSharedExecutionScenarioSlot(t testing.TB) {
+	t.Helper()
 	sharedExecutionScenarioSlot <- struct{}{}
 	t.Cleanup(func() { <-sharedExecutionScenarioSlot })
 }
@@ -87,6 +106,9 @@ type sharedExecutionFixture struct {
 	sessionMu        sync.Mutex
 	openedSessionIDs map[string]struct{}
 	closedSessionIDs map[string]struct{}
+
+	openMu   sync.Mutex
+	identity *sharedExecutionIdentity
 }
 
 type sharedExecutionHostedCommand struct {
@@ -116,8 +138,7 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 
 	api := support.NewProcessAPIServer()
 	router := newSharedExecutionCommandRouter()
-	var identityMu sync.Mutex
-	var pendingSessionIDs []string
+	identity := &sharedExecutionIdentity{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return api.Start(ctx, request)
@@ -126,21 +147,34 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 		// prefix. Live ownership still remains explicit until the scenario
 		// closes the session.
 		FactorySessionIDGenerator: func() string {
-			id := "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
-			identityMu.Lock()
-			pendingSessionIDs = append(pendingSessionIDs, id)
-			identityMu.Unlock()
+			identity.mu.Lock()
+			// Durable synchronous execution adds its own durable prefix around
+			// this raw generator result. Explicit dispatch-list sessions are
+			// opened through the live-session route and request that prefix here.
+			kind := sharedExecutionSessionLive
+			if len(identity.pendingSessionKinds) > 0 {
+				kind = identity.pendingSessionKinds[0]
+				identity.pendingSessionKinds = identity.pendingSessionKinds[1:]
+			}
+			var id string
+			if kind == sharedExecutionSessionLive {
+				id = uuid.NewString()
+			} else {
+				id = "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
+			}
+			identity.pendingSessionIDs = append(identity.pendingSessionIDs, id)
+			identity.mu.Unlock()
 			return id
 		},
 		FactoryRuntimeIDGenerator: func() string {
-			identityMu.Lock()
-			if len(pendingSessionIDs) > 0 {
-				id := pendingSessionIDs[0]
-				pendingSessionIDs = pendingSessionIDs[1:]
-				identityMu.Unlock()
+			identity.mu.Lock()
+			if len(identity.pendingSessionIDs) > 0 {
+				id := identity.pendingSessionIDs[0]
+				identity.pendingSessionIDs = identity.pendingSessionIDs[1:]
+				identity.mu.Unlock()
 				return id
 			}
-			identityMu.Unlock()
+			identity.mu.Unlock()
 			return uuid.NewString()
 		},
 		ProviderCommandRunner: router,
@@ -158,6 +192,7 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 		process:          process,
 		api:              api,
 		router:           router,
+		identity:         identity,
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}
@@ -486,21 +521,29 @@ type sharedExecutionSession struct {
 }
 
 func openSharedExecutionSession(t *testing.T, factoryDir string, config sharedExecutionRouteConfig) *sharedExecutionSession {
+	return openSharedExecutionSessionWithKind(t, factoryDir, config, sharedExecutionSessionDurable)
+}
+
+func openSharedExecutionLiveSession(t *testing.T, factoryDir string, config sharedExecutionRouteConfig) *sharedExecutionSession {
+	return openSharedExecutionSessionWithKind(t, factoryDir, config, sharedExecutionSessionLive)
+}
+
+func openSharedExecutionSessionWithKind(
+	t *testing.T,
+	factoryDir string,
+	config sharedExecutionRouteConfig,
+	kind sharedExecutionSessionKind,
+) *sharedExecutionSession {
 	t.Helper()
 	fixture := sharedExecutionProcess(t)
 	factoryDir, err := filepath.Abs(filepath.Clean(factoryDir))
 	if err != nil {
 		t.Fatalf("resolve execution Factory directory: %v", err)
 	}
-	if err := fixture.router.register(factoryDir, config); err != nil {
-		t.Fatalf("register shared execution command route: %v", err)
-	}
-	routeRegistered := true
-	t.Cleanup(func() {
-		if routeRegistered {
-			fixture.router.unregister(factoryDir)
-		}
-	})
+	registerSharedExecutionRoute(t, factoryDir, config)
+	fixture.openMu.Lock()
+	defer fixture.openMu.Unlock()
+	fixture.queueSessionKind(kind)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	sessionID := opened.Session.Id
 	if err := fixture.recordSessionOpened(sessionID); err != nil {
@@ -510,6 +553,28 @@ func openSharedExecutionSession(t *testing.T, factoryDir string, config sharedEx
 	session := &sharedExecutionSession{fixture: fixture, factoryDir: factoryDir, sessionID: sessionID}
 	t.Cleanup(func() { session.close(t) })
 	return session
+}
+
+func registerSharedExecutionRoute(t testing.TB, factoryDir string, config sharedExecutionRouteConfig) {
+	t.Helper()
+	fixture := sharedExecutionProcess(t)
+	factoryDir, err := filepath.Abs(filepath.Clean(factoryDir))
+	if err != nil {
+		t.Fatalf("resolve execution Factory directory: %v", err)
+	}
+	if err := fixture.router.register(factoryDir, config); err != nil {
+		t.Fatalf("register shared execution command route: %v", err)
+	}
+	t.Cleanup(func() { fixture.router.unregister(factoryDir) })
+}
+
+func (fixture *sharedExecutionFixture) queueSessionKind(kind sharedExecutionSessionKind) {
+	// The process's session-id generator is invoked by the Open Factory Session
+	// request. Serializing callers around that request keeps each requested
+	// route identity paired with the correct generated kind.
+	fixture.identity.mu.Lock()
+	defer fixture.identity.mu.Unlock()
+	fixture.identity.pendingSessionKinds = append(fixture.identity.pendingSessionKinds, kind)
 }
 
 func (session *sharedExecutionSession) close(t testing.TB) {
