@@ -70,3 +70,34 @@ The source-plan artifact named by the PRD is ignored and absent in this
 worktree. The PRD/task packet supplies the matrix used here. No source-plan,
 shared support, or c01 canonical inventory file was edited; the source-hash
 refresh is a narrow delta request to the inventory owner.
+
+## Story 004 optimization evidence
+
+P-01 and P-02 continue to use one serialized package-scoped application root
+with fresh request frames, stdio streams, contexts, HOME/USERPROFILE
+directories, working roots, and response decoding per invocation. P-03 retains
+its separate root because cancellation, serve return, descriptor closure, and
+stdout EOF are the genuine whole-protocol lifecycle witness. The protocol
+topology is therefore one shared root plus one isolated shutdown root, with all
+temporary roots and streams balanced.
+
+The post-change `errors_test.go` SHA-256 is
+`d1dfb7d46631cfe062adb8b980643244e5a662d100bc4d058a84a42f45b8de2b`.
+List discovery ran with `go test -list '^Test' -count=0 -timeout=5m
+./tests/functional/transport/mcp/protocol` and exited 0, listing all three
+top-level tests. Focused P-01, P-02, and P-03 selectors each exited 0 and
+preserved exact request IDs, invalid-params/error envelopes, missing-session
+payloads, cancellation, clean serve return, and stdout EOF.
+
+The useful repeat and race procedures passed:
+
+| Procedure | Observed topology and result |
+| --- | --- |
+| `go test -v -count=3 -timeout=10m ./tests/functional/transport/mcp/protocol -run '^TestMCP(MalformedParametersReturnInvalidParams|MissingFactorySessionReturnsCanonicalNotFound)$'` | exit 0; one shared root built/closed; six invocations, streams, and temporary roots balanced; six home roots made/removed; package 25.353s. |
+| `go test -v -count=3 -timeout=10m ./tests/functional/transport/mcp/protocol -run '^TestMCPServerShutdownClosesStdioCleanly$'` | exit 0; three isolated roots built/closed; three invocations, contexts, streams, working roots, and home roots balanced; package 12.822s. |
+| `go test -race -v -count=1 -timeout=15m ./tests/functional/transport/mcp/protocol -run '^TestMCP(MalformedParametersReturnInvalidParams|MissingFactorySessionReturnsCanonicalNotFound)$'` | exit 0; no race report; one shared root built/closed; two invocations and streams balanced; two working and home roots removed; package 67.596s under the race detector. |
+
+These procedures prove changed shared-root isolation and the retained local-real
+shutdown boundary, not portable package timing, functional coverage,
+built-child behavior, remote compatibility, or the final package run. Story
+005 owns the final execution and GATE-PERF/GATE-COVERAGE/GATE-LOOP.

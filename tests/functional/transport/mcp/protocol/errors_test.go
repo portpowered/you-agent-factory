@@ -52,6 +52,8 @@ type mcpProtocolTopologyLedger struct {
 	streamsClosed         int
 	temporaryRootsMade    int
 	temporaryRootsRemoved int
+	homeRootsMade         int
+	homeRootsRemoved      int
 }
 
 var mcpProtocolTopology mcpProtocolTopologyLedger
@@ -186,6 +188,7 @@ type fixtureBackedMCPServer struct {
 	stdoutWrite      *os.File
 	serveErr         <-chan error
 	cancel           context.CancelFunc
+	homeDirectory    string
 	workingDirectory string
 	shutdownOnce     sync.Once
 	shutdownDone     chan struct{}
@@ -270,14 +273,16 @@ func startFixtureBackedMCPServerWithProcess(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
+	homeDirectory := t.TempDir()
 	workingDirectory := t.TempDir()
+	mcpProtocolTopology.recordHomeRootMade()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
-			Env:              os.Environ(),
+			Env:              mcpProtocolEnvironmentWithHome(homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -296,12 +301,24 @@ func startFixtureBackedMCPServerWithProcess(
 		stdoutWrite:      stdoutWrite,
 		serveErr:         serveErr,
 		cancel:           cancel,
+		homeDirectory:    homeDirectory,
 		workingDirectory: workingDirectory,
 		shutdownDone:     make(chan struct{}),
 	}
 	mcpProtocolTopology.recordInvocationStarted()
 	t.Cleanup(server.cleanup)
 	return server
+}
+
+func mcpProtocolEnvironmentWithHome(homeDirectory string) []string {
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "HOME=") || strings.HasPrefix(entry, "USERPROFILE=") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+homeDirectory, "USERPROFILE="+homeDirectory)
 }
 
 func assertInitializeHandshake(t *testing.T, server *fixtureBackedMCPServer) {
@@ -365,6 +382,10 @@ func (s *fixtureBackedMCPServer) cleanup() {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove MCP protocol working directory: %w", err))
 		}
 		mcpProtocolTopology.recordTemporaryRootRemoved()
+		if err := os.RemoveAll(s.homeDirectory); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove MCP protocol home directory: %w", err))
+		}
+		mcpProtocolTopology.recordHomeRootRemoved()
 		mcpProtocolTopology.recordInvocationReturned()
 		s.cleanupErr = errors.Join(cleanupErrors...)
 	})
@@ -484,6 +505,18 @@ func (l *mcpProtocolTopologyLedger) recordTemporaryRootRemoved() {
 	l.Unlock()
 }
 
+func (l *mcpProtocolTopologyLedger) recordHomeRootMade() {
+	l.Lock()
+	l.homeRootsMade++
+	l.Unlock()
+}
+
+func (l *mcpProtocolTopologyLedger) recordHomeRootRemoved() {
+	l.Lock()
+	l.homeRootsRemoved++
+	l.Unlock()
+}
+
 func (l *mcpProtocolTopologyLedger) cleanupError() error {
 	l.Lock()
 	defer l.Unlock()
@@ -506,6 +539,9 @@ func (l *mcpProtocolTopologyLedger) cleanupError() error {
 	if l.temporaryRootsMade != l.temporaryRootsRemoved {
 		errs = append(errs, fmt.Errorf("MCP temporary roots made/removed = %d/%d", l.temporaryRootsMade, l.temporaryRootsRemoved))
 	}
+	if l.homeRootsMade != l.homeRootsRemoved {
+		errs = append(errs, fmt.Errorf("MCP home roots made/removed = %d/%d", l.homeRootsMade, l.homeRootsRemoved))
+	}
 	return errors.Join(errs...)
 }
 
@@ -513,12 +549,13 @@ func (l *mcpProtocolTopologyLedger) summary() string {
 	l.Lock()
 	defer l.Unlock()
 	return fmt.Sprintf(
-		"roots shared=%d/%d isolated=%d/%d; invocations=%d/%d; contexts=%d; streams=%d/%d; temporary_roots=%d/%d; child_processes=0 ports=0 routes=0 (not acquired)",
+		"roots shared=%d/%d isolated=%d/%d; invocations=%d/%d; contexts=%d; streams=%d/%d; temporary_roots=%d/%d home_roots=%d/%d; child_processes=0 ports=0 routes=0 (not acquired)",
 		l.sharedRootBuilds, l.sharedRootCloses,
 		l.isolatedRootBuilds, l.isolatedRootCloses,
 		l.invocationStarts, l.invocationReturns,
 		l.contextsCanceled,
 		l.streamsOpened, l.streamsClosed,
 		l.temporaryRootsMade, l.temporaryRootsRemoved,
+		l.homeRootsMade, l.homeRootsRemoved,
 	)
 }

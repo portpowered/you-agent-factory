@@ -17,7 +17,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -44,12 +43,19 @@ type mcpStdioTopologyLedger struct {
 var mcpStdioTopology mcpStdioTopologyLedger
 
 // TestMain reports the stdio inventory and verifies package-owned lifecycle
-// accounting after every scenario cleanup has run. The eight isolated rows
-// are the six non-constructor top-level rows plus the two named initializer
-// rows; the constructor validation row is process-free.
+// accounting after every scenario cleanup has run. Root-backed rows share one
+// immutable application root; streams, contexts, environments, and temporary
+// directories remain invocation-local. The constructor validation row is
+// process-free.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
+	if err := closeSharedMCPStdioRoot(); err != nil {
+		fmt.Fprintf(os.Stderr, "close shared MCP stdio root: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
 	if err := mcpStdioTopology.cleanupError(); err != nil {
 		fmt.Fprintf(os.Stderr, "GATE-CLEANUP failure: %v\n", err)
 		if exitCode == 0 {
@@ -57,8 +63,8 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "GATE-INVENTORY stdio: top_level_tests=7 named_initializer_rows=2 eligible_process_free_rows=1 isolated_rows=8")
-	fmt.Fprintf(os.Stderr, "GATE-STDIO-ISOLATED: %s\n", mcpStdioTopology.isolationSummary())
+	fmt.Fprintln(os.Stderr, "GATE-INVENTORY stdio: top_level_tests=7 named_initializer_rows=2 eligible_process_free_rows=1 root_backed_rows=7")
+	fmt.Fprintf(os.Stderr, "GATE-STDIO-ROOTS: %s\n", mcpStdioTopology.isolationSummary())
 	fmt.Fprintf(os.Stderr, "GATE-LIFECYCLE: %s\n", mcpStdioTopology.lifecycleSummary())
 	fmt.Fprintf(os.Stderr, "GATE-CLEANUP: %s\n", mcpStdioTopology.summary())
 	fmt.Fprintln(os.Stderr, "GATE-REPEAT: per-invocation resource balances are checked for each package run; use the declared -count=3 gate for repeatability")
@@ -71,8 +77,8 @@ func TestMain(m *testing.M) {
 // tools/list succeed through the public you server mcp boundary without widening
 // into Factory Session lifecycle semantics.
 func TestMCPStdioInitializeAndToolDiscovery(t *testing.T) {
-	// Keep this fixture isolated: initialize and discovery are separate
-	// scenario-owned protocol observations and must not share session state.
+	// Share immutable application wiring while keeping the protocol session,
+	// streams, environment, and temporary roots invocation-local.
 	server := startFixtureBackedMCPServer(t)
 	defer server.cleanup()
 
@@ -106,8 +112,8 @@ func TestMCPStdioInitializeAndToolDiscovery(t *testing.T) {
 // is not in the discovered catalog returns a protocol-visible JSON-RPC error
 // rather than a success result or typed Factory Session domain envelope.
 func TestMCPUnknownToolReturnsProtocolError(t *testing.T) {
-	// Keep this fixture isolated: unknown-tool handling is a protocol error
-	// witness and must retain its own root and stdio session.
+	// Unknown-tool handling remains a fresh protocol error witness even though
+	// immutable application wiring is shared.
 	server := startFixtureBackedMCPServer(t)
 	defer server.cleanup()
 
@@ -136,8 +142,8 @@ func TestMCPUnknownToolReturnsProtocolError(t *testing.T) {
 // the canonical Factory Session tool names published for MCP hosts without
 // asserting Session lifecycle or tool execution semantics.
 func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
-	// Keep this fixture isolated: generated discovery membership is an
-	// independent catalog witness, not reusable live session state.
+	// Generated discovery membership is an independent catalog witness with a
+	// fresh live session, despite sharing immutable application wiring.
 	server := startFixtureBackedMCPServer(t)
 	defer server.cleanup()
 
@@ -160,8 +166,8 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 // server mcp fails with a customer-visible home diagnostic before stdio initialize when
 // HOME and USERPROFILE are absent from the process environment.
 func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
-	// Keep this root isolated: the environment witness must return before MCP
-	// initialization and cannot share process inputs with a valid invocation.
+	// Keep the supplied environment and paths case-local; the initializer
+	// failure can reuse immutable application wiring.
 	process := buildMCPProcess(t)
 	projectRoot := trackedMCPTempDir(t)
 	workingDirectory := trackedMCPTempDir(t)
@@ -180,15 +186,15 @@ func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 // server mcp rejects a project root that cannot resolve a factory layout before
 // stdio initialize succeeds.
 func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
-	// Keep this root isolated: invalid Factory layout exercises initializer
-	// failure with its own project and home environment.
+	// Keep the invalid Factory layout and home environment case-local while
+	// reusing immutable application wiring.
 	process := buildMCPProcess(t)
 	projectRoot := trackedMCPTempDir(t)
 	homeDir := trackedMCPTempDir(t)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "server", "mcp", "--runtime", "--project-root", projectRoot,
 	})
-	inputs.Env = append([]string{"PATH=", "HOME=" + homeDir, "USERPROFILE=" + homeDir}, os.Environ()...)
+	inputs.Env = mcpEnvironmentWithHome(homeDir)
 	inputs.WorkingDirectory = projectRoot
 	err := executeMCPProcess(t, process, inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "factory layout not found") {
@@ -200,12 +206,12 @@ func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
 // runtime-backed you server mcp both reach a successful stdio initialize through
 // the public process boundary with injected transport dependencies.
 func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
-	// The parent row owns two named initializer witnesses. They remain
-	// isolated because fixture and runtime initialization have different roots,
-	// environments, and lifecycle inputs.
+	// The parent row owns two named initializer witnesses. Their streams,
+	// environments, and project paths remain case-local while application
+	// wiring is shared.
 	t.Run("fixture-backed", func(t *testing.T) {
-		// Keep the fixture-backed initializer row isolated from the runtime
-		// row: each owns a distinct root, stream, and initialization path.
+		// Keep the fixture-backed initializer's stream and protocol lifecycle
+		// distinct from the runtime row.
 		server := startFixtureBackedMCPServer(t)
 		defer server.cleanup()
 		initializeMCPClient(t, server.client)
@@ -215,8 +221,8 @@ func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 		projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-stdio-discovery-runtime")
 		trackMCPTempRoot(t, projectRoot)
 
-		// Keep the runtime-backed initializer row isolated: its project root
-		// and environment are distinct from the fixture-backed row.
+		// Keep the runtime-backed initializer's project root and environment
+		// distinct from the fixture-backed row.
 		server := startRuntimeBackedMCPServer(t, projectRoot)
 		defer server.cleanup()
 		initializeMCPClient(t, server.client)
@@ -357,21 +363,7 @@ func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 
 func buildMCPProcess(t testing.TB) support.ApplicationProcess {
 	t.Helper()
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess: %v", err)
-	}
-	mcpStdioTopology.recordRootBuild()
-	t.Cleanup(func() {
-		closeContext, cancel := context.WithTimeout(context.Background(), mcpStdioStopTimeout)
-		closeErr := process.Close(closeContext)
-		cancel()
-		mcpStdioTopology.recordRootClose()
-		if closeErr != nil {
-			t.Errorf("close MCP application process: %v", closeErr)
-		}
-	})
-	return process
+	return sharedMCPStdioRoot.ensure(t)
 }
 
 func executeMCPProcess(t testing.TB, process support.ApplicationProcess, input root.Input) error {
@@ -379,9 +371,18 @@ func executeMCPProcess(t testing.TB, process support.ApplicationProcess, input r
 	if process == nil {
 		t.Fatal("execute MCP process requires an application process")
 	}
-	mcpStdioTopology.recordInvocationStarted()
-	defer mcpStdioTopology.recordInvocationReturned()
-	return process.Execute(input)
+	return executeSharedMCPStdioProcess(process, input)
+}
+
+func mcpEnvironmentWithHome(homeDirectory string) []string {
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "HOME=") || strings.HasPrefix(entry, "USERPROFILE=") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+homeDirectory, "USERPROFILE="+homeDirectory)
 }
 
 func trackedMCPTempDir(t testing.TB) string {
@@ -423,8 +424,8 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	homeDirectory := trackedMCPTempDir(t)
 	workingDirectory := trackedMCPTempDir(t)
-	mcpStdioTopology.recordInvocationStarted()
 	mcpStdioTopology.recordStdioSessionOpened()
 	mcpStdioTopology.recordContextCreated()
 	mcpStdioTopology.recordStreamsOpened()
@@ -432,12 +433,12 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
-		serveErr <- process.Execute(root.Input{
+		serveErr <- executeSharedMCPStdioProcess(process, root.Input{
 			Args: []string{
 				"you", "server", "mcp",
 				"--fixture-catalog", fixtureCatalog,
 			},
-			Env:              os.Environ(),
+			Env:              mcpEnvironmentWithHome(homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -481,8 +482,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 
 	ctx, cancel := context.WithCancel(context.Background())
 	homeDir := trackedMCPTempDir(t)
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	mcpStdioTopology.recordInvocationStarted()
+	env := mcpEnvironmentWithHome(homeDir)
 	mcpStdioTopology.recordStdioSessionOpened()
 	mcpStdioTopology.recordContextCreated()
 	mcpStdioTopology.recordStreamsOpened()
@@ -490,7 +490,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
-		serveErr <- process.Execute(root.Input{
+		serveErr <- executeSharedMCPStdioProcess(process, root.Input{
 			Args: []string{
 				"you", "server", "mcp",
 				"--runtime", "--project-root", projectRoot,
@@ -529,7 +529,6 @@ func (s *stdioMCPServer) cleanup() {
 		}
 		s.closeStreams()
 		mcpStdioTopology.recordStdioSessionClosed()
-		mcpStdioTopology.recordInvocationReturned()
 		s.cleanupErr = errors.Join(cleanupErrors...)
 	})
 	if s.cleanupErr != nil {
@@ -711,7 +710,7 @@ func (l *mcpStdioTopologyLedger) isolationSummary() string {
 	l.Lock()
 	defer l.Unlock()
 	return fmt.Sprintf(
-		"root_builds=%d root_closes=%d; root-backed rows retain distinct Process instances; process_free_constructor=not_acquired",
+		"root_builds=%d root_closes=%d; root-backed rows share immutable Process wiring with fresh invocation state; process_free_constructor=not_acquired",
 		l.rootBuilds, l.rootCloses,
 	)
 }

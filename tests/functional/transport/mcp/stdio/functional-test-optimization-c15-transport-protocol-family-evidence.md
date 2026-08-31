@@ -81,3 +81,49 @@ The source-plan artifact named by the PRD is ignored and absent in this
 worktree. The PRD/task packet supplies the matrix used here. No source-plan,
 shared support, or c01 canonical inventory file was edited; the source-hash
 refresh is a narrow delta request to the inventory owner.
+
+## Story 004 optimization evidence
+
+The MCP-S fixture now builds one package-scoped application root lazily and
+serializes `Process.Execute` calls. All seven root-backed rows retain fresh
+stdio pipe pairs, contexts, environments, HOME/USERPROFILE directories,
+working or project roots, request IDs, and protocol state. S-08..S-10 remain
+process-free constructor checks. The root-backed topology is therefore one
+shared root with no isolated root; the real stdio, incomplete-frame, EOF, and
+pre-initialize failure boundaries remain case-local.
+
+Post-change source hashes:
+
+| File | SHA-256 |
+| --- | --- |
+| `discovery_test.go` | `1ae0cf6775b10adc30dde5ee42fabd5324e8559fd7ca86dc18de9204bcb85179` |
+| `package_fixture_test.go` | `29bee5673a03b2248dc05cccc357ed91ba8f8ec066c68b7629a075d51f6e5a38` |
+
+List discovery ran with `go test -list '^Test' -count=0 -timeout=5m
+./tests/functional/transport/mcp/stdio` and exited 0, listing seven
+top-level tests, two named initializer rows, and the three process-free
+constructor subparts. The focused selectors for initialize/discovery,
+unknown-tool error, canonical discovery, missing-home failure, invalid-root
+failure, both initializer rows, and Open validation each exited 0 with
+unchanged exact assertions. Representative focused output included:
+
+```text
+go test -v -count=1 -timeout=5m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioInitializeAndToolDiscovery$'
+exit 0; package 1.378s; roots=1/1; invocations=1/1; sessions=1/1; contexts=1/1; streams=1/1; temporary_roots=2/2
+
+go test -v -count=1 -timeout=5m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioFixtureAndRuntimePathsReachInitializer$'
+exit 0; package 11.518s; roots=1/1; invocations=2/2; sessions=2/2; contexts=2/2; streams=2/2; temporary_roots=4/4
+```
+
+The useful repeat procedures passed:
+
+| Procedure | Observed topology and result |
+| --- | --- |
+| `go test -v -count=3 -timeout=10m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioFixtureAndRuntimePathsReachInitializer$'` | exit 0; one root built/closed; six invocations, sessions, contexts, and streams balanced; twelve temporary roots made/removed; package 25.819s. |
+| `go test -v -count=3 -timeout=10m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioRuntimeRejects(MissingHomeEnvironment|InvalidRuntimeProjectRoot)$'` | exit 0; one root built/closed; six invocations balanced with zero stdio sessions/streams; twelve temporary roots made/removed; package 12.851s. |
+| `go test -race -v -count=1 -timeout=15m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioFixtureAndRuntimePathsReachInitializer$'` | exit 0; no race report; one root built/closed; two invocations, sessions, contexts, and streams balanced; four temporary roots made/removed; package 68.254s under the race detector. |
+
+The repeat and race runs prove fresh-case isolation and cleanup for the
+changed shared fixture, not portable package timing, functional coverage,
+built-child behavior, Unix descriptor semantics, or the single final package
+run. Story 005 owns that final run and GATE-PERF/GATE-COVERAGE/GATE-LOOP.
