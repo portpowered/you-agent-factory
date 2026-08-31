@@ -292,11 +292,17 @@ are owned by the subsequent behavior/delivery gates.
 ## Story 004 — exact-head behavior, performance, and delivery evidence
 
 The implementation/test tree validated for this story is commit
-`49aaa22d66f4ec9f790fed4400561b796aada670` on Windows `amd64` with Go
+`9c89ba607f57ff68f08bd6e314220fbc228cc7a2` on Windows `amd64` with Go
 `1.25.0`. The only tracked paths in the implementation diff are this ledger
 and the two owned functional-test packages; `prd.json` and `progress.txt`
 remain ignored local scaffolding. `git diff --check` and
 `go run ./cmd/functionalboundarycheck` both exited `0`.
+
+The branch was rebased once immediately before final validation from the
+characterization base onto `origin/main`/`upstream/main`
+`3c6acf6794b0f7ecace31e6d13504a2bce6ffe1`. The base delta touched none of the
+owned CLI/runtime/support paths, and the owned source tree is identical before
+and after the rebase.
 
 ### Final topology reconciliation
 
@@ -351,8 +357,8 @@ an `n=1` observation, not a portable threshold claim.
 
 | Package | Supplied before median | Final Go package result | Final measured wall | Result |
 | --- | ---: | ---: | ---: | --- |
-| `commands` | `38.327s` | `36.738s` | `40.715s` | exit `0`; all C01-C29 active under the ordinary suite |
-| `parameters` | `28.615s` | `27.466s` | `31.436s` | exit `0`; all default P01-P21 active |
+| `commands` | `38.327s` | `49.903s` | `54.440s` | exit `0`; all C01-C29 active under the ordinary suite |
+| `parameters` | `28.615s` | `25.910s` | `29.945s` | exit `0`; all default P01-P21 active |
 
 P22 was run exactly once with the required tag and short policy:
 
@@ -362,7 +368,7 @@ go test -tags=functionallong ./tests/functional/transport/cli/parameters \
   -count=1 -short=false -timeout=15m
 ```
 
-It exited `0` with package time `1.463s` and measured wall `5.798s`. The
+It exited `0` with package time `1.757s` and measured wall `6.361s`. The
 assertion retained one complete Work, zero init/failed Work, one Codex command,
 the exact provider arguments, Factory-root-relative workdir, and non-empty
 stdin prompt.
@@ -438,7 +444,7 @@ SHA. No implementation repair was made during any loopback attempt.
 
 #### Environment and artifact
 
-- Commit/build identifier: `49aaa22d66f4ec9f790fed4400561b796aada670`.
+- Commit/build identifier: `9c89ba607f57ff68f08bd6e314220fbc228cc7a2`.
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -480,7 +486,7 @@ must be recorded in the PR conversation only, never in this ledger commit.
 
 ### Implementation-stage handoff status
 
-Local story evidence is complete and ready for final synchronization. The
+Local story evidence is complete and ready for final push. The
 implementation-stage delivery criterion becomes satisfied only after this
 final head is pushed, the named PR is open, required CI has started on that
 head, and any blocking review feedback is addressed. Review owns terminal CI,
