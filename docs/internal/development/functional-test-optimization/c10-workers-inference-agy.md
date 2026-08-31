@@ -589,6 +589,24 @@ and the race package passed (`8.885s`). These local timings are diagnostic only;
 fresh hosted Backend Functional Coverage remains the review-owned timing
 verdict.
 
+### Per-test irreducibility after the bounded package pass
+
+When the hosted package row remains at or above three seconds after the bounded
+package-local pass, the complete executable package surface is recorded here.
+The table describes required observable work, not a committed CI timing result;
+current-head timings and coverage remain in the PR conversation.
+
+| Executable row | Required observable work retained | Why it is irreducible within this lane |
+| --- | --- | --- |
+| `TestAgyGoldenFinalOnlySuccess` | One successful Work, one controlled AGY call, 11 Factory Events, final-only response frames, provider/output goldens, route isolation, and normal cleanup. | Removing the process, session, event, response, or Work observation would remove the success behavior witness; coalescing it with timeout would erase immutable route and outcome separation. |
+| `TestAgyGoldenTimeout` | Failed Work, nine retry calls, 23 Factory Events, partial-output retention, timeout classification, failed terminal response, redaction, and cleanup. | The retry and failure observations are the characterized timeout contract; omitting attempts or terminal projections would no longer prove retry grouping, partial-output handling, or failure semantics. |
+| `TestAgyCleanupPreservesAssertionAndCleanupErrors` | Injected primary/assertion and cleanup failures, every release/check operation, joined error discovery, and idempotent cleanup. | This is the only direct adverse cleanup/error-preservation witness; removing it would leave cleanup failures unproved and could allow cleanup to mask the primary result. |
+| Shared `TestMain` package lifecycle | One production-composed application/API process, two explicit scenario sessions, shared routes, listener/process shutdown, active-call census, and temporary-root removal. | The shared lifecycle is the package topology under test. Splitting or deleting it would reintroduce per-test process setup or drop the one-process/two-session and package-cleanup guarantees. |
+
+No additional package-local observation, retry, cleanup, or assertion is removed
+by this disposition. The remaining elapsed time is shared process/test-runtime
+overhead rather than a safely removable duplicate behavior witness.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
