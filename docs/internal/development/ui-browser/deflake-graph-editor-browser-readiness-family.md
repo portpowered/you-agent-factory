@@ -235,3 +235,105 @@ The full check's diagnostics are outside the changed integration file and
 were not repaired in this scoped story. Clean final-artifact behavior,
 full-browser-tier coexistence, loopback, rebase, PR workflow, and review remain
 story-003 edges.
+
+## Story 003 clean final-artifact validation
+
+Validation date: 2026-08-30 (America/Los_Angeles)
+
+### Environment and artifact
+
+- The tracked worktree was clean before validation. Final candidate was
+  `ec937095c6dacd79f961259d2f6e7dc3e2ebf594`; its merge base with
+  `origin/main` was `8442846cb31f225a8c128228235874aa518ce31c`, so the final
+  candidate is rebased onto the fetched current main.
+- The final UI artifact was built by `make ui-integration-test`: Vite
+  transformed `4830` modules and exited 0. The local browser used supported
+  Playwright Chromium `chromium-1217` on Windows 11 with the existing
+  controlled mock API harness; no paid or production dependency was used.
+- The focused raw artifacts are retained locally under the ignored
+  `.artifacts/ui-browser-integration/graph-editor-readiness/story-003-final-focused/`
+  directory. No raw browser artifact was committed.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Final focused graph-editor journeys | PASS | `bunx --no-install vitest run integration/factory-graph-editor.integration.test.mjs --no-file-parallelism --maxWorkers 1 --retry=0 --reporter=verbose`: 1 file, 5/5 tests, exit 0. The existing assertions retained exact Add/save topology, version, route, workstation, prompt, observer controls, zero Add nodes, and zero saves. | Remote CI and later-main behavior. |
+| Direct Chromium keyboard and accessibility smoke | BLOCKED | Real Chromium observed semantic Add/Workstation/Save/Leave names; Add `Enter` opened the menu, menu `Escape` closed and restored focus to Add, the workstation dialog initially focused Identifier, Save `Enter` opened confirmation, and leave-dialog Discard returned to visible Edit mode and viewport. The nested workstation dialog's `Escape` returned focus to `BODY` after its menu trigger unmounted, so a trigger-return guarantee is not established. | Whether the body fallback is acceptable for this nested menu/dialog composition; no product correction was authorized in the read-only loopback. |
+| UI typecheck | PASS | `cd ui && bun run typecheck`: exit 0. | Full remote type/build environment. |
+| UI check | FAIL | `cd ui && bun run check`: exit 1 with 174 pre-existing formatter/import diagnostics in untouched baseline files; no changed-file diagnostic was reported. | Requires an independently scoped baseline cleanup or policy decision. |
+| Full browser tier | FAIL | `make ui-integration-test`: build passed; 16 files and 41 tests executed, 40 passed and 1 failed. Untouched failure: `integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs > ... preserves a valid reconnect cursor across a backend restart when identity still matches`, `Timed out waiting for durable checkpoint: restart cursor reuse`. | Base-SHA reproduction and ownership of the recovery deflake remain unproven. |
+| Forbidden-change and count audit | PASS | `git diff --check origin/main...HEAD` passed; the diff changes only the site-labelled diagnostic test path and ledger. No timeout/retry/sleep/skip/quarantine/conditional or weakened value assertion was added; the configured browser inventory remains 16 files. | Static audit does not prove every remote workflow policy. |
+| Clean-room loopback and handoff | BLOCKED | No silent repair was made. Because the UI check, full-tier test, and nested-dialog focus-return edge are not all passing, the final PR handoff was not claimed. | Push/open PR/CI start/review feedback remain for the smallest next delta. |
+
+### Customer journey
+
+1. In real Chromium against the built dashboard and controlled mock API, the
+   operator entered editor mode, opened Add with keyboard `Enter`, selected
+   Workstation, entered `review` and `Review the drafted story.`, and added the
+   workstation. After focusing Save, keyboard `Enter` opened the confirmation
+   dialog and produced one successful `PUT` to
+   `/factory-sessions/019e0000-0000-7000-8000-000000000042/factory` (`200`).
+   The response retained `Current Factory`, the `review` workstation,
+   `INFERENCE_RUN`, `writer`, and the exact prompt. The focused integration
+   test independently proves the canonical exact topology/version/route
+   assertions.
+2. The operator opened a pending work-type draft, used Discard, invoked Leave
+   editor, and confirmed Discard in the unsaved-changes dialog. The observed
+   result was visible `Edit mode`, visible `Work graph viewport`, zero Add
+   toolbar controls, and no additional PUT after the one save used by the
+   preceding journey.
+3. No browser launch retry, test retry, or silent repair was used. Existing
+   focused and full-tier harness cleanup completed; the full-tier recovery
+   timeout remains counted as a failure.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: this ledger records the final SHA, commands,
+  counts, artifacts, findings, and delta plans beside the story-001/002
+  characterization evidence.
+- Permission and error behavior: only local preview and controlled mock API
+  services were used; no production or paid calls were made.
+- Persistence/reload behavior: the focused browser spec's successful PUT and
+  exact request assertions passed; an independent post-reload persistence
+  check was not added to this read-only validation.
+- Accessibility/keyboard/responsive behavior: semantic names, visible dialog
+  focus, Add-menu Enter/Escape, Save Enter, and leave Discard were exercised;
+  the nested dialog's focus-return edge is recorded above rather than hidden.
+- Operational signals: full-tier cleanup ran, build output was ignored, and
+  no CI result or audit record was committed after validation.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| LOOPBACK-UI-QUALITY-BASELINE | High | Run `cd ui && bun run check` on final head | Exit 0 | Exit 1, 174 diagnostics in untouched baseline files | Final command output; diff contains no affected files. |
+| LOOPBACK-FULL-BROWSER-BASELINE | High | Run `make ui-integration-test` on final head | 16 files / 41 tests all pass | 16 files / 41 tests executed; 40 passed, one untouched recovery checkpoint test timed out | Full-tier output names `restart cursor reuse`. |
+| LOOPBACK-NESTED-DIALOG-FOCUS | Medium | Open Add → Workstation and press Escape in Chromium | Close the dialog and return focus to an appropriate live control | Dialog closed, but focus was `BODY` after the menu trigger unmounted | Direct Chromium observation; no source change made. |
+
+### Verdict
+
+BLOCKED
+
+### Delta-plan request [Required for BLOCKED]
+
+- Affected behavior and criteria: UI-quality check, full browser-tier
+  coexistence, and nested Add-dialog focus return in LOOPBACK-01.
+- Root-cause evidence or remaining uncertainty: the check reports only
+  untouched baseline formatter/import diagnostics; the full tier's only failure
+  is in an untouched session-recovery manual scenario; the nested dialog
+  focus-return path has direct evidence of `BODY` focus but no characterization
+  of whether this is an accepted portal/unmount fallback.
+- Smallest recommended correction/prerequisite: first run the failing recovery
+  scenario once against the exact `origin/main` base and route any reproduced
+  failure to its recovery deflake owner; separately establish the repository
+  baseline for `bun run check`. Then decide whether the nested-dialog trigger
+  needs a product-owned focus-return correction or an explicit accessibility
+  contract. Re-run only the affected recovery/focus checks and the full
+  browser tier after a bounded correction.
+- Dependencies and retest scope: a clean base comparison, owner decision for
+  the baseline check, and (if required) a narrowly scoped UI owner change;
+  afterward rerun the named focus/component evidence, the focused 5-test file,
+  `bun run typecheck`, `bun run check`, and `make ui-integration-test` before
+  rebase/push/PR/CI handoff. Terminal CI, conflicts, and merge remain review-
+  owned.
