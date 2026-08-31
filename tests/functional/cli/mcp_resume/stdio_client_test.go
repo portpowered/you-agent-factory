@@ -2,14 +2,9 @@ package mcp_resume_test
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
-	"errors"
 	"io"
-	"os"
-	"strings"
 	"testing"
-	"time"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
@@ -130,20 +125,5 @@ func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {
 	protocolVersion, _ := initResult.Result["protocolVersion"].(string)
 	if protocolVersion != "2024-11-05" {
 		t.Fatalf("protocolVersion = %q, want 2024-11-05", protocolVersion)
-	}
-}
-
-func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan error) {
-	t.Helper()
-	if stdinWrite != nil {
-		_ = stdinWrite.Close()
-	}
-	select {
-	case err := <-serveErr:
-		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-			t.Fatalf("RunServe: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("RunServe did not shut down after stdin closed")
 	}
 }

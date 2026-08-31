@@ -1,13 +1,11 @@
 package mcp_resume_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP server smoke fixture: terminal async completion.
@@ -22,35 +20,13 @@ return {
 `
 
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	t.Parallel()
+	fixture := mcpResumePackageFixtureForTest(t)
+	client := fixture.client
 
-	projectRoot := runtimeSmokeProjectRoot(t)
-	client, shutdown := startRunServeRuntimeSmokeServer(t, projectRoot)
-	assertInstallSmokeInitialize(t, client)
-
-	sessionID := assertRuntimeSmokeAsyncStart(t, client)
+	sessionID := assertRuntimeSmokeAsyncStart(t, client, fixture.nextRequestID("runtime-smoke"))
+	fixture.trackSession(t, client, sessionID)
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
 	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
-	shutdown()
-}
-
-func runtimeSmokeProjectRoot(t *testing.T) string {
-	t.Helper()
-	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-runtime-smoke")
-	t.Cleanup(func() {
-		// Remove the full project root before t.TempDir teardown so runtime-backed
-		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.
-		_ = os.RemoveAll(projectRoot)
-	})
-	return projectRoot
-}
-
-func startRunServeRuntimeSmokeServer(
-	t *testing.T,
-	projectRoot string,
-) (*stdioMCPClient, func()) {
-	t.Helper()
-	return startRootRuntimeMCPServer(t, projectRoot, nil)
 }
 
 func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
@@ -73,11 +49,11 @@ func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, se
 	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
 }
 
-func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient) string {
+func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient, requestID string) string {
 	t.Helper()
 	asyncStart := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest()),
+		client.callTool(mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest(requestID)),
 	)
 	if asyncStart.Error != nil || asyncStart.Result == nil {
 		t.Fatalf("start_async = %#v, want success", asyncStart)
@@ -217,7 +193,7 @@ func assertRuntimeSmokeTerminalResult(
 	}
 }
 
-func runtimeSmokeInlineAsyncRequest() factoryapi.FactorySessionExecutionRequest {
+func runtimeSmokeInlineAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
 	dialect := "you-workflow-v1"
 	metadata := factoryapi.StringMap{
 		"name":        "runtime-mcp-serve-smoke",
@@ -229,7 +205,7 @@ func runtimeSmokeInlineAsyncRequest() factoryapi.FactorySessionExecutionRequest 
 		"prefix":  "you",
 	}
 	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-mcp-runtime-serve-smoke-001",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
 			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{

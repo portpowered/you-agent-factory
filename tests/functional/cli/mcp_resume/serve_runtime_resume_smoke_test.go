@@ -1,34 +1,21 @@
 package mcp_resume_test
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
-	t.Parallel()
-
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
-	assertInstallSmokeInitialize(t, client)
+	client := harness.client
 	assertRuntimeResumeSmokeDiscovery(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
+	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.SessionId != sessionID {
@@ -72,21 +59,17 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 	mode := factoryapi.FactorySessionResultModeFinal
 	assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
 
-	if harness.provider.callCount() < 3 {
-		t.Fatalf("provider execute calls = %d, want at least 3 after resume completion", harness.provider.callCount())
+	if harness.provider.callCount(sessionID) < 3 {
+		t.Fatalf("provider execute calls = %d, want at least 3 after resume completion", harness.provider.callCount(sessionID))
 	}
-
-	shutdown()
 }
 
 func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
-	t.Parallel()
-
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
-	assertInstallSmokeInitialize(t, client)
+	client := harness.client
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
+	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	assertMCPDurableProgressCounts(t, before.Progress, 1, 2, 0)
@@ -145,21 +128,17 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 		}
 	}
 
-	if harness.provider.callCount() != 3 {
-		t.Fatalf("provider execute calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+	if harness.provider.callCount(sessionID) != 3 {
+		t.Fatalf("provider execute calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount(sessionID))
 	}
-
-	shutdown()
 }
 
 func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
-	t.Parallel()
-
 	harness := newMCPRuntimeResumeSmokeSucceededHarness(t)
-	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
-	assertInstallSmokeInitialize(t, client)
+	client := harness.client
 
-	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client)
+	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client, harness.fixture)
+	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.SessionId != sessionID {
@@ -199,18 +178,14 @@ func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionA
 			after.ResultSummary.ResultStatus,
 		)
 	}
-
-	shutdown()
 }
 
 func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
-	t.Parallel()
-
 	harness := newMCPRuntimeResumeSmokeRunningHarness(t)
-	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
-	assertInstallSmokeInitialize(t, client)
+	client := harness.client
 
-	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client)
+	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client, harness.fixture)
+	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
@@ -240,117 +215,60 @@ func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPres
 	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("post-resume status = %q, want RUNNING unchanged", after.Status)
 	}
-
-	shutdown()
 }
 
 type mcpRuntimeResumeSmokeHarness struct {
-	projectRoot string
-	provider    *mcpRuntimeResumeSmokeBlockingProvider
+	provider *mcpRuntimeResumeSmokeProviderRouter
+	fixture  *mcpResumePackageFixture
+	client   *stdioMCPClient
 }
 
 func newMCPRuntimeResumeSmokeHarness(t *testing.T) *mcpRuntimeResumeSmokeHarness {
 	t.Helper()
 
-	const workflowName = "resumable-two-step-fake-children"
-	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "resumable-two-step-fake-children.workflow.js", workflowName)
-	provider := newMCPRuntimeResumeSmokeBlockingProvider(workflowName)
-
+	fixture := mcpResumePackageFixtureForTest(t)
 	return &mcpRuntimeResumeSmokeHarness{
-		projectRoot: projectRoot,
-		provider:    provider,
+		provider: fixture.provider,
+		fixture:  fixture,
+		client:   fixture.client,
 	}
 }
 
 type mcpRuntimeResumeSmokeSucceededHarness struct {
-	projectRoot string
+	fixture *mcpResumePackageFixture
+	client  *stdioMCPClient
 }
 
 func newMCPRuntimeResumeSmokeSucceededHarness(t *testing.T) *mcpRuntimeResumeSmokeSucceededHarness {
 	t.Helper()
 
-	const workflowName = "simple-final"
-	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", workflowName)
-	return &mcpRuntimeResumeSmokeSucceededHarness{projectRoot: projectRoot}
+	fixture := mcpResumePackageFixtureForTest(t)
+	return &mcpRuntimeResumeSmokeSucceededHarness{
+		fixture: fixture,
+		client:  fixture.client,
+	}
 }
 
 type mcpRuntimeResumeSmokeRunningHarness struct {
-	projectRoot string
+	fixture *mcpResumePackageFixture
+	client  *stdioMCPClient
 }
 
 func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmokeRunningHarness {
 	t.Helper()
 
-	const workflowName = "busy-loop"
-	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "busy-loop.workflow.js", workflowName)
-	return &mcpRuntimeResumeSmokeRunningHarness{projectRoot: projectRoot}
+	fixture := mcpResumePackageFixtureForTest(t)
+	return &mcpRuntimeResumeSmokeRunningHarness{
+		fixture: fixture,
+		client:  fixture.client,
+	}
 }
 
-func startRootRuntimeMCPServer(
+func startMCPRuntimeResumeSmokeSucceededSession(
 	t *testing.T,
-	projectRoot string,
-	provider providers.Service,
-) (*stdioMCPClient, func()) {
-	t.Helper()
-
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderOverride: provider,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess: %v", err)
-	}
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	homeDir := t.TempDir()
-	t.Cleanup(func() {
-		// Remove initializer-owned files before testing.TempDir performs its
-		// strict Windows cleanup, matching the project-root persistence cleanup.
-		_ = os.RemoveAll(homeDir)
-	})
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-	serveErr := make(chan error, 1)
-	var stderr bytes.Buffer
-	go func() {
-		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", projectRoot},
-			Env:              env,
-			Stdin:            stdinRead,
-			Stdout:           stdoutWrite,
-			Stderr:           &stderr,
-			Context:          ctx,
-			WorkingDirectory: projectRoot,
-		})
-	}()
-
-	var shutdownOnce sync.Once
-	shutdown := func() {
-		shutdownOnce.Do(func() {
-			cancel()
-			_ = stdinWrite.Close()
-			closeRunServeSmokeServer(t, nil, serveErr)
-		})
-	}
-	t.Cleanup(shutdown)
-
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown
-}
-
-func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPClient) string {
+	client *stdioMCPClient,
+	fixture *mcpResumePackageFixture,
+) string {
 	t.Helper()
 
 	const workflowName = "simple-final"
@@ -359,7 +277,7 @@ func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPCl
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-mcp-runtime-resume-smoke-succeeded-001",
+			RequestId: fixture.nextRequestID("succeeded"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 				WorkflowName: &workflowNamePtr,
@@ -384,7 +302,11 @@ func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPCl
 	return sessionID
 }
 
-func startMCPRuntimeResumeSmokeRunningSession(t *testing.T, client *stdioMCPClient) string {
+func startMCPRuntimeResumeSmokeRunningSession(
+	t *testing.T,
+	client *stdioMCPClient,
+	fixture *mcpResumePackageFixture,
+) string {
 	t.Helper()
 
 	const workflowName = "busy-loop"
@@ -392,7 +314,7 @@ func startMCPRuntimeResumeSmokeRunningSession(t *testing.T, client *stdioMCPClie
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-mcp-runtime-resume-smoke-running-001",
+			RequestId: fixture.nextRequestID("running"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 				WorkflowName: &workflowNamePtr,
@@ -446,7 +368,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-mcp-runtime-resume-smoke-start-001",
+			RequestId: harness.fixture.nextRequestID("interrupted"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 				WorkflowName: &workflowNamePtr,
@@ -480,7 +402,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	)
 
 	interruptReason := "mcp runtime resume smoke interrupt"
-	harness.provider.waitForExecuteBlocked(t, 5*time.Second)
+	harness.provider.waitForExecuteBlocked(t, sessionID, 5*time.Second)
 	interrupted := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolControl, map[string]any{
@@ -497,7 +419,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 		t.Fatalf("interrupt outcome = %q, want ACCEPTED", interrupted.Result.Outcome)
 	}
 
-	harness.provider.waitForCanceledExecute(t, 5*time.Second)
+	harness.provider.waitForCanceledExecute(t, sessionID, 5*time.Second)
 	waitForMCPSessionStatus(
 		t,
 		client,
@@ -744,27 +666,6 @@ func waitForMCPDispatchStatus(
 	t.Fatalf("dispatch %s did not reach %s within %s; last dispatches = %s", dispatchID, want, timeout, lastJSON)
 }
 
-func setupMCPRuntimeResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
-	t.Helper()
-
-	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-resume-smoke")
-	t.Cleanup(func() {
-		_ = os.RemoveAll(projectRoot)
-	})
-	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "fixtures", "javascript_runtime", fixtureName))
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", fixtureName, err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, workflowName+".js"), raw, 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return projectRoot
-}
-
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -772,97 +673,4 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
-}
-
-type mcpRuntimeResumeSmokeBlockingProvider struct {
-	testutil.NativeProvider
-	mu              sync.Mutex
-	calls           int
-	blockedOnce     bool
-	contextCanceled int
-	executeBlocked  chan struct{}
-	workflowName    string
-}
-
-func newMCPRuntimeResumeSmokeBlockingProvider(workflowName string) *mcpRuntimeResumeSmokeBlockingProvider {
-	provider := &mcpRuntimeResumeSmokeBlockingProvider{
-		executeBlocked: make(chan struct{}),
-		workflowName:   workflowName,
-	}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
-	t.Helper()
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-p.executeBlocked:
-	case <-timer.C:
-		t.Fatal("provider Execute did not enter its cancellable wait")
-	}
-}
-
-func (p *mcpRuntimeResumeSmokeBlockingProvider) callCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.calls
-}
-
-func (p *mcpRuntimeResumeSmokeBlockingProvider) Execute(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	p.mu.Lock()
-	p.calls++
-	call := p.calls
-	alreadyBlocked := p.blockedOnce
-	p.mu.Unlock()
-
-	if call == 1 {
-		return providers.ExecuteResult{
-			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			SessionRef: &providers.SessionRef{
-				Provider: "mock",
-				Kind:     providers.SessionIDKind,
-				ID:       "live-provider-session-1",
-			},
-		}, nil
-	}
-
-	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		close(p.executeBlocked)
-		p.mu.Unlock()
-
-		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
-		return providers.ExecuteResult{}, ctx.Err()
-	}
-
-	return providers.ExecuteResult{
-		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		SessionRef: &providers.SessionRef{
-			Provider: "mock",
-			Kind:     providers.SessionIDKind,
-			ID:       "live-provider-session-2",
-		},
-	}, nil
-}
-
-func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("provider Execute did not observe canceled workflow context")
 }
