@@ -130,12 +130,16 @@ const (
 func newAgentSharedProcessFixture(t *testing.T, scenarioNames ...string) *agentSharedProcessFixture {
 	t.Helper()
 
-	hostDir := newAgentSharedFactoryDir(t)
-	support.WriteAgentConfig(t, hostDir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCodex,
-		"test-model",
-	))
 	scenarios := newAgentSharedScenarios(t, scenarioNames...)
+	if len(scenarios) == 0 {
+		t.Fatal("agent shared fixture has no selected scenarios")
+	}
+	// The default daemon session is idle; reuse the first characterized
+	// scenario's Factory Definition instead of provisioning a second identical
+	// host directory. Explicit scenario Sessions remain fresh and isolated by
+	// their session identities, while the routed provider configuration stays
+	// immutable for each directory.
+	hostDir := scenarios[0].factoryDir
 	router := newAgentSharedCommandRouter(t, scenarios)
 	api := support.NewProcessAPIServer()
 	apiClosed := make(chan struct{})

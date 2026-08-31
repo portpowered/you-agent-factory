@@ -71,9 +71,17 @@ func (fixture *agentSharedProcessFixture) close(t testing.TB) {
 
 func (fixture *agentSharedProcessFixture) ownedPaths() []string {
 	paths := make([]string, 0, len(fixture.scenarios)+1)
-	paths = append(paths, fixture.hostDir)
+	seen := make(map[string]struct{}, len(fixture.scenarios)+1)
+	appendPath := func(path string) {
+		if _, exists := seen[path]; exists {
+			return
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	appendPath(fixture.hostDir)
 	for _, scenario := range fixture.scenarios {
-		paths = append(paths, scenario.factoryDir)
+		appendPath(scenario.factoryDir)
 	}
 	return paths
 }
