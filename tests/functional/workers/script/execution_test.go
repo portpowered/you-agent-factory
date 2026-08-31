@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,14 +20,14 @@ const scriptNonZeroExitMessage = "script-non-zero-exit-output"
 func newScriptSharedExecutionScenarios(t *testing.T) []scriptSharedScenario {
 	t.Helper()
 
-	nonZeroDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	nonZeroDir := newScriptFactoryDir(t, "script-non-zero")
 
 	const actionableDiagnostic = "repository root is dirty: 2 tracked changes, 1 untracked file; inspect and commit or back up changes"
-	failureDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	failureDir := newScriptFactoryDir(t, "script-failure-work-show")
 
-	cancellationDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	cancellationDir := newScriptFactoryDir(t, "script-cancellation")
 	workstationAgentsPath := filepath.Join(cancellationDir, "workstations", "run-script", "AGENTS.md")
-	agentsMD := "---\ntype: MODEL_WORKSTATION\n---\nExecute the script.\n"
+	agentsMD := scriptWorkstationPrompt
 	if err := os.WriteFile(workstationAgentsPath, []byte(agentsMD), 0o644); err != nil {
 		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -52,7 +51,7 @@ func TestScriptWorkerSharedSuccessSpine(t *testing.T) {
 func newScriptSharedSpineFixture(t *testing.T) *scriptSharedSpineFixture {
 	t.Helper()
 
-	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	hostDir := newScriptFactoryDir(t, "script-host")
 	scenarios := newScriptSharedSpineScenarios(t)
 	routes := make([]scriptCommandRoute, 0, len(scenarios))
 	for _, scenario := range scenarios {
@@ -254,7 +253,7 @@ func newScriptSharedSpineScenarios(t *testing.T) []scriptSharedScenario {
 	for _, testCase := range cases {
 		scenarios = append(scenarios, scriptSharedScenario{
 			name:            testCase.name,
-			factoryDir:      testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir")),
+			factoryDir:      newScriptFactoryDir(t, "script-"+testCase.name),
 			workName:        testCase.workName,
 			traceID:         testCase.traceID,
 			workTypeName:    "task",

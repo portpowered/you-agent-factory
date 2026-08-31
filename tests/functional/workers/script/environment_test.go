@@ -27,22 +27,14 @@ func newScriptSharedEnvironmentScenarios(t *testing.T) []scriptSharedScenario {
 	t.Helper()
 	t.Setenv(undeclaredHostEnvName, undeclaredHostEnvValue)
 
-	environmentDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	environmentDir := newScriptFactoryDir(t, "script-declared-environment")
 	updateScriptWorkstationEnv(t, environmentDir, map[string]string{
 		declaredScriptEnvName: declaredScriptEnvValue,
 	})
 
-	missingDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	missingDir := newScriptFactoryDir(t, "script-missing-executable")
 
-	worktreeDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
-	support.WriteAgentConfig(t, worktreeDir, "worker-a", `---
-type: MODEL_WORKER
-model: test-model
-modelProvider: claude
-stopToken: COMPLETE
----
-Process the input task.
-`)
+	worktreeDir := newScriptWorktreeFactoryDir(t, "script-worktree-passthrough")
 
 	return []scriptSharedScenario{
 		{
