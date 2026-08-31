@@ -2,13 +2,17 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
@@ -24,12 +28,16 @@ func (h *unifiedLifecycleGatewayHost) DurableExecution() factorysessionexecution
 type lifecycleGatewayHost struct {
 	openTestHost
 	factory             factory.Service
+	sessionFactoryErr   error
 	sessionFactoryCalls []string
 	stopCalls           []string
 }
 
 func (h *lifecycleGatewayHost) SessionFactory(sessionID string) (factory.Service, error) {
 	h.sessionFactoryCalls = append(h.sessionFactoryCalls, sessionID)
+	if h.sessionFactoryErr != nil {
+		return nil, h.sessionFactoryErr
+	}
 	return h.factory, nil
 }
 
@@ -173,6 +181,185 @@ func TestService_ProbeFactoryEventsForSession_CancelsOwnedSubscription(t *testin
 	case <-subscriptionContext.Done():
 	default:
 		t.Fatal("probe-owned subscription context remains active after probe")
+	}
+}
+
+func TestService_SubscribeFactoryEventsForSession_StampsResolvedCanonicalID(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name          string
+		requestedID   string
+		canonicalID   string
+		eventScopeID  string
+		wantFactoryID string
+	}{
+		{
+			name:          "exact selector",
+			requestedID:   "session-legacy-exact-001",
+			canonicalID:   "session-legacy-exact-001",
+			eventScopeID:  "session-legacy-exact-001",
+			wantFactoryID: "session-legacy-exact-001",
+		},
+		{
+			name:          "default selector",
+			requestedID:   factorysessions.DefaultSessionID,
+			canonicalID:   "3c1d4c6b-0d6a-4e8f-b0c0-9e5a2bb1d8aa",
+			eventScopeID:  factorysessions.DefaultSessionID,
+			wantFactoryID: "3c1d4c6b-0d6a-4e8f-b0c0-9e5a2bb1d8aa",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			events := make(chan interfaces.FactoryEvent)
+			history := []interfaces.FactoryEvent{{Id: "legacy-event-1", Type: interfaces.FactoryEventTypeWorkRequest}}
+			session := &livesession.LiveSession{
+				ID:                      test.requestedID,
+				RuntimeFactorySessionID: test.canonicalID,
+				RuntimeEventSessionID:   test.eventScopeID,
+			}
+			factory := &gatewayLifecycleFactory{
+				subscribeFactoryFn: func(
+					_ context.Context,
+					_ *interfaces.FactoryEventReconnectCursor,
+					scope interfaces.FactoryEventReconnectScope,
+				) (*interfaces.FactoryEventStream, error) {
+					if scope.SessionID != test.eventScopeID {
+						t.Fatalf("scope session = %q, want %q", scope.SessionID, test.eventScopeID)
+					}
+					return &interfaces.FactoryEventStream{History: history, Events: events}, nil
+				},
+			}
+			host := &lifecycleGatewayHost{
+				openTestHost: openTestHost{requireSession: session},
+				factory:      factory,
+			}
+			gateway := newServiceTestGateway(host)
+
+			stream, err := gateway.SubscribeFactoryEventsForSession(context.Background(), test.requestedID, nil)
+			if err != nil {
+				t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+			}
+			if stream == nil {
+				t.Fatal("SubscribeFactoryEventsForSession returned nil stream")
+			}
+			if stream.FactorySessionID != test.wantFactoryID {
+				t.Fatalf("FactorySessionID = %q, want canonical %q", stream.FactorySessionID, test.wantFactoryID)
+			}
+			if stream.Events != events {
+				t.Fatal("SubscribeFactoryEventsForSession replaced the request-local event channel")
+			}
+			if !reflect.DeepEqual(stream.History, history) {
+				t.Fatalf("history = %#v, want unchanged %#v", stream.History, history)
+			}
+		})
+	}
+}
+
+func TestService_SubscribeFactoryEventsForSession_DoesNotFabricateIdentityOnFailure(t *testing.T) {
+	t.Parallel()
+
+	resolvedSession := &livesession.LiveSession{ID: "session-legacy-failure-001"}
+	subscriptionErr := errors.New("subscription failed")
+	for _, test := range []struct {
+		name          string
+		host          *lifecycleGatewayHost
+		context       context.Context
+		wantStream    bool
+		wantError     error
+		wantFactoryID string
+	}{
+		{
+			name: "unknown session",
+			host: &lifecycleGatewayHost{
+				openTestHost:      openTestHost{requireSessionE: factorysessions.ErrSessionNotFound},
+				sessionFactoryErr: factorysessions.ErrSessionNotFound,
+			},
+			wantError: factorysessions.ErrSessionNotFound,
+		},
+		{
+			name: "canceled subscription",
+			host: &lifecycleGatewayHost{
+				openTestHost: openTestHost{requireSession: resolvedSession},
+				factory: &gatewayLifecycleFactory{
+					subscribeFactoryFn: func(ctx context.Context, _ *interfaces.FactoryEventReconnectCursor, _ interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+						return nil, ctx.Err()
+					},
+				},
+			},
+			context: func() context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			}(),
+			wantError: context.Canceled,
+		},
+		{
+			name: "nil stream",
+			host: &lifecycleGatewayHost{
+				openTestHost: openTestHost{requireSession: resolvedSession},
+				factory:      &gatewayLifecycleFactory{},
+			},
+		},
+		{
+			name: "partial stream failure",
+			host: &lifecycleGatewayHost{
+				openTestHost: openTestHost{requireSession: resolvedSession},
+				factory: &gatewayLifecycleFactory{
+					subscribeFactoryFn: func(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+						return &interfaces.FactoryEventStream{FactorySessionID: "untrusted-id"}, subscriptionErr
+					},
+				},
+			},
+			wantError: subscriptionErr,
+		},
+		{
+			name: "session resolution unavailable",
+			host: &lifecycleGatewayHost{
+				openTestHost: openTestHost{requireSessionE: factorysessions.ErrSessionNotFound},
+				factory: &gatewayLifecycleFactory{
+					subscribeFactoryFn: func(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+						return &interfaces.FactoryEventStream{}, nil
+					},
+				},
+			},
+			wantStream: true,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			gateway := newServiceTestGateway(test.host)
+			ctx := test.context
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			sessionID := "session-legacy-unknown-001"
+			if test.host.openTestHost.requireSession != nil {
+				sessionID = test.host.openTestHost.requireSession.ID
+			}
+			stream, err := gateway.SubscribeFactoryEventsForSession(ctx, sessionID, nil)
+			if test.wantError != nil {
+				if !errors.Is(err, test.wantError) {
+					t.Fatalf("error = %v, want %v", err, test.wantError)
+				}
+				if stream != nil {
+					t.Fatalf("stream = %#v on failed subscription, want nil", stream)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+			}
+			if (stream != nil) != test.wantStream {
+				t.Fatalf("stream present = %t, want %t", stream != nil, test.wantStream)
+			}
+			if stream != nil && stream.FactorySessionID != test.wantFactoryID {
+				t.Fatalf("FactorySessionID = %q, want %q", stream.FactorySessionID, test.wantFactoryID)
+			}
+		})
 	}
 }
 
