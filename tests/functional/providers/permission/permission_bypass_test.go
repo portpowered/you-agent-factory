@@ -67,14 +67,7 @@ func (runner *permissionGatedCommandRunner) Run(
 }
 
 func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
-	// Capability overrides are immutable construction-time provider wiring, so
-	// the capable and incapable graphs remain separate. Build both roots in
-	// parallel, start their independent local servers, and hold the capable
-	// command edge while the incapable graph executes.
-	capableDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	incapableDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, capableDir, "worker", permissionBypassWorkerConfig("codex"))
-	support.WriteAgentConfig(t, incapableDir, "worker", permissionBypassWorkerConfig("codex"))
+	capableDir, incapableDir := permissionScenarioDirs(t)
 
 	capableAPI := support.NewProcessAPIServer()
 	incapableAPI := support.NewProcessAPIServer()
@@ -169,6 +162,19 @@ func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
 	t.Run("registered incapable Codex route fails before the command edge", func(t *testing.T) {
 		assertIncapablePermissionScenario(t, incapableListed, incapableEvents, incapableRunner.Requests())
 	})
+}
+
+func permissionScenarioDirs(t *testing.T) (capableDir, incapableDir string) {
+	t.Helper()
+	// Capability overrides are immutable construction-time provider wiring, so
+	// the capable and incapable graphs remain separate. Build both roots in
+	// parallel, start their independent local servers, and hold the capable
+	// command edge while the incapable graph executes.
+	capableDir = testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	incapableDir = testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, capableDir, "worker", permissionBypassWorkerConfig("codex"))
+	support.WriteAgentConfig(t, incapableDir, "worker", permissionBypassWorkerConfig("codex"))
+	return capableDir, incapableDir
 }
 
 func assertCapablePermissionScenario(
