@@ -291,18 +291,23 @@ are owned by the subsequent behavior/delivery gates.
 
 ## Story 004 — exact-head behavior, performance, and delivery evidence
 
-The implementation/test tree validated for this story is commit
-`9c89ba607f57ff68f08bd6e314220fbc228cc7a2` on Windows `amd64` with Go
-`1.25.0`. The only tracked paths in the implementation diff are this ledger
-and the two owned functional-test packages; `prd.json` and `progress.txt`
-remain ignored local scaffolding. `git diff --check` and
+The implementation/test tree after the required main synchronization is
+represented by command source commit
+`85a235c5398f8bcd2dd97cee47dfec840176a8fb` and parameter source commit
+`750e5e968e41106dc77644ade0e64fcb49b01846` on Windows `amd64` with Go
+`1.25.0`. The current documentation/evidence head is
+`969291ec32f62a1d00a9510e9d2770fdf1b88afd`; its owned source is byte-for-byte
+identical to the pre-sync implementation head used for the hosted retry and
+the earlier loopback. The only tracked paths in the implementation diff are
+this ledger and the two owned functional-test packages; `prd.json` and
+`progress.txt` remain ignored local scaffolding. `git diff --check` and
 `go run ./cmd/functionalboundarycheck` both exited `0`.
 
-The branch was rebased once immediately before final validation from the
-characterization base onto `origin/main`/`upstream/main`
-`3c6acf6794b0f7ecace31e6d13504a2bce6ffe1`. The base delta touched none of the
-owned CLI/runtime/support paths, and the owned source tree is identical before
-and after the rebase.
+The branch was synchronized immediately before this final validation by
+rebasing onto `origin/main`/`upstream/main`
+`8c5e97fde0220e539ad6ee144d9d0be6cb948131`. The synchronization delta touched
+none of the owned CLI/runtime/support paths, and the owned source tree is
+identical before and after the rebase.
 
 ### Final topology reconciliation
 
@@ -439,8 +444,9 @@ host performance verdict.
 ### Current-head CI timing and coverage record
 
 The Backend Functional Coverage job for hosted CI run `33354015121` measured
-the exact final implementation head
-`45b3aab5a9eeaee039dd3feed9ac8130d5d0de84`. Its latest bounded retry reported
+the pre-sync implementation head
+`45b3aab5a9eeaee039dd3feed9ac8130d5d0de84`, whose owned source is identical to
+the synchronized source commits above. Its latest bounded retry reported
 `commands 24.040s` and `parameters 22.596s`, both above the three-second target.
 The bounded profile-led pass above is the required floor disposition for both
 values under this exact source-identity reuse key: implementation/test source
@@ -470,14 +476,14 @@ artifact, and both failure records are retained in the PR conversation only.
 ### VAL-001 clean-room validation report
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
-It was run read-only from a detached clean worktree at exact implementation
-head `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84`. No implementation repair was
-made during the loopback.
+It was run read-only from a detached clean worktree at exact synchronized
+evidence head `969291ec32f62a1d00a9510e9d2770fdf1b88afd`. No implementation
+repair was made during the loopback.
 
 #### Environment and artifact
 
-- Commit/build identifier: `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84` (the
-  exact implementation head under review).
+- Commit/build identifier: `969291ec32f62a1d00a9510e9d2770fdf1b88afd` (the
+  exact synchronized evidence head under review).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -490,9 +496,9 @@ made during the loopback.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Final detached worktree at exact head `45b3aab5a9eeaee039dd3feed9ac8130d5d0de84` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `24.909s`, wall `42.484s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `49.787s`, wall `56.434s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `2.697s`, wall `7.582s`. | Hosted Linux/CI topology. |
+| Complete command matrix | PASS | Final detached worktree at exact synchronized head `969291ec32f62a1d00a9510e9d2770fdf1b88afd` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `38.513s`, wall `60.231s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `37.455s`, wall `44.331s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `2.020s`, wall `6.828s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
