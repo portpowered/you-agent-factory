@@ -49,6 +49,7 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 			fixture.runTurn(t, connection, session, testCase)
 		})
 	}
+	fixture.closeActiveSession(t, connection, session)
 	secondWorkspace := filepath.Join(t.TempDir(), "second-reusable-acp-workspace")
 	if err := os.MkdirAll(secondWorkspace, 0o755); err != nil {
 		t.Fatalf("create second reusable ACP workspace: %v", err)
@@ -60,11 +61,6 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 	if filepath.Clean(secondSession.workspace) == filepath.Clean(session.workspace) {
 		t.Fatalf("reusable ACP session workspaces reused %q across distinct session/new requests", session.workspace)
 	}
-	// Creating the second Chat Session is safe while the first Factory runtime
-	// is retained; its first turn must wait until the first active runtime has
-	// been canceled and closed because the on-demand target owns one retained
-	// default runtime at a time.
-	fixture.closeActiveSession(t, connection, session)
 	fixture.runTurn(t, connection, secondSession, reusableACPCase{
 		name:             "second isolated session turn",
 		marker:           "delta4",
