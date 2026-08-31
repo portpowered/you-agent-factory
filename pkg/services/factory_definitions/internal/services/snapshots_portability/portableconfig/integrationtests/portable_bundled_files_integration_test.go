@@ -631,7 +631,7 @@ func TestLoadPortableBundledFiles_RejectsFilesystemLinkEscapeWithoutEscapedWrite
 	if err == nil {
 		t.Fatal("expected LoadRuntimeConfig to reject filesystem-link escape target")
 	}
-	if !strings.Contains(err.Error(), "cannot escape the expand target through filesystem links") {
+	if !strings.Contains(err.Error(), "cannot escape the materialization target through filesystem links") {
 		t.Fatalf("error = %q, want filesystem-link escape validation message", err.Error())
 	}
 	if !strings.Contains(err.Error(), "factory/scripts/execute-story.ps1") {
