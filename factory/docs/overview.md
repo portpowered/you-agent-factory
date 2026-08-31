@@ -136,6 +136,18 @@ Executor and review workstations run in worktrees under
 `.claude/worktrees/<work-item-name>/`, created by
 `factory/scripts/setup-workspace.py`.
 
+For a plan-to-task handoff, `setup-workspace.py` reads exactly one
+`tasks/todo/<work-item-name>.json` from the main checkout or a Git-registered
+worktree. The packet must be a JSON object whose `branchName` exactly matches
+the requested Work; a non-root packet must also be in an existing attached
+worktree on `refs/heads/<work-item-name>` with positive live-lane evidence
+(otherwise an abandoned same-name lane is refused). Missing, invalid,
+mismatched, stale, or ambiguous candidates fail before root synchronization,
+pruning, worktree preparation, or copying. Each selected JSON or Markdown
+source must resolve to a regular file under its registered worktree; links that
+escape that boundary fail closed. The root packet and its existing destination
+behavior remain supported.
+
 The **review** workstation runs the dedicated `reviewer` worker
 (codex `gpt-5.6-luna`, reasoning effort `max`). Planning (`plan`) stays on the
 `planner` worker (codex `gpt-5.6-sol`).

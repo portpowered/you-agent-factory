@@ -3,9 +3,10 @@
 
 Usage: python scripts/agents/setup-workspace.py <prd-name>
 
-Reads tasks/todo/<prd-name>.json, uses <prd-name> as the branch/worktree name,
-syncs main, creates or reuses a git worktree, copies the PRD (and optional .md)
-into the worktree root, and prints a JSON result to stdout.
+Reads the exact tasks/todo/<prd-name>.json packet from the main checkout or a
+Git-registered worktree, uses <prd-name> as the branch/worktree name, syncs
+main, creates or reuses a git worktree, copies the PRD (and optional .md) into
+the worktree root, and prints a JSON result to stdout.
 
 Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specific error).
 """
@@ -16,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -31,6 +33,8 @@ MAX_ANCESTOR_RESIDUE_PATHS = 20
 MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
 MAX_DIRTY_ROOT_ATTRIBUTION_PATHS = 5
 MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES = 20
+MAX_CANDIDATE_DIAGNOSTIC_PATHS = 8
+MAX_CANDIDATE_DIAGNOSTIC_PATH_LENGTH = 240
 MAX_STATUS_FAILURE_DETAILS = 512
 MAX_FAILURE_DETAILS = 1024
 MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
@@ -858,6 +862,319 @@ def read_prd(prd_path):
         return json.load(f)
 
 
+def normalized_absolute_path(path):
+    """Return a stable case-normalized absolute path for identity checks."""
+    try:
+        return os.path.normcase(str(Path(path).resolve()))
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        return os.path.normcase(os.path.abspath(os.path.normpath(str(path))))
+
+
+def display_path(path):
+    """Render a bounded, escaped local path for an operator diagnostic."""
+    return bounded_failure_details(
+        json.dumps(str(path), ensure_ascii=True),
+        MAX_CANDIDATE_DIAGNOSTIC_PATH_LENGTH,
+    )
+
+
+def absolute_worktree_path(raw_path, repo_root):
+    """Resolve one Git-reported worktree path without inspecting its children."""
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = Path(repo_root) / path
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        return Path(os.path.abspath(os.path.normpath(str(path))))
+
+
+def canonical_packet_file_path(packet_path, worktree_path, label):
+    """Validate and canonicalize one packet file before it can be consumed."""
+    try:
+        lexical_exists = os.path.lexists(packet_path)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not inspect {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+    if not lexical_exists:
+        return None
+
+    try:
+        canonical_root = Path(worktree_path).resolve(strict=True)
+        canonical_path = Path(packet_path).resolve(strict=True)
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} could not be "
+            "resolved because it is missing or contains a broken link"
+        ) from error
+    except (OSError, RuntimeError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not resolve {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+
+    try:
+        canonical_path.relative_to(canonical_root)
+    except ValueError as error:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} is ineligible: "
+            "its resolved path is outside the registered worktree "
+            f"{display_path(canonical_root)}"
+        ) from error
+
+    try:
+        is_regular_file = stat.S_ISREG(canonical_path.stat().st_mode)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not inspect {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+    if not is_regular_file:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} is ineligible: "
+            "it is not a regular file"
+        )
+
+    return canonical_path
+
+
+def parse_worktree_inventory(output, repo_root):
+    """Parse Git's porcelain worktree inventory into bounded records."""
+    blocks = []
+    current = []
+    for line in output.splitlines():
+        if line:
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+
+    records = []
+    for block in blocks:
+        if not block or not block[0].startswith("worktree "):
+            raise RuntimeError("git worktree inventory returned malformed output")
+        raw_path = block[0][len("worktree "):]
+        if not raw_path:
+            raise RuntimeError("git worktree inventory returned an empty path")
+
+        record = {
+            "path": absolute_worktree_path(raw_path, repo_root),
+            "branch_ref": None,
+            "detached": False,
+            "locked": False,
+            "prunable": False,
+        }
+        for line in block[1:]:
+            if line == "detached":
+                record["detached"] = True
+            elif line == "locked" or line.startswith("locked "):
+                record["locked"] = True
+            elif line == "prunable" or line.startswith("prunable "):
+                record["prunable"] = True
+            elif line.startswith("branch "):
+                record["branch_ref"] = line[len("branch "):]
+        records.append(record)
+
+    if not records:
+        raise RuntimeError("git worktree inventory returned no worktrees")
+    return records
+
+
+def list_registered_worktrees(repo_root):
+    """Read Git's registered worktrees exactly once for packet discovery."""
+    result = run_git(
+        "worktree", "list", "--porcelain", cwd=repo_root, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "git worktree inventory failed "
+            f"(exit {result.returncode}): {command_failure_details(result)}"
+        )
+    return parse_worktree_inventory(result.stdout, repo_root)
+
+
+def packet_candidates(repo_root, prd_name, records):
+    """Find exact packet paths under each unique registered worktree root."""
+    root_key = normalized_absolute_path(repo_root)
+    roots = [*records]
+    if not any(normalized_absolute_path(record["path"]) == root_key for record in roots):
+        roots.append(
+            {
+                "path": Path(repo_root),
+                "branch_ref": None,
+                "detached": False,
+                "locked": False,
+                "prunable": False,
+            }
+        )
+
+    candidates = []
+    seen_roots = set()
+    for record in roots:
+        worktree_path = record["path"]
+        root_identity = normalized_absolute_path(worktree_path)
+        if root_identity in seen_roots:
+            continue
+        seen_roots.add(root_identity)
+
+        packet_path = worktree_path / "tasks" / "todo" / f"{prd_name}.json"
+        canonical_path = canonical_packet_file_path(
+            packet_path, worktree_path, "PRD JSON",
+        )
+        if canonical_path is not None:
+            candidates.append(
+                {
+                    "prd_json_path": canonical_path,
+                    "prd_json_candidate_path": packet_path,
+                    "worktree_path": worktree_path,
+                    "record": record,
+                    "is_root": root_identity == root_key,
+                }
+            )
+    return candidates
+
+
+def candidate_path_details(candidates):
+    """Render a bounded list of conflicting exact packet paths."""
+    paths = [
+        display_path(
+            candidate.get("prd_json_candidate_path", candidate["prd_json_path"]),
+        )
+        for candidate in candidates
+    ]
+    if len(paths) > MAX_CANDIDATE_DIAGNOSTIC_PATHS:
+        omitted = len(paths) - MAX_CANDIDATE_DIAGNOSTIC_PATHS
+        paths = [*paths[:MAX_CANDIDATE_DIAGNOSTIC_PATHS], f"... ({omitted} more paths)"]
+    return ", ".join(paths)
+
+
+def safe_identity_display(value):
+    """Render a bounded packet identity without exposing packet contents."""
+    return bounded_failure_details(
+        json.dumps(value, ensure_ascii=True),
+        MAX_CANDIDATE_DIAGNOSTIC_PATH_LENGTH,
+    )
+
+
+def validate_nested_packet_freshness(repo_root, candidate, prd_name):
+    """Refuse attached packets with no positive evidence of a live lane."""
+    record = candidate["record"]
+    packet_path = candidate["prd_json_path"]
+    worktree_path = candidate["worktree_path"]
+    expected_ref = f"refs/heads/{prd_name}"
+
+    if record["locked"]:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} is ineligible: "
+            "its registered worktree is locked"
+        )
+    if record["prunable"]:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} is ineligible: "
+            "its registered worktree is prunable"
+        )
+    if record["detached"] or record["branch_ref"] != expected_ref:
+        observed_ref = "detached" if record["detached"] else record["branch_ref"]
+        observed = safe_identity_display(observed_ref) if observed_ref else "missing"
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} is ineligible: "
+            f"registered worktree branch is {observed}; expected {expected_ref}"
+        )
+    if not (worktree_path / ".git").exists():
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} is ineligible: "
+            "registered worktree path is unavailable"
+        )
+
+    has_remote_head = branch_exists_on_remote(repo_root, prd_name)
+    has_origin_main = origin_main_ref_exists(repo_root)
+    baseline_ref = "refs/remotes/origin/main"
+    baseline_label = "origin/main"
+    if not has_origin_main and local_main_ref_exists(repo_root):
+        baseline_ref = "refs/heads/main"
+        baseline_label = "main"
+    elif not has_origin_main and has_remote_head:
+        return
+    elif not has_origin_main:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} cannot be correlated "
+            "to a live lane: no local main baseline or remote head is "
+            "available"
+        )
+
+    ahead_result = run_git(
+        "rev-list", "--count", f"{baseline_ref}..{expected_ref}",
+        cwd=repo_root, check=False,
+    )
+    if ahead_result.returncode != 0:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} freshness check failed: "
+            f"{command_failure_details(ahead_result)}"
+        )
+    ahead_text = ahead_result.stdout.strip()
+    try:
+        commits_ahead = int(ahead_text)
+    except ValueError as error:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} freshness check "
+            f"returned an invalid commit count {safe_identity_display(ahead_text)}"
+        ) from error
+
+    if commits_ahead == 0 and not has_remote_head:
+        raise RuntimeError(
+            f"PRD candidate {display_path(packet_path)} appears abandoned: "
+            f"the attached branch has 0 commits ahead of {baseline_label} "
+            "and no remote head"
+        )
+
+
+def select_prd_candidate(repo_root, prd_name, records):
+    """Select and validate one exact packet before any setup mutation."""
+    candidates = packet_candidates(repo_root, prd_name, records)
+    if not candidates:
+        raise RuntimeError(
+            f"PRD not found: exact tasks/todo/{prd_name}.json was absent from "
+            "the main checkout and all Git-registered worktrees"
+        )
+    if len(candidates) > 1:
+        raise RuntimeError(
+            "ambiguous PRD: multiple exact candidates were found: "
+            f"{candidate_path_details(candidates)}"
+        )
+
+    candidate = candidates[0]
+    prd = read_prd(candidate["prd_json_path"])
+    if not isinstance(prd, dict):
+        raise ValueError("PRD must be a JSON object")
+
+    packet_branch = prd.get("branchName")
+    if not isinstance(packet_branch, str):
+        raise ValueError("PRD branchName must be a string")
+    if packet_branch != prd_name:
+        raise ValueError(
+            "PRD branchName mismatch: expected "
+            f"{safe_identity_display(prd_name)}, observed "
+            f"{safe_identity_display(packet_branch)}"
+        )
+
+    if not candidate["is_root"]:
+        validate_nested_packet_freshness(repo_root, candidate, prd_name)
+
+    packet_dir = candidate["prd_json_candidate_path"].parent
+    prd_md_candidate_path = packet_dir / f"{prd_name}.md"
+    prd_md_path = canonical_packet_file_path(
+        prd_md_candidate_path,
+        candidate["worktree_path"],
+        "PRD Markdown",
+    )
+    candidate["prd_md_path"] = prd_md_path
+    return candidate
+
+
 def has_origin_remote(repo_root):
     """Return True when an origin remote is configured."""
     result = run_git("remote", "get-url", "origin", cwd=repo_root, check=False)
@@ -1396,39 +1713,28 @@ def main():
 
     prd_name = sys.argv[1]
 
+    if not prd_name:
+        print("PRD name must not be empty", file=sys.stderr)
+        sys.exit(1)
+
     try:
         repo_root = get_repo_root()
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Failed to discover repo root", e), file=sys.stderr)
         sys.exit(1)
 
-    # Locate PRD files.
-    prd_json_path = repo_root / "tasks" / "todo" / f"{prd_name}.json"
-    if not prd_json_path.exists():
-        print(
-            format_stage_failure(
-                "Failed to read PRD",
-                f"PRD not found: {prd_json_path}",
-            ),
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    prd_md_path = repo_root / "tasks" / "todo" / f"{prd_name}.md"
-    if not prd_md_path.exists():
-        prd_md_path = None
-
-    # Read the PRD to catch malformed input; the branch name is the work item name.
+    # Discover and validate the packet before any synchronization or worktree
+    # mutation. Git's registered inventory is the only supported non-root source.
     try:
-        read_prd(prd_json_path)
+        records = list_registered_worktrees(repo_root)
+        selected_candidate = select_prd_candidate(repo_root, prd_name, records)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)
 
     branch = f"{prd_name}"
-    if not branch:
-        print("PRD name must not be empty", file=sys.stderr)
-        sys.exit(1)
+    prd_json_path = selected_candidate["prd_json_path"]
+    prd_md_path = selected_candidate["prd_md_path"]
 
     # Sync main and prune worktrees.
     try:
@@ -1447,7 +1753,10 @@ def main():
         sys.exit(1)
 
     # Create or reuse worktree.
-    worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
+    if selected_candidate["is_root"]:
+        worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
+    else:
+        worktree_dir = selected_candidate["worktree_path"]
     try:
         reused = create_or_reuse_worktree(
             repo_root,
