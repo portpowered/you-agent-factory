@@ -1,10 +1,14 @@
 package agy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,36 +30,23 @@ const agySharedInvocationTimeout = 30 * time.Second
 
 const agySharedRouteCount = 29
 
-type agySharedHTTPRun struct {
-	server *support.ProcessAPIServer
-	done   chan struct{}
-}
-
-func (run *agySharedHTTPRun) waitClosed(ctx context.Context) error {
-	if run == nil {
-		return fmt.Errorf("shared AGY HTTP run is nil")
-	}
-	select {
-	case <-run.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-// agySharedHTTPServer creates a fresh listener for each hosted Process.Execute
-// invocation while keeping the HTTP edge itself in the one package-owned
-// process graph.
+// agySharedHTTPServer owns the one listener started by the package-scoped
+// process. Explicit Factory Sessions opened against this listener carry the
+// scenario-specific folder and identity; the default session is reserved for
+// the long-lived host and receives no scenario Work.
 type agySharedHTTPServer struct {
-	mu      sync.Mutex
-	starts  int
-	runs    []*agySharedHTTPRun
-	started chan *agySharedHTTPRun
+	server *support.ProcessAPIServer
+
+	mu       sync.Mutex
+	starts   int
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 func newAgySharedHTTPServer() *agySharedHTTPServer {
 	return &agySharedHTTPServer{
-		started: make(chan *agySharedHTTPRun, 16),
+		server: support.NewProcessAPIServer(),
+		done:   make(chan struct{}),
 	}
 }
 
@@ -63,30 +54,11 @@ func (server *agySharedHTTPServer) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
 ) error {
-	run := &agySharedHTTPRun{
-		server: support.NewProcessAPIServer(),
-		done:   make(chan struct{}),
-	}
 	server.mu.Lock()
 	server.starts++
-	server.runs = append(server.runs, run)
 	server.mu.Unlock()
-	server.started <- run
-	defer close(run.done)
-	return run.server.Start(ctx, request)
-}
-
-func (server *agySharedHTTPServer) waitForStart(t *testing.T) *agySharedHTTPRun {
-	t.Helper()
-	timer := time.NewTimer(agySharedInvocationTimeout)
-	defer timer.Stop()
-	select {
-	case run := <-server.started:
-		return run
-	case <-timer.C:
-		t.Fatal("timed out waiting for shared AGY HTTP server starter")
-		return nil
-	}
+	defer server.doneOnce.Do(func() { close(server.done) })
+	return server.server.Start(ctx, request)
 }
 
 func (server *agySharedHTTPServer) startCount() int {
@@ -96,29 +68,97 @@ func (server *agySharedHTTPServer) startCount() int {
 }
 
 func (server *agySharedHTTPServer) waitClosed(ctx context.Context) error {
-	server.mu.Lock()
-	runs := append([]*agySharedHTTPRun(nil), server.runs...)
-	server.mu.Unlock()
-	for _, run := range runs {
-		select {
-		case <-run.done:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	select {
+	case <-server.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
+}
+
+// agySharedProcessCommand owns the long-lived host invocation without tying
+// its cleanup to the first test that happens to construct the package fixture.
+// The package fixture is closed from TestMain after all per-test session
+// cleanups have run.
+type agySharedProcessCommand struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	mu  sync.Mutex
+	err error
+
+	stopOnce sync.Once
+}
+
+func startAgySharedProcessCommand(
+	process support.Process,
+	inputs *support.CapturedInputs,
+) *agySharedProcessCommand {
+	parent := inputs.Input.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	inputs.Input.Context = ctx
+	command := &agySharedProcessCommand{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		err := process.Execute(inputs.Input)
+		command.mu.Lock()
+		command.err = err
+		command.mu.Unlock()
+		close(command.done)
+	}()
+	return command
+}
+
+func (command *agySharedProcessCommand) stop(ctx context.Context) error {
+	if command == nil {
+		return nil
+	}
+	command.stopOnce.Do(command.cancel)
+	return command.wait(ctx)
+}
+
+func (command *agySharedProcessCommand) wait(ctx context.Context) error {
+	if command == nil {
+		return nil
+	}
+	select {
+	case <-command.done:
+		command.mu.Lock()
+		err := command.err
+		command.mu.Unlock()
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 type agySharedProcessFixture struct {
 	rootDir            string
+	homeDir            string
+	hostWorkDir        string
+	baseURL            string
 	process            support.ApplicationProcess
+	command            *agySharedProcessCommand
+	recordingProcess   support.ApplicationProcess
 	runner             *agySharedCommandRunner
 	api                *agySharedHTTPServer
 	routes             map[string]*agySharedCommandRoute
 	processBuilds      int
 	processCloses      int
-	earlyExitRelease   chan struct{}
-	concurrencyRelease chan struct{}
+	recordingBuilds    int
+	recordingCloses    int
+	earlyExitRelease   *agySharedRelease
+	concurrencyRelease *agySharedRelease
+
+	sessionMu        sync.Mutex
+	openedSessionIDs map[string]struct{}
+	activeSessionIDs map[string]struct{}
+	hostMu           sync.Mutex
 
 	closeOnce sync.Once
 	closeErr  error
@@ -162,11 +202,23 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	if err != nil {
 		t.Fatalf("create shared AGY fixture root: %v", err)
 	}
+	homeDir := filepath.Join(rootDir, "home")
+	hostWorkDir := filepath.Join(rootDir, "host")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create shared AGY home %q: %v", homeDir, err)
+	}
+	if err := os.MkdirAll(hostWorkDir, 0o755); err != nil {
+		t.Fatalf("create shared AGY host workspace %q: %v", hostWorkDir, err)
+	}
 	fixture := &agySharedProcessFixture{
-		rootDir: rootDir,
-		runner:  newAgySharedCommandRunner(),
-		api:     newAgySharedHTTPServer(),
-		routes:  make(map[string]*agySharedCommandRoute),
+		rootDir:          rootDir,
+		homeDir:          homeDir,
+		hostWorkDir:      hostWorkDir,
+		runner:           newAgySharedCommandRunner(),
+		api:              newAgySharedHTTPServer(),
+		routes:           make(map[string]*agySharedCommandRoute),
+		openedSessionIDs: make(map[string]struct{}),
+		activeSessionIDs: make(map[string]struct{}),
 	}
 	defer func() {
 		if fixture.process == nil {
@@ -180,6 +232,12 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	fixture.registerRecoveryRoute(t)
 	fixture.registerEarlyExitRoute(t)
 	fixture.registerConcurrencyRoutes(t)
+	for _, route := range fixture.routes {
+		// The old per-route hosted command consumed these startup seeds. The
+		// shared host must start empty so each explicit session receives only
+		// the Work submitted by its own witness.
+		support.ClearSeedInputs(t, route.workDir)
+	}
 	fixture.runner.freeze()
 	if got := fixture.runner.routeCount(); got != agySharedRouteCount {
 		t.Fatalf("shared AGY frozen route count = %d, want %d", got, agySharedRouteCount)
@@ -195,7 +253,88 @@ func newAgySharedProcessFixture(t *testing.T) *agySharedProcessFixture {
 	}
 	fixture.process = process
 	fixture.processBuilds++
+	fixture.materializeRoleFactories(t)
 	return fixture
+}
+
+// ensureHosted activates the one shared API listener on demand. Keeping the
+// host lazy avoids booting an unused listener for recording-only focused runs;
+// the recording-sensitive recovery witness uses its own root process because
+// Process.Execute cannot overlap with the long-lived hosted execution.
+func (fixture *agySharedProcessFixture) ensureHosted(t *testing.T) {
+	t.Helper()
+	fixture.hostMu.Lock()
+	defer fixture.hostMu.Unlock()
+	if fixture.command != nil {
+		return
+	}
+	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), fixture.hostWorkDir)
+	support.ClearSeedInputs(t, fixture.hostWorkDir)
+	hostWorkerConfig := strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, agyFunctionalModel),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	)
+	support.WriteAgentConfig(t, fixture.hostWorkDir, "worker", hostWorkerConfig)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", fixture.hostWorkDir,
+		"--continuously", "--with-server", "--server", "http://127.0.0.1:1",
+		"--quiet", "--no-record",
+	})
+	inputs.Input.Env = agySharedEnvironment(fixture.homeDir)
+	inputs.Input.WorkingDirectory = fixture.hostWorkDir
+	fixture.command = startAgySharedProcessCommand(fixture.process, inputs)
+	fixture.baseURL = fixture.api.server.WaitForURL(t)
+	support.WaitForStatus(t, fixture.baseURL, agySharedInvocationTimeout, func(status factoryapi.StatusResponse) bool {
+		return strings.TrimSpace(status.RuntimeStatus) != ""
+	})
+}
+
+// materializeRoleFactories uses the public initializer once per packaged
+// Factory, then copies the resulting immutable package payload into each
+// route workspace. Sessions can therefore select the route's local Factory
+// while the package process and listener remain shared.
+func (fixture *agySharedProcessFixture) materializeRoleFactories(t *testing.T) {
+	t.Helper()
+	sources := make(map[string]string)
+	for _, route := range fixture.routes {
+		if strings.TrimSpace(route.factoryName) == "" {
+			continue
+		}
+		if _, ok := sources[route.factoryName]; ok {
+			continue
+		}
+		sources[route.factoryName] = support.InstallPackagedFactoryWithProcess(
+			t,
+			fixture.process,
+			agySharedEnvironment(fixture.homeDir),
+			fixture.hostWorkDir,
+			route.factoryName,
+		)
+	}
+	for _, route := range fixture.routes {
+		source, ok := sources[route.factoryName]
+		if !ok {
+			continue
+		}
+		copyAgyDirectory(t, source, route.workDir)
+	}
+}
+
+func (fixture *agySharedProcessFixture) ensureRecordingProcess(t *testing.T) {
+	t.Helper()
+	if fixture.recordingProcess != nil {
+		return
+	}
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: fixture.runner,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(isolated AGY recording fixture): %v", err)
+	}
+	fixture.recordingProcess = process
+	fixture.recordingBuilds++
 }
 
 func (fixture *agySharedProcessFixture) registerDirectRoutes(t *testing.T) {
@@ -311,7 +450,7 @@ func (fixture *agySharedProcessFixture) registerRecoveryRoute(t *testing.T) {
 
 func (fixture *agySharedProcessFixture) registerEarlyExitRoute(t *testing.T) {
 	t.Helper()
-	release := make(chan struct{})
+	release := newAgySharedRelease()
 	fixture.earlyExitRelease = release
 	route := fixture.newRouteDirectories(t, "early-exit")
 	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), route.workDir)
@@ -337,7 +476,7 @@ func (fixture *agySharedProcessFixture) registerEarlyExitRoute(t *testing.T) {
 
 func (fixture *agySharedProcessFixture) registerConcurrencyRoutes(t *testing.T) {
 	t.Helper()
-	release := make(chan struct{})
+	release := newAgySharedRelease()
 	fixture.concurrencyRelease = release
 	for _, test := range []struct {
 		selector string
@@ -484,102 +623,86 @@ func assertAgySharedRouteRejections(
 	}
 }
 
-type agySharedHostedInvocation struct {
-	route          *agySharedCommandRoute
-	command        *support.ProcessCommand
-	httpRun        *agySharedHTTPRun
-	baseURL        string
-	responseStream *support.FactoryResponseEventStream
+type agySharedSession struct {
+	route  *agySharedCommandRoute
+	id     string
+	closed bool
 }
 
-func (fixture *agySharedProcessFixture) startHosted(
+func (fixture *agySharedProcessFixture) openSession(
 	t *testing.T,
-	selector string,
-	args []string,
-	captureResponseEvents bool,
-) *agySharedHostedInvocation {
+	route *agySharedCommandRoute,
+) *agySharedSession {
 	t.Helper()
-	route := fixture.routes[selector]
+	fixture.ensureHosted(t)
 	if route == nil {
-		t.Fatalf("shared AGY route %q is missing", selector)
+		t.Fatal("open shared AGY session: route is nil")
 	}
-	inputs := support.FakeInputs(context.Background(), args)
-	inputs.Input.Env = agySharedEnvironment(route.homeDir)
-	inputs.Input.WorkingDirectory = route.workDir
-	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
-	httpRun := fixture.api.waitForStart(t)
-	baseURL := httpRun.server.WaitForURL(t)
-	invocation := &agySharedHostedInvocation{
-		route:   route,
-		command: command,
-		httpRun: httpRun,
-		baseURL: baseURL,
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, route.workDir)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("shared AGY Factory Session for %q = %#v, want identity", route.selector, opened)
 	}
-	if captureResponseEvents {
-		session := support.GetDefaultSession(t, baseURL)
-		invocation.responseStream = support.OpenFactoryResponseEventStreamAt(
-			t,
-			support.SessionResponseEventsURL(baseURL, session.Id),
-		)
+	sessionID := strings.TrimSpace(opened.Session.Id)
+	if sessionID == "~default" {
+		t.Fatalf("shared AGY Factory Session for %q = %q, want explicit session", route.selector, sessionID)
 	}
-	return invocation
+	fixture.sessionMu.Lock()
+	if _, exists := fixture.openedSessionIDs[sessionID]; exists {
+		fixture.sessionMu.Unlock()
+		t.Fatalf("duplicate shared AGY Factory Session identity %q", sessionID)
+	}
+	fixture.openedSessionIDs[sessionID] = struct{}{}
+	fixture.activeSessionIDs[sessionID] = struct{}{}
+	fixture.sessionMu.Unlock()
+	session := &agySharedSession{route: route, id: sessionID}
+	t.Cleanup(func() { fixture.closeSession(t, session) })
+	return session
 }
 
-func (fixture *agySharedProcessFixture) finishHosted(
-	t *testing.T,
-	invocation *agySharedHostedInvocation,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, []factoryapi.FactoryResponseEvent) {
+func (fixture *agySharedProcessFixture) closeSession(t testing.TB, session *agySharedSession) {
 	t.Helper()
-	liveSession := support.GetDefaultSession(t, invocation.baseURL)
-	support.WaitForSessionTerminalStatus(t, invocation.baseURL, liveSession.Id, agySharedInvocationTimeout)
-	var responseEvents []factoryapi.FactoryResponseEvent
-	if invocation.responseStream != nil {
-		responseEvents = collectAgyResponseEvents(t, invocation.responseStream)
+	if session == nil || session.closed {
+		return
 	}
-	session := support.GetDefaultSession(t, invocation.baseURL)
-	listed := support.ListDefaultSessionWork(t, invocation.baseURL)
-	events := support.GetFactoryEventsAt(t, invocation.baseURL)
-	invocation.command.Stop(t)
-	if invocation.responseStream != nil {
-		invocation.responseStream.Close()
-	}
-	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := invocation.httpRun.waitClosed(closeCtx); err != nil {
-		t.Fatalf("close shared AGY HTTP server for %q: %v", invocation.route.selector, err)
-	}
-	return session, listed, events, responseEvents
+	support.CloseFactorySessionAt(t, fixture.baseURL, session.id)
+	session.closed = true
+	fixture.sessionMu.Lock()
+	delete(fixture.activeSessionIDs, session.id)
+	fixture.sessionMu.Unlock()
 }
 
-func (fixture *agySharedProcessFixture) observeHostedSession(
-	t *testing.T,
-	baseURL, sessionID string,
+func (fixture *agySharedProcessFixture) observeSession(
+	t testing.TB,
+	session *agySharedSession,
 	stream *support.FactoryResponseEventStream,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, []factoryapi.FactoryResponseEvent) {
 	t.Helper()
-	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, agySharedInvocationTimeout)
+	if session == nil {
+		t.Fatal("observe shared AGY session: session is nil")
+	}
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, session.id, agySharedInvocationTimeout)
 	var responseEvents []factoryapi.FactoryResponseEvent
 	if stream != nil {
 		responseEvents = collectAgyResponseEvents(t, stream)
 	}
 	getResponse := support.GetJSON[factoryapi.FactorySessionGetResponse](
 		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+url.PathEscape(session.id),
 	)
-	session, err := getResponse.AsFactorySession()
+	liveSession, err := getResponse.AsFactorySession()
 	if err != nil {
-		t.Fatalf("decode shared AGY hosted Factory Session %q: %v", sessionID, err)
+		t.Fatalf("decode shared AGY Factory Session %q: %v", session.id, err)
 	}
 	listed := support.GetJSON[factoryapi.ListWorkResponse](
 		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/work",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+url.PathEscape(session.id)+"/work",
 	)
-	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
-	return session, listed, events, responseEvents
+	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.id)
+	return liveSession, listed, events, responseEvents
 }
 
 func collectAgyResponseEvents(
-	t *testing.T,
+	t testing.TB,
 	stream *support.FactoryResponseEventStream,
 ) []factoryapi.FactoryResponseEvent {
 	t.Helper()
@@ -616,15 +739,10 @@ func (fixture *agySharedProcessFixture) runGolden(
 		t.Fatalf("shared AGY golden route %q is missing", selector)
 	}
 	callStart := route.callCount()
-	session, listed, events, _ := fixture.finishHosted(t, fixture.startHosted(t, selector, []string{
-		"you", "run",
-		"--dir", route.workDir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	}, false))
+	sessionHandle := fixture.openSession(t, route)
+	fixture.submitWork(t, sessionHandle, "agy shared golden")
+	session, listed, events, _ := fixture.observeSession(t, sessionHandle, nil)
+	fixture.closeSession(t, sessionHandle)
 	return session, listed, events, route, callStart
 }
 
@@ -638,16 +756,35 @@ func (fixture *agySharedProcessFixture) runDirect(
 		t.Fatalf("shared AGY direct route %q is missing", selector)
 	}
 	callStart := route.callCount()
-	session, listed, events, responseEvents := fixture.finishHosted(t, fixture.startHosted(t, selector, []string{
-		"you", "run",
-		"--dir", route.workDir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	}, true))
+	sessionHandle := fixture.openSession(t, route)
+	responseStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(fixture.baseURL, sessionHandle.id),
+	)
+	fixture.submitWork(t, sessionHandle, "agy shared direct")
+	session, listed, events, responseEvents := fixture.observeSession(t, sessionHandle, responseStream)
+	responseStream.Close()
+	fixture.closeSession(t, sessionHandle)
 	return session, listed, events, responseEvents, route, callStart
+}
+
+func (fixture *agySharedProcessFixture) submitWork(t testing.TB, session *agySharedSession, title string) {
+	t.Helper()
+	if session == nil {
+		t.Fatal("submit shared AGY Work: session is nil")
+	}
+	name := session.route.selector
+	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, session.id, factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": title},
+	})
+	if submitted.SessionId == nil || *submitted.SessionId != session.id {
+		t.Fatalf("shared AGY submitted Work session ID = %#v, want %q", submitted.SessionId, session.id)
+	}
+	if strings.TrimSpace(submitted.RequestId) == "" || support.StringPointerValue(submitted.WorkId) == "" {
+		t.Fatalf("shared AGY submitted Work identity = request:%q work:%q, want both identities", submitted.RequestId, support.StringPointerValue(submitted.WorkId))
+	}
 }
 
 func (fixture *agySharedProcessFixture) runRole(
@@ -666,6 +803,84 @@ func (fixture *agySharedProcessFixture) runRoleFailure(
 	return fixture.runRoleWithExpectation(t, selector, args, true)
 }
 
+// runRoleWithRecordingExpectation is retained for the recovery witness only.
+// The public live-session API intentionally does not accept a recording path;
+// this narrow one-shot path preserves the production CLI recording contract
+// while every other role case uses a fresh explicit session on the shared
+// listener. The packaged Factory, route and command edge remain shared, while
+// the secondary root process and recording path are explicit isolation
+// properties of this witness.
+func (fixture *agySharedProcessFixture) runRoleWithRecordingExpectation(
+	t *testing.T,
+	selector string,
+	args []string,
+	expectFailure bool,
+) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *agySharedCommandRoute, string, int) {
+	t.Helper()
+	route := fixture.routes[selector]
+	if route == nil {
+		t.Fatalf("shared AGY role route %q is missing", selector)
+	}
+	fixture.ensureRecordingProcess(t)
+	callStart := route.callCount()
+	recordingDir, err := os.MkdirTemp(route.rootDir, "recording-")
+	if err != nil {
+		t.Fatalf("create shared AGY recording directory: %v", err)
+	}
+	recordingPath := filepath.Join(recordingDir, "events.replay.json")
+	route.recordRecordingPath(recordingPath)
+	t.Cleanup(func() { _ = os.RemoveAll(recordingDir) })
+	args = append(append([]string(nil), args...), "--record", recordingPath, "--output", "primary")
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.Input.Env = agySharedEnvironment(fixture.homeDir)
+	inputs.Input.WorkingDirectory = route.workDir
+	command := startAgySharedProcessCommand(fixture.recordingProcess, inputs)
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), agySharedInvocationTimeout)
+	executionErr := command.wait(waitCtx)
+	cancelWait()
+	if errors.Is(executionErr, context.DeadlineExceeded) {
+		stopCtx, cancelStop := context.WithTimeout(context.Background(), agySharedInvocationTimeout)
+		stopErr := command.stop(stopCtx)
+		cancelStop()
+		t.Fatalf("Process.Execute(shared AGY recording role %q) timed out: stop error: %v", selector, stopErr)
+	}
+	if expectFailure {
+		if executionErr == nil {
+			t.Fatalf("Process.Execute(shared AGY recording role %q) error = nil, want terminal failure", selector)
+		}
+	} else if executionErr != nil {
+		t.Fatalf("Process.Execute(shared AGY recording role %q): %v\nstdout=%s\nstderr=%s", selector, executionErr, inputs.Stdout(), inputs.Stderr())
+	}
+	if strings.TrimSpace(inputs.Stdout()) == "" {
+		t.Fatalf("Process.Execute(shared AGY recording role %q) returned no invocation JSON: err=%v\nstderr=%s", selector, executionErr, inputs.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	events := readAgyRecording(t, recordingPath, "shared AGY recovery role")
+	if err := os.RemoveAll(recordingDir); err != nil {
+		t.Fatalf("remove shared AGY recording directory: %v", err)
+	}
+	if _, err := os.Stat(recordingDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("shared AGY recording directory %q remains after invocation: %v", recordingDir, err)
+	}
+	return response, events, route, route.assetPath, callStart
+}
+
+func (fixture *agySharedProcessFixture) runRoleRecording(
+	t *testing.T,
+	selector string,
+	args []string,
+) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *agySharedCommandRoute, string, int) {
+	return fixture.runRoleWithRecordingExpectation(t, selector, args, false)
+}
+
+func (fixture *agySharedProcessFixture) runRoleRecordingFailure(
+	t *testing.T,
+	selector string,
+	args []string,
+) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *agySharedCommandRoute, string, int) {
+	return fixture.runRoleWithRecordingExpectation(t, selector, args, true)
+}
+
 func (fixture *agySharedProcessFixture) runRoleWithExpectation(
 	t *testing.T,
 	selector string,
@@ -678,36 +893,89 @@ func (fixture *agySharedProcessFixture) runRoleWithExpectation(
 		t.Fatalf("shared AGY role route %q is missing", selector)
 	}
 	callStart := route.callCount()
-	env := agySharedEnvironment(route.homeDir)
-	support.InstallPackagedFactoryWithProcess(t, fixture.process, env, route.workDir, route.factoryName)
-	recordingDir, err := os.MkdirTemp(route.rootDir, "recording-")
-	if err != nil {
-		t.Fatalf("create shared AGY recording directory: %v", err)
+	session := fixture.openSession(t, route)
+	response := fixture.invokeRole(t, session, args)
+	if expectFailure && response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("shared AGY role %q status = %q, want FAILED", selector, response.Status)
 	}
-	recordingPath := filepath.Join(recordingDir, "events.replay.json")
-	route.recordRecordingPath(recordingPath)
-	t.Cleanup(func() { _ = os.RemoveAll(recordingDir) })
-	args = append(append([]string(nil), args...), "--record", recordingPath, "--output", "primary")
-	inputs := support.FakeInputs(context.Background(), args)
-	inputs.Input.Env = env
-	inputs.Input.WorkingDirectory = route.workDir
-	executionErr := fixture.process.Execute(inputs.Input)
-	if expectFailure {
-		if executionErr == nil {
-			t.Fatalf("Process.Execute(shared AGY role %q) error = nil, want terminal failure", selector)
-		}
-	} else if executionErr != nil {
-		t.Fatalf("Process.Execute(shared AGY role %q): %v\nstdout=%s\nstderr=%s", selector, executionErr, inputs.Stdout(), inputs.Stderr())
+	if !expectFailure && response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("shared AGY role %q status = %q, want COMPLETED", selector, response.Status)
 	}
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-	events := readAgyRecording(t, recordingPath, "shared AGY role")
-	if err := os.RemoveAll(recordingDir); err != nil {
-		t.Fatalf("remove shared AGY recording directory: %v", err)
-	}
-	if _, err := os.Stat(recordingDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("shared AGY recording directory %q remains after invocation: %v", recordingDir, err)
-	}
+	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.id)
+	fixture.closeSession(t, session)
 	return response, events, route, route.assetPath, callStart
+}
+
+func (fixture *agySharedProcessFixture) invokeRole(
+	t testing.TB,
+	session *agySharedSession,
+	args []string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	request := agyInvocationRequestFromArgs(t, args)
+	response, err := fixture.invokeSession(context.Background(), session.id, request)
+	if err != nil {
+		t.Fatalf("invoke shared AGY Factory Session %q: %v", session.id, err)
+	}
+	return response
+}
+
+func agyInvocationRequestFromArgs(t testing.TB, args []string) factoryapi.InvocationRequest {
+	t.Helper()
+	values := make(map[string]any)
+	for index := 0; index < len(args); index++ {
+		if index+1 >= len(args) {
+			continue
+		}
+		key := ""
+		switch args[index] {
+		case "--cut-path":
+			key = "cutPath"
+		case "--clip-path":
+			key = "clipPath"
+		case "--shot-specification":
+			key = "shotSpecification"
+		}
+		if key != "" {
+			values[key] = args[index+1]
+			index++
+		}
+	}
+	if len(values) == 0 {
+		t.Fatalf("shared AGY role arguments = %#v, want invocation arguments", args)
+	}
+	return factoryapi.InvocationRequest{Args: &values}
+}
+
+func (fixture *agySharedProcessFixture) invokeSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (factoryapi.InvocationResponse, error) {
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("marshal invocation request: %w", err)
+	}
+	endpoint := strings.TrimSuffix(fixture.baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("build invocation request: %w", err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return factoryapi.InvocationResponse{}, fmt.Errorf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("decode invocation response: %w", err)
+	}
+	return result, nil
 }
 
 func runAgySharedColdWatchComplete(
@@ -799,9 +1067,29 @@ func (fixture *agySharedProcessFixture) close() error {
 		if fixture.processBuilds != 1 {
 			closeErrors = append(closeErrors, fmt.Errorf("shared AGY process builds = %d, want 1", fixture.processBuilds))
 		}
+		if fixture.recordingBuilds > 1 {
+			closeErrors = append(closeErrors, fmt.Errorf("isolated AGY recording process builds = %d, want at most 1", fixture.recordingBuilds))
+		}
+		fixture.hostMu.Lock()
+		command := fixture.command
+		fixture.hostMu.Unlock()
+		if command != nil {
+			if err := command.stop(closeCtx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("stop shared AGY host command: %w", err))
+			}
+		}
 		if fixture.api != nil {
-			if err := fixture.api.waitClosed(closeCtx); err != nil {
-				closeErrors = append(closeErrors, err)
+			if command != nil {
+				if err := fixture.api.waitClosed(closeCtx); err != nil {
+					closeErrors = append(closeErrors, err)
+				}
+			}
+			wantStarts := 0
+			if command != nil {
+				wantStarts = 1
+			}
+			if fixture.api.startCount() != wantStarts {
+				closeErrors = append(closeErrors, fmt.Errorf("shared AGY listener starts = %d, want %d", fixture.api.startCount(), wantStarts))
 			}
 		}
 		if fixture.process != nil {
@@ -810,9 +1098,21 @@ func (fixture *agySharedProcessFixture) close() error {
 				closeErrors = append(closeErrors, err)
 			}
 		}
+		if fixture.recordingProcess != nil {
+			fixture.recordingCloses++
+			if err := fixture.recordingProcess.Close(closeCtx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close isolated AGY recording process: %w", err))
+			}
+		}
 		if fixture.runner != nil {
 			if got := fixture.runner.activeCallCount(); got != 0 {
 				closeErrors = append(closeErrors, fmt.Errorf("shared AGY active command calls = %d, want 0", got))
+			}
+			fixture.sessionMu.Lock()
+			activeSessions := len(fixture.activeSessionIDs)
+			fixture.sessionMu.Unlock()
+			if activeSessions != 0 {
+				closeErrors = append(closeErrors, fmt.Errorf("shared AGY active Factory Sessions = %d, want 0", activeSessions))
 			}
 			if got := fixture.runner.routeCount(); got != agySharedRouteCount {
 				closeErrors = append(closeErrors, fmt.Errorf("shared AGY routes before clear = %d, want %d", got, agySharedRouteCount))
@@ -833,6 +1133,9 @@ func (fixture *agySharedProcessFixture) close() error {
 		}
 		if fixture.processCloses != 1 {
 			closeErrors = append(closeErrors, fmt.Errorf("shared AGY process closes = %d, want 1", fixture.processCloses))
+		}
+		if fixture.recordingCloses != fixture.recordingBuilds {
+			closeErrors = append(closeErrors, fmt.Errorf("isolated AGY recording process closes = %d, want %d", fixture.recordingCloses, fixture.recordingBuilds))
 		}
 		if fixture.rootDir != "" {
 			if err := os.RemoveAll(fixture.rootDir); err != nil {

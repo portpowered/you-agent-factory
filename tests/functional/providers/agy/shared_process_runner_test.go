@@ -16,7 +16,42 @@ import (
 type agySharedCommandOutcome struct {
 	result  platformprocess.CommandResult
 	err     error
-	release <-chan struct{}
+	release *agySharedRelease
+}
+
+// agySharedRelease is reset by repeated lifecycle tests instead of closing a
+// package-global channel permanently after the first -count iteration.
+type agySharedRelease struct {
+	mu       sync.Mutex
+	channel  chan struct{}
+	released bool
+}
+
+func newAgySharedRelease() *agySharedRelease {
+	return &agySharedRelease{channel: make(chan struct{})}
+}
+
+func (release *agySharedRelease) current() <-chan struct{} {
+	release.mu.Lock()
+	defer release.mu.Unlock()
+	return release.channel
+}
+
+func (release *agySharedRelease) reset() {
+	release.mu.Lock()
+	defer release.mu.Unlock()
+	release.channel = make(chan struct{})
+	release.released = false
+}
+
+func (release *agySharedRelease) close() {
+	release.mu.Lock()
+	defer release.mu.Unlock()
+	if release.released {
+		return
+	}
+	close(release.channel)
+	release.released = true
 }
 
 // agySharedCommandRoute is immutable after the package-owned command router
@@ -47,8 +82,9 @@ func (route *agySharedCommandRoute) record(
 	route.mu.Unlock()
 
 	if outcome.release != nil {
+		release := outcome.release.current()
 		select {
-		case <-outcome.release:
+		case <-release:
 		case <-ctx.Done():
 			return platformprocess.CommandResult{}, ctx.Err()
 		}
@@ -61,7 +97,9 @@ func (route *agySharedCommandRoute) outcome(index int) agySharedCommandOutcome {
 		return agySharedCommandOutcome{}
 	}
 	if index >= len(route.outcomes) {
-		index = len(route.outcomes) - 1
+		// The recovery route intentionally repeats its first/second outcome
+		// pair for each -count iteration. Single-outcome routes are unchanged.
+		index %= len(route.outcomes)
 	}
 	return route.outcomes[index]
 }
