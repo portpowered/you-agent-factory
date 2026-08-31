@@ -5,9 +5,10 @@ U02 blocker; Story 002 supplied the explicitly scoped smallest delta and now
 passes the complete TTS gate; Story 003 preserves the plan-execute witness and
 adds explicit runner-workspace and shared-host cleanup evidence; Story 004 now
 passes after the operator-authorized Full Flow OS-spawn bookkeeping
-reconciliation. Story 005 remains the integrated promotion story. The
-unchanged-head table below must not be read as claiming that U02 existed before
-the implementation change.
+reconciliation. Story 005's implementation-stage clean-room promotion is
+complete; review owns terminal CI, conflicts, and merge. The unchanged-head
+table below must not be read as claiming that U02 existed before the
+implementation change.
 
 ## Authority and boundary
 
@@ -360,6 +361,92 @@ The focused Full Flow package, repeat, and race evidence above remains valid
 because this reconciliation changed only governance data; the final integrated
 clean-room, coverage, PR timing, terminal CI, real Git executable semantics,
 and merge remain Story 005 or review-stage evidence.
+
+## Story 005 — integrated clean-room promotion and loopback
+
+### Environment and artifact
+
+- Implementation head tested: `cd98e2daaa4e2fc5801066e3a744671b1cf0262d`.
+- Environment: Windows `windows/amd64`, Go `go1.25.0`, `GOFLAGS` empty.
+- A detached clean checkout was created at that head with no `prd.json` or
+  `progress.txt` task scaffolding. It was removed after validation; its tracked
+  worktree status was clean.
+- Dependency fidelity: local-real `root.BuildProcess` and `Process.Execute`
+  with controlled provider, model, protocol, repository, script, filesystem,
+  and recording edges. No remote or paid calls were used.
+- Cost: no paid calls; the bounded local coverage attempt was interrupted after
+  its partial report became non-progressing, as recorded below.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| GATE-TTS / GATE-PLAN / GATE-FLOW | PASS | From the detached checkout, `go test -count=1 -timeout 30m ./tests/functional/factory/packaged/tts ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/full_flow` exited `0`; package timings were TTS `78.008s`, plan-execute `5.541s`, and Full Flow `13.048s`. The complete parents and all 17 named behavior rows passed. | Remote model quality and real Git executable semantics. |
+| LIFE-01 through LIFE-09 | PASS | The same clean-room run exercised the package cleanup assertions; existing final-head focused and repeat evidence records fresh sessions/routes/roots, balanced hosts, removed workspaces, zero routes/artifacts, and no cross-scenario leakage. | Exhaustive schedules and unsupported remote lifecycle behavior. |
+| GATE-OS | PASS | Clean-room `make functional-os-boundary-check` exited `0`: `observed=69 baseline=69 packages=22 intentional=62 accidental=7`; the Full Flow source has no `os/exec` or direct `exec.Command` match. The ratchet is `70 -> 69`. | None for the assigned static OS property. |
+| GATE-REPEAT / applicable GATE-RACE / GATE-PACKAGES | PASS | Story 002 and Story 004 final-head focused `-count=3` and `-race` runs exited `0`; the clean-room package run also exited `0`. | Other platforms and terminal PR CI. |
+| GATE-PR-TIMING | PASS via permitted irreducibility branch | TTS and plan-execute remain above `3.000s` in noisy local package samples, but the completed bounded optimization pass retains the per-row/per-test measured-cost and real-property irreducibility tables in this ledger. Customer baselines are TTS `35.224s` and plan-execute `5.036s`; clean-room samples are recorded above. | Same-head PR `functional-timing-summary.json` is review-owned after CI starts. |
+| GATE-COVERAGE / QUAL-01 | BLOCKED until PR CI | The three owned directories contain no `t.Skip`, `t.Skipf`, `testing.Short`, or quarantine marker, and the manifest has no entries for these packages. The local full-tier attempt produced only a partial `complete=false` report after 895 seconds, reached 14 of 149 packages, and reported unrelated failures in `events/factory_events` and `events/response_events` before interruption; no aggregate coverage verdict was produced. | Same-head aggregate `>=61.6%`, package floors, and CI quarantine validation. |
+| GATE-LOOPBACK | PASS | This report follows the validation-loopback template. The clean checkout reproduced the integrated three-package journey and the OS gate without modifying implementation files or silently repairing a failure. | Review-stage terminal CI and merge. |
+| Implementation-stage delivery | Pending handoff at report capture | The report is tied to the final pre-handoff implementation head; the next action is to push it, open the named PR, confirm required CI has started, and put CI-run evidence in a PR comment. | Terminal CI, conflicts, and merge remain review-owned. |
+
+### Customer journey
+
+1. Checked out the delivered implementation head into a fresh detached
+   worktree. The checkout contained no ignored task scaffolding.
+2. Ran the combined public packaged TTS, plan-execute, and Full Flow functional
+   parents with `-count=1`; all three packages exited `0`, all 17 cases passed,
+   and the package-reported timings were captured above.
+3. Ran the unchanged `make functional-os-boundary-check` from the same clean
+   checkout. It exited `0` and reconciled 69 inventory records at the 69-site
+   baseline.
+4. Removed the temporary clean checkout after confirming its tracked status
+   was clean. No implementation defect was repaired during loopback.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: this checked-in ledger is the C15 evidence
+  destination and records the exact selectors, assertions, topology, timing,
+  OS, cleanup, and loopback evidence.
+- Permission and error behavior: the functional matrix retains its controlled
+  failure, capacity, bounded-cycle, and input-error assertions; no auth claim
+  was invented for the test-local API.
+- Persistence/reload behavior: managed-model recording/replay and Full Flow
+  cursor replay remain asserted by the retained package witnesses.
+- Accessibility/keyboard/responsive behavior: not applicable; this story has
+  no UI surface.
+- Operational signals: package timings, lifecycle counters, route/artifact
+  cleanup, repository-edge calls, and the OS-spawn checker output are recorded;
+  the partial coverage artifact is explicitly not used as a verdict.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| C15-F001 | non-blocking, review-owned | Run the required Backend Functional Coverage job on the pushed PR head. | Same-head timing, aggregate coverage, package floors, and quarantine evidence are available. | No PR artifact existed at loopback capture; the local full-tier attempt was partial and was not substituted. | The partial `functional-timing-summary.json` reports `complete=false`, `captureReason=functional run still active`, and `packageCount=14/149`. |
+| C15-F002 | non-blocking, environment | Run `bash scripts/ci/verify-functional-quarantine-packages.sh` locally. | The structured package-event verifier runs. | It exits `1` with `jq is required to verify the structured go test package events`; CI has the required tool. | Exact command result; static owned-source inspection found no skip/quarantine markers. |
+
+### Timing record
+
+| Package | Customer baseline | Retained characterization | Delivered bounded/local result | Clean-room result |
+| --- | ---: | ---: | ---: | ---: |
+| TTS | `35.224s` | `72.033s` | `60.265s` bounded pass; `112.411s` contaminated sample | `78.008s` |
+| plan-execute | `5.036s` | `2.888s` | `5.256s` final local sample | `5.541s` |
+| Full Flow | not supplied | `11.511s` | `14.936s` package pass; `60.878s` repeat | `13.048s` |
+
+### Verdict
+
+PASS for the implementation-stage clean-room validation and promotion
+evidence. The implementation handoff remains the required final operational
+step: push the final head, open the named PR, confirm required CI has started,
+and stop. Review owns terminal CI, same-head coverage/timing verdict,
+conflicts, real Git semantics, and merge.
+
+### Delta-plan request
+
+No implementation delta is requested. The only follow-up is the prescribed
+review-owned CI handoff and terminal review; if that run reports a failure on a
+package touched by this diff, apply only the corresponding review correction.
 
 ## Source hash register
 
