@@ -1,0 +1,14 @@
+{
+  "requestId": "board-occupancy-repro-request",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "current-terminal-after-move",
+      "workTypeName": "idea",
+      "state": "complete",
+      "payload": {
+        "fixture": "sanitized-board-occupancy-repro"
+      }
+    }
+  ]
+}
