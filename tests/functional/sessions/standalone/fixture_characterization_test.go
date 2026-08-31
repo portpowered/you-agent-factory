@@ -2,15 +2,18 @@ package standalone_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -20,8 +23,68 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const standaloneFixtureStopTimeout = 5 * time.Second
+
+// standalonePackageFixture owns immutable application wiring for the two
+// eligible fixture rows. Each row still opens a fresh MCP Process.Execute
+// invocation, so its fixture service/store, stdio streams, context, and
+// working directory remain scenario-owned.
+type standalonePackageFixture struct {
+	sync.Mutex
+	process   support.ApplicationProcess
+	buildErr  error
+	closeOnce sync.Once
+	closeErr  error
+}
+
+var sharedStandaloneFixture standalonePackageFixture
+var sharedStandaloneScenarioSlot = make(chan struct{}, 1)
+
+// standaloneTopologyLedger keeps the optimization's real resource boundary
+// observable without reaching into the production fixture service. One
+// Process.Execute invocation corresponds to one fixture service/store scope.
+type standaloneTopologyLedger struct {
+	sync.Mutex
+	sharedRootBuilds          int
+	isolatedRootBuilds        int
+	sharedRootCloses          int
+	isolatedRootCloses        int
+	invocationStarts          int
+	invocationReturns         int
+	contextsCanceled          int
+	stdioPairsOpened          int
+	stdioPairsClosed          int
+	workingDirectoriesMade    int
+	workingDirectoriesRemoved int
+}
+
+var standaloneTopology standaloneTopologyLedger
+
+// TestMain closes the package-scoped root after all per-invocation fixture
+// services, stores, and stdio streams have been released. S03 intentionally
+// keeps two separately built roots so its cross-store not-found assertion
+// remains a real isolation witness.
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+
+	if err := closeSharedStandaloneFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "close shared standalone fixture: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+	if err := standaloneTopology.cleanupError(); err != nil {
+		fmt.Fprintf(os.Stderr, "standalone cleanup accounting: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+	fmt.Fprintf(os.Stderr, "GATE-STAND topology: %s\n", standaloneTopology.summary())
+	os.Exit(exitCode)
+}
+
 func TestBTRCP0StandaloneFixtureSuccessCharacterization(t *testing.T) {
-	server := startStandaloneFixtureServer(t, canonicalFixtureCatalogPath(t))
+	server := startSharedStandaloneFixtureServer(t)
 	assertStandaloneInitialized(t, server.client)
 
 	start := callStandaloneStartSync(t, server.client, standaloneSuccessRequest("req-petri-success-001", "customer-support-triage", "TKT-2002"))
@@ -35,7 +98,7 @@ func TestBTRCP0StandaloneFixtureSuccessCharacterization(t *testing.T) {
 }
 
 func TestBTRCP0StandaloneFixtureFailureCharacterization(t *testing.T) {
-	server := startStandaloneFixtureServer(t, canonicalFixtureCatalogPath(t))
+	server := startSharedStandaloneFixtureServer(t)
 	assertStandaloneInitialized(t, server.client)
 
 	workflowName := "does-not-exist"
@@ -55,6 +118,12 @@ func TestBTRCP0StandaloneFixtureFailureCharacterization(t *testing.T) {
 	events := callStandaloneEvents(t, server.client, start.SessionId)
 	assertStandaloneFailureEvents(t, events, start.SessionId)
 	assertStandaloneFailedSessionHasNoLiveDispatches(t, server.client, start.SessionId)
+	assertStandaloneSessionNotFound(
+		t,
+		server.client,
+		"dur-sess-petri-success-001",
+		"prior shared fixture invocation",
+	)
 }
 
 func TestBTRCP0StandaloneFixtureRunsRemainIsolated(t *testing.T) {
@@ -308,6 +377,20 @@ func assertStandaloneFailedSessionHasNoLiveDispatches(t *testing.T, client *stan
 	}
 }
 
+func assertStandaloneSessionNotFound(t *testing.T, client *standaloneMCPClient, sessionID, label string) {
+	t.Helper()
+	response := decodeStandaloneToolResponse[factoryapi.FactorySessionDurableReadModel](t, client.callTool(
+		mcpfactorysession.ToolGetSession,
+		map[string]any{"sessionId": sessionID},
+	))
+	if response.Error == nil || response.Error.Code != "factory_session.session.not_found" {
+		t.Fatalf("%s get_session response = %#v, want typed session.not_found", label, response)
+	}
+	if response.Error.SessionID != sessionID {
+		t.Fatalf("%s get_session error sessionId = %q, want %q", label, response.Error.SessionID, sessionID)
+	}
+}
+
 func writeStandaloneFixtureVariant(t *testing.T, sessionID, resultText string) string {
 	t.Helper()
 	raw, err := os.ReadFile(canonicalFixtureCatalogPath(t))
@@ -399,66 +482,349 @@ func setStandaloneFixtureResultText(scenario map[string]any, resultText string) 
 func stringPtr(value string) *string { return &value }
 
 type standaloneMCPServer struct {
-	client     *standaloneMCPClient
-	cancel     context.CancelFunc
-	stdinWrite *os.File
-	serveErr   <-chan error
-	closeOnce  sync.Once
+	client           *standaloneMCPClient
+	process          support.ApplicationProcess
+	ownsProcess      bool
+	cancel           context.CancelFunc
+	stdinRead        *os.File
+	stdinWrite       *os.File
+	stdoutRead       *os.File
+	stdoutWrite      *os.File
+	serveErr         <-chan error
+	stderr           *bytes.Buffer
+	workingDirectory string
+	closeOnce        sync.Once
+	closeErr         error
 }
 
 func startStandaloneFixtureServer(t *testing.T, fixtureCatalog string) *standaloneMCPServer {
 	t.Helper()
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
+	standaloneTopology.recordIsolatedRootBuild()
+	return startStandaloneFixtureServerWithProcess(t, process, true, fixtureCatalog)
+}
+
+func startSharedStandaloneFixtureServer(t *testing.T) *standaloneMCPServer {
+	t.Helper()
+	acquireSharedStandaloneScenarioSlot(t)
+	return startStandaloneFixtureServerWithProcess(
+		t,
+		sharedStandaloneProcess(t),
+		false,
+		canonicalFixtureCatalogPath(t),
+	)
+}
+
+func sharedStandaloneProcess(t testing.TB) support.ApplicationProcess {
+	t.Helper()
+
+	sharedStandaloneFixture.Lock()
+	defer sharedStandaloneFixture.Unlock()
+	if sharedStandaloneFixture.process == nil && sharedStandaloneFixture.buildErr == nil {
+		sharedStandaloneFixture.process, sharedStandaloneFixture.buildErr = support.BuildProcessWithContext(
+			context.Background(), serviceedges.Edges{},
+		)
+		if sharedStandaloneFixture.buildErr == nil {
+			standaloneTopology.recordSharedRootBuild()
+		}
+	}
+	if sharedStandaloneFixture.buildErr != nil {
+		t.Fatalf("BuildProcess() for shared standalone fixture: %v", sharedStandaloneFixture.buildErr)
+	}
+	if sharedStandaloneFixture.process == nil {
+		t.Fatal("shared standalone fixture process is unavailable")
+	}
+	return sharedStandaloneFixture.process
+}
+
+func acquireSharedStandaloneScenarioSlot(t testing.TB) {
+	t.Helper()
+	sharedStandaloneScenarioSlot <- struct{}{}
+	t.Cleanup(func() { <-sharedStandaloneScenarioSlot })
+}
+
+func closeSharedStandaloneFixture() error {
+	sharedStandaloneFixture.Lock()
+	process := sharedStandaloneFixture.process
+	sharedStandaloneFixture.Unlock()
+	if process == nil {
+		return nil
+	}
+
+	sharedStandaloneFixture.closeOnce.Do(func() {
+		closeContext, cancel := context.WithTimeout(context.Background(), standaloneFixtureStopTimeout)
+		defer cancel()
+		sharedStandaloneFixture.closeErr = process.Close(closeContext)
+		standaloneTopology.recordSharedRootClose()
+	})
+	return sharedStandaloneFixture.closeErr
+}
+
+func startStandaloneFixtureServerWithProcess(
+	t *testing.T,
+	process support.ApplicationProcess,
+	ownsProcess bool,
+	fixtureCatalog string,
+) *standaloneMCPServer {
+	t.Helper()
+	if process == nil {
+		t.Fatal("start standalone fixture server requires an application process")
+	}
+
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
+		closeStandaloneProcessAfterStartFailure(process, ownsProcess)
 		t.Fatalf("create MCP stdin pipe: %v", err)
 	}
 	stdoutRead, stdoutWrite, err := os.Pipe()
 	if err != nil {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		closeStandaloneProcessAfterStartFailure(process, ownsProcess)
 		t.Fatalf("create MCP stdout pipe: %v", err)
 	}
-	t.Cleanup(func() {
+	workingDirectory, err := os.MkdirTemp("", "you-functional-sessions-standalone-")
+	if err != nil {
 		_ = stdinRead.Close()
 		_ = stdinWrite.Close()
 		_ = stdoutRead.Close()
 		_ = stdoutWrite.Close()
-	})
+		closeStandaloneProcessAfterStartFailure(process, ownsProcess)
+		t.Fatalf("create MCP working directory: %v", err)
+	}
+	standaloneTopology.recordStdioPairOpened()
+	standaloneTopology.recordWorkingDirectoryMade()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	serveErr := make(chan error, 1)
+	stderr := &bytes.Buffer{}
+	standaloneTopology.recordInvocationStarted()
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixtureCatalog},
 			Env:              os.Environ(),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
+			Stderr:           stderr,
 			Context:          ctx,
-			WorkingDirectory: t.TempDir(),
+			WorkingDirectory: workingDirectory,
 		})
+		standaloneTopology.recordInvocationReturned()
 	}()
 	server := &standaloneMCPServer{
-		client:     newStandaloneMCPClient(t, stdinWrite, stdoutRead),
-		cancel:     cancel,
-		stdinWrite: stdinWrite,
-		serveErr:   serveErr,
+		client:           newStandaloneMCPClient(t, stdinWrite, stdoutRead),
+		process:          process,
+		ownsProcess:      ownsProcess,
+		cancel:           cancel,
+		stdinRead:        stdinRead,
+		stdinWrite:       stdinWrite,
+		stdoutRead:       stdoutRead,
+		stdoutWrite:      stdoutWrite,
+		serveErr:         serveErr,
+		stderr:           stderr,
+		workingDirectory: workingDirectory,
 	}
 	t.Cleanup(func() { server.close(t) })
 	return server
 }
 
+func closeStandaloneProcessAfterStartFailure(process support.ApplicationProcess, ownsProcess bool) {
+	if !ownsProcess || process == nil {
+		return
+	}
+	closeContext, cancel := context.WithTimeout(context.Background(), standaloneFixtureStopTimeout)
+	_ = process.Close(closeContext)
+	cancel()
+	standaloneTopology.recordIsolatedRootClose()
+}
+
 func (server *standaloneMCPServer) close(t *testing.T) {
 	t.Helper()
 	server.closeOnce.Do(func() {
+		var closeErrors []error
 		server.cancel()
+		standaloneTopology.recordContextCanceled()
 		_ = server.stdinWrite.Close()
-		err := <-server.serveErr
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "file already closed") {
-			t.Errorf("fixture-backed MCP server shutdown: %v", err)
+		select {
+		case err := <-server.serveErr:
+			if err != nil && !standaloneServeShutdownError(err) {
+				closeErrors = append(closeErrors, fmt.Errorf(
+					"fixture-backed MCP server: %w (stderr=%q)",
+					err,
+					strings.TrimSpace(server.stderr.String()),
+				))
+			}
+		// A returned serveErr is the deterministic shutdown signal. This
+		// timeout is only a cleanup hang guard for a stuck stdio transport.
+		case <-time.After(standaloneFixtureStopTimeout):
+			closeErrors = append(closeErrors, fmt.Errorf("fixture-backed MCP server did not shut down"))
 		}
+		_ = server.stdinRead.Close()
+		_ = server.stdoutRead.Close()
+		_ = server.stdoutWrite.Close()
+		standaloneTopology.recordStdioPairClosed()
+
+		if server.ownsProcess {
+			closeContext, cancel := context.WithTimeout(context.Background(), standaloneFixtureStopTimeout)
+			if err := server.process.Close(closeContext); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close isolated MCP process: %w", err))
+			}
+			cancel()
+			standaloneTopology.recordIsolatedRootClose()
+		}
+		if err := os.RemoveAll(server.workingDirectory); err != nil {
+			closeErrors = append(closeErrors, fmt.Errorf("remove MCP working directory: %w", err))
+		}
+		standaloneTopology.recordWorkingDirectoryRemoved()
+		server.closeErr = errors.Join(closeErrors...)
 	})
+	if server.closeErr != nil {
+		t.Errorf("standalone fixture cleanup: %v", server.closeErr)
+	}
+}
+
+func standaloneServeShutdownError(err error) bool {
+	return errors.Is(err, context.Canceled) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, os.ErrClosed) ||
+		strings.Contains(err.Error(), "file already closed")
+}
+
+func (ledger *standaloneTopologyLedger) recordSharedRootBuild() {
+	ledger.Lock()
+	ledger.sharedRootBuilds++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordIsolatedRootBuild() {
+	ledger.Lock()
+	ledger.isolatedRootBuilds++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordSharedRootClose() {
+	ledger.Lock()
+	ledger.sharedRootCloses++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordIsolatedRootClose() {
+	ledger.Lock()
+	ledger.isolatedRootCloses++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordInvocationStarted() {
+	ledger.Lock()
+	ledger.invocationStarts++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordInvocationReturned() {
+	ledger.Lock()
+	ledger.invocationReturns++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordContextCanceled() {
+	ledger.Lock()
+	ledger.contextsCanceled++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordStdioPairOpened() {
+	ledger.Lock()
+	ledger.stdioPairsOpened++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordStdioPairClosed() {
+	ledger.Lock()
+	ledger.stdioPairsClosed++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordWorkingDirectoryMade() {
+	ledger.Lock()
+	ledger.workingDirectoriesMade++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) recordWorkingDirectoryRemoved() {
+	ledger.Lock()
+	ledger.workingDirectoriesRemoved++
+	ledger.Unlock()
+}
+
+func (ledger *standaloneTopologyLedger) cleanupError() error {
+	ledger.Lock()
+	defer ledger.Unlock()
+	var cleanupErrors []error
+	if ledger.sharedRootBuilds != ledger.sharedRootCloses {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"shared roots built=%d closed=%d",
+			ledger.sharedRootBuilds,
+			ledger.sharedRootCloses,
+		))
+	}
+	if ledger.isolatedRootBuilds != ledger.isolatedRootCloses {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"isolated roots built=%d closed=%d",
+			ledger.isolatedRootBuilds,
+			ledger.isolatedRootCloses,
+		))
+	}
+	if ledger.invocationStarts != ledger.invocationReturns {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"fixture invocations started=%d returned=%d",
+			ledger.invocationStarts,
+			ledger.invocationReturns,
+		))
+	}
+	if ledger.contextsCanceled != ledger.invocationStarts {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"fixture contexts canceled=%d started=%d",
+			ledger.contextsCanceled,
+			ledger.invocationStarts,
+		))
+	}
+	if ledger.stdioPairsOpened != ledger.stdioPairsClosed {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"stdio pairs opened=%d closed=%d",
+			ledger.stdioPairsOpened,
+			ledger.stdioPairsClosed,
+		))
+	}
+	if ledger.workingDirectoriesMade != ledger.workingDirectoriesRemoved {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf(
+			"working directories made=%d removed=%d",
+			ledger.workingDirectoriesMade,
+			ledger.workingDirectoriesRemoved,
+		))
+	}
+	return errors.Join(cleanupErrors...)
+}
+
+func (ledger *standaloneTopologyLedger) summary() string {
+	ledger.Lock()
+	defer ledger.Unlock()
+	return fmt.Sprintf(
+		"root_builds={shared:%d isolated:%d} root_closes={shared:%d isolated:%d} fixture_scopes={started:%d returned:%d} contexts={canceled:%d} stdio_pairs={opened:%d closed:%d} working_dirs={made:%d removed:%d}",
+		ledger.sharedRootBuilds,
+		ledger.isolatedRootBuilds,
+		ledger.sharedRootCloses,
+		ledger.isolatedRootCloses,
+		ledger.invocationStarts,
+		ledger.invocationReturns,
+		ledger.contextsCanceled,
+		ledger.stdioPairsOpened,
+		ledger.stdioPairsClosed,
+		ledger.workingDirectoriesMade,
+		ledger.workingDirectoriesRemoved,
+	)
 }
 
 type standaloneMCPClient struct {
