@@ -181,7 +181,7 @@ test("the adapter follows duplicate boundary records without double counting", a
 					pullRequest(202, "2026-01-01T04:00:00Z"),
 				]);
 			}
-			if (parsed.pathname.endsWith("/search/issues")) {
+			if (parsed.pathname === "/search/issues") {
 				return response({
 					total_count: 2,
 					items: [

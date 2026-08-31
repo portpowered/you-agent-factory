@@ -552,7 +552,10 @@ export function createGitHubClient({
 		if (requestCount > maxRequests) {
 			fail(`GitHub API request budget exceeded ${maxRequests}; refusing an unbounded report`);
 		}
-		const url = new URL(`repos/${repositoryPath(validatedRepository)}/${path}`, base);
+		const endpoint = path.startsWith("search/")
+			? path
+			: `repos/${repositoryPath(validatedRepository)}/${path}`;
+		const url = new URL(endpoint, base);
 		addQueryParameters(url, parameters);
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), timeoutMs);
