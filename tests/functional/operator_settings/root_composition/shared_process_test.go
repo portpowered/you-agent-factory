@@ -50,6 +50,7 @@ type sharedOperatorSettingsFixture struct {
 
 type operatorSettingsEffectSnapshot struct {
 	fileSystemCalls      int64
+	readFileCalls        int64
 	createTemporaryCalls int64
 	operatorIDCalls      int64
 	sessionIDCalls       int64
@@ -66,6 +67,7 @@ type operatorSettingsEffectRouter struct {
 	nextID atomic.Uint64
 
 	fileSystemCalls      atomic.Int64
+	readFileCalls        atomic.Int64
 	createTemporaryCalls atomic.Int64
 	operatorIDCalls      atomic.Int64
 	sessionIDCalls       atomic.Int64
@@ -100,12 +102,13 @@ type operatorSettingsEffectRoute struct {
 }
 
 type sharedOperatorSettingsSession struct {
-	fixture *sharedOperatorSettingsFixture
-	route   *operatorSettingsEffectRoute
-	baseURL string
-	session string
-	command *support.ProcessCommand
-	tracked bool
+	fixture              *sharedOperatorSettingsFixture
+	route                *operatorSettingsEffectRoute
+	baseURL              string
+	session              string
+	command              *support.ProcessCommand
+	tracked              bool
+	factorySessionClosed bool
 
 	closeOnce sync.Once
 }
@@ -159,6 +162,7 @@ func newOperatorSettingsEffectRouter() *operatorSettingsEffectRouter {
 func (router *operatorSettingsEffectRouter) snapshot() operatorSettingsEffectSnapshot {
 	return operatorSettingsEffectSnapshot{
 		fileSystemCalls:      router.fileSystemCalls.Load(),
+		readFileCalls:        router.readFileCalls.Load(),
 		createTemporaryCalls: router.createTemporaryCalls.Load(),
 		operatorIDCalls:      router.operatorIDCalls.Load(),
 		sessionIDCalls:       router.sessionIDCalls.Load(),
@@ -356,7 +360,7 @@ func (router *operatorSettingsEffectRouter) generateSessionID() string {
 		return ""
 	}
 	router.sessionIDCalls.Add(1)
-	return fmt.Sprintf("operator-settings-session-%d", router.nextID.Add(1))
+	return fmt.Sprintf("00000000-0000-4000-8000-%012x", router.nextID.Add(1))
 }
 
 func (router *operatorSettingsEffectRouter) routeForEffectPath(path string) (*operatorSettingsEffectRoute, error) {
@@ -382,6 +386,7 @@ func (router *operatorSettingsEffectRouter) ReadFile(path string) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+	router.readFileCalls.Add(1)
 	router.fileSystemCalls.Add(1)
 	return os.ReadFile(filepath.Clean(path))
 }
@@ -560,7 +565,82 @@ func (fixture *sharedOperatorSettingsFixture) withFactorySession(
 	run func(string),
 ) {
 	t.Helper()
-	route, err := fixture.router.register(label, homeDir, workingDir, generatedID, providerRunner)
+	fixture.withFactorySessionHandle(
+		t,
+		label,
+		homeDir,
+		workingDir,
+		generatedID,
+		providerRunner,
+		func(session *sharedOperatorSettingsSession) {
+			run(session.session)
+		},
+	)
+}
+
+// withFactorySessionHandle gives a migrated test access to the session-owned
+// command and URL when it must stop one public invocation before issuing the
+// next one through the same immutable process.
+func (fixture *sharedOperatorSettingsFixture) withFactorySessionHandle(
+	t *testing.T,
+	label, homeDir, workingDir, generatedID string,
+	providerRunner platformprocess.CommandRunner,
+	run func(*sharedOperatorSettingsSession),
+) {
+	t.Helper()
+	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
+	fixture.withFactorySessionHandlePaths(
+		t,
+		label,
+		homeDir,
+		bootstrapDir,
+		workingDir,
+		generatedID,
+		providerRunner,
+		nil,
+		false,
+		run,
+	)
+}
+
+// withDefaultFactorySessionHandle preserves a scenario whose observable
+// behavior belongs to the CLI's default session while still opening a unique
+// public Factory Session for the shared-process lifecycle witness. The opened
+// session uses a no-work bootstrap Factory, so it cannot duplicate the CLI
+// scenario's provider dispatch.
+func (fixture *sharedOperatorSettingsFixture) withDefaultFactorySessionHandle(
+	t *testing.T,
+	label, homeDir, workingDir, generatedID string,
+	providerRunner platformprocess.CommandRunner,
+	runArgs []string,
+	run func(*sharedOperatorSettingsSession),
+) {
+	t.Helper()
+	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
+	fixture.withFactorySessionHandlePaths(
+		t,
+		label,
+		homeDir,
+		workingDir,
+		bootstrapDir,
+		generatedID,
+		providerRunner,
+		runArgs,
+		true,
+		run,
+	)
+}
+
+func (fixture *sharedOperatorSettingsFixture) withFactorySessionHandlePaths(
+	t *testing.T,
+	label, homeDir, runDirectory, sessionDirectory, generatedID string,
+	providerRunner platformprocess.CommandRunner,
+	runArgs []string,
+	waitForDefaultTerminal bool,
+	run func(*sharedOperatorSettingsSession),
+) {
+	t.Helper()
+	route, err := fixture.router.register(label, homeDir, runDirectory, generatedID, providerRunner)
 	if err != nil {
 		t.Fatalf("register Operator Settings Factory Session route: %v", err)
 	}
@@ -584,18 +664,28 @@ func (fixture *sharedOperatorSettingsFixture) withFactorySession(
 		}
 	}()
 
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", workingDir, "--continuously", "--with-server", "--quiet", "--no-record",
-	})
+	bootstrapDir := filepath.Join(homeDir, ".operator-settings-bootstrap")
+	if err := writeOperatorSettingsBootstrapFactory(bootstrapDir); err != nil {
+		t.Fatalf("write Operator Settings bootstrap Factory: %v", err)
+	}
+	args := []string{
+		"you", "run", "--dir", runDirectory, "--continuously", "--with-server", "--quiet", "--no-record",
+	}
+	args = append(args, runArgs...)
+	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDir
+	inputs.Input.WorkingDirectory = runDirectory
 	command = support.StartProcessCommand(t, fixture.process, inputs.Input)
 	baseURL := route.apiServer.WaitForURL(t)
-	support.WaitForStatus(t, baseURL, sharedOperatorSettingsProcessTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
+	if waitForDefaultTerminal {
+		support.WaitForTerminalStatus(t, baseURL, sharedOperatorSettingsProcessTimeout)
+	} else {
+		support.WaitForStatus(t, baseURL, sharedOperatorSettingsProcessTimeout, func(status factoryapi.StatusResponse) bool {
+			return strings.TrimSpace(status.RuntimeStatus) != ""
+		})
+	}
 
-	opened := support.OpenFactorySessionAt(t, baseURL, workingDir)
+	opened := support.OpenFactorySessionAt(t, baseURL, sessionDirectory)
 	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" ||
 		opened.Session.Id == factorysessions.DefaultSessionID {
 		t.Fatalf("open routed Factory Session %q returned invalid session %#v", label, opened.Session)
@@ -623,7 +713,15 @@ func (fixture *sharedOperatorSettingsFixture) withFactorySession(
 	defer func() {
 		session.close(t)
 	}()
-	run(opened.Session.Id)
+	run(session)
+}
+
+func writeOperatorSettingsBootstrapFactory(directory string) error {
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		return err
+	}
+	const factoryConfig = `{"name":"operator-settings-bootstrap","workTypes":[{"name":"bootstrap","states":[{"name":"ready","type":"INITIAL"}]}],"workers":[],"workstations":[]}`
+	return os.WriteFile(filepath.Join(directory, "factory.json"), []byte(factoryConfig), 0o644)
 }
 
 func (session *sharedOperatorSettingsSession) close(t testing.TB) {
@@ -649,9 +747,21 @@ func (session *sharedOperatorSettingsSession) close(t testing.TB) {
 				session.fixture.sessionMu.Unlock()
 			}
 		}()
-		support.CloseFactorySessionAt(t, session.baseURL, session.session)
-		verifyOperatorSettingsSessionDeleted(t, session.baseURL, session.session)
+		session.closeFactorySession(t)
 	})
+}
+
+// closeFactorySession deletes the public session while its owning API server
+// is still serving. Tests that need to stop the daemon before a follow-up
+// Process.Execute call use this before stopping the session command.
+func (session *sharedOperatorSettingsSession) closeFactorySession(t testing.TB) {
+	t.Helper()
+	if session.factorySessionClosed {
+		return
+	}
+	support.CloseFactorySessionAt(t, session.baseURL, session.session)
+	verifyOperatorSettingsSessionDeleted(t, session.baseURL, session.session)
+	session.factorySessionClosed = true
 }
 
 func verifyOperatorSettingsSessionDeleted(t testing.TB, baseURL, sessionID string) {

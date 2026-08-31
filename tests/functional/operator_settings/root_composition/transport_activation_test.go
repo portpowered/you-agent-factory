@@ -21,7 +21,7 @@ const (
 
 // TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle proves
 // the Settings-owned HTTP adapter activates after runtime lifecycle on a process
-// composed only via root.BuildProcess with edges.Edges effect replacement.
+// composed only via the canonical process construction with edges.Edges effect replacement.
 // CLI Settings transport is covered by
 // TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISurface.
 func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
@@ -29,118 +29,123 @@ func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *
 
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	recorder := newOperatorSettingsActivationRecorder()
-	process := support.BuildProcess(t, recorder.edges())
+	fixture := ensureSharedOperatorSettingsFixture(t)
+	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-http-transport")
+	fixture.withFactorySessionHandle(
+		t,
+		"HTTP settings transport",
+		homeDir,
+		factoryDir,
+		identityActivationGeneratedUUID,
+		nil,
+		func(session *sharedOperatorSettingsSession) {
+			session.closeFactorySession(t)
+			session.command.Stop(t)
+			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
 
-	if got := recorder.fileSystemCalls(); got != 0 {
-		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
-	}
-
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
-
-	beforeTransport := recorder.readFileCalls()
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
+			beforeTransport := fixture.router.readFileCalls.Load()
+			settingsRoot := newRoutedOperatorSettingsRoot(t, fixture)
+			adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: settingsRoot})
+			response, err := adapter.LoadDocument(t.Context(), operatorsettingshttp.LoadDocumentInput{
+				Path:            configPath,
+				RequireExisting: true,
+			})
+			if err != nil {
+				t.Fatalf("HTTP LoadDocument() error = %v", err)
+			}
+			if !response.Found {
+				t.Fatalf("HTTP LoadDocument() found = false, want true for %q", configPath)
+			}
+			if response.Path != configPath {
+				t.Fatalf("HTTP LoadDocument() path = %q, want %q", response.Path, configPath)
+			}
+			if response.Document.Defaults == nil ||
+				response.Document.Defaults.WorkerModel == nil ||
+				*response.Document.Defaults.WorkerModel != transportActivationModel {
+				t.Fatalf("HTTP LoadDocument() defaults = %#v, want model %q", response.Document.Defaults, transportActivationModel)
+			}
+			if got := fixture.router.readFileCalls.Load() - beforeTransport; got == 0 {
+				t.Fatalf("operator-config ReadFile calls during HTTP transport = %d, want > 0 via edges", got)
+			}
+		},
 	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
-
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: root})
-	response, err := adapter.LoadDocument(t.Context(), operatorsettingshttp.LoadDocumentInput{
-		Path:            configPath,
-		RequireExisting: true,
-	})
-	if err != nil {
-		t.Fatalf("HTTP LoadDocument() error = %v", err)
-	}
-	if !response.Found {
-		t.Fatalf("HTTP LoadDocument() found = false, want true for %q", configPath)
-	}
-	if response.Path != configPath {
-		t.Fatalf("HTTP LoadDocument() path = %q, want %q", response.Path, configPath)
-	}
-	if response.Document.Defaults == nil ||
-		response.Document.Defaults.WorkerModel == nil ||
-		*response.Document.Defaults.WorkerModel != transportActivationModel {
-		t.Fatalf("HTTP LoadDocument() defaults = %#v, want model %q", response.Document.Defaults, transportActivationModel)
-	}
-	if got := recorder.readFileCalls() - beforeTransport; got == 0 {
-		t.Fatalf("operator-config ReadFile calls during HTTP transport = %d, want > 0 via edges", got)
-	}
 }
 
 // TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle proves
 // the Settings-owned MCP adapter activates after runtime lifecycle on a process
-// composed only via root.BuildProcess with edges.Edges effect replacement.
+// composed only via the canonical process construction with edges.Edges effect replacement.
 func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	recorder := newOperatorSettingsActivationRecorder()
-	process := support.BuildProcess(t, recorder.edges())
+	fixture := ensureSharedOperatorSettingsFixture(t)
+	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-mcp-transport")
+	fixture.withFactorySessionHandle(
+		t,
+		"MCP settings transport",
+		homeDir,
+		factoryDir,
+		identityActivationGeneratedUUID,
+		nil,
+		func(session *sharedOperatorSettingsSession) {
+			session.closeFactorySession(t)
+			session.command.Stop(t)
+			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
 
-	if got := recorder.fileSystemCalls(); got != 0 {
-		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
-	}
+			beforeTransport := fixture.router.readFileCalls.Load()
+			settingsRoot := newRoutedOperatorSettingsRoot(t, fixture)
+			operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: settingsRoot})
+			raw, err := operation(
+				t.Context(),
+				mcpoperatorsettings.ToolLoadDocument,
+				json.RawMessage(`{"path":`+jsonString(configPath)+`,"requireExisting":true}`),
+			)
+			if err != nil {
+				t.Fatalf("MCP CallTool(load_document) transport error = %v", err)
+			}
 
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
+			var response mcpoperatorsettings.ToolResponse[operatorsettings.LoadDocumentResult]
+			if err := json.Unmarshal(raw, &response); err != nil {
+				t.Fatalf("decode MCP tool response: %v\nraw=%s", err, raw)
+			}
+			if response.Error != nil || response.Result == nil {
+				t.Fatalf("MCP CallTool(load_document) = %s, want success", raw)
+			}
+			if !response.Result.Found {
+				t.Fatalf("MCP load_document found = false, want true for %q", configPath)
+			}
+			if response.Result.Document.Defaults.WorkerModel != transportActivationModel {
+				t.Fatalf(
+					"MCP load_document model = %q, want %q",
+					response.Result.Document.Defaults.WorkerModel,
+					transportActivationModel,
+				)
+			}
+			if got := fixture.router.readFileCalls.Load() - beforeTransport; got == 0 {
+				t.Fatalf("operator-config ReadFile calls during MCP transport = %d, want > 0 via edges", got)
+			}
+		},
+	)
+}
 
-	beforeTransport := recorder.readFileCalls()
+func newRoutedOperatorSettingsRoot(t *testing.T, fixture *sharedOperatorSettingsFixture) operatorsettings.Service {
+	t.Helper()
 	providersRoot, err := providerswire.NewService()
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
 	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
+		fixture.router,
 		globalconfigmapping.Decode,
 		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
+		fixture.router.generateOperatorID,
 		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
 	}
-
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: root})
-	raw, err := operation(
-		t.Context(),
-		mcpoperatorsettings.ToolLoadDocument,
-		json.RawMessage(`{"path":`+jsonString(configPath)+`,"requireExisting":true}`),
-	)
-	if err != nil {
-		t.Fatalf("MCP CallTool(load_document) transport error = %v", err)
-	}
-
-	var response mcpoperatorsettings.ToolResponse[operatorsettings.LoadDocumentResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		t.Fatalf("decode MCP tool response: %v\nraw=%s", err, raw)
-	}
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("MCP CallTool(load_document) = %s, want success", raw)
-	}
-	if !response.Result.Found {
-		t.Fatalf("MCP load_document found = false, want true for %q", configPath)
-	}
-	if response.Result.Document.Defaults.WorkerModel != transportActivationModel {
-		t.Fatalf(
-			"MCP load_document model = %q, want %q",
-			response.Result.Document.Defaults.WorkerModel,
-			transportActivationModel,
-		)
-	}
-	if got := recorder.readFileCalls() - beforeTransport; got == 0 {
-		t.Fatalf("operator-config ReadFile calls during MCP transport = %d, want > 0 via edges", got)
-	}
+	return root
 }
 
 func jsonString(value string) string {
