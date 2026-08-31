@@ -568,6 +568,16 @@ func TestDispatchResultHook_CompletionRecordedAtObservedTick(t *testing.T) {
 			records = append(records, record)
 		}),
 	)
+	// Keep the response-order regression in this existing completion inventory
+	// entry: the response callback must see the published terminal dispatch
+	// snapshot, while the completion recorder still proves the observed tick.
+	eng.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
+		DispatchID: "dispatch-1",
+	}
+	var observed interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	eng.recordResponse = func(_ int, _ workerexecution.WorkResult, _ interfaces.CompletedDispatch) {
+		observed = eng.GetRuntimeStateSnapshot()
+	}
 
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick() error: %v", err)
@@ -580,6 +590,12 @@ func TestDispatchResultHook_CompletionRecordedAtObservedTick(t *testing.T) {
 	}
 	if records[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatch ID = %q, want dispatch-1", records[0].DispatchID)
+	}
+	if len(observed.DispatchHistory) != 1 {
+		t.Fatalf("dispatch history visible to response observer = %d, want 1", len(observed.DispatchHistory))
+	}
+	if len(observed.Dispatches) != 0 {
+		t.Fatalf("active dispatches visible to response observer = %d, want 0", len(observed.Dispatches))
 	}
 }
 

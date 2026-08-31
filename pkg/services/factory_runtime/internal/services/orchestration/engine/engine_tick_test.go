@@ -48,42 +48,6 @@ func TestTickCallsSubsystem(t *testing.T) {
 	}
 }
 
-func TestFinishTickPublishesRuntimeSnapshotBeforeDispatchResponse(t *testing.T) {
-	engine := newTestFactoryEngine(buildTestNet(), petri.NewMarking("test-wf"), nil)
-	engine.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
-		DispatchID: "dispatch-1",
-	}
-	engine.runtimeState.Results = []workerexecution.WorkResult{{
-		DispatchID: "dispatch-1",
-		Outcome:    workerexecution.OutcomeAccepted,
-	}}
-
-	var observed interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-	engine.recordResponse = func(_ int, _ workerexecution.WorkResult, _ interfaces.CompletedDispatch) {
-		observed = engine.GetRuntimeStateSnapshot()
-	}
-
-	engine.mu.Lock()
-	engine.finishTick(
-		false,
-		false,
-		0,
-		map[string]interfaces.CompletedDispatch{
-			"dispatch-1": {DispatchID: "dispatch-1", Outcome: workerexecution.OutcomeAccepted},
-		},
-		engine.runtimeState.Snapshot(),
-		false,
-	)
-	engine.mu.Unlock()
-
-	if len(observed.DispatchHistory) != 1 {
-		t.Fatalf("dispatch history visible to response observer = %d, want 1", len(observed.DispatchHistory))
-	}
-	if len(observed.Dispatches) != 0 {
-		t.Fatalf("active dispatches visible to response observer = %d, want 0", len(observed.Dispatches))
-	}
-}
-
 func TestTickNRunsMultipleTicks(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
