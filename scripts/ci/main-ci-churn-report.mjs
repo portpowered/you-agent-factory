@@ -288,10 +288,11 @@ function jobsForRun(jobsByRunId, runId) {
 function normalizeMerge(pullRequest, query, { strictIdentity = false } = {}) {
 	if (!isRecord(pullRequest)) fail("pull requests contained a malformed record");
 	const number = positiveInteger(pullRequest.number, "pull request number");
-	const mergedAt = timestampOrNull(pullRequest.merged_at, `pull request ${number} merged_at`);
+	const mergedValue = pullRequest.merged_at ?? pullRequest.pull_request?.merged_at;
+	const mergedAt = timestampOrNull(mergedValue, `pull request ${number} merged_at`);
 	const updatedAt = parseRfc3339(pullRequest.updated_at, `pull request ${number} updated_at`);
 	const baseRef = pullRequest.base?.ref;
-	if (strictIdentity || baseRef !== undefined) {
+	if (baseRef !== undefined) {
 		if (baseRef !== query.branch) fail(`pull request ${number} is not based on branch ${query.branch}`);
 	}
 	const url = requiredHttpsUrl(pullRequest.html_url || pullRequest.url, `pull request ${number} html_url`);
@@ -299,9 +300,6 @@ function normalizeMerge(pullRequest, query, { strictIdentity = false } = {}) {
 		return { number, mergedAt, updatedAt, url, relevant: false };
 	}
 	const headRef = pullRequest.head?.ref;
-	if (strictIdentity && typeof headRef !== "string") {
-		fail(`pull request ${number} has no head branch`);
-	}
 	const author = actorIdentity(pullRequest.user, `pull request ${number} user`);
 	const merger = actorIdentity(pullRequest.merged_by, `pull request ${number} merged_by`);
 	const title = typeof pullRequest.title === "string" ? pullRequest.title : "";
@@ -632,7 +630,6 @@ export function createGitHubClient({
 		},
 		listClosedPullRequests(query) {
 			const pageSize = Math.min(DEFAULT_PAGE_SIZE, query.mergeLimit);
-			let previousUpdatedAt = null;
 			return fetchPages({
 				label: "closed pull requests",
 				limit: query.mergeLimit,
@@ -651,30 +648,39 @@ export function createGitHubClient({
 				),
 				itemsOf: (payload, label) => {
 					if (!Array.isArray(payload)) fail(`${label} returned a malformed page`);
-					const timestamps = payload.map((pullRequest) => {
+					for (const pullRequest of payload) {
 						if (!isRecord(pullRequest)) fail(`${label} contains a malformed record`);
-						return parseRfc3339(pullRequest.updated_at, `pull request ${pullRequest.number || "unknown"} updated_at`);
-					});
-					for (let index = 1; index < timestamps.length; index += 1) {
-						if (timestamps[index] > timestamps[index - 1]) {
-							fail(`${label} were not returned in descending updated_at order`);
-						}
+						parseRfc3339(pullRequest.updated_at, `pull request ${pullRequest.number || "unknown"} updated_at`);
 					}
-					if (timestamps.length > 0 && previousUpdatedAt !== null && timestamps[0] > previousUpdatedAt) {
-						fail(`${label} pages were not returned in descending updated_at order`);
-					}
-					if (timestamps.length > 0) previousUpdatedAt = timestamps[timestamps.length - 1];
 					return payload;
-				},
-				terminal: (items, page, perPage) => {
-					if (items.length < perPage) return true;
-					return items.every((pullRequest) => parseRfc3339(
-						pullRequest.updated_at,
-						`pull request ${pullRequest.number || "unknown"} updated_at`,
-					) < Date.parse(query.since));
 				},
 				idOf: (pullRequest) => {
 					if (!isRecord(pullRequest)) fail("closed pull requests contains a malformed record");
+					return positiveInteger(pullRequest.number, "pull request number");
+				},
+			});
+		},
+		listMergedPullRequests(query) {
+			const pageSize = Math.min(DEFAULT_PAGE_SIZE, query.mergeLimit);
+			const sinceDate = query.since.slice(0, 10);
+			const untilDate = query.until.slice(0, 10);
+			return fetchPages({
+				label: "merged pull requests",
+				limit: query.mergeLimit,
+				pageSize,
+				fetchPage: (page, perPage) => request(
+					"search/issues",
+					{
+						q: `repo:${validatedRepository} is:pr is:merged base:${query.branch} merged:${sinceDate}..${untilDate}`,
+						per_page: perPage,
+						page,
+					},
+					"merged pull requests",
+				),
+				itemsOf: (payload, label) => pageItems(payload, "items", label),
+				totalOf: pageTotal,
+				idOf: (pullRequest) => {
+					if (!isRecord(pullRequest)) fail("merged pull requests contains a malformed record");
 					return positiveInteger(pullRequest.number, "pull request number");
 				},
 			});
@@ -695,7 +701,9 @@ export async function collectMainCiChurnReport(rawQuery, { client, ...clientOpti
 		if (!Array.isArray(jobs)) fail(`jobs adapter returned a non-array result for workflow run ${runId}`);
 		jobsByRunId.set(runId, jobs);
 	}
-	const merges = await github.listClosedPullRequests(query);
+	const listMerges = github.listMergedPullRequests || github.listClosedPullRequests;
+	if (typeof listMerges !== "function") fail("pull request adapter does not expose a merge listing method");
+	const merges = await listMerges.call(github, query);
 	if (!Array.isArray(merges)) fail("pull request adapter returned a non-array result");
 	return reduceMainCiChurnReport(
 		{ query, runs: uniqueRuns, jobsByRunId, merges },

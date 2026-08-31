@@ -181,6 +181,15 @@ test("the adapter follows duplicate boundary records without double counting", a
 					pullRequest(202, "2026-01-01T04:00:00Z"),
 				]);
 			}
+			if (parsed.pathname.endsWith("/search/issues")) {
+				return response({
+					total_count: 2,
+					items: [
+						{ ...pullRequest(301, "2026-01-01T05:00:00Z"), pull_request: { merged_at: "2026-01-01T05:00:00Z" } },
+						{ ...pullRequest(302, "2026-01-01T04:00:00Z"), pull_request: { merged_at: "2026-01-01T04:00:00Z" } },
+					],
+				});
+			}
 			throw new Error(`unexpected endpoint ${parsed.pathname}`);
 		},
 	});
@@ -194,7 +203,9 @@ test("the adapter follows duplicate boundary records without double counting", a
 	assert.equal(new Set(jobs.map((item) => item.id)).size, 101);
 	const pullRequests = await client.listClosedPullRequests(query);
 	assert.deepEqual(pullRequests.map((item) => item.number), [201, 202]);
-	assert.equal(client.requestCount, 5);
+	const mergedPullRequests = await client.listMergedPullRequests(query);
+	assert.deepEqual(mergedPullRequests.map((item) => item.number), [301, 302]);
+	assert.equal(client.requestCount, 6);
 	assert.ok(calls.every((url) => url.searchParams.get("per_page") === "100"));
 });
 

@@ -27,9 +27,10 @@ The command writes one complete versioned report to stdout only. It reads:
   workflow-runs API;
 - every job page for every selected run, summing only explicit
   `started_at`/`completed_at` durations; and
-- closed pull requests ordered by `updated_at`, stopping only after the query
-  window is exhausted, then counting merges whose `merged_at` is inside the
-  window.
+- merged pull-request search results qualified by repository, base branch, and
+  calendar dates, then counting only results whose API `merged_at` is inside
+  the exact timestamp window. Search `total_count` and bounded pagination make
+  truncation observable without relying on mutable closed-PR ordering.
 
 The adapter uses a bounded page size and page budget, validates API
 `total_count` where available, deduplicates an identical boundary record, and
