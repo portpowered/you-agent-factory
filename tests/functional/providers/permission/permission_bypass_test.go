@@ -159,25 +159,7 @@ func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
 	incapableServer.close(t)
 
 	t.Run("capable Codex route uses the command edge", func(t *testing.T) {
-		if got := support.CountWorkAtCustomerState(capableListed, "task:done"); got != 1 {
-			t.Fatalf("completed work = %d, want 1; listed=%#v", got, capableListed)
-		}
-		if got := support.CountWorkAtCustomerState(capableListed, "task:failed"); got != 0 {
-			t.Fatalf("failed work = %d, want 0", got)
-		}
-		if len(capableRequests) != 1 {
-			t.Fatalf("provider command calls = %d, want one Codex execution", len(capableRequests))
-		}
-		request := capableRequests[0]
-		if request.Command != string(modelprovider.ProviderCodex) {
-			t.Fatalf("provider command = %q, want %q", request.Command, modelprovider.ProviderCodex)
-		}
-		if !slices.Contains(request.Args, "--dangerously-bypass-approvals-and-sandbox") {
-			t.Fatalf("provider args = %#v, want Codex permission-bypass flag", request.Args)
-		}
-		if request.WorkDir != capableDir {
-			t.Fatalf("capable provider WorkDir = %q, want %q", request.WorkDir, capableDir)
-		}
+		assertCapablePermissionScenario(t, capableListed, capableRequests, capableDir)
 	})
 
 	// The capability override targets the real published Codex route while
@@ -185,27 +167,65 @@ func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
 	// route-specific authoritative capability view without registering an
 	// in-process provider fake or selecting an unknown provider.
 	t.Run("registered incapable Codex route fails before the command edge", func(t *testing.T) {
-		if got := support.CountWorkAtCustomerState(incapableListed, "task:failed"); got != 1 {
-			t.Fatalf("failed work = %d, want one capability failure; listed=%#v", got, incapableListed)
-		}
-		observations := support.ObserveDispatchEvents(t, incapableEvents)
-		if len(observations) != 1 || observations[0].Response == nil {
-			t.Fatalf("dispatch observations = %#v, want one terminal response", observations)
-		}
-		response := observations[0].Response
-		if response.FailureDetail == nil || !strings.Contains(response.FailureDetail.Message, `provider "codex" does not support capability "permission_bypass"`) {
-			t.Fatalf("capability failure detail = %#v, want bounded provider capability diagnostic", response.FailureDetail)
-		}
-		if response.Error != nil && strings.Contains(*response.Error, "command") {
-			t.Fatalf("capability failure error = %q, want no command detail", *response.Error)
-		}
-		if response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
-			t.Fatalf("capability failure reason = %q, want permanent bad request", response.FailureDetail.Reason)
-		}
-		if requests := incapableRunner.Requests(); len(requests) != 0 {
-			t.Fatalf("provider command calls = %d, want zero for incapable route", len(requests))
-		}
+		assertIncapablePermissionScenario(t, incapableListed, incapableEvents, incapableRunner.Requests())
 	})
+}
+
+func assertCapablePermissionScenario(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	requests []platformprocess.CommandRequest,
+	dir string,
+) {
+	t.Helper()
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work = %d, want 0", got)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("provider command calls = %d, want one Codex execution", len(requests))
+	}
+	request := requests[0]
+	if request.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", request.Command, modelprovider.ProviderCodex)
+	}
+	if !slices.Contains(request.Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("provider args = %#v, want Codex permission-bypass flag", request.Args)
+	}
+	if request.WorkDir != dir {
+		t.Fatalf("capable provider WorkDir = %q, want %q", request.WorkDir, dir)
+	}
+}
+
+func assertIncapablePermissionScenario(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+	requests []platformprocess.CommandRequest,
+) {
+	t.Helper()
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want one capability failure; listed=%#v", got, listed)
+	}
+	observations := support.ObserveDispatchEvents(t, events)
+	if len(observations) != 1 || observations[0].Response == nil {
+		t.Fatalf("dispatch observations = %#v, want one terminal response", observations)
+	}
+	response := observations[0].Response
+	if response.FailureDetail == nil || !strings.Contains(response.FailureDetail.Message, `provider "codex" does not support capability "permission_bypass"`) {
+		t.Fatalf("capability failure detail = %#v, want bounded provider capability diagnostic", response.FailureDetail)
+	}
+	if response.Error != nil && strings.Contains(*response.Error, "command") {
+		t.Fatalf("capability failure error = %q, want no command detail", *response.Error)
+	}
+	if response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("capability failure reason = %q, want permanent bad request", response.FailureDetail.Reason)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("provider command calls = %d, want zero for incapable route", len(requests))
+	}
 }
 
 func buildPermissionProcess(results chan<- permissionProcessBuild, name string, edges serviceedges.Edges) {
