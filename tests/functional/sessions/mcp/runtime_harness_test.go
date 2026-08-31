@@ -1,8 +1,10 @@
 package mcp_test
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,27 +12,108 @@ import (
 	"testing"
 	"time"
 
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+type mcpSharedFixture struct {
+	process     *initializerapplication.Process
+	openRuntime factorysessions.ExecutionRuntimeOpeningFunc
+}
+
+type mcpRuntimeHost struct {
+	events chan factorydefinitions.FactoryEvent
+}
+
+type mcpObservedDurableExecution struct {
+	mcpfactorysession.DurableExecution
+	consume factorysessions.FactoryEventConsumer
+}
+
+func (execution *mcpObservedDurableExecution) StartAsync(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	request.EventConsumer = execution.consume
+	return execution.DurableExecution.StartAsync(ctx, request)
+}
+
+type mcpCanonicalEventSubscription struct {
+	events <-chan factorydefinitions.FactoryEvent
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+var mcpSharedFixtureState struct {
+	once    sync.Once
+	fixture *mcpSharedFixture
+	err     error
+}
+
+func TestMain(m *testing.M) {
+	exitCode := m.Run()
+	if fixture := mcpSharedFixtureState.fixture; fixture != nil && fixture.process != nil {
+		if err := fixture.process.Close(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared MCP process: %v\n", err)
+			if exitCode == 0 {
+				exitCode = 1
+			}
+		}
+	}
+	os.Exit(exitCode)
+}
+
+func mcpSharedProcessForTest(t *testing.T) *mcpSharedFixture {
+	t.Helper()
+	mcpSharedFixtureState.once.Do(func() {
+		mcpSharedFixtureState.fixture, mcpSharedFixtureState.err = newMCPSharedFixture()
+	})
+	if mcpSharedFixtureState.err != nil {
+		t.Fatalf("build shared MCP process: %v", mcpSharedFixtureState.err)
+	}
+	return mcpSharedFixtureState.fixture
+}
+
+func newMCPSharedFixture() (*mcpSharedFixture, error) {
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		return nil, err
+	}
+	closeOnError := true
+	defer func() {
+		if closeOnError {
+			_ = process.Close(context.Background())
+		}
+	}()
+
+	capability := process.ExecutionRuntimeOpening()
+	if capability == nil {
+		return nil, fmt.Errorf("shared MCP process did not expose execution runtime opening")
+	}
+	opening, ok := capability.ExecutionRuntimeOpening().(factorysessions.ExecutionRuntimeOpeningFunc)
+	if !ok || opening == nil {
+		return nil, fmt.Errorf("shared MCP process execution runtime opening has type %T, want factorysessions.ExecutionRuntimeOpeningFunc", capability.ExecutionRuntimeOpening())
+	}
+	closeOnError = false
+	return &mcpSharedFixture{process: process, openRuntime: opening}, nil
+}
 
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider providers.Service,
-) (*stdioMCPClient, func(), <-chan error) {
+) (*stdioMCPClient, func(), <-chan error, *mcpRuntimeHost) {
 	t.Helper()
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderOverride: provider,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess: %v", err)
-	}
+	fixture := mcpSharedProcessForTest(t)
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
@@ -51,25 +134,65 @@ func startRootRuntimeMCPServer(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(homeDir)
 	})
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	opened, err := fixture.openRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
+		ProjectRoot:      projectRoot,
+		SystemConfigHome: homeDir,
+	})
+	if err != nil {
+		t.Fatalf("open MCP runtime: %v", err)
+	}
+	if opened.Execution == nil || opened.Close == nil {
+		if opened.Close != nil {
+			_ = opened.Close()
+		}
+		t.Fatalf("open MCP runtime returned incomplete execution owner: execution=%T close=%t", opened.Execution, opened.Close != nil)
+	}
+	execution, ok := any(opened.Execution).(mcpfactorysession.DurableExecution)
+	if !ok || execution == nil {
+		_ = opened.Close()
+		t.Fatalf("MCP runtime execution has type %T, want MCP durable execution capability", opened.Execution)
+	}
+	events := make(chan factorydefinitions.FactoryEvent, 256)
+	observedExecution := &mcpObservedDurableExecution{
+		DurableExecution: execution,
+		consume: func(observed []factorydefinitions.FactoryEvent) {
+			for _, event := range observed {
+				events <- event.Clone()
+			}
+		},
+	}
+	server, err := mcpserver.New(mcpserver.Options{
+		ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
+			observedExecution,
+			nil,
+			factorysessionwire.NewRequestPreparation(),
+			nil,
+		)),
+	})
+	if err != nil {
+		_ = opened.Close()
+		t.Fatalf("build MCP server: %v", err)
+	}
+	stdio, err := mcpstdio.Open(server, stdinRead, stdoutWrite)
+	if err != nil {
+		_ = opened.Close()
+		t.Fatalf("open MCP stdio session: %v", err)
+	}
 
 	serveErr := make(chan error, 1)
-	var stderr bytes.Buffer
+	serveDone := make(chan struct{})
 	go func() {
-		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", projectRoot},
-			Env:              env,
-			Stdin:            stdinRead,
-			Stdout:           stdoutWrite,
-			Stderr:           &stderr,
-			Context:          ctx,
-			WorkingDirectory: projectRoot,
-		})
+		defer close(serveDone)
+		runErr := stdio.Run(ctx)
+		if closeErr := opened.Close(); closeErr != nil {
+			runErr = errors.Join(runErr, closeErr)
+		}
+		serveErr <- runErr
 	}()
 	select {
 	case err := <-serveErr:
-		t.Fatalf("start root MCP runtime process: %v; stderr=%s", err, stderr.String())
-	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("start root MCP runtime process: %v", err)
+	default:
 	}
 
 	var shutdownOnce sync.Once
@@ -79,9 +202,91 @@ func startRootRuntimeMCPServer(
 			_ = stdinWrite.Close()
 		})
 	}
-	t.Cleanup(shutdown)
+	t.Cleanup(func() {
+		shutdown()
+		select {
+		case <-serveDone:
+		case <-time.After(5 * time.Second):
+			t.Errorf("root MCP runtime process did not shut down during cleanup")
+		}
+	})
 
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr, &mcpRuntimeHost{events: events}
+}
+
+func (host *mcpRuntimeHost) subscribeCanonicalEvents(t *testing.T) *mcpCanonicalEventSubscription {
+	t.Helper()
+	_, cancel := context.WithCancel(t.Context())
+	return &mcpCanonicalEventSubscription{
+		events: host.events,
+		cancel: cancel,
+	}
+}
+
+func (subscription *mcpCanonicalEventSubscription) next(ctx context.Context) (factorydefinitions.FactoryEvent, error) {
+	if subscription == nil {
+		return factorydefinitions.FactoryEvent{}, errors.New("canonical Factory Event subscription is nil")
+	}
+	select {
+	case event := <-subscription.events:
+		return event, nil
+	case <-ctx.Done():
+		return factorydefinitions.FactoryEvent{}, ctx.Err()
+	}
+}
+
+func (subscription *mcpCanonicalEventSubscription) detach() {
+	if subscription == nil {
+		return
+	}
+	subscription.once.Do(func() {
+		subscription.cancel()
+	})
+}
+
+func waitForMCPCanonicalTerminalEvent(
+	t *testing.T,
+	subscription *mcpCanonicalEventSubscription,
+	want factorysessions.LifecycleStatus,
+	timeout time.Duration,
+) factorydefinitions.FactoryEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for {
+		event, err := subscription.next(ctx)
+		if err != nil {
+			t.Fatalf("wait for canonical Factory Event %q: %v", want, err)
+		}
+		status, terminal := mcpCanonicalTerminalStatus(event)
+		if !terminal {
+			continue
+		}
+		if status != want {
+			t.Fatalf("canonical Factory Session terminal event = %s/%s, want status %q", event.Type, status, want)
+		}
+		return event
+	}
+}
+
+func mcpCanonicalTerminalStatus(event factorydefinitions.FactoryEvent) (factorysessions.LifecycleStatus, bool) {
+	if event.Type != factorydefinitions.FactoryEventTypeSessionCompleted {
+		return "", false
+	}
+	var payload struct {
+		FinalStatus factorysessions.LifecycleStatus `json:"finalStatus"`
+	}
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	switch payload.FinalStatus {
+	case factorysessions.LifecycleStatusSucceeded,
+		factorysessions.LifecycleStatusFailed,
+		factorysessions.LifecycleStatusCanceled:
+		return payload.FinalStatus, true
+	default:
+		return "", false
+	}
 }
 
 func setupWorkflowFixture(t *testing.T, factoryID, fixtureFile, workflowName string) string {
@@ -283,62 +488,36 @@ func startMCPAsyncSucceededSession(
 	return sessionID, *started.Result
 }
 
-func pollMCPAsyncSessionToTerminalSuccess(
+func observeMCPAsyncSessionToTerminalSuccess(
 	t *testing.T,
 	client *stdioMCPClient,
+	subscription *mcpCanonicalEventSubscription,
 	sessionID string,
 	timeout time.Duration,
 ) (factoryapi.FactorySessionDurableReadModel, factoryapi.FactorySessionResult) {
 	t.Helper()
 
 	mode := factoryapi.FactorySessionResultModeFinal
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		session := readMCPSessionDurableReadModel(t, client, sessionID)
-		switch session.Status {
-		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			if mcpAsyncResultIsFinal(t, client, sessionID, mode) {
-				// Result can reach FINAL before durable session status catches up.
-				break
-			}
-			assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
-		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
-			result := readMCPAsyncTerminalResult(t, client, sessionID, mode)
-			return session, result
-		default:
-			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED while polling async success", session.Status)
-		}
-		time.Sleep(15 * time.Millisecond)
+	session := readMCPSessionDurableReadModel(t, client, sessionID)
+	switch session.Status {
+	case factoryapi.FactorySessionDurableLifecycleStatusRunning:
+		assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
+	case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
+		// The retained cursor still proves the canonical terminal event when the
+		// async workflow finished before the first follow-up read.
+	case factoryapi.FactorySessionDurableLifecycleStatusFailed,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceled:
+		t.Fatalf("get status = %q, want RUNNING or SUCCEEDED while observing async success", session.Status)
+	default:
+		t.Fatalf("get status = %q, want RUNNING or SUCCEEDED while observing async success", session.Status)
 	}
 
-	session := readMCPSessionDurableReadModel(t, client, sessionID)
-	t.Fatalf(
-		"session %s status = %q, want SUCCEEDED with terminal result within %s",
-		sessionID,
-		session.Status,
-		timeout,
-	)
-	return session, factoryapi.FactorySessionResult{}
-}
-
-func mcpAsyncResultIsFinal(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	mode factoryapi.FactorySessionResultMode,
-) bool {
-	t.Helper()
-	response := decodeToolResponse[factoryapi.FactorySessionResult](
-		t,
-		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
-			"sessionId": sessionID,
-			"mode":      mode,
-		}),
-	)
-	return response.Error == nil &&
-		response.Result != nil &&
-		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal
+	waitForMCPCanonicalTerminalEvent(t, subscription, factorysessions.LifecycleStatusSucceeded, timeout)
+	session = readMCPSessionDurableReadModel(t, client, sessionID)
+	if session.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session %s status = %q after terminal Factory Event, want SUCCEEDED", sessionID, session.Status)
+	}
+	return session, readMCPAsyncTerminalResult(t, client, sessionID, mode)
 }
 
 func assertMCPAsyncRunningResultNotReady(
@@ -403,64 +582,36 @@ func startMCPAsyncFailedSession(
 	return sessionID, *started.Result
 }
 
-func pollMCPAsyncSessionToTerminalFailure(
+func observeMCPAsyncSessionToTerminalFailure(
 	t *testing.T,
 	client *stdioMCPClient,
+	subscription *mcpCanonicalEventSubscription,
 	sessionID string,
 	timeout time.Duration,
 ) (factoryapi.FactorySessionDurableReadModel, factoryapi.FactorySessionResult) {
 	t.Helper()
 
 	mode := factoryapi.FactorySessionResultModeFinal
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		session := readMCPSessionDurableReadModel(t, client, sessionID)
-		switch session.Status {
-		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			if mcpAsyncResultIsUnavailableFailure(t, client, sessionID, mode) {
-				// Result can reach terminal failure before durable session status catches up.
-				break
-			}
-			assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
-		case factoryapi.FactorySessionDurableLifecycleStatusFailed:
-			result := readMCPAsyncTerminalFailureResult(t, client, sessionID, mode)
-			return session, result
-		default:
-			t.Fatalf("get status = %q, want RUNNING or FAILED while polling async failure", session.Status)
-		}
-		time.Sleep(15 * time.Millisecond)
+	session := readMCPSessionDurableReadModel(t, client, sessionID)
+	switch session.Status {
+	case factoryapi.FactorySessionDurableLifecycleStatusRunning:
+		assertMCPAsyncRunningResultNotReady(t, client, sessionID, mode)
+	case factoryapi.FactorySessionDurableLifecycleStatusFailed:
+		// The retained cursor still proves the canonical terminal event when the
+		// async workflow finished before the first follow-up read.
+	case factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceled:
+		t.Fatalf("get status = %q, want RUNNING or FAILED while observing async failure", session.Status)
+	default:
+		t.Fatalf("get status = %q, want RUNNING or FAILED while observing async failure", session.Status)
 	}
 
-	session := readMCPSessionDurableReadModel(t, client, sessionID)
-	t.Fatalf(
-		"session %s status = %q, want FAILED with terminal failure result within %s",
-		sessionID,
-		session.Status,
-		timeout,
-	)
-	return session, factoryapi.FactorySessionResult{}
-}
-
-func mcpAsyncResultIsUnavailableFailure(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	mode factoryapi.FactorySessionResultMode,
-) bool {
-	t.Helper()
-	response := decodeToolResponse[factoryapi.FactorySessionResult](
-		t,
-		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
-			"sessionId": sessionID,
-			"mode":      mode,
-		}),
-	)
-	return response.Error == nil &&
-		response.Result != nil &&
-		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusUnavailable &&
-		response.Result.SessionStatus != nil &&
-		*response.Result.SessionStatus == factoryapi.FactorySessionDurableLifecycleStatusFailed
+	waitForMCPCanonicalTerminalEvent(t, subscription, factorysessions.LifecycleStatusFailed, timeout)
+	session = readMCPSessionDurableReadModel(t, client, sessionID)
+	if session.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session %s status = %q after terminal Factory Event, want FAILED", sessionID, session.Status)
+	}
+	return session, readMCPAsyncTerminalFailureResult(t, client, sessionID, mode)
 }
 
 func readMCPAsyncTerminalFailureResult(
@@ -552,13 +703,9 @@ func startMCPRunningSession(t *testing.T, client *stdioMCPClient) string {
 	if sessionID == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
-	waitForMCPSessionStatus(
-		t,
-		client,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		5*time.Second,
-	)
+	if started.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("start_async status = %q, want RUNNING", started.Result.Status)
+	}
 	return sessionID
 }
 
@@ -603,28 +750,6 @@ func mcpControl(
 		t.Fatalf("%s sessionId = %q, want %q", operation, response.Result.SessionId, sessionID)
 	}
 	return *response.Result
-}
-
-func waitForMCPSessionStatus(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readMCPSessionDurableReadModel(t, client, sessionID)
-		if session.Status == want {
-			return session
-		}
-		time.Sleep(15 * time.Millisecond)
-	}
-	session := readMCPSessionDurableReadModel(t, client, sessionID)
-	t.Fatalf("session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
-	return session
 }
 
 func assertCanonicalSessionID(

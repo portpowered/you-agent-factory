@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -15,7 +16,7 @@ import (
 // canonical sessionId on control responses and subsequent MCP session reads.
 func TestMCPPauseResumeAndCancelTargetCanonicalFactorySession(t *testing.T) {
 	projectRoot := setupBusyLoopWorkflowFixture(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, host := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
 	toolsResult := client.call("tools/list", map[string]any{})
@@ -30,6 +31,8 @@ func TestMCPPauseResumeAndCancelTargetCanonicalFactorySession(t *testing.T) {
 		}
 	}
 
+	terminalEvents := host.subscribeCanonicalEvents(t)
+	defer terminalEvents.detach()
 	sessionID := startMCPRunningSession(t, client)
 	startedRead := readMCPSessionDurableReadModel(t, client, sessionID)
 	assertCanonicalSessionID(t, startedRead.SessionId, sessionID, "start read")
@@ -82,13 +85,11 @@ func TestMCPPauseResumeAndCancelTargetCanonicalFactorySession(t *testing.T) {
 	if cancelResponse.Operation != factoryapi.FactorySessionLifecycleControlKindCancel {
 		t.Fatalf("cancel operation = %q, want CANCEL", cancelResponse.Operation)
 	}
-	canceledRead := waitForMCPSessionStatus(
-		t,
-		client,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
-		8*time.Second,
-	)
+	waitForMCPCanonicalTerminalEvent(t, terminalEvents, factorysessions.LifecycleStatusCanceled, 8*time.Second)
+	canceledRead := readMCPSessionDurableReadModel(t, client, sessionID)
+	if canceledRead.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("cancel read status = %q, want CANCELED", canceledRead.Status)
+	}
 	assertCanonicalSessionID(t, canceledRead.SessionId, sessionID, "cancel read")
 
 	shutdown()
@@ -103,9 +104,11 @@ func TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault(t *testing.T)
 	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
 	baseURL := apiServer.URL()
 
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, host := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
+	terminalEvents := host.subscribeCanonicalEvents(t)
+	defer terminalEvents.detach()
 	sessionID := startMCPRunningSession(t, client)
 	mcpControl(
 		t,
@@ -129,10 +132,10 @@ func TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault(t *testing.T)
 
 // TestMCPSynchronousFactorySessionReturnsTerminalResult proves public MCP
 // you.factory_session.start_sync returns a terminal success result for a
-// successful Factory Session run without requiring async polling.
+// successful Factory Session run without requiring async observation.
 func TestMCPSynchronousFactorySessionReturnsTerminalResult(t *testing.T) {
 	projectRoot := setupSimpleFinalWorkflowFixture(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, _ := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
 	toolsResult := client.call("tools/list", map[string]any{})
@@ -162,7 +165,7 @@ func TestMCPSynchronousFactorySessionReturnsTerminalResult(t *testing.T) {
 // result on the sync response or subsequent MCP session read.
 func TestMCPSynchronousFailureReturnsStructuredFailure(t *testing.T) {
 	projectRoot := setupThrowErrorWorkflowFixture(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, _ := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
 	syncResult := startMCPSyncFailedSession(t, client)
@@ -182,11 +185,11 @@ func TestMCPSynchronousFailureReturnsStructuredFailure(t *testing.T) {
 }
 
 // TestMCPAsyncFactorySessionCanBePolledToSuccess proves public MCP
-// you.factory_session.start_async returns a session id and subsequent MCP get
-// and get_result polling observe progress until a terminal success result.
+// you.factory_session.start_async returns a session id and the canonical
+// Factory Session response stream reaches a terminal success result.
 func TestMCPAsyncFactorySessionCanBePolledToSuccess(t *testing.T) {
 	projectRoot := setupSimpleFinalWorkflowFixture(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, host := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
 	toolsResult := client.call("tools/list", map[string]any{})
@@ -197,24 +200,26 @@ func TestMCPAsyncFactorySessionCanBePolledToSuccess(t *testing.T) {
 		mcpfactorysession.ToolGetResult,
 	} {
 		if !containsString(toolNames, want) {
-			t.Fatalf("tools/list missing async poll tool %q; got %#v", want, toolNames)
+			t.Fatalf("tools/list missing async observation tool %q; got %#v", want, toolNames)
 		}
 	}
 
+	terminalEvents := host.subscribeCanonicalEvents(t)
+	defer terminalEvents.detach()
 	sessionID, asyncStart := startMCPAsyncSucceededSession(t, client)
 	assertCanonicalSessionID(t, asyncStart.SessionId, sessionID, "async start")
 
-	sessionRead, terminalResult := pollMCPAsyncSessionToTerminalSuccess(t, client, sessionID, 8*time.Second)
-	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async poll session read")
+	sessionRead, terminalResult := observeMCPAsyncSessionToTerminalSuccess(t, client, terminalEvents, sessionID, 8*time.Second)
+	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async observed session read")
 	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("async poll session status = %q, want SUCCEEDED", sessionRead.Status)
+		t.Fatalf("async observed session status = %q, want SUCCEEDED", sessionRead.Status)
 	}
 	if sessionRead.ResultSummary == nil ||
 		sessionRead.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("async poll session resultSummary = %#v, want FINAL", sessionRead.ResultSummary)
+		t.Fatalf("async observed session resultSummary = %#v, want FINAL", sessionRead.ResultSummary)
 	}
 	if terminalResult.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("async poll result status = %q, want FINAL", terminalResult.ResultStatus)
+		t.Fatalf("async observed result status = %q, want FINAL", terminalResult.ResultStatus)
 	}
 
 	shutdown()
@@ -222,11 +227,11 @@ func TestMCPAsyncFactorySessionCanBePolledToSuccess(t *testing.T) {
 }
 
 // TestMCPAsyncFactorySessionCanBePolledToFailure proves public MCP
-// you.factory_session.start_async plus get and get_result polling reach a
+// you.factory_session.start_async plus the canonical response stream reach a
 // terminal failure outcome without presenting a terminal success result.
 func TestMCPAsyncFactorySessionCanBePolledToFailure(t *testing.T) {
 	projectRoot := setupAsyncThrowErrorWorkflowFixture(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, host := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
 	toolsResult := client.call("tools/list", map[string]any{})
@@ -237,22 +242,24 @@ func TestMCPAsyncFactorySessionCanBePolledToFailure(t *testing.T) {
 		mcpfactorysession.ToolGetResult,
 	} {
 		if !containsString(toolNames, want) {
-			t.Fatalf("tools/list missing async poll tool %q; got %#v", want, toolNames)
+			t.Fatalf("tools/list missing async observation tool %q; got %#v", want, toolNames)
 		}
 	}
 
+	terminalEvents := host.subscribeCanonicalEvents(t)
+	defer terminalEvents.detach()
 	sessionID, asyncStart := startMCPAsyncFailedSession(t, client)
 	assertCanonicalSessionID(t, asyncStart.SessionId, sessionID, "async failure start")
 
-	sessionRead, terminalResult := pollMCPAsyncSessionToTerminalFailure(t, client, sessionID, 8*time.Second)
-	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async failure poll session read")
+	sessionRead, terminalResult := observeMCPAsyncSessionToTerminalFailure(t, client, terminalEvents, sessionID, 8*time.Second)
+	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async failure observed session read")
 	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-		t.Fatalf("async failure poll session status = %q, want FAILED", sessionRead.Status)
+		t.Fatalf("async failure observed session status = %q, want FAILED", sessionRead.Status)
 	}
-	assertMCPStructuredFailureDetail(t, sessionRead.FailureDetail, "async failure poll session read")
+	assertMCPStructuredFailureDetail(t, sessionRead.FailureDetail, "async failure observed session read")
 	if sessionRead.ResultSummary != nil &&
 		sessionRead.ResultSummary.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("async failure poll session resultSummary = %#v, want non-FINAL failure availability", sessionRead.ResultSummary)
+		t.Fatalf("async failure observed session resultSummary = %#v, want non-FINAL failure availability", sessionRead.ResultSummary)
 	}
 	assertMCPAsyncFailureNotTerminalSuccess(t, terminalResult)
 
@@ -268,9 +275,11 @@ func TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault(t *testing.T)
 	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
 	baseURL := apiServer.URL()
 
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	client, shutdown, serveErr, host := startRootRuntimeMCPServer(t, projectRoot)
 	assertMCPInitialized(t, client)
 
+	terminalEvents := host.subscribeCanonicalEvents(t)
+	defer terminalEvents.detach()
 	sessionID := startMCPRunningSession(t, client)
 	mcpControl(
 		t,
@@ -279,13 +288,11 @@ func TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault(t *testing.T)
 		factoryapi.FactorySessionLifecycleControlKindCancel,
 		factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
 	)
-	mcpRead := waitForMCPSessionStatus(
-		t,
-		client,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
-		8*time.Second,
-	)
+	waitForMCPCanonicalTerminalEvent(t, terminalEvents, factorysessions.LifecycleStatusCanceled, 8*time.Second)
+	mcpRead := readMCPSessionDurableReadModel(t, client, sessionID)
+	if mcpRead.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("mcp cancel read status = %q, want CANCELED", mcpRead.Status)
+	}
 	assertCanonicalSessionID(t, mcpRead.SessionId, sessionID, "mcp cancel read")
 
 	assertAPIFactorySessionNotFound(t, baseURL, sessionID)

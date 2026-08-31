@@ -2,7 +2,7 @@
 
 ## Scope and result
 
-- Story: `functional-test-optimization-c15-sessions-root-mcp-001`
+- Story: `functional-test-optimization-c15-sessions-root-mcp-003`
 - Parent behavior: `BEH-003` — evidence proves behavior, cleanup, coverage
   neutrality, and package performance.
 - Captured: `2026-08-30`
@@ -12,7 +12,7 @@
 - Dependency fidelity: local-real root, Factory Session, Recordings, API, and
   MCP stdio boundaries with controlled provider/worker edges; zero remote or
   paid calls.
-- Status: **PASS — GATE-CHAR and GATE-ROOT complete; stories 003–004 remain open.**
+- Status: **PASS — GATE-CHAR, GATE-ROOT, and GATE-MCP complete; story 004 remains open.**
 
 This is an additive before-state record. Story 001 changes no test behavior,
 production code, public contract, generated output, UI, shared functional
@@ -189,8 +189,8 @@ VAL-001.
 | MCP-002 | `TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault` | Shared MCP host candidate with private stdio pipes plus a required second in-process API host | The owning MCP host sees PAUSED while the separately constructed API host returns 404 for that Session ID. |
 | MCP-003 | `TestMCPSynchronousFactorySessionReturnsTerminalResult` | Shared host candidate with private real stdio pipes and fresh success workflow/Session | `start_sync` returns SUCCEEDED/COMPLETED, a canonical Session ID, and a FINAL result; the subsequent read agrees. |
 | MCP-004 | `TestMCPSynchronousFailureReturnsStructuredFailure` | Shared host candidate with private real stdio pipes and fresh failure workflow/Session | `start_sync` returns structured FAILED detail without a FINAL primary success, and the subsequent read remains non-FINAL. |
-| MCP-005 | `TestMCPAsyncFactorySessionCanBePolledToSuccess` | Shared host candidate with private real stdio pipes and fresh async success Session | `start_async` reports RUNNING, public get/get_result observation reaches SUCCEEDED and FINAL, and the ID remains canonical. |
-| MCP-006 | `TestMCPAsyncFactorySessionCanBePolledToFailure` | Shared host candidate with private real stdio pipes and fresh async failure Session | Async observation reaches FAILED and UNAVAILABLE with structured failure and no primary success payload. |
+| MCP-005 | `TestMCPAsyncFactorySessionCanBePolledToSuccess` | Shared host candidate with private real stdio pipes and fresh async success Session | `start_async` reports RUNNING, canonical terminal-event observation reaches SUCCEEDED and FINAL, and the ID remains canonical. |
+| MCP-006 | `TestMCPAsyncFactorySessionCanBePolledToFailure` | Shared host candidate with private real stdio pipes and fresh async failure Session | Canonical terminal-event observation reaches FAILED and UNAVAILABLE with structured failure and no primary success payload. |
 | MCP-007 | `TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault` | Shared MCP host candidate with private stdio pipes, a required second API host, and fresh busy-loop Session | The owning MCP host reaches CANCELED while the separate API host returns 404. |
 
 The retained private MCP transport reason is common and exact: each case
@@ -221,14 +221,45 @@ implementations hidden in the excluded shared-support package.
 | ROOT explicit ticker/timeout guards | 1 ticker, 3 `time.After` guards | The nested cleanup fixture polls public Session stop status at 10ms; P3/P7 and fixture shutdown use bounded failure guards. These are current evidence, not new waits. |
 | ROOT public status wait call sites | 5 | Three `WaitForStatus`/`WaitForSessionTerminalStatus` calls and one `WaitForSessionStopped` path plus the nested stop-status ticker; readiness waits are recorded separately from completion claims. |
 | MCP top-level selectors/cases | 7 / 7 | `go test .../mcp/... -list '^Test'`; each selector is one matrix case. |
-| MCP assembled-host helper call sites/runtime hosts | 1 / 7 | `startRootRuntimeMCPServer` contains one `BuildProcessWithContext` call and is invoked once per case. |
+| MCP assembled-host helper call sites/runtime hosts | 1 / 7 | `newMCPSharedFixture` contains one `root.BuildProcess` call; each case opens one fresh runtime execution and invokes the shared package fixture. |
 | MCP real stdio pipe pairs | 2 per host / 14 runtime pairs | The helper creates one stdin pipe and one stdout pipe for each of seven hosts. These are the retained real transport boundary. |
 | MCP stdio clients/Sessions | 7 / 7 | One client and one fresh workflow Session per case. |
 | MCP secondary API hosts | 1 call site / 2 runtime hosts | MCP-002 and MCP-007 require cross-host `404` assertions. |
-| MCP subscriptions | 0 | Current completion uses public status/result polling; subscribe-before-act is a later MCP conversion requirement, not a current claim. |
-| MCP fixed polling sites | 3 | Three helper sites sleep `15ms`: async-success polling, async-failure polling, and lifecycle-status polling. Story 001 changes none. |
-| MCP `time.After` guards | 2 | One 100ms startup backstop and one 5s stdio shutdown backstop; neither is claimed as a terminal-event proof. |
-| MCP polling helpers | 3 | Two async terminal helpers and one Session-status helper; all are current witnesses to replace in story 003. |
+| MCP subscriptions | 5 / 5 | MCP-001, MCP-002, MCP-005, MCP-006, and MCP-007 register the canonical Factory Event observer before starting or controlling the fresh Session; each detaches it with test cleanup. |
+| MCP fixed polling sites | 0 | Async completion and cancellation consume canonical terminal events; no fixed interval or stable-window wait remains. |
+| MCP `time.After` guards | 2 | Two 5s stdio/runtime shutdown cleanup backstops; neither is claimed as a terminal-event proof. |
+| MCP polling helpers | 0 | The former two async terminal helpers and Session-status helper were replaced by canonical terminal-event observation. |
+
+## GATE-MCP / Story 003 evidence
+
+Story 003 extends the one package-owned `root.BuildProcess` fixture through
+fresh runtime-backed executions and the canonical MCP server/stdio boundary.
+Each case retains its own workflow root, runtime execution, MCP pipe pair, and
+stdio client because the MCP tool binding captures the execution owner and the
+stdio stream is the behavior under test. MCP-002 and MCP-007 also retain their
+second API host because its independent `404` is an assertion. The async
+runtime now retains a supplied canonical Factory Event consumer until the run
+finishes, allowing the tests to observe terminal `SESSION_COMPLETED` events
+without sampling status or result state.
+
+Changed-selector verification:
+
+```text
+go test ./tests/functional/sessions/mcp/... -run '^(TestMCPPauseResumeAndCancelTargetCanonicalFactorySession|TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault|TestMCPSynchronousFactorySessionReturnsTerminalResult|TestMCPSynchronousFailureReturnsStructuredFailure|TestMCPAsyncFactorySessionCanBePolledToSuccess|TestMCPAsyncFactorySessionCanBePolledToFailure|TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault)$' -count=1
+ok
+
+go test -race ./tests/functional/sessions/mcp/... -run '^(TestMCPPauseResumeAndCancelTargetCanonicalFactorySession|TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault|TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault)$' -count=1
+ok
+```
+
+The focused functional run completed in 14.966s and the declared focused
+race run completed in 21.607s in this Windows workspace. These timings are
+directional local evidence against the supplied 23.950s MCP observation, not
+portable thresholds; host contention and terminal CI timing remain open. The
+focused checks prove MCP framing, lifecycle/result/failure parity, canonical
+terminal-event synchronization, cross-host isolation, and cleanup. They do
+not prove the final unfiltered package run, coverage, clean-room VAL-001, or
+terminal CI.
 
 ### Cleanup and OS-boundary census
 

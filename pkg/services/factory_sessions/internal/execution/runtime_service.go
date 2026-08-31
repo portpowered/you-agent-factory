@@ -417,8 +417,11 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	sessionID := reserved.state.session.SessionID
 	s.mu.Unlock()
+	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
+		stopObservingFactoryEvents()
 		s.mu.Lock()
 		reserved.state.runCancel = nil
 		close(runDone)
@@ -429,8 +432,10 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
 	if err := admission.launch(func() {
-		s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+		defer stopObservingFactoryEvents()
+		s.runAsyncSession(runCtx, sessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
 	}); err != nil {
+		stopObservingFactoryEvents()
 		runCancel()
 		s.mu.Lock()
 		reserved.state.runCancel = nil
