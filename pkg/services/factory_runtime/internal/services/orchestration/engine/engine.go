@@ -74,6 +74,12 @@ type FactoryEngine struct {
 	pendingProjectionRequestIDs map[string]struct{}
 }
 
+type completedDispatchResponse struct {
+	tick      int
+	result    workerexecution.WorkResult
+	completed interfaces.CompletedDispatch
+}
+
 // NewFactoryEngine creates a new engine for the given net and marking.
 // Subsystems are sorted by TickGroup on construction.
 func NewFactoryEngine(
@@ -207,7 +213,8 @@ func (e *FactoryEngine) appendObservedResult(result workerexecution.WorkResult) 
 // processed during this tick and records them in DispatchHistory. Transitioner-
 // supplied completion records take precedence; missing records fall back to a
 // minimal timing summary so dispatch bookkeeping still completes.
-func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.WorkResult, completed map[string]interfaces.CompletedDispatch) {
+func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.WorkResult, completed map[string]interfaces.CompletedDispatch) []completedDispatchResponse {
+	var responses []completedDispatchResponse
 	for _, r := range results {
 		if entry, ok := e.runtimeState.Dispatches[r.DispatchID]; ok {
 			completedDispatch, hasCompletedRecord := completed[r.DispatchID]
@@ -231,7 +238,11 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			}
 			e.runtimeState.DispatchHistory = append(e.runtimeState.DispatchHistory, completedDispatch)
 			if e.recordResponse != nil {
-				e.recordResponse(e.runtimeState.TickCount, workResultForCompletedDispatch(r, completedDispatch), completedDispatch)
+				responses = append(responses, completedDispatchResponse{
+					tick:      e.runtimeState.TickCount,
+					result:    workResultForCompletedDispatch(r, completedDispatch),
+					completed: completedDispatch,
+				})
 			}
 			delete(e.runtimeState.Dispatches, r.DispatchID)
 			if e.runtimeState.InFlightCount > 0 {
@@ -239,6 +250,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			}
 		}
 	}
+	return responses
 }
 
 // NotifyResult wakes the engine after a WorkResult is enqueued so the engine
@@ -826,9 +838,12 @@ func containsHumanApprovalDispatch(net *state.Net, records []interfaces.Dispatch
 }
 
 func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
-	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
+	responses := e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
 	e.runtimeState.Results = nil
 	e.publishRuntimeSnapshotLocked()
+	for _, response := range responses {
+		e.recordResponse(response.tick, response.result, response.completed)
+	}
 	e.signalPendingObservableProjections()
 	if keepAlive {
 		shouldTerminate = false
