@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -218,7 +217,7 @@ func cancelAgentSession(baseURL, sessionID string) error {
 	return fmt.Errorf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
 }
 
-func runAgentMalformedConfigurationProbe(t *testing.T) {
+func (fixture *agentSharedProcessFixture) assertMalformedConfiguration(t *testing.T) {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "agent-malformed-worker-reference",
@@ -241,20 +240,12 @@ func runAgentMalformedConfigurationProbe(t *testing.T) {
 			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
 		}},
 	})
-	runner := support.NewRecordingCommandRunner("malformed configuration must not invoke a provider")
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() malformed configuration probe: %v", err)
-	}
-	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", dir, "--continuously", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
 	inputs.Input.WorkingDirectory = dir
-	if err := process.Execute(inputs.Input); err == nil {
+	if err := fixture.process.Execute(inputs.Input); err == nil {
 		t.Fatal("malformed worker configuration succeeded, want validation failure")
 	} else {
 		diagnostic := strings.ToLower(err.Error())
@@ -264,8 +255,16 @@ func runAgentMalformedConfigurationProbe(t *testing.T) {
 			}
 		}
 	}
-	if got := runner.CallCount(); got != 0 {
+	if got := fixture.router.callCount(); got != 0 {
 		t.Fatalf("malformed worker provider calls = %d, want zero", got)
+	}
+	if got := fixture.apiStarts.Load(); got != 0 {
+		t.Fatalf("malformed worker API starts = %d, want zero before valid daemon activation", got)
+	}
+	fixture.sessionsMu.Lock()
+	defer fixture.sessionsMu.Unlock()
+	if len(fixture.opened) != 0 {
+		t.Fatalf("malformed worker Factory Sessions = %#v, want none", fixture.opened)
 	}
 }
 

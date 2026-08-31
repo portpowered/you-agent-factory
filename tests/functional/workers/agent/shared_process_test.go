@@ -51,7 +51,7 @@ func TestAgentSharedProcess(t *testing.T) {
 				fixture.assertUnknownProvider(t, scenario)
 			})
 			t.Run("MalformedConfiguration", func(t *testing.T) {
-				runAgentMalformedConfigurationProbe(t)
+				fixture.assertMalformedConfiguration(t)
 			})
 		})
 	}

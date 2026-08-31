@@ -55,6 +55,10 @@ func (router *agentSharedCommandRouter) Run(
 	selector := filepath.Clean(strings.TrimSpace(request.WorkDir))
 	router.mu.Lock()
 	runner, ok := router.routes[selector]
+	router.calls = append(router.calls, agentSharedRoutedCall{
+		selector: selector,
+		request:  cloneAgentCommandRequest(request),
+	})
 	router.mu.Unlock()
 	if !ok {
 		return platformprocess.CommandResult{}, fmt.Errorf(
@@ -62,12 +66,6 @@ func (router *agentSharedCommandRouter) Run(
 			request.WorkDir,
 		)
 	}
-	router.mu.Lock()
-	router.calls = append(router.calls, agentSharedRoutedCall{
-		selector: selector,
-		request:  cloneAgentCommandRequest(request),
-	})
-	router.mu.Unlock()
 	return runner.Run(ctx, request)
 }
 
