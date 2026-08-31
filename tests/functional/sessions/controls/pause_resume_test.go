@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -17,22 +15,12 @@ import (
 // the public session invocation API without fabricating a completed primary result.
 func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
 	factoryDir := scaffoldInvocationFactory(t, nil)
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(
-		t,
-		&edges,
-		support.NewStaticSuccessCommandRunner("primary result COMPLETE"),
-		nil,
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{
+		provider: support.NewStaticSuccessCommandRunner("primary result COMPLETE"),
 	})
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	sessionID := factorysessions.DefaultSessionID
+	baseURL := session.baseURL()
+	sessionID := session.id()
 	pause := postSessionLifecycleControl(
 		t,
 		baseURL,
@@ -44,7 +32,7 @@ func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
 
-	response := postInvocation(t, baseURL, textInvocationRequest(t, "invoke this", nil))
+	response := postInvocation(t, baseURL, sessionID, textInvocationRequest(t, "invoke this", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
@@ -73,14 +61,10 @@ func TestPausedFactorySessionReturnsInvocationPausedStatus(t *testing.T) {
 // keeping that work buffered instead of advancing it into active processing.
 func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	sessionID := factorysessions.DefaultSessionID
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{})
+	baseURL := session.baseURL()
+	sessionID := session.id()
 
 	pause := postSessionLifecycleControl(
 		t,
@@ -96,7 +80,7 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 		t.Fatalf("pause status = %q, want PAUSED", pause.Status)
 	}
 
-	pausedSession := support.GetDefaultSession(t, baseURL)
+	pausedSession := getControlsSession(t, baseURL, sessionID)
 	if pausedSession.Runtime.LifecycleControlStatus == nil ||
 		*pausedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf(
@@ -107,7 +91,7 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 	}
 
 	workName := "paused-buffered-task"
-	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	submitted := submitControlsSessionWork(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer(workName),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "Submitted while paused"},
@@ -117,7 +101,7 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 		t.Fatalf("submit while paused missing work id: %#v", submitted)
 	}
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := listControlsSessionWork(t, baseURL, sessionID)
 	if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "init")) {
 		t.Fatalf("work %q reached task:init while session was paused: %#v", workID, listed.Results)
 	}
@@ -131,14 +115,10 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 // dispatch observation boundaries.
 func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        factoryDir,
-		MockWorkersConfig: pauseResumeControlsMockWorkersConfig(),
-	})
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	sessionID := factorysessions.DefaultSessionID
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{})
+	baseURL := session.baseURL()
+	sessionID := session.id()
 
 	pause := postSessionLifecycleControl(
 		t,
@@ -151,12 +131,12 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
 
-	first := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	first := submitControlsSessionWork(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("paused-buffered-first"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "First paused submission"},
 	})
-	second := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	second := submitControlsSessionWork(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("paused-buffered-second"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "Second paused submission"},
@@ -167,7 +147,7 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 		t.Fatalf("submit while paused missing work ids: first=%#v second=%#v", first, second)
 	}
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := listControlsSessionWork(t, baseURL, sessionID)
 	for _, workID := range []string{firstID, secondID} {
 		if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
 			t.Fatalf("work %q reached task:complete before resume: %#v", workID, listed.Results)
@@ -188,7 +168,7 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 		t.Fatalf("resume status = %q, want RUNNING", resume.Status)
 	}
 
-	assertBufferedWorkDrainedInSubmissionOrder(t, server, firstID, secondID)
+	assertBufferedWorkDrainedInSubmissionOrder(t, baseURL, sessionID, firstID, secondID)
 }
 
 // TestPauseResumeEmitsDurableLifecycleEvents proves pause and resume through
@@ -205,17 +185,13 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("buffered task accepted COMPLETE"),
 	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{
+		provider: runner,
 	})
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	sessionID := factorysessions.DefaultSessionID
-	eventStream := openPauseResumeLifecycleEventStream(t, server)
+	baseURL := session.baseURL()
+	sessionID := session.id()
+	eventStream := openPauseResumeLifecycleEventStream(t, baseURL, sessionID)
 
 	pause := postSessionLifecycleControl(
 		t,
@@ -228,7 +204,7 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
 
-	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	submitted := submitControlsSessionWork(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("lifecycle-event-buffered-task"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "Submitted between pause and resume"},
@@ -261,12 +237,13 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 // dispatch context on public session and work read surfaces.
 func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
 	factoryDir := scaffoldInterruptedInspectFactory(t)
-	mockWorkersPath := writeInterruptedInspectMockWorkers(t)
-	server := startInterruptedInspectAPIServer(t, factoryDir, mockWorkersPath)
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{
+		script: support.NewStaticSuccessCommandRunner("interrupted"),
+	})
+	baseURL := session.baseURL()
+	sessionID := session.id()
+	submitted := submitControlsSessionWork(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPointer("interrupted-operator-inspect"),
 		WorkTypeName: interruptedInspectWorkTypeName,
 		Payload:      map[string]string{"title": "Interrupted inspect probe"},
@@ -283,24 +260,24 @@ func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
 	waitForSessionWorkIDsAtCustomerState(
 		t,
 		baseURL,
+		sessionID,
 		[]string{workID},
 		interruptedLocation,
 		pauseResumeDrainWaitTimeout,
 	)
-	support.WaitForRuntimeIdle(t, baseURL, pauseResumeDurableStatusTimeout)
 
-	work := support.GetDefaultSessionWorkByID(t, baseURL, workID)
+	work := getControlsSessionWorkByID(t, baseURL, sessionID, workID)
 	if work.StopSummary == nil {
 		t.Fatalf("work show = %#v, want stopSummary on interrupted work", work)
 	}
 	assertInterruptedStopSummary(t, work.StopSummary, "work")
 
-	session := support.GetDefaultSession(t, baseURL)
-	if session.Runtime.StopSummary != nil {
-		assertInterruptedStopSummary(t, session.Runtime.StopSummary, "session")
+	liveSession := getControlsSession(t, baseURL, sessionID)
+	if liveSession.Runtime.StopSummary != nil {
+		assertInterruptedStopSummary(t, liveSession.Runtime.StopSummary, "session")
 	}
 
-	listed := support.ListDefaultSessionWork(t, baseURL)
+	listed := listControlsSessionWork(t, baseURL, sessionID)
 	completeLocation := support.WorkCustomerLocation(interruptedInspectWorkTypeName, "complete")
 	if support.HasWorkAtCustomerState(listed, workID, completeLocation) {
 		t.Fatalf("interrupted work %q reached %s", workID, completeLocation)
@@ -321,15 +298,10 @@ func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
 
-	baseURL := server.URL()
-	liveSession := support.GetDefaultSession(t, baseURL)
+	session := openSharedControlsSession(t, factoryDir, sharedControlsRouteConfig{})
+	baseURL := session.baseURL()
+	liveSession := getControlsSession(t, baseURL, session.id())
 	liveSessionID := liveSession.Id
 	if liveSessionID == "" {
 		t.Fatal("live Factory Session id is empty")
@@ -351,6 +323,7 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 	assertLiveSessionLifecycleControlStatus(
 		t,
 		baseURL,
+		liveSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusPaused,
 	)
 
@@ -370,13 +343,20 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 	assertLiveSessionLifecycleControlStatus(
 		t,
 		baseURL,
+		liveSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 	)
 
-	cancelSessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-cancel")
-	waitForDurableFactorySessionStatus(
+	cancelSessionID := startBusyLoopDurableSession(
 		t,
 		baseURL,
+		uniqueControlsDurableRequestID("req-sessions-controls-cancel"),
+	)
+	cancelEvents := openDurableSessionEventStream(t, baseURL, cancelSessionID)
+	waitForDurableSessionLifecycleStatus(
+		t,
+		baseURL,
+		cancelEvents,
 		cancelSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		pauseResumeDurableStatusTimeout,
@@ -395,18 +375,25 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 		factoryapi.FactorySessionLifecycleControlKindCancel,
 		factoryapi.FactorySessionDurableLifecycleStatusCanceling,
 	)
-	waitForDurableFactorySessionStatus(
+	waitForDurableSessionLifecycleStatus(
 		t,
 		baseURL,
+		cancelEvents,
 		cancelSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
 		pauseResumeDurableStatusTimeout,
 	)
 
-	terminateSessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-terminate")
-	waitForDurableFactorySessionStatus(
+	terminateSessionID := startBusyLoopDurableSession(
 		t,
 		baseURL,
+		uniqueControlsDurableRequestID("req-sessions-controls-terminate"),
+	)
+	terminateEvents := openDurableSessionEventStream(t, baseURL, terminateSessionID)
+	waitForDurableSessionLifecycleStatus(
+		t,
+		baseURL,
+		terminateEvents,
 		terminateSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		pauseResumeDurableStatusTimeout,
@@ -424,6 +411,14 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 		terminateSessionID,
 		factoryapi.FactorySessionLifecycleControlKindTerminate,
 		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+	)
+	waitForDurableSessionLifecycleStatus(
+		t,
+		baseURL,
+		terminateEvents,
+		terminateSessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+		pauseResumeDurableStatusTimeout,
 	)
 
 	terminated := readDurableFactorySession(t, baseURL, terminateSessionID)
@@ -441,19 +436,19 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 // lifecycle controls through the public API return HTTP conflict with typed rejection
 // outcomes and leave the session in its prior terminal lifecycle state.
 func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
-	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	sessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-invalid-transition")
-	waitForDurableFactorySessionStatus(
+	acquireSharedControlsScenarioSlot(t)
+	fixture := sharedControlsProcess(t)
+	baseURL := fixture.baseURL
+	sessionID := startBusyLoopDurableSession(
 		t,
 		baseURL,
+		uniqueControlsDurableRequestID("req-sessions-controls-invalid-transition"),
+	)
+	events := openDurableSessionEventStream(t, baseURL, sessionID)
+	waitForDurableSessionLifecycleStatus(
+		t,
+		baseURL,
+		events,
 		sessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		pauseResumeDurableStatusTimeout,
@@ -473,10 +468,12 @@ func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
 		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
 	)
 
-	waitForDurableFactorySessionTerminal(
+	waitForDurableSessionLifecycleStatus(
 		t,
 		baseURL,
+		events,
 		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
 		pauseResumeDurableStatusTimeout,
 	)
 	before := readDurableFactorySession(t, baseURL, sessionID)

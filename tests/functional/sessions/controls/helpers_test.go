@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/google/uuid"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -23,7 +23,12 @@ const (
 	pauseResumeProcessTaskWorkstation = "process-task"
 	pauseResumeDrainWaitTimeout       = 30 * time.Second
 	pauseResumeBusyLoopWorkflowName   = "busy-loop"
-	pauseResumeDurableStatusTimeout   = 15 * time.Second
+	pauseResumeBusyLoopWorkflowSource = `var spin = 0;
+while (true) {
+  spin += 1;
+}
+`
+	pauseResumeDurableStatusTimeout = 15 * time.Second
 
 	interruptedInspectWorkTypeName      = "goal"
 	interruptedInspectReviewWorkstation = "review-goal"
@@ -31,11 +36,12 @@ const (
 
 func openPauseResumeLifecycleEventStream(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	baseURL string,
+	sessionID string,
 ) *support.FactoryEventStream {
 	t.Helper()
 
-	retained := server.GetFactoryEvents(t)
+	retained := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	if len(retained) == 0 {
 		t.Fatal("canonical Factory Event history is empty before pause/resume controls")
 	}
@@ -47,7 +53,7 @@ func openPauseResumeLifecycleEventStream(
 	lastRetainedEventID := retained[len(retained)-1].Id
 	stream := support.OpenFactoryEventStreamAt(
 		t,
-		support.DefaultSessionEventsURL(server.URL()),
+		support.SessionEventsURL(baseURL, sessionID),
 	)
 	deadline := time.Now().Add(pauseResumeDurableStatusTimeout)
 	for {
@@ -71,6 +77,65 @@ func openPauseResumeLifecycleEventStream(
 	}
 }
 
+func controlsSessionEndpoint(baseURL, sessionID, path string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + path
+}
+
+func getControlsSession(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySession {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		controlsSessionEndpoint(baseURL, sessionID, ""),
+	)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode Factory Session %q: %v", sessionID, err)
+	}
+	return session
+}
+
+func listControlsSessionWork(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	return support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		controlsSessionEndpoint(baseURL, sessionID, "/work"),
+	)
+}
+
+func getControlsSessionWorkByID(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	workID string,
+) factoryapi.Work {
+	t.Helper()
+	if strings.TrimSpace(workID) == "" {
+		t.Fatal("workID is empty")
+	}
+	return support.GetJSON[factoryapi.Work](
+		t,
+		controlsSessionEndpoint(baseURL, sessionID, "/work/"+url.PathEscape(workID)),
+	)
+}
+
+func submitControlsSessionWork(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	request factoryapi.SubmitWorkRequest,
+) factoryapi.SubmitWorkResponse {
+	t.Helper()
+	return support.SubmitSessionWorkAt(t, baseURL, sessionID, request)
+}
+
 func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
 	t.Helper()
 
@@ -79,17 +144,9 @@ func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	fixturePath := support.AgentFactoryPath(
-		t,
-		filepath.Join("tests", "fixtures", "javascript_runtime", pauseResumeBusyLoopWorkflowName+".workflow.js"),
-	)
-	raw, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read workflow fixture %s: %v", fixturePath, err)
-	}
 	if err := os.WriteFile(
 		filepath.Join(workflowDir, pauseResumeBusyLoopWorkflowName+".js"),
-		raw,
+		[]byte(pauseResumeBusyLoopWorkflowSource),
 		0o600,
 	); err != nil {
 		t.Fatalf("write workflow: %v", err)
@@ -147,6 +204,10 @@ func startBusyLoopDurableSession(t *testing.T, baseURL string, requestID string)
 	return started.SessionId
 }
 
+func uniqueControlsDurableRequestID(prefix string) string {
+	return prefix + "-" + uuid.NewString()
+}
+
 func readDurableFactorySession(
 	t *testing.T,
 	baseURL string,
@@ -194,64 +255,107 @@ func assertDurableFactorySessionRemainsTerminal(
 	}
 }
 
-func waitForDurableFactorySessionTerminal(
+func openDurableSessionEventStream(
 	t *testing.T,
 	baseURL string,
 	sessionID string,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableLifecycleStatus {
+) *support.FactoryEventStream {
 	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	var lastTerminal factoryapi.FactorySessionDurableLifecycleStatus
-	for time.Now().Before(deadline) {
-		session := readDurableFactorySession(t, baseURL, sessionID)
-		if session.Status == factoryapi.FactorySessionDurableLifecycleStatusTerminated ||
-			session.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceled {
-			if lastTerminal == session.Status {
-				return session.Status
-			}
-			lastTerminal = session.Status
-		} else {
-			lastTerminal = ""
-		}
-		time.Sleep(15 * time.Millisecond)
-	}
-	session := readDurableFactorySession(t, baseURL, sessionID)
-	t.Fatalf(
-		"durable session %s status = %q, want stable TERMINATED or CANCELED within %s",
-		sessionID,
-		session.Status,
-		timeout,
-	)
-	return ""
+	return support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 }
 
-func waitForDurableFactorySessionStatus(
+func waitForDurableSessionLifecycleStatus(
 	t *testing.T,
 	baseURL string,
+	stream *support.FactoryEventStream,
 	sessionID string,
 	want factoryapi.FactorySessionDurableLifecycleStatus,
 	timeout time.Duration,
 ) {
 	t.Helper()
-
 	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readDurableFactorySession(t, baseURL, sessionID)
-		if session.Status == want {
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf("timed out waiting for durable Factory Session %s status %q", sessionID, want)
+		}
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			if durableSessionLifecycleStatusObservedInRetainedEvents(t, baseURL, sessionID, want) {
+				return
+			}
+			t.Fatalf(
+				"Factory Event stream closed before durable Factory Session %s reached %q; retained=%v",
+				sessionID,
+				want,
+				support.GetFactoryEventsForSessionAt(t, baseURL, sessionID),
+			)
+		}
+		if durableSessionLifecycleStatusObserved(t, event, sessionID, want) {
 			return
 		}
-		time.Sleep(15 * time.Millisecond)
 	}
-	session := readDurableFactorySession(t, baseURL, sessionID)
-	t.Fatalf(
-		"durable session %s status = %q, want %q within %s",
-		sessionID,
-		session.Status,
-		want,
-		timeout,
-	)
+}
+
+func durableSessionLifecycleStatusObservedInRetainedEvents(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) bool {
+	t.Helper()
+	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, sessionID) {
+		if durableSessionLifecycleStatusObserved(t, event, sessionID, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func durableSessionLifecycleStatusObserved(
+	t testing.TB,
+	event factoryapi.FactoryEvent,
+	sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) bool {
+	t.Helper()
+	if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
+		return false
+	}
+	switch event.Type {
+	case factoryapi.FactoryEventTypeSessionStarted:
+		return want == factoryapi.FactorySessionDurableLifecycleStatusRunning
+	case factoryapi.FactoryEventTypeSessionLifecycleControl:
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err != nil {
+			t.Fatalf("decode durable lifecycle-control event %q: %v", event.Id, err)
+		}
+		return payload.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted &&
+			durableLifecycleStatusMatches(payload.NewStatus, want)
+	case factoryapi.FactoryEventTypeSessionCompleted:
+		payload, err := event.Payload.AsSessionCompletedEventPayload()
+		if err != nil {
+			t.Fatalf("decode durable SESSION_COMPLETED event %q: %v", event.Id, err)
+		}
+		return durableLifecycleStatusMatches(payload.FinalStatus, want)
+	default:
+		return false
+	}
+}
+
+func durableLifecycleStatusMatches(
+	got factoryapi.FactorySessionDurableLifecycleStatus,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) bool {
+	if got == want {
+		return true
+	}
+	// The terminate control may be finalized as CANCELED by the runtime after
+	// the accepted TERMINATED control response. The public characterization
+	// accepts either terminal outcome, so the canonical completion witness must
+	// preserve that existing contract too.
+	return want == factoryapi.FactorySessionDurableLifecycleStatusTerminated &&
+		got == factoryapi.FactorySessionDurableLifecycleStatusCanceled
 }
 
 func assertAcceptedSessionLifecycleControl(
@@ -280,11 +384,12 @@ func assertAcceptedSessionLifecycleControl(
 func assertLiveSessionLifecycleControlStatus(
 	t *testing.T,
 	baseURL string,
+	sessionID string,
 	want factoryapi.FactorySessionDurableLifecycleStatus,
 ) {
 	t.Helper()
 
-	session := support.GetDefaultSession(t, baseURL)
+	session := getControlsSession(t, baseURL, sessionID)
 	if session.Runtime.LifecycleControlStatus == nil {
 		t.Fatalf("live session %s lifecycleControlStatus = nil, want %q", session.Id, want)
 	}
@@ -309,7 +414,7 @@ func postSessionLifecycleControl(
 	pathSegment := lifecycleControlPathSegment(operation)
 	return postSessionControlJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		baseURL+"/factory-sessions/"+sessionID+"/"+pathSegment,
+		controlsSessionEndpoint(baseURL, sessionID, "/"+pathSegment),
 		factoryapi.FactorySessionLifecycleControlRequest{},
 		"apply Factory Session lifecycle control "+string(operation),
 	)
@@ -324,7 +429,7 @@ func postSessionLifecycleControlExpectConflict(
 	t.Helper()
 
 	pathSegment := lifecycleControlPathSegment(operation)
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/" + pathSegment
+	endpoint := controlsSessionEndpoint(baseURL, sessionID, "/"+pathSegment)
 	body, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
 	if err != nil {
 		t.Fatalf("marshal lifecycle control request: %v", err)
@@ -442,24 +547,10 @@ func stringPointerValue(value *string) string {
 	return *value
 }
 
-func pauseResumeControlsMockWorkersConfig() *workers.MockWorkersConfig {
-	// Keep the drain fixture in-process so full-suite CPU/process load cannot
-	// starve an external worker command before the ordering assertion runs.
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "mock-worker",
-				WorkstationName: pauseResumeProcessTaskWorkstation,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-		},
-	}
-}
-
 func waitForSessionWorkIDsAtCustomerState(
 	t *testing.T,
 	baseURL string,
+	sessionID string,
 	workIDs []string,
 	location string,
 	timeout time.Duration,
@@ -470,78 +561,169 @@ func waitForSessionWorkIDsAtCustomerState(
 	for _, workID := range workIDs {
 		want[workID] = true
 	}
+	stream := support.OpenFactoryEventStreamAt(
+		t,
+		support.SessionEventsURL(baseURL, sessionID),
+	)
 	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		found := 0
-		for _, workID := range workIDs {
-			if support.HasWorkAtCustomerState(listed, workID, location) {
-				found++
-			}
+	observed := make(map[string]bool, len(want))
+	for len(observed) < len(want) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf(
+				"timed out waiting for work IDs %v at %s; observed=%v",
+				workIDs,
+				location,
+				observed,
+			)
 		}
-		if found == len(want) {
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			if workStateObservedInRetainedEvents(t, baseURL, sessionID, want, location, observed) {
+				return
+			}
+			t.Fatalf(
+				"Factory Event stream closed before work IDs %v reached %s; observed=%v; retained=%v",
+				workIDs,
+				location,
+				observed,
+				support.GetFactoryEventsForSessionAt(t, baseURL, sessionID),
+			)
+		}
+		observeWorkStateEvent(t, event, want, location, observed)
+	}
+}
+
+func observeWorkStateEvent(
+	t testing.TB,
+	event factoryapi.FactoryEvent,
+	want map[string]bool,
+	location string,
+	observed map[string]bool,
+) {
+	t.Helper()
+	// Petri transitions publish WORK_STATE_CHANGE directly. Classifier
+	// workstations publish their selected destination on DISPATCH_RESPONSE, so
+	// both canonical forms are valid synchronization evidence for this witness.
+	switch event.Type {
+	case factoryapi.FactoryEventTypeWorkStateChange:
+		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		if err != nil {
+			t.Fatalf("decode WORK_STATE_CHANGE event %q: %v", event.Id, err)
+		}
+		if _, ok := want[payload.WorkId]; ok &&
+			support.WorkCustomerLocation(payload.WorkTypeName, payload.ToState) == location {
+			observed[payload.WorkId] = true
+		}
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE event %q: %v", event.Id, err)
+		}
+		if payload.OutputWork == nil {
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		for _, output := range *payload.OutputWork {
+			if output.WorkId == nil || output.State == nil || output.WorkTypeName == nil {
+				continue
+			}
+			if _, ok := want[*output.WorkId]; ok &&
+				support.WorkCustomerLocation(*output.WorkTypeName, output.State.Name) == location {
+				observed[*output.WorkId] = true
+			}
+		}
 	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting for work IDs %v at %s; listed=%#v",
-		workIDs,
-		location,
-		listed.Results,
-	)
+}
+
+func workStateObservedInRetainedEvents(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	want map[string]bool,
+	location string,
+	observed map[string]bool,
+) bool {
+	t.Helper()
+	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, sessionID) {
+		observeWorkStateEvent(t, event, want, location, observed)
+	}
+	return len(observed) == len(want)
 }
 
 func assertBufferedWorkDrainedInSubmissionOrder(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	baseURL string,
+	sessionID string,
 	firstWorkID string,
 	secondWorkID string,
 ) {
 	t.Helper()
 
-	waitForSessionWorkIDsAtCustomerState(
+	stream := support.OpenFactoryEventStreamAt(
 		t,
-		server.URL(),
-		[]string{firstWorkID, secondWorkID},
-		support.WorkCustomerLocation("task", "complete"),
-		pauseResumeDrainWaitTimeout,
+		support.SessionEventsURL(baseURL, sessionID),
 	)
-
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
-	firstIndex, okFirst := dispatchObservationIndexForWorkAtWorkstation(
-		dispatches,
-		firstWorkID,
-		pauseResumeProcessTaskWorkstation,
-	)
-	secondIndex, okSecond := dispatchObservationIndexForWorkAtWorkstation(
-		dispatches,
-		secondWorkID,
-		pauseResumeProcessTaskWorkstation,
-	)
-	if !okFirst || !okSecond {
-		t.Fatalf(
-			"dispatch history missing %q dispatches for buffered work %q and %q: %#v",
-			pauseResumeProcessTaskWorkstation,
-			firstWorkID,
-			secondWorkID,
+	deadline := time.Now().Add(pauseResumeDrainWaitTimeout)
+	var events []factoryapi.FactoryEvent
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf(
+				"timed out waiting for dispatches for buffered work %q and %q",
+				firstWorkID,
+				secondWorkID,
+			)
+		}
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			t.Fatalf(
+				"Factory Event stream closed before dispatches for buffered work %q and %q completed",
+				firstWorkID,
+				secondWorkID,
+			)
+		}
+		events = append(events, event)
+		dispatches := support.ObserveDispatchEvents(t, events)
+		firstIndex, okFirst := completedDispatchObservationIndex(
 			dispatches,
-		)
-	}
-	if firstIndex >= secondIndex {
-		firstDispatch := dispatches[firstIndex]
-		secondDispatch := dispatches[secondIndex]
-		t.Fatalf(
-			"dispatch order = first@%d (%s) second@%d (%s) for works %q then %q; want first buffered work dispatched before second",
-			firstIndex,
-			firstDispatch.StartedAt.UTC(),
-			secondIndex,
-			secondDispatch.StartedAt.UTC(),
 			firstWorkID,
-			secondWorkID,
+			pauseResumeProcessTaskWorkstation,
 		)
+		secondIndex, okSecond := completedDispatchObservationIndex(
+			dispatches,
+			secondWorkID,
+			pauseResumeProcessTaskWorkstation,
+		)
+		if !okFirst || !okSecond {
+			continue
+		}
+		if firstIndex >= secondIndex {
+			firstDispatch := dispatches[firstIndex]
+			secondDispatch := dispatches[secondIndex]
+			t.Fatalf(
+				"dispatch order = first@%d (%s) second@%d (%s) for works %q then %q; want first buffered work dispatched before second",
+				firstIndex,
+				firstDispatch.StartedAt.UTC(),
+				secondIndex,
+				secondDispatch.StartedAt.UTC(),
+				firstWorkID,
+				secondWorkID,
+			)
+		}
+		return
 	}
+}
+
+func completedDispatchObservationIndex(
+	dispatches []support.DispatchEventObservation,
+	workID string,
+	workstation string,
+) (int, bool) {
+	index, ok := dispatchObservationIndexForWorkAtWorkstation(dispatches, workID, workstation)
+	if !ok || dispatches[index].Response == nil {
+		return -1, false
+	}
+	return index, true
 }
 
 func dispatchObservationIndexForWorkAtWorkstation(
@@ -776,7 +958,12 @@ func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) fact
 	}
 }
 
-func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
+func postInvocation(
+	t *testing.T,
+	serverURL string,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) factoryapi.InvocationResponse {
 	t.Helper()
 
 	body, err := json.Marshal(request)
@@ -784,12 +971,12 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 		t.Fatalf("marshal invocation request: %v", err)
 	}
 	response, err := http.Post(
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		controlsSessionEndpoint(serverURL, sessionID, "/invocations"),
 		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST /factory-sessions/%s/invocations: %v", sessionID, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -798,7 +985,8 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 			t.Fatalf("read invocation error response: %v", readErr)
 		}
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d: %s",
+			"POST /factory-sessions/%s/invocations status = %d: %s",
+			sessionID,
 			response.StatusCode,
 			strings.TrimSpace(string(payload)),
 		)
@@ -870,56 +1058,6 @@ func interruptedInspectFactoryConfig() map[string]any {
 			},
 		},
 	}
-}
-
-func writeInterruptedInspectMockWorkers(t *testing.T) string {
-	t.Helper()
-
-	cfg := workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "mock-worker",
-				WorkstationName: interruptedInspectReviewWorkstation,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{"interrupted"},
-				},
-			},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal interrupted inspect mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-interrupted-inspect.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write interrupted inspect mock-workers config: %v", err)
-	}
-	return path
-}
-
-func startInterruptedInspectAPIServer(
-	t *testing.T,
-	factoryDir string,
-	mockWorkersPath string,
-) *support.FunctionalAPIServer {
-	t.Helper()
-
-	payload, err := os.ReadFile(mockWorkersPath)
-	if err != nil {
-		t.Fatalf("read customer mock-workers config: %v", err)
-	}
-	var mockWorkersConfig workers.MockWorkersConfig
-	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
-		t.Fatalf("decode customer mock-workers config: %v", err)
-	}
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         &mockWorkersConfig,
-	})
 }
 
 func assertInterruptedStopSummary(
