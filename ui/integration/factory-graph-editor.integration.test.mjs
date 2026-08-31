@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -226,6 +226,208 @@ const editableGraphFactoryReplayLines = [
 
 function factoryGraphCardScope(page) {
   return page.getByRole("article", { name: "Factory graph" });
+}
+
+const readinessCharacterizationCondition =
+  process.env.AGENT_FACTORY_GRAPH_EDITOR_READINESS_CONDITION?.trim() ?? "";
+const readinessCharacterizationIteration =
+  process.env.AGENT_FACTORY_GRAPH_EDITOR_READINESS_ITERATION?.trim() ?? "";
+
+function readinessCharacterizationEnabled() {
+  return (
+    readinessCharacterizationCondition.length > 0 &&
+    readinessCharacterizationIteration.length > 0
+  );
+}
+
+function readinessArtifactLabel(site) {
+  if (!readinessCharacterizationEnabled()) {
+    return `graph-editor-${site}`;
+  }
+
+  return `graph-editor-readiness-${readinessCharacterizationCondition}-${readinessCharacterizationIteration}-${site}`;
+}
+
+function readinessFailureDetails(error) {
+  return {
+    message: String(error?.message ?? error).slice(0, 4_096),
+    name: error?.name ?? "Error",
+    stack: String(error?.stack ?? error).slice(0, 8_192),
+  };
+}
+
+async function captureGraphEditorReadinessFailure(
+  browserPage,
+  { error, reached, site },
+) {
+  if (!browserPage.artifactDirectory) {
+    return;
+  }
+
+  const context = browserPage.page.isClosed()
+    ? {
+        activeElement: null,
+        pageClosed: true,
+        nodes: [],
+        url: null,
+      }
+    : await browserPage.page.evaluate(() => {
+        const selectors = {
+          addEntityMenu: '[aria-label="Add graph entity menu"]',
+          addEntityMenuWorkstation:
+            '[aria-label="Add graph entity menu"] button',
+          addWorkstationDialog: '[role="dialog"]',
+          editorModeButton: "button",
+          graphCard: '[aria-label="Factory graph"]',
+          graphToolbar:
+            '[role="region"][aria-label="Factory graph editor tools"]',
+          graphViewport: '[role="region"][aria-label="Work graph viewport"]',
+          leaveEditorButton: "button",
+        };
+
+        function isVisible(element) {
+          const bounds = element.getBoundingClientRect();
+          const styles = window.getComputedStyle(element);
+          return (
+            !element.hidden &&
+            element.getAttribute("aria-hidden") !== "true" &&
+            styles.display !== "none" &&
+            styles.visibility !== "hidden" &&
+            bounds.width > 0 &&
+            bounds.height > 0
+          );
+        }
+
+        function describeElement(element) {
+          if (!element) {
+            return null;
+          }
+          const bounds = element.getBoundingClientRect();
+          return {
+            ariaLabel: element.getAttribute("aria-label"),
+            disabled: "disabled" in element ? element.disabled : null,
+            id: element.id || null,
+            role: element.getAttribute("role"),
+            tagName: element.tagName,
+            text: element.textContent?.trim().slice(0, 200) ?? "",
+            visible: isVisible(element),
+            bounds: {
+              height: Math.round(bounds.height),
+              left: Math.round(bounds.left),
+              top: Math.round(bounds.top),
+              width: Math.round(bounds.width),
+            },
+          };
+        }
+
+        function matchingElements(selector, predicate = () => true) {
+          return [...document.querySelectorAll(selector)]
+            .filter(predicate)
+            .slice(0, 24)
+            .map(describeElement);
+        }
+
+        const activeElement =
+          document.activeElement instanceof HTMLElement
+            ? describeElement(document.activeElement)
+            : null;
+        const graphCard = document.querySelector(
+          'article[aria-label="Factory graph"], [aria-label="Factory graph"]',
+        );
+        const graphToolbar = document.querySelector(selectors.graphToolbar);
+
+        return {
+          activeElement,
+          nodes: {
+            addEntityMenu: matchingElements(selectors.addEntityMenu),
+            addEntityMenuWorkstation: matchingElements(
+              selectors.addEntityMenuWorkstation,
+              (element) => element.textContent?.trim() === "Workstation",
+            ),
+            addWorkstationDialog: matchingElements(
+              selectors.addWorkstationDialog,
+              (element) =>
+                element.textContent?.includes("Add workstation") === true,
+            ),
+            editorModeButtons: matchingElements(
+              selectors.editorModeButton,
+              (element) =>
+                ["Edit mode", "Leave editor"].includes(
+                  element.getAttribute("aria-label") ??
+                    element.textContent?.trim(),
+                ),
+            ),
+            graphCard: matchingElements(
+              selectors.graphCard,
+              (element) => element === graphCard,
+            ),
+            graphToolbar: matchingElements(
+              selectors.graphToolbar,
+              (element) => element === graphToolbar,
+            ),
+            graphToolbarButtons: graphToolbar
+              ? matchingElements("button", (element) =>
+                  graphToolbar.contains(element),
+                )
+              : [],
+            graphViewport: matchingElements(selectors.graphViewport),
+            leaveEditorButtons: matchingElements(
+              selectors.leaveEditorButton,
+              (element) =>
+                (element.getAttribute("aria-label") ??
+                  element.textContent?.trim()) === "Leave editor",
+            ),
+            dialogs: matchingElements('[role="dialog"]'),
+          },
+          pageClosed: false,
+          url: window.location.href,
+        };
+      });
+
+  await mkdir(browserPage.artifactDirectory, { recursive: true });
+  await writeFile(
+    path.join(
+      browserPage.artifactDirectory,
+      `${browserPage.artifactLabel}.readiness.json`,
+    ),
+    JSON.stringify(
+      {
+        characterization: readinessCharacterizationEnabled()
+          ? {
+              condition: readinessCharacterizationCondition,
+              iteration: readinessCharacterizationIteration,
+            }
+          : null,
+        error: readinessFailureDetails(error),
+        firstAttempt: true,
+        reached,
+        site,
+        state: context,
+        writtenAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
+function logGraphEditorReadinessOutcome({ error, reached, site }) {
+  if (!readinessCharacterizationEnabled()) {
+    return;
+  }
+
+  console.log(
+    `[graph-editor-readiness] ${JSON.stringify({
+      condition: readinessCharacterizationCondition,
+      error: error ? readinessFailureDetails(error) : null,
+      firstAttempt: true,
+      iteration: readinessCharacterizationIteration,
+      reached,
+      site,
+      outcome: error ? "failure" : "pass",
+    })}`,
+  );
 }
 
 async function expectConsolidatedDirtyGraphEditorChrome(page, expect) {
@@ -561,6 +763,9 @@ describe.concurrent("factory graph editor browser integration", () => {
   it(
     "creates a workstation, links it through labeled graph anchors, and saves the topology payload",
     async ({ expect, openBrowserPage, preview }) => {
+      const readinessSite = "add-workstation-dialog";
+      let readinessReached = false;
+      let readinessFailure = null;
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -570,7 +775,9 @@ describe.concurrent("factory graph editor browser integration", () => {
           saveRequests.push(value);
         },
       });
-      const browserPage = await openBrowserPage();
+      const browserPage = await openBrowserPage({
+        artifactLabel: readinessArtifactLabel(readinessSite),
+      });
 
       try {
         await browserPage.page.goto(preview.previewURL, {
@@ -622,6 +829,7 @@ describe.concurrent("factory graph editor browser integration", () => {
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
+        readinessReached = true;
         await addDialog.getByLabel("Identifier").fill("review");
         await fillWorkstationPromptBody(addDialog, "Review the drafted story.");
         await addDialog.getByRole("button", { name: "Add entity" }).click();
@@ -729,7 +937,26 @@ describe.concurrent("factory graph editor browser integration", () => {
           browserPage.consoleErrors,
           expect,
         );
+      } catch (error) {
+        readinessFailure = error;
+        try {
+          await captureGraphEditorReadinessFailure(browserPage, {
+            error,
+            reached: readinessReached,
+            site: readinessSite,
+          });
+        } catch (diagnosticError) {
+          console.error(
+            `[graph-editor-readiness] diagnostic capture failed: ${String(diagnosticError)}`,
+          );
+        }
+        throw error;
       } finally {
+        logGraphEditorReadinessOutcome({
+          error: readinessFailure,
+          reached: readinessReached,
+          site: readinessSite,
+        });
         await server.stop();
         await browserPage.close();
       }
@@ -836,6 +1063,9 @@ describe.concurrent("factory graph editor browser integration", () => {
   it(
     "discards pending graph edits and leaves the factory graph editor without saving",
     async ({ expect, openBrowserPage, preview }) => {
+      const readinessSite = "leave-editor-observer-mode";
+      let readinessReached = false;
+      let readinessFailure = null;
       const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -845,7 +1075,9 @@ describe.concurrent("factory graph editor browser integration", () => {
           saveRequests.push(value);
         },
       });
-      const browserPage = await openBrowserPage();
+      const browserPage = await openBrowserPage({
+        artifactLabel: readinessArtifactLabel(readinessSite),
+      });
 
       try {
         await browserPage.page.goto(preview.previewURL, {
@@ -932,6 +1164,7 @@ describe.concurrent("factory graph editor browser integration", () => {
         await browserPage.page
           .getByRole("region", { name: "Work graph viewport" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        readinessReached = true;
 
         expect(saveRequests).toHaveLength(0);
         expectNoBrowserErrors(
@@ -939,7 +1172,26 @@ describe.concurrent("factory graph editor browser integration", () => {
           browserPage.consoleErrors,
           expect,
         );
+      } catch (error) {
+        readinessFailure = error;
+        try {
+          await captureGraphEditorReadinessFailure(browserPage, {
+            error,
+            reached: readinessReached,
+            site: readinessSite,
+          });
+        } catch (diagnosticError) {
+          console.error(
+            `[graph-editor-readiness] diagnostic capture failed: ${String(diagnosticError)}`,
+          );
+        }
+        throw error;
       } finally {
+        logGraphEditorReadinessOutcome({
+          error: readinessFailure,
+          reached: readinessReached,
+          site: readinessSite,
+        });
         await server.stop();
         await browserPage.close();
       }
