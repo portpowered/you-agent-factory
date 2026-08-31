@@ -652,38 +652,84 @@ func restoredWorkPlacements(
 	restored *interfaces.FactoryWorldState,
 	items map[string]work.FactoryWorkItem,
 ) (map[string]string, error) {
-	placements := make(map[string]string)
+	resolution, err := resolveRestoredWorkPlacements(restored, items)
+	if err != nil {
+		return nil, err
+	}
+	return resolution.placements, nil
+}
+
+type restoredWorkPlacementResolution struct {
+	placements                map[string]string
+	historicalMovePlacements  map[string]string
+	supersededHistoricalMoves []restoredWorkPlacementReconciliation
+}
+
+type restoredWorkPlacementReconciliation struct {
+	workID              string
+	authoritativePlace  string
+	historicalMovePlace string
+}
+
+func resolveRestoredWorkPlacements(
+	restored *interfaces.FactoryWorldState,
+	items map[string]work.FactoryWorkItem,
+) (restoredWorkPlacementResolution, error) {
+	resolution := restoredWorkPlacementResolution{placements: make(map[string]string)}
 	if restored == nil {
-		return placements, nil
+		return resolution, nil
 	}
-	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID); err != nil {
-		return nil, err
+	if err := addRestoredOccupancyPlacements(resolution.placements, restored.PlaceOccupancyByID); err != nil {
+		return restoredWorkPlacementResolution{}, err
 	}
-	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches); err != nil {
-		return nil, err
+	if err := addRestoredDispatchPlacements(resolution.placements, restored.ActiveDispatches); err != nil {
+		return restoredWorkPlacementResolution{}, err
 	}
-	if err := addRestoredWorkStateChangePlacements(placements, restored.WorkStateChangesByWorkID); err != nil {
-		return nil, err
+	authoritativePlacements := cloneRestoredPlacements(resolution.placements)
+	resolution.historicalMovePlacements = latestRestoredWorkStateChangePlacements(restored.WorkStateChangesByWorkID)
+	if err := addRestoredWorkStateChangePlacements(resolution.placements, restored.WorkStateChangesByWorkID); err != nil {
+		return restoredWorkPlacementResolution{}, err
+	}
+	for _, workID := range sortedRestoredKeys(resolution.historicalMovePlacements) {
+		historicalPlace := resolution.historicalMovePlacements[workID]
+		if authoritativePlace, exists := authoritativePlacements[workID]; exists && authoritativePlace != historicalPlace {
+			resolution.supersededHistoricalMoves = append(
+				resolution.supersededHistoricalMoves,
+				restoredWorkPlacementReconciliation{
+					workID:              workID,
+					authoritativePlace:  authoritativePlace,
+					historicalMovePlace: historicalPlace,
+				},
+			)
+		}
 	}
 	completedDispatchPlacements, err := restoredCompletedDispatchPlacements(restored.CompletedDispatches, items)
 	if err != nil {
-		return nil, err
+		return restoredWorkPlacementResolution{}, err
 	}
 	for _, workID := range sortedRestoredKeys(completedDispatchPlacements) {
 		placeID := completedDispatchPlacements[workID]
 		// Completed dispatch output is a historical snapshot. A later canonical
 		// Work state change or current occupancy is the authoritative placement
 		// when the output describes an intermediate state.
-		if _, exists := placements[workID]; !exists {
-			placements[workID] = placeID
+		if _, exists := resolution.placements[workID]; !exists {
+			resolution.placements[workID] = placeID
 		}
 	}
 	if restored.PlaceOccupancyByID == nil {
-		if err := addRestoredItemPlacements(placements, items); err != nil {
-			return nil, err
+		if err := addRestoredItemPlacements(resolution.placements, items); err != nil {
+			return restoredWorkPlacementResolution{}, err
 		}
 	}
-	return placements, nil
+	return resolution, nil
+}
+
+func cloneRestoredPlacements(source map[string]string) map[string]string {
+	clone := make(map[string]string, len(source))
+	for workID, placeID := range source {
+		clone[workID] = placeID
+	}
+	return clone
 }
 
 func restoredDispatchWorkID(input interfaces.WorkstationInput) (string, bool) {

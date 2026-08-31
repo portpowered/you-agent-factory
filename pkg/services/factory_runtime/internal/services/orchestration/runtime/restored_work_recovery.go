@@ -42,7 +42,7 @@ func restoreRestoredWorkMarking(
 			excludedWorkIDs[workID] = struct{}{}
 		}
 	}
-	seededWorkIDs, err := seedRestoredWork(
+	seededWorkIDs, supersededHistoricalMoves, err := seedRestoredWork(
 		marking,
 		cfg.net,
 		cfg.restoredWorldState,
@@ -54,6 +54,7 @@ func restoreRestoredWorkMarking(
 	if err != nil {
 		return nil, err
 	}
+	logRestoredWorkPlacementReconciliations(cfg, supersededHistoricalMoves)
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
 }
@@ -249,16 +250,72 @@ func addRestoredWorkStateChangePlacements(
 	changes map[string][]interfaces.FactoryWorldWorkStateChangeRecord,
 ) error {
 	for _, workID := range sortedRestoredKeys(changes) {
-		records := changes[workID]
-		for index := len(records) - 1; index >= 0; index-- {
-			placeID := strings.TrimSpace(records[index].ToPlaceID)
-			if placeID == "" {
-				continue
-			}
-			if err := addRestoredPlacement(placements, workID, placeID); err != nil {
-				return err
-			}
-			break
+		placeID := latestRestoredWorkStateChangePlace(changes[workID])
+		if placeID == "" {
+			continue
+		}
+		// Work-state changes are immutable audit history. A current occupancy or
+		// active dispatch already supplied the authoritative placement, so an
+		// older move must not become a second current placement.
+		if _, exists := placements[workID]; exists {
+			continue
+		}
+		placements[workID] = placeID
+	}
+	return nil
+}
+
+func latestRestoredWorkStateChangePlacements(
+	changes map[string][]interfaces.FactoryWorldWorkStateChangeRecord,
+) map[string]string {
+	placements := make(map[string]string, len(changes))
+	for workID, records := range changes {
+		if placeID := latestRestoredWorkStateChangePlace(records); placeID != "" {
+			placements[workID] = placeID
+		}
+	}
+	return placements
+}
+
+func latestRestoredWorkStateChangePlace(
+	records []interfaces.FactoryWorldWorkStateChangeRecord,
+) string {
+	for index := len(records) - 1; index >= 0; index-- {
+		if placeID := strings.TrimSpace(records[index].ToPlaceID); placeID != "" {
+			return placeID
+		}
+	}
+	return ""
+}
+
+func validateRestoredHistoricalMoveReferences(
+	placements map[string]string,
+	net *state.Net,
+	items map[string]work.FactoryWorkItem,
+	resourcePlaceIDs map[string]struct{},
+) error {
+	for _, workID := range sortedRestoredKeys(placements) {
+		placeID := placements[workID]
+		item, exists := items[workID]
+		if !exists {
+			return fmt.Errorf("restore Work board: placement references unknown Work %q", workID)
+		}
+		if item.ID != workID {
+			return fmt.Errorf(
+				"restore Work board: Work index key %q does not match Work identity %q",
+				workID,
+				item.ID,
+			)
+		}
+		if _, isResourcePlace := resourcePlaceIDs[placeID]; isResourcePlace {
+			return fmt.Errorf("restore Work board: Work %q references resource place %q", workID, placeID)
+		}
+		if place, exists := net.Places[placeID]; !exists || place == nil {
+			return fmt.Errorf(
+				"restore Work board: Work %q references place %q, which is not present in the current Factory topology",
+				workID,
+				placeID,
+			)
 		}
 	}
 	return nil
@@ -393,6 +450,29 @@ func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) 
 			"recording_id", strings.TrimSpace(cfg.recordingID),
 			"work_id", workID,
 			"disposition", restoredLegacyAutomationDisposition,
+		)
+	}
+}
+
+const restoredHistoricalMoveSupersededDisposition = "historical_move_superseded_by_authoritative_placement"
+
+func logRestoredWorkPlacementReconciliations(
+	cfg *runtimeConfig,
+	reconciliations []restoredWorkPlacementReconciliation,
+) {
+	if cfg == nil || len(reconciliations) == 0 {
+		return
+	}
+	logger := logging.EnsureLogger(cfg.logger)
+	for _, reconciliation := range reconciliations {
+		logger.Warn(
+			"restore Factory Runtime Work board: historical move superseded by authoritative placement",
+			"session_id", sessionIDFromFactoryConfig(cfg),
+			"recording_id", strings.TrimSpace(cfg.recordingID),
+			"work_id", reconciliation.workID,
+			"authoritative_place_id", reconciliation.authoritativePlace,
+			"historical_move_place_id", reconciliation.historicalMovePlace,
+			"disposition", restoredHistoricalMoveSupersededDisposition,
 		)
 	}
 }
