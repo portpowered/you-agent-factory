@@ -161,6 +161,10 @@ func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
 	}
 }
 
+// TestRecordedFactoryRedactsSecretStepsAcrossLifecycle proves that recording
+// and replaying a two-workstation Factory run redacts a declared secret for
+// both file-backed and inline workstation definitions while preserving visible
+// controls, outputs, event lineage, cleanup, and replay.
 func TestRecordedFactoryRedactsSecretStepsAcrossLifecycle(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
