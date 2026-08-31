@@ -1,14 +1,18 @@
 package board_occupancy_resume_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -51,6 +55,134 @@ func TestResumeUsesCurrentWorkOccupancyOverStaleMoveHistory(t *testing.T) {
 	assertBoardOccupancyWorkList(t, listed)
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("resume provider calls = %d, want no live dispatch for completed recording", got)
+	}
+}
+
+func TestResumeRecordingReadFailureStopsBeforeRuntimeActivation(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, boardOccupancyFactoryConfig())
+	replayPath := filepath.Join(t.TempDir(), "injected-read-failure.replay.json")
+	readFailure := errors.New("injected recording read failure: fixture-secret-must-not-leak")
+	var readCalls atomic.Int32
+	var serverStarts atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			readCalls.Add(1)
+			if path != replayPath {
+				return nil, errors.New("unexpected replay path")
+			}
+			return nil, readFailure
+		},
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			serverStarts.Add(1)
+			return nil
+		},
+	})
+	support.CleanupProcess(t, process)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--dir", factoryDir, "--with-server", "--resume", replayPath,
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(resume read failure) error = nil; stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+	}
+	if got := readCalls.Load(); got != 1 {
+		t.Fatalf("replay reader calls = %d, want one read before activation; err=%v stdout=%q stderr=%q", got, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if got := serverStarts.Load(); got != 0 {
+		t.Fatalf("HTTP server starts = %d, want zero after recording read failure", got)
+	}
+	if strings.Contains(inputs.Stdout(), "fixture-secret-must-not-leak") ||
+		strings.Contains(inputs.Stderr(), "fixture-secret-must-not-leak") {
+		t.Fatalf("recording read failure leaked fixture content: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+	}
+	if !strings.Contains(err.Error(), "replay") {
+		t.Fatalf("Process.Execute(resume read failure) error = %v, want safe replay-input context", err)
+	}
+}
+
+func TestResumeCancellationUnwindsLifecycleWithoutRetry(t *testing.T) {
+	sourcePath := testutil.MustRepoPath(t, boardOccupancyFixture)
+	factoryDir := support.ScaffoldFactory(t, boardOccupancyFactoryConfig())
+	successorPath := filepath.Join(t.TempDir(), "canceled-resume-successor.replay.json")
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	api := support.NewProcessAPIServer()
+	shutdownGate := make(chan struct{})
+	api.HoldShutdownUntilSignaled(shutdownGate)
+	cancellationObserved := make(chan struct{})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			go func() {
+				<-ctx.Done()
+				close(cancellationObserved)
+			}()
+			return api.Start(ctx, request)
+		},
+		ProviderCommandRunner: runner,
+	})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--continuously", "--with-server", "--quiet", "--dir", factoryDir,
+		"--resume", sourcePath, "--record", successorPath,
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	if _, err := api.WaitForBaseURL(60 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stop is run concurrently because the injected server edge is deliberately
+	// held after it observes cancellation. This proves cancellation reaches the
+	// acquired lifecycle before the deterministic shutdown hook is released.
+	command.AcceptError()
+	stopDone := make(chan struct{})
+	go func() {
+		command.Stop(t)
+		close(stopDone)
+	}()
+	waitForResumeSignal(t, cancellationObserved, "canceled resumed lifecycle")
+	select {
+	case <-command.Done():
+		t.Fatal("canceled resumed Process.Execute joined before shutdown hook was released")
+	default:
+	}
+	close(shutdownGate)
+	waitForResumeSignal(t, stopDone, "canceled resumed Process.Execute")
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("canceled resumed provider calls = %d, want no remote execution or retry", got)
+	}
+	assertValidOptionalSuccessor(t, successorPath)
+}
+
+func waitForResumeSignal(t *testing.T, signal <-chan struct{}, label string) {
+	t.Helper()
+	// The injected edge signal is deterministic. The timer only guards a broken
+	// lifecycle path that never reaches the expected observation.
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatalf("timed out waiting for %s", label)
+	}
+}
+
+func assertValidOptionalSuccessor(t *testing.T, path string) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		t.Fatalf("read canceled resume successor: %v", err)
+	}
+	var artifact interfaces.ReplayArtifact
+	if err := json.Unmarshal(payload, &artifact); err != nil {
+		t.Fatalf("decode canceled resume successor: %v", err)
+	}
+	if artifact.SchemaVersion != interfaces.ReplayV1SourceFormat {
+		t.Fatalf("canceled resume successor schema = %q, want %q", artifact.SchemaVersion, interfaces.ReplayV1SourceFormat)
 	}
 }
 
