@@ -4,10 +4,12 @@ Date: 2026-08-30 (America/Los_Angeles)
 
 ## Scope and decision
 
-This ledger covers story `deflake-graph-editor-browser-readiness-family-001`
-only. It characterizes the two confirmed readiness sites in
+The characterization section covers story
+`deflake-graph-editor-browser-readiness-family-001` and the nonreproducing
+decision below completes story `deflake-graph-editor-browser-readiness-family-002`.
+It characterizes the two confirmed readiness sites in
 `ui/integration/factory-graph-editor.integration.test.mjs` before any
-readiness correction. The only code change in this story is failure-only,
+readiness correction. The only code change in these stories is failure-only,
 site-labelled diagnostics and first-attempt accounting; no application source,
 timeout, retry, sleep, skip, quarantine, assertion, or browser-test inventory
 change was made.
@@ -182,12 +184,14 @@ performance claim and do not prove universal flake probability.
   harness artifact contract; no failure instance occurred to populate a
   site-context bundle.
 - `GATE-COMPONENT`: not applicable; no application code changed.
-- `GATE-CORRECTION` / `GATE-STRESS`: deferred to story 002 because no root
-  cause or correction was proven.
+- `GATE-CORRECTION` / `GATE-STRESS`: not applicable on the story-002
+  nonreproducing branch because no root cause or correction was proven or
+  shipped; post-fix rates are `N/A`.
 - `GATE-FULL-BROWSER` / `LOOPBACK-01`: deferred to the clean-artifact
   validation story.
-- Canonical UI typecheck remains blocked by the unrelated baseline errors
-  listed above; changed-file syntax and Biome checks passed.
+- Canonical `bun run build` remains blocked by the unrelated baseline errors
+  listed above; the story-002 `bun run typecheck` and changed-file syntax and
+  Biome checks passed.
 - Still unproven: universal failure probability, a root cause at either site,
   correction effectiveness, full browser-tier coexistence, clean-room final
   artifact behavior, current-main rebase, remote CI, review feedback, and
@@ -199,3 +203,35 @@ Verification performed for the diagnostic change:
 node --check ui/integration/factory-graph-editor.integration.test.mjs    PASS
 cd ui && bunx --no-install biome check integration/factory-graph-editor.integration.test.mjs    PASS
 ```
+
+## Story 002 decision: retain diagnostics without a speculative correction
+
+Story 001's evidence is the required direct trace input for story 002. Each
+site completed 30 ordinary and 30 CPU-loaded first-attempt executions with
+`0/30` failures and `0/30` not-reached in both conditions. There is therefore
+no failing rendered, network, actionability, or explicit-ready transition to
+name as a test-owned or product-owned mechanism. The Add workstation dialog
+and Leave editor observer-mode sites remain distinct accounting boundaries;
+their common graph card, harness, or `waitFor` calls do not prove a shared
+cause.
+
+The committed pre-close active-element and bounded node inventory remains the
+next-occurrence diagnostic. No timeout, retry, rerun, sleep, fixed polling,
+stable window, skip, quarantine, conditional, assertion, or test-count change
+was made. No application source changed, so `GATE-COMPONENT` is not
+applicable; no correction shipped, so `GATE-CORRECTION` and `GATE-STRESS` are
+not applicable and post-fix rates are `N/A`.
+
+Story-002 UI-quality evidence:
+
+```text
+cd ui && bun run typecheck                                           PASS (exit 0)
+cd ui && bun run check                                               FAIL (exit 1; 174 unrelated base-tree diagnostics)
+node --check ui/integration/factory-graph-editor.integration.test.mjs  PASS
+cd ui && bunx --no-install biome check integration/factory-graph-editor.integration.test.mjs PASS
+```
+
+The full check's diagnostics are outside the changed integration file and
+were not repaired in this scoped story. Clean final-artifact behavior,
+full-browser-tier coexistence, loopback, rebase, PR workflow, and review remain
+story-003 edges.
