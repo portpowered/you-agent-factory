@@ -1,16 +1,11 @@
 package root_composition_test
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -121,37 +116,32 @@ func runBTRCBatch(
 ) (*interfaces.ReplayArtifact, error) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
-	batch, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal batch: %v", err)
-	}
-	batchPath := filepath.Join(t.TempDir(), "batch.json")
-	if err := os.WriteFile(batchPath, batch, 0o600); err != nil {
-		t.Fatalf("write batch: %v", err)
-	}
-	artifactPath := filepath.Join(t.TempDir(), "batch.replay.json")
-
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: provider})
-	support.CleanupProcess(t, process)
-	homeDir := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir, "--work", batchPath, "--record", artifactPath,
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-	executeErr := process.Execute(inputs.Input)
-	return testutil.LoadReplayArtifact(t, artifactPath), executeErr
+	session := openBTRCBatchSession(t, provider)
+	artifact, executeErr := executeBTRCBatch(t, session, request)
+	session.close(t)
+	assertBTRCBatchRouteRequests(t, session)
+	return artifact, executeErr
 }
 
 func assertBTRCBatchEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 	t.Helper()
+	if len(events) == 0 {
+		t.Fatal("batch recording has no events")
+	}
+	seenEventIDs := make(map[string]struct{}, len(events))
 	got := make([]interfaces.FactoryEventType, len(events))
 	for index, event := range events {
 		got[index] = event.Type
 		if event.Context.Sequence != index {
-			t.Fatalf("event[%d] sequence = %d, want %d", index, event.Context.Sequence, index)
+			t.Fatalf("event[%d] global sequence = %d, want %d", index, event.Context.Sequence, index)
 		}
+		if event.Id == "" {
+			t.Fatalf("event[%d] has empty id", index)
+		}
+		if _, duplicate := seenEventIDs[event.Id]; duplicate {
+			t.Fatalf("event[%d] id %q is duplicated", index, event.Id)
+		}
+		seenEventIDs[event.Id] = struct{}{}
 	}
 	if !reflect.DeepEqual(got, btrcBatchEventOrder) {
 		t.Fatalf("canonical batch event order = %v, want %v", got, btrcBatchEventOrder)
@@ -163,7 +153,7 @@ func assertBTRCBatchEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 			interfaces.FactoryEventTypeSessionResultUpdated,
 			interfaces.FactoryEventTypeSessionCompleted:
 			if got := btrcStringPointerValue(event.Context.SessionID); got != "~default" {
-				t.Fatalf("%s session id = %q, want ~default", event.Type, got)
+				t.Fatalf("%s session id = %q, want %q", event.Type, got, "~default")
 			}
 		}
 	}
