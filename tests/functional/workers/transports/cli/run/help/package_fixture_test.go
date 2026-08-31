@@ -206,28 +206,17 @@ func writeHelpFactoryFiles(dir string, cfg map[string]any) error {
 func (fixture *helpPackageFixture) createNamedFactory(t *testing.T) error {
 	t.Helper()
 
-	missingPath := filepath.Join(fixture.workingRoot, "missing-initialization-factory.json")
-	missing := fixture.execute(t, "you", "run", "--factory", missingPath)
-	if missing.err == nil || !strings.Contains(missing.err.Error(), filepath.Base(missingPath)) {
-		return fmt.Errorf("initialize named Factory home: error = %v", missing.err)
-	}
-
 	namedFactoriesRoot := filepath.Join(fixture.homeDir, ".you-agent-factory", "factories")
-	created := fixture.execute(t,
-		"you", "--json", "factory", "create", invocationHelpNamedFactoryName,
-		"--from", fixture.fullFactoryPath, "--dir", namedFactoriesRoot,
-	)
-	if created.err != nil {
-		return fmt.Errorf("create named Factory: %w", created.err)
+	namedFactoryDir := filepath.Join(namedFactoriesRoot, invocationHelpNamedFactoryName)
+	// The source Factory is already authored by prepareFiles. Materialize the
+	// same named-factory layout directly so fixture construction does not spend
+	// two Process.Execute calls bootstrapping a temporary HOME and invoking the
+	// public factory-create command before the help matrix starts.
+	if err := copyHelpDirectory(filepath.Dir(fixture.fullFactoryPath), namedFactoryDir); err != nil {
+		return fmt.Errorf("materialize named Factory: %w", err)
 	}
-	var result struct {
-		FactoryDir string `json:"factoryDir"`
-	}
-	if err := json.Unmarshal([]byte(created.inputs.Stdout()), &result); err != nil {
-		return fmt.Errorf("decode named Factory result: %w", err)
-	}
-	if _, err := os.Stat(filepath.Join(result.FactoryDir, interfaces.FactoryConfigFile)); err != nil {
-		return fmt.Errorf("named Factory config missing at %s: %w", result.FactoryDir, err)
+	if _, err := os.Stat(filepath.Join(namedFactoryDir, interfaces.FactoryConfigFile)); err != nil {
+		return fmt.Errorf("named Factory config missing at %s: %w", namedFactoryDir, err)
 	}
 	return nil
 }
