@@ -105,7 +105,7 @@ type pinnedAcpxScenario struct {
 	sessionMayExist bool
 	// cleanupCloser is populated only by controlled characterization; the real
 	// scenario closes through the pinned ACPX command below.
-	cleanupCloser   func() error
+	cleanupCloser func() error
 }
 
 type realClientEvidence struct {
@@ -446,11 +446,6 @@ func runBoundedCommand(directory string, environment []string, phase, name strin
 	return runBoundedCommandWithTimeout(directory, environment, phase, time.Minute, name, args...)
 }
 
-// attachProcessTree is a process-ownership seam for the controlled
-// characterization of the fail-closed ownership branch. The real client path
-// uses the platform implementation unchanged.
-var attachProcessTree = attachCommandProcessTree
-
 func runBoundedCommandWithTimeout(directory string, environment []string, phase string, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	command := exec.Command(name, args...)
 	configureCommandProcessTree(command)
@@ -464,11 +459,13 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf("real ACP evidence failed during %s: launch", phase)
 	}
-	tree, err := attachProcessTree(command)
+	tree, err := attachCommandProcessTree(command)
 	if err != nil {
-		_ = terminateCommandProcessTree(command, nil)
-		_ = command.Wait()
-		return nil, fmt.Errorf("real ACP evidence failed during %s: process ownership", phase)
+		return nil, cleanupStartedCommandAfterOwnershipFailure(
+			phase,
+			func() error { return terminateCommandProcessTree(command, nil) },
+			command.Wait,
+		)
 	}
 	defer closeCommandProcessTree(command, tree)
 	completed := make(chan error, 1)
@@ -494,6 +491,16 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 		}
 		return nil, fmt.Errorf("real ACP evidence failed during %s: timeout", phase)
 	}
+}
+
+func cleanupStartedCommandAfterOwnershipFailure(
+	phase string,
+	terminate func() error,
+	wait func() error,
+) error {
+	_ = terminate()
+	_ = wait()
+	return fmt.Errorf("real ACP evidence failed during %s: process ownership", phase)
 }
 
 func nodeSupportsPinnedAcpx() bool {

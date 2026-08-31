@@ -3,7 +3,6 @@ package realclient_test
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,15 +71,23 @@ func characterizeProcessFailures(t *testing.T) {
 		assertCharacterizationError(t, err, "during characterize-launch: launch")
 	})
 
-	t.Run("process ownership failure cleans up the started command", func(t *testing.T) {
-		previous := attachProcessTree
-		attachProcessTree = func(*exec.Cmd) (*commandProcessTree, error) {
-			return nil, errors.New("controlled ownership failure")
-		}
-		t.Cleanup(func() { attachProcessTree = previous })
-
-		_, err := runBoundedCommandWithTimeout(t.TempDir(), nil, "characterize-ownership", time.Second, os.Args[0], "-test.run=^$")
+	t.Run("process ownership failure cleans up without another process", func(t *testing.T) {
+		terminated, waited := false, false
+		err := cleanupStartedCommandAfterOwnershipFailure(
+			"characterize-ownership",
+			func() error {
+				terminated = true
+				return errors.New("controlled termination result")
+			},
+			func() error {
+				waited = true
+				return errors.New("controlled wait result")
+			},
+		)
 		assertCharacterizationError(t, err, "during characterize-ownership: process ownership")
+		if !terminated || !waited {
+			t.Fatalf("ownership failure cleanup = terminated:%t waited:%t, want both cleanup operations", terminated, waited)
+		}
 	})
 }
 

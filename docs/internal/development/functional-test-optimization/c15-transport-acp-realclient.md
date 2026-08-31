@@ -112,7 +112,7 @@ zero shareable rows, zero shareable-with-mock rows, and three
 | `TestRunBoundedCommandTerminatesScenarioDescendants` | `C01-P038-TestRunBoundedCommandTerminatesScenarioDescendants` | `C07-F026-top-level-test-TestRunBoundedCommandTerminatesScenarioDescendants` | `isolated-with-reason` | Real `os.Args[0]` helper parent/descendant, OS process-tree ownership, timeout, and inactive-PID cleanup; sharing would remove the process boundary. |
 | `TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `C01-P038-TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `C07-F026-top-level-test-TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `isolated-with-reason` | Real helper parent/descendant, non-zero exit, tree termination, and inactive-PID cleanup; sharing would remove the exit/process boundary. |
 | `TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt` | `C01-P038-TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt` | `C07-F026-top-level-test-TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt` | `isolated-with-reason` | Pinned ACPX executable, real stdio, current production executable, provider process, session lifecycle, and cleanup; sharing would remove the external-client boundary. |
-| `TestCharacterizePinnedAcpxFailureClassifications` | `added-after-C01` (no prior row; no conflict) | C15 characterization identity | `isolated-with-reason` | Controlled parser/cleanup cases plus one real started command for launch-ownership cleanup characterization. It is not eligible for the reusable session process. |
+| `TestCharacterizePinnedAcpxFailureClassifications` | `added-after-C01` (no prior row; no conflict) | C15 characterization identity | `isolated-with-reason` | Controlled parser/cleanup cases plus callback-driven ownership cleanup characterization. It deliberately does not launch an OS process; the retained OS process-tree witnesses remain in the existing functional package rows. |
 
 The three inherited package rows retain their C01 source hashes and process
 observation IDs (`PSO-0040`, `PSO-0041`, and `PSO-0042`) in the canonical
@@ -134,7 +134,7 @@ phase counts.
 | Timeout helper | 1 bounded parent | 1 `os.Args[0]` held descendant; Unix process group or Windows Job Object | One-second deadline, safe `timeout` classification, tree termination, and recorded PID inactive check. |
 | Non-zero helper | 1 bounded parent | 1 `os.Args[0]` held descendant; Unix process group or Windows Job Object | Parent exits non-zero, safe `non-zero exit` classification, tree termination, and recorded PID inactive check. |
 | Pinned client normal path | 7: Node version probe, Git revision, Go build, one `npx` pinned-version phase, ACPX session creation, prompt, and close | `npx`/Node/ACPX, configured current `you server acp`, and two deterministic provider invocations | Exact executable/config/version/stdio/session/frame/provider/close/queue-owner assertions. Current diagnostic reached the first three phases only. |
-| C15 characterization | launch-failure case starts no process; ownership case starts one `os.Args[0]` command | Windows cleanup may invoke `taskkill`; parser and queue cases use only temp data | Safe launch/ownership classification, started-command wait, partial-session state transition, and queue-owner failure. This cost is not part of the pre-edit denominator. |
+| C15 characterization | launch-failure and ownership cases start no process | Parser and cleanup cases use only temp data; ownership callbacks model terminate-and-wait without creating a command | Safe launch/ownership classification, partial-session state transition, and queue-owner failure. This deterministic characterization cost is not part of the pre-edit denominator. |
 
 The five canonical C01 spawn-site records remain intentional OS boundaries:
 `runProcessTreeParent` for stream/child framing, Windows process inspection and
@@ -150,7 +150,7 @@ behavior. No spawn was removed or replaced in TASK-001.
 | `RC-OS-TIMEOUT` | `TestRunBoundedCommandTerminatesScenarioDescendants` and `runTimedOutProcessTreeScenario` in `pinned_acpx_process_test.go` | Local-real OS process tree; PASS in diagnostic and focused run |
 | `RC-OS-CRASH` | `TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | Local-real OS process tree; PASS in diagnostic and focused run |
 | `RC-LAUNCH-FAILURE` | Characterization subtest `launch failure` through `runBoundedCommandWithTimeout` | Local-real executable lookup; PASS, no owned process is created |
-| `RC-OWNERSHIP-FAILURE` | Characterization subtest `process ownership failure cleans up the started command` through the controlled ownership seam | Local-real started command plus controlled attach fault; PASS for terminate-and-wait classification; not a claim that a naturally failing OS attach was reproduced |
+| `RC-OWNERSHIP-FAILURE` | Characterization subtest `process ownership failure cleans up without another process` through the controlled ownership cleanup seam | Controlled terminate-and-wait callbacks; PASS for cleanup ordering and safe classification, with no claim that a naturally failing OS attach was reproduced |
 | `RC-ACPX-PIN` | `preparePinnedAcpx` and `resolvePinnedAcpxPath` | Current-head real ACPX edge UNPROVEN because the diagnostic timed out before acquisition; owner `GATE-FOCUSED-OS` |
 | `RC-ACPX-STREAM` | `scenario.run` and `assertPromptEvidence` | Current-head real stdio edge UNPROVEN; owner `GATE-FOCUSED-OS` |
 | `RC-SESSION-CREATE` | `newSession`, `requireAcpxSessionResult`, and `assertCreatedSession` | Current-head real session UNPROVEN; owner `GATE-FOCUSED-SESSION` |
@@ -209,7 +209,7 @@ contract, skip, timeout bound, sleep, or assertion was weakened.
 | Current identities | PASS: three pre-edit top-level tests recorded; one explicitly added focused characterization identity recorded after C01 |
 | Assertion inventory | PASS: all C15 rows map to a source witness, focused owner, later gate, or N/A rationale |
 | C01 reconciliation | PASS: exact inherited `C01-P038`/`C07-F026` rows and added-after-C01 characterization are recorded |
-| Direct/descendant starts | PASS: nine pre-edit test-owned parent starts plus two helper descendants and named phase ownership recorded |
+| Direct/descendant starts | PASS: nine pre-edit test-owned parent starts plus two helper descendants and named phase ownership recorded; the added characterization now starts no process |
 | Prerequisite behavior | PASS: six current-head focused selectors preserve optional skip and required fail-closed facts |
 | Applicable failure characterization | PASS: controlled classification/cleanup selectors exited `0`; local-real timeout/non-zero helpers exited `0` |
 | Diagnostic timing | PASS as retained diagnostic: required current-head run exited `1` on host build-timeout at the existing phase bound; no success claim made |
@@ -441,3 +441,62 @@ its application process is built once and its ACP stream is driven through
 The final package timing and PR functional coverage remain TASK-003 evidence;
 this table records why the retained OS/client rows cannot be replaced by the
 reusable controlled witness.
+
+### TASK-002 review correction: provider-edge mapping and OS-witness placement
+
+The reusable fixture now retains the `session/new` `cwd` in a
+`reusableACPSession` record instead of discarding it. Every session/turn case
+passes its expected prompt and the installed Factory directory to the
+provider-edge runner. The runner records every invocation's `WorkDir`, input
+prompt, and case marker; the test asserts all three for both provider calls in
+each turn, including the first prompt of the second session and the
+in-flight prompt used by close/cancellation. The evidence distinguishes the
+client workspace (`session.workspace`, the distinct `session/new` `cwd`) from
+the provider execution workspace (`session.providerWorkDir`, the resolved
+Factory directory), so the assertion does not incorrectly equate ACP client
+cwd with the provider's production working directory.
+
+Current focused evidence after this correction:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=5m -v
+```
+
+Exited `0` with package wall `8.73s`. The two marker-isolated turns, the
+in-flight close/cancellation turn, the second session's first turn, and all
+provider `WorkDir`/prompt/marker observations passed.
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=2 -timeout=10m -v
+```
+
+Exited `0` for both repetitions with package wall `24.142s`. The provider
+observation assertions passed on each fresh fixture repetition; no state or
+marker crossed repetitions.
+
+```text
+go test -race ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=10m -v
+```
+
+Exited `0` with package wall `19.265s` and no race report. The focused
+characterization and retained local-real OS selectors also exited `0` in
+`2.435s`:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^(TestCharacterizePinnedAcpxFailureClassifications|TestRunBoundedCommandTerminatesScenarioDescendants|TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit)$' \
+  -count=1 -timeout=10m -v
+```
+
+The process-ownership characterization was deliberately changed to a
+non-OS deterministic callback case. Its placement decision is therefore to
+keep the safe classification and terminate-then-wait assertion in this
+package's controlled characterization, while retaining the existing C01
+local-real timeout/non-zero process-tree witnesses for the executable,
+exit, ownership, and descendant-inactivity properties. No additional
+`os.Args[0]` process launch or modified OS witness was added, and no
+integration mirror or production/shared-support change is needed for this
+bounded correction.
