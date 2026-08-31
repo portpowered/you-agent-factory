@@ -439,12 +439,15 @@ host performance verdict.
 ### VAL-001 clean-room validation report
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
-It was run read-only from detached clean worktrees at the exact implementation
-SHA. No implementation repair was made during any loopback attempt.
+It was run read-only from a detached clean worktree at exact delivery head
+`4f67613efb6626b45d1313fb6d664f3e1f33721d`. No implementation repair was made
+during any loopback attempt.
 
 #### Environment and artifact
 
-- Commit/build identifier: `9c89ba607f57ff68f08bd6e314220fbc228cc7a2`.
+- Commit/build identifier: `4f67613efb6626b45d1313fb6d664f3e1f33721d` (the
+  documentation-only delivery head containing the already validated source
+  tree).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -457,9 +460,9 @@ SHA. No implementation repair was made during any loopback attempt.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Retry detached worktree at the exact SHA ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `59.252s`, wall `100.920s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same detached retry ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `32.578s`, wall `37.665s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS locally; cold loopback diagnostic recorded | Exact local tagged command exited `0`; detached cold starts twice reached the existing helper deadline before the injected API server was invoked. | Cold detached startup under this shared host; no assertion or timeout was changed. |
+| Complete command matrix | PASS | Final detached worktree at the exact delivery head ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `59.113s`, wall `95.143s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same final detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `36.084s`, wall `41.724s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Final detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `2.914s`, wall `11.306s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
@@ -469,15 +472,15 @@ SHA. No implementation repair was made during any loopback attempt.
 
 | ID | Severity | Reproduction | Expected | Actual | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| `ENV-C15-001` | environmental diagnostic | First detached full command run at the exact SHA | C13 emits `INVOCATION_INPUT_SOURCE_CONFLICT` | Existing 20-second invocation context expired; stderr was `RUN_INVOCATION_TIMEOUT` after `27.43s`. The focused C13 selector then passed three times locally. | Not used as behavior evidence; no code or timeout change. |
-| `ENV-C15-002` | environmental diagnostic | Detached tagged P22 run at the exact SHA | Injected API server starts and the provider workdir witness completes | `process_factory.go:314` reported the API server starter was never invoked; daemon stderr ended with `Error: context canceled` under the existing 10-second helper deadline. The exact tagged local run passed. | Not used as behavior evidence; no code or timeout change. |
+| `ENV-C15-001` | environmental diagnostic | Earlier cold detached full command attempt at the code-preserving pre-refresh SHA | C13 emits `INVOCATION_INPUT_SOURCE_CONFLICT` | Existing 20-second invocation context expired; stderr was `RUN_INVOCATION_TIMEOUT` after `27.43s`. A focused C13 selector then passed three times locally, and the final delivery-head loopback passed. | Historical contaminated attempt; not used as behavior evidence; no code or timeout change. |
+| `ENV-C15-002` | environmental diagnostic | Earlier cold detached tagged P22 attempt at the code-preserving pre-refresh SHA | Injected API server starts and the provider workdir witness completes | `process_factory.go:314` reported the API server starter was never invoked; daemon stderr ended with `Error: context canceled` under the existing 10-second helper deadline. The final delivery-head loopback passed. | Historical contaminated attempt; not used as behavior evidence; no code or timeout change. |
 
 #### Verdict
 
-`PASS` for the exact-head local-real implementation and package loopback, with
-the two cold-start environmental diagnostics explicitly retained as
-unproven edges. The diagnostics do not reproduce on the current worktree’s
-focused C13/P22 runs, and no assertion, skip, quarantine, or timeout was
+`PASS` for the exact-head local-real implementation and package loopback. The
+final delivery-head detached worktree passed both ordinary matrices and P22;
+the two earlier cold-start diagnostics are retained as environmental history,
+not behavior failures. No assertion, skip, quarantine, or timeout was
 weakened to obtain the pass.
 
 The remaining hosted edges are current-head Backend Functional Coverage,
