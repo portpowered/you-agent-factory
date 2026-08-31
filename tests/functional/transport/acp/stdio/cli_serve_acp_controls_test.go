@@ -17,7 +17,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,7 +32,7 @@ func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T
 		t.Skip("integration test driving you server acp provider failure through root.BuildProcess")
 	}
 
-	harness := newServeACPControlHarness(t, newControlProviderFailureCommandRunner())
+	harness := newServeACPControlHarness(t, "ACP-01", newControlProviderFailureCommandRunner())
 	sessionID := harness.openSession(t)
 
 	harness.sendPrompt(t, 3, sessionID, "fail this provider invocation")
@@ -69,7 +68,7 @@ func TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt(t *testin
 		t.Skip("integration test driving you server acp cancellation through root.BuildProcess")
 	}
 
-	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
+	harness := newServeACPControlHarness(t, "ACP-02", newControlProviderCommandRunner(1))
 	sessionID := harness.openSession(t)
 
 	harness.sendPrompt(t, 3, sessionID, "cancel this in-flight prompt")
@@ -104,7 +103,7 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 		t.Skip("integration test driving you server acp close through root.BuildProcess")
 	}
 
-	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
+	harness := newServeACPControlHarness(t, "ACP-03", newControlProviderCommandRunner(1))
 	sessionID := harness.openSession(t)
 
 	harness.sendPrompt(t, 3, sessionID, "close this in-flight prompt")
@@ -142,7 +141,7 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 		t.Skip("integration test driving ACP close then load through root.BuildProcess")
 	}
 
-	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(2))
+	harness := newServeACPControlHarness(t, "ACP-04", newControlProviderCommandRunner(2))
 	sessionID := harness.openSession(t)
 
 	harness.sendPrompt(t, 3, sessionID, "complete before the active close")
@@ -206,18 +205,24 @@ type serveACPControlHarness struct {
 	stderr      *bytes.Buffer
 }
 
-func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunner) *serveACPControlHarness {
+func newServeACPControlHarness(t *testing.T, id string, runner *controlProviderCommandRunner) *serveACPControlHarness {
 	t.Helper()
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	cwd := t.TempDir()
-	seedFixtureFactory(t, cwd)
-	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
+	var scenario *acpCase
+	switch id {
+	case "ACP-03", "ACP-04":
+		// These are the close-capable members of the shared cohort: each
+		// explicitly terminates its active Factory Session before EOF, so the
+		// next real-pipe connection can use the same application graph.
+		scenario = newACPControlCase(t, id, runner)
+	default:
+		// Provider failure and ordinary terminal prompts intentionally leave
+		// their on-demand runtime owned by the process. Keep those rows
+		// isolated so their production lifecycle is closed by the per-test
+		// root cleanup rather than pretending EOF is a Factory close.
+		scenario = newACPIsolatedControlCase(t, id, runner)
+	}
+	process := scenario.process
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
@@ -238,16 +243,16 @@ func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunne
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
 		Args:             []string{"you", "server", "acp"},
-		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		Env:              append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home),
 		Stdin:            stdinRead,
 		Stdout:           stdoutWrite,
 		Stderr:           &stderr,
-		WorkingDirectory: cwd,
+		WorkingDirectory: scenario.cwd,
 	})
 
 	return &serveACPControlHarness{
 		runner:      runner,
-		cwd:         cwd,
+		cwd:         scenario.cwd,
 		stdinWrite:  stdinWrite,
 		stdout:      bufio.NewReader(stdoutRead),
 		stdoutWrite: stdoutWrite,

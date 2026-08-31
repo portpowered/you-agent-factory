@@ -16,7 +16,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -68,27 +67,19 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
 	// cwd is installed as the fixture Factory's own project-local root (see
 	// seedFixtureFactory), so the one downstream provider dispatch's WorkDir
 	// can be asserted against it below -- proving the client-supplied
 	// session/new working root itself reaches exactly one downstream
 	// execution, not merely a resolved Factory identifier.
-	cwd := t.TempDir()
-
-	factoryDir := seedFixtureFactory(t, cwd)
-	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte(fixtureFinalAnswerText),
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
-	support.CleanupProcess(t, process)
+	scenario := newACPControlCase(t, "ACP-05", runner)
+	home := scenario.home
+	cwd := scenario.cwd
+	factoryDir := scenario.factoryDir
+	process := scenario.process
 
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
@@ -305,15 +296,24 @@ func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
 // command's WorkDir.
 func seedFixtureFactory(t *testing.T, cwd string) string {
 	t.Helper()
+	return seedFixtureFactoryForTarget(t, cwd, fixtureFactoryTargetID)
+}
+
+func seedFixtureFactoryForTarget(t *testing.T, cwd, targetID string) string {
+	t.Helper()
 
 	projectRoot := factorydefinitions.ProjectFactoriesRoot(cwd)
-	factoryDir := filepath.Join(projectRoot, "@"+fixtureFactoryScope, fixtureFactoryName)
+	factoryName := strings.TrimPrefix(targetID, operatorsettings.ACPFactoryTargetNamespace)
+	if factoryName == targetID || !strings.HasPrefix(factoryName, "@") {
+		t.Fatalf("fixture Factory target %q does not use the expected ACP namespace", targetID)
+	}
+	factoryDir := filepath.Join(projectRoot, filepath.FromSlash(factoryName))
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", factoryDir, err)
 	}
 
 	cfg := map[string]any{
-		"name": "@" + fixtureFactoryScope + "/" + fixtureFactoryName,
+		"name": factoryName,
 		"invocationSignature": map[string]any{
 			"parameters": []any{map[string]any{
 				"name":     "input",

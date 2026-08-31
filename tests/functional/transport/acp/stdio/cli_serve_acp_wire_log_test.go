@@ -96,15 +96,10 @@ func newTranscriptProcess(
 	t.Helper()
 	seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
+	return buildACPIsolatedProcess(t, &acpTranscriptRootCounter, serviceedges.Edges{
 		ACPWireRecorder:       newRotatingWireRecorder(t, home),
 		ProviderCommandRunner: runner,
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-	return process
 }
 
 func exerciseTranscriptConversation(
@@ -474,17 +469,13 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
+	process := buildACPIsolatedProcess(t, &acpOutboundFailureCounter, serviceedges.Edges{
 		ACPWireRecorder: newRotatingWireRecorder(t, home),
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
 
 	stdoutErr := errors.New("stdout failed")
 	var stderr bytes.Buffer
-	err = process.Execute(root.Input{
+	err := process.Execute(root.Input{
 		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`, fixtureInitializeParams) + "\n"),
@@ -527,10 +518,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
+	process := buildACPIsolatedProcess(t, &acpPermissionRootCounter, serviceedges.Edges{})
 
 	var stdout, stderr bytes.Buffer
 	if err := process.Execute(root.Input{
