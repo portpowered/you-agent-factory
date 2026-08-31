@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -672,6 +674,73 @@ func (session *sharedPetriSession) close(t testing.TB) {
 	})
 }
 
+func (session *sharedPetriSession) closeAfterTerminal(t testing.TB) {
+	t.Helper()
+	if session == nil {
+		return
+	}
+	session.closeOnce.Do(func() {
+		// The work-terminal observation above proves that the scenario is
+		// complete. Continuous sessions still require the public terminate
+		// control, but the deletion contract can itself observe when that
+		// asynchronous stop has completed. Avoid a second status polling loop.
+		support.TerminateFactorySessionAt(t, session.fixture.baseURL, session.sessionID)
+		deleteSharedPetriSessionAfterTerminate(t, session.fixture.baseURL, session.sessionID)
+		session.fixture.router.unregister(session.factoryDir)
+		session.fixture.recordSessionClosed(session.sessionID)
+		if err := recordSharedPetriScenarioClosed(session.sessionID); err != nil {
+			t.Errorf("record shared Petri runtime row close: %v", err)
+		}
+	})
+}
+
+func deleteSharedPetriSessionAfterTerminate(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	deadline := time.NewTimer(sharedPetriFixtureShutdownTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		request, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+		if err != nil {
+			t.Fatalf("build delete terminated Factory Session request: %v", err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("DELETE terminated Factory Session %q: %v", sessionID, err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil {
+			t.Fatalf("read DELETE terminated Factory Session %q response: %v", sessionID, readErr)
+		}
+		if response.StatusCode == http.StatusNoContent {
+			return
+		}
+		if response.StatusCode != http.StatusConflict || !strings.Contains(string(body), "runtime is") {
+			t.Fatalf(
+				"DELETE terminated Factory Session %q status = %d, want 204 or active-runtime conflict: %s",
+				sessionID,
+				response.StatusCode,
+				strings.TrimSpace(string(body)),
+			)
+		}
+
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out deleting terminated Factory Session %q: last status = %d: %s",
+				sessionID,
+				response.StatusCode,
+				strings.TrimSpace(string(body)),
+			)
+		}
+	}
+}
+
 func (fixture *sharedPetriProcessFixture) recordSessionOpened(sessionID string) error {
 	fixture.sessionMu.Lock()
 	defer fixture.sessionMu.Unlock()
@@ -698,7 +767,7 @@ func runSharedPetriFactoryToCompletionWithEdgesAndWork(
 	selection := openSharedPetriSession(t, dir)
 	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
-	selection.close(t)
+	selection.closeAfterTerminal(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return status, listed
 }
@@ -713,7 +782,7 @@ func runSharedPetriFactoryToCompletionWithEdgesAndListedWork(
 	selection := openSharedPetriSession(t, dir)
 	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
-	selection.close(t)
+	selection.closeAfterTerminal(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return listed
 }
@@ -743,7 +812,7 @@ func runSharedPetriFactoryToCompletionWithRouteAndObservations(
 	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, selection.fixture.baseURL, selection.sessionID)
-	selection.close(t)
+	selection.closeAfterTerminal(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return status, listed, events
 }
@@ -758,7 +827,7 @@ func runSharedPetriFactoryToCompletionWithRouteAndWork(
 	selection := openSharedPetriSessionWithRoute(t, dir, config)
 	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
-	selection.close(t)
+	selection.closeAfterTerminal(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return status, listed
 }
@@ -773,7 +842,7 @@ func runSharedPetriFactoryToCompletionWithRouteAndListedWork(
 	selection := openSharedPetriSessionWithRoute(t, dir, config)
 	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
-	selection.close(t)
+	selection.closeAfterTerminal(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return listed
 }
