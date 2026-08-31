@@ -288,3 +288,200 @@ behavior, final n=1 timing, current-head PR timing, coverage measurement,
 clean-room validation, built executable/OS behavior, terminal CI, or merge.
 The C05 Unicode prompt edge and P22 execution remain explicitly unproven and
 are owned by the subsequent behavior/delivery gates.
+
+## Story 004 — exact-head behavior, performance, and delivery evidence
+
+The implementation/test tree validated for this story is commit
+`49aaa22d66f4ec9f790fed4400561b796aada670` on Windows `amd64` with Go
+`1.25.0`. The only tracked paths in the implementation diff are this ledger
+and the two owned functional-test packages; `prd.json` and `progress.txt`
+remain ignored local scaffolding. `git diff --check` and
+`go run ./cmd/functionalboundarycheck` both exited `0`.
+
+### Final topology reconciliation
+
+The command package now has one `support.BuildProcessWithContext` site in
+`package_runtime_test.go`, shared by all command fixtures through a serialized
+`commandRuntime`. The parameter package has two such sites: one observer root
+and one handler root. The observer root remains separate because it intercepts
+handler execution; the handler root carries the provider/submission and
+missing-asset lifecycle edges. Every retained root has that named behavioral
+reason. No production, shared-support, contract, generated, inventory,
+workflow, or baseline path changed.
+
+Final changed-source SHA-256 identities are recorded below so later evidence
+can distinguish the implementation tree from this documentation refresh:
+
+| File | SHA-256 |
+| --- | --- |
+| `commands/docs_wiring_test.go` | `568FE727E0899F54597212AB8C5A635B5B424D528CE55DD0E09428BC7915E169` |
+| `commands/factory_wiring_test.go` | `55C0B96EAF775B51B33901642F19B159A88662B40234707FC281B6B9B5AA10E6` |
+| `commands/local_reusable_harness_test.go` | `6A01B78C23F04FAC374446A7A290CD3364CB1F4E11A95251D020BB3396F3DC1C` |
+| `commands/package_runtime_test.go` | `D35B7512D55B67F2D2EBEBBD6F44F1DDF16A282936D980F90E4FF7C309384AFB` |
+| `commands/run_wiring_test.go` | `3F32DDB96B8943744C9FA1135C08CB03C459D60BA2967A1CEBE160B84CF79689` |
+| `commands/session_wiring_test.go` | `16EB8AB9BF79A0B0CA8F29C05CE8FD4BE831797901D28748D0FA92DBB1DA0A11` |
+| `commands/shared_remote_harness_test.go` | `6E292EFF471F6166E9568F5D15FEAA272A7AE5A04B937D860C226F85A12BAFC9` |
+| `parameters/flags_test.go` | `6E5DEC09239BB46B8F5C1E362A43B8CF76D9530CEE37ABE7390CAAA3FA2D8C08` |
+| `parameters/json_values_test.go` | `5F63243FC67E4C8C4C604B8243C1DC0DEF518A7AF49962F526A1FA712F2A3517` |
+| `parameters/key_value_test.go` | `A3684560701920D1D982F07CE8774C2C8E92A8AE1B4FFCCCE2EAB485980320E2` |
+| `parameters/parameter_spine_test.go` | `8E9BECF853391C082E438E3A3B27E33D1B5F1F6FC4F94AA358BF34FE2F582AE2` |
+| `parameters/positional_values_test.go` | `249ED3299A3B99F458DD2F6E0005D3C5D386B9DA57F61149EF6C938A4C30672A` |
+| `parameters/working_directory_test.go` | `21804FB87B61A216D1A8B1CC8CBCA445FB22AB5D637D67F7C02EB0965CAA3428` |
+
+### Focused repeat, race, and boundary gates
+
+All commands below ran against the implementation tree above and exited `0`.
+The package elapsed values are diagnostic observations under a shared,
+contended Windows host, not portable latency claims.
+
+| Gate | Procedure | Result and property proved |
+| --- | --- | --- |
+| `GATE-CMD-REPEAT` | Command changed-witness selector group with `-count=3` | Package `25.079s`; C03, C12, C17, C21, C26, and C29 preserved public output/error/effect/isolation behavior. |
+| `GATE-CMD-RACE` | Same command changed-witness selector group with `-race -count=1` | Package `36.891s`; no race report. |
+| `GATE-PARAM-REPEAT` | P01-P21 default selector group with `-count=3` | Package `154.822s`; exact parser, invalid-to-valid, effect-delta, path, and cleanup assertions remained active. |
+| `GATE-PARAM-RACE` | P01-P21 default selector group with `-race -count=1` | Package `48.204s`; no race report. |
+| `GATE-C13-DIAGNOSTIC` | `TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup` with `-count=3` | Package `9.795s`; the isolated conflict witness passed three times after the cold loopback diagnostic. |
+| `GATE-BOUNDARY` | `go run ./cmd/functionalboundarycheck` | Exit `0`; the repository functional-boundary policy passed. |
+
+### Final local package runs
+
+Each ordinary package was run exactly once with `-count=1` after the focused
+gates. The supplied medians remain the before record. The final local result is
+an `n=1` observation, not a portable threshold claim.
+
+| Package | Supplied before median | Final Go package result | Final measured wall | Result |
+| --- | ---: | ---: | ---: | --- |
+| `commands` | `38.327s` | `36.738s` | `40.715s` | exit `0`; all C01-C29 active under the ordinary suite |
+| `parameters` | `28.615s` | `27.466s` | `31.436s` | exit `0`; all default P01-P21 active |
+
+P22 was run exactly once with the required tag and short policy:
+
+```text
+go test -tags=functionallong ./tests/functional/transport/cli/parameters \
+  -run '^TestCLIProviderExecResolvesWorkdirAgainstFactoryRuntimeRoot$' \
+  -count=1 -short=false -timeout=15m
+```
+
+It exited `0` with package time `1.463s` and measured wall `5.798s`. The
+assertion retained one complete Work, zero init/failed Work, one Codex command,
+the exact provider arguments, Factory-root-relative workdir, and non-empty
+stdin prompt.
+
+### One bounded profile-led floor pass
+
+Because both ordinary packages remain above three seconds, one and only one
+CPU-profile/JSON event pass was run for each package. The pass itemizes every
+top-level test identity; it is not an additional variance sample. The
+package-level setup/teardown remainder is the package event minus the sum of
+top-level test events. The compile/runner column is an upper bound from the
+outer invocation window and is not attributed to product behavior.
+
+| Package | Profile package event | Top-level test sum | Package setup/teardown remainder | Outer invocation window | Compile/runner upper bound |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `commands` | `68.887s` | `68.480s` | `0.407s` | `84.778s` log window | `15.891s` upper bound |
+| `parameters` | `81.770s` | `81.020s` | `0.750s` | `89.666s` | `7.896s` upper bound |
+
+Command top-level profile identities:
+
+| Test | Seconds |
+| --- | ---: |
+| `TestCLIDocsListsPackagedTopics` | `0.040` |
+| `TestCLIDocsEveryTopicRendersNonEmptyContent` | `1.670` |
+| `TestCLIDocsUnknownTopicReturnsActionableFailure` | `0.070` |
+| `TestCLIFactoryFlattenExpandPreservesMeaning` | `0.220` |
+| `TestCLIRunNamedFactory` | `12.460` |
+| `TestCLIRunInvalidFactoryReturnsValidationFailure` | `3.160` |
+| `TestCLIRunFactoryByPath` | `5.520` |
+| `TestCLIRunFactoryWritesPrimaryResultFromStdin` | `3.870` |
+| `TestCLIRunRejectsConflictingPositionalAndStdinInput` | `2.740` |
+| `TestCLIRunFailureWritesNoSuccessPayloadToStdout` | `3.600` |
+| `TestCLIRunCleanInvocationStdoutRemainsPipeable` | `10.180` |
+| `TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup` | `4.050` |
+| `TestCLISharedRemoteScenarios` | `20.730` |
+| `TestCLIWorkRenderProducesDeterministicGraph` | `0.170` |
+
+Parameter top-level profile identities:
+
+| Test | Seconds |
+| --- | ---: |
+| `TestRetiredSessionDispatchesCommandIsUnknown` | `0.050` |
+| `TestCLIStringBooleanAndRepeatedFlagsReachRequest` | `0.030` |
+| `TestCLIFlagAfterPositionalValueUsesDocumentedParsing` | `0.020` |
+| `TestCLIUnknownFlagFailsBeforeLifecycleStart` | `0.020` |
+| `TestCLIJSONParameterPreservesNestedObjectAndArray` | `2.960` |
+| `TestCLIInvalidJSONParameterNamesTheParameter` | `2.200` |
+| `TestCLIJSONNullAndEmptyValuesRemainDistinct` | `4.800` |
+| `TestRunKeyValueParametersReachFactoryInvocation` | `4.600` |
+| `TestRunKeyValuePreservesEqualsInValue` | `6.190` |
+| `TestRunDuplicateKeyUsesDocumentedPrecedence` | `9.270` |
+| `TestRunMalformedKeyValueFailsWithoutDispatch` | `19.290` |
+| `TestCLIParameterReusableProcessSpine` | `16.100` |
+| `TestRunAcceptsOnePositionalPrompt` | `0.080` |
+| `TestRunRejectsExtraPositionalValues` | `7.600` |
+| `TestOptionalSessionIDUsesDefaultWhenOmitted` | `0.230` |
+| `TestCLIRelativeFactoryPathResolvesFromInvocationDirectory` | `7.270` |
+| `TestCLIWorkingDirectoryDoesNotLeakIntoOutput` | `0.210` |
+| `TestCLIMissingWorkingDirectoryAssetFailsActionably` | `0.100` |
+
+The floor shows that the remaining local cost is overwhelmingly retained
+customer-path execution and shared remote/session observation, not redundant
+root assembly: the package-level setup/teardown remainder is under one second
+for each profile pass. No second optimization pass was authorized after this
+bounded profile result; the current-head PR runner is the authoritative shared
+host performance verdict.
+
+### VAL-001 clean-room validation report
+
+This report follows `factory/docs/standards/validation-loopback-template.md`.
+It was run read-only from detached clean worktrees at the exact implementation
+SHA. No implementation repair was made during any loopback attempt.
+
+#### Environment and artifact
+
+- Commit/build identifier: `49aaa22d66f4ec9f790fed4400561b796aada670`.
+- Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
+  had unrelated long-running Go/test/runtime processes, which is retained as
+  an environmental observation.
+- Customer entry point: production `root.BuildProcess` and `Process.Execute`,
+  with local-real filesystem/listener/HTTP boundaries and controlled effects
+  through `serviceedges.Edges`.
+- Cost/call budget: zero paid calls, zero real-remote/provider calls, `$0`.
+
+#### Project criteria
+
+| Criterion | Result | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Complete command matrix | PASS | Retry detached worktree at the exact SHA ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `59.252s`, wall `100.920s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same detached retry ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `32.578s`, wall `37.665s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS locally; cold loopback diagnostic recorded | Exact local tagged command exited `0`; detached cold starts twice reached the existing helper deadline before the injected API server was invoked. | Cold detached startup under this shared host; no assertion or timeout was changed. |
+| Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
+| Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
+| Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
+| UI/browser/accessibility/localization | PASS — not applicable | This lane changes functional test runtime construction only. | None. |
+
+#### Clean-room findings
+
+| ID | Severity | Reproduction | Expected | Actual | Disposition |
+| --- | --- | --- | --- | --- | --- |
+| `ENV-C15-001` | environmental diagnostic | First detached full command run at the exact SHA | C13 emits `INVOCATION_INPUT_SOURCE_CONFLICT` | Existing 20-second invocation context expired; stderr was `RUN_INVOCATION_TIMEOUT` after `27.43s`. The focused C13 selector then passed three times locally. | Not used as behavior evidence; no code or timeout change. |
+| `ENV-C15-002` | environmental diagnostic | Detached tagged P22 run at the exact SHA | Injected API server starts and the provider workdir witness completes | `process_factory.go:314` reported the API server starter was never invoked; daemon stderr ended with `Error: context canceled` under the existing 10-second helper deadline. The exact tagged local run passed. | Not used as behavior evidence; no code or timeout change. |
+
+#### Verdict
+
+`PASS` for the exact-head local-real implementation and package loopback, with
+the two cold-start environmental diagnostics explicitly retained as
+unproven edges. The diagnostics do not reproduce on the current worktree’s
+focused C13/P22 runs, and no assertion, skip, quarantine, or timeout was
+weakened to obtain the pass.
+
+The remaining hosted edges are current-head Backend Functional Coverage,
+current-head package timing, terminal CI, and merge. CI-run output and URLs
+must be recorded in the PR conversation only, never in this ledger commit.
+
+### Implementation-stage handoff status
+
+Local story evidence is complete and ready for final synchronization. The
+implementation-stage delivery criterion becomes satisfied only after this
+final head is pushed, the named PR is open, required CI has started on that
+head, and any blocking review feedback is addressed. Review owns terminal CI,
+conflict resolution, the hosted coverage/timing verdict, and merge.
