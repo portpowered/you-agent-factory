@@ -217,7 +217,10 @@ func runAgentForcedCleanupChild(t *testing.T) {
 		}
 	})
 
-	fixture = newAgentSharedProcessFixture(t)
+	// This child proves teardown after one admitted cancellation. It does not
+	// need to provision the complete behavior matrix that the parent already
+	// runs, so keep the forced-cleanup witness focused on its owned resources.
+	fixture = newAgentSharedProcessFixture(t, "Cancel")
 	fixture.start(t)
 	scenario := findAgentScenario(t, fixture.scenarios, "Cancel")
 	probe = &agentForcedCleanupProbe{fixture: fixture, scenario: scenario}

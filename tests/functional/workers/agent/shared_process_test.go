@@ -127,12 +127,15 @@ const (
 	agentSharedCancel      agentSharedScenarioBehavior = "cancel"
 )
 
-func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
+func newAgentSharedProcessFixture(t *testing.T, scenarioNames ...string) *agentSharedProcessFixture {
 	t.Helper()
 
-	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.ClearSeedInputs(t, hostDir)
-	scenarios := newAgentSharedScenarios(t)
+	hostDir := newAgentSharedFactoryDir(t)
+	support.WriteAgentConfig(t, hostDir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		"test-model",
+	))
+	scenarios := newAgentSharedScenarios(t, scenarioNames...)
 	router := newAgentSharedCommandRouter(t, scenarios)
 	api := support.NewProcessAPIServer()
 	apiClosed := make(chan struct{})
@@ -169,14 +172,58 @@ func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
 	return fixture
 }
 
-func newAgentSharedScenarios(t *testing.T) []agentSharedScenario {
+func newAgentSharedFactoryDir(t *testing.T) string {
+	t.Helper()
+
+	return support.ScaffoldFactory(t, map[string]any{
+		"name": "agent-shared",
+		"workTypes": []any{
+			map[string]any{
+				"name": "task",
+				"states": []any{
+					map[string]any{"name": "init", "type": "INITIAL"},
+					map[string]any{"name": "done", "type": "TERMINAL"},
+					map[string]any{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []any{
+			map[string]any{"name": "worker"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "process",
+				"worker": "worker",
+				"inputs": []any{
+					map[string]any{"workType": "task", "state": "init"},
+				},
+				"outputs": []any{
+					map[string]any{"workType": "task", "state": "done"},
+				},
+				"onFailure": []any{
+					map[string]any{"workType": "task", "state": "failed"},
+				},
+			},
+		},
+	})
+}
+
+func newAgentSharedScenarios(t *testing.T, scenarioNames ...string) []agentSharedScenario {
 	t.Helper()
 	cases := agentSharedScenarioSpecs()
+	selected := make(map[string]struct{}, len(scenarioNames))
+	for _, name := range scenarioNames {
+		selected[name] = struct{}{}
+	}
 
 	scenarios := make([]agentSharedScenario, 0, len(cases))
 	for _, testCase := range cases {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-		support.ClearSeedInputs(t, dir)
+		if len(selected) > 0 {
+			if _, ok := selected[testCase.name]; !ok {
+				continue
+			}
+		}
+		dir := newAgentSharedFactoryDir(t)
 		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 			testCase.provider,
 			testCase.model,
