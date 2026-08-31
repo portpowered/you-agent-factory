@@ -390,6 +390,10 @@ func (fixture *sharedExecutionFixture) recordSessionClosed(sessionID string) {
 type sharedExecutionRouteConfig struct {
 	provider platformprocess.CommandRunner
 	script   platformprocess.CommandRunner
+	// match admits deterministic routing for JavaScript child commands whose
+	// runtime working directory is the process project root rather than the
+	// scenario's source directory.
+	match func(platformprocess.CommandRequest) bool
 }
 
 type sharedExecutionCommandRouter struct {
@@ -402,6 +406,7 @@ type sharedExecutionCommandRoute struct {
 	factoryDir string
 	provider   platformprocess.CommandRunner
 	script     platformprocess.CommandRunner
+	match      func(platformprocess.CommandRequest) bool
 }
 
 func newSharedExecutionCommandRouter() *sharedExecutionCommandRouter {
@@ -425,6 +430,7 @@ func (router *sharedExecutionCommandRouter) register(factoryDir string, config s
 		factoryDir: factoryDir,
 		provider:   config.provider,
 		script:     config.script,
+		match:      config.match,
 	}
 	return nil
 }
@@ -481,8 +487,12 @@ func (router *sharedExecutionCommandRouter) Run(
 func (router *sharedExecutionCommandRouter) routeForRequest(request platformprocess.CommandRequest) *sharedExecutionCommandRoute {
 	var best *sharedExecutionCommandRoute
 	for factoryDir, route := range router.routes {
-		if !sharedExecutionPathBelongsTo(factoryDir, request.WorkDir) &&
-			!sharedExecutionPathBelongsTo(factoryDir, request.Command) {
+		matched := route.match != nil && route.match(request)
+		if !matched {
+			matched = sharedExecutionPathBelongsTo(factoryDir, request.WorkDir) ||
+				sharedExecutionPathBelongsTo(factoryDir, request.Command)
+		}
+		if !matched {
 			continue
 		}
 		if best == nil || len(factoryDir) > len(best.factoryDir) {

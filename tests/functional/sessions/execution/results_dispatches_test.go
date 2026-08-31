@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -222,18 +223,18 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
+	acquireSharedExecutionScenarioSlot(t)
 
 	dir := scaffoldDispatchCorrelationFactory(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: support.NewRecordingCommandRunner("unexpected live provider execution"),
+	fixture := sharedExecutionProcess(t)
+	registerSharedExecutionRoute(t, dir, sharedExecutionRouteConfig{
+		provider: support.NewStaticSuccessCommandRunner("dispatch correlation child COMPLETE"),
+		match: func(request platformprocess.CommandRequest) bool {
+			return strings.Contains(string(request.Stdin), dispatchCorrelationChildPrompt)
 		},
 	})
 
-	started := startDispatchCorrelationSync(t, server.URL(), dir)
+	started := startDispatchCorrelationSync(t, fixture.baseURL, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
@@ -241,7 +242,7 @@ func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 		t.Fatal("sessionId is empty, want durable Factory Session identifier")
 	}
 
-	listed := listFactorySessionDispatches(t, server.URL(), started.SessionId)
+	listed := listFactorySessionDispatches(t, fixture.baseURL, started.SessionId)
 	if len(listed.Dispatches) == 0 {
 		t.Fatalf("dispatch list is empty, want at least one public dispatch summary")
 	}
@@ -257,7 +258,7 @@ func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 		if summary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
 			t.Fatalf("dispatch summary status = %q, want COMPLETED", summary.Status)
 		}
-		detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
+		detail := getFactorySessionDispatch(t, fixture.baseURL, started.SessionId, summary.Id)
 		assertDispatchListDetailPublicCorrelation(t, started.SessionId, summary, detail)
 		matched = true
 		break

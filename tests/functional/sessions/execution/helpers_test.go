@@ -132,6 +132,8 @@ var dispatchCorrelationWorkflow = `return (async function () {
   const child = await agent.run({
     prompt: "` + dispatchCorrelationChildPrompt + `",
     label: "` + dispatchCorrelationChildLabel + `",
+    modelProvider: "codex",
+    model: "gpt-5-codex",
   });
   return { child };
 })();`
