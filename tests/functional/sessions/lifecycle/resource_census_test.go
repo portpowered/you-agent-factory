@@ -344,6 +344,9 @@ func removeLifecycleSessionPath(t testing.TB, folderPath string) bool {
 func assertDurableSessionTerminal(t testing.TB, baseURL, sessionID string) bool {
 	t.Helper()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	// Cleanup performs one direct durable-read probe after the terminate edge;
+	// this request deadline diagnoses an unreachable server and never polls for
+	// a terminal status.
 	client := &http.Client{Timeout: lifecycleCleanupProbeTimeout}
 	defer client.CloseIdleConnections()
 	response, err := client.Get(endpoint)

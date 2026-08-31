@@ -28,6 +28,8 @@ const (
 	placementTransportFactoryName    = "session-parity-transport-failure"
 	lifecycleNamedFactoryStateDir    = ".you-agent-factory"
 	lifecycleNamedFactoriesDir       = "factories"
+	lifecycleRemoteAdmissionTimeout  = 10 * time.Second
+	lifecycleRemoteDisconnectTimeout = 10 * time.Second
 )
 
 // TestCLIRemoteRunStartsDurableSessionOnSelectedServer proves the public
@@ -525,24 +527,39 @@ func runRemoteClientDisconnect(
 		"--remote", "--verbose", "run",
 		"--named", "remote-placement", "--json", "--output", "response-stream", "--no-record", prompt,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	admissionOutput := newRemoteAdmissionOutput()
 	_, command := client.startCLI(t, ctx, workingDir, serverURL, admissionOutput, args...)
+	admissionDeadline := time.NewTimer(lifecycleRemoteAdmissionTimeout)
+	defer admissionDeadline.Stop()
 	select {
 	case <-admissionOutput.started:
-	case <-time.After(10 * time.Second):
+	case <-command.Done():
+		// Process completion before the Session ID appears is a real admission
+		// failure. Observe that process edge immediately instead of waiting for
+		// the deadline to manufacture a readiness result.
+		command.AcceptError()
+		t.Fatalf("remote client terminated before durable admission: client error=%v\nadmission output:\n%s", command.Err(), admissionOutput.String())
+	case <-admissionDeadline.C:
+		// The admission response is the only deterministic edge available to a
+		// submitting client before it disconnects. This deadline diagnoses
+		// missing admission evidence; it is not a success or status-poll loop.
 		command.Stop(t)
 		t.Fatalf("remote client did not observe durable admission: client error=%v\nadmission output:\n%s", command.Err(), admissionOutput.String())
 	}
 	cancel()
+	disconnectDeadline := time.NewTimer(lifecycleRemoteDisconnectTimeout)
+	defer disconnectDeadline.Stop()
 	select {
 	case <-command.Done():
 		command.AcceptError()
 		if command.Err() == nil {
 			t.Fatal("remote client returned nil after submitting-client disconnect")
 		}
-	case <-time.After(10 * time.Second):
+	case <-disconnectDeadline.C:
+		// A disconnected client must still join its Process.Execute invocation;
+		// this deadline diagnoses a leaked response stream after cancellation.
 		command.Stop(t)
 		t.Fatal("remote client did not return after submitting connection cancellation")
 	}
@@ -680,7 +697,13 @@ func newRemoteAdmissionOutput() *remoteAdmissionOutput {
 func (writer *remoteAdmissionOutput) Write(p []byte) (int, error) {
 	writer.mu.Lock()
 	_, _ = writer.output.Write(p)
-	started := strings.Contains(writer.output.String(), "remote durable start response") || strings.Contains(writer.output.String(), "session-started/")
+	// Signal only after the output contains the server-owned Session identity.
+	// A log prefix or an incomplete event frame is not enough to safely cancel
+	// the submitting client and inspect the admitted durable Session.
+	started := false
+	if _, ok := remoteSessionIDFromAdmissionOutputValue(writer.output.String()); ok {
+		started = true
+	}
 	writer.mu.Unlock()
 	if started {
 		writer.once.Do(func() { close(writer.started) })
@@ -724,6 +747,14 @@ func (writer *localInvocationReadinessOutput) String() string {
 
 func remoteSessionIDFromAdmissionOutput(t *testing.T, output string) string {
 	t.Helper()
+	if sessionID, ok := remoteSessionIDFromAdmissionOutputValue(output); ok {
+		return sessionID
+	}
+	t.Fatalf("durable admission output did not contain a session id: %s", output)
+	return ""
+}
+
+func remoteSessionIDFromAdmissionOutputValue(output string) (string, bool) {
 	for _, marker := range []string{"sessionId=", `"sessionId":"`} {
 		start := strings.Index(output, marker)
 		if start < 0 {
@@ -734,11 +765,10 @@ func remoteSessionIDFromAdmissionOutput(t *testing.T, output string) string {
 			value = value[:end]
 		}
 		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
+			return strings.TrimSpace(value), true
 		}
 	}
-	t.Fatalf("durable admission output did not contain a session id: %s", output)
-	return ""
+	return "", false
 }
 
 func postRemoteFunctionalExecution(

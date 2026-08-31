@@ -72,6 +72,8 @@ func (server *lifecycleHTTPServer) waitForBaseURL(timeout time.Duration) (string
 }
 
 func (server *lifecycleHTTPServer) waitClosed() error {
+	// Listener shutdown is a process-lifecycle witness. The bounded wait
+	// diagnoses a server that does not honor cancellation; it is not polling.
 	ctx, cancel := context.WithTimeout(context.Background(), lifecycleFixtureShutdownTimeout)
 	defer cancel()
 	select {
@@ -87,6 +89,8 @@ func (server *lifecycleHTTPServer) probeClosed() error {
 	if !ok {
 		return fmt.Errorf("shared lifecycle listener has no bound URL")
 	}
+	// A short request deadline bounds the negative-liveness probe after the
+	// listener's shutdown edge; any response is a failure, not success evidence.
 	client := &http.Client{Timeout: lifecycleCleanupProbeTimeout}
 	defer client.CloseIdleConnections()
 	response, err := client.Get(strings.TrimSuffix(baseURL, "/") + "/status")

@@ -123,6 +123,9 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	done := make(chan error, 1)
 	serverInvocationID := ledger.beginInvocation("shared server Process.Execute")
 	go func() { done <- process.Execute(inputs.Input) }()
+	// The injected listener is the deterministic readiness edge for every
+	// lifecycle case. This deadline only diagnoses a missing shared listener;
+	// it is not a completion or status-polling mechanism.
 	baseURL, err := api.waitForBaseURL(15 * time.Second)
 	if err != nil {
 		stopFailedFixture(cancel, rootDir, process, done)
@@ -258,6 +261,8 @@ func waitForLifecycleProcess(done chan error) error {
 	if done == nil {
 		return nil
 	}
+	// Shared-host teardown must join the server Process.Execute goroutine. The
+	// bounded wait diagnoses a leaked process during listener lifecycle cleanup.
 	timer := time.NewTimer(lifecycleFixtureShutdownTimeout)
 	defer timer.Stop()
 	select {
@@ -272,6 +277,8 @@ func closeLifecycleProcess(process support.ApplicationProcess) error {
 	if process == nil {
 		return nil
 	}
+	// Process.Close is the explicit shared-role teardown edge. Its bounded
+	// context diagnoses a role that fails to release its lifecycle resources.
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), lifecycleFixtureShutdownTimeout)
 	defer cancelClose()
 	return process.Close(closeCtx)
