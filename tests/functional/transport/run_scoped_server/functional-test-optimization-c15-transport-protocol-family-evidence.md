@@ -3,8 +3,8 @@
 This ledger is the package-local evidence for
 `functional-test-optimization-c15-transport-protocol-family-001`.
 It freezes the current RS-01..17 witness before any fixture topology change.
-It is a characterization record, not post-change parity or performance
-evidence.
+The opening section is the characterization record; the review follow-up below
+records post-change parity and performance evidence.
 
 ## Artifact and provenance
 
@@ -152,7 +152,75 @@ PASS; no race report; one controlled root, two balanced listeners, active=0
 
 These focused runs prove RS-01..17 parity at the declared functional level,
 fresh shared-fixture isolation, cleanup balance, and material root reduction.
-They do not prove the comparable PR-CI under-three-second timing gate,
-functional coverage, the story-005 single final full-package run, clean-room
-loopback, terminal CI, or merge; those remain GATE-PERF, GATE-COVERAGE,
-GATE-LOOP, and GATE-PR inputs.
+The comparable CI timing and irreducibility evidence is recorded below;
+functional coverage, terminal CI, and merge remain review-owned gates.
+
+## Review follow-up: comparable timing and irreducibility
+
+### Comparable package timing
+
+The following is the comparable package-level denominator requested in review.
+Both sides use the `seconds` package field from the same CI workflow's
+`functional-timing-summary.json` on Linux X64; local Windows wall time is not
+used for this comparison.
+
+| Package | Before CI package median / sample | After CI package median / sample | Delta | Disposition |
+| --- | ---: | ---: | ---: | --- |
+| `run_scoped_server` | 29.183s | 21.854s | -7.329s (-25.1%) | Direct `<3s` target blocked; irreducibility alternative complete |
+
+Before provenance is the base CI run [33337769566](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566), head `42eeee4472656b8290f798c36a5b8c871b24d7d0`, Backend Functional Coverage job [99327753325](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/job/99327753325), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/artifacts/9739638631). The `29.183s` value is the supplied admission median and is now tied to the same package timing field and CI denominator.
+
+After provenance is the matching PR CI run [33348730534](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534), head `c2c429a62dcb0e86eaca8ba87eb712ce2756387a`, Backend Functional Coverage job [99357847982](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/job/99357847982), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/artifacts/9742979739). The artifact's `functional-tests.md` supplies the post-change top-level test timings below.
+
+### Complete measured irreducibility table
+
+The CI artifact reports top-level test elapsed cost. The seven named child
+rows below use focused `go test -json -count=1 -timeout=20m` measurements at
+the final head because CI's report aggregates those children into their parent
+test. The focused commands all exited `0`; parent CI elapsed values are shown
+in parentheses as the corresponding top-level report value, not as a sum across
+local child runs. Every row retains the exact boundary listed in the witness
+map, names the owner of the irreducible cost, and records the direct-target
+disposition.
+
+| Case | Measured elapsed cost | Retained real boundary | Irreducibility reason / owner | Resulting disposition |
+| --- | ---: | --- | --- | --- |
+| RS-01 | 2.510s focused child (parent CI 5.180s) | Controlled listener, provider edge, Factory Session, and fresh CLI streams | Hosted provider invocation and listener effect stay case-local; `RS-HOSTED-PROVIDER` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-02 | 7.990s focused child (parent CI 5.180s) | Controlled listener/browser, site input, Factory Session, and fresh stdin | Site/browser and file/stdin state cannot cross a case; `RS-HOSTED-PROVIDER` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-03 | 1.680s focused child (parent CI 2.120s) | Controlled dashboard handler/listener and raw JavaScript readiness | Listener context and dashboard probe stay case-keyed; `RS-HOSTED-JS` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-04 | 1.540s focused child (parent CI 2.120s) | Controlled dashboard handler/listener and browser site path | Browser/site lifecycle is case-local; `RS-HOSTED-JS` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-05 | 1.270s PR-CI top-level | Local-real HTTP handler probe for an unavailable Worker Session owner | Missing-owner handler composition remains isolated; `RS-DIRECT-HANDLER` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-06 | 1.630s PR-CI top-level | Busy TCP port, production fallback bind, and post-run rebind | Port occupancy and listener release are real OS effects; `RS-LISTENER-COHORT` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-07 | 1.380s PR-CI top-level | Exact production bind and post-run rebind | Requested-port identity and release cannot be shared; `RS-LISTENER-COHORT` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-08 | 0.330s PR-CI top-level | Local remote-placement HTTP endpoint and zero local listener effect | Remote request/result ownership is case-local; `RS-REMOTE-DISPATCH` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-09 | 1.010s PR-CI top-level | Busy exact port and production bind failure | Bind failure and no-readiness cleanup are real listener boundaries; `RS-LISTENER-COHORT` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-10 | 0.110s PR-CI top-level | CLI placement validation with zero listener effect | Invalid remote bind target must fail before initialization; `RS-PLACEMENT-VALIDATION` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-11 | 0.040s focused child (parent CI 0.050s) | Pre-initialization conflict and aggregate zero-effect counters | Both flag placements must retain the same parent-owned zero-effect proof; `RS-CONFLICT-PAIR` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-12 | 0.040s focused child (parent CI 0.050s) | Pre-initialization conflict and aggregate zero-effect counters | Both flag placements must retain the same parent-owned zero-effect proof; `RS-CONFLICT-PAIR` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-13 | 0.020s PR-CI top-level | Remote local-only server validation and zero listener effect | Local-only command rejection precedes listener startup; `RS-PLACEMENT-VALIDATION` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-14 | 0.040s PR-CI top-level | Remote local-only Factory validation before file inspection | Placement rejection and missing-path state stay case-local; `RS-PLACEMENT-VALIDATION` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-15 | 0.040s PR-CI top-level | Malformed exact-address parser and zero listener effect | Parser failure precedes runtime/listener acquisition; `RS-PLACEMENT-VALIDATION` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-16 | 1.150s PR-CI top-level | Cross-process terminal-port lock, port 65535 listener, and release | Global terminal-port ownership cannot be shared; `RS-TERMINAL-PORT-ISOLATED` | **BLOCKED** direct `<3s`; alternative complete |
+| RS-17 | 4.020s PR-CI top-level | Record-then-replay sequence, recording files, listener, and rebind | Replay identity and terminal state are a multi-step sequence; `RS-REPLAY-SEQUENCE-ISOLATED` | **BLOCKED** direct `<3s`; alternative complete |
+
+Focused child timing procedures at the final head were:
+
+```text
+go test -json -count=1 -timeout=20m ./tests/functional/transport/run_scoped_server -run '^TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles$'
+exit 0; named_positional_server=2.510s; file_stdin_site=7.990s; parent=10.490s
+
+go test -json -count=1 -timeout=20m ./tests/functional/transport/run_scoped_server -run '^TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness$'
+exit 0; server=1.680s; site=1.540s; parent=3.230s
+
+go test -json -count=1 -timeout=20m ./tests/functional/transport/run_scoped_server -run '^TestRemotePlacementRejectsLocalHostingBeforeInitialization$'
+exit 0; persistent_flags_before_run=0.040s; persistent_flags_after_run=0.040s; parent=0.190s
+```
+
+### GATE-PERF disposition
+
+The post-change package sample remains above three seconds, so the direct
+under-three-second branch is recorded as **BLOCKED**. The permitted alternative
+is complete: all 17 rows have measured cost, every retained real boundary has
+an explicit irreducibility reason and owner, and the bounded root-reuse pass
+was already completed before this evidence follow-up. No residual row is
+silently treated as an optimization opportunity or omitted from the matrix.

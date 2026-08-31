@@ -2,8 +2,9 @@
 
 This ledger is the package-local evidence for
 `functional-test-optimization-c15-transport-protocol-family-001`.
-It freezes ACP-01..08 before fixture topology changes. It is a
-characterization record, not post-change parity or performance evidence.
+It freezes ACP-01..08 before fixture topology changes. The opening section is
+the characterization record; the review follow-up below records post-change
+parity and performance evidence.
 
 ## Artifact and provenance
 
@@ -143,8 +144,50 @@ PASS; package-reported 23.373s; no race report; shared-control roots=1/1
 These runs prove ACP-01..08 exact protocol, lifecycle, identity/order,
 transcript, failed-write, permission, EOF, and stderr assertions at local-real
 fidelity, plus fresh case routing, balanced root cleanup, repeat stability, and
-no detected race in the reusable cohort. They do not prove the PR-CI package
-under-three-second performance gate, functional coverage, the story-005 one
-final full-package run, ACPX executable behavior, transport-family loopback,
-terminal CI, or merge; those remain GATE-PERF, GATE-COVERAGE, GATE-LOOP, and
-GATE-PR inputs.
+no detected race in the reusable cohort. The comparable CI timing and
+irreducibility evidence is recorded below; functional coverage, terminal CI,
+and merge remain review-owned gates.
+
+## Review follow-up: comparable timing and irreducibility
+
+### Comparable package timing
+
+The following is the comparable package-level denominator requested in review.
+Both sides use the `seconds` package field from the same CI workflow's
+`functional-timing-summary.json` on Linux X64; local Windows wall time is not
+used for this comparison.
+
+| Package | Before CI package median / sample | After CI package median / sample | Delta | Disposition |
+| --- | ---: | ---: | ---: | --- |
+| `acp/stdio` | 21.128s | 18.073s | -3.055s (-14.5%) | Direct `<3s` target blocked; irreducibility alternative complete |
+
+Before provenance is the base CI run [33337769566](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566), head `42eeee4472656b8290f798c36a5b8c871b24d7d0`, Backend Functional Coverage job [99327753325](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/job/99327753325), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/artifacts/9739638631). The `21.128s` value is the supplied admission median and is now tied to the same package timing field and CI denominator.
+
+After provenance is the matching PR CI run [33348730534](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534), head `c2c429a62dcb0e86eaca8ba87eb712ce2756387a`, Backend Functional Coverage job [99357847982](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/job/99357847982), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/artifacts/9742979739). The artifact's `functional-tests.md` supplies the post-change top-level test timings below.
+
+### Complete measured irreducibility table
+
+The CI artifact reports top-level test elapsed cost. Each ACP row is a
+top-level test, so no CI aggregation allocation is needed. Every row retains
+the exact boundary listed in the witness map, names the owner of the
+irreducible cost, and records the direct-target disposition.
+
+| Case | Measured elapsed cost | Retained real boundary | Irreducibility reason / owner | Resulting disposition |
+| --- | ---: | --- | --- | --- |
+| ACP-01 | 3.130s PR-CI top-level | Provider failure over real ACP pipes followed by stdin EOF | Failure terminalization and command return are real stream lifecycle edges; `ACP-CONTROL-PROMPT-ROOT` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-02 | 2.760s PR-CI top-level | Captured-prompt cancellation, later prompt, and stdin EOF | Cancellation scope and subsequent work require fresh Session/pipe state; `ACP-CONTROL-PROMPT-ROOT` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-03 | 1.860s PR-CI top-level | Active Factory Session close, cancellation, and ACP response barrier | Close-safe Session lifecycle must remain case-local even with shared graph; `ACP-CONTROL-PROMPT-ROOT` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-04 | 1.490s PR-CI top-level | Close/load identity replay and ordered retained items | Multi-step identity sequence cannot share terminal Session state; `ACP-CONTROL-PROMPT-ROOT` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-05 | 1.510s PR-CI top-level | Caller cwd to provider WorkDir over real ACP pipes and EOF | Caller-supplied layout and provider execution must remain fresh; `ACP-CONTROL-PROMPT-ROOT` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-06 | 2.470s PR-CI top-level | Real frame bytes/order, malformed frames, transcript rotation, and files | Sequence, rotation, and publication ownership cannot mix across connections; `ACP-TRANSCRIPT-ROTATION` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-07 | 0.860s PR-CI top-level | Failing stdout writer and transcript cardinality | Failed outbound bytes must remain tied to one writer/recorder; `ACP-OUTBOUND-FAILURE` | **BLOCKED** direct `<3s`; alternative complete |
+| ACP-08 | 1.590s PR-CI top-level | Owner-only transcript permission under a fresh HOME | Artifact permissions and content ownership cannot be inferred from a shared HOME; `ACP-PERMISSION-ISOLATED` | **BLOCKED** direct `<3s`; alternative complete |
+
+### GATE-PERF disposition
+
+The post-change package sample remains above three seconds, so the direct
+under-three-second branch is recorded as **BLOCKED**. The permitted alternative
+is complete: all eight rows have measured cost, every retained real boundary
+has an explicit irreducibility reason and owner, and the bounded root-reuse
+pass was already completed before this evidence follow-up. No residual row is
+silently treated as an optimization opportunity or omitted from the matrix.

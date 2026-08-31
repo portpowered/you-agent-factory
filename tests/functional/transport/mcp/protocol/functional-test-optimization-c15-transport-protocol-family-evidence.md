@@ -2,8 +2,9 @@
 
 This ledger is the package-local evidence for
 `functional-test-optimization-c15-transport-protocol-family-001`.
-It freezes MCP-P-01..03 before fixture-topology changes. It is a
-characterization record, not post-change parity or performance evidence.
+It freezes MCP-P-01..03 before fixture-topology changes. The opening section
+is the characterization record; the review follow-up below records
+post-change parity and performance evidence.
 
 ## Artifact and provenance
 
@@ -98,6 +99,45 @@ The useful repeat and race procedures passed:
 | `go test -race -v -count=1 -timeout=15m ./tests/functional/transport/mcp/protocol -run '^TestMCP(MalformedParametersReturnInvalidParams|MissingFactorySessionReturnsCanonicalNotFound)$'` | exit 0; no race report; one shared root built/closed; two invocations and streams balanced; two working and home roots removed; package 67.596s under the race detector. |
 
 These procedures prove changed shared-root isolation and the retained local-real
-shutdown boundary, not portable package timing, functional coverage,
-built-child behavior, remote compatibility, or the final package run. Story
-005 owns the final execution and GATE-PERF/GATE-COVERAGE/GATE-LOOP.
+shutdown boundary. The comparable CI timing and irreducibility evidence is
+recorded below; functional coverage, terminal CI, and merge remain
+review-owned gates.
+
+## Review follow-up: comparable timing and irreducibility
+
+### Comparable package timing
+
+The following is the comparable package-level denominator requested in review.
+Both sides use the `seconds` package field from the same CI workflow's
+`functional-timing-summary.json` on Linux X64; local Windows wall time is not
+used for this comparison.
+
+| Package | Before CI package median / sample | After CI package median / sample | Delta | Disposition |
+| --- | ---: | ---: | ---: | --- |
+| `mcp/protocol` | 6.598s | 5.961s | -0.637s (-9.7%) | Direct `<3s` target blocked; irreducibility alternative complete |
+
+Before provenance is the base CI run [33337769566](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566), head `42eeee4472656b8290f798c36a5b8c871b24d7d0`, Backend Functional Coverage job [99327753325](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/job/99327753325), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/artifacts/9739638631). The `6.598s` value is the supplied admission median and is now tied to the same package timing field and CI denominator.
+
+After provenance is the matching PR CI run [33348730534](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534), head `c2c429a62dcb0e86eaca8ba87eb712ce2756387a`, Backend Functional Coverage job [99357847982](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/job/99357847982), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/artifacts/9742979739). The artifact's `functional-tests.md` supplies the post-change top-level test timings below.
+
+### Complete measured irreducibility table
+
+All three MCP protocol rows are top-level tests in the CI report, so no
+aggregation allocation is needed. Every row retains the exact boundary listed
+in the witness map, names the owner of the irreducible cost, and records the
+direct-target disposition.
+
+| Case | Measured elapsed cost | Retained real boundary | Irreducibility reason / owner | Resulting disposition |
+| --- | ---: | --- | --- | --- |
+| MCP-P-01 | 1.410s PR-CI top-level | Real protocol initialize plus malformed tools/call frame and `-32602` response | Invalid-params envelope and response-ID preservation cross the protocol stream; `MCP-PROTOCOL-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-P-02 | 0.940s PR-CI top-level | Real protocol request/response for a missing Factory Session | Canonical not-found result and response decoding remain request-local; `MCP-PROTOCOL-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-P-03 | 1.320s PR-CI top-level | Isolated cancellation, serve return, stream closure, and stdout EOF | Descriptor/EOF shutdown is the genuine whole-protocol boundary; `MCP-PROTOCOL-SHUTDOWN` | **BLOCKED** direct `<3s`; alternative complete |
+
+### GATE-PERF disposition
+
+The post-change package sample remains above three seconds, so the direct
+under-three-second branch is recorded as **BLOCKED**. The permitted alternative
+is complete: all three rows have measured cost, every retained real boundary
+has an explicit irreducibility reason and owner, and the bounded root-reuse
+pass was already completed before this evidence follow-up. No residual row is
+silently treated as an optimization opportunity or omitted from the matrix.

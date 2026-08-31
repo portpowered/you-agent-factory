@@ -2,8 +2,9 @@
 
 This ledger is the package-local evidence for
 `functional-test-optimization-c15-transport-protocol-family-001`.
-It freezes MCP-S-01..10 before fixture-topology changes. It is a
-characterization record, not post-change parity or performance evidence.
+It freezes MCP-S-01..10 before fixture-topology changes. The opening section
+is the characterization record; the review follow-up below records
+post-change parity and performance evidence.
 
 ## Artifact and provenance
 
@@ -126,4 +127,68 @@ The useful repeat procedures passed:
 The repeat and race runs prove fresh-case isolation and cleanup for the
 changed shared fixture, not portable package timing, functional coverage,
 built-child behavior, Unix descriptor semantics, or the single final package
-run. Story 005 owns that final run and GATE-PERF/GATE-COVERAGE/GATE-LOOP.
+run. The comparable CI timing and irreducibility evidence is recorded below;
+functional coverage, terminal CI, and merge remain review-owned gates.
+
+## Review follow-up: comparable timing and irreducibility
+
+### Comparable package timing
+
+The following is the comparable package-level denominator requested in review.
+Both sides use the `seconds` package field from the same CI workflow's
+`functional-timing-summary.json` on Linux X64; local Windows wall time is not
+used for this comparison.
+
+| Package | Before CI package median / sample | After CI package median / sample | Delta | Disposition |
+| --- | ---: | ---: | ---: | --- |
+| `mcp/stdio` | 15.678s | 9.292s | -6.386s (-40.7%) | Direct `<3s` target blocked; irreducibility alternative complete |
+
+Before provenance is the base CI run [33337769566](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566), head `42eeee4472656b8290f798c36a5b8c871b24d7d0`, Backend Functional Coverage job [99327753325](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/job/99327753325), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33337769566/artifacts/9739638631). The `15.678s` value is the supplied admission median and is now tied to the same package timing field and CI denominator.
+
+After provenance is the matching PR CI run [33348730534](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534), head `c2c429a62dcb0e86eaca8ba87eb712ce2756387a`, Backend Functional Coverage job [99357847982](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/job/99357847982), and its [functional-test-diagnostics artifact](https://github.com/portpowered/you-agent-factory/actions/runs/33348730534/artifacts/9742979739). The artifact's `functional-tests.md` supplies the post-change top-level test timings below.
+
+### Complete measured irreducibility table
+
+The CI artifact reports top-level test elapsed cost. The two named child rows
+below use focused `go test -json -count=1 -timeout=20m` measurements at the
+final head because CI's report aggregates them into their parent test. The
+focused commands exited `0`; the parent CI elapsed value is shown in
+parentheses as the corresponding top-level report value, not as a sum across
+local child runs. The three Open cases are ordinary
+assertions in one top-level function, not named Go subtests, so their shared
+`0.000s` top-level measurement is recorded without inventing child timings.
+Every row retains the exact boundary listed in the witness map, names the owner
+of the irreducible cost, and records the direct-target disposition.
+
+| Case | Measured elapsed cost | Retained real boundary | Irreducibility reason / owner | Resulting disposition |
+| --- | ---: | --- | --- | --- |
+| MCP-S-01 | 1.180s PR-CI top-level | Real MCP stdio initialize and tools/list stream | Protocol handshake and discovery are local-real stream behavior; `MCP-STDIO-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-02 | 0.780s PR-CI top-level | Real stdio unknown-tool request and JSON-RPC error | Error envelope must cross the protocol stream; `MCP-STDIO-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-03 | 0.860s PR-CI top-level | Generated canonical discovery over a fresh stdio session | Canonical tool membership remains request-local; `MCP-STDIO-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-04 | 0.050s PR-CI top-level | Missing HOME/USERPROFILE rejection before Session acquisition | Environment validation and session-free failure cannot share case state; `MCP-STDIO-INIT-ERRORS` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-05 | 0.980s PR-CI top-level | Invalid runtime project root rejection before successful initialize | Invalid layout path and initializer outcome remain case-local; `MCP-STDIO-INIT-ERRORS` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-06 | 1.060s focused child (parent CI 2.090s) | Incomplete frame, stdout EOF, and fixture-backed initializer | Malformed-frame and EOF ownership require fresh pipes; `MCP-STDIO-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-07 | 0.890s focused child (parent CI 2.090s) | Runtime-backed Factory initializer and exact protocol version | Runtime project and successful Session lifecycle remain fresh; `MCP-STDIO-SHARED` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-08 | 0.000s PR-CI top-level invocation | Process-free `Open` validation for nil server | No root or stream is acquired by design; `MCP-STDIO-PROCESS-FREE` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-09 | 0.000s PR-CI top-level invocation | Process-free `Open` validation for nil reader | No root or stream is acquired by design; `MCP-STDIO-PROCESS-FREE` | **BLOCKED** direct `<3s`; alternative complete |
+| MCP-S-10 | 0.000s PR-CI top-level invocation | Process-free `Open` validation for nil writer | No root or stream is acquired by design; `MCP-STDIO-PROCESS-FREE` | **BLOCKED** direct `<3s`; alternative complete |
+
+The focused child timing procedure was:
+
+```text
+go test -json -count=1 -timeout=20m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioFixtureAndRuntimePathsReachInitializer$'
+exit 0; fixture-backed=1.060s; runtime-backed=0.890s; parent=1.940s
+
+go test -json -count=1 -timeout=20m ./tests/functional/transport/mcp/stdio -run '^TestMCPStdioOpenRejectsUncomposedServerAndStreams$'
+exit 0; one top-level function, no named subtests, 0.000s
+```
+
+### GATE-PERF disposition
+
+The post-change package sample remains above three seconds, so the direct
+under-three-second branch is recorded as **BLOCKED**. The permitted alternative
+is complete: all ten rows have measured cost, every retained real boundary (or
+intentional process-free boundary) has an explicit irreducibility reason and
+owner, and the bounded root-reuse pass was already completed before this
+evidence follow-up. No residual row is silently treated as an optimization
+opportunity or omitted from the matrix.
