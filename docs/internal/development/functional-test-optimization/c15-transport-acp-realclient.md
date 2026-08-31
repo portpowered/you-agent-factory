@@ -292,3 +292,66 @@ RC-SESSION-CLOSE on the converted path, final package timing, and PR evidence
 remain unproven. The retained pinned ACPX/OS witnesses and all existing
 failure characterization remain unchanged pending an owner decision on this
 boundary.
+
+## TASK-002 bounded close and cancellation evidence
+
+The reusable process slice now also drives an in-flight prompt and sends
+`session/close` over the same ACP connection before the provider edge returns.
+The command-runner edge waits on its invocation context, so the production
+Factory Sessions close control cancels the prompt without a sleep or a second
+application process. A single response reader correlates the canceled
+`session/prompt` and successful `session/close` responses by JSON-RPC id while
+retaining interleaved `session/update` frames. This proves converted close and
+cancellation at the controlled provider edge; the pinned ACPX queue-owner
+assertion remains owned by the retained local-real witness.
+
+Focused procedure, after the close/cancellation edit:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+The command exited `0` with a package wall of `10.334s`. The existing two
+marker-isolated turns passed their non-empty assistant, Worker
+`tool_call`/`tool_call_update` ordering, `end_turn`, and exact-two-provider
+assertions; the additional active-turn case returned `cancelled` and its
+`session/close` response decoded successfully on the same process and
+connection.
+
+Repeat and synchronization evidence also exited `0`:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=2 -timeout=15m -v
+```
+
+Both repetitions passed; package wall was `12.785s` on the noisy local host.
+
+```text
+go test -race ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+The race command exited `0` with a package wall of `14.579s` and no race
+report. The changed parser, process, and cleanup characterization remained
+green:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^(TestCharacterizePinnedAcpxFailureClassifications|TestRunBoundedCommand)' \
+  -count=1 -timeout=5m
+```
+
+It exited `0` in `2.840s`, including both local-real process-tree witnesses
+and the controlled malformed-output, protocol, ownership, partial-session,
+and cleanup-failure branches.
+
+These results extend the converted proof to RC-SESSION-CLOSE and RC-CANCEL
+for the one already-bound session, but do not prove RC-SHARED-ISOLATION or
+full two-independent-session prompt parity. A second `session/new` still
+produces a distinct identity and workspace, while its first Factory prompt
+cannot be admitted after the first activation because production retains the
+fixed `~default` runtime scope. Story 002 therefore remains blocked pending
+the previously recorded lifecycle/placement decision; no production or
+shared-support change was made.
