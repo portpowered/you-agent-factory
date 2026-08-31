@@ -83,7 +83,10 @@ func requirePinnedAcpxPrerequisites(t *testing.T) {
 		}
 		t.Skip("set INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1 to run pinned real-client ACP evidence")
 	}
-	if !nodeSupportsPinnedAcpx() {
+	started := time.Now()
+	supported := nodeSupportsPinnedAcpx()
+	t.Logf("real ACP evidence phase: phase=node-version duration=%s", time.Since(started))
+	if !supported {
 		if required {
 			t.Fatal("real ACP evidence prerequisite failed: Node.js 22.13.0 or later is required")
 		}
@@ -106,6 +109,12 @@ type pinnedAcpxScenario struct {
 	// cleanupCloser is populated only by controlled characterization; the real
 	// scenario closes through the pinned ACPX command below.
 	cleanupCloser func() error
+}
+
+func logAcpxPhaseTiming(t *testing.T, phase string, duration time.Duration) {
+	if t != nil {
+		t.Logf("real ACP evidence phase: phase=%s duration=%s", phase, duration)
+	}
 }
 
 type realClientEvidence struct {
@@ -158,9 +167,12 @@ func buildCurrentYouBinary(t *testing.T, scenario *pinnedAcpxScenario) {
 	if err := os.MkdirAll(filepath.Dir(scenario.serverPath), 0o755); err != nil {
 		t.Fatalf("real ACP evidence setup failed: create disposable binary directory")
 	}
+	started := time.Now()
 	if _, err := runBoundedCommand(scenario.repoRoot, nil, "build-current-you", "go", "build", "-o", scenario.serverPath, "./cmd/factory"); err != nil {
+		logAcpxPhaseTiming(t, "go-build", time.Since(started))
 		t.Fatal(err)
 	}
+	logAcpxPhaseTiming(t, "go-build", time.Since(started))
 }
 
 func (scenario *pinnedAcpxScenario) writeConfig(t *testing.T) {
@@ -207,6 +219,7 @@ func (scenario *pinnedAcpxScenario) writeDeterministicProvider(t *testing.T) {
 
 func (scenario *pinnedAcpxScenario) preparePinnedAcpx(t *testing.T) {
 	t.Helper()
+	started := time.Now()
 	output, err := runBoundedCommand(
 		scenario.project,
 		scenario.environment(),
@@ -218,6 +231,7 @@ func (scenario *pinnedAcpxScenario) preparePinnedAcpx(t *testing.T) {
 		"acpx",
 		"--version",
 	)
+	logAcpxPhaseTiming(t, "npm-acpx-acquisition", time.Since(started))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +306,7 @@ func (scenario *pinnedAcpxScenario) newSession(t *testing.T) acpxSessionResult {
 	// incomplete machine-readable result. Mark cleanup as necessary before the
 	// request so t.Cleanup still closes any session that may have been created.
 	scenario.sessionMayExist = true
-	output, err := scenario.run("create-session", "--format", "json", realClientAgentName, "sessions", "new")
+	output, err := scenario.run(t, "create-session", "--format", "json", realClientAgentName, "sessions", "new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +318,7 @@ func (scenario *pinnedAcpxScenario) prompt(t *testing.T) []byte {
 	// Keep the input ephemeral and semantically empty. The assertion below
 	// retains only result-presence and terminal facts, never prompt or result
 	// payloads from the real-client output.
-	output, err := scenario.run(
+	output, err := scenario.run(t,
 		"complete-prompt",
 		"--format", "json",
 		"--timeout", "45",
@@ -320,7 +334,7 @@ func (scenario *pinnedAcpxScenario) prompt(t *testing.T) []byte {
 
 func (scenario *pinnedAcpxScenario) closeSession(t *testing.T) {
 	t.Helper()
-	output, err := scenario.run("close-session", "--format", "json", realClientAgentName, "sessions", "close")
+	output, err := scenario.run(t, "close-session", "--format", "json", realClientAgentName, "sessions", "close")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +364,7 @@ func (scenario *pinnedAcpxScenario) closeSessionForCleanup() error {
 	if scenario.cleanupCloser != nil {
 		err = scenario.cleanupCloser()
 	} else {
-		_, err = scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close")
+		_, err = scenario.run(nil, "cleanup-session", "--format", "json", realClientAgentName, "sessions", "close")
 	}
 	if err != nil {
 		return errors.New("real ACP evidence cleanup failed: close disposable session")
@@ -396,9 +410,12 @@ func (scenario *pinnedAcpxScenario) emitEvidence(t *testing.T, providerInvocatio
 	)
 }
 
-func (scenario *pinnedAcpxScenario) run(phase string, args ...string) ([]byte, error) {
+func (scenario *pinnedAcpxScenario) run(t *testing.T, phase string, args ...string) ([]byte, error) {
 	commandArgs := append([]string{scenario.acpxPath}, args...)
-	return runBoundedCommand(scenario.project, scenario.environment(), phase, "node", commandArgs...)
+	started := time.Now()
+	output, err := runBoundedCommand(scenario.project, scenario.environment(), phase, "node", commandArgs...)
+	logAcpxPhaseTiming(t, phase, time.Since(started))
+	return output, err
 }
 
 func (scenario *pinnedAcpxScenario) environment() []string {
@@ -742,7 +759,9 @@ func repositoryRoot(t *testing.T) string {
 
 func repositoryRevision(t *testing.T, root string) string {
 	t.Helper()
+	started := time.Now()
 	output, err := runBoundedCommand(root, allowlistedEnvironment(nil), "read-revision", "git", "rev-parse", "HEAD")
+	t.Logf("real ACP evidence phase: phase=git-revision duration=%s", time.Since(started))
 	if err != nil {
 		t.Fatal("real ACP evidence setup failed: resolve repository revision")
 	}

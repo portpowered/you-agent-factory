@@ -428,15 +428,31 @@ The converted session witness has no test-owned child process or private root;
 its application process is built once and its ACP stream is driven through
 `Process.Execute`. The remaining local-real rows are:
 
+The costs below are standalone phase or witness measurements, not another
+package aggregate. The Node, Git, and bounded-build values came from the latest
+supported pinned selector attempt with Node `v22.13.0`; that host-contaminated
+attempt reached admission and revision lookup before the existing one-minute
+build bound fired. The npm value came from the same pinned package command
+against a fresh disposable cache and exited `0`; its host `npx` launcher emitted
+the expected Node `v22.12.0` engine warning while still reporting `0.13.0`.
+The ACPX values came from a temporary local-only probe (removed after the run)
+that used the current production
+binary and the acquired `acpx@0.13.0` CLI, with the same scenario environment
+and assertions. The process-tree values came from the focused retained-witness
+selector, whose new logs measure the complete command plus descendant-inactive
+observation.
+
 | Retained phase/witness | Measured cost | Exact property | Why reuse cannot prove it |
 | --- | ---: | --- | --- |
-| `node --version` admission | included in the `117.457s` package wall; no standalone trace on the final run | Select a Node executable meeting the pinned ACPX minimum before startup | An in-process root cannot establish the external Node executable/version boundary. |
-| `git rev-parse HEAD` | included in the `117.457s` package wall; no standalone trace on the final run | Attach sanitized evidence to the current source revision | The evidence contract requires the repository revision from the current checkout. |
-| `go build -o <temp>/you[.exe] ./cmd/factory` | included in the `117.457s` package wall; no standalone trace on the final run | Start the current production executable through ACPX-configured argv | `root.BuildProcess` is the controlled application path and cannot prove the shipped executable boundary. |
-| `npx --yes --package acpx@0.13.0 acpx --version` | included in the `117.457s` package wall; no standalone trace on the final run | Acquire and verify the exact third-party ACPX package | A reusable application process cannot prove npm resolution or the pinned external client. |
-| ACPX `sessions new`, `prompt`, and `sessions close` direct Node phases | included in the `117.457s` package wall; no standalone trace on the final run | Real ACP stdio framing, persisted client session, provider stream, close identity, and queue-owner shutdown | The controlled connection proves server behavior but cannot prove the independently packaged ACPX client and its queue owner. |
-| `TestRunBoundedCommandTerminatesScenarioDescendants` | `1.70s` | Real timeout, process-tree ownership, and descendant inactivity | Sharing would remove the held OS parent/descendant boundary. |
-| `TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `0.62s` | Real non-zero crash classification, tree cleanup, and descendant inactivity | Sharing would remove the non-zero exit and process-tree boundary. |
+| `node --version` admission | `50.847ms` (Node `v22.13.0`; supported selector reached this phase) | Select a Node executable meeting the pinned ACPX minimum before startup | An in-process root cannot establish the external Node executable/version boundary. |
+| `git rev-parse HEAD` | `167.630ms` (supported selector) | Attach sanitized evidence to the current source revision | The evidence contract requires the repository revision from the current checkout. |
+| `go build -o <temp>/you[.exe] ./cmd/factory` | `60.027s` (supported selector; existing timeout classification) | Build the current production executable before ACPX-configured startup | `root.BuildProcess` is the controlled application path and cannot prove the shipped executable boundary. The host did not permit a successful bounded build in this measurement; the earlier successful local-real witness remains recorded separately. |
+| `npx --yes --package acpx@0.13.0 acpx --version` | `36.856s` (fresh disposable cache; exit `0`, output `0.13.0`) | Acquire and verify the exact third-party ACPX package | A reusable application process cannot prove npm resolution or the pinned external client. |
+| ACPX `sessions new` direct Node phase | `2.779s` (temporary phase probe; exit `0`) | Real ACP stdio session creation, persisted client identity, and negotiated setup | The controlled connection proves server behavior but cannot prove the independently packaged ACPX client and its session state. |
+| ACPX `prompt` direct Node phase | `4.567s` (temporary phase probe; exit `0`) | Real ACP stdio framing, provider stream, Worker updates, assistant result, and terminal result | A reusable server connection cannot prove the independently packaged ACPX client or its external stream parser. |
+| ACPX `sessions close` direct Node phase | `2.860s` (temporary phase probe; exit `0`) | Real close identity and ACPX queue-owner shutdown | The controlled connection cannot prove the independently packaged ACPX queue owner and client shutdown path. |
+| `TestRunBoundedCommandTerminatesScenarioDescendants` | `1.732s` (focused selector; exit `0`) | Real timeout, process-tree ownership, and descendant inactivity | Sharing would remove the held OS parent/descendant boundary. |
+| `TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit` | `720ms` (focused selector; exit `0`) | Real non-zero crash classification, tree cleanup, and descendant inactivity | Sharing would remove the non-zero exit and process-tree boundary. |
 
 The final package timing and PR functional coverage remain TASK-003 evidence;
 this table records why the retained OS/client rows cannot be replaced by the
