@@ -4,12 +4,37 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      unit_coverage_jobs:
+        description: "Unit coverage package parallelism for a bounded cohort"
+        required: true
+        type: choice
+        options:
+          - "1"
+          - "4"
+      unit_coverage_mode:
+        description: "Enable build diagnostics or collect a timing control"
+        required: true
+        default: diagnostic
+        type: choice
+        options:
+          - diagnostic
+          - control
+      unit_coverage_sample:
+        description: "Cohort sample identity (1, 2, or 3)"
+        required: true
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.unit_coverage_jobs || 'default' }}-${{ inputs.unit_coverage_mode || 'default' }}-${{ inputs.unit_coverage_sample || 'default' }}
   cancel-in-progress: true
 
 env:
@@ -290,7 +315,8 @@ jobs:
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
-          UNIT_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/unit-coverage/coverage-build-diagnostics.json
+          UNIT_COVERAGE_JOBS: ${{ inputs.unit_coverage_jobs || '' }}
+          UNIT_COVERAGE_BUILD_DIAGNOSTICS: ${{ inputs.unit_coverage_mode != 'control' && '.artifacts/unit-coverage/coverage-build-diagnostics.json' || '' }}
       # This existing coverage tier intentionally selects backend packages
       # under pkg/... through make test-unit-coverage. It does not claim to
       # exercise ./internal/...; that tree has separate repository-maintenance
