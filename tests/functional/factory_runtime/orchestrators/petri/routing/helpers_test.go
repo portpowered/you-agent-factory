@@ -68,6 +68,23 @@ func assertFailedDispatchForWork(
 	t.Fatalf("no failed dispatch observation for work %q", workID)
 }
 
+func assertDispatchTransitionSequence(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	want []string,
+) {
+	t.Helper()
+	observed := support.ObserveDispatchEvents(t, events)
+	if len(observed) != len(want) {
+		t.Fatalf("dispatch transition count = %d, want %d", len(observed), len(want))
+	}
+	for index, transition := range want {
+		if got := observed[index].Request.TransitionId; got != transition {
+			t.Errorf("dispatch transition[%d] = %q, want %q", index, got, transition)
+		}
+	}
+}
+
 func assertWorkAtCustomerStates(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for location, want := range wants {
@@ -77,9 +94,9 @@ func assertWorkAtCustomerStates(t *testing.T, listed factoryapi.ListWorkResponse
 	}
 }
 
-func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
+func assertQuiescentSession(t *testing.T, status factoryapi.StatusResponse, wantTerminal, wantFailed int) {
 	t.Helper()
-	categories := session.Runtime.Progress.Categories
+	categories := status.Categories
 	if categories.Initial != 0 || categories.Processing != 0 {
 		t.Errorf(
 			"session still has in-progress Work: initial=%d processing=%d",

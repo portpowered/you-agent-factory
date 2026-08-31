@@ -7,9 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,6 +19,7 @@ import (
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 	t.Run("two_stage_service_simple_completes_at_terminal", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		traceID := "trace-two-stage-service-simple"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -29,10 +28,9 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			Payload:    []byte(`{"title":"two-stage routing depth"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(2)...)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		status, listed := runSharedRoutingFactoryToCompletionWithRouteAndWork(
+			t, dir, sharedRoutingRouteConfig{}, 10*time.Second,
+		)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -42,13 +40,12 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			support.WorkCustomerLocation("task", "failed"):     0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		assertQuiescentSession(t, session, 1, 0)
-		if runner.CallCount() != 2 {
-			t.Errorf("provider command call count = %d, want 2", runner.CallCount())
-		}
+		assertQuiescentSession(t, status, 1, 0)
+		assertSharedRoutingProviderCalls(t, dir, 2)
 	})
 
 	t.Run("code_review_multi_stage_completes", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		traceID := "trace-code-review-routing"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -57,13 +54,9 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			Payload:    []byte(`{"task":"routing depth review"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"swe":      {{Content: "Done. COMPLETE"}},
-			"reviewer": {{Content: "Done. COMPLETE"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 15*time.Second)
+		status, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
+			t, dir, sharedRoutingRouteConfig{}, 15*time.Second,
+		)
 
 		terminal := support.WorkCustomerLocation("code-change", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -73,17 +66,13 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			support.WorkCustomerLocation("code-change", "failed"):    0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount("swe") != 1 || provider.CallCount("reviewer") != 1 {
-			t.Errorf(
-				"provider calls = swe:%d reviewer:%d, want swe:1 reviewer:1",
-				provider.CallCount("swe"),
-				provider.CallCount("reviewer"),
-			)
-		}
+		assertQuiescentSession(t, status, 1, 0)
+		assertDispatchTransitionSequence(t, events, []string{"coding", "review"})
+		assertSharedRoutingProviderCalls(t, dir, 2)
 	})
 
 	t.Run("three_stage_ideation_reaches_story_complete", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 		traceID := "trace-ideation-multi-stage"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -92,14 +81,16 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			Payload:    []byte(`{"title":"multi-transition ideation depth"}`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
+		status, listed := runSharedRoutingFactoryToCompletionWithRouteAndWork(
+			t,
+			dir,
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("PRD created. COMPLETE"),
+				sharedRoutingProviderOutput("Code written. COMPLETE"),
+				sharedRoutingProviderOutput("Looks good. ACCEPTED"),
+			)},
+			15*time.Second,
 		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("story", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -111,13 +102,12 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			support.WorkCustomerLocation("story", "executing"): 0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount() != 3 {
-			t.Errorf("provider call count = %d, want 3", provider.CallCount())
-		}
+		assertQuiescentSession(t, status, 1, 0)
+		assertSharedRoutingProviderCalls(t, dir, 3)
 	})
 
 	t.Run("cross_work_type_dispatcher_reaches_prd_complete", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-dispatcher-multi-transition"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -126,10 +116,9 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			Payload:    []byte(`{"title":"dispatcher routing depth"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		status, listed := runSharedRoutingFactoryToCompletionWithRouteAndWork(
+			t, dir, sharedRoutingRouteConfig{}, 10*time.Second,
+		)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -138,10 +127,8 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 			support.WorkCustomerLocation("prd", "init"):  0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		assertQuiescentSession(t, session, 1, 0)
-		if runner.CallCount() != 3 {
-			t.Errorf("provider command call count = %d, want 3", runner.CallCount())
-		}
+		assertQuiescentSession(t, status, 1, 0)
+		assertSharedRoutingProviderCalls(t, dir, 3)
 	})
 }
 
@@ -154,6 +141,7 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		traceID := "trace-two-stage-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -162,17 +150,16 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 			Payload:    []byte(`{"title":"two-stage failure routing"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(
-			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
-			platformprocess.CommandResult{
-				Stderr:   []byte("stage-two provider unavailable"),
-				ExitCode: 1,
-			},
-		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		status, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("Done. COMPLETE"),
+				sharedRoutingCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("stage-two provider unavailable"),
+					ExitCode: 1,
+				}),
+			)},
 			10*time.Second,
 		)
 
@@ -186,19 +173,20 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
-		assertQuiescentSession(t, session, 0, 1)
+		assertQuiescentSession(t, status, 0, 1)
 
 		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
 		if !ok {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
-		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if runner.CallCount() != 2 {
-			t.Errorf("provider command call count = %d, want 2", runner.CallCount())
-		}
+		dispatches := support.ObserveDispatchEvents(t, events)
+		assertFailedDispatchForWork(t, dispatches, failedWorkID)
+		assertDispatchTransitionSequence(t, events, []string{"step-one", "step-two"})
+		assertSharedRoutingProviderCalls(t, dir, 2)
 	})
 
 	t.Run("cross_work_type_dispatcher_executor_exit_routes_prd_to_failed", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-dispatcher-executor-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -207,17 +195,16 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 			Payload:    []byte(`{"title":"dispatcher failure routing"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(
-			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
-			platformprocess.CommandResult{
-				Stderr:   []byte("executor subprocess failed"),
-				ExitCode: 1,
-			},
-		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		status, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("Done. COMPLETE"),
+				sharedRoutingCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("executor subprocess failed"),
+					ExitCode: 1,
+				}),
+			)},
 			15*time.Second,
 		)
 
@@ -232,19 +219,19 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
-		assertQuiescentSession(t, session, 0, 1)
+		assertQuiescentSession(t, status, 0, 1)
 
 		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
 		if !ok {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if runner.CallCount() != 2 {
-			t.Errorf("provider command call count = %d, want 2", runner.CallCount())
-		}
+		assertDispatchTransitionSequence(t, events, []string{"plan", "execute"})
+		assertSharedRoutingProviderCalls(t, dir, 2)
 	})
 
 	t.Run("code_review_reviewer_error_routes_to_failed", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		traceID := "trace-code-review-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -253,14 +240,13 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 			Payload:    []byte(`{"task":"routing failure review"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"swe":      {{Content: "Done. COMPLETE"}},
-			"reviewer": {{Content: "", Error: errors.New("reviewer inference failed")}},
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		status, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("Done. COMPLETE"),
+				sharedRoutingCommandError(errors.New("reviewer inference failed")),
+			)},
 			15*time.Second,
 		)
 
@@ -274,20 +260,15 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
-		assertQuiescentSession(t, session, 0, 1)
+		assertQuiescentSession(t, status, 0, 1)
 
 		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
 		if !ok {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if provider.CallCount("swe") != 1 || provider.CallCount("reviewer") != 1 {
-			t.Errorf(
-				"provider calls = swe:%d reviewer:%d, want swe:1 reviewer:1",
-				provider.CallCount("swe"),
-				provider.CallCount("reviewer"),
-			)
-		}
+		assertDispatchTransitionSequence(t, events, []string{"coding", "review"})
+		assertSharedRoutingProviderCalls(t, dir, 2)
 	})
 }
 
@@ -298,6 +279,7 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 // inspecting internal Petri markings.
 func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 	t.Run("cross_work_type_dispatcher_preserves_origin_trace_through_stages", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		originTraceID := "trace-correlation-dispatcher"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -306,12 +288,8 @@ func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 			Payload:    []byte(`{"title":"correlation across dispatcher stages"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
-			10*time.Second,
+		_, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
+			t, dir, sharedRoutingRouteConfig{}, 10*time.Second,
 		)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
@@ -326,6 +304,7 @@ func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 	})
 
 	t.Run("three_stage_ideation_correlates_trace_on_terminal_and_events", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 		originTraceID := "trace-correlation-ideation"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -334,15 +313,14 @@ func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 			Payload:    []byte(`{"title":"correlation across ideation stages"}`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
-		)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		_, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("PRD created. COMPLETE"),
+				sharedRoutingProviderOutput("Code written. COMPLETE"),
+				sharedRoutingProviderOutput("Looks good. ACCEPTED"),
+			)},
 			15*time.Second,
 		)
 
@@ -361,6 +339,7 @@ func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 	})
 
 	t.Run("failure_routing_preserves_origin_trace_at_failed_place", func(t *testing.T) {
+		enterSharedRoutingScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		originTraceID := "trace-correlation-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -369,17 +348,16 @@ func TestPetriMultiTransitionPreservesWorkCorrelation(t *testing.T) {
 			Payload:    []byte(`{"title":"correlation on failure routing"}`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(
-			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
-			platformprocess.CommandResult{
-				Stderr:   []byte("stage-two provider unavailable"),
-				ExitCode: 1,
-			},
-		)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		_, listed, events := runSharedRoutingFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			sharedRoutingRouteConfig{provider: sharedRoutingProviderSequence(
+				sharedRoutingProviderOutput("Done. COMPLETE"),
+				sharedRoutingCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("stage-two provider unavailable"),
+					ExitCode: 1,
+				}),
+			)},
 			10*time.Second,
 		)
 
