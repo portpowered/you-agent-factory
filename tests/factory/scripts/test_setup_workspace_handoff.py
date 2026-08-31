@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -94,6 +95,26 @@ def write_packet(worktree_path, prd_name, payload=None, markdown=None):
     if markdown is not None:
         (packet_dir / f"{prd_name}.md").write_text(markdown, encoding="utf-8")
     return packet_path
+
+
+def create_directory_link(link_path, target_path):
+    """Create a junction on Windows or a directory symlink elsewhere."""
+    if os.name == "nt":
+        result = subprocess.run(
+            [
+                "cmd.exe", "/d", "/c", "mklink", "/J",
+                str(link_path), str(target_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            details = result.stderr.strip() or result.stdout.strip()
+            raise OSError(
+                f"mklink /J failed with exit {result.returncode}: {details}"
+            )
+        return
+    link_path.symlink_to(target_path, target_is_directory=True)
 
 
 def create_remote_clone(base_path):
@@ -314,6 +335,79 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
         self.assertIn(f"expected refs/heads/{prd_name}", result.stderr)
         self.assertNotIn("Root sync:", result.stderr)
         self.assertEqual(repository_snapshot(self.repo_path, (nested_path,)), before)
+
+    def test_handoff_rejects_packet_junction_escape_before_mutation(self):
+        init_repository(self.repo_path)
+        prd_name = "junction-escape-prd"
+        _, nested_path = create_nested_worktree(self.repo_path, prd_name)
+        outside_dir = Path(tempfile.mkdtemp(prefix="setup-workspace-outside-"))
+        self.addCleanup(shutil.rmtree, outside_dir, ignore_errors=True)
+        outside_packet = write_packet(
+            outside_dir,
+            prd_name,
+            {"branchName": prd_name, "payload": "must not escape"},
+        )
+        try:
+            create_directory_link(nested_path / "tasks", outside_dir / "tasks")
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"directory junction/symlink unavailable: {error}")
+        before = repository_snapshot(self.repo_path, (nested_path,))
+        outside_bytes = outside_packet.read_bytes()
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Failed to read PRD:", result.stderr)
+        self.assertIn("outside the registered worktree", result.stderr)
+        self.assertNotIn("must not escape", result.stderr)
+        self.assertNotIn("Root sync:", result.stderr)
+        self.assertEqual(repository_snapshot(self.repo_path, (nested_path,)), before)
+        self.assertEqual(outside_packet.read_bytes(), outside_bytes)
+        self.assertFalse((nested_path / "prd.json").exists())
+
+    def test_handoff_rejects_non_regular_packet_before_mutation(self):
+        init_repository(self.repo_path)
+        prd_name = "directory-packet-prd"
+        packet_dir = self.repo_path / "tasks" / "todo" / f"{prd_name}.json"
+        packet_dir.mkdir(parents=True, exist_ok=True)
+        before = repository_snapshot(self.repo_path)
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Failed to read PRD:", result.stderr)
+        self.assertIn("not a regular file", result.stderr)
+        self.assertNotIn("Root sync:", result.stderr)
+        self.assertEqual(repository_snapshot(self.repo_path), before)
+
+    def test_handoff_rejects_markdown_junction_escape_before_mutation(self):
+        init_repository(self.repo_path)
+        prd_name = "markdown-junction-escape-prd"
+        _, nested_path = create_nested_worktree(self.repo_path, prd_name)
+        write_packet(nested_path, prd_name, {"branchName": prd_name})
+        outside_dir = Path(tempfile.mkdtemp(prefix="setup-workspace-md-outside-"))
+        self.addCleanup(shutil.rmtree, outside_dir, ignore_errors=True)
+        try:
+            create_directory_link(
+                nested_path / "tasks" / "todo" / f"{prd_name}.md",
+                outside_dir,
+            )
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"directory junction/symlink unavailable: {error}")
+        before = repository_snapshot(self.repo_path, (nested_path,))
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Failed to read PRD:", result.stderr)
+        self.assertIn("PRD Markdown candidate", result.stderr)
+        self.assertIn("outside the registered worktree", result.stderr)
+        self.assertNotIn("Root sync:", result.stderr)
+        self.assertEqual(repository_snapshot(self.repo_path, (nested_path,)), before)
+        self.assertFalse((nested_path / "prd.json").exists())
 
     def test_handoff_refuses_locked_attached_worktree_before_mutation(self):
         init_repository(self.repo_path)

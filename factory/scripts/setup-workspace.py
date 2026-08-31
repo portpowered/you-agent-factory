@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -888,6 +889,57 @@ def absolute_worktree_path(raw_path, repo_root):
         return Path(os.path.abspath(os.path.normpath(str(path))))
 
 
+def canonical_packet_file_path(packet_path, worktree_path, label):
+    """Validate and canonicalize one packet file before it can be consumed."""
+    try:
+        lexical_exists = os.path.lexists(packet_path)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not inspect {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+    if not lexical_exists:
+        return None
+
+    try:
+        canonical_root = Path(worktree_path).resolve(strict=True)
+        canonical_path = Path(packet_path).resolve(strict=True)
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} could not be "
+            "resolved because it is missing or contains a broken link"
+        ) from error
+    except (OSError, RuntimeError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not resolve {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+
+    try:
+        canonical_path.relative_to(canonical_root)
+    except ValueError as error:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} is ineligible: "
+            "its resolved path is outside the registered worktree "
+            f"{display_path(canonical_root)}"
+        ) from error
+
+    try:
+        is_regular_file = stat.S_ISREG(canonical_path.stat().st_mode)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise RuntimeError(
+            f"could not inspect {label.lower()} candidate "
+            f"{display_path(packet_path)}: {raw_failure_details(error)}"
+        ) from error
+    if not is_regular_file:
+        raise RuntimeError(
+            f"{label} candidate {display_path(packet_path)} is ineligible: "
+            "it is not a regular file"
+        )
+
+    return canonical_path
+
+
 def parse_worktree_inventory(output, repo_root):
     """Parse Git's porcelain worktree inventory into bounded records."""
     blocks = []
@@ -970,21 +1022,14 @@ def packet_candidates(repo_root, prd_name, records):
         seen_roots.add(root_identity)
 
         packet_path = worktree_path / "tasks" / "todo" / f"{prd_name}.json"
-        try:
-            packet_path.stat()
-        except FileNotFoundError:
-            exists = False
-        except (OSError, UnicodeError, ValueError) as error:
-            raise RuntimeError(
-                f"could not inspect exact PRD candidate {display_path(packet_path)}: "
-                f"{raw_failure_details(error)}"
-            ) from error
-        else:
-            exists = True
-        if exists:
+        canonical_path = canonical_packet_file_path(
+            packet_path, worktree_path, "PRD JSON",
+        )
+        if canonical_path is not None:
             candidates.append(
                 {
-                    "prd_json_path": packet_path,
+                    "prd_json_path": canonical_path,
+                    "prd_json_candidate_path": packet_path,
                     "worktree_path": worktree_path,
                     "record": record,
                     "is_root": root_identity == root_key,
@@ -995,7 +1040,12 @@ def packet_candidates(repo_root, prd_name, records):
 
 def candidate_path_details(candidates):
     """Render a bounded list of conflicting exact packet paths."""
-    paths = [display_path(candidate["prd_json_path"]) for candidate in candidates]
+    paths = [
+        display_path(
+            candidate.get("prd_json_candidate_path", candidate["prd_json_path"]),
+        )
+        for candidate in candidates
+    ]
     if len(paths) > MAX_CANDIDATE_DIAGNOSTIC_PATHS:
         omitted = len(paths) - MAX_CANDIDATE_DIAGNOSTIC_PATHS
         paths = [*paths[:MAX_CANDIDATE_DIAGNOSTIC_PATHS], f"... ({omitted} more paths)"]
@@ -1114,17 +1164,13 @@ def select_prd_candidate(repo_root, prd_name, records):
     if not candidate["is_root"]:
         validate_nested_packet_freshness(repo_root, candidate, prd_name)
 
-    packet_dir = candidate["prd_json_path"].parent
-    prd_md_path = packet_dir / f"{prd_name}.md"
-    try:
-        markdown_exists = prd_md_path.exists()
-    except (OSError, UnicodeError, ValueError) as error:
-        raise RuntimeError(
-            f"could not inspect optional PRD Markdown candidate "
-            f"{display_path(prd_md_path)}: {raw_failure_details(error)}"
-        ) from error
-    if not markdown_exists:
-        prd_md_path = None
+    packet_dir = candidate["prd_json_candidate_path"].parent
+    prd_md_candidate_path = packet_dir / f"{prd_name}.md"
+    prd_md_path = canonical_packet_file_path(
+        prd_md_candidate_path,
+        candidate["worktree_path"],
+        "PRD Markdown",
+    )
     candidate["prd_md_path"] = prd_md_path
     return candidate
 
