@@ -516,3 +516,198 @@ exit, ownership, and descendant-inactivity properties. No additional
 `os.Args[0]` process launch or modified OS witness was added, and no
 integration mirror or production/shared-support change is needed for this
 bounded correction.
+
+## TASK-003 bounded optimization and final validation
+
+The prior PR review measured the authoritative package result at `46.241s`
+against the admitted `40.486s`. One bounded optimization pass was applied in
+`566aff6e82` by removing the redundant second successful turn from the
+controlled reusable witness. The retained cases still execute one successful
+turn in the first session, an in-flight cancellation/close, and one successful
+turn in a distinct second session with distinct workspace, prompt, provider
+marker, session-bound updates, result, and cleanup assertions. The pinned
+ACPX witness and the retained timeout/non-zero process-tree witnesses were not
+weakened or removed. The second-session marker assertion now rejects the first
+session's `alpha1` result; the removed `bravo2` turn was a duplicate controlled
+success case rather than an assertion from the original pinned real-client
+matrix.
+
+A separate setup experiment copied the generated Factory fixture directly in
+an attempt to avoid the normal packaged-installation command. The focused
+reusable selector then held in production initialization/reconciliation until
+its `15m` test bound. That shortcut was fully reverted; the final fixture uses
+the public `InstallPackagedFactoryWithProcess` path and makes no support or
+production change.
+
+Current bounded-pass evidence:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+Exited `0`; package wall `2.322s`.
+
+```text
+go test ./tests/functional/transport/acp/realclient -run '^TestReusableACPServerTurnsThroughOneProcess$' -count=2 -timeout=15m -v
+```
+
+Exited `0`; both repetitions passed; package wall `5.299s`.
+
+```text
+go test -race ./tests/functional/transport/acp/realclient -run '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+Exited `0`; package wall `6.388s`; no race was reported.
+
+```text
+go test ./tests/functional/transport/acp/realclient -run '^(TestCharacterizePinnedAcpxFailureClassifications|TestRunBoundedCommandTerminatesScenarioDescendants|TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit)$' -count=1 -timeout=10m -v
+```
+
+Exited `0`; package wall `1.931s`. Both retained process-tree witnesses and
+the controlled characterization branches passed.
+
+```text
+go test ./tests/functional/transport/acp/realclient/... -count=1 -timeout=15m -v
+```
+
+Exited `0`; package wall `5.586s`. The optional pinned real-client test was
+skipped because this host has only Node `v22.12.0`, below the required
+`v22.13.0`; no supported Node executable was available for a current-head
+local-real rerun. This proves ordinary package coexistence and cleanup, but
+does not replace the pinned executable/ACPX edge.
+
+```text
+make test
+```
+
+Exited `0`. The final Node test stage reported `170` tests, `169` passed,
+`1` skipped, `0` failed, and `duration_ms=125724.6233`. The skip is the
+existing environment-dependent Windows path-bridge case; no new skip was
+introduced by this lane.
+
+The source-plan reference remains an explicit planning conflict. The exact
+check `Test-Path docs/temp/functional-test-optimization.md` returned `False`;
+the path is absent from `origin/main` and from repository history inspected
+with `git ls-tree`/`git log`. No operator amendment authorizes inventing or
+reconstructing it. The smallest resolution is for the plan owner to restore
+that source plan or amend `context.sourcePlan` before the delivery lane can
+be promoted.
+
+# Validation report: BEH-C15-ACP-DELIVERY
+
+## Environment and artifact
+
+- Commit/build identifier: implementation code under validation is
+  `566aff6e82`; the report commit is documentation-only.
+- Environment and configuration: Windows PowerShell host; Go package tests
+  run with the existing deterministic provider edge; only Node `v22.12.0` is
+  installed locally, while the pinned ACPX gate requires `v22.13.0+`.
+- Customer entry point: `go test ./tests/functional/transport/acp/realclient/...`
+  exercising the realclient package's pinned ACPX, process-tree, and reusable
+  ACP server witnesses.
+- Real and substituted dependencies: current reusable session proof uses one
+  production `root.BuildProcess` and one `Process.Execute` server with only
+  `ProviderCommandRunner` replaced; the current host could not run the
+  pinned external Node/ACPX dependency.
+- Cost/call budget used: zero provider API calls; one bounded local
+  optimization pass; one full `make test` run; no additional executable or
+  support-surface shortcut retained.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| P-01 Complete matrix parity | BLOCKED | Current controlled selectors and the committed ledger preserve the mapped protocol, lifecycle, error, cancellation, framing, and cleanup assertions. | The exact current-head full local-real pinned matrix could not run with Node `v22.12.0`. |
+| P-02 One shared production process for eligible session behavior | PASS | Current reusable selector passed with one package-scoped `root.BuildProcess`/`Process.Execute` server, distinct sessions/workspaces, and provider-edge observations. | Arbitrary concurrent load is not proved. |
+| P-03 Irreducibility rows for retained boundaries | PASS | Ledger contains measured Node, Git, build, npm, ACPX session/prompt/close, timeout-tree, and non-zero-tree rows with property and reuse rationale. | Future host variance remains unproved. |
+| P-04 Local timing target or fallback | PASS | Current package wall was `5.586s`; the complete per-test irreducibility table is published. | The under-three-second target is not met. |
+| P-05 PR timing direction and bounded response | BLOCKED | Prior PR result was `46.241s` versus `40.486s`; commit `566aff6e82` is the one bounded optimization pass. | Current-head hosted timing is pending. |
+| P-06 PR functional coverage floor | BLOCKED | Prior review evidence recorded `61.6%` at the earlier head. | Current-head coverage has not been reported. |
+| P-07 Characterization gate | PASS | Current characterization/process selector exited `0` in `1.931s`; full `make test` also exited `0`. | Unsupported Node prevented repeating the pinned prerequisite on this host. |
+| P-08 Focused reusable-session gate | PASS | Single, repeat, and race reusable selectors exited `0`; provider WorkDir/prompt/marker and session-bound frame assertions passed. | No concurrent multi-runtime claim is made. |
+| P-09 Focused OS gate | PASS | Retained timeout/non-zero process-tree selectors passed; the unchanged pinned witness and per-phase rows remain in the committed ledger. | A fresh current-head pinned ACPX run is unavailable locally. |
+| P-10 Repeat/race gates | PASS | `-count=2` passed both repetitions; package-local `-race` passed with no race report. | Exhaustive race schedules are not proved. |
+| P-11 Final package gate | BLOCKED | Ordinary package command exited `0` in `5.586s`; `make test` exited `0`. | The pinned test skipped on the unsupported local Node, so complete local-real final behavior is not current-head proved. |
+| P-12 Current-head PR functional gate | BLOCKED | Existing PR #2511 has the prior review result and receives this bounded correction. | Current-head package timing, coverage, and suite coexistence still require CI. |
+| P-13 Scope and prohibited-change gate | PASS | The bounded code diff is confined to the owned reusable test; no new skip, sleep, timeout inflation, assertion weakening, credential/data retention, production, or shared-support change was retained. | Repository-wide future drift is outside this report. |
+| P-14 VAL-001 clean final-head report | BLOCKED | This report follows `factory/docs/standards/validation-loopback-template.md` and reports every project criterion without repair. | The required source plan is absent, and this report was prepared before the final push/current-head CI observation. |
+| P-15 Implementation handoff | BLOCKED | PR #2511 is open and the next step is to push the report head and observe required CI start. | At report creation the bounded-pass head was not yet pushed and current-head CI had not started. |
+| S003-01 Clean final package matrix | BLOCKED | The ordinary package passed with no failure, but the pinned test was skipped by the host Node prerequisite. | Current-head local-real ACPX success and zero residue are not freshly proved. |
+| S003-02 Local timing disposition | PASS | Actual package wall `5.586s` is recorded and the complete retained-process/client fallback table is present. | Under-three-second timing is not achieved. |
+| S003-03 Retained OS rows | PASS | Each retained row names its exact executable, stream, exit, shutdown, crash, or descendant-cleanup property and measured cost. | Measurements are host-contaminated and not a promise of hosted latency. |
+| S003-04 PR timing/coverage result | BLOCKED | The prior non-improving timing triggered the bounded pass; no current-head result exists yet. | Hosted package timing direction and `>=61.6%` coverage remain unproven. |
+| S003-05 Non-improving result after bounded pass | BLOCKED | The bounded pass is implemented and does not weaken behavior. | The current PR result is needed to determine whether a post-pass blocker remains. |
+| S003-06 Missing/stale evidence disposition | BLOCKED | Missing source-plan authority and unavailable current local-real dependency are explicitly recorded; no repair was invented. | Plan-owner resolution and current-head CI evidence are required. |
+| S003-07 Final pushed/open/CI-started handoff | BLOCKED | PR #2511 is open; the final push and required check-start observation are the next controlled actions. | The final report head is not yet remotely confirmed. |
+| S003-08 Implementation/review ownership | BLOCKED | The report assigns terminal CI, conflicts, and merge to review. | Handoff cannot be complete until the final head is pushed and CI starts. |
+
+## Customer journey
+
+1. A caller enters the realclient package through its declared Go test
+   command. The ordinary package command exits `0` in `5.586s`; the pinned
+   external test reports an environment skip because Node `v22.12.0` is below
+   the required minimum.
+2. The reusable ACP path builds one production process, starts one ACP server,
+   negotiates ACP v1, creates distinct session identities and workspaces, and
+   completes marker-isolated turns through the same connection. Current
+   single, repeat, and race selectors pass.
+3. The first session's active prompt is canceled and closed; the second
+   session then completes with its own provider workspace, prompt, marker,
+   session-bound updates, assistant result, and terminal outcome.
+4. The retained local-real helpers prove timeout and non-zero process-tree
+   termination, while the ledger retains the external Node/npm/ACPX phase
+   costs and explains why those boundaries cannot be converted to an
+   in-process proof.
+5. `make test` exits `0` with no failures. The remaining delivery evidence is
+   current-head PR timing/coverage and an approved resolution of the absent
+   source-plan reference.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the package-owned ledger records the
+  characterization, conversion, irreducibility, bounded optimization, and
+  validation report; the referenced source plan is absent and remains a
+  blocker.
+- Permission and error behavior: provider-edge failures, cancellation, close,
+  malformed/protocol/terminal classifications, and cleanup assertions remain
+  covered by focused selectors.
+- Persistence/reload behavior: ACP session identity/workspace isolation and
+  disposable Factory/session cleanup are asserted; no durable customer data is
+  retained.
+- Accessibility/keyboard/responsive behavior: not applicable to this backend
+  transport test lane.
+- Operational signals: phase timing is logged before fail-fast paths;
+  package, race, repeat, and full-suite outcomes are recorded without CI
+  results being committed.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| F-001 | BLOCKED | `Test-Path docs/temp/functional-test-optimization.md`; inspect `origin/main` and history. | `context.sourcePlan` resolves to an approved source plan. | The path is absent and no operator amendment authorizes reconstruction. | Exact check returned `False`; no matching tree/history entry. |
+| F-002 | BLOCKED | Inspect prior PR timing, then evaluate current head. | Package timing improves directionally after one bounded response, or the report gives a measured blocker. | Prior PR timing was `46.241s` vs `40.486s`; the bounded pass is now present, but current-head timing is pending. | Review finding; commit `566aff6e82`; current PR CI required. |
+| F-003 | BLOCKED | Run the declared final package command with required Node. | Every final matrix witness passes on the final head. | This host has only Node `v22.12.0`; the pinned test skips rather than claiming real-client evidence. | Current package exit `0`, package wall `5.586s`, pinned prerequisite skip. |
+| F-004 | PASS | Run `make test`. | Full repository gate completes without a diff-caused failure. | Exit `0`; final Node stage: 169 passed, 1 skipped, 0 failed. | Local command result. |
+
+## Verdict
+
+BLOCKED
+
+## Delta-plan request [Required for FAIL/BLOCKED]
+
+- Affected behavior and criterion: `BEH-C15-ACP-DELIVERY`, especially P-01,
+  P-05/P-06, P-12, P-14, and S003-01/S003-04/S003-06.
+- Root-cause evidence or remaining uncertainty: the referenced
+  `docs/temp/functional-test-optimization.md` source plan is absent; the
+  local host cannot execute the required Node `v22.13+` pinned ACPX path; and
+  the prior hosted timing was non-improving, so the bounded pass needs a
+  current-head hosted measurement.
+- Smallest recommended correction/prerequisite: the plan owner should restore
+  the source plan or amend `context.sourcePlan`; then inspect the current PR
+  head's package timing, coverage, pinned evidence, and suite result. If the
+  post-pass timing remains non-improving, request a new bounded plan delta
+  rather than weakening an assertion or deleting another behavior witness.
+- Dependencies and retest scope: approved source-plan resolution; current
+  PR Backend Functional Coverage/latency and coverage jobs; one clean
+  final-head realclient package run on Node `v22.13+` if available; review
+  owns terminal CI, conflicts, and merge.
