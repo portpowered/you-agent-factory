@@ -197,7 +197,7 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 			provider: support.NewRecordingCommandRunner("unexpected live provider execution"),
 		})
 
-		started := startInlineJavaScriptSync(t, fixture.baseURL, dir)
+		started := startSharedInlineJavaScriptSync(t, fixture, dir)
 		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 			t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 		}
@@ -234,7 +234,7 @@ func TestAPIDispatchListAndDetailExposePublicCorrelation(t *testing.T) {
 		},
 	})
 
-	started := startDispatchCorrelationSync(t, fixture.baseURL, dir)
+	started := startSharedDispatchCorrelationSync(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}

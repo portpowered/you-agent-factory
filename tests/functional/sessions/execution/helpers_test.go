@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -392,7 +393,7 @@ func startDispatchCorrelationSync(
 
 	workflowPath := filepath.Join(factoryDir, dispatchCorrelationWorkflowFileName)
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "results-dispatches-correlation-sync",
+		RequestId: "results-dispatches-correlation-sync-" + uuid.NewString(),
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
@@ -423,6 +424,17 @@ func startDispatchCorrelationSync(
 		t.Fatalf("decode dispatch correlation sync response: %v", err)
 	}
 	return result
+}
+
+func startSharedDispatchCorrelationSync(
+	t *testing.T,
+	fixture *sharedExecutionFixture,
+	factoryDir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+	fixture.openMu.Lock()
+	defer fixture.openMu.Unlock()
+	return startDispatchCorrelationSync(t, fixture.baseURL, factoryDir)
 }
 
 func listFactorySessionDispatches(
@@ -457,7 +469,7 @@ func startInlineJavaScriptSync(
 
 	workflowPath := filepath.Join(factoryDir, inlineJavaScriptWorkflowFileName)
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "results-dispatches-inline-js-sync",
+		RequestId: "results-dispatches-inline-js-sync-" + uuid.NewString(),
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
@@ -488,6 +500,17 @@ func startInlineJavaScriptSync(
 		t.Fatalf("decode sync execution response: %v", err)
 	}
 	return result
+}
+
+func startSharedInlineJavaScriptSync(
+	t *testing.T,
+	fixture *sharedExecutionFixture,
+	factoryDir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+	fixture.openMu.Lock()
+	defer fixture.openMu.Unlock()
+	return startInlineJavaScriptSync(t, fixture.baseURL, factoryDir)
 }
 
 func readDurableSessionResult(

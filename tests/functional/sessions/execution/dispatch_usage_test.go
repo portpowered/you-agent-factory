@@ -21,6 +21,7 @@ import (
 func TestAPIPetriDispatchUsageReachesDispatchList(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
+	acquireSharedExecutionScenarioSlot(t)
 
 	tests := []petriDispatchUsageCase{
 		{

@@ -25,7 +25,11 @@ import (
 
 const sharedExecutionFixtureTimeout = 15 * time.Second
 
-const sharedExecutionScenarioConcurrency = 2
+// The portable recording projection is process-scoped and finalized when a
+// live session closes. Keep scenario bodies serialized so one session cannot
+// read or finalize the shared projection while another session is publishing
+// its terminal state.
+const sharedExecutionScenarioConcurrency = 1
 
 type sharedExecutionSessionKind uint8
 
@@ -62,13 +66,6 @@ func sharedExecutionProcess(t testing.TB) *sharedExecutionFixture {
 		t.Fatal("shared execution fixture is unavailable")
 	}
 	return sharedExecutionFixtureValue
-}
-
-func enterSharedExecutionScenario(t *testing.T) {
-	t.Helper()
-	t.Parallel()
-	sharedExecutionScenarioSlot <- struct{}{}
-	t.Cleanup(func() { <-sharedExecutionScenarioSlot })
 }
 
 func acquireSharedExecutionScenarioSlot(t testing.TB) {
@@ -151,18 +148,23 @@ func newSharedExecutionFixture() (*sharedExecutionFixture, error) {
 			// Durable synchronous execution adds its own durable prefix around
 			// this raw generator result. Explicit dispatch-list sessions are
 			// opened through the live-session route and request that prefix here.
-			kind := sharedExecutionSessionLive
-			if len(identity.pendingSessionKinds) > 0 {
-				kind = identity.pendingSessionKinds[0]
-				identity.pendingSessionKinds = identity.pendingSessionKinds[1:]
-			}
+			// Only an explicitly queued live-session open also pairs its public
+			// identity with the following runtime-ID allocation. Other callers of
+			// this shared edge allocate request IDs and must not leave a stale
+			// runtime identity for a later session.
 			var id string
-			if kind == sharedExecutionSessionLive {
-				id = uuid.NewString()
+			if len(identity.pendingSessionKinds) > 0 {
+				kind := identity.pendingSessionKinds[0]
+				identity.pendingSessionKinds = identity.pendingSessionKinds[1:]
+				if kind == sharedExecutionSessionLive {
+					id = uuid.NewString()
+				} else {
+					id = "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
+				}
+				identity.pendingSessionIDs = append(identity.pendingSessionIDs, id)
 			} else {
-				id = "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
+				id = uuid.NewString()
 			}
-			identity.pendingSessionIDs = append(identity.pendingSessionIDs, id)
 			identity.mu.Unlock()
 			return id
 		},
