@@ -221,3 +221,74 @@ The smallest safe next step is TASK-002: retain the named real ACPX/OS
 witnesses while moving only eligible session behavior through one synchronized
 `root.BuildProcess`/`Process.Execute` process. TASK-001 does not claim that
 conversion or its performance result.
+
+## TASK-002 partial conversion and lifecycle boundary
+
+The first bounded conversion is implemented in
+`tests/functional/transport/acp/realclient/reusable_acp_session_test.go`.
+`TestReusableACPServerTurnsThroughOneProcess` builds one canonical
+`root.BuildProcess`, starts one ACP server through `Process.Execute`, and
+serially drives two prompt turns through the same ACP connection. The only
+replaced external effect is `edges.Edges.ProviderCommandRunner`. Each turn has
+its own 16-character input, output marker, and provider-call accounting; the
+test asserts a non-empty marker-specific assistant result, Worker
+`tool_call`, Worker `tool_call_update`, their order, `end_turn`, and exactly
+two provider calls. A second `session/new` uses a distinct workspace and
+identity on that same connection without activating another Factory runtime.
+
+Focused repetition evidence:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=2 -timeout=15m -v
+```
+
+The command exited `0`; both repetitions passed all subtests. Package wall was
+`32.461s` on a noisy local host, so this is repeat/isolation evidence only and
+not a three-second timing claim.
+
+The package regression selector also exited `0`:
+
+```text
+go test ./tests/functional/transport/acp/realclient -count=1 -timeout=15m -v
+```
+
+The two local-real process-tree witnesses and the controlled characterization
+passed; the pinned ACPX test reported its existing optional prerequisite skip
+because this host has Node `v22.12.0`. No real-client success or current-head
+ACPX evidence is claimed from that run.
+
+Because the converted witness shares live ACP state across turns, its focused
+race procedure also exited `0`:
+
+```text
+go test -race ./tests/functional/transport/acp/realclient -run \
+  '^TestReusableACPServerTurnsThroughOneProcess$' -count=1 -timeout=15m -v
+```
+
+The reusable server/turn assertions passed with no race report; the race run
+took `38.738s` locally under instrumentation.
+
+The required two-independent-session probe remains blocked at the existing
+production lifecycle boundary. Two sessions that each reach their first
+prompt through the same root-built process were tried serially with both the
+same target (`factory:@you/factory-builder`) and different named targets. The
+first activation completes; the second `StartAsync` fails with the bounded
+ACP `dependency_unavailable` response while opening the retained runtime.
+`FactorySessionIDGenerator` and `FactorySessionRuntimeInstanceIDGenerator`
+edges do not change the runtime's internal fixed `~default` session scope.
+Calling `Process.Close` between cases closes process-wide roots and does not
+make the process reusable. The public ACP `session/close` path also rejects a
+completed terminalized prompt under the current contract, matching the
+existing root-composition rationale in
+`tests/functional/sessions/chat_sessions/root_composition/acp_controlled_cohort_test.go`.
+
+This is a structured blocker, not a success or skip: solving it requires a
+production lifecycle/resolver change or a new test seam, both outside TASK-002
+scope (`Production ACP changes` and `Shared-support changes`). The converted
+turn slice is proven; RC-SESSION-CREATE/NEGOTIATE is proven for the shared
+process, while RC-SHARED-ISOLATION, full two-session prompt parity,
+RC-SESSION-CLOSE on the converted path, final package timing, and PR evidence
+remain unproven. The retained pinned ACPX/OS witnesses and all existing
+failure characterization remain unchanged pending an owner decision on this
+boundary.
