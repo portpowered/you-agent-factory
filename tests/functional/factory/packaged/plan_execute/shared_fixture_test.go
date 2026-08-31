@@ -41,10 +41,12 @@ type planExecuteSharedFixture struct {
 type planExecuteLifecycleResource struct {
 	sessionID     string
 	rootDir       string
+	workspaceDir  string
 	factoryDir    string
 	closed        bool
 	sessionAbsent bool
 	rootRemoved   bool
+	workspaceGone bool
 }
 
 type planExecuteLifecycleLedger struct {
@@ -65,7 +67,7 @@ func (ledger *planExecuteLifecycleLedger) recordProcessStart() {
 }
 
 func (ledger *planExecuteLifecycleLedger) register(
-	sessionID, rootDir, factoryDir string,
+	sessionID, rootDir, workspaceDir, factoryDir string,
 ) error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -80,22 +82,27 @@ func (ledger *planExecuteLifecycleLedger) register(
 			return fmt.Errorf("Factory Session ID %q is not unique", sessionID)
 		}
 	}
-	for label, path := range map[string]string{"scenario root": rootDir, "Factory": factoryDir} {
+	for label, path := range map[string]string{
+		"scenario root":    rootDir,
+		"runner workspace": workspaceDir,
+		"Factory":          factoryDir,
+	} {
 		if !filepath.IsAbs(path) {
 			return fmt.Errorf("%s path %q is not absolute", label, path)
 		}
 	}
 	ledger.resources = append(ledger.resources, planExecuteLifecycleResource{
-		sessionID:  sessionID,
-		rootDir:    rootDir,
-		factoryDir: factoryDir,
+		sessionID:    sessionID,
+		rootDir:      rootDir,
+		workspaceDir: workspaceDir,
+		factoryDir:   factoryDir,
 	})
 	return nil
 }
 
 func (ledger *planExecuteLifecycleLedger) close(
 	sessionID string,
-	sessionAbsent, rootRemoved bool,
+	sessionAbsent, rootRemoved, workspaceGone bool,
 ) error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -110,6 +117,7 @@ func (ledger *planExecuteLifecycleLedger) close(
 		resource.closed = true
 		resource.sessionAbsent = sessionAbsent
 		resource.rootRemoved = rootRemoved
+		resource.workspaceGone = workspaceGone
 		return nil
 	}
 	return fmt.Errorf("Factory Session %q was not registered", sessionID)
@@ -131,6 +139,7 @@ func (ledger *planExecuteLifecycleLedger) assertClean(t testing.TB) {
 	}
 	sessions := make(map[string]struct{}, len(resources))
 	roots := make(map[string]struct{}, len(resources))
+	workspaces := make(map[string]struct{}, len(resources))
 	factories := make(map[string]struct{}, len(resources))
 	closed := 0
 	for _, resource := range resources {
@@ -142,6 +151,10 @@ func (ledger *planExecuteLifecycleLedger) assertClean(t testing.TB) {
 			t.Errorf("scenario root %q is not unique", resource.rootDir)
 		}
 		roots[resource.rootDir] = struct{}{}
+		if _, exists := workspaces[resource.workspaceDir]; exists {
+			t.Errorf("runner workspace %q is not unique", resource.workspaceDir)
+		}
+		workspaces[resource.workspaceDir] = struct{}{}
 		if _, exists := factories[resource.factoryDir]; exists {
 			t.Errorf("Factory definition %q is not unique", resource.factoryDir)
 		}
@@ -157,13 +170,16 @@ func (ledger *planExecuteLifecycleLedger) assertClean(t testing.TB) {
 		if !resource.rootRemoved {
 			t.Errorf("scenario root %q remains after cleanup", resource.rootDir)
 		}
+		if !resource.workspaceGone {
+			t.Errorf("runner workspace %q remains after cleanup", resource.workspaceDir)
+		}
 	}
 	if closed != len(resources) {
 		t.Errorf("explicit sessions closed = %d, want %d", closed, len(resources))
 	}
 	t.Logf(
-		"plan-execute lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
-		processStarts, len(resources), closed, len(sessions), len(roots),
+		"plan-execute lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runner_workspaces_removed=%d runtime_artifacts=0 isolated_rows=0",
+		processStarts, len(resources), closed, len(sessions), len(roots), len(workspaces),
 	)
 }
 
@@ -246,6 +262,7 @@ func planExecutePathContains(root, candidate string) bool {
 type planExecuteScenario struct {
 	fixture          *planExecuteSharedFixture
 	rootDir          string
+	workspaceDir     string
 	factoryDir       string
 	environment      []string
 	workingDirectory string
@@ -361,6 +378,7 @@ func (fixture *planExecuteSharedFixture) newScenario(
 ) *planExecuteScenario {
 	t.Helper()
 	rootDir := t.TempDir()
+	workspaceDir := filepath.Join(rootDir, "runner")
 	homeDir := filepath.Join(rootDir, "home")
 	workingDirectory := filepath.Join(rootDir, "work")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
@@ -384,6 +402,7 @@ func (fixture *planExecuteSharedFixture) newScenario(
 	return &planExecuteScenario{
 		fixture:          fixture,
 		rootDir:          rootDir,
+		workspaceDir:     workspaceDir,
 		factoryDir:       factoryDir,
 		environment:      environment,
 		workingDirectory: workingDirectory,
@@ -402,7 +421,7 @@ func (scenario *planExecuteScenario) open(t *testing.T) {
 		scenario.close(t)
 	})
 	if err := scenario.fixture.lifecycle.register(
-		scenario.sessionID, scenario.rootDir, scenario.factoryDir,
+		scenario.sessionID, scenario.rootDir, scenario.workspaceDir, scenario.factoryDir,
 	); err != nil {
 		t.Fatalf("register plan-execute scenario lifecycle: %v", err)
 	}
@@ -417,15 +436,37 @@ func (scenario *planExecuteScenario) close(t testing.TB) {
 	assertPlanExecuteSessionAbsent(t, scenario.fixture.baseURL, scenario.sessionID)
 	sessionAbsent := true
 	rootRemoved := false
+	workspaceGone := false
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("PLAN-EXECUTE-CLEANUP-001 remove scenario root %q: %v", scenario.rootDir, err)
-	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
-		t.Errorf("PLAN-EXECUTE-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
 	} else {
-		rootRemoved = true
+		if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
+			t.Errorf("PLAN-EXECUTE-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
+		} else {
+			rootRemoved = true
+		}
+		if _, err := os.Stat(scenario.workspaceDir); !os.IsNotExist(err) {
+			t.Errorf("PLAN-EXECUTE-CLEANUP-001 runner workspace %q remains: %v", scenario.workspaceDir, err)
+		} else {
+			workspaceGone = true
+		}
 	}
-	if err := scenario.fixture.lifecycle.close(scenario.sessionID, sessionAbsent, rootRemoved); err != nil {
+	assertPlanExecuteHostReusable(t, scenario.fixture.baseURL)
+	if err := scenario.fixture.lifecycle.close(
+		scenario.sessionID, sessionAbsent, rootRemoved, workspaceGone,
+	); err != nil {
 		t.Errorf("record plan-execute scenario cleanup: %v", err)
+	}
+}
+
+func assertPlanExecuteHostReusable(t testing.TB, baseURL string) {
+	t.Helper()
+	status := support.GetJSON[factoryapi.StatusResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/status",
+	)
+	if strings.TrimSpace(status.RuntimeStatus) == "" {
+		t.Errorf("PLAN-EXECUTE-CLEANUP-001 reusable host returned empty runtime status")
 	}
 }
 

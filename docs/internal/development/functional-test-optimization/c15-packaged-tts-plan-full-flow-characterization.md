@@ -2,8 +2,10 @@
 
 Status: Story 001's pre-change record is complete and retains its historical
 U02 blocker; Story 002 supplied the explicitly scoped smallest delta and now
-passes the complete TTS gate. The unchanged-head table below must not be read
-as claiming that U02 existed before the implementation change.
+passes the complete TTS gate; Story 003 preserves the plan-execute witness and
+adds explicit runner-workspace and shared-host cleanup evidence. The
+unchanged-head table below must not be read as claiming that U02 existed before
+the implementation change.
 
 ## Authority and boundary
 
@@ -207,6 +209,56 @@ and removes the package-owned root. Remote model availability, audio quality,
 aggregate coverage/package floors, three-package coexistence, PR timing, clean
 room loopback, terminal CI, and merge remain later gates.
 
+## Story 003 — reusable plan-execute result
+
+The plan-execute journey retains one package-scoped `root.BuildProcess`, one
+packaged Factory installation, one API host, and one routed
+`ProviderCommandRunner` edge. The scenario creates a fresh copied Factory,
+working directory, non-default Factory Session, and runner workspace. The
+runner workspace is nested under the scenario root, so cleanup removes it
+explicitly instead of relying only on Go's automatic `t.TempDir` cleanup.
+
+The selector
+`^TestPackagedPlanExecute/TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults$`
+passed with the exact `planner,executor` call order. Both requests were
+`codex` calls carrying `--model operator-default-model`; the exact
+`implemented.txt` bytes were `implemented from prd\n`; and the generated fixture
+PRD contained one passed story with non-empty notes. The scenario then verified
+the session was absent with HTTP 404, the runner workspace and scenario root
+were removed, the provider route registry was empty, and the shared host still
+served a valid `/status` response before process teardown. The lifecycle log
+reported `process_starts=1 explicit_sessions_opened=1
+explicit_sessions_closed=1 unique_session_ids=1 scenario_roots_removed=1
+runner_workspaces_removed=1 runtime_artifacts=0 isolated_rows=0`.
+
+### Story 003 verification evidence
+
+Procedure, run on the delivered working tree after the bounded cleanup/reuse
+pass, used local-real production composition with a controlled provider
+command runner. It exited 0:
+
+```text
+go test -v -count=1 -timeout 10m ./tests/functional/factory/packaged/plan_execute
+```
+
+The package reported `ok ... 5.256s` on Windows; the nested behavior row
+reported `0.96s`. The retained characterization sample was `2.888s`, and the
+customer-supplied diagnostic baseline is `5.036s`. This local run is noisy and
+does not claim the PR timing verdict. The completed bounded pass found no
+compatible setup to remove beyond the existing one-root/one-install/one-host
+topology: packaged initialization protects the packaged seed contract, the
+continuous host is required by the Factory Session invocation boundary, and
+the runner must remain a real controlled command edge. The residual PLAN-H01
+row therefore retains exact two-stage output, prompt/default selection,
+artifact/PRD mutation, explicit-session cleanup, route teardown, and host
+reuse as its real properties; PR timing remains authoritative at the PR gate.
+
+The run emitted existing structured discovery diagnostics while probing copied
+non-root child directories (`.you-agent-factory`, `inputs`, `workers`, and
+`workstations`); these are expected probe logs, not test failures. Remote
+provider behavior, aggregate coverage/package floors, three-package
+coexistence, clean-room loopback, terminal CI, and merge remain later gates.
+
 ## Source hash register
 
 SHA-256 hashes tie this read-only ledger to the characterized source:
@@ -223,7 +275,7 @@ SHA-256 hashes tie this read-only ledger to the characterized source:
 | `tests/functional/factory/packaged/tts/shared_command_runner_test.go` | `253016f4dff475794cf81924c39bfbe9acb5f7f64120192c9d4c46584c1c0f47` |
 | `tests/functional/factory/packaged/tts/shared_concurrency_test.go` | `d9beae4d8d67c462a83fd2299f46e0a4c16186c4a454364a06121f82344a7155` |
 | `tests/functional/factory/packaged/tts/shared_fixture_test.go` | `280e65ac62b81601faf157603e21141784d69085c284747ec2bf8ef145b7907b` |
-| `tests/functional/factory/packaged/plan_execute/invocation_test.go` | `a1a8d4d7b9afe0814f99d3e41941c661e66284d909ec0bafe2fc6282cf8d65cd` |
-| `tests/functional/factory/packaged/plan_execute/shared_fixture_test.go` | `f35f5e52ab0b26e3e7a05a377582cbb31e73fa14a9e858c7fe93dbd7ad1ed921` |
+| `tests/functional/factory/packaged/plan_execute/invocation_test.go` | `E841BE6D898F9CF4435D6C34E84BBAC2818160C19FD583574AEEC34410A5BE28` |
+| `tests/functional/factory/packaged/plan_execute/shared_fixture_test.go` | `A936845335DDA31E563E4F1FDE70D31CED837141D34825D03453ECC6EBE3FE03` |
 | `tests/functional/factory/packaged/full_flow/invocation_test.go` | `34cd8ae792108eae46a98114460080f8000a3a61d4513bc370081cb62d62143f` |
 | `tests/functional/factory/packaged/full_flow/shared_fixture_test.go` | `1c6864ef4c89fda99b9d2387612d29419b898d92460f7c1509cbc7cf2cb2fdf3` |

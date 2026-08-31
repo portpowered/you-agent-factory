@@ -41,8 +41,9 @@ func testPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(
 	t *testing.T,
 	fixture *planExecuteSharedFixture,
 ) {
-	runner := &planExecuteRunner{workspace: t.TempDir()}
+	runner := &planExecuteRunner{}
 	scenario := fixture.newScenario(t, runner)
+	runner.workspace = scenario.workspaceDir
 	scenario.open(t)
 	assertPlanExecutePromptContracts(t)
 
