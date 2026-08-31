@@ -28,9 +28,10 @@ const reusableACPInitializeParams = `{"protocolVersion":1,"clientCapabilities":{
 // provider is replaced only at edges.Edges; the protocol, session, Factory
 // target, and stream remain production behavior. Each turn owns its prompt,
 // output marker, and provider-call accounting while the application process
-// and ACP connection are shared serially. The runtime currently cannot host
-// two independent first-turn Factory activations in one process; that
-// distinct-session boundary is recorded in the C15 ledger as unresolved.
+// and ACP connection are shared serially. The second independent session is
+// started only after the first session's active turn is canceled and closed:
+// the production on-demand target has one retained default runtime at a time,
+// and the public session/close contract requires an active turn.
 func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 	fixture := newReusableACPFixture(t)
 	connection := fixture.startServer(t)
@@ -43,13 +44,16 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 
 	for _, testCase := range []reusableACPCase{
 		{name: "first isolated turn", marker: "alpha1", prompt: "xxxxxxxxxxxxxxa1", output: "alpha1 reusable ACP result"},
-		{name: "second isolated turn", marker: "bravo2", prompt: "xxxxxxxxxxxxxxb2", output: "bravo2 reusable ACP result"},
+		{
+			name:             "second isolated turn",
+			marker:           "bravo2",
+			prompt:           "xxxxxxxxxxxxxxb2",
+			output:           "bravo2 reusable ACP result",
+			forbiddenMarkers: []string{"alpha1"},
+		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			observation := fixture.runTurn(t, connection, sessionID, testCase)
-			if strings.Contains(observation.assistantText, "alpha1") && testCase.marker == "bravo2" {
-				t.Fatalf("%s assistant result crossed the prior turn marker: %q", testCase.name, observation.assistantText)
-			}
+			fixture.runTurn(t, connection, sessionID, testCase)
 		})
 	}
 	secondWorkspace := filepath.Join(t.TempDir(), "second-reusable-acp-workspace")
@@ -60,15 +64,28 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 	if secondSessionID == sessionID {
 		t.Fatalf("reusable ACP session identities reused %q across distinct session/new workspaces", sessionID)
 	}
+	// Creating the second Chat Session is safe while the first Factory runtime
+	// is retained; its first turn must wait until the first active runtime has
+	// been canceled and closed because the on-demand target owns one retained
+	// default runtime at a time.
 	fixture.closeActiveSession(t, connection, sessionID)
+	fixture.runTurn(t, connection, secondSessionID, reusableACPCase{
+		name:             "second isolated session turn",
+		marker:           "delta4",
+		prompt:           "xxxxxxxxxxxxxxd4",
+		output:           "delta4 reusable ACP result",
+		forbiddenMarkers: []string{"alpha1", "bravo2"},
+	})
+	fixture.closeActiveSession(t, connection, secondSessionID)
 }
 
 type reusableACPCase struct {
-	name          string
-	marker        string
-	prompt        string
-	output        string
-	blockProvider bool
+	name             string
+	marker           string
+	prompt           string
+	output           string
+	blockProvider    bool
+	forbiddenMarkers []string
 }
 
 type reusableACPFixture struct {
@@ -193,6 +210,13 @@ func (connection *reusableACPConnection) initialize(t *testing.T) {
 	if frame.JSONRPC != "2.0" {
 		t.Fatalf("initialize response jsonrpc = %q, want 2.0", frame.JSONRPC)
 	}
+	var result acpsdk.InitializeResponse
+	if err := json.Unmarshal(frame.Result, &result); err != nil {
+		t.Fatalf("decode initialize result: %v", err)
+	}
+	if result.ProtocolVersion != acpsdk.ProtocolVersion(acpsdk.ProtocolVersionNumber) {
+		t.Fatalf("initialize protocolVersion = %v, want %v", result.ProtocolVersion, acpsdk.ProtocolVersionNumber)
+	}
 }
 
 func (connection *reusableACPConnection) request(
@@ -284,7 +308,7 @@ func (fixture *reusableACPFixture) runTurn(
 	if result.StopReason != acpsdk.StopReasonEndTurn {
 		t.Fatalf("%s stopReason = %q, want %q", testCase.name, result.StopReason, acpsdk.StopReasonEndTurn)
 	}
-	assistantText := assertReusableACPNotifications(t, testCase, notifications)
+	assistantText := assertReusableACPNotifications(t, sessionID, testCase, notifications)
 	if got := fixture.provider.count(testCase.marker); got != 2 {
 		t.Fatalf("%s provider invocations = %d, want exactly 2", testCase.name, got)
 	}
@@ -383,6 +407,7 @@ func (fixture *reusableACPFixture) newSession(
 
 func assertReusableACPNotifications(
 	t *testing.T,
+	sessionID string,
 	testCase reusableACPCase,
 	notifications []acpsdk.SessionNotification,
 ) string {
@@ -390,6 +415,9 @@ func assertReusableACPNotifications(
 	assistantText := ""
 	toolCallIndex, toolUpdateIndex, assistantIndex := -1, -1, -1
 	for index, notification := range notifications {
+		if string(notification.SessionId) != sessionID {
+			t.Fatalf("%s notification %d sessionId = %q, want %q", testCase.name, index, notification.SessionId, sessionID)
+		}
 		switch {
 		case notification.Update.ToolCall != nil && toolCallIndex == -1:
 			toolCallIndex = index
@@ -410,6 +438,11 @@ func assertReusableACPNotifications(
 	}
 	if assistantIndex < 0 || toolCallIndex > toolUpdateIndex || toolUpdateIndex > assistantIndex {
 		t.Fatalf("%s notification order = %s, want tool_call, tool_call_update, assistant result", testCase.name, summarizeReusableACPNotifications(notifications))
+	}
+	for _, forbiddenMarker := range testCase.forbiddenMarkers {
+		if strings.Contains(assistantText, forbiddenMarker) {
+			t.Fatalf("%s assistant result crossed marker %q from another turn or session: %q", testCase.name, forbiddenMarker, assistantText)
+		}
 	}
 	return assistantText
 }
