@@ -94,3 +94,57 @@ The source-plan artifact named by the PRD is ignored and absent in this
 worktree. The PRD/task packet supplies the matrix used here. No source-plan,
 shared support, or c01 canonical inventory file was edited; the controls-file
 hash refresh is a narrow delta request to the inventory owner.
+
+## TASK-003 post-change topology and focused evidence
+
+Implementation commit: `12745daabc` (`test: reuse ACP stdio fixture roots`).
+The eight ACP rows now use six root builds when the package is selected: the
+two terminal/EOF rows (ACP-01 and ACP-02) retain isolated roots because their
+on-demand Factory runtime is not released by ordinary prompt completion, the
+close-capable ACP-03/04 rows share one application graph, and ACP-05 reuses
+that graph after those explicit close requests. Transcript rotation,
+failed-outbound-write, and permission rows remain isolated because their
+recording bytes, writer failure, and filesystem ownership are the genuine
+property under test.
+
+| Cohort | Rows | Root topology | Fresh per-case state retained |
+| --- | --- | --- | --- |
+| control-isolated | ACP-01..02 | one root per row; balanced package counters `2/2` | HOME, project-local Factory, profile, provider runner, Session, real pipe pairs, frames, command, and EOF cleanup |
+| shared control | ACP-03..05 | one shared root; balanced package counter `1/1`; case router observed 4 provider routes | HOME, project-local Factory/target, profile, provider runner route, Session, real pipe pairs, frames, command, close/EOF lifecycle |
+| transcript rotation | ACP-06 | isolated root `1/1` | rotating recorder, transcript files, HOME, cwd, provider runner, Session, real pipe pairs, and EOF cleanup |
+| outbound failure | ACP-07 | isolated root `1/1` | failing writer, recorder, HOME, cwd, initialize stream, and process cleanup |
+| permission | ACP-08 | isolated root `1/1` | default recorder, HOME, transcript path, initialize stream, and process cleanup |
+
+The shared fixture stores its case directories until `TestMain` closes the
+application root, which is required on Windows because the production
+transcript logger can retain file handles beyond one `Process.Execute` return.
+Every shared invocation carries a case-local context route and the whole
+`Process.Execute` call is serialized; ACP-03/04 explicitly close their active
+Factory Session before the next connection, while TestMain closes the final
+ACP-05 runtime. No actual ACP pipes or protocol assertions were replaced.
+
+Focused functional evidence on commit `12745daabc` (Go 1.25.0,
+windows/amd64; all commands exited 0):
+
+```text
+go test -v -count=1 -timeout=10m ./tests/functional/transport/acp/stdio -run '^TestServeACP_RootBuildProcess(ProviderFailureTerminalizesPrompt|CancelTerminalizesOnlyCapturedPrompt|CloseStopsCapturedFactorySession|CloseThenLoadReplaysRetainedItemIdentities|CompletesOneFactoryPrompt)$'
+PASS; package-reported 16.012s; shared-control roots=1/1, routes=4; control-isolated roots=2/2
+
+go test -v -count=1 -timeout=10m ./tests/functional/transport/acp/stdio -run '^TestServeACP(WritesAWireTranscriptByDefault|DoesNotRecordFailedOutboundFrame|WireTranscriptIsOwnerReadableOnly)$'
+PASS; package-reported 9.523s; transcript roots=1/1, outbound-failure roots=1/1, permission roots=1/1
+
+go test -count=3 -timeout=20m ./tests/functional/transport/acp/stdio -run '^TestServeACP_RootBuildProcess(ProviderFailureTerminalizesPrompt|CancelTerminalizesOnlyCapturedPrompt|CloseStopsCapturedFactorySession|CloseThenLoadReplaysRetainedItemIdentities)$'
+PASS; all three package repetitions; package-reported 63.125s total
+
+go test -race -count=1 -timeout=20m ./tests/functional/transport/acp/stdio -run '^TestServeACP_RootBuildProcess(CloseStopsCapturedFactorySession|CloseThenLoadReplaysRetainedItemIdentities|CompletesOneFactoryPrompt)$'
+PASS; package-reported 23.373s; no race report; shared-control roots=1/1
+```
+
+These runs prove ACP-01..08 exact protocol, lifecycle, identity/order,
+transcript, failed-write, permission, EOF, and stderr assertions at local-real
+fidelity, plus fresh case routing, balanced root cleanup, repeat stability, and
+no detected race in the reusable cohort. They do not prove the PR-CI package
+under-three-second performance gate, functional coverage, the story-005 one
+final full-package run, ACPX executable behavior, transport-family loopback,
+terminal CI, or merge; those remain GATE-PERF, GATE-COVERAGE, GATE-LOOP, and
+GATE-PR inputs.
