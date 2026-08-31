@@ -290,6 +290,7 @@ jobs:
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+          UNIT_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/unit-coverage/coverage-build-diagnostics.json
       # This existing coverage tier intentionally selects backend packages
       # under pkg/... through make test-unit-coverage. It does not claim to
       # exercise ./internal/...; that tree has separate repository-maintenance
@@ -329,6 +330,7 @@ jobs:
             .artifacts/unit-coverage/unit-timing-summary.json
             .artifacts/unit-coverage/unit-coverage-summary.md
             .artifacts/unit-coverage/command.log
+            .artifacts/unit-coverage/coverage-build-diagnostics.json
           if-no-files-found: ignore
           retention-days: 14
       - name: Render unit coverage pull request comment

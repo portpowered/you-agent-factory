@@ -162,6 +162,8 @@ GO_UNIT_COVERAGE_JSON_OUTPUT ?= $(UNIT_COVERAGE_DIR)/coverage-summary.json
 GO_UNIT_COVERAGE_TIMING_OUTPUT ?= $(UNIT_COVERAGE_DIR)/unit-timing-summary.json
 GO_UNIT_COVERAGE_LOG ?= $(UNIT_COVERAGE_DIR)/command.log
 UNIT_COVERAGE_GO ?= $(GO)
+UNIT_COVERAGE_JOBS ?=
+UNIT_COVERAGE_BUILD_DIAGNOSTICS ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
 GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT ?=
@@ -753,7 +755,9 @@ test-unit-coverage:
 		-profile "$(GO_UNIT_COVERAGE_PROFILE)" \
 		-coverage-summary "$(GO_UNIT_COVERAGE_JSON_OUTPUT)" \
 		-timing-summary "$(GO_UNIT_COVERAGE_TIMING_OUTPUT)" \
-		-log "$(GO_UNIT_COVERAGE_LOG)"
+		-log "$(GO_UNIT_COVERAGE_LOG)" \
+		$(if $(UNIT_COVERAGE_JOBS),-jobs $(UNIT_COVERAGE_JOBS),) \
+		$(if $(UNIT_COVERAGE_BUILD_DIAGNOSTICS),-coverage-build-diagnostics "$(UNIT_COVERAGE_BUILD_DIAGNOSTICS)",)
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of
