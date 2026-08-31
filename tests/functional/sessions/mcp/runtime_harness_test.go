@@ -18,10 +18,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
-	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -114,14 +111,7 @@ func startRootRuntimeMCPServer(
 	t.Helper()
 
 	fixture := mcpSharedProcessForTest(t)
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
+	stdinRead, stdinWrite, stdoutRead, stdoutWrite := openMCPStdioPipes(t)
 	t.Cleanup(func() {
 		_ = stdinRead.Close()
 		_ = stdinWrite.Close()
@@ -134,56 +124,19 @@ func startRootRuntimeMCPServer(
 	t.Cleanup(func() {
 		_ = os.RemoveAll(homeDir)
 	})
-	opened, err := fixture.openRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
-		ProjectRoot:      projectRoot,
-		SystemConfigHome: homeDir,
-	})
-	if err != nil {
-		t.Fatalf("open MCP runtime: %v", err)
-	}
-	if opened.Execution == nil || opened.Close == nil {
-		if opened.Close != nil {
-			_ = opened.Close()
-		}
-		t.Fatalf("open MCP runtime returned incomplete execution owner: execution=%T close=%t", opened.Execution, opened.Close != nil)
-	}
-	execution, ok := any(opened.Execution).(mcpfactorysession.DurableExecution)
-	if !ok || execution == nil {
-		_ = opened.Close()
-		t.Fatalf("MCP runtime execution has type %T, want MCP durable execution capability", opened.Execution)
-	}
 	events := make(chan factorydefinitions.FactoryEvent, 256)
-	observedExecution := &mcpObservedDurableExecution{
-		DurableExecution: execution,
-		consume: func(observed []factorydefinitions.FactoryEvent) {
-			for _, event := range observed {
-				events <- event.Clone()
-			}
-		},
-	}
-	server, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-			observedExecution,
-			nil,
-			factorysessionwire.NewRequestPreparation(),
-			nil,
-		)),
-	})
+	opened, observedExecution := openObservedMCPExecution(t, fixture, projectRoot, homeDir, events)
+	server, err := root.MCPServerForExecution(fixture.process, observedExecution)
 	if err != nil {
 		_ = opened.Close()
 		t.Fatalf("build MCP server: %v", err)
-	}
-	stdio, err := mcpstdio.Open(server, stdinRead, stdoutWrite)
-	if err != nil {
-		_ = opened.Close()
-		t.Fatalf("open MCP stdio session: %v", err)
 	}
 
 	serveErr := make(chan error, 1)
 	serveDone := make(chan struct{})
 	go func() {
 		defer close(serveDone)
-		runErr := stdio.Run(ctx)
+		runErr := server.ServeStdio(ctx, stdinRead, stdoutWrite)
 		if closeErr := opened.Close(); closeErr != nil {
 			runErr = errors.Join(runErr, closeErr)
 		}
@@ -212,6 +165,58 @@ func startRootRuntimeMCPServer(
 	})
 
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr, &mcpRuntimeHost{events: events}
+}
+
+func openMCPStdioPipes(t *testing.T) (*os.File, *os.File, *os.File, *os.File) {
+	t.Helper()
+	stdinRead, stdinWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	return stdinRead, stdinWrite, stdoutRead, stdoutWrite
+}
+
+func openObservedMCPExecution(
+	t *testing.T,
+	fixture *mcpSharedFixture,
+	projectRoot string,
+	homeDir string,
+	events chan<- factorydefinitions.FactoryEvent,
+) (factorysessions.OpenedExecutionRuntime, mcpfactorysession.DurableExecution) {
+	t.Helper()
+	opened, err := fixture.openRuntime(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
+		ProjectRoot:      projectRoot,
+		SystemConfigHome: homeDir,
+	})
+	if err != nil {
+		t.Fatalf("open MCP runtime: %v", err)
+	}
+	if opened.Execution == nil || opened.Close == nil {
+		if opened.Close != nil {
+			_ = opened.Close()
+		}
+		t.Fatalf("open MCP runtime returned incomplete execution owner: execution=%T close=%t", opened.Execution, opened.Close != nil)
+	}
+	execution, ok := any(opened.Execution).(mcpfactorysession.DurableExecution)
+	if !ok || execution == nil {
+		_ = opened.Close()
+		t.Fatalf("MCP runtime execution has type %T, want MCP durable execution capability", opened.Execution)
+	}
+	observedExecution := &mcpObservedDurableExecution{
+		DurableExecution: execution,
+		consume: func(observed []factorydefinitions.FactoryEvent) {
+			for _, event := range observed {
+				events <- event.Clone()
+			}
+		},
+	}
+	return opened, observedExecution
 }
 
 func (host *mcpRuntimeHost) subscribeCanonicalEvents(t *testing.T) *mcpCanonicalEventSubscription {

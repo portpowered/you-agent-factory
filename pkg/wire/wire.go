@@ -440,6 +440,7 @@ var BundleSet = wire.NewSet(
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideMCPServerBuilder,
+	provideMCPServerFactory,
 	provideSessionExecutionOpeningFactory,
 	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
 	factorysessionwire.NewStdioOpeningService,
@@ -454,7 +455,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcessWithRuntimeCostsAndExecution,
+	initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndMCP,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )

@@ -37,6 +37,7 @@ type Process struct {
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
 	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
 	runtimeCosts   processcontract.RuntimeCostsQueryCapability
+	mcpServer      processcontract.MCPServerFactory
 }
 
 // invocationCancellation is owned by one Process.Execute call. It is kept
@@ -66,7 +67,7 @@ func NewProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil, nil)
 }
 
 // NewProcessWithRuntimeCostsAndExecution constructs the canonical process
@@ -83,7 +84,26 @@ func NewProcessWithRuntimeCostsAndExecution(
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, nil)
+}
+
+// NewProcessWithRuntimeCostsAndExecutionAndMCP constructs the canonical
+// process with durable Factory Session opening and the root-owned MCP server
+// factory capability.
+func NewProcessWithRuntimeCostsAndExecutionAndMCP(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+	mcpServer processcontract.MCPServerFactory,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, mcpServer)
 }
 
 func newProcess(
@@ -97,6 +117,7 @@ func newProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+	mcpServer processcontract.MCPServerFactory,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -115,6 +136,7 @@ func newProcess(
 		runtimeMetrics: runtimeMetrics,
 		executionOpen:  executionOpen,
 		runtimeCosts:   runtimeCosts,
+		mcpServer:      mcpServer,
 	}, nil
 }
 
@@ -192,6 +214,15 @@ func (p *Process) RuntimeCostsQuery() processcontract.RuntimeCostsQueryCapabilit
 		return nil
 	}
 	return p.runtimeCosts
+}
+
+// MCPServerFactory returns the canonical MCP transport factory composed by
+// Wire. The factory is inert until a caller supplies an opened execution.
+func (p *Process) MCPServerFactory() processcontract.MCPServerFactory {
+	if p == nil {
+		return nil
+	}
+	return p.mcpServer
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

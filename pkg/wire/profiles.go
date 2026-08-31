@@ -648,9 +648,9 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 }
 
 type mcpServerBuilder func(
-	factorysessionwire.DurableExecutionService,
-	recordings.Service,
-	factorysessionwire.RequestPreparation,
+	factorysessionmcp.DurableExecution,
+	factorysessionmcp.RecordingsInspection,
+	factorysessionmcp.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
 ) (*mcpserver.Server, error)
 
@@ -660,9 +660,9 @@ type mcpServerBuilder func(
 // services while an opening is being selected.
 func provideMCPServerBuilder() mcpServerBuilder {
 	return func(
-		execution factorysessionwire.DurableExecutionService,
-		recordingsService recordings.Service,
-		prepare factorysessionwire.RequestPreparation,
+		execution factorysessionmcp.DurableExecution,
+		recordingsService factorysessionmcp.RecordingsInspection,
+		prepare factorysessionmcp.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 	) (*mcpserver.Server, error) {
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
@@ -676,6 +676,23 @@ func provideMCPServerBuilder() mcpServerBuilder {
 				execution, inspection, prepare, workflowPreview,
 			)),
 		})
+	}
+}
+
+// provideMCPServerFactory publishes the transport-only root capability used
+// by embedders that already opened a durable execution. Request preparation
+// remains selected by the canonical Wire graph; the opaque process contract
+// keeps Factory Sessions and MCP implementation types out of initializer.
+func provideMCPServerFactory(
+	buildServer mcpServerBuilder,
+	prepare factorysessionwire.RequestPreparation,
+) processcontract.MCPServerFactory {
+	return func(execution any) (processcontract.MCPServer, error) {
+		durable, ok := execution.(factorysessionmcp.DurableExecution)
+		if !ok || durable == nil {
+			return nil, fmt.Errorf("build MCP server: durable execution has type %T", execution)
+		}
+		return buildServer(durable, nil, prepare, nil)
 	}
 }
 

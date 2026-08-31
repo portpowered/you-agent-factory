@@ -159,6 +159,19 @@ type ACPServer interface {
 	Serve(context.Context, io.Reader, io.Writer) error
 }
 
+// MCPServer is the neutral process capability for serving an already-bound
+// Factory Session MCP server over caller-owned stdio streams. The process
+// contract carries the protocol role without importing the MCP transport
+// implementation into the initializer.
+type MCPServer interface {
+	ServeStdio(context.Context, io.Reader, io.Writer) error
+}
+
+// MCPServerFactory constructs one MCP server around an already-opened,
+// caller-selected durable execution. The execution is opaque here so the
+// initializer does not depend on Factory Sessions or transport packages.
+type MCPServerFactory func(any) (MCPServer, error)
+
 type Functions struct {
 	ProcessContextFunc   func(context.Context) (context.Context, func())
 	InitializeSystemFunc func(context.Context, string) error
