@@ -438,19 +438,25 @@ host performance verdict.
 
 ### Current-head CI timing and coverage record
 
-The Backend Functional Coverage job for hosted CI run `33347664926` measured
-the exact pushed implementation head
-`d5e9ae43b89bd61857086afae22411c12afc8e5b` before the required base
-synchronization. Its package rows reported
-`commands 24.731s` and `parameters 22.033s`, both above the three-second target.
+The Backend Functional Coverage job for hosted CI run `33352199369` measured
+the exact final delivery head
+`74e5244a948428ddd681e49fdd9c52ae1f902118`. Its package rows reported
+`commands 29.073s` and `parameters 27.420s`, both above the three-second target.
 The bounded profile-led pass above is the required floor disposition for both
-values: it enumerates every top-level test in each package, records package
-setup/teardown remainder (`0.407s` for commands and `0.750s` for parameters),
-and records the outer compile/runner upper bounds (`15.891s` and `7.896s`).
-Thus the hosted package rows are not presented as below-threshold results; the
-complete retained-test, setup/teardown, and compile/runner floor is recorded
-for the one authorized diagnostic pass. The CI transcript and URL remain in
-the PR conversation, not in this ledger.
+values under this exact source-identity reuse key: implementation/test source
+commit `9c89ba607f57ff68f08bd6e314220fbc228cc7a2`, the changed-source
+SHA-256 table above, and an empty `git diff` between that commit and the final
+head for both owned package directories. Within the two owned package
+directories, the final head has no source diff from that implementation
+source; the only lane-owned change since that source snapshot is the evidence
+ledger, so the profile
+pass enumerates the same top-level tests, package setup/teardown remainder
+(`0.407s` for commands and `0.750s` for parameters), and outer compile/runner
+upper bounds (`15.891s` and `7.896s`) required to disposition the current-head
+rows. Thus the hosted package rows are not presented as below-threshold
+results; the complete retained-test, setup/teardown, and compile/runner floor
+is recorded for the one authorized diagnostic pass. The CI transcript and URL
+remain in the PR conversation, not in this ledger.
 
 The same hosted job measured Backend Functional Coverage at `61.6%` and
 reported no owned skip or quarantine. Those property-specific CI details are
@@ -460,13 +466,13 @@ retained in the PR conversation as required by the delivery criterion.
 
 This report follows `factory/docs/standards/validation-loopback-template.md`.
 It was run read-only from a detached clean worktree at exact delivery head
-`5ca89fab3f159914979d57ed964722cffec86402`. No implementation repair was made
+`74e5244a948428ddd681e49fdd9c52ae1f902118`. No implementation repair was made
 during the loopback.
 
 #### Environment and artifact
 
-- Commit/build identifier: `5ca89fab3f159914979d57ed964722cffec86402` (the
-  exact synchronized implementation head before this evidence refresh).
+- Commit/build identifier: `74e5244a948428ddd681e49fdd9c52ae1f902118` (the
+  exact final delivery head under review).
 - Environment: Windows `10.0.26200.0`, Go `1.25.0`, `windows/amd64`; the host
   had unrelated long-running Go/test/runtime processes, which is retained as
   an environmental observation.
@@ -479,9 +485,9 @@ during the loopback.
 
 | Criterion | Result | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete command matrix | PASS | Final detached worktree at exact head `5ca89fab3f159914979d57ed964722cffec86402` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `53.575s`, wall `95.396s`. | Hosted Linux/CI topology. |
-| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `31.601s`, wall `35.732s`. | Hosted Linux/CI topology. |
-| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.748s`, wall `7.835s`. | Hosted Linux/CI topology. |
+| Complete command matrix | PASS | Final detached worktree at exact head `74e5244a948428ddd681e49fdd9c52ae1f902118` ran `go test ./tests/functional/transport/cli/commands -count=1`; exit `0`, package `81.147s`, wall `142.434s`. | Hosted Linux/CI topology. |
+| Complete default parameter matrix | PASS | Same exact-head detached worktree ran `go test ./tests/functional/transport/cli/parameters -count=1`; exit `0`, package `51.813s`, wall `59.536s`. | Hosted Linux/CI topology. |
+| P22 tagged witness | PASS | Exact-head detached worktree ran the required `functionallong`/`-short=false` selector; exit `0`, package `1.684s`, wall `11.091s`. | Hosted Linux/CI topology. |
 | Repeat/race/cleanup support | PASS | Focused count-three and race gates above exited `0`; package-owned runtimes close once through their serialized locks. | Unexercised schedules and future host behavior. |
 | Scope and compatibility | PASS | Three-dot diff and boundary check contain only the owned test paths and ledger; no API, generated, production, shared-support, inventory, or UI change. | Future base changes before push. |
 | Security/privacy/cost | PASS | Controlled local effects only; no credentials, customer data, paid calls, or real remote providers. | None within this lane. |
