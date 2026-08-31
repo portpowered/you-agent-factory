@@ -468,7 +468,7 @@ Place new scenarios under behavior-owned packages rather than the deletion-only
   correlation, revision, cursor reconnect, failure closure, and absence on
   rejection/no-op; and
 - extend `tests/functional/sessions/restart/` and
-  `tests/functional/cli/session_resume/` for post-change restart and
+  `tests/functional/transport/cli/session_resume/` for post-change restart and
   pause/change/resume reconstruction.
 
 Required high-value functional cells:

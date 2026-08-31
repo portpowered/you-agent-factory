@@ -431,7 +431,7 @@ func prepareMCPResumeFactory(projectRoot string) error {
 		{fixture: "simple-final.workflow.js", name: "simple-final"},
 		{fixture: "busy-loop.workflow.js", name: "busy-loop"},
 	} {
-		source := filepath.Join("..", "..", "..", "fixtures", "javascript_runtime", workflow.fixture)
+		source := filepath.Join("..", "..", "..", "..", "fixtures", "javascript_runtime", workflow.fixture)
 		content, err := os.ReadFile(source)
 		if err != nil {
 			return fmt.Errorf("read MCP resume workflow fixture %s: %w", workflow.fixture, err)
