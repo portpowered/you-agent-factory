@@ -1,19 +1,16 @@
 package execution_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -50,8 +47,8 @@ func TestAPIPetriDispatchUsageReachesDispatchList(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			endpoint := runPetriDispatchUsage(t, test)
-			assertPetriDispatchUsage(t, endpoint, test)
+			observation := runPetriDispatchUsage(t, test)
+			assertPetriDispatchUsage(t, observation, test)
 		})
 	}
 }
@@ -66,85 +63,100 @@ type petriDispatchUsageCase struct {
 	wantTokenKeys  bool
 }
 
-func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) string {
+type petriDispatchUsageObservation struct {
+	endpoint string
+	body     []byte
+	listed   factoryapi.ListFactorySessionDispatchesResponse
+}
+
+func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) petriDispatchUsageObservation {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", test.workerConfig)
-	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	var openingCustomSession bool
-	var customRuntimeIDIssued atomic.Bool
-	recordPath := filepath.Join(t.TempDir(), "petri-dispatch-usage.json")
 	providerRunner := testutil.NewProviderCommandRunner(test.providerResult)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--record", recordPath},
-		Edges: serviceedges.Edges{
-			FactoryRuntimeIDGenerator: func() string {
-				if openingCustomSession && customRuntimeIDIssued.CompareAndSwap(false, true) {
-					return sessionID
-				}
-				return uuid.NewString()
-			},
-			FactorySessionIDGenerator:                func() string { return sessionID },
-			FactorySessionRuntimeInstanceIDGenerator: uuid.NewString,
-			ProviderCommandRunner:                    providerRunner,
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	openingCustomSession = true
-	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
-	if opened.Session == nil || opened.Session.Id != sessionID {
-		t.Fatalf("opened session = %#v, want id %q", opened.Session, sessionID)
-	}
+	observedRunner := &petriDispatchUsageRunner{delegate: providerRunner, calls: make(chan struct{}, 1)}
+	session := openSharedExecutionSession(t, dir, sharedExecutionRouteConfig{provider: observedRunner})
 	name := "rest-submit-petri-dispatch-usage"
-	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+	support.SubmitSessionWorkAt(t, session.fixture.baseURL, session.sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "REST Petri dispatch usage"},
 	})
-	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
-	return strings.TrimSuffix(server.URL(), "/") + "/factory-sessions/" + sessionID + "/dispatches"
+	if err := observedRunner.waitForCall(t.Context(), sharedExecutionFixtureTimeout); err != nil {
+		t.Fatalf("wait for provider command edge: %v", err)
+	}
+	// The command edge proves the external effect returned; this bounded
+	// public-session observation proves the runtime committed that result before
+	// the session is closed and its durable dispatch projection is read.
+	support.WaitForSessionTerminalStatus(t, session.fixture.baseURL, session.sessionID, sharedExecutionFixtureTimeout)
+	// The provider edge is the deterministic completion witness for this
+	// recording-backed projection. Close the live session before reading the
+	// durable dispatch list, matching the original public route.
+	session.close(t)
+	listed, err := support.WaitForObservation(
+		sharedExecutionFixtureTimeout,
+		func() (factoryapi.ListFactorySessionDispatchesResponse, error) {
+			return listFactorySessionDispatches(t, session.fixture.baseURL, session.sessionID), nil
+		},
+		func(listed factoryapi.ListFactorySessionDispatchesResponse) bool {
+			return len(listed.Dispatches) == 1 && listed.Dispatches[0].Status == factoryapi.FactoryDispatchStatusCOMPLETED
+		},
+	)
+	if err != nil {
+		t.Fatalf("dispatch list did not reach COMPLETED: %v; last dispatches=%#v", err, listed.Dispatches)
+	}
+	endpoint := strings.TrimSuffix(session.fixture.baseURL, "/") + "/factory-sessions/" + session.sessionID + "/dispatches"
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200: %s", endpoint, response.StatusCode, body)
+	}
+	var listedResponse factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(body, &listedResponse); err != nil {
+		t.Fatalf("decode GET %s response: %v", endpoint, err)
+	}
+	return petriDispatchUsageObservation{endpoint: endpoint, body: body, listed: listedResponse}
 }
 
-func assertPetriDispatchUsage(t *testing.T, endpoint string, test petriDispatchUsageCase) {
-	t.Helper()
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	var (
-		body   []byte
-		listed factoryapi.ListFactorySessionDispatchesResponse
-	)
-	for {
-		response, err := http.Get(endpoint)
-		if err != nil {
-			t.Fatalf("GET %s: %v", endpoint, err)
-		}
-		body, err = io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil {
-			t.Fatalf("read GET %s response: %v", endpoint, err)
-		}
-		if response.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want 200: %s", endpoint, response.StatusCode, body)
-		}
-		listed = factoryapi.ListFactorySessionDispatchesResponse{}
-		if err := json.Unmarshal(body, &listed); err != nil {
-			t.Fatalf("decode GET %s response: %v", endpoint, err)
-		}
-		if len(listed.Dispatches) > 0 {
-			break
-		}
+type petriDispatchUsageRunner struct {
+	delegate platformprocess.CommandRunner
+	calls    chan struct{}
+}
+
+func (runner *petriDispatchUsageRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	result, err := runner.delegate.Run(ctx, request)
+	if err == nil {
 		select {
-		case <-deadline.C:
-			t.Fatalf("GET %s dispatches remained empty after waiting for recording projection", endpoint)
-		case <-ticker.C:
+		case runner.calls <- struct{}{}:
+		default:
 		}
 	}
+	return result, err
+}
+
+func (runner *petriDispatchUsageRunner) waitForCall(ctx context.Context, timeout time.Duration) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	select {
+	case <-runner.calls:
+		return nil
+	case <-waitCtx.Done():
+		return waitCtx.Err()
+	}
+}
+
+func assertPetriDispatchUsage(t *testing.T, observation petriDispatchUsageObservation, test petriDispatchUsageCase) {
+	t.Helper()
+	endpoint := observation.endpoint
+	body := observation.body
+	listed := observation.listed
 	if len(listed.Dispatches) != 1 {
 		t.Fatalf("GET %s dispatches = %#v, want one completed Petri dispatch", endpoint, listed.Dispatches)
 	}
