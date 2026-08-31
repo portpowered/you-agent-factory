@@ -23,14 +23,18 @@ func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	fixture := mcpResumePackageFixtureForTest(t)
 	client := fixture.client
 
-	sessionID := assertRuntimeSmokeAsyncStart(t, client, fixture.nextRequestID("runtime-smoke"))
-	fixture.trackSession(t, client, sessionID)
+	sessionID := assertRuntimeSmokeAsyncStart(t, client, fixture, fixture.nextRequestID("runtime-smoke"))
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
 	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
 }
 
 func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
 	t.Helper()
+
+	// The public session read and final result are the observable async
+	// completion witnesses. The provider edge cannot prove that persistence and
+	// result projection are complete, so this bounded poll intentionally yields
+	// between public reads instead of using a fixed startup wait.
 	deadline := time.Now().Add(5 * time.Second)
 	mode := factoryapi.FactorySessionResultModeFinal
 	for time.Now().Before(deadline) {
@@ -49,7 +53,12 @@ func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, se
 	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
 }
 
-func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient, requestID string) string {
+func assertRuntimeSmokeAsyncStart(
+	t *testing.T,
+	client *stdioMCPClient,
+	fixture *mcpResumePackageFixture,
+	requestID string,
+) string {
 	t.Helper()
 	asyncStart := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
@@ -58,17 +67,25 @@ func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient, requestI
 	if asyncStart.Error != nil || asyncStart.Result == nil {
 		t.Fatalf("start_async = %#v, want success", asyncStart)
 	}
-	if asyncStart.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("start_async status = %q, want RUNNING", asyncStart.Result.Status)
-	}
 	if asyncStart.Result.SessionId == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
-	return asyncStart.Result.SessionId
+	sessionID := asyncStart.Result.SessionId
+	// Register cleanup before checking any post-start state so a failed status
+	// or result observation cannot leave this durable session unowned.
+	fixture.trackSession(t, client, sessionID)
+	if asyncStart.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("start_async status = %q, want RUNNING", asyncStart.Result.Status)
+	}
+	return sessionID
 }
 
 func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdioMCPClient, sessionID string) {
 	t.Helper()
+
+	// This checks the customer-visible RUNNING/not-ready and terminal/result
+	// sequence. A provider completion signal cannot prove either public read
+	// model, so the bounded poll must observe those MCP responses directly.
 	deadline := time.Now().Add(5 * time.Second)
 	mode := factoryapi.FactorySessionResultModeFinal
 	observedRunningNotReady := false

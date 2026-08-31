@@ -15,7 +15,6 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 	assertRuntimeResumeSmokeDiscovery(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
-	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.SessionId != sessionID {
@@ -69,7 +68,6 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 	client := harness.client
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
-	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	assertMCPDurableProgressCounts(t, before.Progress, 1, 2, 0)
@@ -138,7 +136,6 @@ func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionA
 	client := harness.client
 
 	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client, harness.fixture)
-	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.SessionId != sessionID {
@@ -185,7 +182,6 @@ func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPres
 	client := harness.client
 
 	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client, harness.fixture)
-	harness.fixture.trackSession(t, client, sessionID)
 
 	before := readMCPSessionDurableReadModel(t, client, sessionID)
 	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
@@ -292,6 +288,7 @@ func startMCPRuntimeResumeSmokeSucceededSession(
 	if sessionID == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
+	fixture.trackSession(t, client, sessionID)
 	waitForMCPSessionStatus(
 		t,
 		client,
@@ -328,6 +325,7 @@ func startMCPRuntimeResumeSmokeRunningSession(
 	if sessionID == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
+	fixture.trackSession(t, client, sessionID)
 	waitForMCPSessionStatus(
 		t,
 		client,
@@ -383,6 +381,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	if sessionID == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
+	harness.fixture.trackSession(t, client, sessionID)
 
 	waitForMCPDispatchStatus(
 		t,
@@ -453,6 +452,12 @@ func mcpControlResumeWhenInterrupted(
 	timeout time.Duration,
 ) factoryapi.FactorySessionLifecycleControlResponse {
 	t.Helper()
+
+	// The public MCP control response is the synchronization witness here: the
+	// provider cancellation channel proves edge progress, but only retrying the
+	// control operation proves the server has observed the persisted interrupted
+	// state and accepted the requested resume. Keep the bounded retry without a
+	// fixed startup wait.
 	waitForMCPSessionStatus(
 		t,
 		client,
@@ -618,6 +623,10 @@ func waitForMCPSessionStatus(
 ) factoryapi.FactorySessionDurableReadModel {
 	t.Helper()
 
+	// The durable read model is the required witness for persisted lifecycle
+	// state. A provider or runtime signal cannot prove that the public MCP read
+	// projection has reached the requested status, so this functional poll is
+	// intentionally bounded and uses only a short yield between reads.
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		session := readMCPSessionDurableReadModel(t, client, sessionID)
@@ -641,6 +650,9 @@ func waitForMCPDispatchStatus(
 ) {
 	t.Helper()
 
+	// Dispatch status is owned by the public MCP dispatch projection; provider
+	// completion alone cannot prove that projection has recorded the requested
+	// status. Poll the public list response with the existing bounded yield.
 	deadline := time.Now().Add(timeout)
 	var last []factoryapi.FactorySessionDispatchSummary
 	for time.Now().Before(deadline) {

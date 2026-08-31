@@ -274,6 +274,11 @@ func waitForMCPResumeTerminal(
 	timeout time.Duration,
 ) bool {
 	t.Helper()
+
+	// Cleanup must observe the public durable terminal state after terminate
+	// before unregistering the provider route and shutting down the shared
+	// process. Internal cancellation signals cannot prove persistence has caught
+	// up, so this bounded public-read poll is intentional.
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		session := readMCPSessionDurableReadModel(t, client, sessionID)

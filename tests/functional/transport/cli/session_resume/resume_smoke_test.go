@@ -562,6 +562,10 @@ func waitForDurableSessionStatusViaCLI(
 ) factoryapi.FactorySessionDurableReadModel {
 	t.Helper()
 
+	// The CLI durable read is the public persistence witness for this scenario.
+	// Provider or runtime signals cannot prove that the CLI-visible projection
+	// has reached the requested status, so the bounded poll intentionally yields
+	// between those public reads.
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		session := readDurableSessionViaCLI(t, harness, sessionID)
@@ -585,6 +589,9 @@ func waitForCLIResumeSmokeDispatchStatus(
 ) {
 	t.Helper()
 
+	// Dispatch completion is asserted through the HTTP read-model parity cell;
+	// provider completion alone cannot prove that the public dispatch projection
+	// has recorded the requested status. Keep the existing bounded poll and yield.
 	deadline := time.Now().Add(timeout)
 	var last factoryapi.ListFactorySessionDispatchesResponse
 	for time.Now().Before(deadline) {
