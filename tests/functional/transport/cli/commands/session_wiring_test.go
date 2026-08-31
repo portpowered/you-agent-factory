@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -361,7 +360,7 @@ func sessionWiringFactoryConfig() map[string]any {
 
 func runYouCLI(
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	args ...string,
@@ -371,8 +370,11 @@ func runYouCLI(
 		cmdArgs = append(cmdArgs, "--server", serverURL)
 	}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := processHarness.CommandContext(ctx, cmdArgs...)
-	cmd.Dir = workingDir
+	cmd, cleanup, err := newEphemeralCommandForScenario(processHarness, ctx, workingDir, cmdArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 	return cmd.CombinedOutput()
 }
 
@@ -443,7 +445,7 @@ type sessionWiringBatchSubmitJSON struct {
 func runSessionLifecycleCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	operation string,
@@ -469,7 +471,7 @@ func runSessionLifecycleCLIJSON(
 func runSessionShowCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	sessionID string,
@@ -493,7 +495,7 @@ func runSessionShowCLIJSON(
 func runWorkShowCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	sessionID string,
@@ -519,7 +521,7 @@ func runWorkShowCLIJSON(
 func runWorkListCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	sessionID string,
@@ -546,7 +548,7 @@ func runWorkListCLIJSON(
 func assertWorkNotDispatchedViaCLI(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	sessionID string,
@@ -573,7 +575,7 @@ func assertWorkNotDispatchedViaCLI(
 func waitForWorkStateViaCLI(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	serverURL string,
 	sessionID string,

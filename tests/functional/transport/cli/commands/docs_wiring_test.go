@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 )
 
 var packagedDocsIndexTopicPattern = regexp.MustCompile(`(?m)^- ` + "`" + `([a-z][a-z0-9-]*)` + "`" + ` - `)
@@ -103,7 +101,7 @@ func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {
 
 func executeDocsWiringCommand(
 	t *testing.T,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	args ...string,
 ) string {
@@ -118,14 +116,13 @@ func executeDocsWiringCommand(
 
 func executeDocsWiringCommandResult(
 	t *testing.T,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	workingDir string,
 	args ...string,
 ) (stdout string, err error) {
 	t.Helper()
 
-	command := processHarness.CommandContext(t.Context(), args...)
-	command.Dir = workingDir
+	command := newCommandForScenario(t, processHarness, t.Context(), workingDir, args...)
 	var stdoutBuffer, stderrBuffer bytes.Buffer
 	command.Stdout = &stdoutBuffer
 	command.Stderr = &stderrBuffer

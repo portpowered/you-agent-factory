@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,7 +20,7 @@ import (
 // still provide their own server URL when they need an unavailable or synthetic
 // HTTP boundary.
 type sharedRemoteCLI struct {
-	process        *builtcliacceptance.Harness
+	process        *commandRuntime
 	baseURL        string
 	hostFactoryDir string
 }

@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -58,7 +56,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		defer cancel()
 
 		unrelatedWorkingDir := t.TempDir()
-		cmd := processHarness.CommandContext(ctx,
+		cmd := newCommandForScenario(t, processHarness, ctx, unrelatedWorkingDir,
 			"run",
 			"--named", runWiringNamedFactoryName,
 			"--with-mock-workers="+mockWorkersPath,
@@ -67,7 +65,6 @@ func TestCLIRunNamedFactory(t *testing.T) {
 			"--quiet",
 			prompt,
 		)
-		cmd.Dir = unrelatedWorkingDir
 		cmd.Env = runWiringCustomerHomeEnvironment(homeDir)
 
 		var stdout, stderr strings.Builder
@@ -115,7 +112,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		defer cancel()
 
 		unrelatedWorkingDir := t.TempDir()
-		cmd := processHarness.CommandContext(ctx,
+		cmd := newCommandForScenario(t, processHarness, ctx, unrelatedWorkingDir,
 			"run",
 			"--named", interfaces.PackagedGoalFactoryName,
 			"--with-mock-workers="+mockWorkersPath,
@@ -124,7 +121,6 @@ func TestCLIRunNamedFactory(t *testing.T) {
 			"--quiet",
 			goalText,
 		)
-		cmd.Dir = unrelatedWorkingDir
 		cmd.Env = runWiringCustomerHomeEnvironment(homeDir)
 
 		var stdout, stderr strings.Builder
@@ -172,14 +168,13 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := processHarness.CommandContext(ctx,
+	cmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"run",
 		"--factory", factoryPath,
 		"--no-record",
 		"--quiet",
 		prompt,
 	)
-	cmd.Dir = factoryDir
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -219,7 +214,7 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := processHarness.CommandContext(ctx,
+	cmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers="+mockWorkersPath,
@@ -228,7 +223,6 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 		"--quiet",
 		prompt,
 	)
-	cmd.Dir = factoryDir
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -269,7 +263,7 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := processHarness.CommandContext(ctx,
+	cmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers="+mockWorkersPath,
@@ -277,7 +271,6 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 		"--server", baseURL,
 		"--quiet",
 	)
-	cmd.Dir = factoryDir
 	cmd.Stdin = strings.NewReader(prompt)
 
 	var stdout, stderr strings.Builder
@@ -317,7 +310,7 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := processHarness.CommandContext(ctx,
+	cmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers="+mockWorkersPath,
@@ -326,7 +319,6 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 		"--quiet",
 		"from positional",
 	)
-	cmd.Dir = factoryDir
 	cmd.Stdin = strings.NewReader("from stdin")
 
 	var stdout, stderr strings.Builder
@@ -367,7 +359,7 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := processHarness.CommandContext(ctx,
+	cmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers="+mockWorkersPath,
@@ -376,8 +368,6 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 		"--quiet",
 		"trigger unresolved result",
 	)
-	cmd.Dir = factoryDir
-
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -607,9 +597,9 @@ func writeRunWiringMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
-func newRunWiringRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
+func newRunWiringRootProcessHarness(t *testing.T) *commandRuntime {
 	t.Helper()
-	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	return newLocalReusableProcessHarness(t)
 }
 
 func reserveRunWiringLocalTCPPort() (int, error) {
@@ -629,7 +619,7 @@ func reserveRunWiringLocalTCPPort() (int, error) {
 func runRunWiringFactoryCLI(
 	t *testing.T,
 	dir string,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	mockWorkersPath string,
 	stdin *strings.Reader,
 	factoryPath string,
@@ -649,8 +639,7 @@ func runRunWiringFactoryCLI(
 	}
 	args = append(args, promptArgs...)
 
-	cmd := processHarness.CommandContext(ctx, args...)
-	cmd.Dir = dir
+	cmd := newCommandForScenario(t, processHarness, ctx, dir, args...)
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

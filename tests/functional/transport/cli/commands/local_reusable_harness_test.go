@@ -1,15 +1,13 @@
 package commands_test
 
-import (
-	"testing"
-
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
-)
+import "testing"
 
 // newLocalReusableProcessHarness gives a command group one reusable
 // production root process for serialized functional CLI invocations.
-func newLocalReusableProcessHarness(t *testing.T) *builtcliacceptance.Harness {
+func newLocalReusableProcessHarness(t *testing.T) *commandRuntime {
 	t.Helper()
-	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	if commandPackageRuntime == nil {
+		t.Fatal("command package runtime was not initialized")
+	}
+	return commandPackageRuntime
 }

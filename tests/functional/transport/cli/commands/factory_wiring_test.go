@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -41,12 +40,11 @@ func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	createCmd := processHarness.CommandContext(ctx,
+	createCmd := newCommandForScenario(t, processHarness, ctx, sourceDir,
 		"factory", "create", factoryWiringName,
 		"--from", sourcePath,
 		"--dir", namedFactoriesRoot,
 	)
-	createCmd.Dir = sourceDir
 	createOut, err := createCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you factory create: %v\noutput:\n%s", err, createOut)
@@ -67,10 +65,9 @@ func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 		t.Fatalf("created factory.json missing at %s: %v", createdFactoryPath, err)
 	}
 
-	validateCmd := processHarness.CommandContext(ctx,
+	validateCmd := newCommandForScenario(t, processHarness, ctx, sourceDir,
 		"factory", "config", "validate", createdFactoryPath,
 	)
-	validateCmd.Dir = sourceDir
 	validateOut, err := validateCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you factory config validate: %v\noutput:\n%s", err, validateOut)
@@ -119,10 +116,9 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 
 	want := flattenFactoryConfigViaCLI(t, ctx, processHarness, dir)
 
-	expandCmd := processHarness.CommandContext(ctx,
+	expandCmd := newCommandForScenario(t, processHarness, ctx, dir,
 		"factory", "config", "expand", factoryPath,
 	)
-	expandCmd.Dir = dir
 	expandOut, err := expandCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you factory config expand: %v\noutput:\n%s", err, expandOut)
@@ -195,17 +191,16 @@ func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sha
 func queryFactoryViaCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *commandRuntime,
 	serverURL, workDir string,
 ) factoryapi.Factory {
 	t.Helper()
 
-	queryCmd := processHarness.CommandContext(ctx,
+	queryCmd := newCommandForScenario(t, processHarness, ctx, workDir,
 		"--json",
 		"--server", serverURL,
 		"factory", "show",
 	)
-	queryCmd.Dir = workDir
 	queryOut, err := queryCmd.Output()
 	if err != nil {
 		t.Fatalf("you factory show --json: %v", err)
@@ -218,13 +213,12 @@ func queryFactoryViaCLIJSON(
 	return current
 }
 
-func flattenFactoryConfigViaCLI(t *testing.T, ctx context.Context, processHarness *builtcliacceptance.Harness, factoryDir string) any {
+func flattenFactoryConfigViaCLI(t *testing.T, ctx context.Context, processHarness *commandRuntime, factoryDir string) any {
 	t.Helper()
 
-	flattenCmd := processHarness.CommandContext(ctx,
+	flattenCmd := newCommandForScenario(t, processHarness, ctx, factoryDir,
 		"factory", "config", "flatten", factoryDir,
 	)
-	flattenCmd.Dir = factoryDir
 	flattenOut, err := flattenCmd.Output()
 	if err != nil {
 		t.Fatalf("you factory config flatten: %v", err)
