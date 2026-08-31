@@ -1,11 +1,14 @@
 package codex
 
 import (
-	"os/exec"
+	"fmt"
+	"io/fs"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -183,11 +186,42 @@ func scaffoldCodexWorkingDirectoryFactory(t *testing.T) string {
 	return dir
 }
 
-func initTrustedGitRepository(t *testing.T, dir string) {
+type codexRepositoryFileSystem interface {
+	MkdirAll(string, fs.FileMode) error
+	WriteFile(string, []byte, fs.FileMode) error
+}
+
+const (
+	codexTrustedRepositoryHEAD   = "ref: refs/heads/main\n"
+	codexTrustedRepositoryConfig = "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n"
+)
+
+var _ codexRepositoryFileSystem = platformfilesystem.Local{}
+
+func materializeTrustedCodexRepository(fileSystem codexRepositoryFileSystem, dir string) error {
+	if fileSystem == nil {
+		return fmt.Errorf("materialize trusted Codex repository: filesystem is required")
+	}
+	gitDir := filepath.Join(dir, ".git")
+	refsHeadsDir := filepath.Join(gitDir, "refs", "heads")
+	if err := fileSystem.MkdirAll(refsHeadsDir, 0o755); err != nil {
+		return fmt.Errorf("create trusted Codex repository refs/heads directory %q: %w", refsHeadsDir, err)
+	}
+	headPath := filepath.Join(gitDir, "HEAD")
+	if err := fileSystem.WriteFile(headPath, []byte(codexTrustedRepositoryHEAD), 0o644); err != nil {
+		return fmt.Errorf("write trusted Codex repository HEAD %q: %w", headPath, err)
+	}
+	configPath := filepath.Join(gitDir, "config")
+	if err := fileSystem.WriteFile(configPath, []byte(codexTrustedRepositoryConfig), 0o644); err != nil {
+		return fmt.Errorf("write trusted Codex repository config %q: %w", configPath, err)
+	}
+	return nil
+}
+
+func initTrustedCodexRepository(t *testing.T, dir string) {
 	t.Helper()
-	command := exec.Command("git", "-C", dir, "init")
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("git init in trusted fixture directory failed: %v; output=%s", err, output)
+	if err := materializeTrustedCodexRepository(platformfilesystem.Local{}, dir); err != nil {
+		t.Fatalf("materialize trusted Codex repository in %q: %v", dir, err)
 	}
 }
 

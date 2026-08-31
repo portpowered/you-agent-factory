@@ -273,7 +273,7 @@ func scaffoldCodexSharedFactory(t *testing.T) string {
 	t.Helper()
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	support.ClearSeedInputs(t, dir)
-	initTrustedGitRepository(t, dir)
+	initTrustedCodexRepository(t, dir)
 	return dir
 }
 
