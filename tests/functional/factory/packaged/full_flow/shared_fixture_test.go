@@ -35,6 +35,7 @@ type fullFlowSharedFixture struct {
 	rootDir    string
 	process    support.ApplicationProcess
 	provider   *fullFlowProviderCommandRouter
+	git        *fullFlowGitCommander
 	baseURL    string
 	factoryDir string
 	requestID  atomic.Uint64
@@ -264,6 +265,8 @@ func newFullFlowSharedFixture(t *testing.T) *fullFlowSharedFixture {
 
 	api := support.NewProcessAPIServer()
 	provider := newFullFlowProviderCommandRouter()
+	git := newFullFlowGitCommander()
+	scripts := newFullFlowScriptCommandRunner(git)
 	lifecycle := newFullFlowLifecycleLedger(fullFlowExpectedSessions)
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
@@ -271,6 +274,8 @@ func newFullFlowSharedFixture(t *testing.T) *fullFlowSharedFixture {
 			return api.Start(ctx, request)
 		},
 		ProviderCommandRunner: provider,
+		ScriptCommandRunner:   scripts,
+		WorkersWorktreeGit:    git,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess(Full Flow): %v", err)
@@ -279,6 +284,7 @@ func newFullFlowSharedFixture(t *testing.T) *fullFlowSharedFixture {
 		rootDir:   rootDir,
 		process:   process,
 		provider:  provider,
+		git:       git,
 		lifecycle: lifecycle,
 	}
 	// Register the post-process probe before CleanupProcess so Go's LIFO cleanup
@@ -375,7 +381,10 @@ func (fixture *fullFlowSharedFixture) newScenario(
 		homeDir,
 		factorydefinitions.PackagedFullFlowFactoryName,
 	)
-	repository := initializeFullFlowRepositoryAt(t, factoryDir)
+	if fullFlowRunner, ok := runner.(*fullFlowRunner); ok {
+		fullFlowRunner.git = fixture.git
+	}
+	repository := initializeFullFlowRepositoryAt(t, fixture.git, factoryDir)
 	environment := fullFlowCustomerEnvironment(homeDir)
 	selectorPaths := []string{factoryDir, repository, fixture.factoryDir}
 	fixture.provider.register(selectorPaths, runner)

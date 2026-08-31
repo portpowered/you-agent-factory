@@ -259,9 +259,66 @@ non-root child directories (`.you-agent-factory`, `inputs`, `workers`, and
 provider behavior, aggregate coverage/package floors, three-package
 coexistence, clean-room loopback, terminal CI, and merge remain later gates.
 
+## Story 004 — Full Flow repository-edge result (partial)
+
+The Full Flow fixture now supplies one shared `WorkersWorktreeGit` edge and
+one script command edge to the root-built process. The edge performs the
+fixture's observable repository contract in memory while materializing real
+`.git` metadata, worktree files, committed task snapshots, and merged task
+files for the production Worktree preparer and public assertions. Setup's
+packaged script behavior is preserved through the controlled script edge, so
+the test no longer launches Git from `invocation_test.go`.
+
+### Story 004 verification evidence
+
+Local-real production composition with controlled provider, repository, and
+script edges was used. These commands exited 0:
+
+```text
+go test -count=1 -timeout 10m ./tests/functional/factory/packaged/full_flow
+go test -race -count=1 -timeout 15m ./tests/functional/factory/packaged/full_flow
+go test -count=3 -timeout 20m ./tests/functional/factory/packaged/full_flow
+```
+
+The package timings were `14.936s`, `27.387s`, and `60.878s` on the Windows
+host. All four Full Flow cases ran in each invocation, including exact success,
+review/verification, merge, replay, bounded implementation failure, caller
+task bound, caller cycle bound, and shared four-session cleanup. The happy
+case's edge ledger observed initialization, identity config, add/commit,
+repository and branch probes, two worktree adds, two long-path config writes,
+two task commits, two `diff --check` calls, two merges, and the persisted
+`core.longpaths` readback. The race run reported no data race.
+
+An independent source cross-check found no `exec.Command` or
+`exec.CommandContext` match under `tests/functional/factory/packaged/full_flow`
+and counted 69 remaining functional matches repository-wide, down from the
+70-site characterization. The required boundary command was also run:
+
+```text
+make functional-os-boundary-check
+```
+
+It exited 1 before reporting the decreased count because the frozen inventory
+still contains the removed site
+`OSSPAWN-tests-functional-factory-packaged-full-flow-invocation-test-fullFlowGit-01`:
+`inventory site ... is not present in the AST census` and
+`LINT_VIOLATION_COUNT: 1`. The baseline and inventory files remain unchanged,
+as required by this story's current scope. Real Git executable semantics,
+combined clean-room coverage, terminal CI, and merge remain unproven.
+
+### Story 004 blocker and smallest plan delta
+
+GATE-OS is blocked by a direct contract contradiction: the story requires the
+sole Full Flow AST site to be removed and explicitly places inventory and
+baseline edits out of scope, while `functional-os-boundary-check` rejects any
+historical inventory row that is no longer present. The smallest authorized
+delta is to remove the obsolete Full Flow `osSpawnSites` row and its matching
+Full Flow baseline `siteIds` entry/count (or, alternatively, authorize a
+deletion-tolerant checker change); no such delta was applied here.
+
 ## Source hash register
 
-SHA-256 hashes tie this read-only ledger to the characterized source:
+SHA-256 hashes tie this ledger to the delivered source:
 
 | File | SHA-256 |
 | --- | --- |
@@ -277,5 +334,6 @@ SHA-256 hashes tie this read-only ledger to the characterized source:
 | `tests/functional/factory/packaged/tts/shared_fixture_test.go` | `280e65ac62b81601faf157603e21141784d69085c284747ec2bf8ef145b7907b` |
 | `tests/functional/factory/packaged/plan_execute/invocation_test.go` | `E841BE6D898F9CF4435D6C34E84BBAC2818160C19FD583574AEEC34410A5BE28` |
 | `tests/functional/factory/packaged/plan_execute/shared_fixture_test.go` | `A936845335DDA31E563E4F1FDE70D31CED837141D34825D03453ECC6EBE3FE03` |
-| `tests/functional/factory/packaged/full_flow/invocation_test.go` | `34cd8ae792108eae46a98114460080f8000a3a61d4513bc370081cb62d62143f` |
-| `tests/functional/factory/packaged/full_flow/shared_fixture_test.go` | `1c6864ef4c89fda99b9d2387612d29419b898d92460f7c1509cbc7cf2cb2fdf3` |
+| `tests/functional/factory/packaged/full_flow/invocation_test.go` | `B2CC50CF94EE9FC52D81555AEDB05B4546E971092655721D56C6558DF0F9C770` |
+| `tests/functional/factory/packaged/full_flow/shared_fixture_test.go` | `4CBAC9DB44632A955EEE438FC1275EA852044EF27A4E282E273472299FC292D2` |
+| `tests/functional/factory/packaged/full_flow/repository_edge_test.go` | `66967689FDBB679C93BEB5C034FF7CD4E03C8C6027B93160E4429996F7A0CBB1` |

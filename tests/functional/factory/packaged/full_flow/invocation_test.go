@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,10 +56,11 @@ func testPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(
 			t.Fatalf("merged %s = %q, %v", task, content, err)
 		}
 	}
-	longPaths, err := fullFlowGit(scenario.repository, "config", "--get", "core.longpaths")
+	longPaths, err := runFullFlowGit(t.Context(), fixture.git, scenario.repository, "config", "--get", "core.longpaths")
 	if err != nil || longPaths != "true" {
 		t.Fatalf("repository core.longpaths = %q, %v, want persisted true for isolated-HOME task agents", longPaths, err)
 	}
+	assertFullFlowRepositoryEdge(t, fixture.git, scenario.repository)
 	planners, maximum, merges, _ := runner.Observations()
 	if planners != 2 {
 		t.Fatalf("planner calls = %d, want initial wave plus completion replan", planners)
@@ -234,6 +234,7 @@ func invokeFullFlowSession(
 
 type fullFlowRunner struct {
 	mu                              sync.Mutex
+	git                             *fullFlowGitCommander
 	repository                      string
 	plannerCalls                    int
 	active                          int
@@ -245,7 +246,7 @@ type fullFlowRunner struct {
 	detectConcurrentImplementations bool
 }
 
-func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner *fullFlowRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	prompt := string(request.Stdin)
 	switch {
 	case strings.Contains(prompt, "You are the planning stage for one bounded delivery cycle"):
@@ -291,10 +292,10 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		if err := os.WriteFile(filepath.Join(request.WorkDir, task+".txt"), []byte(task+"\n"), 0o600); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
-		if _, err := fullFlowGit(request.WorkDir, "add", task+".txt"); err != nil {
+		if _, err := runFullFlowGit(ctx, runner.git, request.WorkDir, "add", task+".txt"); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
-		if _, err := fullFlowGit(request.WorkDir, "commit", "-m", "implement "+task); err != nil {
+		if _, err := runFullFlowGit(ctx, runner.git, request.WorkDir, "commit", "-m", "implement "+task); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
 		runner.mu.Lock()
@@ -304,13 +305,13 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 	case strings.Contains(prompt, "independent reviewer with no shared conversation"):
 		return fullFlowCodexResult("<COMPLETE>"), nil
 	case strings.Contains(prompt, "verification stage for an independently reviewed task"):
-		if _, err := fullFlowGit(request.WorkDir, "diff", "--check", "HEAD^"); err != nil {
+		if _, err := runFullFlowGit(ctx, runner.git, request.WorkDir, "diff", "--check", "HEAD^"); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
 		return fullFlowCodexResult("<COMPLETE>"), nil
 	case strings.Contains(prompt, "merge stage for one verified task"):
 		task := filepath.Base(request.WorkDir)
-		if _, err := fullFlowGit(runner.repository, "merge", "--no-ff", task, "-m", "merge "+task); err != nil {
+		if _, err := runFullFlowGit(ctx, runner.git, runner.repository, "merge", "--no-ff", task, "-m", "merge "+task); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
 		runner.mu.Lock()
@@ -367,33 +368,23 @@ func (runner *fullFlowRunner) Observations() (int, int, []string, int) {
 	return runner.plannerCalls, runner.maxActive, append([]string(nil), runner.merges...), runner.implementationCalls
 }
 
-func initializeFullFlowRepositoryAt(t *testing.T, repository string) string {
+func initializeFullFlowRepositoryAt(t *testing.T, git *fullFlowGitCommander, repository string) string {
 	t.Helper()
 	for _, args := range [][]string{{"init", "-b", "main"}, {"config", "user.email", "factory@example.test"}, {"config", "user.name", "Factory Test"}} {
-		if _, err := fullFlowGit(repository, args...); err != nil {
+		if _, err := runFullFlowGit(t.Context(), git, repository, args...); err != nil {
 			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 		}
 	}
 	if err := os.WriteFile(filepath.Join(repository, "README.md"), []byte("fixture\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fullFlowGit(repository, "add", "README.md"); err != nil {
+	if _, err := runFullFlowGit(t.Context(), git, repository, "add", "README.md"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fullFlowGit(repository, "commit", "-m", "fixture"); err != nil {
+	if _, err := runFullFlowGit(t.Context(), git, repository, "commit", "-m", "fixture"); err != nil {
 		t.Fatal(err)
 	}
 	return repository
-}
-
-func fullFlowGit(directory string, args ...string) (string, error) {
-	command := exec.Command("git", args...)
-	command.Dir = directory
-	output, err := command.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, output)
-	}
-	return strings.TrimSpace(string(output)), nil
 }
 
 func fullFlowCodexResult(text string) platformprocess.CommandResult {
