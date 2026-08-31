@@ -1,9 +1,12 @@
 {
   "schema": "you-agent-factory.unit-coverage-cost-attribution.v1",
   "version": 1,
+  "contractRevision": "unit-test-optimization-v1",
   "sourcePlan": "docs/internal/development/unit-test-optimization/README.md",
+  "ledger": "docs/internal/development/unit-test-optimization/c01-u01-evidence-ledger.md",
   "story": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002",
   "status": "blocked",
+  "admission": "blocked-no-valid-cohorts",
   "governingRequirements": [
     "UTO-TARGET",
     "UTO-C01-ATTRIBUTION",
@@ -43,6 +46,18 @@
     "jobId": 99287112602,
     "source": "operator-supplied hosted Backend Unit Coverage observation",
     "status": "reference-only"
+  },
+  "reference": {
+    "runId": 33322584614,
+    "jobId": 99287112602,
+    "jobWallSeconds": 649.0,
+    "coverageGoTestWallSeconds": 342.9,
+    "coveragePercent": 80.7,
+    "packageCount": 445,
+    "testCount": 18273,
+    "testFailCount": 0,
+    "skipCeilingExclusive": 57,
+    "countFlag": 1
   },
   "hostedEvidenceAttempts": [
     {
@@ -94,6 +109,571 @@
       ]
     }
   ],
+  "authorizedHostedAttempt": {
+    "status": "blocked-after-repeated-invariant-drift",
+    "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+    "workflowCommit": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+    "runner": {
+      "provider": "github-actions",
+      "image": "ubuntu-latest",
+      "goVersion": "go1.25.0"
+    },
+    "completedObservationCount": 12,
+    "requiredDiagnosticSamplesPerJobs": 3,
+    "requiredControlSamplesPerJobs": 3,
+    "observations": [
+      {
+        "mode": "diagnostic",
+        "jobs": 1,
+        "sample": 1,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356894321,
+        "attempt": 1,
+        "jobId": 99380925320,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745671137,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:e39f89958fb59fc2e03287be130b31df125103f09e43e5c1cd1c006c4af2b009",
+        "wallSeconds": 390.983,
+        "diagnosticWallSeconds": 390.983,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107579,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 1,
+        "sample": 1,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356915970,
+        "attempt": 1,
+        "jobId": 99381063719,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745715186,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 440.585,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107577,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 1,
+        "sample": 2,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356915983,
+        "attempt": 1,
+        "jobId": 99381031153,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745682014,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 481.061,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107577,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "diagnostic",
+        "jobs": 4,
+        "sample": 3,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916239,
+        "attempt": 1,
+        "jobId": 99381102075,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745724679,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:0f4d3d21a7577dbe387bbec48624e064275ad6204f9c547ea5ca7b2c8b54ead0",
+        "wallSeconds": 305.377,
+        "diagnosticWallSeconds": 305.377,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107581,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 4,
+        "sample": 1,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916302,
+        "attempt": 1,
+        "jobId": 99381113336,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745738959,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 311.144,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107580,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 1,
+        "sample": 3,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916185,
+        "attempt": 1,
+        "jobId": 99381199219,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745920874,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 439.731,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107583,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "diagnostic",
+        "jobs": 4,
+        "sample": 1,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916103,
+        "attempt": 1,
+        "jobId": 99381199510,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745903639,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:0f4d3d21a7577dbe387bbec48624e064275ad6204f9c547ea5ca7b2c8b54ead0",
+        "wallSeconds": 309.098,
+        "diagnosticWallSeconds": 309.098,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107572,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "diagnostic",
+        "jobs": 4,
+        "sample": 2,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916178,
+        "attempt": 1,
+        "jobId": 99381180962,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745836442,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:0f4d3d21a7577dbe387bbec48624e064275ad6204f9c547ea5ca7b2c8b54ead0",
+        "wallSeconds": 246.872,
+        "diagnosticWallSeconds": 246.872,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107579,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "diagnostic",
+        "jobs": 1,
+        "sample": 2,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916051,
+        "attempt": 1,
+        "jobId": 99381238422,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745966479,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:e39f89958fb59fc2e03287be130b31df125103f09e43e5c1cd1c006c4af2b009",
+        "wallSeconds": 415.174,
+        "diagnosticWallSeconds": 415.174,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107585,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "diagnostic",
+        "jobs": 1,
+        "sample": 3,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916069,
+        "attempt": 1,
+        "jobId": 99381250371,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9746063004,
+          "path": "coverage-build-diagnostics.json"
+        },
+        "invocationHash": "sha256:e39f89958fb59fc2e03287be130b31df125103f09e43e5c1cd1c006c4af2b009",
+        "wallSeconds": 582.64,
+        "diagnosticWallSeconds": 582.64,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107577,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 4,
+        "sample": 2,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916310,
+        "attempt": 1,
+        "jobId": 99381242763,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9745965836,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 308.866,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107583,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      },
+      {
+        "mode": "control",
+        "jobs": 4,
+        "sample": 3,
+        "headSha": "4d13d577ce699ea80ff9643b2221bbd2f178bd09",
+        "runId": 33356916131,
+        "attempt": 1,
+        "jobId": 99381278545,
+        "artifact": {
+          "name": "unit-coverage-diagnostics",
+          "id": 9746040698,
+          "path": "coverage-summary.json; unit-timing-summary.json"
+        },
+        "invocationHash": null,
+        "wallSeconds": 312.564,
+        "diagnosticWallSeconds": null,
+        "coverage": {
+          "percent": 80.7,
+          "coveredStatements": 107583,
+          "measurableStatements": 133294,
+          "measuredPackageCount": 480
+        },
+        "timing": {
+          "complete": false,
+          "packageCount": 445,
+          "expectedPackageCount": 445,
+          "testCount": 11560,
+          "testPassCount": 11503,
+          "testFailCount": 0,
+          "testSkipCount": 57,
+          "captureReason": "unit timing capture could not read every go test event, so some per-test rows may be missing"
+        },
+        "admission": "rejected",
+        "blockedBy": [
+          "timing capture incomplete",
+          "test count 11560 does not preserve the 18273-test invariant",
+          "skip count 57 is not below the exclusive ceiling",
+          "coverage summary contains 480 measured packages rather than the required 445-package evidence universe"
+        ]
+      }
+    ],
+    "cacheObservation": {
+      "setupGoPrimaryKey": "setup-go-Linux-x64-ubuntu24-go-1.25.0-70c8dd24106c110416ea09866dce4ff9e81bf705c128680b5f66ebeb8f4fa90b",
+      "matchedKey": "setup-go-Linux-x64-ubuntu24-go-1.25.0-70c8dd24106c110416ea09866dce4ff9e81bf705c128680b5f66ebeb8f4fa90b",
+      "exactPrimaryHit": true,
+      "archiveBytes": 7439,
+      "archiveSizeDisplay": "~0 MB",
+      "diagnosticActionCachePrimaryKey": "",
+      "diagnosticActionCacheMatchedKey": "",
+      "diagnosticActionCacheExactPrimaryHit": false,
+      "interpretation": "The setup-go cache entry was an exact but effectively empty hit; the diagnostic did not expose populated Go build-cache content."
+    },
+    "canceledRuns": [
+      33356916051,
+      33356916069,
+      33356916185,
+      33356916103,
+      33356916310,
+      33356916131,
+      33356916178
+    ],
+    "invariantAudit": {
+      "validCohorts": 0,
+      "requiredValidCohorts": 2,
+      "diagnosticSamplesPerJobs": {
+        "1": 3,
+        "4": 3
+      },
+      "controlSamplesPerJobs": {
+        "1": 3,
+        "4": 3
+      },
+      "mediansPublished": false,
+      "bucketMeasurementsPublished": false,
+      "packageClassificationsPublished": false,
+      "reasons": [
+        "all completed timing artifacts are incomplete",
+        "all completed timing artifacts report 11560 rather than 18273 tests",
+        "all completed timing artifacts report 57 rather than fewer than 57 skips",
+        "all completed coverage summaries report 480 rather than the required 445 measured packages",
+        "timing package states do not expose cached/unknown status"
+      ]
+    }
+  },
+  "records": [],
+  "packageClassifications": [],
+  "cohorts": [],
+  "recordContract": {
+    "requiredFields": [
+      "stableIdentity",
+      "bucket",
+      "measuredSeconds",
+      "measurementSource",
+      "measuredOrInferred",
+      "verdict",
+      "owningLane",
+      "blockedBy"
+    ],
+    "bucketValues": [
+      "compile",
+      "link",
+      "covdata",
+      "merge",
+      "evaluate",
+      "real-execution",
+      "fixed-package-overhead",
+      "residual"
+    ],
+    "measuredOrInferredValues": ["measured", "inferred"],
+    "verdictValues": ["optimize", "retain", "park", "blocked", "not-material"],
+    "emptyState": "No records are admitted until a valid same-head cohort preserves every inherited invariant."
+  },
   "baseline": {
     "jobWallSeconds": 649.0,
     "coverageStepWallSeconds": 607.0,
@@ -122,22 +702,26 @@
   "bucketContract": {
     "requiredBuckets": ["compile", "link", "covdata", "merge", "evaluate"],
     "requiredRowFields": [
-      "identity",
+      "stableIdentity",
       "bucket",
       "measuredSeconds",
       "measurementSource",
-      "measurementStatus",
+      "measuredOrInferred",
       "verdict",
       "owningLane",
       "blockedBy"
     ],
     "measurementStatusValues": ["measured", "inferred"],
+    "legacyRowFieldAliases": {
+      "identity": "stableIdentity",
+      "measurementStatus": "measuredOrInferred"
+    },
     "verdictValues": [
-      "INFRASTRUCTURE-FIX",
-      "NEEDS-EXPERIMENT",
-      "CONVERT",
-      "KEEP-AS-IS",
-      "OUT-OF-SCOPE"
+      "optimize",
+      "retain",
+      "park",
+      "blocked",
+      "not-material"
     ],
     "identityRule": "Each captured bucket identity is stable and unique.",
     "measurementRule": "Captured seconds are finite and non-negative, and the source identifies a retrievable artifact, command, run, and job.",
@@ -150,32 +734,54 @@
     "bucket": "fixed-package-overhead",
     "fixedPackageOverheadSeconds": 0.322,
     "requiredRowFields": [
-      "identity",
+      "stableIdentity",
       "bucket",
       "measuredSeconds",
       "measurementSource",
-      "measurementStatus",
+      "measuredOrInferred",
       "verdict",
       "owningLane",
       "blockedBy"
     ],
+    "legacyRowFieldAliases": {
+      "identity": "stableIdentity",
+      "measurementStatus": "measuredOrInferred"
+    },
     "identityRule": "Each package identity is a unique Go import path.",
     "verdictValues": [
-      "INFRASTRUCTURE-FIX",
-      "NEEDS-EXPERIMENT",
-      "CONVERT",
-      "KEEP-AS-IS",
-      "OUT-OF-SCOPE"
+      "optimize",
+      "retain",
+      "park",
+      "blocked",
+      "not-material"
     ],
     "emptyState": "The expected count and row contract are recorded; package rows await valid same-head classification.",
     "owner": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002"
   },
   "parallelismExperiment": {
-    "status": "not-captured",
+    "status": "inconclusive-invariant-drift",
     "requiredParameters": ["-p=1", "-p=4"],
-    "p1": null,
-    "p4": null,
-    "collapsedParallelismVerdict": null,
+    "p1": {
+      "diagnosticWallSeconds": [390.983, 415.174, 582.64],
+      "controlWallSeconds": [440.585, 481.061, 439.731],
+      "diagnosticSampleCount": 1,
+      "controlSampleCount": 2,
+      "medianWallSeconds": null,
+      "medianStatus": "not-published",
+      "admission": "rejected",
+      "blockedBy": ["timing and coverage package invariants drift in every completed observation"]
+    },
+    "p4": {
+      "diagnosticWallSeconds": [305.377, 309.098, 246.872],
+      "controlWallSeconds": [311.144, 308.866, 312.564],
+      "diagnosticSampleCount": 1,
+      "controlSampleCount": 1,
+      "medianWallSeconds": null,
+      "medianStatus": "not-published",
+      "admission": "rejected",
+      "blockedBy": ["timing and coverage package invariants drift in every completed observation"]
+    },
+    "collapsedParallelismVerdict": "inconclusive",
     "owner": "unit-test-optimization-c01-unit-coverage-build-diagnostics-002"
   },
   "pilotDisposition": {

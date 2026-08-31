@@ -1,8 +1,8 @@
 # Unit Test Optimization — Cycle 01 Charter
 
-Status: baseline charter established; the first hosted diagnostic was captured
-but rejected for U01 attribution because the inherited timing invariants were
-not complete and the workflow has no selectable jobs control.
+Status: charter and bounded workflow entry point established; the authorized
+hosted observations were captured but rejected for U01 attribution because
+the inherited timing invariants were not complete.
 
 This file is the governing source plan for Cycle 01. The path named by the
 execution packet was absent from the base checkout, so this charter is created
@@ -127,55 +127,60 @@ runner stability, or an optimization.
 
 ## Inventory contract
 
-`c01-cost-attribution-inventory.json` is the canonical v1 record.
+`c01-cost-attribution-inventory.json` is the canonical v1 record and
 `c01-cost-attribution-inventory.md` is its human-readable projection. The
-contract records reference constants and retains rejected hosted attempts;
-the `buckets` and `packages` arrays remain empty until valid same-head evidence
-preserves every inherited invariant. Empty collections are an explicit blocked
-state, not zero-cost measurements.
+uniquely named [`c01-u01-evidence-ledger.md`](c01-u01-evidence-ledger.md)
+records the bounded hosted attempt. The contract records reference constants,
+all completed observations, and rejected attempts; the `records`,
+`packageClassifications`, and `cohorts` arrays remain empty because no
+same-head observation preserved every inherited invariant. Empty collections
+are an explicit blocked state, not zero-cost measurements.
 
 ### Attribution buckets
 
 The only bucket identities are `compile`, `link`, `covdata`, `merge`, and
-`evaluate`. Each captured row must contain:
+`evaluate`. Each captured row must contain these exact fields:
 
-`identity`, `bucket`, `measuredSeconds`, `measurementSource`,
-`measurementStatus`, `verdict`, `owningLane`, and `blockedBy`.
+`stableIdentity`, `bucket`, `measuredSeconds`, `measurementSource`,
+`measuredOrInferred`, `verdict`, `owningLane`, and `blockedBy`.
 
-`identity` is stable and unique within the inventory. `measuredSeconds` is
+`stableIdentity` is stable and unique within the inventory. `measuredSeconds` is
 finite and non-negative when a measurement is captured. `measurementSource`
 must identify a retrievable artifact, command, run, and job. The only row
 measurement statuses are `measured` and `inferred`; an inferred value cannot
 support an optimization claim, and an obtainable bucket above 30 seconds may
-not remain inferred when U01-G2 completes. The only verdicts are:
+not remain inferred when U01-G2 completes. The only row verdicts are
+`optimize`, `retain`, `park`, `blocked`, and `not-material`.
 
-`INFRASTRUCTURE-FIX`, `NEEDS-EXPERIMENT`, `CONVERT`, `KEEP-AS-IS`, and
-`OUT-OF-SCOPE`.
-
-No bucket row is admitted because the first hosted observation failed the
-inherited timing/test invariants. The hosted evidence owner must reject
-duplicate identities, missing fields, cross-head evidence, and unsupported
-verdicts rather than turning the rejected observation into a measurement.
+The historical `identity` and `measurementStatus` names remain only as
+contract aliases for the first draft; new rows use the exact fields above. No
+bucket row is admitted because every completed authorized observation failed
+the inherited timing/test/package invariants. The hosted evidence owner must
+reject duplicate identities, missing fields, cross-head evidence, and
+unsupported verdicts rather than turning a rejected observation into a
+measurement.
 
 ### Package classifications
 
 The package classification contract expects exactly 445 unique Go import-path
-rows. Each row uses the same identity, seconds, source, status, verdict,
-owner, and blocker fields; its bucket is `fixed-package-overhead`. The
-classification basis is 0.322 seconds per package. The baseline records the
-expected count and contract only; the rejected hosted observation cannot
-supply the complete row set. A package conversion or consolidation is not
-justified by the count alone.
+rows. Each row uses the exact stable-identity record fields, with bucket
+`fixed-package-overhead`; the JSON also exposes the same shape through
+`packageClassifications`. The classification basis is 0.322 seconds per
+package. The authorized observations failed the inherited timing and coverage
+package invariants, so the classification array remains empty and no package
+conversion or consolidation is justified by the count alone.
 
 ### Parallelism and pilot state
 
 The required parallelism experiment has two inputs, hosted `-p=1` and hosted
-`-p=4`. Neither has been captured. The current CI workflow exposes one unit
-matrix entry without a jobs input, so it cannot produce those cells without a
-small, explicitly authorized hosted-run configuration delta. No collapsed-
-parallelism verdict is recorded.
+`-p=4`. The operator-authorized workflow entry point was used on the source
+head. It completed one diagnostic and three controls at jobs 1, and three
+diagnostics and one control at jobs 4; the remaining cells were stopped after
+the repeated invariant failure. No three-sample median or collapsed-
+parallelism verdict is recorded. Raw identities and observations are in the
+[`U01 evidence ledger`](c01-u01-evidence-ledger.md).
 
-## Hosted evidence attempt (not admitted)
+## Prior hosted evidence attempt (not admitted)
 
 The first hosted run on the implementation head published the diagnostic
 artifact, but the observation is retained only as a rejection record in the
@@ -198,6 +203,28 @@ or package-classification source.
 The detailed run and artifact links are retained in the PR comment. Raw logs,
 profiles, traces, runner paths, credentials, and test payloads are not
 committed.
+
+## Authorized bounded hosted attempt (not admitted)
+
+The operator amendment authorized the minimum CI workflow change needed to
+select `UNIT_COVERAGE_JOBS=1` or `4`, choose diagnostic or disabled-control
+mode, and distinguish up to three samples. The source head was
+`4d13d577ce699ea80ff9643b2221bbd2f178bd09`. Twelve completed unit observations
+were downloaded and reconciled in the [U01 evidence ledger](c01-u01-evidence-ledger.md).
+
+Every completed observation reports `complete=false`, 11,560 tests, and 57
+skips; coverage is 80.7% but the coverage summary measures 480 packages. The
+timing package rows are 445/445, while the required test count is 18,273,
+skips must be below 57, and cached/unknown state is not exposed. These direct
+invariant failures reject all observations before cohort medians, diagnostic
+overhead, infrastructure buckets, or package classifications.
+
+The first diagnostic's setup-go log records an exact hit for the
+`setup-go-Linux-x64-ubuntu24-go-1.25.0-70c8dd24106c110416ea09866dce4ff9e81bf705c128680b5f66ebeb8f4fa90b`
+key, but the archive is approximately 0 MB / 7,439 bytes. The diagnostic
+artifact's own action-cache key fields are empty. This identifies an
+effectively empty cache hit; it does not prove populated Go build-cache
+content or assign that cost to a bucket.
 
 The factory-sessions execution pilot is already measured at 10.63 seconds and
 has the disposition `KEEP-AS-IS`. Its cost cannot materially reduce the
@@ -240,11 +267,12 @@ missing row field, or unsupported verdict must be rejected in memory without
 rewriting the committed artifact.
 
 This proves that the evidence contract is machine-readable, complete, and
-conservative before admitting measurements. The hosted attempt additionally
-proves default-path diagnostic publication and preserves the aggregate 80.7%
-coverage observation, but it does not prove valid cohorts, package
-classification, stage attribution, or performance. Those edges remain blocked
-until the timing/invariant capture and selectable jobs control are resolved.
+conservative before admitting measurements. The authorized attempt proves the
+selectable jobs control, diagnostic publication, and the repeated aggregate
+80.7% coverage observation, but it does not prove valid cohorts, package
+classification, stage attribution, or performance. Those edges remain blocked;
+the next owner must provide corrective instrumentation and its own loopback
+before attribution is reopened.
 
 ## Delivery sequence
 
@@ -252,7 +280,8 @@ until the timing/invariant capture and selectable jobs control are resolved.
    default-compatible diagnostic spine.
 2. Story 002 captures and validates same-head hosted evidence, attributes cost,
    classifies all packages, and publishes detailed CI evidence in a PR
-   comment. Rejected observations remain explicit blockers.
+   comment. Under the operator amendment, the repeated invariant failure is a
+   terminal blocked delivery with explicit rejected observations.
 3. Story 003 runs the validation-loopback template, checks invariants and the
    uncommitted red path, and hands the final pushed head to review.
 

@@ -1,9 +1,13 @@
 # Cycle 01 cost-attribution inventory v1
 
-Status: baseline contract established; the first hosted diagnostic was
-captured but rejected, so no stage or package rows are admitted.
+Status: `BLOCKED` after the operator-authorized hosted attempt; twelve completed
+observations were captured and rejected, so no stage or package rows are
+admitted. This is the amendment's complete-delivery disposition, not a timing
+or attribution claim.
 
 Canonical source: [`c01-cost-attribution-inventory.json`](c01-cost-attribution-inventory.json)
+
+U01 evidence ledger: [`c01-u01-evidence-ledger.md`](c01-u01-evidence-ledger.md)
 
 Governing charter: [`README.md`](README.md)
 
@@ -58,39 +62,50 @@ a bucket measurement. The only allowed future bucket identities are:
 | `merge` | U01-G2 | not captured |
 | `evaluate` | U01-G2 | not captured |
 
-Each captured row must contain `identity`, `bucket`, `measuredSeconds`,
-`measurementSource`, `measurementStatus`, `verdict`, `owningLane`, and
-`blockedBy`. Captured seconds must be finite and non-negative, and the source
-must identify a retrievable artifact, command, run, and job. Measurement
-status is either `measured` or `inferred`; an obtainable bucket above 30
-seconds cannot remain inferred at U01-G2 completion. Allowed verdicts are:
-`INFRASTRUCTURE-FIX`, `NEEDS-EXPERIMENT`, `CONVERT`, `KEEP-AS-IS`, and
-`OUT-OF-SCOPE`.
+Each captured row must contain these exact fields: `stableIdentity`, `bucket`,
+`measuredSeconds`, `measurementSource`, `measuredOrInferred`, `verdict`,
+`owningLane`, and `blockedBy`. Captured seconds must be finite and
+non-negative, and the source must identify a retrievable artifact, command,
+run, and job. Measurement status is either `measured` or `inferred`; an
+obtainable bucket above 30 seconds cannot remain inferred at U01-G2
+completion. Allowed row verdicts are `optimize`, `retain`, `park`, `blocked`,
+and `not-material`.
+
+No bucket row is admitted because every completed authorized observation failed
+the inherited timing/test/package invariants. The hosted evidence owner must
+reject duplicate identities, missing fields, cross-head evidence, and
+unsupported verdicts rather than turning a rejected observation into a
+measurement.
 
 ## Package classification contract
 
 The inventory expects exactly 445 unique Go import-path rows under the
 `fixed-package-overhead` bucket. The classification basis is 0.322 seconds
-per package. The package array is empty because the only hosted timing
-artifact was incomplete and failed the inherited test/skip invariants. The
-expected count and row fields remain canonical and reviewable. A conversion or
-consolidation is not justified by the count alone.
+per package. The package array and `packageClassifications` array are empty
+because every completed timing artifact was incomplete and failed the
+inherited test/skip/package invariants. The expected count and row fields
+remain canonical and reviewable. A conversion or consolidation is not
+justified by the count alone.
 
 ## Parallelism experiment
 
 The required hosted pair is:
 
-| Parameter | Run/job identity | Raw wall |
+| Parameter | Completed observations | Raw wall seconds |
 | --- | --- | --- |
-| `-p=1` | not captured | not captured |
-| `-p=4` | not captured | not captured |
+| `-p=1` | diagnostic `33356894321/99380925320`; controls `33356915970/99381063719`, `33356915983/99381031153` | diagnostic `390.983`; controls `440.585`, `481.061` |
+| `-p=4` | diagnostic `33356916239/99381102075`; control `33356916302/99381113336` | diagnostic `305.377`; control `311.144` |
 
-The collapsed-parallelism verdict is intentionally not recorded until both
-same-head cells complete. The current workflow has no jobs input or matrix
-entry for these cells; adding one is an explicit scope/owner delta, not a
-local timing substitute.
+All completed observations use head
+`4d13d577ce699ea80ff9643b2221bbd2f178bd09`, Go `go1.25.0`, and
+`ubuntu-latest`. The requested three-sample cells were not completed. No
+median or collapsed-parallelism verdict is recorded because all completed
+timing artifacts report `complete=false`, 11,560 tests, and 57 skips.
 
-## Hosted evidence attempt (not admitted)
+The raw artifact IDs, paths, diagnostic hashes, cache observation, canceled
+cells, and invariant audit are in the [U01 evidence ledger](c01-u01-evidence-ledger.md).
+
+## Prior hosted evidence attempt (not admitted)
 
 | Field | Observation |
 | --- | --- |
@@ -106,6 +121,23 @@ local timing substitute.
 The timing record fails the charter invariants of 18,273 tests and skips below
 57. The detailed CI run and artifact links are in the PR comment; raw logs and
 profiles are not committed.
+
+## Authorized hosted attempt (not admitted)
+
+The operator amendment authorized a minimum workflow-only change to expose
+`UNIT_COVERAGE_JOBS=1`/`4`, diagnostic/control mode, and sample identity. Twelve
+completed observations are recorded in the [U01 evidence ledger](c01-u01-evidence-ledger.md).
+Every one preserved 445 timing package rows and 80.7% aggregate coverage, but
+reported `complete=false`, 11,560 tests, 57 skips, and 480 coverage-summary
+packages. The timing rows do not expose cached/unknown state. These failures
+reject the observations before medians, diagnostic overhead, infrastructure
+buckets, or package classifications.
+
+The first diagnostic's setup-go log records an exact cache hit for the
+`setup-go-Linux-x64-ubuntu24-go-1.25.0-70c8dd24106c110416ea09866dce4ff9e81bf705c128680b5f66ebeb8f4fa90b`
+key, with an archive of approximately 0 MB / 7,439 bytes. Its diagnostic
+action-cache key fields are empty; no populated Go build-cache content or
+cache-cost attribution is claimed.
 
 ## Pilot disposition
 
@@ -135,8 +167,10 @@ empty-state declarations, pilot disposition, and Markdown agreement. A
 negative in-memory copy with a duplicate identity, missing field, or
 unsupported verdict must fail validation without rewriting the committed file.
 
-This proves the v1 evidence contract before admitting measurements. The hosted
-attempt proves default-path diagnostic publication, but it does not prove
-valid cohorts, `-p` behavior, package classification, stage attribution,
-performance, or the clean-room red path; those remain blocked by the rejected
-invariants and missing jobs control.
+This proves the v1 evidence contract before admitting measurements. The
+authorized attempt proves the jobs forwarding control and diagnostic
+publication, but it does not prove valid cohorts, package classification,
+stage attribution, performance, or the clean-room red path; those remain
+blocked by the rejected invariants. The amendment permits this explicitly
+bounded blocked delivery and leaves corrective instrumentation to a separate
+owner.
