@@ -521,7 +521,8 @@ bounded correction.
 
 The prior PR review measured the authoritative package result at `46.241s`
 against the admitted `40.486s`. One bounded optimization pass was applied in
-`566aff6e82` by removing the redundant second successful turn from the
+rebased commit `fffc294ee8` (originally `566aff6e82`) by removing the
+redundant second successful turn from the
 controlled reusable witness. The retained cases still execute one successful
 turn in the first session, an in-flight cancellation/close, and one successful
 turn in a distinct second session with distinct workspace, prompt, provider
@@ -597,8 +598,9 @@ be promoted.
 
 ## Environment and artifact
 
-- Commit/build identifier: implementation code under validation is
-  `566aff6e82`; the report commit is documentation-only.
+- Commit/build identifier: synchronized implementation content under
+  validation is rebased commit `fffc294ee8` (the same owned diff as original
+  `566aff6e82`); the report commit is documentation-only.
 - Environment and configuration: Windows PowerShell host; Go package tests
   run with the existing deterministic provider edge; only Node `v22.12.0` is
   installed locally, while the pinned ACPX gate requires `v22.13.0+`.
@@ -621,7 +623,7 @@ be promoted.
 | P-02 One shared production process for eligible session behavior | PASS | Current reusable selector passed with one package-scoped `root.BuildProcess`/`Process.Execute` server, distinct sessions/workspaces, and provider-edge observations. | Arbitrary concurrent load is not proved. |
 | P-03 Irreducibility rows for retained boundaries | PASS | Ledger contains measured Node, Git, build, npm, ACPX session/prompt/close, timeout-tree, and non-zero-tree rows with property and reuse rationale. | Future host variance remains unproved. |
 | P-04 Local timing target or fallback | PASS | Current package wall was `5.586s`; the complete per-test irreducibility table is published. | The under-three-second target is not met. |
-| P-05 PR timing direction and bounded response | BLOCKED | Prior PR result was `46.241s` versus `40.486s`; commit `566aff6e82` is the one bounded optimization pass. | Current-head hosted timing is pending. |
+| P-05 PR timing direction and bounded response | BLOCKED | Prior PR result was `46.241s` versus `40.486s`; rebased commit `fffc294ee8` is the one bounded optimization pass. | Current-head hosted timing is pending. |
 | P-06 PR functional coverage floor | BLOCKED | Prior review evidence recorded `61.6%` at the earlier head. | Current-head coverage has not been reported. |
 | P-07 Characterization gate | PASS | Current characterization/process selector exited `0` in `1.931s`; full `make test` also exited `0`. | Unsupported Node prevented repeating the pinned prerequisite on this host. |
 | P-08 Focused reusable-session gate | PASS | Single, repeat, and race reusable selectors exited `0`; provider WorkDir/prompt/marker and session-bound frame assertions passed. | No concurrent multi-runtime claim is made. |
@@ -685,7 +687,7 @@ be promoted.
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | F-001 | BLOCKED | `Test-Path docs/temp/functional-test-optimization.md`; inspect `origin/main` and history. | `context.sourcePlan` resolves to an approved source plan. | The path is absent and no operator amendment authorizes reconstruction. | Exact check returned `False`; no matching tree/history entry. |
-| F-002 | BLOCKED | Inspect prior PR timing, then evaluate current head. | Package timing improves directionally after one bounded response, or the report gives a measured blocker. | Prior PR timing was `46.241s` vs `40.486s`; the bounded pass is now present, but current-head timing is pending. | Review finding; commit `566aff6e82`; current PR CI required. |
+| F-002 | BLOCKED | Inspect prior PR timing, then evaluate current head. | Package timing improves directionally after one bounded response, or the report gives a measured blocker. | Prior PR timing was `46.241s` vs `40.486s`; the bounded pass is now present, but current-head timing is pending. | Review finding; rebased commit `fffc294ee8`; current PR CI required. |
 | F-003 | BLOCKED | Run the declared final package command with required Node. | Every final matrix witness passes on the final head. | This host has only Node `v22.12.0`; the pinned test skips rather than claiming real-client evidence. | Current package exit `0`, package wall `5.586s`, pinned prerequisite skip. |
 | F-004 | PASS | Run `make test`. | Full repository gate completes without a diff-caused failure. | Exit `0`; final Node stage: 169 passed, 1 skipped, 0 failed. | Local command result. |
 
