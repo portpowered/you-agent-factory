@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -48,26 +46,29 @@ type haikuGoldenCase struct {
 // TestClaudeHaikuStreamJSONGoldens replays sanitized streams captured from
 // three live Claude Haiku selectors through the customer process boundary.
 func TestClaudeHaikuStreamJSONGoldens(t *testing.T) {
-	manifest := loadHaikuGoldenManifest(t)
-	cases := prepareHaikuGoldenReplayCases(t, manifest)
-	router := newHaikuGoldenCommandRouter(t, cases)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                cases[0].factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: router,
-		},
+	fixture := claudeSharedProcess(t)
+	requestStart := len(fixture.runner.Requests())
+	routeCallStarts := make(map[string]int, len(fixture.goldenCases))
+	for _, replayCase := range fixture.goldenCases {
+		routeCallStarts[replayCase.factoryDir] = fixture.runner.CallsFor(replayCase.factoryDir)
+	}
+	seenSessions := make(map[string]struct{}, len(fixture.goldenCases))
+	t.Cleanup(func() {
+		assertHaikuGoldenTopology(
+			t,
+			fixture.runner,
+			fixture.goldenCases,
+			seenSessions,
+			requestStart,
+			routeCallStarts,
+		)
 	})
-	t.Cleanup(func() { server.Stop(t) })
-	seenSessions := make(map[string]struct{}, len(cases))
-	t.Cleanup(func() { assertHaikuGoldenTopology(t, router, cases, seenSessions) })
-	runHaikuGoldenCases(t, server, router, cases, seenSessions)
+	runHaikuGoldenCases(t, fixture, fixture.goldenCases, seenSessions)
 }
 
 func runHaikuGoldenCases(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
-	router *haikuGoldenCommandRouter,
+	fixture *claudeSharedProcessFixture,
 	cases []haikuGoldenReplayCase,
 	seenSessions map[string]struct{},
 ) {
@@ -75,59 +76,41 @@ func runHaikuGoldenCases(
 	for _, replayCase := range cases {
 		replayCase := replayCase
 		t.Run(replayCase.golden.Name, func(t *testing.T) {
-			replayHaikuGoldenCase(t, server, router, replayCase, seenSessions)
+			replayHaikuGoldenCase(t, fixture, replayCase, seenSessions)
 		})
 	}
 }
 
 func replayHaikuGoldenCase(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
-	router *haikuGoldenCommandRouter,
+	fixture *claudeSharedProcessFixture,
 	replayCase haikuGoldenReplayCase,
 	seenSessions map[string]struct{},
 ) {
 	t.Helper()
-	opened := support.OpenFactorySessionAt(t, server.URL(), replayCase.factoryDir)
-	if opened.Session == nil || opened.Session.Id == "" {
-		t.Fatal("explicit Claude golden session has no id")
-	}
-	sessionID := opened.Session.Id
-	if sessionID == factorysessions.DefaultSessionID {
-		t.Fatalf("golden session id = %q, want a non-default explicit session", sessionID)
-	}
+	routeName := "golden-" + replayCase.golden.Name
+	session := fixture.openSession(t, routeName)
+	sessionID := session.id
 	if _, exists := seenSessions[sessionID]; exists {
 		t.Fatalf("duplicate explicit golden session id %q", sessionID)
 	}
 	seenSessions[sessionID] = struct{}{}
-	closed := false
-	t.Cleanup(func() {
-		if !closed {
-			support.CloseFactorySessionAt(t, server.URL(), sessionID)
-		}
-	})
 
-	name := "claude-haiku-" + replayCase.golden.Name
-	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
-		Name:         &name,
-		WorkTypeName: "task",
-		Payload:      map[string]string{"title": "claude Haiku golden replay"},
-	})
+	fixture.submitWork(t, session, "claude Haiku golden replay")
 	// The command edge can return before the asynchronous Factory Session
 	// projection has classified Work. Only the session-scoped public status
 	// contract observes that customer-visible boundary; a runner-local signal
 	// would bypass the behavior this functional test is proving.
-	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 20*time.Second)
-	if err := assertSuccessfulHaikuGoldenWork(t, server, router, replayCase, sessionID); err != nil {
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, 20*time.Second)
+	if err := assertSuccessfulHaikuGoldenWork(t, fixture.baseURL, fixture.runner, replayCase, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
-	closed = true
+	fixture.closeSession(t, session)
 }
 
 func assertSuccessfulHaikuGoldenWork(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	baseURL string,
 	router *haikuGoldenCommandRouter,
 	replayCase haikuGoldenReplayCase,
 	sessionID string,
@@ -135,7 +118,7 @@ func assertSuccessfulHaikuGoldenWork(
 	t.Helper()
 	// Return the first witness failure so the adverse path can exercise this
 	// exact assertion sequence as a contained expected failure.
-	listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(server.URL(), sessionID))
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(baseURL, sessionID))
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		return fmt.Errorf("completed work = %d, want 1", got)
 	}
@@ -156,7 +139,7 @@ func assertSuccessfulHaikuGoldenWork(
 		return fmt.Errorf("expected args %v to contain sequence %v", request.Args, wantArgs)
 	}
 	if err := findHaikuGoldenInferenceResult(
-		support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID),
+		support.GetFactoryEventsForSessionAt(t, baseURL, sessionID),
 		replayCase.golden.SessionID,
 	); err != nil {
 		return err
@@ -185,12 +168,19 @@ func assertHaikuGoldenTopology(
 	router *haikuGoldenCommandRouter,
 	cases []haikuGoldenReplayCase,
 	seenSessions map[string]struct{},
+	requestStart int,
+	routeCallStarts map[string]int,
 ) {
 	t.Helper()
 	if len(seenSessions) != len(cases) {
 		t.Errorf("explicit Claude golden sessions = %d, want %d", len(seenSessions), len(cases))
 	}
 	requests := router.Requests()
+	if requestStart > len(requests) {
+		t.Errorf("golden request start = %d exceeds request count %d", requestStart, len(requests))
+		return
+	}
+	requests = requests[requestStart:]
 	if len(requests) != len(cases) {
 		t.Errorf("shared Claude golden command calls = %d, want %d", len(requests), len(cases))
 	}
@@ -203,13 +193,10 @@ func assertHaikuGoldenTopology(
 		}
 	}
 	for _, replayCase := range cases {
-		if got := router.CallsFor(replayCase.factoryDir); got != 1 {
+		start := routeCallStarts[replayCase.factoryDir]
+		if got := router.CallsFor(replayCase.factoryDir) - start; got != 1 {
 			t.Errorf("golden route %q calls = %d, want 1", replayCase.golden.Name, got)
 		}
-	}
-	router.Close()
-	if got := router.RouteCount(); got != 0 {
-		t.Errorf("closed golden route count = %d, want 0", got)
 	}
 }
 
