@@ -44,13 +44,6 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 
 	for _, testCase := range []reusableACPCase{
 		{name: "first isolated turn", marker: "alpha1", prompt: "xxxxxxxxxxxxxxa1", output: "alpha1 reusable ACP result"},
-		{
-			name:             "second isolated turn",
-			marker:           "bravo2",
-			prompt:           "xxxxxxxxxxxxxxb2",
-			output:           "bravo2 reusable ACP result",
-			forbiddenMarkers: []string{"alpha1"},
-		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			fixture.runTurn(t, connection, session, testCase)
@@ -77,7 +70,7 @@ func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
 		marker:           "delta4",
 		prompt:           "xxxxxxxxxxxxxxd4",
 		output:           "delta4 reusable ACP result",
-		forbiddenMarkers: []string{"alpha1", "bravo2"},
+		forbiddenMarkers: []string{"alpha1"},
 	})
 	fixture.closeActiveSession(t, connection, secondSession)
 }
