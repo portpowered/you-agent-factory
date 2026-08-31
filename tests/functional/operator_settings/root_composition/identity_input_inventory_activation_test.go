@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
@@ -28,29 +29,37 @@ const (
 
 // TestBackendScopeIdentityGeneratesThroughRootBuildProcessAfterLifecycle proves
 // backend-scope identity resolution and persistence activate through public
-// Operator Settings surfaces after runtime lifecycle on a process composed only
-// via root.BuildProcess with edges.Edges effect replacement.
+// Operator Settings surfaces after runtime lifecycle on the shared process.
 func TestBackendScopeIdentityGeneratesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
-	recorder := newIdentityActivationRecorder(identityActivationGeneratedUUID)
-	process := support.BuildProcess(t, recorder.edges())
+	fixture := ensureSharedOperatorSettingsFixture(t)
+	factoryDir := support.ScaffoldSingleStepFactory(t, "operator-settings-generated-scope")
+	constructionIDCalls := fixture.constructionEffectSnapshot().operatorIDCalls
+	fixture.withFactorySession(
+		t,
+		"generated backend scope",
+		homeDir,
+		factoryDir,
+		identityActivationGeneratedUUID,
+		nil,
+		func(sessionID string) {
+			if sessionID == factorysessions.DefaultSessionID {
+				t.Fatalf("routed Factory Session unexpectedly used the default session ID")
+			}
+			runOperatorSettingsLifecycleInitialization(t, fixture.process, homeDir)
 
-	if got := recorder.idGeneratorCalls(); got != 0 {
-		t.Fatalf("IDGenerator calls during BuildProcess = %d, want 0", got)
-	}
+			if got := fixture.router.operatorIDCalls.Load(); got <= constructionIDCalls {
+				t.Fatalf("IDGenerator calls after Factory Session lifecycle = %d, want > construction count %d", got, constructionIDCalls)
+			}
 
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
-
-	if got := recorder.idGeneratorCalls(); got == 0 {
-		t.Fatalf("IDGenerator calls after lifecycle = %d, want > 0 via edges", got)
-	}
-
-	wantScope := operatorsettings.LocalBackendScopePrefix + identityActivationGeneratedUUID
-	if got := readBackendScopeIDFromHome(t, homeDir); got != wantScope {
-		t.Fatalf("backendScopeID = %q, want generated scope %q", got, wantScope)
-	}
+			wantScope := operatorsettings.LocalBackendScopePrefix + identityActivationGeneratedUUID
+			if got := readBackendScopeIDFromHome(t, homeDir); got != wantScope {
+				t.Fatalf("backendScopeID = %q, want generated scope %q", got, wantScope)
+			}
+		},
+	)
 }
 
 // TestBackendScopeIdentityReusesExistingScopeThroughRootBuildProcessAfterLifecycle
