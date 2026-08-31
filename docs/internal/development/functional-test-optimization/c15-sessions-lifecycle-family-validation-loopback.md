@@ -2,7 +2,7 @@
 
 ## Environment and artifact
 
-- Commit/build identifier: `764bd5f5bc5888fe1815ffa461849a10feab3ced` (implementation
+- Commit/build identifier: `f5c654842d9b672befb51b2c555c9e917b5dffcc` (implementation
   head validated; this report update is the following documentation commit).
 - Environment and configuration: Windows/amd64, Go `go1.25.0`,
   `CGO_ENABLED=1`; clean detached checkout; no paid or remote-provider calls.
@@ -18,7 +18,7 @@
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Exact 33-test denominator | PASS | In a clean detached checkout at `764bd5f5bc5888fe1815ffa461849a10feab3ced`, `go test ./<package> -list '^Test'` exited `0` for every owned package and listed 9 execution, 7 controls, 3 standalone, 12 lifecycle, and 2 CLI top-level tests. | Future test additions after this artifact. |
+| Exact 33-test denominator | PASS | In a clean detached checkout at `f5c654842d9b672befb51b2c555c9e917b5dffcc`, `go test ./<package> -list '^Test'` exited `0` for every owned package and listed 9 execution, 7 controls, 3 standalone, 12 lifecycle, and 2 CLI top-level tests. | Future test additions after this artifact. |
 | Complete clean-room behavior run | PASS | Exactly one sequential `go test -count=1 -timeout=10m ./<package>` run per package exited `0`; no test failure, skip, or quarantine token was observed. | New-head hosted CI timing and coverage. |
 | Nested behavior matrix | PASS | The complete E01–E22, C01–C10, S01–S03, L01–L12, Q01–Q04, and X01–X05 ledger remains mapped to the unchanged top-level witnesses below; stories 002–006 supplied focused behavior and cleanup evidence. | Restart and authorization remain outside this lane. |
 | Process/topology reduction | PASS | Eligible setup was consolidated: execution `21 -> 13` retained starts, controls `7 -> 1` API-host start with provider/script command-runner edges (no MockWorkers feature), standalone `4 -> 3` root builds, lifecycle retained its property-required two roles/one listener, and CLI uses one root/responder plus one fewer temporary-root allocation in Q04. | PR-host package timing is review-owned. |
@@ -68,11 +68,11 @@ run and is retained as the exact baseline for the next current-head run.
 
 | Package | Supplied before (s) | Clean-room local after, outer (s) | Go package (s) | Retained property / PR-CI row |
 | --- | ---: | ---: | ---: | --- |
-| execution | 22.748 | 6.274 | 3.998 | 13 starts remain: one shared host plus drain/liveness, partial-result, CLI visibility, and parity boundaries. New-head PR-CI pending. |
-| controls | 16.710 | 2.891 | 1.092 | One shared host with provider/script edge responses; busy-loop lifecycle and transition boundaries remain property-required. New-head PR-CI pending. |
-| standalone | 14.089 | 3.988 | 1.874 | Three roots remain; S03 retains two independent roots/catalogs for cross-store typed not-found. New-head PR-CI pending. |
-| lifecycle | 13.572 | 8.464 | 6.171 | Existing two root-built roles, listener, client-disconnect, transport-failure, and negative-liveness boundaries remain property-required. New-head PR-CI pending. |
-| cli | 3.163 | 2.345 | 0.348 | One reusable root/responder with fresh execution state; Q04 reuses its fresh case working directory for the payload and remains pre-dispatch. New-head PR-CI pending. |
+| execution | 22.748 | 5.232 | 3.512 | 13 starts remain: one shared host plus drain/liveness, partial-result, CLI visibility, and parity boundaries. New-head PR-CI pending. |
+| controls | 16.710 | 2.939 | 1.114 | One shared host with provider/script edge responses; busy-loop lifecycle and transition boundaries remain property-required. New-head PR-CI pending. |
+| standalone | 14.089 | 3.118 | 1.499 | Three roots remain; S03 retains two independent roots/catalogs for cross-store typed not-found. New-head PR-CI pending. |
+| lifecycle | 13.572 | 5.283 | 3.436 | Existing two root-built roles, listener, client-disconnect, transport-failure, and negative-liveness boundaries remain property-required. New-head PR-CI pending. |
+| cli | 3.163 | 2.258 | 0.330 | One reusable root/responder with fresh execution state; Q04 reuses its fresh case working directory for the payload and remains pre-dispatch. New-head PR-CI pending. |
 
 The clean-room local sample is diagnostic and is not a PR-CI claim. If a new
 PR-CI package remains at or above three seconds, the exact witness-level
@@ -130,7 +130,7 @@ timing threshold.
 ## Customer journey
 
 1. A detached clean checkout was created at
-   `764bd5f5bc5888fe1815ffa461849a10feab3ced`, verified clean, and removed
+   `f5c654842d9b672befb51b2c555c9e917b5dffcc`, verified clean, and removed
    after validation. The validator made no implementation edit.
 2. These exact list-only commands were run once each:
 
@@ -155,8 +155,8 @@ timing threshold.
 
    Execution, controls, standalone, lifecycle, and CLI exited `0` in
    `6.274s`, `2.891s`, `3.988s`, `8.464s`, and `2.345s` outer elapsed,
-   respectively. The Go package-reported durations were `3.998s`, `1.092s`,
-   `1.874s`, `6.171s`, and `0.348s`.
+   respectively. The Go package-reported durations were `3.512s`, `1.114s`,
+   `1.499s`, `3.436s`, and `0.330s`.
 4. The prior package gates supplied focused repeat/race evidence and detailed
    public behavior/census assertions. This clean-room run supplied the
    cross-task integration check, and the bounded CLI pass reused Q04's
