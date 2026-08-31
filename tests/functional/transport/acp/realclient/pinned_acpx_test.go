@@ -103,6 +103,9 @@ type pinnedAcpxScenario struct {
 	providerProof   string
 	acpxPath        string
 	sessionMayExist bool
+	// cleanupCloser is populated only by controlled characterization; the real
+	// scenario closes through the pinned ACPX command below.
+	cleanupCloser   func() error
 }
 
 type realClientEvidence struct {
@@ -293,7 +296,7 @@ func (scenario *pinnedAcpxScenario) newSession(t *testing.T) acpxSessionResult {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return parseAcpxSessionResult(t, output, "session_ensured")
+	return requireAcpxSessionResult(t, output, "session_ensured")
 }
 
 func (scenario *pinnedAcpxScenario) prompt(t *testing.T) []byte {
@@ -321,7 +324,7 @@ func (scenario *pinnedAcpxScenario) closeSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if closed := parseAcpxSessionResult(t, output, "session_closed"); closed.ACPSessionID == "" {
+	if closed := requireAcpxSessionResult(t, output, "session_closed"); closed.ACPSessionID == "" {
 		t.Fatal("real ACP evidence cleanup failed: closed session has no ACP session identity")
 	}
 	scenario.sessionMayExist = false
@@ -330,17 +333,30 @@ func (scenario *pinnedAcpxScenario) closeSession(t *testing.T) {
 func (scenario *pinnedAcpxScenario) registerSessionCleanup(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		if scenario.sessionMayExist {
-			if _, err := scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close"); err != nil {
-				t.Error("real ACP evidence cleanup failed: close disposable session")
-			} else {
-				scenario.sessionMayExist = false
-			}
+		if err := scenario.closeSessionForCleanup(); err != nil {
+			t.Error(err)
 		}
 		if err := scenario.queueOwnerStopped(); err != nil {
 			t.Error(err)
 		}
 	})
+}
+
+func (scenario *pinnedAcpxScenario) closeSessionForCleanup() error {
+	if !scenario.sessionMayExist {
+		return nil
+	}
+	var err error
+	if scenario.cleanupCloser != nil {
+		err = scenario.cleanupCloser()
+	} else {
+		_, err = scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close")
+	}
+	if err != nil {
+		return errors.New("real ACP evidence cleanup failed: close disposable session")
+	}
+	scenario.sessionMayExist = false
+	return nil
 }
 
 func (scenario *pinnedAcpxScenario) emitEvidence(t *testing.T, providerInvocations int) {
@@ -430,6 +446,11 @@ func runBoundedCommand(directory string, environment []string, phase, name strin
 	return runBoundedCommandWithTimeout(directory, environment, phase, time.Minute, name, args...)
 }
 
+// attachProcessTree is a process-ownership seam for the controlled
+// characterization of the fail-closed ownership branch. The real client path
+// uses the platform implementation unchanged.
+var attachProcessTree = attachCommandProcessTree
+
 func runBoundedCommandWithTimeout(directory string, environment []string, phase string, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	command := exec.Command(name, args...)
 	configureCommandProcessTree(command)
@@ -443,7 +464,7 @@ func runBoundedCommandWithTimeout(directory string, environment []string, phase 
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf("real ACP evidence failed during %s: launch", phase)
 	}
-	tree, err := attachCommandProcessTree(command)
+	tree, err := attachProcessTree(command)
 	if err != nil {
 		_ = terminateCommandProcessTree(command, nil)
 		_ = command.Wait()
@@ -496,19 +517,26 @@ type acpxSessionResult struct {
 	ACPSessionID string `json:"acpxSessionId"`
 }
 
-func parseAcpxSessionResult(t *testing.T, output []byte, action string) acpxSessionResult {
+func requireAcpxSessionResult(t *testing.T, output []byte, action string) acpxSessionResult {
 	t.Helper()
+	result, err := parseAcpxSessionResult(output, action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func parseAcpxSessionResult(output []byte, action string) (acpxSessionResult, error) {
 	for _, line := range bytes.Split(bytes.TrimSpace(output), []byte{'\n'}) {
 		var result acpxSessionResult
 		if err := json.Unmarshal(line, &result); err != nil {
-			t.Fatalf("real ACP evidence failed: acpx %s output was not machine-readable JSON", action)
+			return acpxSessionResult{}, fmt.Errorf("real ACP evidence failed: acpx %s output was not machine-readable JSON", action)
 		}
 		if result.Action == action {
-			return result
+			return result, nil
 		}
 	}
-	t.Fatalf("real ACP evidence failed: acpx did not report %s", action)
-	return acpxSessionResult{}
+	return acpxSessionResult{}, fmt.Errorf("real ACP evidence failed: acpx did not report %s", action)
 }
 
 func assertCreatedSession(t *testing.T, created acpxSessionResult) {
@@ -534,7 +562,12 @@ func assertNegotiatedDefaultTarget(t *testing.T, scenario *pinnedAcpxScenario) {
 
 func assertPromptEvidence(t *testing.T, output []byte) {
 	t.Helper()
+	if err := validatePromptEvidence(output); err != nil {
+		t.Fatal(err)
+	}
+}
 
+func validatePromptEvidence(output []byte) error {
 	// A Worker is a tool call, so everything it produces -- messages,
 	// reasoning, tool activity -- must arrive as content inside that call, and
 	// the assistant message must come from the Factory rather than from a
@@ -562,10 +595,10 @@ func assertPromptEvidence(t *testing.T, output []byte) {
 			Error json.RawMessage `json:"error"`
 		}
 		if err := json.Unmarshal(line, &frame); err != nil {
-			t.Fatal("real ACP evidence failed: acpx prompt output was not machine-readable JSON")
+			return errors.New("real ACP evidence failed: acpx prompt output was not machine-readable JSON")
 		}
 		if len(frame.Error) > 0 && string(frame.Error) != "null" {
-			t.Fatal("real ACP evidence failed: acpx prompt reported a protocol error")
+			return errors.New("real ACP evidence failed: acpx prompt reported a protocol error")
 		}
 		if frame.Method == "session/update" && frame.Params.Update.SessionUpdate == "agent_message_chunk" {
 			var content struct {
@@ -573,7 +606,7 @@ func assertPromptEvidence(t *testing.T, output []byte) {
 				Text string `json:"text"`
 			}
 			if err := json.Unmarshal(frame.Params.Update.Content, &content); err != nil {
-				t.Fatal("real ACP evidence failed: assistant message carried an unreadable content block")
+				return errors.New("real ACP evidence failed: assistant message carried an unreadable content block")
 			}
 			if content.Type == "text" && strings.TrimSpace(content.Text) != "" {
 				assistantResult = true
@@ -592,17 +625,18 @@ func assertPromptEvidence(t *testing.T, output []byte) {
 		}
 	}
 	if !assistantResult {
-		t.Fatal("real ACP evidence failed: prompt did not produce a non-empty assistant result")
+		return errors.New("real ACP evidence failed: prompt did not produce a non-empty assistant result")
 	}
 	if workerToolCalls == 0 {
-		t.Fatal("real ACP evidence failed: the dispatched Worker did not open a tool call")
+		return errors.New("real ACP evidence failed: the dispatched Worker did not open a tool call")
 	}
 	if workerToolUpdates == 0 {
-		t.Fatal("real ACP evidence failed: the Worker produced no content inside its tool call")
+		return errors.New("real ACP evidence failed: the Worker produced no content inside its tool call")
 	}
 	if len(terminalStopReasons) != 1 || terminalStopReasons[0] != "end_turn" {
-		t.Fatal("real ACP evidence failed: prompt did not return exactly one successful end_turn result")
+		return errors.New("real ACP evidence failed: prompt did not return exactly one successful end_turn result")
 	}
+	return nil
 }
 
 func (scenario *pinnedAcpxScenario) assertDeterministicProviderInvocations(t *testing.T) int {
