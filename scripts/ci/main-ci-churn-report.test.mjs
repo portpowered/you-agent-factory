@@ -143,6 +143,21 @@ test("the reducer treats queued cancellations as zero started burn and preserves
 	assert.equal(report.normalized.baselineBotMergesPerNonBotMerge, null);
 });
 
+test("skipped jobs contribute no compute even when hosted timestamps have scheduler skew", () => {
+	const data = fixture();
+	data.jobsByRunId.set(1, [
+		job(11, "2026-01-01T01:00:20Z", "2026-01-01T01:00:10Z"),
+		{ ...job(12, "2026-01-01T01:00:20Z", "2026-01-01T01:00:10Z"), conclusion: "skipped" },
+	]);
+	assert.throws(
+		() => reduceMainCiChurnReport({ query: QUERY, ...data }),
+		/job 11 .* negative duration/,
+	);
+	data.jobsByRunId.set(1, [data.jobsByRunId.get(1)[1]]);
+	const report = reduceMainCiChurnReport({ query: QUERY, ...data });
+	assert.equal(report.mainCi.totalJobSeconds, 45);
+});
+
 test("the adapter follows duplicate boundary records without double counting", async () => {
 	const calls = [];
 	const manyRuns = Array.from({ length: 101 }, (_, index) => {

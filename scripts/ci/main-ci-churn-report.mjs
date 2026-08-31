@@ -241,6 +241,7 @@ function normalizeApiRun(run, query, { strictIdentity = false } = {}) {
 
 function durationSeconds(job, label) {
 	if (!isRecord(job)) fail(`${label} is malformed`);
+	if (job.conclusion === "skipped") return 0;
 	if (Object.hasOwn(job, "durationSeconds")) {
 		const duration = Number(job.durationSeconds);
 		if (!Number.isFinite(duration) || duration < 0) fail(`${label} has a negative or invalid duration`);

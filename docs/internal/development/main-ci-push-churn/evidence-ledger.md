@@ -40,8 +40,10 @@ exhaustion. No response body is written to a repository file.
 
 ## Metric definitions
 
-- Main CI job-seconds are the sum of completed job durations for the selected
-  completed workflow runs. `mainCi.totalJobSeconds / mergedChanges.total` is
+- Main CI job-seconds are the sum of completed, non-skipped job durations for
+  the selected completed workflow runs. Skipped jobs contribute zero because
+  they consume no runner time; negative durations on any non-skipped job fail
+  the report. `mainCi.totalJobSeconds / mergedChanges.total` is
   `normalized.mainCiJobSecondsPerMergedChange`.
 - A cancelled run is a started cancellation when `run_started_at` is present;
   otherwise it is a queued cancellation. `startedRate` is started cancelled
