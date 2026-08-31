@@ -587,6 +587,7 @@ func sharedGuardProviderResponse(
 	return result, response.err
 }
 
+// TestSharedGuardProviderByMarker verifies exact synthetic Work marker selection, response propagation, cancellation, and safe unmatched-input errors.
 func TestSharedGuardProviderByMarker(t *testing.T) {
 	const privatePrompt = `{"case":"unknown","secret":"do not disclose this prompt"}`
 	responder := sharedGuardProviderByMarker(map[string]sharedGuardCommandResponse{
