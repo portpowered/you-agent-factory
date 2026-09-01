@@ -276,7 +276,81 @@ fidelity, artifact identity where applicable, parallel/race result, and any
 remaining unproven edge. A generic suite pass is not sufficient evidence by
 itself.
 
-## 10. Delivery checklist
+## 10. Functional-test performance audit and optimization
+
+A functional-test performance audit **MUST** measure the executed critical
+path. Source-level construction counts and calls to the language's parallel
+test facility are useful discovery signals, but they do not prove that setup is
+shared or scenarios overlap.
+
+### Audit procedure
+
+For every slow package, the auditor **MUST**:
+
+1. capture package and leaf-subtest timings in normal execution;
+2. repeat the focused package enough times to distinguish a stable cost from
+   host variance, then run the changed package under the race detector;
+3. count executable builds, subprocess launches, application construction
+   sites, actual constructed process instances, and immutable edge shapes as
+   separate quantities;
+4. identify locks, gates, shared identifiers, Current Factory or `~default`
+   ownership, environment mutation, ports, directories, streams, and cleanup
+   that span a complete `Process.Execute` call;
+5. trace the slowest leaf from readiness through its terminal signal instead of
+   inferring its cost from the enclosing test name;
+6. inspect every wait to determine whether it completed from an observed signal
+   or exhausted its timeout ceiling;
+7. verify terminal outcomes by typed error, error identity, public status, or
+   documented code. A substring that can also occur in harness or deadline
+   text is not proof of cancellation, timeout, shutdown, or recovery; and
+8. name the customer-observable behavior for every retained cell. Harness
+   cleanup, fixture ledgers, constructor topology, and test-process recursion
+   are not functional customer coverage.
+
+An aggregate test marked parallel may still serialize all useful work through
+a fixture mutex. A table of subtests may hide one deadline-bound leaf. A large
+safety timeout may hide a missing completion signal while the test remains
+green. Reviewers **MUST** inspect these cases before declaring a delay an
+unavoidable customer lifecycle boundary.
+
+### Optimization order
+
+Apply optimizations in this order so speed does not weaken the proof:
+
+1. Remove tests with no customer observer, or move unit, contract, inventory,
+   load, executable, and harness behavior to the correct layer.
+2. Remove CLI compilation and test-binary subprocess recursion. Functional
+   command behavior enters through `Process.Execute`; the deliberately small
+   integration suite consumes one artifact built outside the tests.
+3. Build one reusable process per compatible immutable edge shape. Consolidate
+   repeated setup, package installation, service hosting, and fixture data.
+   Keep a separate graph when reconstruction or a genuinely different
+   immutable production edge is itself part of the customer behavior.
+4. Give each scenario an explicit Factory Session and unique routes,
+   identifiers, directories, streams, and fake-edge state. Preserve that
+   session identity through every command and provider boundary so adapters do
+   not fall back to process-global `~default` ownership.
+5. Parallelize independent leaf scenarios, not only their aggregate parent.
+   Minimize lock scope and verify from timing or instrumentation that complete
+   `Process.Execute` calls actually overlap.
+6. Replace sleeps, polling cadence, and deadline-driven completion with
+   observable readiness gates, event subscriptions, explicit cancellation, and
+   deterministic completion signals. Retain timeouts only as failure ceilings.
+7. Separate distinct public lifecycle controls in the scenario. For example,
+   canceling a Factory Session and stopping a CLI invocation that owns a local
+   server may be separate customer actions; proving one must not rely on the
+   other timing out.
+8. Drain already-retained public event or response heads when available rather
+   than waiting for a new live event that may never arrive.
+9. Re-run focused normal and race tests, then the broader functional lane.
+   Record before-and-after package and slowest-leaf timings, remaining
+   serialization, and the customer invariant that requires it.
+
+Shared mutable edge switches are not a default convergence technique. Prefer
+immutable fixtures and scenario-owned fakes; otherwise an optimization can
+replace construction cost with cross-scenario coupling and flakes.
+
+## 11. Delivery checklist
 
 - Every test has one named behavior and observer.
 - Unit tests remain inside the component boundary.

@@ -240,6 +240,93 @@ direct, golden, timeout, cancellation, and hosted-lifecycle cases are already
 served by the single package graph; their sequencing owns customer lifecycle
 boundaries rather than duplicate construction.
 
+## Optimization techniques applied across the cleanup
+
+The cleanup used the following techniques. They are recorded here so a future
+audit can reproduce the result without treating construction count as the only
+performance variable.
+
+- Removed functional tests that compiled or located the real CLI. Customer
+  command behavior now executes through the in-memory public command contract;
+  executable discovery, OS process, signal, pipe, and exit-status proof belongs
+  in the small prebuilt-artifact integration lane.
+- Replaced per-scenario application construction with one package process for
+  every compatible immutable edge shape. Package installation, service
+  hosting, fixture data, and application initialization are paid once.
+- Distinguished a static `BuildProcess` call site, an actual process instance,
+  and a distinct immutable edge graph. These are different audit quantities;
+  two source sites do not prove two processes per scenario.
+- Converted reusable customer scenarios to unique explicit Factory Sessions.
+  Session-owned IDs, peer routes, streams, working directories, recordings,
+  and fake state prevent overlap from changing another scenario's result.
+- Preserved Factory Session authority through platform command and provider
+  adapters. Removing identity loss avoided fallback to Current Factory or
+  `~default`, enabling safe concurrent routing rather than adding fixture
+  locks.
+- Added the public remote-session CLI selector and used one hosted process for
+  independent CLI scenarios. Response rendering drains the retained public
+  event head rather than waiting for a future live event.
+- Parallelized independent top-level tests and leaf subtests. Aggregate
+  matrices were split where independent cells could overlap; cases that prove
+  reconstruction or own incompatible immutable boundaries retained separate
+  graphs.
+- Replaced shared real effects with exact controlled boundaries: provider
+  command runners, listener starters, clocks, filesystems, recording readers
+  and writers, streams, and cancellation gates. Each parallel scenario owns
+  its boundary state.
+- Removed inventories, generic constructor coverage, internal topology checks,
+  fixture-ledger assertions, and duplicated behavioral matrices. Customer
+  behavior stayed functional; package shape moved to lint/static enforcement
+  or disappeared when it protected no contract.
+- Used observable readiness, cancellation, retained events, and explicit gates
+  instead of fixed sleeps. Safety deadlines remain generous ceilings and are
+  not used as the expected completion mechanism.
+- Ran focused packages repeatedly and under the race detector before the whole
+  functional lane. This separated deterministic critical-path costs from host
+  contention and caught race-only startup assumptions without converting them
+  into arbitrary sleeps.
+
+## Lifecycle audit miss and correction
+
+The first lifecycle review missed a significant optimization because it
+accepted structural evidence in place of executed-path evidence:
+
+1. It saw parallel test declarations but did not notice that the shared
+   fixture held its mutex across the entire `Process.Execute`. The tests were
+   scheduled concurrently but the customer commands executed serially.
+2. It reported the aggregate adverse matrix time and described the result as a
+   shutdown boundary without timing its leaf subtests. The
+   cancellation-and-recovery leaf alone consumed about 16.3 seconds.
+3. It did not determine why the leaf reached the 15-second completion ceiling.
+   The CLI invocation owning `--with-server` remained alive after the Factory
+   Session cancellation because these are separate lifecycle controls.
+4. The assertion accepted any error text containing `cancel`. Its own harness
+   timeout said `cancelable lifecycle command did not complete`, so a deadline
+   failure falsely passed as successful cancellation.
+5. It treated a subprocess-based forced fixture-cleanup assertion as functional
+   coverage even though no customer could observe the bookkeeping it tested.
+6. It described two static construction sites as "2 builds," obscuring the
+   difference between source topology, runtime construction, and the immutable
+   edges that actually justify separate graphs.
+
+The corrected scenario first proves the public Factory Session and provider
+cancellation projections, releases the listener gate, explicitly cancels the
+CLI invocation, requires the canonical cancellation outcome, rejects deadline
+expiry, and then proves a fresh invocation recovers. Independent adverse cells
+run as parallel leaf subtests, while the two cells that use the routed local
+process retain its narrow serialization. The harness-only subprocess test was
+removed.
+
+That correction reduced cancellation-and-recovery from about **16.3 seconds to
+1.1 seconds**, the package from roughly **23 seconds to a stable 6.35–6.38
+seconds**, and its race run from roughly **32 seconds to 13.8 seconds** without
+removing listener shutdown, session cancellation, provider cancellation,
+public projection, CLI cancellation, or recovery coverage.
+
+The general lesson is that an audit is incomplete until it verifies actual
+overlap, leaf-level timing, signal-driven completion, exact terminal outcomes,
+and a customer observer for every retained scenario.
+
 ## Validation required before closing this audit
 
 - [x] Focused provider and worker command-correlation unit tests pass.
