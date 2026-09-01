@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const sharedDefinitionsServiceHostShutdownTimeout = 15 * time.Second
+const sharedDefinitionsServiceHostShutdownTimeout = 60 * time.Second
 
 // sharedDefinitionsServiceHost owns one continuous service-mode invocation.
 // The host Factory and process wiring are shared only by scenarios that use

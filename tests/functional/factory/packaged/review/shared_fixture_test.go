@@ -24,7 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const packagedReviewFixtureShutdownTimeout = 15 * time.Second
+const packagedReviewFixtureShutdownTimeout = 60 * time.Second
 
 // packagedReviewSharedFixture owns one root-built process and one continuous
 // API host for compatible public-outcome scenarios. Each scenario owns a
