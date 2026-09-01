@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -25,6 +24,7 @@ const (
 // finite CLI watch invocation observes canonical Work transitions through the
 // terminal transition and exits successfully.
 func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, workWatchFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -33,11 +33,7 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 	defer server.Stop(t)
 	streamGate := newWorkWatchStreamGate(t, server.URL())
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess(work watch) error = %v", err)
-	}
-	support.CleanupProcess(t, process)
+	process := workWatchProcess
 
 	payloadPath := filepath.Join(t.TempDir(), "watch-request.md")
 	if err := os.WriteFile(payloadPath, []byte("# observe terminal work\n"), 0o600); err != nil {

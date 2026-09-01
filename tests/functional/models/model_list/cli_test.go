@@ -1,20 +1,44 @@
 package model_list_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+var modelListProcess support.ApplicationProcess
+
+func TestMain(m *testing.M) {
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build models CLI process: %v\n", err)
+		os.Exit(1)
+	}
+	modelListProcess = process
+	exitCode := m.Run()
+	closeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := process.Close(closeContext); err != nil {
+		fmt.Fprintf(os.Stderr, "close models CLI process: %v\n", err)
+		exitCode = 1
+	}
+	os.Exit(exitCode)
+}
+
 // TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON proves list routing and JSON catalog output.
 func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %q, want /models", r.URL.Path)
@@ -23,7 +47,7 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := modelListProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "--server", strings.TrimSuffix(server.URL, "/"), "models", "list",
 	})
@@ -48,6 +72,7 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 
 // TestProcessModelsInspect_UsesResolvedModelNameArgument proves inspect forwards the resolved model identity.
 func TestProcessModelsInspect_UsesResolvedModelNameArgument(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M" {
 			t.Fatalf("path = %q, want /models/OMNIVOICE_Q4_K_M", r.URL.Path)
@@ -56,7 +81,7 @@ func TestProcessModelsInspect_UsesResolvedModelNameArgument(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := modelListProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "--server", strings.TrimSuffix(server.URL, "/"),
 		"models", "inspect", "OMNIVOICE_Q4_K_M",
@@ -82,6 +107,7 @@ func TestProcessModelsInspect_UsesResolvedModelNameArgument(t *testing.T) {
 
 // TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON proves pull routing and JSON pull output.
 func TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
 			t.Fatalf("path = %q, want /models/OMNIVOICE_Q4_K_M/pull", r.URL.Path)
@@ -90,7 +116,7 @@ func TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := modelListProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "--server", strings.TrimSuffix(server.URL, "/"),
 		"models", "pull", "OMNIVOICE_Q4_K_M",
@@ -115,6 +141,7 @@ func TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON(t *testing.T) {
 
 // TestProcessModelsList_ReturnsHumanReadableCatalog proves list human presentation.
 func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %q, want /models", r.URL.Path)
@@ -123,7 +150,7 @@ func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := modelListProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", strings.TrimSuffix(server.URL, "/"), "models", "list",
 	})
@@ -139,6 +166,7 @@ func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
 
 // TestProcessModelsInspect_ReturnsHumanReadableDetail proves inspect human presentation.
 func TestProcessModelsInspect_ReturnsHumanReadableDetail(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M" {
 			t.Fatalf("path = %q, want /models/OMNIVOICE_Q4_K_M", r.URL.Path)
@@ -147,7 +175,7 @@ func TestProcessModelsInspect_ReturnsHumanReadableDetail(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := modelListProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", strings.TrimSuffix(server.URL, "/"),
 		"models", "inspect", "OMNIVOICE_Q4_K_M",

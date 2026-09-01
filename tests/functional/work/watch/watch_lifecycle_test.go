@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -35,6 +34,7 @@ func TestWorkWatchControlledLifecycleCases(t *testing.T) {
 
 func runControlledWatchBoundaryCases(t *testing.T) {
 	t.Run("CASE-WW-002 empty stream cancellation", func(t *testing.T) {
+		t.Parallel()
 		stream := newControlledWatchStream(t, nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -54,6 +54,7 @@ func runControlledWatchBoundaryCases(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-003 retained history precedes live transition", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
@@ -77,6 +78,7 @@ func runControlledWatchBoundaryCases(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-004 exact duplicate is idempotent", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
@@ -97,6 +99,7 @@ func runControlledWatchBoundaryCases(t *testing.T) {
 
 func runControlledWatchCancellationCases(t *testing.T) {
 	t.Run("CASE-WW-006 follow cancellation detaches", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
@@ -122,13 +125,13 @@ func runControlledWatchCancellationCases(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-007 established stream deadline", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
 			fixture.request,
 		}}, nil)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
+		process := workWatchProcess
 		ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
 		defer cancel()
 		stdout := newLedgerOutput()
@@ -153,18 +156,22 @@ func runControlledWatchCancellationCases(t *testing.T) {
 
 func runControlledWatchRecoveryAndCleanupCases(t *testing.T) {
 	t.Run("CASE-WW-005 conflicting duplicate fails safely", func(t *testing.T) {
+		t.Parallel()
 		runControlledConflictFailure(t)
 	})
 
 	t.Run("CASE-WW-009 disconnect preserves accepted transition", func(t *testing.T) {
+		t.Parallel()
 		runControlledReconnectCase(t)
 	})
 
 	t.Run("CASE-WW-010 reconnect uses accepted cursor", func(t *testing.T) {
+		t.Parallel()
 		runControlledReconnectCase(t)
 	})
 
 	t.Run("CASE-WW-011 success cleanup closes stream", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
@@ -180,12 +187,14 @@ func runControlledWatchRecoveryAndCleanupCases(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-012 failure cleanup preserves primary error", func(t *testing.T) {
+		t.Parallel()
 		runControlledConflictFailure(t)
 	})
 }
 
 func runControlledWatchContentionCases(t *testing.T) {
 	t.Run("CASE-WW-016 delivery and cancellation use signals", func(t *testing.T) {
+		t.Parallel()
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
 			fixture.metadata,
@@ -569,8 +578,7 @@ func startControlledWatch(
 	follow bool,
 ) (*support.ProcessCommand, *ledgerOutput, *ledgerOutput, *controlledWatchConnection) {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workWatchProcess
 	stdout := newLedgerOutput()
 	stderr := newLedgerOutput()
 	inputs := controlledWatchInput(t, ctx, stream.URL(), follow, stdout, stderr)

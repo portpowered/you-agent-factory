@@ -188,7 +188,7 @@ func TestFactoryValidateAcceptsSupportedTwoInputJoinArity(t *testing.T) {
 		"you", "factory", "config", "validate", sourcePath,
 	})
 	inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := validatePersistCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config validate) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -243,7 +243,7 @@ func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
 				"you", "factory", "config", "validate", sourcePath,
 			})
 			inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
-			err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+			err := validatePersistCLIProcess.Execute(inputs.Input)
 			if test.wantErr && err == nil {
 				t.Fatal("Process.Execute(factory config validate) error = nil, want rejection")
 			}
@@ -547,7 +547,7 @@ func executeFactoryList(t *testing.T, home, workingDirectory string) []factoryLi
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := validatePersistCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,

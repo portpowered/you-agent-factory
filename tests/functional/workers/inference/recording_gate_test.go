@@ -28,6 +28,7 @@ import (
 // WSR-FT-004: durable opening before the first provider call and zero provider
 // calls when opening durability fails.
 func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
+	t.Parallel()
 	t.Run("durable opening precedes provider call", func(t *testing.T) {
 		probe := newWSRFT004RecordingProbe(t, false)
 		runner := newWSRFT004ProviderRunner(t, probe)
@@ -65,6 +66,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 // WSR-FT-005: exact finalized live-to-reloaded-replay equality, terminal-last
 // behavior, no duplicates, and zero provider invocations during replay.
 func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
+	t.Parallel()
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
 	dir := wsrFT004Factory(t)
@@ -119,6 +121,7 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 // WSR-FT-008: post-handoff recording loss never rewrites execution outcome,
 // and a correlated terminal fact upgrades the surviving prefix to DEGRADED.
 func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		fixture    string

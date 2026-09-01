@@ -34,6 +34,7 @@ const (
 
 // TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles proves hosted invocation cleanup across selectors.
 func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		site        bool
@@ -51,6 +52,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			homeDir := t.TempDir()
 			workingDirectory := t.TempDir()
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
@@ -120,6 +122,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 
 // TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness proves raw JavaScript hosting shares one lifecycle.
 func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name        string
 		mode        string
@@ -129,6 +132,7 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 		{name: "site", mode: "--with-site", wantBrowser: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			workingDirectory := t.TempDir()
 			workflowPath := filepath.Join(workingDirectory, "workflow.js")
 			if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
@@ -180,6 +184,7 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 // this is the functional exception for the unavailable-owner composition
 // without constructing transporthttp.NewServer in a functional test.
 func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
@@ -246,6 +251,7 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 // TestRunScopedServerUsesProductionListenerAndReportsFallback proves the
 // customer CLI path binds, reports, and joins the concrete HTTP server.
 func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
+	t.Parallel()
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve requested loopback port: %v", err)
@@ -302,6 +308,7 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 // TestRunScopedServerUsesExactListenAddress proves --listen binds the requested
 // loopback port without entering the legacy ascending fallback path.
 func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
@@ -337,6 +344,7 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 // run sends its normalized prompt to the selected server without starting a
 // local listener or invoking the local runtime.
 func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
+	t.Parallel()
 	var gotRequest factoryapi.FactorySessionExecutionRequest
 	var startRequests atomic.Int32
 	var resultRequests atomic.Int32
@@ -413,6 +421,7 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 }
 
 func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
+	t.Parallel()
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve exact listener port: %v", err)
@@ -450,6 +459,7 @@ func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
 // TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary proves remote bind
 // targets fail at the customer CLI boundary before listener startup.
 func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
@@ -485,6 +495,7 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 // public process rejects contradictory placement before any local or remote
 // runtime effect can start, regardless of persistent-flag position.
 func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
+	t.Parallel()
 	const wantCode = factoryapi.ErrorResponseCode("REMOTE_LOCAL_HOSTING_CONFLICT")
 	const wantMessage = "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind"
 
@@ -521,6 +532,7 @@ func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			var stdout, stderr bytes.Buffer
 			homeDir := t.TempDir()
 			stdinIsTTY := true
@@ -559,6 +571,7 @@ func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
 // TestRemotePlacementRejectsLocalOnlyServerCommand proves remote placement
 // remains explicit for commands that can only own local listener state.
 func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
+	t.Parallel()
 	var listenerStarts atomic.Int32
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
@@ -587,6 +600,7 @@ func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
 // local-only commands fail at the generic placement boundary before their
 // handler can inspect the requested file.
 func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
+	t.Parallel()
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -608,6 +622,7 @@ func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
 // TestRunRejectsMalformedExactListenAddress proves --listen is parsed as an
 // exact local host:port before the listener or Factory runtime starts.
 func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
+	t.Parallel()
 	var listenerStarts atomic.Int32
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
@@ -635,6 +650,7 @@ func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
 // TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary proves port
 // exhaustion is reported through the customer CLI contract.
 func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
@@ -692,6 +708,7 @@ func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) 
 
 // TestRunScopedServerOwnsReplayLifecycle proves replay hosting joins its listener at terminal completion.
 func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
+	t.Parallel()
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	var listenerStarts, listenerStops, browserCalls atomic.Int32

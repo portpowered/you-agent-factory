@@ -48,6 +48,7 @@ func sharedInferencePromptCapabilities() sharedInferenceProviderCapabilitySet {
 }
 
 func TestSharedInferenceCommandRouterRejectsUnknownSelector(t *testing.T) {
+	t.Parallel()
 	validDir := filepath.Join(t.TempDir(), "valid")
 	var calls int
 	runner := inferenceSelectorProbeRunner{calls: &calls}
@@ -99,6 +100,7 @@ func (runner inferenceSelectorProbeRunner) Run(
 // that edge, and does not invoke a different registered provider edge for the
 // same work.
 func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
+	t.Parallel()
 	const (
 		selectedProviderID     = "selected.provider"
 		selectedProviderAlias  = "selected"
@@ -250,6 +252,7 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 // provider edges inert and factory startup fails with a stable validation error
 // before any provider invoke or customer process lifecycle starts.
 func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
+	t.Parallel()
 	const (
 		unknownProviderAlias    = "unknown-provider"
 		registeredProviderID    = "registered.provider"

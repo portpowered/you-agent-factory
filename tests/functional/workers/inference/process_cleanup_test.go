@@ -30,6 +30,7 @@ const processCleanupWorkerTimeout = 5 * time.Second
 // pipe; the second same-route Work can complete only after the first
 // workstation admission is released by PROCESS_GONE reconciliation.
 func TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("process-gone inherited-pipe observation is covered on the Unix process boundary")
 	}
@@ -101,6 +102,7 @@ then complete the second same-route Work after PROCESS_GONE reconciliation.
 // observable witness for workstation reconciliation and route release while
 // the Unix test above covers the real inherited-pipe process boundary.
 func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	const (
 		workID  = "work-process-gone-functional"
@@ -185,6 +187,7 @@ func (runner processGoneFunctionalCommandRunner) RunStreaming(
 // timeout failure with no lingering in-progress dispatch.
 func TestProviderTimeoutTerminatesChildProcessTree(t *testing.T) {
 	support.SkipLongFunctional(t, "slow timeout process-tree cleanup proof")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	childPIDFile := filepath.Join(t.TempDir(), "descendant.pid")
 
@@ -335,6 +338,7 @@ func processCleanupHelperArgs() (string, []string) {
 // prior timeout only settles once timeout cleanup has finished.
 func TestProviderSuccessWaitsForProcessAndStreamClosure(t *testing.T) {
 	support.SkipLongFunctional(t, "slow timeout retry and success cleanup proof")
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	attemptFile := filepath.Join(t.TempDir(), "timeout-attempts.txt")
 	providerPIDFile := attemptFile + ".provider.pid"

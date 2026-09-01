@@ -23,6 +23,7 @@ import (
 // WSR-FT-007: COMPLETE/DEGRADED/INCOMPLETE across terminal outcomes, capture
 // loss, and missing-terminal histories.
 func TestWSRFT007WorkerRecordingHealthMatrix(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		build              func(*testing.T) recordings.WorkerRecordingSnapshot

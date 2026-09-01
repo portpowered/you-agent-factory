@@ -26,6 +26,7 @@ import (
 // Provider Session reference.
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/final-only-success/manifest.json
 func TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession(t *testing.T) {
+	t.Parallel()
 	loaded := loadOpeningRecordFixture(t, "agy", "final-only-success")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(

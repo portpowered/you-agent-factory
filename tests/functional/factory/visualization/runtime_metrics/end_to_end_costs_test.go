@@ -28,6 +28,7 @@ const (
 // the Costs service values those rows through the public CLI route. The
 // unconsumed dispatch.cost/provider.cost samples intentionally remain absent.
 func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
+	t.Parallel()
 	functionalevidence.Covers(t, "cli/you.metrics.costs")
 	factoryDir := scaffoldEndToEndCostsFactory(t)
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte(`{"title":"cost rollup"}`))
@@ -105,6 +106,7 @@ func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
 // TestRuntimeCostsNoUsageThroughPublicCLI proves an empty metrics root is a
 // successful, explicit report rather than an empty stdout or command error.
 func TestRuntimeCostsNoUsageThroughPublicCLI(t *testing.T) {
+	t.Parallel()
 	homeDir := t.TempDir()
 	if err := os.MkdirAll(platformmetrics.RuntimeMetricsRoot(homeDir), 0o755); err != nil {
 		t.Fatalf("create empty runtime metrics root: %v", err)
@@ -234,8 +236,7 @@ func queryCostsReport(
 	})
 	defer server.Stop(t)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := runtimeMetricsCLIProcess
 	args := []string{"you", "--json", "--server", server.URL(), "metrics", "costs"}
 	if strings.TrimSpace(sessionID) != "" {
 		args = append(args, "--session", sessionID)

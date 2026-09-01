@@ -104,7 +104,7 @@ func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t 
 	})
 	update.Input.Env = env
 	update.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(update.Input); err != nil {
+	if err := yamlParityCLIProcess.Execute(update.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory update) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -238,7 +238,7 @@ func validateFactory(t *testing.T, path string) {
 		[]string{"you", "factory", "config", "validate", path},
 	)
 	inputs.Input.WorkingDirectory = filepath.Dir(path)
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := yamlParityCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config validate %s) error = %v\nstdout:\n%s\nstderr:\n%s",
 			path,
@@ -290,7 +290,7 @@ func invokeGoal(
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := yamlParityCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,

@@ -39,10 +39,17 @@ const functionalWebhookSecret = "functional-webhook-secret"
 // verification, and that transient receiver failures are retried without
 // delaying the Work terminal event.
 func TestFactoryWebhooksRunThroughRootProcess(t *testing.T) {
-	t.Run("transition filtering and signature", testFunctionalWebhookTransition)
-	t.Run("failed dispatch filtering and signature", testFunctionalWebhookDispatchFailure)
-	t.Run("retry then success", testFunctionalWebhookRetrySuccess)
-	t.Run("retry exhaustion writes one redacted dead letter", testFunctionalWebhookRetryExhaustion)
+	t.Run("transition filtering and signature", parallelFunctionalWebhookCase(testFunctionalWebhookTransition))
+	t.Run("failed dispatch filtering and signature", parallelFunctionalWebhookCase(testFunctionalWebhookDispatchFailure))
+	t.Run("retry then success", parallelFunctionalWebhookCase(testFunctionalWebhookRetrySuccess))
+	t.Run("retry exhaustion writes one redacted dead letter", parallelFunctionalWebhookCase(testFunctionalWebhookRetryExhaustion))
+}
+
+func parallelFunctionalWebhookCase(run func(*testing.T)) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Parallel()
+		run(t)
+	}
 }
 
 func testFunctionalWebhookTransition(t *testing.T) {
@@ -61,8 +68,7 @@ func testFunctionalWebhookTransition(t *testing.T) {
 	resolver.waitForCount(t, 2, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := factoryEventsCLIProcess
 	workID := submitFunctionalWebhookWork(t, process, server.URL(), "transition-filtering")
 	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
 	terminalEvent := waitForTerminalWorkEvent(t, stream, workID, 15*time.Second)
@@ -108,8 +114,7 @@ func testFunctionalWebhookRetrySuccess(t *testing.T) {
 	resolver.waitForCount(t, 1, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := factoryEventsCLIProcess
 	workID := submitFunctionalWebhookWork(t, process, server.URL(), "retry-success")
 	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
 	first := receiver.waitForWorkEvent(t, workID, 5*time.Second)
@@ -155,8 +160,7 @@ func testFunctionalWebhookDispatchFailure(t *testing.T) {
 	})
 	resolver.waitForCount(t, 1, 5*time.Second)
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := factoryEventsCLIProcess
 	submitFunctionalWebhookWork(t, process, server.URL(), "dispatch-failure")
 	failedDispatch := waitForDispatchResponseEvent(t, stream, 15*time.Second)
 	request := receiver.waitForEvent(t, failedDispatch.Id, 5*time.Second)
@@ -197,8 +201,7 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	resolver.waitForCount(t, 1, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := factoryEventsCLIProcess
 	workID := submitFunctionalWebhookWork(t, process, server.URL(), "retry-exhaustion")
 	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
 	first := receiver.waitForWorkEvent(t, workID, 5*time.Second)

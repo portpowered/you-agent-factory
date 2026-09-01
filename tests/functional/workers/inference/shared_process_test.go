@@ -58,7 +58,7 @@ type inferenceProcessGroup struct {
 	once     sync.Once
 	setupErr error
 
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	process  support.ApplicationProcess
 	serverMu sync.RWMutex
 	server   *support.ProcessAPIServer
@@ -75,6 +75,7 @@ type inferenceProcessGroup struct {
 
 	externals         map[string]*inferenceIntegrationRouter
 	sessions          map[string]struct{}
+	sessionMu         sync.Mutex
 	openedSessionIDs  []string
 	deletedSessionIDs []string
 }
@@ -310,8 +311,14 @@ func runSharedInferenceFactory(
 	t.Helper()
 	group := sharedInferenceGroup
 	group.ensure(t)
-	group.mu.Lock()
-	defer group.mu.Unlock()
+	exclusive := sharedInferenceScenarioRequiresExclusiveProcess(scenario)
+	if exclusive {
+		group.mu.Lock()
+		defer group.mu.Unlock()
+	} else {
+		group.mu.RLock()
+		defer group.mu.RUnlock()
+	}
 	group.override.set(scenario.providerOverride)
 	releaseResponse := prepareSharedInferenceScenario(t, group, dir, scenario)
 	defer func() {
@@ -355,6 +362,13 @@ func runSharedInferenceFactory(
 		result.responseEvents = append(result.responseEvents, drainSharedInferenceResponseEvents(t, responseStream)...)
 	}
 	return result
+}
+
+func sharedInferenceScenarioRequiresExclusiveProcess(scenario sharedInferenceScenario) bool {
+	return scenario.providerOverride != nil ||
+		len(scenario.providerRegistrations) > 0 ||
+		scenario.workerRecordingWriter != nil ||
+		scenario.stopDaemonForExecute
 }
 
 func prepareSharedInferenceScenario(
@@ -405,6 +419,8 @@ func openSharedInferenceSession(
 	if sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened Factory Session ID = %q, want an explicit non-default session", sessionID)
 	}
+	group.sessionMu.Lock()
+	defer group.sessionMu.Unlock()
 	if _, exists := group.sessions[sessionID]; exists {
 		t.Fatalf("Factory Session ID %q was reused by the shared process group", sessionID)
 	}
@@ -419,6 +435,8 @@ func openSharedInferenceSession(
 func closeSharedInferenceSession(t *testing.T, group *inferenceProcessGroup, sessionID string) {
 	t.Helper()
 	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	group.sessionMu.Lock()
+	defer group.sessionMu.Unlock()
 	group.deletedSessionIDs = append(group.deletedSessionIDs, sessionID)
 }
 

@@ -23,6 +23,7 @@ const (
 // dispatch maps those settings onto the provider-process command args for that
 // provider instead of silently dropping them or routing through a different edge.
 func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -74,6 +75,7 @@ func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
 // capability error before starting a provider command instead of launching a
 // live provider-process edge for that work.
 func TestUnsupportedProviderFlagReturnsCapabilityError(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 
 	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
