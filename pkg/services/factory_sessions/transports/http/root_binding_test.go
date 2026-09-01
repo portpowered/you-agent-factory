@@ -2,19 +2,34 @@ package http_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionsse "github.com/portpowered/infinite-you/pkg/transports/http/servertests/factorysessionsse"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
+)
+
+const (
+	legacyEventFactorySessionHeader = "X-Factory-Session-Factory-Session-Id"
+	legacyEventRetainedCountHeader  = "X-Factory-Session-Retained-Event-Count"
 )
 
 func TestHandlerFromRoot_GetFactorySessionInvokesSessionsRoot(t *testing.T) {
@@ -486,3 +501,255 @@ func TestDurableRequestPreparation_ReportsServiceFailuresAndAbsentRoles(t *testi
 		t.Fatal("typed-nil preparation role should not produce a bound adapter")
 	}
 }
+
+func TestLegacyEventSSEHTTPUsesResolvedCanonicalIDForExactAndDefault(t *testing.T) {
+	t.Parallel()
+
+	const (
+		exactSessionID   = "session-http-exact-001"
+		defaultSessionID = factorysessions.DefaultSessionID
+		defaultCanonical = "3c1d4c6b-0d6a-4e8f-b0c0-9e5a2bb1d8aa"
+		backendScopeID   = "http-test-backend"
+	)
+
+	event, err := factorydefinitions.NewFactoryEvent(factoryapi.FactoryEvent{
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeWorkRequest,
+		Id:            "session-http-legacy-event-001",
+		Context: factoryapi.FactoryEventContext{
+			EventTime: time.Date(2026, 8, 31, 17, 0, 0, 0, time.UTC),
+			Sequence:  0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("convert HTTP event fixture: %v", err)
+	}
+
+	events := make(chan factorydefinitions.FactoryEvent)
+	close(events)
+	sessions := map[string]*livesession.LiveSession{
+		exactSessionID: {
+			ID:                      exactSessionID,
+			RuntimeFactorySessionID: exactSessionID,
+			RuntimeEventSessionID:   exactSessionID,
+		},
+		defaultSessionID: {
+			ID:                      defaultSessionID,
+			RuntimeFactorySessionID: defaultCanonical,
+			RuntimeEventSessionID:   defaultSessionID,
+		},
+	}
+	runtimes := make(map[string]factoryruntime.Service, len(sessions))
+	for selector, session := range sessions {
+		selector, session := selector, session
+		runtimes[selector] = &legacyHTTPRuntime{
+			subscribe: func(
+				_ context.Context,
+				_ *factorydefinitions.FactoryEventReconnectCursor,
+				scope factorydefinitions.FactoryEventReconnectScope,
+			) (*factorydefinitions.FactoryEventStream, error) {
+				if scope.SessionID != session.RuntimeEventSessionID {
+					return nil, fmt.Errorf("event scope = %q, want %q", scope.SessionID, session.RuntimeEventSessionID)
+				}
+				return &factorydefinitions.FactoryEventStream{
+					// The legacy runtime intentionally omits identity metadata. The
+					// Factory Sessions gateway must supply only resolved identity.
+					History: []factorydefinitions.FactoryEvent{event},
+					Events:  events,
+				}, nil
+			},
+		}
+	}
+
+	host := &legacyHTTPGatewayHost{
+		sessions:       sessions,
+		runtimes:       runtimes,
+		backendScopeID: backendScopeID,
+	}
+	gateway := newLegacyHTTPGateway(host)
+	server := httptest.NewServer(factorysessionsse.NewProductionWiredAPIServer(gateway).Handler())
+	t.Cleanup(server.Close)
+	harness := factorysessionsse.NewFactorySessionSSEHarness(t, 2*time.Second, http.DefaultClient, context.Background())
+
+	for _, test := range []struct {
+		name      string
+		selector  string
+		canonical string
+	}{
+		{name: "exact selector", selector: exactSessionID, canonical: exactSessionID},
+		{name: "default selector", selector: defaultSessionID, canonical: defaultCanonical},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			stream := harness.Open(server.URL, test.selector, "")
+			defer stream.Close()
+
+			if got := stream.Identity.FactorySessionID; got != test.canonical {
+				t.Fatalf("resolved Factory Session header = %q, want %q", got, test.canonical)
+			}
+			if got := stream.Response.Header.Get(legacyEventRetainedCountHeader); got != "1" {
+				t.Fatalf("retained event count header = %q, want 1", got)
+			}
+
+			streamed := stream.ReadNextEvent()
+			if streamed.SchemaVersion != factoryapi.AgentFactoryEventV1 ||
+				streamed.Type != factoryapi.FactoryEventTypeWorkRequest ||
+				streamed.Id != event.Id ||
+				streamed.Context.EventTime != event.Context.EventTime ||
+				streamed.Context.Sequence != event.Context.Sequence {
+				t.Fatalf("streamed event = %#v, want unchanged event %q/%q", streamed, event.Id, factoryapi.FactoryEventTypeWorkRequest)
+			}
+		})
+	}
+}
+
+func TestLegacyEventSSEHTTPPreservesTypedFailuresWithoutIdentity(t *testing.T) {
+	t.Parallel()
+
+	const failureSessionID = "session-http-failure-001"
+	subscriptionFailure := errors.New("legacy reconnect cursor is stale")
+	sessions := map[string]*livesession.LiveSession{
+		failureSessionID: {
+			ID:                      failureSessionID,
+			RuntimeFactorySessionID: failureSessionID,
+			RuntimeEventSessionID:   failureSessionID,
+		},
+	}
+	runtimes := map[string]factoryruntime.Service{
+		failureSessionID: &legacyHTTPRuntime{
+			subscribe: func(context.Context, *factorydefinitions.FactoryEventReconnectCursor, factorydefinitions.FactoryEventReconnectScope) (*factorydefinitions.FactoryEventStream, error) {
+				return nil, subscriptionFailure
+			},
+		},
+	}
+	host := &legacyHTTPGatewayHost{sessions: sessions, runtimes: runtimes}
+	server := httptest.NewServer(factorysessionsse.NewProductionWiredAPIServer(newLegacyHTTPGateway(host)).Handler())
+	t.Cleanup(server.Close)
+
+	for _, test := range []struct {
+		name       string
+		selector   string
+		wantStatus int
+		wantCode   factoryapi.ErrorResponseCode
+		wantBody   string
+	}{
+		{
+			name:       "unknown session",
+			selector:   "session-http-unknown-001",
+			wantStatus: http.StatusNotFound,
+			wantCode:   factoryapi.ErrorResponseCodeNOTFOUND,
+			wantBody:   "factory session not found",
+		},
+		{
+			name:       "subscription failure",
+			selector:   failureSessionID,
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   factoryapi.ErrorResponseCodeINTERNALERROR,
+			wantBody:   "failed to subscribe to factory events",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			request, err := http.NewRequest(http.MethodGet, server.URL+"/factory-sessions/"+test.selector+"/events", nil)
+			if err != nil {
+				t.Fatalf("new Factory Event request: %v", err)
+			}
+			request.Header.Set("Accept", "text/event-stream")
+			response, err := (&http.Client{Timeout: 2 * time.Second}).Do(request)
+			if err != nil {
+				t.Fatalf("GET Factory Event stream: %v", err)
+			}
+			defer response.Body.Close()
+
+			if response.StatusCode != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.StatusCode, test.wantStatus)
+			}
+			if _, present := response.Header[http.CanonicalHeaderKey(legacyEventFactorySessionHeader)]; present {
+				t.Fatalf("resolved Factory Session header = %q on failed response, want omitted", response.Header.Get(legacyEventFactorySessionHeader))
+			}
+
+			var errorResponse factoryapi.ErrorResponse
+			if err := json.NewDecoder(response.Body).Decode(&errorResponse); err != nil {
+				t.Fatalf("decode typed error response: %v", err)
+			}
+			if errorResponse.Code != test.wantCode || !strings.Contains(errorResponse.Message, test.wantBody) {
+				t.Fatalf("error response = %#v, want code %q and message containing %q", errorResponse, test.wantCode, test.wantBody)
+			}
+		})
+	}
+}
+
+type legacyHTTPRuntime struct {
+	factoryruntime.Service
+	subscribe func(
+		context.Context,
+		*factorydefinitions.FactoryEventReconnectCursor,
+		factorydefinitions.FactoryEventReconnectScope,
+	) (*factorydefinitions.FactoryEventStream, error)
+}
+
+func (*legacyHTTPRuntime) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (r *legacyHTTPRuntime) SubscribeFactoryEvents(
+	ctx context.Context,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	scope factorydefinitions.FactoryEventReconnectScope,
+) (*factorydefinitions.FactoryEventStream, error) {
+	if r.subscribe == nil {
+		return nil, nil
+	}
+	return r.subscribe(ctx, reconnect, scope)
+}
+
+type legacyHTTPGatewayHost struct {
+	factorysessionservice.LegacyHost
+	sessions       map[string]*livesession.LiveSession
+	runtimes       map[string]factoryruntime.Service
+	backendScopeID string
+}
+
+func (h *legacyHTTPGatewayHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
+	session, ok := h.sessions[sessionID]
+	if !ok {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	return session, nil
+}
+
+func (h *legacyHTTPGatewayHost) GetLiveSession(sessionID string) *livesession.LiveSession {
+	return h.sessions[sessionID]
+}
+
+func (h *legacyHTTPGatewayHost) SessionFactory(sessionID string) (factoryruntime.Service, error) {
+	runtime, ok := h.runtimes[sessionID]
+	if !ok {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	return runtime, nil
+}
+
+func (h *legacyHTTPGatewayHost) BackendScopeID() string {
+	return h.backendScopeID
+}
+
+func (*legacyHTTPGatewayHost) DurableExecution() durableexecution.Service {
+	return nil
+}
+
+func newLegacyHTTPGateway(host factorysessionservice.LegacyHost) *factorysessionservice.Service {
+	clock := platformclock.Real{}
+	registry := responsestream.NewRegistry(
+		func() *responsestream.SessionResponseStream {
+			return responsestream.NewSessionResponseStream(clock)
+		},
+		clock,
+	)
+	return factorysessionservice.New(host, registry)
+}
+
+var _ factorysessionservice.LegacyHost = (*legacyHTTPGatewayHost)(nil)
+var _ factoryruntime.Service = (*legacyHTTPRuntime)(nil)

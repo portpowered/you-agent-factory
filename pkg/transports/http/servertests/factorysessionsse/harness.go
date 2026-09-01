@@ -14,7 +14,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/boundedio"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
 )
 
 const (
@@ -52,6 +56,19 @@ type FactorySessionSSEHarness struct {
 // HTTPDoer is the explicit HTTP edge used by the SSE test harness.
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
+}
+
+// NewProductionWiredAPIServer composes the generated HTTP route shell with
+// the existing Factory Sessions and Recordings adapters for owner-boundary
+// integration tests. The supplied legacy-live role is the controlled runtime
+// edge; route registration and legacy adapter behavior remain production code.
+var NewProductionWiredAPIServer = func(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
+	logger := zap.NewNop()
+	return api.NewServerWithRecordings(
+		recordingshttp.NewLegacyAdapterWithLive(nil, nil, liveEvents),
+		factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger),
+		nil, nil, nil, nil, logger,
+	)
 }
 
 // FactorySessionSSEStreamIdentity preserves the four independent identities
