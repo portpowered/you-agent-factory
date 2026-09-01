@@ -345,7 +345,7 @@ func (scenario *pinnedAcpxScenario) registerSessionCleanup(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		if scenario.sessionMayExist {
-			if _, err := scenario.run("cleanup-session", "--format", "json", realClientAgentName, "sessions", "close"); err != nil {
+			if _, err := scenario.run(t, "cleanup-session", "--format", "json", realClientAgentName, "sessions", "close"); err != nil {
 				t.Error("real ACP evidence cleanup failed: close disposable session")
 			} else {
 				scenario.sessionMayExist = false
