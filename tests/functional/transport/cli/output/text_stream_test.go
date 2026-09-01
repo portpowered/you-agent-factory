@@ -37,6 +37,7 @@ const (
 // invocation is in flight, then completes with canonical presentation and no
 // structured or operator noise.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
+	t.Parallel()
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
 
@@ -101,6 +102,7 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 // a non-quiet operator continuous CLI run with --with-server reports Factory
 // initiated and Dashboard URL startup output on stdout.
 func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI operator continuous text-stream startup")
 	}
@@ -162,6 +164,7 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 // human response-stream CLI run ends with the documented cancellation outcome
 // and does not print successful-completion or primary-result claims on stdout.
 func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
+	t.Parallel()
 	// This case intentionally owns an independent root: cancellation and the
 	// external-work join are the behavior under test.
 	externalWork := newCancellableExternalWorkRunner()
@@ -382,7 +385,7 @@ func waitForFirstChunkStdoutContent(t *testing.T, writer *firstChunkGatedStdoutW
 	select {
 	case <-writer.firstChunk:
 		return
-	case <-time.After(5 * time.Second):
+	case <-time.After(humanTextStreamScenarioTimeout):
 		t.Fatal("timed out waiting for first human response-stream stdout chunk")
 	}
 }

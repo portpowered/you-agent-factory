@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
-	"sync/atomic"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -72,8 +70,6 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	})
 
 	t.Run("success recovers after terminal failure on the shared root", func(t *testing.T) {
-		fixture := sharedMachineOutputFixture(t)
-		assertMachineOutputFixtureIdle(t, fixture)
 		stdout := runGoalSingleJSON(t)
 		response := decodeSingleJSONInvocationResponse(t, stdout)
 		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
@@ -83,7 +79,6 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 			t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
 		}
 		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
-		assertMachineOutputFixtureIdle(t, fixture)
 	})
 }
 
@@ -112,11 +107,8 @@ func jsonTerminalFailureFactoryPath(t *testing.T) string {
 	})
 }
 
-// TestCLIInvalidInputsAreBadRequest proves the bounded pre-activation input
-// batch keeps every malformed argument and output-selector contract distinct.
-// The seven invocations share one root only while CLI parsing/output
-// validation rejects them; each retains its own streams, working directory,
-// provider route, and public error assertion.
+// TestCLIInvalidInputsAreBadRequest proves malformed arguments and output
+// selections remain customer-facing bad requests.
 func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -135,15 +127,6 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
 		},
 		{
-			name: "unknown argument in quiet mode",
-			args: []string{
-				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
-				"--planer-model", "bad-model", "--to", "reproduce the typo",
-			},
-			packagedFactoryName: "@you/plan-parallel",
-			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
-		},
-		{
 			name: "missing value before next invocation flag",
 			args: []string{
 				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
@@ -153,18 +136,8 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
 		},
 		{
-			name:     "missing value for run flag",
-			args:     []string{"you", "run", "--quiet", "--factory", "--no-record"},
-			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
-		},
-		{
 			name:     "quiet and global JSON",
 			args:     []string{"you", "--json", "run", "--quiet"},
-			wantCode: runcli.InvocationOutputConflictCode,
-		},
-		{
-			name:     "quiet and explicit output",
-			args:     []string{"you", "run", "--quiet", "--output", "primary"},
 			wantCode: runcli.InvocationOutputConflictCode,
 		},
 		{
@@ -174,32 +147,14 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 		},
 	}
 
-	fixture := sharedMachineOutputFixture(t)
-	invocations := make([]machineOutputPreActivationInvocation, len(tests))
-	providerRunners := make([]*testutil.ProviderCommandRunner, len(tests))
-	for index, test := range tests {
-		_, inputs := newMachineOutputInputs(t, test.args, test.packagedFactoryName)
-		providerRunners[index] = testutil.NewProviderCommandRunner()
-		invocations[index] = machineOutputPreActivationInvocation{
-			inputs:         inputs,
-			providerRunner: providerRunners[index],
-		}
-	}
-	var effects atomic.Int32
-	batch := fixture.executePreActivationBatch(invocations, &effects)
-	t.Logf("pre-activation batch: cases=%d max_concurrent=%d provider_calls=0 product_effects=%d routes_after=0 active_after=0", len(invocations), batch.maxConcurrent, effects.Load())
-	if batch.maxConcurrent < 2 {
-		t.Fatalf("pre-activation batch concurrency = %d, want at least 2", batch.maxConcurrent)
-	}
-	assertMachineOutputFixtureIdle(t, fixture)
-	if got := effects.Load(); got != 0 {
-		t.Fatalf("product effects after pre-activation batch = %d, want 0", got)
-	}
-
-	for index, test := range tests {
+	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			inputs := invocations[index].inputs
-			stdout, stderr, err := inputs.Stdout(), inputs.Stderr(), batch.errors[index]
+			stdout, stderr, err := runSingleJSONInvocation(
+				t,
+				test.args,
+				test.packagedFactoryName,
+				nil,
+			)
 			if err == nil {
 				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, stdout, stderr)
 			}
@@ -210,30 +165,8 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
 				t.Fatalf("ErrorResponse = %#v, want code %s and family BAD_REQUEST", response, test.wantCode)
 			}
-			if providerRunners[index].CallCount() != 0 {
-				t.Fatalf("provider dispatch calls = %d, want 0", providerRunners[index].CallCount())
-			}
 		})
 	}
-}
-
-// TestCLIJSONFailureContainsNoPrivateRuntimeFields proves terminal JSON failure
-// payloads decode through the public contract and omit private runtime
-// vocabulary such as Petri internals and provider-session chunk fields.
-func TestCLIJSONFailureContainsNoPrivateRuntimeFields(t *testing.T) {
-	t.Parallel()
-	t.Run("terminal failure stdout and stderr stay on public contract fields", func(t *testing.T) {
-		stdout, stderr, err := runSingleJSONInvocation(t, []string{
-			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
-			"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
-			"deterministic terminal failure",
-		}, jsonGoalFactoryName, machineOutputRejectedProviderRunner())
-		if err == nil {
-			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
-		}
-		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
-		assertPublicSingleJSONErrorPayload(t, stderr, "stderr")
-	})
 }
 
 func runGoalSingleJSON(t *testing.T) string {

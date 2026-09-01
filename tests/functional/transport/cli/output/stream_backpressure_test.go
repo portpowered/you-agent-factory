@@ -27,6 +27,7 @@ const (
 // emission order when stdout is blocked by a slow consumer, so parsers never
 // observe reordered lifecycle or result records under backpressure.
 func TestCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
+	t.Parallel()
 	writer := newGatedStdoutWriter()
 	stdout := runGoalResponseStreamWithStdout(t, writer)
 
@@ -142,7 +143,7 @@ func waitForStdoutWriteAttempt(t *testing.T, writer *gatedStdoutWriter) {
 	select {
 	case <-writer.writeAttemptedCh:
 		return
-	case <-time.After(5 * time.Second):
+	case <-time.After(slowWriterScenarioTimeout):
 		t.Fatal("timed out waiting for stdout write under backpressure")
 	}
 }
@@ -192,6 +193,7 @@ func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *g
 // CLI response-stream invocation unsuccessfully and cancels in-flight provider
 // external work so no orphaned subprocess remains after the CLI returns.
 func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
+	t.Parallel()
 	externalWork := newCancellableExternalWorkRunner()
 	writer := newInFlightFailureStdoutWriter(errors.New(writerFailureStdoutError), externalWork)
 	runGoalResponseStreamWriterFailure(t, externalWork, writer)
@@ -368,7 +370,7 @@ func waitForStdoutBufferedRecords(t *testing.T, writer *inFlightFailureStdoutWri
 	// does not establish ordering through polling or scheduler timing.
 	select {
 	case <-writer.bufferedCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(writerFailureScenarioTimeout):
 		t.Fatalf("timed out waiting for buffered stdout records before mid-stream writer failure")
 	}
 }
@@ -377,7 +379,7 @@ func waitForExternalWorkStart(t *testing.T, runner *cancellableExternalWorkRunne
 	t.Helper()
 	select {
 	case <-runner.startedCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(writerFailureScenarioTimeout):
 		t.Fatal("timed out waiting for provider external work to start")
 	}
 }

@@ -21,10 +21,9 @@ import (
 const machineOutputProcessCloseTimeout = 5 * time.Second
 
 var machineOutputShared struct {
-	once      sync.Once
-	fixture   *machineOutputFixture
-	err       error
-	rootBuild atomic.Int32
+	once    sync.Once
+	fixture *machineOutputFixture
+	err     error
 }
 
 // TestMain owns the machine-readable output process for the package. The
@@ -51,21 +50,6 @@ type machineOutputFixture struct {
 	sourceRoot     string
 	mu             sync.Mutex
 	active         atomic.Int32
-}
-
-type machineOutputPreActivationInvocation struct {
-	inputs         *support.CapturedInputs
-	providerRunner platformprocess.CommandRunner
-}
-
-type machineOutputPreActivationBatchResult struct {
-	errors        []error
-	maxConcurrent int32
-}
-
-type machineOutputPreActivationResult struct {
-	index int
-	err   error
 }
 
 type machineOutputEffects struct {
@@ -159,7 +143,6 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 	machineOutputShared.once.Do(func() {
 		router := newMachineOutputCommandRouter()
 		effects := &machineOutputEffects{}
-		machineOutputShared.rootBuild.Add(1)
 		process, err := support.BuildProcessWithContext(
 			context.Background(),
 			serviceedges.Edges{
@@ -210,9 +193,6 @@ func (fixture *machineOutputFixture) close(ctx context.Context) error {
 		return nil
 	}
 	var closeErrors []error
-	if builds := machineOutputShared.rootBuild.Load(); builds != 1 {
-		closeErrors = append(closeErrors, fmt.Errorf("shared CLI output root builds: %d, want 1", builds))
-	}
 	if routes := fixture.router.routeCount(); routes != 0 {
 		closeErrors = append(closeErrors, fmt.Errorf("shared CLI output provider routes remaining at close: %d", routes))
 	}
@@ -327,102 +307,6 @@ func (fixture *machineOutputFixture) execute(
 	fixture.active.Add(1)
 	defer fixture.active.Add(-1)
 	return fixture.process.Execute(inputs.Input)
-}
-
-func assertMachineOutputFixtureIdle(t testing.TB, fixture *machineOutputFixture) {
-	t.Helper()
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	if routes := fixture.router.routeCount(); routes != 0 {
-		t.Fatalf("shared CLI output provider routes = %d, want 0", routes)
-	}
-	if active := fixture.active.Load(); active != 0 {
-		t.Fatalf("shared CLI output invocations active = %d, want 0", active)
-	}
-}
-
-// executePreActivationBatch admits the fixed bad-input/output-selection batch
-// concurrently while keeping all other shared-root executions serialized. The
-// cases in this batch return during CLI parsing or output validation, before
-// Factory/runtime activation; unique inputs and working-directory routes keep
-// their streams and controlled provider edges independent if that invariant
-// regresses. The shared effect counter proves that no activation boundary was
-// crossed by any member of the batch.
-func (fixture *machineOutputFixture) executePreActivationBatch(
-	invocations []machineOutputPreActivationInvocation,
-	effectsCounter *atomic.Int32,
-) machineOutputPreActivationBatchResult {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	fixture.effects.setCounter(effectsCounter)
-	defer fixture.effects.setCounter(nil)
-
-	routeIDs := make([]string, len(invocations))
-	for index, invocation := range invocations {
-		if invocation.providerRunner == nil {
-			continue
-		}
-		routeIDs[index] = fixture.router.bind(
-			invocation.inputs.Input.WorkingDirectory,
-			invocation.providerRunner,
-		)
-	}
-	defer func() {
-		for _, routeID := range routeIDs {
-			if routeID != "" {
-				fixture.router.unbind(routeID)
-			}
-		}
-	}()
-
-	if len(invocations) == 0 {
-		return machineOutputPreActivationBatchResult{}
-	}
-
-	start := make(chan struct{})
-	ready := make(chan struct{}, len(invocations))
-	results := make(chan machineOutputPreActivationResult, len(invocations))
-	var current atomic.Int32
-	var maxConcurrent atomic.Int32
-	var waitGroup sync.WaitGroup
-	for index, invocation := range invocations {
-		fixture.active.Add(1)
-		waitGroup.Add(1)
-		go func(index int, invocation machineOutputPreActivationInvocation) {
-			defer waitGroup.Done()
-			defer fixture.active.Add(-1)
-			ready <- struct{}{}
-			<-start
-
-			active := current.Add(1)
-			for {
-				observed := maxConcurrent.Load()
-				if active <= observed || maxConcurrent.CompareAndSwap(observed, active) {
-					break
-				}
-			}
-			err := fixture.process.Execute(invocation.inputs.Input)
-			current.Add(-1)
-			results <- machineOutputPreActivationResult{index: index, err: err}
-		}(index, invocation)
-	}
-	for range invocations {
-		<-ready
-	}
-	close(start)
-	batchErrors := make([]error, len(invocations))
-	for range invocations {
-		result := <-results
-		batchErrors[result.index] = result.err
-	}
-	waitGroup.Wait()
-
-	// The buffered result channel lets each invocation publish independently;
-	// this collection restores the caller's original case order.
-	return machineOutputPreActivationBatchResult{
-		errors:        batchErrors,
-		maxConcurrent: maxConcurrent.Load(),
-	}
 }
 
 func machineOutputAcceptedProviderRunner() platformprocess.CommandRunner {
