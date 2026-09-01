@@ -62,7 +62,7 @@ type HTTPDoer interface {
 // the existing Factory Sessions and Recordings adapters for owner-boundary
 // integration tests. The supplied legacy-live role is the controlled runtime
 // edge; route registration and legacy adapter behavior remain production code.
-var NewProductionWiredAPIServer = func(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
+func NewProductionWiredAPIServer(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
 	logger := zap.NewNop()
 	return api.NewServerWithRecordings(
 		recordingshttp.NewLegacyAdapterWithLive(nil, nil, liveEvents),
