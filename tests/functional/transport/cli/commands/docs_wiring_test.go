@@ -17,6 +17,7 @@ var packagedDocsIndexTopicPattern = regexp.MustCompile(`(?m)^- ` + "`" + `([a-z]
 // non-empty packaged-topic index through the public CLI boundary so customers
 // can discover reference topics without reading repository source trees.
 func TestCLIDocsListsPackagedTopics(t *testing.T) {
+	t.Parallel()
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
 	processHarness := newLocalReusableProcessHarness(t)
 
@@ -50,6 +51,7 @@ func TestCLIDocsListsPackagedTopics(t *testing.T) {
 // packaged docs index renders non-empty content through the public CLI boundary
 // so discovery and retrieval stay consistent for customers.
 func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
+	t.Parallel()
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
 	processHarness := newLocalReusableProcessHarness(t)
 
@@ -74,6 +76,7 @@ func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
 // unsupported topic fails with a clear diagnostic naming the topic and does not
 // write misleading success content to stdout.
 func TestCLIDocsUnknownTopicReturnsActionableFailure(t *testing.T) {
+	t.Parallel()
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
 	processHarness := newLocalReusableProcessHarness(t)
 	const unknownTopic = "unknown"

@@ -204,6 +204,7 @@ func testCLIWorkShowMissingReturnsNotFound(t *testing.T, remote *sharedRemoteCLI
 // TestCLIWorkRenderProducesDeterministicGraph proves you work render emits
 // the same dependency graph for a fixed batch input across repeated CLI invocations.
 func TestCLIWorkRenderProducesDeterministicGraph(t *testing.T) {
+	t.Parallel()
 	workingDir := t.TempDir()
 	processHarness := newLocalReusableProcessHarness(t)
 	batchPath := writeWorkWiringVisualizeBatchFile(t, workingDir)
