@@ -1,7 +1,6 @@
 package stdio_test
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -76,10 +75,13 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 		Stderr:           &stderr,
 		WorkingDirectory: cwd,
 	})
+	t.Cleanup(func() {
+		closeACPStreamFiles(stdinRead, stdinWrite, stdoutRead, stdoutWrite)
+	})
 
-	stdout := &transcriptRPCReader{reader: bufio.NewReader(stdoutRead)}
+	stdout := &transcriptRPCReader{reader: newACPFrameReader(stdoutRead, t.Name())}
 	sent := exerciseTranscriptConversation(t, home, cwd, stdinWrite, stdout)
-	finishTranscriptConversation(t, home, command, stdinWrite, stdoutWrite, runner, stdout, sent)
+	finishTranscriptConversation(t, home, command, stdinRead, stdinWrite, stdoutRead, stdoutWrite, runner, stdout, sent)
 }
 
 func newTranscriptProviderRunner() *support.ShapedProviderCommandRunner {
@@ -185,7 +187,9 @@ func finishTranscriptConversation(
 	t *testing.T,
 	home string,
 	command *support.ProcessCommand,
+	stdinRead *os.File,
 	stdinWrite *os.File,
+	stdoutRead *os.File,
 	stdoutWrite *os.File,
 	runner *support.ShapedProviderCommandRunner,
 	stdout *transcriptRPCReader,
@@ -195,7 +199,9 @@ func finishTranscriptConversation(
 	if err := stdinWrite.Close(); err != nil {
 		t.Fatalf("close stdin: %v", err)
 	}
-	<-command.Done()
+	waitForACPCommand(t, command.Done(), "clean stdin EOF / ACP server teardown", func() {
+		closeACPStreamFiles(stdinRead, stdinWrite, stdoutRead, stdoutWrite)
+	})
 	if err := command.Err(); err != nil {
 		t.Fatalf("Process.Execute(you server acp) error = %v", err)
 	}
@@ -249,24 +255,21 @@ func (functionalWireClock) Now() time.Time {
 }
 
 type transcriptRPCReader struct {
-	reader   *bufio.Reader
+	reader   *acpFrameReader
 	received []string
 	frames   int
 }
 
-func (r *transcriptRPCReader) readFrame(t *testing.T) rpcFrame {
+func (r *transcriptRPCReader) readFrame(t *testing.T, stage string) rpcFrame {
 	t.Helper()
-	raw, err := r.reader.ReadString('\n')
-	if err != nil {
-		t.Fatalf("read RPC line: %v", err)
-	}
+	raw := r.reader.readLine(t, stage)
 	line := strings.TrimSpace(raw)
 	r.received = append(r.received, line)
 	r.frames++
 	assertLineIsProtocolFrame(t, line)
 	var frame rpcFrame
 	if err := json.Unmarshal([]byte(line), &frame); err != nil {
-		t.Fatalf("unmarshal RPC line %q: %v", line, err)
+		t.Fatalf("unmarshal RPC line: %v", err)
 	}
 	return frame
 }
@@ -274,7 +277,7 @@ func (r *transcriptRPCReader) readFrame(t *testing.T) rpcFrame {
 func (r *transcriptRPCReader) readResponse(t *testing.T) rpcFrame {
 	t.Helper()
 	for {
-		frame := r.readFrame(t)
+		frame := r.readFrame(t, "read ACP response or session/update frame")
 		if frame.Method == "" {
 			return frame
 		}
@@ -288,7 +291,7 @@ func (r *transcriptRPCReader) readNotificationsUntilResponse(t *testing.T) (rpcF
 	t.Helper()
 	var notifications []acpsdk.SessionNotification
 	for {
-		frame := r.readFrame(t)
+		frame := r.readFrame(t, "read ACP prompt response or session/update frame")
 		if frame.Method == "" {
 			return frame, notifications
 		}
@@ -531,6 +534,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 
 	var stdout, stderr bytes.Buffer
 	if err := process.Execute(root.Input{

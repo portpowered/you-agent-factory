@@ -1,7 +1,6 @@
 package stdio_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -199,8 +197,10 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 type serveACPControlHarness struct {
 	runner      *controlProviderCommandRunner
 	cwd         string
+	stdinRead   *os.File
 	stdinWrite  *os.File
-	stdout      *bufio.Reader
+	stdout      *acpFrameReader
+	stdoutRead  *os.File
 	stdoutWrite *os.File
 	command     *support.ProcessCommand
 	stderr      *bytes.Buffer
@@ -245,15 +245,23 @@ func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunne
 		WorkingDirectory: cwd,
 	})
 
-	return &serveACPControlHarness{
+	harness := &serveACPControlHarness{
 		runner:      runner,
 		cwd:         cwd,
+		stdinRead:   stdinRead,
 		stdinWrite:  stdinWrite,
-		stdout:      bufio.NewReader(stdoutRead),
+		stdout:      newACPFrameReader(stdoutRead, t.Name()),
+		stdoutRead:  stdoutRead,
 		stdoutWrite: stdoutWrite,
 		command:     command,
 		stderr:      &stderr,
 	}
+	t.Cleanup(harness.closeStreams)
+	return harness
+}
+
+func (h *serveACPControlHarness) closeStreams() {
+	closeACPStreamFiles(h.stdinRead, h.stdinWrite, h.stdoutRead, h.stdoutWrite)
 }
 
 func (h *serveACPControlHarness) openSession(t *testing.T) string {
@@ -328,7 +336,7 @@ func (h *serveACPControlHarness) responseWithUpdates(t *testing.T, id int) (rpcF
 	wantID := fmt.Sprintf("%d", id)
 	var updates []rpcFrame
 	for {
-		frame := readRPCFrame(t, h.stdout)
+		frame := readRPCFrame(t, h.stdout, "read ACP response or session/update frame")
 		if frame.Method != "" {
 			if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
 				t.Fatalf("unexpected ACP notification method %q", frame.Method)
@@ -351,7 +359,7 @@ func (h *serveACPControlHarness) responses(t *testing.T, ids ...string) map[stri
 	}
 	responses := make(map[string]rpcFrame, len(ids))
 	for len(pending) > 0 {
-		frame := readRPCFrame(t, h.stdout)
+		frame := readRPCFrame(t, h.stdout, "read ACP response while resolving correlated requests")
 		if frame.Method != "" {
 			continue
 		}
@@ -382,7 +390,7 @@ func (h *serveACPControlHarness) responsesThroughPromptTerminal(t *testing.T, pr
 	responses := make(map[string]rpcFrame, len(pending))
 	promptTerminalSeen := false
 	for len(pending) > 0 {
-		frame := readRPCFrame(t, h.stdout)
+		frame := readRPCFrame(t, h.stdout, "read ACP response while waiting for prompt terminalization")
 		if frame.Method != "" {
 			continue
 		}
@@ -407,13 +415,9 @@ func (h *serveACPControlHarness) finish(t *testing.T) {
 	if err := h.stdinWrite.Close(); err != nil {
 		t.Fatalf("close ACP stdin: %v", err)
 	}
-	select {
-	case <-h.command.Done():
-		if err := h.command.Err(); err != nil {
-			t.Fatalf("Process.Execute(you server acp) error = %v; stderr=%s", err, h.stderr.String())
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
+	waitForACPCommand(t, h.command.Done(), "clean stdin EOF / ACP server teardown", h.closeStreams)
+	if err := h.command.Err(); err != nil {
+		t.Fatalf("Process.Execute(you server acp) error = %v; stderr=%s", err, h.stderr.String())
 	}
 	h.command.AcceptError()
 	if err := h.stdoutWrite.Close(); err != nil {
@@ -529,25 +533,17 @@ func (r *controlProviderCommandRunner) CallCount() int {
 
 func (r *controlProviderCommandRunner) waitForStart(t *testing.T, want int) {
 	t.Helper()
-	select {
-	case got := <-r.started:
-		if got != want {
-			t.Fatalf("blocked provider command call = %d, want %d", got, want)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("provider command call %d did not start", want)
+	got := waitForACPSignal(t, t.Name(), fmt.Sprintf("provider command call %d start", want), "controlProviderCommandRunner.started", r.started)
+	if got != want {
+		t.Fatalf("blocked provider command call = %d, want %d", got, want)
 	}
 }
 
 func (r *controlProviderCommandRunner) waitForCancellation(t *testing.T, want int) {
 	t.Helper()
-	select {
-	case got := <-r.cancelled:
-		if got != want {
-			t.Fatalf("cancelled provider command call = %d, want %d", got, want)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("provider command call %d did not observe cancellation", want)
+	got := waitForACPSignal(t, t.Name(), fmt.Sprintf("provider command call %d cancellation", want), "controlProviderCommandRunner.cancelled", r.cancelled)
+	if got != want {
+		t.Fatalf("cancelled provider command call = %d, want %d", got, want)
 	}
 }
 
