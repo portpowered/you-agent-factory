@@ -14960,6 +14960,30 @@
             "since": "1.0.0"
           }
         },
+        "you.run.flag.session": {
+          "id": "you.run.flag.session",
+          "long": "session",
+          "usage": "invoke one already-open Factory Session when --remote selects a running server; omit to start a new durable Factory Session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.run.flag.listen": {
           "id": "you.run.flag.listen",
           "long": "listen",

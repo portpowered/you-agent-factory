@@ -31,13 +31,12 @@ mutable fixture.
   value as a policy-free execution scope and can route overlapping calls
   without consulting the Current Factory or inferring ownership from a
   working directory.
-- A real conversion attempt of the CLI run-modes fixture to one hosted process
-  exposed two customer-contract gaps. Remote run rejects compatibility
-  positional input unless the Factory declares an invocation signature, and
-  an ordinary inline JSON Factory is admitted by the public
-  `FACTORY_INLINE` shape but reaches the JavaScript workflow validator. Those
-  are product gaps; a test-only selector or mutable fixture route would hide
-  them.
+- The CLI run-modes conversion exposed a missing customer selector for invoking
+  an already-open remote Factory Session and two command-adapter identity
+  losses. `you --remote run --session <id>` now targets that public session,
+  and the session identity survives both structural command boundaries. The
+  response-stream path drains the server-captured retained-event head instead
+  of guessing at a terminal event or waiting on a live stream.
 - The inference Worker Session history/cursor cases were explicitly probed.
   Live observations work for a non-default session, but the fresh replay
   process does not rehydrate that explicit route; the public `~default`
@@ -214,12 +213,24 @@ mutable fixture.
 ## Packages above 3 seconds with one build
 
 These are intentionally outside the repeated-construction checklist but were
-reviewed when prioritizing wall time. The largest are CLI run modes (31.732s),
-AGY provider behavior (23.498s), sessions restart (11.558s), packaged Factory
-Builder/catalog, Work submission, and several orchestration/provider packages.
-Their cost is execution or serialization, not repeated assembly. CLI run modes
-and AGY are the primary consumers of the explicit-session-authority follow-up;
-adding another process would make their topology worse.
+reviewed when prioritizing wall time. CLI run modes fell from **31.732s** to
+**5.772s** in the final loaded lane after conversion to one hosted process,
+unique explicit sessions, and parallel customer scenarios. Its isolated race
+run passes in **8.264s**. The timeout/cancellation probe also fixed two public
+boundary defects: transport deadlines now retain the canonical terminal CLI
+outcome, and wrapped Work payload-size admission failures remain actionable 400
+responses instead of generic 500s. A provider working-directory assertion was
+removed because it described an internal shape rather than customer behavior.
+
+AGY fell from **23.498s** to **9.610s** in isolation and **11.849s** in the
+final loaded lane. Its nine independent
+packaged-review customer scenarios install the two packages once, open unique
+sessions on one hosted process, invoke through the public remote CLI selector,
+and run in parallel. The package race run passes in **21.524s** in isolation.
+Its remaining
+direct, golden, timeout, cancellation, and hosted-lifecycle cases are already
+served by the single package graph; their sequencing owns customer lifecycle
+boundaries rather than duplicate construction.
 
 ## Validation required before closing this audit
 
@@ -229,7 +240,7 @@ adding another process would make their topology worse.
 - [x] The complete functional lane passes after the final changes.
 - [x] The race detector passes across `./tests/functional/...` with `-p 2`,
   `-count=1`, and a five-minute per-package timeout.
-- [x] A final timing report is captured: **371.140 seconds**, **+26.830
-  seconds** from the 344.310-second audit sample. Package rankings and the
+- [x] A final timing report is captured: approximately **375.4 seconds**,
+  approximately **+31.1 seconds** from the 344.310-second audit sample. Package rankings and the
   slowest package times remained materially unchanged, so this is recorded as
   whole-lane/environment variance rather than a code-path regression.

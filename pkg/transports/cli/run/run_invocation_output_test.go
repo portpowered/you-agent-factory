@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -805,6 +806,51 @@ func TestRemoteInvocationClientRejectsInvalidInputsAndResponses(t *testing.T) {
 	t.Run("nil HTTP response is rejected", testRemoteInvocationRejectsMissingResponse)
 	t.Run("non API error status remains actionable", testRemoteInvocationReportsNonAPIError)
 	t.Run("successful response requires a durable identity", testRemoteInvocationRejectsEmptySuccessBody)
+}
+
+func TestRemoteExistingSessionInvocationPreservesContextOutcome(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus factoryapi.InvocationTerminalStatus
+		wantCode   factoryapi.InvocationResponseErrorCode
+	}{
+		{
+			name:       "deadline",
+			err:        fmt.Errorf("execute request: %w", context.DeadlineExceeded),
+			wantStatus: factoryapi.InvocationTerminalStatusTimedOut,
+			wantCode:   factoryapi.INVOCATIONTIMEDOUT,
+		},
+		{
+			name:       "cancellation",
+			err:        fmt.Errorf("execute request: %w", context.Canceled),
+			wantStatus: factoryapi.InvocationTerminalStatusCanceled,
+			wantCode:   factoryapi.INVOCATIONCANCELED,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requestID := "request-context-outcome"
+			response, err := (remoteInvocationClient{transport: &remoteProtocolStub{err: tt.err}}).InvokeFactorySession(
+				context.Background(),
+				RemoteExistingSessionInvocationRequest{
+					Server:    "http://selected.test",
+					SessionID: "session-context-outcome",
+					Request:   factoryapi.InvocationRequest{RequestId: &requestID},
+				},
+			)
+			if err != nil {
+				t.Fatalf("InvokeFactorySession: %v", err)
+			}
+			if response.Status != tt.wantStatus || response.ErrorCode == nil || *response.ErrorCode != tt.wantCode {
+				t.Fatalf("response = %#v, want status %q and code %q", response, tt.wantStatus, tt.wantCode)
+			}
+			if response.SessionId == nil || *response.SessionId != "session-context-outcome" ||
+				response.RequestId != requestID {
+				t.Fatalf("response identity = %#v, want session and request identity preserved", response)
+			}
+		})
+	}
 }
 
 func testRemoteInvocationRequiresContext(t *testing.T) {

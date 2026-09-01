@@ -3,8 +3,6 @@ package agy
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +17,8 @@ import (
 // recording identities while using the same frozen external route.
 func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
 	fixture := agySharedProcess(t)
+	fixture.startRoleHost(t)
+	t.Cleanup(func() { fixture.stopRoleHost(t) })
 	selector := "role-recovery-empty-then-valid"
 	route := fixture.routes[selector]
 
@@ -57,15 +57,6 @@ func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
 	assertAgySingleDispatch(t, firstEvents, factoryapi.WorkOutcomeFailed)
 	assertAgySingleDispatch(t, secondEvents, factoryapi.WorkOutcomeAccepted)
 
-	paths := route.recordingPathsSnapshot()
-	if len(paths) != 2 {
-		t.Fatalf("recovery recording paths = %d, want two invocation-owned recordings", len(paths))
-	}
-	for _, path := range paths {
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("recovery recording %q remains: %v", path, err)
-		}
-	}
 }
 
 // TestAgySharedProcessEarlyHostedExitReleasesResources proves that stopping

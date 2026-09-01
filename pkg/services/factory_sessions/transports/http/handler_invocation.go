@@ -28,6 +28,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 
 	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
 	if err != nil {
+		var payloadSize *work.PayloadSizeError
+		if errors.As(err, &payloadSize) {
+			s.writeError(w, http.StatusBadRequest, payloadSize.Error(), "BAD_REQUEST")
+			return
+		}
 		switch typed := err.(type) {
 		case *work.InputError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))

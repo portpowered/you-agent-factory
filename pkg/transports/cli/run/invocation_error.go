@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -302,6 +303,22 @@ type RemoteInvocationOperation interface {
 	StartFactorySession(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
 }
 
+// RemoteExistingSessionInvocationRequest targets one already-open Factory
+// Session through the public compatibility invocation route.
+type RemoteExistingSessionInvocationRequest struct {
+	Server      string
+	SessionID   string
+	Request     factoryapi.InvocationRequest
+	Diagnostics io.Writer
+	Verbose     bool
+}
+
+// RemoteExistingSessionInvocationOperation is implemented by production HTTP
+// adapters that can invoke an explicitly selected live Factory Session.
+type RemoteExistingSessionInvocationOperation interface {
+	InvokeFactorySession(context.Context, RemoteExistingSessionInvocationRequest) (factoryapi.InvocationResponse, error)
+}
+
 // RemoteInvocationResultRequest identifies the server-owned durable result
 // read that follows one accepted remote invocation.
 type RemoteInvocationResultRequest struct {
@@ -380,6 +397,92 @@ func (client remoteInvocationClient) StartFactorySession(
 		)
 	}
 	return decodeRemoteDurableStartResponse(cfg, endpointLabel, response)
+}
+
+func (client remoteInvocationClient) InvokeFactorySession(
+	ctx context.Context,
+	cfg RemoteExistingSessionInvocationRequest,
+) (factoryapi.InvocationResponse, error) {
+	if ctx == nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableRequestInvalidCode, Message: "remote Factory Session invocation: context is required"}
+	}
+	if client.transport == nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableStartCode, Message: "remote Factory Session invocation: CLI HTTP protocol is required"}
+	}
+	endpointURL, err := cliserver.RequestURL(cfg.Server, sessionpath.FactoryInvocationsPath(cfg.SessionID))
+	if err != nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableRequestInvalidCode, Message: "remote Factory Session invocation endpoint is invalid", Cause: err}
+	}
+	body, err := json.Marshal(cfg.Request)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableRequestInvalidCode, Message: fmt.Sprintf("marshal remote Factory Session invocation: %v", err), Cause: err}
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(body))
+	if err != nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableRequestInvalidCode, Message: fmt.Sprintf("build remote Factory Session invocation: %v", err), Cause: err}
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.transport.Execute(request)
+	if err != nil {
+		if result, ok := remoteExistingSessionContextResult(err, cfg.SessionID, cfg.Request); ok {
+			return apisurface.InvocationResponseFromResult(result), nil
+		}
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableStartCode, Message: fmt.Sprintf("remote Factory Session invocation failed at %s: %v", safeRemoteEndpoint(endpointURL), err), Cause: err}
+	}
+	if response.HTTP == nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: "remote Factory Session invocation returned no HTTP response"}
+	}
+	if response.HTTP.Body != nil {
+		defer response.HTTP.Body.Close()
+	}
+	if response.HTTP.StatusCode != http.StatusOK {
+		message := fmt.Sprintf("remote Factory Session invocation failed at %s (%d)", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode)
+		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
+			message += ": " + apiError.Message
+		}
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableStartCode, Message: message}
+	}
+	if response.HTTP.Body == nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: "remote Factory Session invocation response has no body"}
+	}
+	var result factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.HTTP.Body).Decode(&result); err != nil {
+		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: fmt.Sprintf("decode remote Factory Session invocation response: %v", err), Cause: err}
+	}
+	return result, nil
+}
+
+func remoteExistingSessionContextResult(
+	err error,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, bool) {
+	requestID := ""
+	if request.RequestId != nil {
+		requestID = *request.RequestId
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return remoteDurableInvocationFailure(
+			requestID,
+			sessionID,
+			interfaces.InvocationTerminalStatusTimedOut,
+			string(factoryapi.INVOCATIONTIMEDOUT),
+			"invocation timed out while waiting for primary result",
+			nil,
+		), true
+	case errors.Is(err, context.Canceled):
+		return remoteDurableInvocationFailure(
+			requestID,
+			sessionID,
+			interfaces.InvocationTerminalStatusCanceled,
+			string(factoryapi.INVOCATIONCANCELED),
+			"invocation was canceled while waiting for primary result",
+			nil,
+		), true
+	default:
+		return apisurface.FactoryInvocationResult{}, false
+	}
 }
 
 func (client remoteInvocationClient) GetFactorySessionResult(
@@ -893,6 +996,9 @@ func runRemoteInvocation(
 			Message: "--remote run requires invocation input; provide a normalized Factory target and invocation arguments",
 		}
 	}
+	if sessionID := strings.TrimSpace(cfg.FactorySessionID); sessionID != "" {
+		return runRemoteExistingSessionInvocation(ctx, cfg, server, sessionID, *request, remote, presentations...)
+	}
 	executionRequest, err := remoteDurableRequestFromRunConfig(cfg, *request)
 	if err != nil {
 		return err
@@ -937,6 +1043,77 @@ func runRemoteInvocation(
 		return err
 	}
 	return writeRemoteInvocationResult(cfg, result)
+}
+
+func runRemoteExistingSessionInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	server, sessionID string,
+	request factoryapi.InvocationRequest,
+	remote RemoteInvocationOperation,
+	presentations ...factoryvisualization.ResponsePresentation,
+) error {
+	invoker, ok := remote.(RemoteExistingSessionInvocationOperation)
+	if !ok {
+		return &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: "remote explicit-session invocation requires the Factory Session invocation operation"}
+	}
+	response, err := invoker.InvokeFactorySession(ctx, RemoteExistingSessionInvocationRequest{
+		Server: server, SessionID: sessionID, Request: request,
+		Diagnostics: cfg.Diagnostics, Verbose: cfg.Verbose,
+	})
+	if err != nil {
+		return err
+	}
+	result := apisurface.FactoryInvocationResultFromResponse(response)
+	if strings.TrimSpace(result.SessionID) == "" {
+		result.SessionID = sessionID
+	}
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return writeRemoteInvocationResult(cfg, result)
+	}
+	var presentation factoryvisualization.ResponsePresentation
+	if len(presentations) > 0 {
+		presentation = presentations[0]
+	}
+	renderer, err := invocationFactoryEventRenderer(cfg, presentation)
+	if err != nil {
+		return err
+	}
+	if renderer == nil {
+		return &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: "remote explicit-session response stream renderer is required"}
+	}
+	defer renderer.StopProgressRendering()
+	if ctx.Err() != nil && (result.Status == interfaces.InvocationTerminalStatusTimedOut ||
+		result.Status == interfaces.InvocationTerminalStatusCanceled) {
+		if err := renderer.WriteFinalInvocationResult(result); err != nil {
+			return err
+		}
+		return invocationResultFailure(result)
+	}
+	events, ok := remote.(RemoteInvocationEventOperation)
+	if !ok {
+		return &InvocationError{Code: RemoteDurableResponseInvalidCode, Message: "remote explicit-session response stream requires the canonical Factory Event operation"}
+	}
+	stream, err := events.OpenFactorySessionEvents(ctx, RemoteInvocationEventRequest{
+		Server: server, SessionID: sessionID,
+		ReplayOnly:  true,
+		Diagnostics: cfg.Diagnostics, Verbose: cfg.Verbose,
+	})
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	cursor := RemoteInvocationEventCursor{}
+	if err := consumeRemoteFactoryEventReplay(ctx, stream, renderer, &cursor); err != nil {
+		return err
+	}
+	if err := renderer.WriteFinalInvocationResult(result); err != nil {
+		return err
+	}
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
+		return invocationResultFailure(result)
+	}
+	return nil
 }
 
 func runRemoteResponseStreamInvocation(

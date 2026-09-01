@@ -97,21 +97,45 @@ func (route *agySharedCommandRoute) recordingPathsSnapshot() []string {
 // Registration is closed before root.BuildProcess, so an invocation cannot
 // mutate routing or select a sibling through mutable session data.
 type agySharedCommandRunner struct {
-	mu         sync.Mutex
-	routes     map[string]*agySharedCommandRoute
-	selectors  map[string]struct{}
-	frozen     bool
-	requests   []platformprocess.CommandRequest
-	active     int
-	maxActive  int
-	callSignal chan struct{}
+	mu          sync.Mutex
+	routes      map[string]*agySharedCommandRoute
+	scopeRoutes map[string]*agySharedCommandRoute
+	selectors   map[string]struct{}
+	frozen      bool
+	requests    []platformprocess.CommandRequest
+	active      int
+	maxActive   int
+	callSignal  chan struct{}
 }
 
 func newAgySharedCommandRunner() *agySharedCommandRunner {
 	return &agySharedCommandRunner{
-		routes:     make(map[string]*agySharedCommandRoute),
-		selectors:  make(map[string]struct{}),
-		callSignal: make(chan struct{}, 64),
+		routes:      make(map[string]*agySharedCommandRoute),
+		scopeRoutes: make(map[string]*agySharedCommandRoute),
+		selectors:   make(map[string]struct{}),
+		callSignal:  make(chan struct{}, 64),
+	}
+}
+
+func (runner *agySharedCommandRunner) registerScope(scopeID string, route *agySharedCommandRoute) error {
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeID == "" || route == nil {
+		return fmt.Errorf("AGY execution scope and route are required")
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if _, exists := runner.scopeRoutes[scopeID]; exists {
+		return fmt.Errorf("AGY execution scope %q is already registered", scopeID)
+	}
+	runner.scopeRoutes[scopeID] = route
+	return nil
+}
+
+func (runner *agySharedCommandRunner) unregisterScope(scopeID string, route *agySharedCommandRoute) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if current := runner.scopeRoutes[strings.TrimSpace(scopeID)]; current == route {
+		delete(runner.scopeRoutes, strings.TrimSpace(scopeID))
 	}
 }
 
@@ -188,6 +212,7 @@ func (runner *agySharedCommandRunner) clear() error {
 		return fmt.Errorf("AGY route table has %d active calls", runner.active)
 	}
 	runner.routes = nil
+	runner.scopeRoutes = nil
 	runner.selectors = nil
 	runner.requests = nil
 	runner.callSignal = nil
@@ -208,7 +233,11 @@ func (runner *agySharedCommandRunner) Run(
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, fmt.Errorf("AGY route table is not frozen")
 	}
-	route, ok := runner.routes[normalized]
+	route := runner.scopeRoutes[strings.TrimSpace(request.ExecutionScopeID)]
+	if route == nil {
+		route = runner.routes[normalized]
+	}
+	ok := route != nil
 	if !ok {
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, fmt.Errorf("AGY invocation has no frozen route")

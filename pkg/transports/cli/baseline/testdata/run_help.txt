@@ -52,6 +52,7 @@ Flags:
       --record string                                                                path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used
       --replay string                                                                recording to replay deterministically or inspect read-only; replay does not write a new recording
       --resume string                                                                recording to continue live Factory execution from; writes a successor recording by default; use --record to choose its path
+      --session string                                                               invoke one already-open Factory Session when --remote selects a running server; omit to start a new durable Factory Session
       --skip-permissions                                                             request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
       --to-file string                                                               read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin
       --with-mock-workers string[="__agent_factory_default_mock_workers_config__"]   enable mock-worker execution with an optional mock-workers JSON config path

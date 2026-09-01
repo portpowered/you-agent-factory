@@ -49,6 +49,7 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output", "you.run.flag.listen",
+		"you.run.flag.session",
 		"you.server.flag.listen",
 	}
 	boolInputs := []string{
@@ -96,6 +97,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},
 		{"you.run.flag.output", &cfg.InvocationOutputMode},
 		{"you.run.flag.listen", &cfg.ListenAddress},
+		{"you.run.flag.session", &cfg.FactorySessionID},
 	}
 	boolFields := []struct {
 		id     string

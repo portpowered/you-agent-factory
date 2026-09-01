@@ -81,6 +81,7 @@ type Config struct {
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
 	CanonicalSessionID            string
+	FactorySessionID              string
 	CanonicalSessionIDGenerator   factorysessions.SessionIDGenerator
 	RecordingsCLI                 recordingscli.Adapter
 	Clock                         recordings.RecordingClock

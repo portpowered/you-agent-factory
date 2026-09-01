@@ -176,6 +176,54 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	return response
 }
 
+// FactoryInvocationResultFromResponse maps the public terminal response back
+// to the shared CLI/runtime result used by transport-neutral presentation.
+func FactoryInvocationResultFromResponse(response factoryapi.InvocationResponse) FactoryInvocationResult {
+	result := FactoryInvocationResult{
+		RequestID:     response.RequestId,
+		TraceID:       response.TraceId,
+		Status:        interfaces.InvocationTerminalStatus(response.Status),
+		PrimaryResult: contentcontract.PartsFromGenerated(response.PrimaryResult),
+	}
+	if response.ErrorCode != nil {
+		result.ErrorCode = string(*response.ErrorCode)
+	}
+	if response.Message != nil {
+		result.Message = *response.Message
+	}
+	if response.SessionId != nil {
+		result.SessionID = *response.SessionId
+	}
+	if response.WorkId != nil {
+		result.WorkID = *response.WorkId
+	}
+	if response.WorkName != nil {
+		result.WorkName = *response.WorkName
+	}
+	if response.WorkState != nil {
+		result.WorkState = *response.WorkState
+	}
+	if response.ApprovalId != nil {
+		result.ApprovalID = *response.ApprovalId
+	}
+	if response.DispatchId != nil {
+		result.DispatchID = *response.DispatchId
+	}
+	if response.WorkstationId != nil {
+		result.WorkstationID = *response.WorkstationId
+	}
+	if response.WorkstationName != nil {
+		result.WorkstationName = *response.WorkstationName
+	}
+	if response.Decisions != nil {
+		result.Decisions = make([]string, 0, len(*response.Decisions))
+		for _, decision := range *response.Decisions {
+			result.Decisions = append(result.Decisions, string(decision))
+		}
+	}
+	return result
+}
+
 // RequestValidationError reports a stable client-side validation failure that
 // should map to HTTP 400 at the transport boundary.
 type RequestValidationError = interfaces.RequestValidationError

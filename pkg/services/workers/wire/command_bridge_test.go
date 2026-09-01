@@ -57,18 +57,19 @@ func TestNewProviderCommandRunnerProjectsRequestsAndBufferedOutput(t *testing.T)
 	}
 	runner := requireProviderCommandRunner(t, NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next)))
 	request := providerCommandRequest{
-		Command:         "codex",
-		Args:            []string{"exec", "--json"},
-		Stdin:           []byte("prompt"),
-		Env:             []string{"MODE=test"},
-		WorkDir:         "factory",
-		AttemptID:       "attempt-fallback",
-		TransitionID:    "transition-1",
-		WorkerType:      "agent",
-		WorkstationName: "reviewer",
-		ProjectID:       "project-1",
-		Execution:       work.ExecutionMetadata{RequestID: "request-1"},
-		ExecutionLogger: logging.NoopLogger{},
+		Command:          "codex",
+		Args:             []string{"exec", "--json"},
+		Stdin:            []byte("prompt"),
+		Env:              []string{"MODE=test"},
+		WorkDir:          "factory",
+		FactorySessionID: "factory-session-1",
+		AttemptID:        "attempt-fallback",
+		TransitionID:     "transition-1",
+		WorkerType:       "agent",
+		WorkstationName:  "reviewer",
+		ProjectID:        "project-1",
+		Execution:        work.ExecutionMetadata{RequestID: "request-1"},
+		ExecutionLogger:  logging.NoopLogger{},
 	}
 
 	result, err := runner.Run(context.Background(), request)
@@ -176,7 +177,7 @@ func assertProjectedWorkerRequest(t *testing.T, got workerprocess.CommandRequest
 	t.Helper()
 	if got.Command != want.Command || !reflect.DeepEqual(got.Args, want.Args) ||
 		!reflect.DeepEqual(got.Stdin, want.Stdin) || !reflect.DeepEqual(got.Env, want.Env) ||
-		got.WorkDir != want.WorkDir || got.DispatchID != want.AttemptID ||
+		got.WorkDir != want.WorkDir || got.FactorySessionID != want.FactorySessionID || got.DispatchID != want.AttemptID ||
 		got.TransitionID != want.TransitionID || got.WorkerType != want.WorkerType ||
 		got.WorkstationName != want.WorkstationName || got.ProjectID != want.ProjectID ||
 		!reflect.DeepEqual(got.Execution, want.Execution) || got.ExecutionLogger == nil {

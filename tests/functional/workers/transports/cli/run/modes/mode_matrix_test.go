@@ -9,6 +9,7 @@ import (
 )
 
 func TestCLIRunPresentationModesCharacterization(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		globalArgs []string
@@ -91,6 +92,7 @@ func assertHumanResponseStream(t *testing.T, stdout string) {
 }
 
 func TestCLIRunFailurePresentationModesCharacterization(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		globalArgs []string

@@ -198,6 +198,37 @@ func consumeRemoteFactoryEventStream(
 	}
 }
 
+func consumeRemoteFactoryEventReplay(
+	ctx context.Context,
+	stream RemoteInvocationEventStream,
+	renderer visualizationcliFactoryEventRenderer,
+	cursor *RemoteInvocationEventCursor,
+) error {
+	if stream == nil {
+		return errors.New("remote Factory Event stream is unavailable")
+	}
+	if renderer == nil {
+		return errors.New("remote response stream renderer is unavailable")
+	}
+	for {
+		event, err := stream.Next(ctx)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return fmt.Errorf("decode remote canonical Factory Event %q: %w", event.Id, err)
+		}
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{domainEvent})
+		if cursor != nil {
+			*cursor = remoteFactoryEventCursor(event)
+		}
+	}
+}
+
 func retryRemoteFactoryEventStream(
 	ctx context.Context,
 	server string,

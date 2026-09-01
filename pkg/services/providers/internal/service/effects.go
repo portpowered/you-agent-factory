@@ -181,6 +181,8 @@ func reflectedRequest(target reflect.Type, request CommandRequest) (reflect.Valu
 	copyReflectedField(value, "Stdin", request.Stdin)
 	copyReflectedField(value, "Env", request.Env)
 	copyReflectedField(value, "WorkDir", request.WorkDir)
+	copyReflectedField(value, "FactorySessionID", request.FactorySessionID)
+	copyReflectedField(value, "ExecutionScopeID", request.FactorySessionID)
 	dispatchID := request.DispatchID
 	if dispatchID == "" {
 		dispatchID = request.AttemptID

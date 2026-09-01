@@ -2,12 +2,14 @@
 
 ## Status
 
-In progress. The 2026-09-01 audit confirmed that explicit durable source
-selection is already public and that ordinary hosted Factory Sessions can
-overlap. Immutable Factory Session identity now reaches the provider command
-effect boundary. Local CLI selection of an existing session, ordinary inline
-JSON Factory execution through the durable endpoint, compatibility positional
-input for remote runs, and explicit-session replay rehydration remain open.
+In progress. Remote CLI invocation of an already-open Factory Session is now
+public as `you --remote run --session <id>`, including compatibility positional
+input and finite response-stream replay. Immutable Factory Session identity
+reaches both structural provider-command boundaries and the platform effect.
+The run-modes and AGY customer matrices now use one hosted process with unique
+sessions and parallel scenarios. Local in-process session selection, ordinary
+inline JSON Factory execution through the durable endpoint, and fresh-process
+explicit-session replay rehydration remain open.
 
 ## Problem
 
@@ -20,8 +22,8 @@ The affected paths currently include:
 - ordinary inline JSON Factory execution through `POST /factory-sessions/async`,
   which currently reaches the JavaScript workflow validator despite the
   public `FACTORY_INLINE` definition contract;
-- remote compatibility positional input, which is rejected unless an
-  invocation signature normalized it to arguments;
+- local compatibility invocation without a hosted server, which still cannot
+  select an already-open session;
 - explicit non-default session replay, whose fresh process does not currently
   rehydrate the original public session route.
 
@@ -52,10 +54,10 @@ Customers and API clients can start concurrent invocations on one hosted process
 
 ## Contract decisions to make
 
-1. Define whether `you run` selects an existing session, opens a session for a Factory target, or supports both operations.
+1. [x] Define remote `you run --session` as invocation of an existing hosted session; omission continues to open a durable remote session.
 2. Extend the async Factory Session execution request with a customer-facing target/session selector consistent with existing Factory Session vocabulary.
 3. Define precedence and validation when a Current Factory, Factory target, and session selector are all available.
-4. Decide whether external command requests carry `FactorySessionID` directly or receive a more general immutable execution context.
+4. [x] Keep domain-owned `FactorySessionID` and project it to the platform-owned `ExecutionScopeID` at the effect boundary.
 5. Preserve CLI/API equivalence for shared invocation behaviors and generated OpenAPI clients.
 
 ## Implementation sequence
@@ -63,10 +65,10 @@ Customers and API clients can start concurrent invocations on one hosted process
 1. Specify CLI and HTTP acceptance criteria for explicit target/session selection, invalid combinations, missing sessions, and terminal sessions.
 2. Update the authored OpenAPI fragments and CLI parsing contracts; regenerate Go and TypeScript clients.
 3. Resolve session authority at the Factory Sessions boundary and remove downstream reliance on mutable Current Factory selection.
-4. Propagate immutable session identity through Worker and Provider execution contexts and the replaceable command-effect boundary.
-5. Add focused unit tests for parsing, precedence, mapping, and propagation. These tests must not start an assembled process.
+4. [x] Propagate immutable session identity through Worker and Provider execution contexts and the replaceable command-effect boundary.
+5. [x] Add focused unit tests for manifest parsing, mapping, retained-event replay, and propagation. These tests do not start an assembled process.
 6. Add a small integration test using a compiled `you` artifact to prove CLI transport wiring.
-7. Convert the modes and inline-JavaScript functional scenarios to a shared hosted process with unique explicit sessions and parallel subtests.
+7. [x] Convert run modes and AGY review scenarios to a shared hosted process with unique explicit sessions and parallel subtests. Inline JavaScript remains blocked on the durable inline-definition mismatch.
 8. Run normal and race-enabled package tests, then three full functional timing runs.
 
 ## Acceptance criteria

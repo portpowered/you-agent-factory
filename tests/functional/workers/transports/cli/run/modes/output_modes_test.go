@@ -21,6 +21,7 @@ const (
 // you run invocation writes the same deterministic primary result across quiet
 // text, single-JSON, and NDJSON response-stream presentations at the CLI boundary.
 func TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON(t *testing.T) {
+	t.Parallel()
 	t.Run("quiet text primary result", func(t *testing.T) {
 		result := executeSuccessfulRun(t, nil, []string{"--quiet"})
 		if strings.TrimSpace(result.stdout) != wantPrimaryResult {
@@ -58,6 +59,7 @@ func TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON(t *testing.T) {
 // text or machine-readable presentations, while stderr still follows the documented
 // structured failure contract for JSON modes.
 func TestCLIRunFailureOmitsFalseSuccessPrimaryResult(t *testing.T) {
+	t.Parallel()
 	t.Run("quiet text omits success primary result", func(t *testing.T) {
 		result, err := executeFailedRun(t, nil, []string{"--quiet"})
 		if err == nil {
