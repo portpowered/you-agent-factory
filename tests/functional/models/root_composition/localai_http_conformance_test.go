@@ -27,6 +27,7 @@ import (
 // public response. The fixture is supplied only through edges.Edges; no
 // production operation vertical, registry, or artifact path is introduced.
 func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
 	home := characterizationTempDir(t)
 	writeGenericConformanceCaches(t, home)

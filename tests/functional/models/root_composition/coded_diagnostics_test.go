@@ -20,6 +20,7 @@ const codedDiagnosticUnknownModelName = "missing-model"
 
 // TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic proves local removal renders a coded diagnostic for a missing cache entry.
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		flags []string
@@ -64,6 +65,7 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 
 // TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic proves local and HTTP removal expose equivalent missing-cache diagnostics.
 func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
+	t.Parallel()
 	const message = "model cache is not installed; run you models pull " + codedDiagnosticModelName + " first"
 
 	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -106,6 +108,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 
 // TestModelsLocalInspectUnknownRendersCodedDiagnostic proves local inspection renders a coded diagnostic for an unknown model.
 func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		flags []string
@@ -150,6 +153,7 @@ func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 
 // TestModelsLocalInspectUnknownMatchesHTTPDiagnostic proves local and HTTP inspection expose equivalent unknown-model diagnostics.
 func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
+	t.Parallel()
 	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {
 			http.NotFound(writer, request)

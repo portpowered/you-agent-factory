@@ -402,6 +402,7 @@ func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 // the effective built-in catalog rejects an operation outside the selected
 // model definition before any model host or provider effect is attempted.
 func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
+	t.Parallel()
 	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -442,6 +443,7 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 // a scoped cache-inspection failure stays on the public model-unavailable
 // contract for both collection and detail reads.
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
+	t.Parallel()
 	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -499,6 +501,7 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 // cancellation returned by the scoped readiness collaborator cannot produce
 // a plausible successful catalog response through the public Models CLI.
 func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
+	t.Parallel()
 	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -531,6 +534,7 @@ func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
 // proves direct invocation does not turn a second readiness lookup failure
 // into a backend or filesystem diagnostic.
 func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
+	t.Parallel()
 	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
@@ -563,6 +567,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 // readiness cancellation returned by the composed catalog does not reach the
 // provider or expose the dependency's error text through Process.Execute.
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
+	t.Parallel()
 	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
@@ -587,6 +592,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 // between scope opening and catalog discovery stops GetCatalogModel before it
 // can return a partial detail or invoke a provider.
 func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
+	t.Parallel()
 	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	started := make(chan struct{})
@@ -629,6 +635,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 // cancellation from the direct readiness preflight remains typed and safe
 // after catalog discovery has already succeeded.
 func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
+	t.Parallel()
 	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
@@ -657,6 +664,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 // collaborator cancels the caller while returning a normal missing-cache
 // observation.
 func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
+	t.Parallel()
 	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	ctx, cancel := context.WithCancel(t.Context())
