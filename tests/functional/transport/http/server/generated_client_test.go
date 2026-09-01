@@ -23,7 +23,7 @@ import (
 
 const generatedClientTestTimeout = 10 * time.Second
 
-const generatedClientDeadline = 2 * time.Second
+const generatedClientDeadline = 100 * time.Millisecond
 
 // TestGeneratedClientStatusAndSessionRoundTrip proves status and Factory Session
 // round-trips through the published generated HTTP client succeed with typed success

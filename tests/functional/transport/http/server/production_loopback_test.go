@@ -29,6 +29,7 @@ import (
 // HTTP functional tests; this cell reaches the real bind, Serve, and shutdown
 // lifecycle so those host-network branches remain in the functional profile.
 func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
+	t.Parallel()
 	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
 
 	for _, test := range []struct {
@@ -67,6 +68,7 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 // delivered server-stop path drains a public long-lived response, returns its
 // serve lifecycle, and leaves the real loopback listener unavailable.
 func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.T) {
+	t.Parallel()
 	// The stop path mutates the hosted process and must observe a real listener,
 	// active stream termination, and process join in its own lifecycle.
 	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
@@ -138,6 +140,7 @@ func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.
 // This is an isolated listener-only witness because the open OS listener and
 // accept goroutine are the behavior under test, not an application process.
 func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
+	t.Parallel()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for listener observer: %v", err)
