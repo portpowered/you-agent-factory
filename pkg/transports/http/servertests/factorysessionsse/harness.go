@@ -14,7 +14,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/boundedio"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
 )
 
 const (
@@ -43,10 +47,11 @@ type FactorySessionSSEKeepaliveSignal struct {
 // FactorySessionSSEHarness opens session-scoped GET /factory-sessions/{session_id}/events
 // streams and reads SSE data frames within bounded timeouts.
 type FactorySessionSSEHarness struct {
-	t       *testing.T
-	timeout time.Duration
-	doer    HTTPDoer
-	ctx     context.Context
+	t                     *testing.T
+	timeout               time.Duration
+	doer                  HTTPDoer
+	ctx                   context.Context
+	ProductionWiredServer func(recordingshttp.LegacyLiveEvents) *api.Server
 }
 
 // HTTPDoer is the explicit HTTP edge used by the SSE test harness.
@@ -207,7 +212,20 @@ func NewFactorySessionSSEHarness(t *testing.T, timeout time.Duration, doer HTTPD
 	if ctx == nil {
 		t.Fatal("Factory Session SSE caller context is required")
 	}
-	return &FactorySessionSSEHarness{t: t, timeout: timeout, doer: doer, ctx: ctx}
+	logger := zap.NewNop()
+	return &FactorySessionSSEHarness{
+		t:       t,
+		timeout: timeout,
+		doer:    doer,
+		ctx:     ctx,
+		ProductionWiredServer: func(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
+			return api.NewServerWithRecordings(
+				recordingshttp.NewLegacyAdapterWithLive(nil, nil, liveEvents),
+				factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger),
+				nil, nil, nil, nil, logger,
+			)
+		},
+	}
 }
 
 // Open starts GET /factory-sessions/{sessionID}/events with an optional raw query
