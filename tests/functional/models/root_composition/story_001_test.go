@@ -15,7 +15,8 @@ import (
 
 // TestModelsPublicRemoveMissingCacheRendersServerDiagnostic proves public removal renders the server diagnostic for a missing cache entry.
 func TestModelsPublicRemoveMissingCacheRendersServerDiagnostic(t *testing.T) {
-	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	t.Parallel()
+	server := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodDelete || request.URL.Path != "/models/not-cached-model" {
 			http.NotFound(writer, request)
 			return
@@ -30,12 +31,12 @@ func TestModelsPublicRemoveMissingCacheRendersServerDiagnostic(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
+	process := functionalBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", "not-cached-model",
 	})
-	inputs.Input.WorkingDirectory = characterizationTempDir(t)
+	inputs.Input.WorkingDirectory = functionalTempDir(t)
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatal("Process.Execute(models remove) error = nil, want missing-cache failure")

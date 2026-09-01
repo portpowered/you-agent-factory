@@ -35,7 +35,7 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	backendBody := []byte("story-004-localai-backend")
 	selection := story004EmbedBackendSelection(backendBody)
 	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
@@ -46,8 +46,8 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
-	factoryDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := characterizationBuildProcess(t, story004EmbedEdges(
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	process := functionalBuildProcess(t, story004EmbedEdges(
 		home, assetNetwork, hostServer.Client(), launcher, protocol, compatibility,
 		selection, fixture,
 	))
@@ -132,7 +132,7 @@ func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	backendBody := []byte("story-004-localai-backend-oversized-input")
 	selection := story004EmbedBackendSelection(backendBody)
 	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
@@ -149,9 +149,9 @@ func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 		receivedLimit = maxBytes
 		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
 	}
-	process := characterizationBuildProcess(t, edges)
+	process := functionalBuildProcess(t, edges)
 	support.CleanupProcess(t, process)
-	factoryDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
 	stdout, stderr, err := runStory004CLI(t, process, factoryDir, functionalHomeEnvironment(home),
 		[]string{"you", "models", "invoke", "embed", "--input", "text=@oversized.txt"})
@@ -179,7 +179,7 @@ func testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) 
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	backendBody := []byte("story-004-localai-backend-invalid-vector")
 	selection := story004EmbedBackendSelection(backendBody)
 	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
@@ -190,12 +190,12 @@ func testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) 
 	fixture.SetResponse(models.EmbeddingBackendResponse{
 		Embeddings: []float64{math.NaN()},
 	})
-	process := characterizationBuildProcess(t, story004EmbedEdges(
+	process := functionalBuildProcess(t, story004EmbedEdges(
 		home, assetNetwork, hostServer.Client(), launcher, &joinedProtocolNegotiator{},
 		&joinedCompatibilityChecker{}, selection, fixture,
 	))
 	support.CleanupProcess(t, process)
-	factoryDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	environment := functionalHomeEnvironment(home)
 
 	stdout, stderr, err := runStory004CLI(t, process, factoryDir, environment,
@@ -254,7 +254,7 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	modelBody := []byte("story-004-embedding-model-download")
 	backendBody := []byte("story-004-localai-backend-download")
 	selection := story004EmbedBackendSelection(backendBody)
@@ -267,8 +267,8 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
-	factoryDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := characterizationBuildProcess(t, story004EmbedEdges(
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	process := functionalBuildProcess(t, story004EmbedEdges(
 		home, assetFixture, hostServer.Client(), launcher, protocol, compatibility,
 		selection, fixture,
 	))
@@ -305,7 +305,7 @@ func TestModelsEmbedHTTPParityUsesTheSameFixtureThroughRootBuildProcess(t *testi
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	backendBody := []byte("story-004-localai-backend-http")
 	selection := story004EmbedBackendSelection(backendBody)
 	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
@@ -315,8 +315,8 @@ func TestModelsEmbedHTTPParityUsesTheSameFixtureThroughRootBuildProcess(t *testi
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
-	factoryDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
@@ -372,7 +372,7 @@ func runStory004CLI(
 
 func story004HostServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -529,7 +529,6 @@ func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response,
 	client.mu.Lock()
 	client.urls = append(client.urls, request.URL.String())
 	client.mu.Unlock()
-	c06Ledger.assetHTTPCalls.Add(1)
 	if strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B") {
 		digest := fmt.Sprintf("%x", sha256.Sum256(client.modelBody))
 		manifest := map[string]any{

@@ -33,11 +33,12 @@ const (
 // the root.BuildProcess edge, while the pull, inspect, and list commands remain
 // ordinary customer Process.Execute invocations.
 func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
+	t.Parallel()
 	assetBody := []byte("network-free ASR asset")
 	backendBody := []byte("network-free ASR backend")
 	backendSelection := pullToReadyBackendSelection(backendBody)
 	assetClient := newPullToReadyAssetClient(assetBody, backendBody, backendSelection.Location)
-	homeDirectory := characterizationTempDir(t)
+	homeDirectory := functionalTempDir(t)
 	edges := pullToReadyEdges(assetClient, homeDirectory, backendSelection)
 
 	firstProcess := buildPullToReadyProcess(t, edges)
@@ -136,7 +137,7 @@ func executePullToReadyCommand(
 		"USERPROFILE="+homeDirectory,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDirectory, "managed-cache"),
 	)
-	inputs.Input.WorkingDirectory = characterizationTempDir(t)
+	inputs.Input.WorkingDirectory = functionalTempDir(t)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%s) error = %v\nstdout:\n%s\nstderr:\n%s",
@@ -294,7 +295,6 @@ func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string)
 }
 
 func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response, error) {
-	c06Ledger.assetHTTPCalls.Add(1)
 	client.calls.Add(1)
 	client.requests = append(client.requests, request.Method+" "+request.URL.String())
 	var body []byte

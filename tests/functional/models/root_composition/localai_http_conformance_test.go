@@ -28,10 +28,10 @@ import (
 // production operation vertical, registry, or artifact path is introduced.
 func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
-	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
-	home := characterizationTempDir(t)
+	fixture := functionalStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
+	home := functionalTempDir(t)
 	writeGenericConformanceCaches(t, home)
-	dir := characterizationScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
+	dir := functionalScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
 	server, compatibility := startLocalAIConformanceServer(t, dir, home, fixture)
 
 	matrix := conformance.Build(models.GenericOperationCatalog{})
@@ -99,7 +99,7 @@ func startLocalAIConformanceServer(
 ) (*support.FunctionalAPIServer, *joinedCompatibilityChecker) {
 	t.Helper()
 	edges, rejectingNetwork, compatibility, _ := localAIConformanceEdges(home, fixture)
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		ServerReadyTimeout:        60 * time.Second,
@@ -521,7 +521,6 @@ func runNoVerticalProbe(t *testing.T, endpoint string) conformance.RowResult {
 type fixtureHostHTTPClient struct{}
 
 func (fixtureHostHTTPClient) Do(request *http.Request) (*http.Response, error) {
-	c06Ledger.hostHTTPCalls.Add(1)
 	return &http.Response{
 		StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: request,
 	}, nil
