@@ -785,7 +785,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/shared_process_test.go::TestACPSharedProcess",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestCustomersCanAddListAndDeleteACPWorkers",
           "boundary": "cli"
         }
       ]
@@ -800,7 +800,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/shared_process_test.go::TestACPSharedProcess",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestCustomersCanAddListAndDeleteACPWorkers",
           "boundary": "cli"
         }
       ]
@@ -815,7 +815,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/shared_process_test.go::TestACPSharedProcess",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestCustomersCanAddListAndDeleteACPWorkers",
           "boundary": "cli"
         }
       ]

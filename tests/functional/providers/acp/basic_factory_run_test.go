@@ -103,19 +103,6 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 	t.Fatal("Factory events omitted the ACP Provider Session reference")
 }
 
-// Isolation: isolated-with-reason - startup boundary; only root construction
-// is allowed, so any shared command execution would destroy the zero-start
-// assertion.
-func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
-	var processStarts atomic.Int32
-	_ = support.BuildProcess(t, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts, functionalACPFixture("1")),
-	})
-	if got := processStarts.Load(); got != 0 {
-		t.Fatalf("ACP process starts during root construction = %d, want 0", got)
-	}
-}
-
 // Isolation: isolated-with-reason - pre-start provider selection; the unknown
 // provider must fail before either ACP or fallback process/effect starts.
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {

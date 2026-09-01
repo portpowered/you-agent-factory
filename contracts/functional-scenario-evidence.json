@@ -29,7 +29,7 @@
       ]
     },
     {
-      "test": "tests/functional/providers/acp/shared_process_test.go::TestACPSharedProcess",
+      "test": "tests/functional/providers/acp/catalog_cli_test.go::TestCustomersCanAddListAndDeleteACPWorkers",
       "stableIds": [
         "cli/you.workers.acp.add",
         "cli/you.workers.acp.delete",
