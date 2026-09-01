@@ -143,7 +143,8 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 	if captured.Command != filepath.Join(contextFactoryDirectory, "scripts", "run.sh") {
 		t.Fatalf("command = %q, want detached context factory script", captured.Command)
 	}
-	if captured.WorkDir != "detached-work-dir" || captured.ProjectID != "detached-project" {
+	if captured.WorkDir != "detached-work-dir" || captured.ProjectID != "detached-project" ||
+		captured.FactorySessionID != "detached-session" {
 		t.Fatalf("command context = %#v, want detached workflow context", captured)
 	}
 	assertEnv(t, captured.Env, "RUNTIME", "detached-env")

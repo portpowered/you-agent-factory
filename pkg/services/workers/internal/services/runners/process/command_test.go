@@ -95,8 +95,10 @@ func TestAdaptCommandRunnerProjectsOnlySubprocessEffectFields(t *testing.T) {
 	want := platformprocess.CommandRequest{
 		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
 		Env: request.Env, WorkDir: request.WorkDir,
+		ExecutionScopeID: request.FactorySessionID,
 	}
 	if effect.request.Command != want.Command || effect.request.WorkDir != want.WorkDir ||
+		effect.request.ExecutionScopeID != want.ExecutionScopeID ||
 		string(effect.request.Stdin) != string(want.Stdin) || len(effect.request.Args) != len(want.Args) ||
 		len(effect.request.Env) != len(want.Env) {
 		t.Fatalf("effect request = %#v, want %#v", effect.request, want)
@@ -391,7 +393,8 @@ func TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs(t *testing.T) {
 func commandTestRequest() CommandRequest {
 	return CommandRequest{
 		Command: "worker-tool", Args: []string{"--fixture"}, Stdin: []byte("input"),
-		Env: []string{"VISIBLE=1"}, WorkDir: "work-dir", DispatchID: "dispatch-1", TransitionID: "transition-1",
+		Env: []string{"VISIBLE=1"}, WorkDir: "work-dir", FactorySessionID: "factory-session-1",
+		DispatchID: "dispatch-1", TransitionID: "transition-1",
 		WorkerType: "script", WorkstationName: "station-1",
 		Execution: work.ExecutionMetadata{RequestID: "request-1", TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 	}

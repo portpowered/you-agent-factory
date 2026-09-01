@@ -123,22 +123,24 @@ func TestAdaptPlatformCommandRunnerRunMapsRequestAndResult(t *testing.T) {
 		t.Fatal("AdaptPlatformCommandRunner() = nil, want adapter")
 	}
 	request := providerservice.CommandRequest{
-		Command: "provider",
-		Args:    []string{"--print"},
-		Stdin:   []byte("input"),
-		Env:     []string{"MODE=test"},
-		WorkDir: "C:\\factory",
+		Command:          "provider",
+		Args:             []string{"--print"},
+		Stdin:            []byte("input"),
+		Env:              []string{"MODE=test"},
+		WorkDir:          "C:\\factory",
+		FactorySessionID: "factory-session-1",
 	}
 	result, err := adapted.Run(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if !reflect.DeepEqual(runner.request, platformprocess.CommandRequest{
-		Command: "provider",
-		Args:    []string{"--print"},
-		Stdin:   []byte("input"),
-		Env:     []string{"MODE=test"},
-		WorkDir: "C:\\factory",
+		Command:          "provider",
+		Args:             []string{"--print"},
+		Stdin:            []byte("input"),
+		Env:              []string{"MODE=test"},
+		WorkDir:          "C:\\factory",
+		ExecutionScopeID: "factory-session-1",
 	}) {
 		t.Fatalf("platform request = %#v, want mapped request", runner.request)
 	}

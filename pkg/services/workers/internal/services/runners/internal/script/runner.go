@@ -400,6 +400,7 @@ func (r *runner) resolveCommandRequest(
 		Args:                     resolveFactoryScripts(factoryDirectory, args),
 		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
+		FactorySessionID:         workflowContext.SessionID,
 		DispatchID:               dispatch.DispatchID,
 		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),

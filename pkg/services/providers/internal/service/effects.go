@@ -45,6 +45,7 @@ type CommandRequest struct {
 	Stdin                    []byte
 	Env                      []string
 	WorkDir                  string
+	FactorySessionID         string
 	DispatchID               string
 	AttemptID                string
 	TransitionID             string

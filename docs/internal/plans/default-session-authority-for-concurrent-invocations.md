@@ -2,7 +2,12 @@
 
 ## Status
 
-Planned follow-up. This work is intentionally separate from the functional-test build and fixture cleanup.
+In progress. The 2026-09-01 audit confirmed that explicit durable source
+selection is already public and that ordinary hosted Factory Sessions can
+overlap. Immutable Factory Session identity now reaches the provider command
+effect boundary. Local CLI selection of an existing session, ordinary inline
+JSON Factory execution through the durable endpoint, compatibility positional
+input for remote runs, and explicit-session replay rehydration remain open.
 
 ## Problem
 
@@ -11,8 +16,18 @@ The Factory runtime supports concurrent explicit Factory Sessions, but several c
 The affected paths currently include:
 
 - one-shot `Process.Execute` calls that exercise `you run` without explicit session authority;
-- inline JavaScript execution through `POST /factory-sessions/async`, whose request cannot select the Factory definition/session that owns execution;
-- external command effects whose command request exposes a working directory but no immutable Factory Session identity.
+- local CLI execution that cannot select an already-open Factory Session;
+- ordinary inline JSON Factory execution through `POST /factory-sessions/async`,
+  which currently reaches the JavaScript workflow validator despite the
+  public `FACTORY_INLINE` definition contract;
+- remote compatibility positional input, which is rejected unless an
+  invocation signature normalized it to arguments;
+- explicit non-default session replay, whose fresh process does not currently
+  rehydrate the original public session route.
+
+The external command-effect identity gap is complete: provider correlation and
+script workflow context now copy the Factory Session ID through their owned
+command requests into the platform request's policy-free execution scope.
 
 This is a customer concurrency and testability gap, not a limitation of session-owned Factory execution. Hosted tests already demonstrate that multiple explicit Factory Sessions can overlap on one process.
 

@@ -158,6 +158,7 @@ func (runner platformCommandRunner) Run(
 		Stdin:                    request.Stdin,
 		Env:                      request.Env,
 		WorkDir:                  request.WorkDir,
+		ExecutionScopeID:         request.FactorySessionID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
@@ -179,6 +180,7 @@ func (runner platformCommandRunner) RunStreaming(
 		Stdin:                    request.Stdin,
 		Env:                      request.Env,
 		WorkDir:                  request.WorkDir,
+		ExecutionScopeID:         request.FactorySessionID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
