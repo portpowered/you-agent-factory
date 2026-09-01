@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"sync/atomic"
@@ -32,7 +33,7 @@ func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T
 	if testing.Short() {
 		t.Skip("integration test driving you server acp provider failure through root.BuildProcess")
 	}
-
+	t.Parallel()
 	harness := newServeACPControlHarness(t, newControlProviderFailureCommandRunner())
 	sessionID := harness.openSession(t)
 
@@ -68,7 +69,7 @@ func TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt(t *testin
 	if testing.Short() {
 		t.Skip("integration test driving you server acp cancellation through root.BuildProcess")
 	}
-
+	t.Parallel()
 	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
 	sessionID := harness.openSession(t)
 
@@ -103,7 +104,7 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 	if testing.Short() {
 		t.Skip("integration test driving you server acp close through root.BuildProcess")
 	}
-
+	t.Parallel()
 	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
 	sessionID := harness.openSession(t)
 
@@ -141,7 +142,7 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 	if testing.Short() {
 		t.Skip("integration test driving ACP close then load through root.BuildProcess")
 	}
-
+	t.Parallel()
 	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(2))
 	sessionID := harness.openSession(t)
 
@@ -199,9 +200,9 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 type serveACPControlHarness struct {
 	runner      *controlProviderCommandRunner
 	cwd         string
-	stdinWrite  *os.File
+	stdinWrite  *io.PipeWriter
 	stdout      *bufio.Reader
-	stdoutWrite *os.File
+	stdoutWrite *io.PipeWriter
 	command     *support.ProcessCommand
 	stderr      *bytes.Buffer
 }
@@ -210,30 +211,16 @@ func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunne
 	t.Helper()
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	cwd := t.TempDir()
 	seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
 
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:              runner,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 	})
+	stdinRead, stdinWrite := io.Pipe()
+	stdoutRead, stdoutWrite := io.Pipe()
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
@@ -243,6 +230,16 @@ func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunne
 		Stdout:           stdoutWrite,
 		Stderr:           &stderr,
 		WorkingDirectory: cwd,
+	})
+	// Register stream cleanup after the command so it runs first. A failed
+	// assertion may leave Execute blocked in an in-process read or write; closing
+	// the caller-owned streams releases that exact operation before command
+	// cancellation joins the invocation.
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		_ = stdoutWrite.Close()
 	})
 
 	return &serveACPControlHarness{

@@ -616,7 +616,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
+	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir(edges2)
 	v92 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
 	v93, err := provideACPServerFactoryTarget(v64, v92, v8, logger)
 	if err != nil {

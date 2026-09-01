@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 var recordingProcessCLIBinary struct {
@@ -47,10 +48,22 @@ func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if recordingProcessCLIBinary.tempDir != "" {
-		if err := os.RemoveAll(recordingProcessCLIBinary.tempDir); err != nil && exitCode == 0 {
+		if err := removeRecordingProcessCLIBinaryDir(recordingProcessCLIBinary.tempDir); err != nil && exitCode == 0 {
 			fmt.Fprintf(os.Stderr, "remove recordings process CLI binary directory %s: %v\n", recordingProcessCLIBinary.tempDir, err)
 			exitCode = 1
 		}
 	}
 	os.Exit(exitCode)
+}
+
+func removeRecordingProcessCLIBinaryDir(path string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := os.RemoveAll(path)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		// Windows can retain an executable image briefly after Wait returns.
+		time.Sleep(50 * time.Millisecond)
+	}
 }

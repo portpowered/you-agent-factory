@@ -27,6 +27,22 @@ type rpcTestMessage struct {
 	Error  *acpsdk.RequestError `json:"error"`
 }
 
+func TestACPServerHomeResolverUsesFactorySessionEdge(t *testing.T) {
+	t.Parallel()
+
+	const want = "/isolated/operator-home"
+	resolver := provideACPServerResolveHomeDir(serviceedges.Edges{
+		FactorySessionResolveHomeDirectory: func() (string, error) { return want, nil },
+	})
+	got, err := resolver()
+	if err != nil {
+		t.Fatalf("resolve ACP server home: %v", err)
+	}
+	if got != want {
+		t.Fatalf("ACP server home = %q, want shared Factory Session edge %q", got, want)
+	}
+}
+
 // TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess
 // proves the production construction path, not a hand-replicated provider
 // chain: it seeds a real, isolated home directory with two real packaged

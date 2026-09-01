@@ -399,7 +399,9 @@ func (decoder *decoder) stopBlock(event nativeEvent) {
 	}
 	switch block.kind {
 	case "text":
-		decoder.addMessageProgress("completed", boundedDetail(block.text.String()), event.Index)
+		// A content block ending is not the assistant message ending. Claude can
+		// follow it with more blocks and then supplies message_stop or an
+		// authoritative assistant snapshot for the single message completion.
 	case "tool_use":
 		decoder.addToolProgress("completed", block.lastSummary, event.Index, block)
 		if len(block.toolInput) > 0 {
@@ -548,6 +550,15 @@ func (decoder *decoder) addMessageProgress(phase, detail string, blockIndex int)
 
 func (decoder *decoder) addToolProgress(phase, detail string, blockIndex int, block *contentBlock) {
 	decoder.ensureRunStarted()
+	if phase == "completed" {
+		// Claude commonly supplies both content_block_stop and a later assistant
+		// snapshot for the same tool call. They are two representations of one
+		// lifecycle transition, so publish the first completion only.
+		if _, completed := decoder.completedTools[block.toolID]; completed {
+			return
+		}
+		decoder.completedTools[block.toolID] = detail
+	}
 	metadata := toolMetadata(decoder.stableMessageID(), blockIndex, block.toolID, block.toolName)
 	decoder.addProgress("tool."+phase, detail, metadata)
 }

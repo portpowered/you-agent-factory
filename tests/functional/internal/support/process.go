@@ -72,13 +72,15 @@ func (p applicationProcess) WorkerRecordingReader() recordings.WorkerRecordingRe
 }
 
 // BuildProcess constructs the same reusable process used by the production
-// command entrypoint.
+// command entrypoint and registers deterministic test-owned cleanup. Callers
+// may still close it early when a restart scenario requires that boundary.
 func BuildProcess(t testing.TB, edges serviceedges.Edges) ApplicationProcess {
 	t.Helper()
 	process, err := BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	CleanupProcess(t, process)
 	return process
 }
 
@@ -97,20 +99,6 @@ func functionalDefaultEdges() serviceedges.Edges {
 	return serviceedges.Edges{
 		BrowserOpener: func(context.Context, string) error { return nil },
 	}
-}
-
-// BuildProcessWithRecordingReader constructs the same reusable process used by
-// the production command entrypoint and returns its selected recording read
-// capability alongside the customer process.
-func BuildProcessWithRecordingReader(
-	t testing.TB, edges serviceedges.Edges,
-) (Process, recordings.WorkerRecordingReader) {
-	t.Helper()
-	process, recordingReader, err := buildProcessWithContext(context.Background(), edges)
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	return process, recordingReader
 }
 
 func buildProcessWithContext(

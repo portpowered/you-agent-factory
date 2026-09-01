@@ -3,6 +3,7 @@
 package repeater
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -310,7 +311,7 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 	for i, dispatch := range provider.Calls("executor-worker") {
 		if dispatch.WorkingDirectory == "" {
 			t.Errorf("dispatch %d: expected WorkingDirectory to be set, got empty", i)
-		} else if dispatch.WorkingDirectory != expectedDir {
+		} else if filepath.Clean(dispatch.WorkingDirectory) != filepath.Clean(expectedDir) {
 			t.Errorf("dispatch %d: expected WorkingDirectory %q, got %q", i, expectedDir, dispatch.WorkingDirectory)
 		}
 		if dispatch.EnvVars["PROJECT"] != "ralph-loop-fixture" {

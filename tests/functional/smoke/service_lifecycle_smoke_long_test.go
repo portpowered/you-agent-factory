@@ -160,6 +160,6 @@ func writeServiceLifecycleSeed(t *testing.T, dir, name, payload string) {
 func createParallelIsolationSourceFixture(t *testing.T) string {
 	t.Helper()
 	srcDir := support.ScaffoldFactory(t, simpleServicePipelineConfig())
-	support.WriteAgentConfig(t, srcDir, "worker-a", "---\ntype: MODEL_WORKER\nstop_tokens:\n  - COMPLETE\n---\nProcess work.\n")
+	support.WriteAgentConfig(t, srcDir, "worker-a", "---\ntype: MODEL_WORKER\nstopToken: COMPLETE\n---\nProcess work.\n")
 	return srcDir
 }

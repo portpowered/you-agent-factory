@@ -67,10 +67,8 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
-
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 
 	// cwd is installed as the fixture Factory's own project-local root (see
 	// seedFixtureFactory), so the one downstream provider dispatch's WorkDir
@@ -86,26 +84,14 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		Stdout: []byte(fixtureFinalAnswerText),
 	})
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
+		ProviderCommandRunner:              runner,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 	})
-	support.CleanupProcess(t, process)
 
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
-	})
+	stdinRead, stdinWrite := io.Pipe()
+	stdoutRead, stdoutWrite := io.Pipe()
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
@@ -115,6 +101,12 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		Stdout:           stdoutWrite,
 		Stderr:           &stderr,
 		WorkingDirectory: cwd,
+	})
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		_ = stdoutWrite.Close()
 	})
 
 	stdout := bufio.NewReader(stdoutRead)

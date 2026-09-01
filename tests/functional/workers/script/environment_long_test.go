@@ -83,7 +83,7 @@ func TestScriptWorkstationDropsResourceTokensFromPromptTemplates(t *testing.T) {
 		Payload:    []byte("script-wrap-resource-payload"),
 	})
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")})
 	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
@@ -97,7 +97,7 @@ func TestScriptWorkstationDropsResourceTokensFromPromptTemplates(t *testing.T) {
 		"inputs=1",
 		"type=work",
 	}, "\n")
-	assertCommandArgs(t, req, []string{"exec", "--model", "test-model", "-"})
+	assertCommandArgs(t, req, []string{"exec", "--json", "--model", "test-model", "-"})
 	assertProviderStdin(t, req, wantPrompt)
 }
 
@@ -141,7 +141,7 @@ func TestScriptWorkstationOrdersMultipleInputsByWorkstationConfigWithResources(t
 	writeNamedWorkstationPromptTemplate(t, dir, "process", strings.Join(twoInputTemplateArgs(), "\n"))
 	writeTwoInputResourceSeeds(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")})
 	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	}, 10*time.Second)
@@ -159,6 +159,6 @@ func TestScriptWorkstationOrdersMultipleInputsByWorkstationConfigWithResources(t
 		"second_payload=alpha-payload",
 		"inputs=2",
 	}, "\n")
-	assertCommandArgs(t, runner.LastRequest(), []string{"exec", "--model", "test-model", "-"})
+	assertCommandArgs(t, runner.LastRequest(), []string{"exec", "--json", "--model", "test-model", "-"})
 	assertProviderStdin(t, runner.LastRequest(), wantPrompt)
 }

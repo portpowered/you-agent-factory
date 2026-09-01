@@ -551,14 +551,22 @@ func releaseACPSharedPeers(t *testing.T, fixture *acpSharedProcessFixture, want 
 				readySeen++
 			}
 
-			startPIDs, startErr := readACPHelperPIDs(fixture.peerStartMarker)
-			if startErr != nil {
-				return readySeen, startErr
+			// A start marker only proves that the process exists. The peer writes
+			// its readiness record later, after the prompt response has flushed.
+			// Returning on the cumulative start count can therefore miss the newest
+			// record and leave that peer blocked forever waiting for its release.
+			exitPIDs, exitErr := readACPHelperPIDs(fixture.peerExits)
+			if exitErr != nil {
+				return 0, exitErr
 			}
-			if int32(len(startPIDs)) >= want {
-				return want, nil
+			observed := make(map[int]struct{}, len(readyRecords)+len(exitPIDs))
+			for _, record := range readyRecords {
+				observed[record.pid] = struct{}{}
 			}
-			return int32(len(startPIDs)), nil
+			for _, pid := range exitPIDs {
+				observed[pid] = struct{}{}
+			}
+			return int32(len(observed)), nil
 		},
 		func(got int32) bool { return got >= want },
 	)

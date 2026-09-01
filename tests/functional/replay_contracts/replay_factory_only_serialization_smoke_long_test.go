@@ -116,10 +116,10 @@ func assertFactoryOnlyPayloadCoversRepresentativeConfig(t *testing.T, factory fa
 
 	assertFactoryOnlyWorkType(t, generatedWorkTypes(factory), "task", []string{"init", "processing", "complete", "failed"})
 	assertFactoryOnlyResource(t, generatedResources(factory), "slot", 1)
-	assertFactoryOnlyWorker(t, generatedWorkers(factory), "exec-worker")
-	assertFactoryOnlyWorker(t, generatedWorkers(factory), "finish-worker")
-	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "executor", "exec-worker", true)
-	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "finisher", "finish-worker", false)
+	assertFactoryOnlyWorker(t, generatedWorkers(factory), "exec-worker", interfaces.WorkerTypeInference)
+	assertFactoryOnlyWorker(t, generatedWorkers(factory), "finish-worker", interfaces.WorkerTypeAgent)
+	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "executor", "exec-worker", interfaces.WorkstationTypeModel, true)
+	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "finisher", "finish-worker", interfaces.WorkstationTypeAgent, false)
 }
 
 func assertFactoryOnlyReplayProjectsInitialTopology(t *testing.T, events []factoryapi.FactoryEvent) {
@@ -127,8 +127,8 @@ func assertFactoryOnlyReplayProjectsInitialTopology(t *testing.T, events []facto
 
 	runRequest := requireFactoryOnlyRunStartedPayload(t, events)
 	assertFactoryOnlyResource(t, generatedResources(runRequest.Factory), "slot", 1)
-	assertFactoryOnlyWorker(t, generatedWorkers(runRequest.Factory), "exec-worker")
-	assertFactoryOnlyWorkstation(t, generatedWorkstations(runRequest.Factory), "executor", "exec-worker", true)
+	assertFactoryOnlyWorker(t, generatedWorkers(runRequest.Factory), "exec-worker", interfaces.WorkerTypeInference)
+	assertFactoryOnlyWorkstation(t, generatedWorkstations(runRequest.Factory), "executor", "exec-worker", interfaces.WorkstationTypeModel, true)
 }
 
 func assertFactoryOnlyWorkType(t *testing.T, workTypes []factoryapi.WorkType, name string, states []string) {
@@ -159,13 +159,13 @@ func assertFactoryOnlyResource(t *testing.T, resources []factoryapi.Resource, na
 	t.Fatalf("generated resources = %#v, want %s capacity %d", resources, name, capacity)
 }
 
-func assertFactoryOnlyWorker(t *testing.T, workers []factoryapi.Worker, name string) {
+func assertFactoryOnlyWorker(t *testing.T, workers []factoryapi.Worker, name, wantType string) {
 	t.Helper()
 
 	for _, worker := range workers {
 		if worker.Name == name {
-			if stringPointerValue(worker.Type) != interfaces.WorkerTypeAgent || stringPointerValue(worker.StopToken) != "COMPLETE" {
-				t.Fatalf("worker %q type=%q stopToken=%q, want AGENT_WORKER/COMPLETE", name, stringPointerValue(worker.Type), stringPointerValue(worker.StopToken))
+			if stringPointerValue(worker.Type) != wantType || stringPointerValue(worker.StopToken) != "COMPLETE" {
+				t.Fatalf("worker %q type=%q stopToken=%q, want %s/COMPLETE", name, stringPointerValue(worker.Type), stringPointerValue(worker.StopToken), wantType)
 			}
 			return
 		}
@@ -173,15 +173,15 @@ func assertFactoryOnlyWorker(t *testing.T, workers []factoryapi.Worker, name str
 	t.Fatalf("generated workers = %#v, want runtime MODEL_WORKER %q", workers, name)
 }
 
-func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workstation, name, worker string, wantResource bool) {
+func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workstation, name, worker, wantType string, wantResource bool) {
 	t.Helper()
 
 	for _, workstation := range workstations {
 		if workstation.Name != name || workstation.Worker == nil || *workstation.Worker != worker {
 			continue
 		}
-		if stringPointerValue(workstation.Type) != interfaces.WorkstationTypeAgent {
-			t.Fatalf("workstation %q runtime type = %#v, want AGENT_RUN", name, workstation.Type)
+		if stringPointerValue(workstation.Type) != wantType {
+			t.Fatalf("workstation %q runtime type = %q, want %s", name, stringPointerValue(workstation.Type), wantType)
 		}
 		if wantResource && !factoryOnlyHasResourceUsage(workstation.Resources, "slot", 1) {
 			t.Fatalf("workstation %q resources = %#v, want slot total 1", name, workstation.Resources)

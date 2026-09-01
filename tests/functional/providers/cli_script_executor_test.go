@@ -638,10 +638,7 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	assertDispatchOutcomeSequence(t, server.factoryEvents(t), []factoryapi.WorkOutcome{
-		factoryapi.WorkOutcomeFailed,
-		factoryapi.WorkOutcomeAccepted,
-	}, "execution timeout")
+	assertDispatchTimeoutEventuallyAccepted(t, server.factoryEvents(t))
 	server.stop(t)
 }
 
@@ -764,6 +761,27 @@ func assertDispatchOutcomeSequence(
 	}
 	if firstError != "" && (responses[0].Error == nil || !strings.Contains(*responses[0].Error, firstError)) {
 		t.Errorf("first dispatch error = %#v, want text %q", responses[0].Error, firstError)
+	}
+}
+
+func assertDispatchTimeoutEventuallyAccepted(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	responses := dispatchResponses(t, events)
+	if len(responses) < 2 {
+		t.Fatalf("dispatch response count = %d, want a timeout and a later accepted retry", len(responses))
+	}
+	first := responses[0]
+	if first.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Errorf("first dispatch outcome = %s, want %s", first.Outcome, factoryapi.WorkOutcomeFailed)
+	}
+	if first.Error == nil || !strings.Contains(*first.Error, "execution timeout") {
+		t.Errorf("first dispatch error = %#v, want execution timeout", first.Error)
+	}
+	// The 10ms production deadline is deliberately real: the command-runner
+	// edge cannot replace workstation timeout policy. Under scheduler contention,
+	// more than one retry may legitimately time out before the eventual success.
+	if last := responses[len(responses)-1]; last.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Errorf("last dispatch outcome = %s after %d attempts, want %s", last.Outcome, len(responses), factoryapi.WorkOutcomeAccepted)
 	}
 }
 

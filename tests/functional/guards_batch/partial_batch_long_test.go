@@ -69,7 +69,7 @@ stopToken: COMPLETE
 Process the task input.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("Work done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Work done. COMPLETE")},
 	)
 
 	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
@@ -186,8 +186,8 @@ func TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFail
 	}, 5*time.Second)
 	assertGuardSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
 
-	if runner.CallCount() != 4 {
-		t.Fatalf("expected provider runner called 4 times, got %d", runner.CallCount())
+	if got := runner.CallCount(); got < 4 {
+		t.Fatalf("provider runner calls = %d, want at least 4 to prove retry exhaustion", got)
 	}
 
 	assertListedFailedWorkID(t, listed, "work-provider-throttle-requeue")

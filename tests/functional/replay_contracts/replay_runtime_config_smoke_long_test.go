@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -101,10 +100,7 @@ func assertCanonicalReplayWorkstationMap(t *testing.T, artifactPath string, arti
 	if strings.Contains(string(data), "workstation_configs") {
 		t.Fatalf("replay artifact contains legacy workstation_configs map")
 	}
-	generatedFactory, err := factorysnapshot.ToAPI(artifact.Factory)
-	if err != nil {
-		t.Fatalf("map replay Factory snapshot: %v", err)
-	}
+	generatedFactory := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events)).Factory
 	if generatedFactory.Workstations == nil || len(*generatedFactory.Workstations) != 2 {
 		t.Fatalf("factory workstations = %#v, want 2", generatedFactory.Workstations)
 	}

@@ -66,7 +66,7 @@ var (
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if boardPersistenceBinaryDir != "" {
-		if err := os.RemoveAll(boardPersistenceBinaryDir); err != nil {
+		if err := removeBoardPersistenceBinaryDir(boardPersistenceBinaryDir); err != nil {
 			fmt.Fprintf(os.Stderr, "remove package-scoped you build directory %q: %v\n", boardPersistenceBinaryDir, err)
 			if code == 0 {
 				code = 1
@@ -74,6 +74,17 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.Exit(code)
+}
+
+func removeBoardPersistenceBinaryDir(path string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := os.RemoveAll(path)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func buildBoardPersistenceBinary(t *testing.T) string {

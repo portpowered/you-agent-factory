@@ -279,8 +279,8 @@ func TestClaudeDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	if err != nil || result.Content != "unterminated final" {
 		t.Fatalf("Execute() = (%#v, %v)", result, err)
 	}
-	if got := countPhase(result.Diagnostics.Progress, "message.completed"); got < 1 {
-		t.Fatalf("completed message facts = %d, want at least 1", got)
+	if got := countPhase(result.Diagnostics.Progress, "message.completed"); got != 1 {
+		t.Fatalf("completed message facts = %d, want 1", got)
 	}
 }
 
@@ -311,8 +311,11 @@ func TestClaudeDecoderMapsMixedTextAndToolProgress(t *testing.T) {
 	if got := countPhase(result.Diagnostics.Progress, "tool.updated"); got != 1 {
 		t.Fatalf("tool.updated facts = %d, want 1", got)
 	}
-	if got := countPhase(result.Diagnostics.Progress, "tool.completed"); got < 1 {
-		t.Fatalf("tool.completed facts = %d, want at least 1", got)
+	if got := countPhase(result.Diagnostics.Progress, "tool.completed"); got != 1 {
+		t.Fatalf("tool.completed facts = %d, want 1", got)
+	}
+	if got := countPhase(result.Diagnostics.Progress, "message.completed"); got != 1 {
+		t.Fatalf("message.completed facts = %d, want 1", got)
 	}
 	for _, key := range []string{"input_tokens", "output_tokens"} {
 		if _, exists := result.Diagnostics.Metadata[key]; exists {

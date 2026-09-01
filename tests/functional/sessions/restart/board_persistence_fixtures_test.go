@@ -94,6 +94,7 @@ func boardPersistenceWorkerConfig(testBinary string) string {
 		"command: " + strconv.Quote(testBinary) + "\n" +
 		"args:\n" +
 		"  - " + strconv.Quote("-test.run=^TestBoardPersistenceWorkerHelper$") + "\n" +
+		"timeout: 2m\n" +
 		"---\n" +
 		"Hold the Work attempt until the restart test releases it.\n"
 }

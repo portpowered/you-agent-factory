@@ -30,9 +30,13 @@ type acpServerResolveHomeDir func() (string, error)
 
 // provideACPServerResolveHomeDir constructs the operator home directory
 // resolver the production ACP stdio server uses to derive the Operator
-// Settings document path and Factory discovery roots for "session/new". It
-// is os.UserHomeDir directly, with no dependency bag or lookup indirection.
-func provideACPServerResolveHomeDir() acpServerResolveHomeDir {
+// Settings document path and Factory discovery roots for "session/new". ACP
+// and Factory Sessions share this exact external-effect edge so one process
+// cannot resolve two different operator homes.
+func provideACPServerResolveHomeDir(edges serviceedges.Edges) acpServerResolveHomeDir {
+	if edges.FactorySessionResolveHomeDirectory != nil {
+		return acpServerResolveHomeDir(edges.FactorySessionResolveHomeDirectory)
+	}
 	return os.UserHomeDir
 }
 

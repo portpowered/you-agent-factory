@@ -428,8 +428,9 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
+	runSessionID := startState.session.SessionID
 	if err := admission.launch(func() {
-		s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+		s.runAsyncSession(runCtx, runSessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
 	}); err != nil {
 		runCancel()
 		s.mu.Lock()

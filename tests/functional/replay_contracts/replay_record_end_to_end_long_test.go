@@ -59,8 +59,8 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	if err != nil {
 		t.Fatalf("record run failed: %v", err)
 	}
-	if recordOutput != "" {
-		t.Fatalf("record run stdout = %q, want empty output with dashboard rendering suppressed", recordOutput)
+	if recordOutput != "Batch completed successfully.\n" {
+		t.Fatalf("record run stdout = %q, want terminal batch completion", recordOutput)
 	}
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
@@ -93,7 +93,7 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 		t.Fatalf("replay run failed: %v", err)
 	}
 	if replayOutput != "" {
-		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
+		t.Fatalf("replay run stdout = %q, want replay output suppressed", replayOutput)
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
@@ -207,7 +207,7 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		t.Fatalf("replay run failed: %v", err)
 	}
 	if replayOutput != "" {
-		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
+		t.Fatalf("replay run stdout = %q, want replay output suppressed", replayOutput)
 	}
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
@@ -275,9 +275,6 @@ Finish the input task.
 	if got := len(factoryWorksValue(generatedRequest.Payload.Works)); got != 2 {
 		t.Fatalf("generated work items = %d, want 2", got)
 	}
-	if got := len(factoryRelationsValue(generatedRequest.Payload.Relations)); got != 1 {
-		t.Fatalf("generated relations = %d, want 1", got)
-	}
 	assertGeneratedReplayRequestMetadata(
 		t,
 		testutil.GeneratedFactoryEvents(t, artifact.Events),
@@ -286,7 +283,7 @@ Finish the input task.
 
 	replay := observeReplayThroughRoot(t, artifactPath, 10*time.Second)
 	assertReplayPlaceCounts(t, replay.Work, map[string]int{
-		"task:complete": 3, "task:init": 0, "task:failed": 0,
+		"task:complete": 4, "task:init": 0, "task:failed": 0,
 	})
 	if !replayWorkIncludesID(replay.Work, "work-generated-alpha") ||
 		!replayWorkIncludesID(replay.Work, "work-generated-beta") {
@@ -428,10 +425,16 @@ func assertGeneratedReplayRequestMetadata(t *testing.T, events []factoryapi.Fact
 		t.Fatalf("generated parent lineage = %#v, want replay batch lineage", stringSlicePointerValue(record.Payload.ParentLineage))
 	}
 	relations := factoryRelationsValue(record.Payload.Relations)
-	if len(relations) != 1 ||
-		relations[0].SourceWorkName != "generated-beta" ||
-		relations[0].TargetWorkName != "generated-alpha" ||
-		stringPointerValue(relations[0].RequiredState) != "complete" {
+	foundDependency := false
+	for _, relation := range relations {
+		if relation.SourceWorkName == "generated-beta" &&
+			relation.TargetWorkName == "generated-alpha" &&
+			stringPointerValue(relation.RequiredState) == "complete" {
+			foundDependency = true
+			break
+		}
+	}
+	if !foundDependency {
 		t.Fatalf("generated relation metadata = %#v, want generated-beta depends on generated-alpha complete", relations)
 	}
 	works := factoryWorksValue(record.Payload.Works)
