@@ -23,8 +23,6 @@ import (
 )
 
 const (
-	lifecycleForcedCleanupChildEnv     = "YOU_LIFECYCLE_FORCED_CLEANUP_CHILD"
-	lifecycleForcedCleanupReportEnv    = "YOU_LIFECYCLE_FORCED_CLEANUP_REPORT"
 	lifecycleAdverseSignalTimeout      = 5 * time.Second
 	lifecycleAdverseCloseTimeout       = 5 * time.Second
 	lifecycleObservationTimeoutForTest = 10 * time.Second
@@ -65,11 +63,21 @@ type lifecycleWorkStatusObservation struct {
 // package's six top-level selector denominator used by the raised-parallelism
 // gate.
 func runLifecycleAdverseMatrix(t *testing.T) {
-	t.Run("partial provider output", runLifecyclePartialProviderOutput)
-	t.Run("server attached provider failure", runLifecycleServerAttachedProviderFailure)
-	t.Run("cancellation and recovery", runLifecycleCancellationAndRecovery)
-	t.Run("observation timeout releases command", runLifecycleObservationTimeout)
-	t.Run("forced assertion cleanup", runForcedLifecycleCleanupParent)
+	tests := []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{name: "partial provider output", run: runLifecyclePartialProviderOutput},
+		{name: "server attached provider failure", run: runLifecycleServerAttachedProviderFailure},
+		{name: "cancellation and recovery", run: runLifecycleCancellationAndRecovery},
+		{name: "observation timeout releases command", run: runLifecycleObservationTimeout},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.run(t)
+		})
+	}
 }
 
 func startHostedLifecycleInvocation(
@@ -304,11 +312,19 @@ func runLifecycleCancellationAndRecovery(t *testing.T) {
 		lifecyclePhaseTerminal,
 		"canceled public projections",
 	)
+	// Canceling the Factory Session and stopping the server-owning CLI command
+	// are separate customer controls. The session control above proves the
+	// provider and public projections stop; this context cancellation then ends
+	// the invocation-owned --with-server command before starting recovery.
+	invocation.command.Cancel()
 	err := waitCancelableLifecycleCommand(invocation.command)
 	if err == nil {
 		t.Fatal("canceled Process.Execute error = nil, want cancellation-compatible error")
 	}
-	if !strings.Contains(strings.ToLower(err.Error()), "cancel") {
+	if strings.Contains(err.Error(), "completion deadline expired") {
+		t.Fatalf("canceled Process.Execute did not join after command cancellation: %v", err)
+	}
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "INVOCATION_CANCELED") {
 		t.Fatalf("canceled Process.Execute error = %v, want cancellation-compatible diagnostic", err)
 	}
 	finishCancelableHostedLifecycleInvocation(t, invocation.coordinator, invocation.baseURL, invocation.listenerClose, workID, workerSessionID)
@@ -875,7 +891,7 @@ func waitCancelableLifecycleCommand(command *lifecycleCancelableCommand) error {
 	case <-command.Done():
 		return command.Err()
 	case <-timer.C:
-		return fmt.Errorf("cancelable lifecycle command did not complete within %s", lifecycleCommandDoneTimeout)
+		return fmt.Errorf("lifecycle command completion deadline expired after %s", lifecycleCommandDoneTimeout)
 	}
 }
 

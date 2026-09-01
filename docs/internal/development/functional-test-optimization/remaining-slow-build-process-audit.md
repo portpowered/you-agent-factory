@@ -47,13 +47,21 @@ mutable fixture.
 
 ## Audited packages
 
-- [x] `workers/transports/cli/run/lifecycle` — **23.145s, 2 builds.** The shared
-  graph owns ordinary one-shot CLI cases. The second graph is the adversarial
-  listener/process coordinator with invocation-scoped API starters and forced
-  failure/cancellation ownership. Six independent customer tests are parallel;
-  the 21.110s failure case is a real clean-invocation shutdown boundary. The
-  graphs cannot be merged without making a listener starter mutable while a
-  command is live.
+- [x] `workers/transports/cli/run/lifecycle` — **about 6–8s after correction,
+  2 static construction sites.** The earlier 23.145s measurement was dominated
+  by a cancellation/recovery assertion bug: the command waited for its full
+  15-second deadline and then accepted the phrase "cancelable lifecycle
+  command" as proof of cancellation. Factory Session cancellation and stopping
+  the CLI command that owns `--with-server` are now exercised as separate
+  customer controls, and deadline expiry is rejected explicitly. The scenario
+  fell from about 16.3s to about 1.1s. Independent adverse cells now overlap;
+  only the two cells using the routed local process retain its serialization.
+  The subprocess-based forced-assertion cleanup cell was removed because it
+  tested fixture bookkeeping rather than customer behavior.
+  The two source call sites are not a count of runtime process instances.
+  Further convergence is possible for session-only behavior through a hosted
+  explicit-session fixture, while customer-visible local listener ownership
+  should retain isolated process coverage.
 
 - [x] `workers/inference` — **15.469s, 4 builds.** One hosted graph serves the
   normal explicit-session matrix in parallel. The remaining graphs prove
