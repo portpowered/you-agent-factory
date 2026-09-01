@@ -25,9 +25,6 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	if os.Getenv(boardPersistenceHelperEnv) != boardPersistenceHelperEnvValue {
 		return
 	}
-	if builds := boardPersistenceBinaryBuilds.Load(); builds != 0 {
-		t.Fatalf("SCRIPT_WORKER helper observed %d package CLI builds, want 0", builds)
-	}
 	releasePath := strings.TrimSpace(os.Getenv(boardPersistenceReleaseEnv))
 	if releasePath == "" {
 		t.Fatal("board persistence worker helper release path is empty")
@@ -211,25 +208,19 @@ type boardPersistenceScenario struct {
 
 func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	t.Helper()
-	if markerPath := strings.TrimSpace(os.Getenv(boardPersistenceScenarioMarkerEnv)); markerPath != "" {
-		if err := os.WriteFile(markerPath, []byte("scenario started\n"), 0o600); err != nil {
-			t.Fatalf("record scenario start for setup-failure probe: %v", err)
-		}
+	binaryPath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve functional test executable: %v", err)
 	}
-	binaryPath := buildBoardPersistenceBinary(t)
 	factoryDir := support.ScaffoldFactory(t, boardPersistenceFactoryConfig())
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-worker")
 	recordPath := filepath.Join(factoryDir, "board-persistence.recording.json")
-	testBinary, err := os.Executable()
-	if err != nil {
-		t.Fatalf("resolve functional test binary: %v", err)
-	}
 	support.WriteAgentConfig(
 		t,
 		factoryDir,
 		"restart-blocker",
-		boardPersistenceWorkerConfig(testBinary),
+		boardPersistenceWorkerConfig(binaryPath),
 	)
 	return &boardPersistenceScenario{
 		binaryPath: binaryPath, factoryDir: factoryDir, homeDir: homeDir,
