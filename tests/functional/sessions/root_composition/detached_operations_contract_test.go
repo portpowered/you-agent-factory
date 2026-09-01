@@ -5,10 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestDetachedOperationsFunctionalContract drives the public detached value
@@ -17,10 +15,6 @@ import (
 // rather than merely checking that construction succeeds.
 func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 
 	owner := newFunctionalDetachedOwner()
 	operations, err := (&factorysessions.DetachedOperations{}).Bind(owner)

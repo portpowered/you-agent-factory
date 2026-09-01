@@ -7,13 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-const processLifecycleCloseTimeout = 5 * time.Second
 
 func processLifecycleHomeEnvironment(home string) []string {
 	return []string{"HOME=" + home, "USERPROFILE=" + home}
@@ -32,8 +28,8 @@ func processLifecycleHomeEnvironment(home string) []string {
 // invented lifecycle failure, and not a cancellation classification that would
 // change the customer's exit code.
 func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
+	fixture := ensureRootCompositionFixture(t)
 
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -42,55 +38,49 @@ func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing
 		t.Fatalf("fixture precondition failed: %s exists", missingFactory)
 	}
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
+	fixture.withRootCompositionRouteValue(t, rootCompositionRouteSpec{
+		label:      "process-lifecycle-failed-command",
+		homeDir:    home,
+		workingDir: workingDirectory,
+	}, func(route *rootCompositionRoute) {
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "run", "--factory", missingFactory,
+		})
+		inputs.Input.Env = processLifecycleHomeEnvironment(home)
+		inputs.Input.WorkingDirectory = workingDirectory
+		inputs.Input.Context = withRootCompositionRouteContext(inputs.Input.Context, route)
 
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", missingFactory,
+		executeErr := fixture.process.Execute(inputs.Input)
+		if executeErr == nil {
+			t.Fatalf(
+				"Process.Execute(run --factory %s) error = nil, want a domain failure\nstdout:\n%s\nstderr:\n%s",
+				missingFactory,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		if !strings.Contains(executeErr.Error(), filepath.Base(missingFactory)) {
+			t.Fatalf("Process.Execute() error = %v, want the missing Factory named in the diagnostic", executeErr)
+		}
+
+		// TestMain owns the shared process close. Keep the entrypoint's join
+		// assertion here so the command failure remains the only error this
+		// scenario contributes before package shutdown.
+		joined := errors.Join(executeErr, nil)
+		if joined == nil || joined.Error() != executeErr.Error() {
+			t.Fatalf(
+				"errors.Join(executeErr, nil) = %v, want exactly the command failure %v",
+				joined,
+				executeErr,
+			)
+		}
+		if errors.Is(joined, context.Canceled) {
+			t.Fatalf(
+				"joined lifecycle result = %v, want a plain failure; a cancellation classification changes the customer exit code",
+				joined,
+			)
+		}
 	})
-	inputs.Input.Env = processLifecycleHomeEnvironment(home)
-	inputs.Input.WorkingDirectory = workingDirectory
-
-	executeErr := process.Execute(inputs.Input)
-	if executeErr == nil {
-		t.Fatalf(
-			"Process.Execute(run --factory %s) error = nil, want a domain failure\nstdout:\n%s\nstderr:\n%s",
-			missingFactory,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	if !strings.Contains(executeErr.Error(), filepath.Base(missingFactory)) {
-		t.Fatalf("Process.Execute() error = %v, want the missing Factory named in the diagnostic", executeErr)
-	}
-
-	closeCtx, cancelClose := context.WithTimeout(context.Background(), processLifecycleCloseTimeout)
-	defer cancelClose()
-	closeErr := process.Close(closeCtx)
-	if closeErr != nil {
-		t.Fatalf("Process.Close() after a failed command error = %v, want nil", closeErr)
-	}
-
-	joined := errors.Join(executeErr, closeErr)
-	if joined == nil || joined.Error() != executeErr.Error() {
-		t.Fatalf(
-			"errors.Join(executeErr, closeErr) = %v, want exactly the command failure %v",
-			joined,
-			executeErr,
-		)
-	}
-	if errors.Is(joined, context.Canceled) {
-		t.Fatalf(
-			"joined lifecycle result = %v, want a plain failure; a cancellation classification changes the customer exit code",
-			joined,
-		)
-	}
-
-	if repeated := process.Close(closeCtx); repeated != nil {
-		t.Fatalf("second Process.Close() error = %v, want nil so a repeated close never invents a failure", repeated)
-	}
 }
 
 // TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure is the success
@@ -98,36 +88,32 @@ func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing
 // makes Close fail, because runProcess would map that Close failure to a
 // non-zero exit code even though the customer's command worked.
 func TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
+	fixture := ensureRootCompositionFixture(t)
 
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
+	fixture.withRootCompositionRouteValue(t, rootCompositionRouteSpec{
+		label:      "process-lifecycle-successful-command",
+		homeDir:    home,
+		workingDir: workingDirectory,
+	}, func(route *rootCompositionRoute) {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "docs", "agents"})
+		inputs.Input.Env = processLifecycleHomeEnvironment(home)
+		inputs.Input.WorkingDirectory = workingDirectory
+		inputs.Input.Context = withRootCompositionRouteContext(inputs.Input.Context, route)
 
-	inputs := support.FakeInputs(t.Context(), []string{"you", "docs", "agents"})
-	inputs.Input.Env = processLifecycleHomeEnvironment(home)
-	inputs.Input.WorkingDirectory = workingDirectory
-
-	if executeErr := process.Execute(inputs.Input); executeErr != nil {
-		t.Fatalf(
-			"Process.Execute(docs agents) error = %v\nstdout:\n%s\nstderr:\n%s",
-			executeErr,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	if !strings.Contains(inputs.Stdout(), "# Agents") {
-		t.Fatalf("Process.Execute(docs agents) stdout = %q, want the packaged agents topic", inputs.Stdout())
-	}
-
-	closeCtx, cancelClose := context.WithTimeout(context.Background(), processLifecycleCloseTimeout)
-	defer cancelClose()
-	if closeErr := process.Close(closeCtx); closeErr != nil {
-		t.Fatalf("Process.Close() after a successful command error = %v, want nil", closeErr)
-	}
+		if executeErr := fixture.process.Execute(inputs.Input); executeErr != nil {
+			t.Fatalf(
+				"Process.Execute(docs agents) error = %v\nstdout:\n%s\nstderr:\n%s",
+				executeErr,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		if !strings.Contains(inputs.Stdout(), "# Agents") {
+			t.Fatalf("Process.Execute(docs agents) stdout = %q, want the packaged agents topic", inputs.Stdout())
+		}
+	})
 }

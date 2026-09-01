@@ -3,17 +3,12 @@ package root_composition_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -25,9 +20,8 @@ import (
 // in-flight artifact is intentionally unfinalized, while the finished artifact
 // retains its terminal Work state.
 func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
-	reusable := newSeededReplayResumeProcess(t)
+	fixture := ensureRootCompositionFixture(t)
 
 	for _, test := range []struct {
 		name     string
@@ -46,106 +40,77 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 			if err := os.WriteFile(artifactPath, artifactPayload, 0o644); err != nil {
 				t.Fatalf("write replay artifact: %v", err)
 			}
-			reusable.payload.Store(append([]byte(nil), artifactPayload...))
-			running := reusable.run(t, factoryDir, artifactPath)
-
-			stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(running.url))
-			waitForSeededReplayRuntimeStart(t, stream)
-			status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(running.url, "/")+"/status")
-
-			if status.TotalTokens != 1 {
-				t.Fatalf("replayed status totalTokens = %d, want one Work token", status.TotalTokens)
-			}
+			homeDir := t.TempDir()
+			label := "seeded-replay-resume-in-flight"
 			if test.finished {
-				if status.Categories.Terminal != 1 {
-					t.Fatalf("finished replay terminal count = %d, want 1", status.Categories.Terminal)
-				}
-			} else if status.Categories.Initial != 1 {
-				t.Fatalf("in-flight replay initial count = %d, want 1", status.Categories.Initial)
+				label = "seeded-replay-resume-finished"
 			}
+			fixture.withRootCompositionRoute(t, rootCompositionRouteSpec{
+				label:      label,
+				homeDir:    homeDir,
+				workingDir: factoryDir,
+				extraPaths: []string{artifactPath},
+			}, func() {
+				running := startSeededReplayResumeRun(t, fixture, factoryDir, artifactPath)
 
-			listed := support.ListDefaultSessionWork(t, running.url)
-			if len(listed.Results) != 1 {
-				t.Fatalf("replayed Work listing length = %d, want one Work: %#v", len(listed.Results), listed.Results)
-			}
-			wantLocation := "task:init"
-			if test.finished {
-				wantLocation = "task:complete"
-			}
-			if !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", wantLocation) {
-				t.Fatalf("replayed Work is not at %s: %#v", wantLocation, listed.Results)
-			}
+				stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(running.url))
+				waitForSeededReplayRuntimeStart(t, stream)
+				status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(running.url, "/")+"/status")
 
-			for _, event := range support.GetFactoryEventsAt(t, running.url) {
-				if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
-					t.Fatalf("replayed Work unexpectedly produced a dispatch request: %#v", event)
+				if status.TotalTokens != 1 {
+					t.Fatalf("replayed status totalTokens = %d, want one Work token", status.TotalTokens)
 				}
-			}
-			running.daemon.Stop(t)
+				if test.finished {
+					if status.Categories.Terminal != 1 {
+						t.Fatalf("finished replay terminal count = %d, want 1", status.Categories.Terminal)
+					}
+				} else if status.Categories.Initial != 1 {
+					t.Fatalf("in-flight replay initial count = %d, want 1", status.Categories.Initial)
+				}
+
+				listed := support.ListDefaultSessionWork(t, running.url)
+				if len(listed.Results) != 1 {
+					t.Fatalf("replayed Work listing length = %d, want one Work: %#v", len(listed.Results), listed.Results)
+				}
+				wantLocation := "task:init"
+				if test.finished {
+					wantLocation = "task:complete"
+				}
+				if !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", wantLocation) {
+					t.Fatalf("replayed Work is not at %s: %#v", wantLocation, listed.Results)
+				}
+
+				for _, event := range support.GetFactoryEventsAt(t, running.url) {
+					if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
+						t.Fatalf("replayed Work unexpectedly produced a dispatch request: %#v", event)
+					}
+				}
+				running.daemon.Stop(t)
+			})
 		})
 	}
 }
 
-type seededReplayResumeProcess struct {
-	process support.Process
-	router  *reusableRootAPIServerStarter
-	payload atomic.Value
-}
-
 type seededReplayResumeRun struct {
 	url    string
-	daemon *support.ProcessCommand
+	daemon *rootCompositionServer
 }
 
-func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
-	t.Helper()
-	reusable := &seededReplayResumeProcess{router: &reusableRootAPIServerStarter{}}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter: reusable.router.start,
-		FactorySessionReplayRecordingReader: func(string) ([]byte, error) {
-			payload, ok := reusable.payload.Load().([]byte)
-			if !ok || len(payload) == 0 {
-				return nil, errors.New("seeded replay payload was not selected")
-			}
-			return append([]byte(nil), payload...), nil
-		},
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stdout: support.CodexSuccessStdout("unexpected replay dispatch COMPLETE"),
-		}),
-	})
-	support.CleanupProcess(t, process)
-	reusable.process = process
-	return reusable
-}
-
-func (reusable *seededReplayResumeProcess) run(
+func startSeededReplayResumeRun(
 	t *testing.T,
+	fixture *rootCompositionFixture,
 	factoryDir string,
 	artifactPath string,
 ) seededReplayResumeRun {
 	t.Helper()
-	api := support.NewProcessAPIServer()
-	reusable.router.setCurrent(api)
-	inputs := support.FakeInputs(t.Context(), []string{
+	server := startRootCompositionServer(t, fixture, support.NewProcessAPIServer(), []string{
 		"you", "run",
 		"--continuously", "--with-server", "--quiet",
 		"--dir", factoryDir,
 		"--provider", "CODEX", "--model", "gpt-5-codex",
 		"--replay", artifactPath, "--no-record",
-	})
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = factoryDir
-	t.Cleanup(func() {
-		if !t.Failed() {
-			return
-		}
-		if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
-			t.Logf("seeded replay daemon stderr: %s", stderr)
-		}
-	})
-	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	return seededReplayResumeRun{url: api.WaitForURL(t), daemon: daemon}
+	}, nil, factoryDir)
+	return seededReplayResumeRun{url: server.URL(t), daemon: server}
 }
 
 func waitForSeededReplayRuntimeStart(t *testing.T, stream *support.FactoryEventStream) {

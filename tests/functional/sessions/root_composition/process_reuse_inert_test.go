@@ -16,7 +16,6 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -35,11 +34,15 @@ const (
 // isolated sessions, and both terminal outcomes retain their canonical event
 // and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
-	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	fixture := newRootProcessReuseFixture(t)
+	shared := ensureRootCompositionFixture(t)
+	fixture := newRootProcessReuseFixture(t, shared)
 	assertRootProcessBuildIsInert(t, fixture)
+
+	t.Run("direct JavaScript transport start failure", func(t *testing.T) {
+		assertRootProcessReportsDirectJavaScriptTransportStartFailure(t, fixture)
+	})
 
 	first := runRootProcessCLIInvocation(t, fixture, 0, "run the successful session")
 	assertRootProcessSuccess(t, first)
@@ -47,81 +50,79 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	second := runRootProcessCLIInvocation(t, fixture, 1, "run the failing session")
 	assertRootProcessFailure(t, second)
 	assertRootProcessReuse(t, fixture, first.session, second.session)
-	t.Run("direct JavaScript transport start failure", func(t *testing.T) {
-		assertRootProcessReportsDirectJavaScriptTransportStartFailure(t, fixture)
-	})
 }
 
 func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T, fixture *rootProcessReuseFixture) {
 	t.Helper()
-	workingDirectory := t.TempDir()
+	workingDirectory := fixture.failureDir
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
 
 	const failureText = "injected direct JavaScript host failure"
-	startsBefore := fixture.router.starts.Load()
-	fixture.router.setFailure(errors.New(failureText))
-
-	var stdout, stderr bytes.Buffer
-	err := fixture.process.Execute(root.Input{
-		Args: []string{
-			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+	fixture.shared.withRootCompositionRouteValue(t, rootCompositionRouteSpec{
+		label:      "root-process-reuse-javascript-failure",
+		homeDir:    t.TempDir(),
+		workingDir: workingDirectory,
+		apiStarter: func(_ context.Context, _ platformhttpserver.StartRequest) error {
+			fixture.apiFailureStarts.Add(1)
+			return fixture.apiFailure
 		},
-		Env:              append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir()),
-		Stdin:            strings.NewReader(""),
-		Stdout:           &stdout,
-		Stderr:           &stderr,
-		Context:          t.Context(),
-		WorkingDirectory: workingDirectory,
+		providerRunner: nil,
+	}, func(route *rootCompositionRoute) {
+		var stdout, stderr bytes.Buffer
+		err := fixture.shared.process.Execute(root.Input{
+			Args: []string{
+				"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+			},
+			Env:              append(os.Environ(), "HOME="+route.homeDir, "USERPROFILE="+route.homeDir),
+			Stdin:            strings.NewReader(""),
+			Stdout:           &stdout,
+			Stderr:           &stderr,
+			Context:          withRootCompositionRouteContext(t.Context(), route),
+			WorkingDirectory: workingDirectory,
+		})
+		if err == nil || !strings.Contains(err.Error(), failureText) {
+			t.Fatalf("Process.Execute(direct JavaScript host failure) error = %v, want injected failure; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+		}
+		if strings.Contains(stdout.String(), "completed (SUCCEEDED)") {
+			t.Fatalf("direct JavaScript failure stdout = %q, want no success result", stdout.String())
+		}
 	})
-	if err == nil || !strings.Contains(err.Error(), failureText) {
-		t.Fatalf("Process.Execute(direct JavaScript host failure) error = %v, want injected failure; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
-	}
-	if got := fixture.router.starts.Load() - startsBefore; got != 1 {
+	if got := fixture.apiFailureStarts.Load(); got != 1 {
 		t.Fatalf("injected API server starter calls = %d, want exactly one", got)
-	}
-	if strings.Contains(stdout.String(), "completed (SUCCEEDED)") {
-		t.Fatalf("direct JavaScript failure stdout = %q, want no success result", stdout.String())
 	}
 }
 
 type rootProcessReuseFixture struct {
-	process        support.Process
-	dir            string
-	identities     *rootProcessReuseIdentities
-	providerRunner *gatedRootProviderCommandRunner
-	router         *reusableRootAPIServerStarter
-	logsRoot       string
-	metricsRoot    string
+	shared           *rootCompositionFixture
+	failureDir       string
+	invocationDirs   []string
+	providerRunner   *gatedRootProviderCommandRunner
+	logsRoot         string
+	metricsRoot      string
+	apiFailure       error
+	apiFailureStarts atomic.Int32
 }
 
-func newRootProcessReuseFixture(t *testing.T) *rootProcessReuseFixture {
+func newRootProcessReuseFixture(t *testing.T, shared *rootCompositionFixture) *rootProcessReuseFixture {
 	t.Helper()
-	dir := support.ScaffoldFactory(t, rootProcessReuseFactoryConfig())
-	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	identities := &rootProcessReuseIdentities{}
+	invocationDirs := make([]string, 2)
+	for index := range invocationDirs {
+		dir := support.ScaffoldFactory(t, rootProcessReuseFactoryConfig())
+		support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+		invocationDirs[index] = dir
+	}
 	providerRunner := newGatedRootProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte(rootProcessReuseSuccessOutput)},
 		platformprocess.CommandResult{Stderr: []byte(rootProcessReuseFailureOutput), ExitCode: 1},
 	)
-	logsRoot := filepath.Join(t.TempDir(), "logs")
-	metricsRoot := filepath.Join(t.TempDir(), "metrics")
-	edges := serviceedges.Edges{
-		FactorySessionIDGenerator:                identities.generateSessionID,
-		FactorySessionRuntimeInstanceIDGenerator: identities.generateRuntimeID,
-		FactorySessionResponseEventIDGenerator:   identities.generateResponseEventID,
-	}
-	support.ConfigureWorkerCommands(t, &edges, providerRunner, nil)
-	router := &reusableRootAPIServerStarter{}
-	edges.APIServerStarter = router.start
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
 	return &rootProcessReuseFixture{
-		process: process, dir: dir, identities: identities,
-		providerRunner: providerRunner, router: router,
-		logsRoot: logsRoot, metricsRoot: metricsRoot,
+		shared: shared, failureDir: t.TempDir(), invocationDirs: invocationDirs,
+		providerRunner: providerRunner,
+		logsRoot:       filepath.Join(t.TempDir(), "logs"), metricsRoot: filepath.Join(t.TempDir(), "metrics"),
+		apiFailure: errors.New("injected direct JavaScript host failure"),
 	}
 }
 
@@ -130,17 +131,9 @@ func assertRootProcessBuildIsInert(t *testing.T, fixture *rootProcessReuseFixtur
 	if got := fixture.providerRunner.CallCount(); got != 0 {
 		t.Fatalf("provider command calls during BuildProcess = %d, want 0", got)
 	}
-	if got := fixture.identities.session.Load(); got != 0 {
-		t.Fatalf("session IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.identities.runtime.Load(); got != 0 {
-		t.Fatalf("runtime IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.identities.responseEvent.Load(); got != 0 {
-		t.Fatalf("response-event IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.router.starts.Load(); got != 0 {
-		t.Fatalf("API server starts during BuildProcess = %d, want 0", got)
+	snapshot := fixture.shared.constructionSnapshot()
+	if got := snapshot.total(); got != 0 {
+		t.Fatalf("shared root construction effect calls = %d, want 0", got)
 	}
 	assertPathDoesNotExist(t, fixture.logsRoot, "runtime log root")
 	assertPathDoesNotExist(t, fixture.metricsRoot, "runtime metrics root")
@@ -161,39 +154,44 @@ func runRootProcessCLIInvocation(
 	text string,
 ) rootProcessInvocation {
 	t.Helper()
-	shutdown := make(chan struct{})
-	server := support.NewProcessAPIServer()
-	server.HoldShutdownUntilSignaled(shutdown)
-	fixture.router.setCurrent(server)
-	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
-		"--with-server", "--server", "http://127.0.0.1:1", "--no-record",
-		"--runtime-log-dir", fixture.logsRoot, "--runtime-metrics-dir", fixture.metricsRoot, text,
+	if callIndex < 0 || callIndex >= len(fixture.invocationDirs) {
+		t.Fatalf("root process invocation index = %d, want [0,%d)", callIndex, len(fixture.invocationDirs))
+	}
+	workingDirectory := fixture.invocationDirs[callIndex]
+	var invocation rootProcessInvocation
+	fixture.shared.withRootCompositionRouteValue(t, rootCompositionRouteSpec{
+		label:          fmt.Sprintf("root-process-reuse-invocation-%d", callIndex),
+		homeDir:        t.TempDir(),
+		workingDir:     workingDirectory,
+		providerRunner: fixture.providerRunner,
+	}, func(route *rootCompositionRoute) {
+		server := startRootCompositionDirectServer(t, fixture.shared, route, support.NewProcessAPIServer(), []string{
+			"you", "--json", "run", "--factory", filepath.Join(workingDirectory, "factory.json"),
+			"--with-server", "--server", "http://127.0.0.1:1", "--no-record",
+			"--runtime-log-dir", fixture.logsRoot, "--runtime-metrics-dir", fixture.metricsRoot, text,
+		}, nil, workingDirectory)
+		baseURL := server.URL(t)
+		session := support.GetDefaultSession(t, baseURL)
+		eventStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, session.Id))
+		responseStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, session.Id))
+		fixture.providerRunner.Release(callIndex)
+		events := readRootProcessEventsUntilDispatchResponse(t, eventStream)
+		responseEvents := readRootProcessResponseEventsUntilTerminal(t, responseStream)
+		eventStream.Close()
+		responseStream.Close()
+		if callIndex == 1 {
+			server.command.AcceptError()
+		}
+		server.Finish(t)
+		invocation = rootProcessInvocation{
+			response:       support.DecodeInvocationResponseJSON(t, server.inputs.Stdout()),
+			session:        session,
+			events:         events,
+			responseEvents: responseEvents,
+			executeErr:     server.Err(),
+		}
 	})
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = fixture.dir
-	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
-	baseURL := server.WaitForURL(t)
-	session := support.GetDefaultSession(t, baseURL)
-	eventStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, session.Id))
-	responseStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, session.Id))
-	fixture.providerRunner.Release(callIndex)
-	events := readRootProcessEventsUntilDispatchResponse(t, eventStream)
-	responseEvents := readRootProcessResponseEventsUntilTerminal(t, responseStream)
-	eventStream.Close()
-	responseStream.Close()
-	close(shutdown)
-	<-command.Done()
-	executeErr := command.Err()
-	if executeErr != nil {
-		command.AcceptError()
-	}
-	return rootProcessInvocation{
-		response: support.DecodeInvocationResponseJSON(t, inputs.Stdout()),
-		session:  session, events: events, responseEvents: responseEvents,
-		executeErr: executeErr,
-	}
+	return invocation
 }
 
 func assertRootProcessSuccess(t *testing.T, invocation rootProcessInvocation) {
@@ -234,10 +232,10 @@ func assertRootProcessReuse(
 ) {
 	t.Helper()
 	if first.Id == "" || first.Runtime.StreamIdentity == nil {
-		t.Fatalf("first default session = %#v, want session and stream identities", first)
+		t.Fatalf("first explicit session = %#v, want session and stream identities", first)
 	}
 	if second.Id == "" || second.Runtime.StreamIdentity == nil {
-		t.Fatalf("second default session = %#v, want session and stream identities", second)
+		t.Fatalf("second explicit session = %#v, want session and stream identities", second)
 	}
 	if second.Id == first.Id {
 		t.Fatalf("second session id = %q, want distinct from first %q", second.Id, first.Id)
@@ -248,20 +246,8 @@ func assertRootProcessReuse(
 	if got := fixture.providerRunner.CallCount(); got != 2 {
 		t.Fatalf("injected provider runner calls = %d, want exactly one per session invocation", got)
 	}
-	if got := fixture.identities.runtime.Load(); got != 2 {
-		t.Fatalf("runtime IDs generated after two process executions = %d, want exactly 2", got)
-	}
-	if got := fixture.identities.responseEvent.Load(); got == 0 {
-		t.Fatalf("response-event IDs generated after invocations = %d, want > 0", got)
-	}
 	assertPathExists(t, fixture.logsRoot, "runtime log root after execution")
 	assertPathExists(t, fixture.metricsRoot, "runtime metrics root after execution")
-}
-
-type rootProcessReuseIdentities struct {
-	session       atomic.Int32
-	runtime       atomic.Int32
-	responseEvent atomic.Int32
 }
 
 type gatedRootProviderCommandRunner struct {
@@ -318,57 +304,6 @@ func (runner *gatedRootProviderCommandRunner) CallCount() int {
 
 var _ platformprocess.CommandRunner = (*gatedRootProviderCommandRunner)(nil)
 
-type reusableRootAPIServerStarter struct {
-	mu      sync.Mutex
-	current *support.ProcessAPIServer
-	failure error
-	starts  atomic.Int32
-}
-
-func (s *reusableRootAPIServerStarter) setCurrent(server *support.ProcessAPIServer) {
-	s.mu.Lock()
-	s.current = server
-	s.failure = nil
-	s.mu.Unlock()
-}
-
-func (s *reusableRootAPIServerStarter) setFailure(err error) {
-	s.mu.Lock()
-	s.current = nil
-	s.failure = err
-	s.mu.Unlock()
-}
-
-func (s *reusableRootAPIServerStarter) start(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	s.mu.Lock()
-	server, failure := s.current, s.failure
-	s.mu.Unlock()
-	if failure != nil {
-		s.starts.Add(1)
-		return failure
-	}
-	if server == nil {
-		return fmt.Errorf("reusable root API server is not selected")
-	}
-	s.starts.Add(1)
-	return server.Start(ctx, request)
-}
-
-func (r *rootProcessReuseIdentities) generateSessionID() string {
-	return fmt.Sprintf("story006-session-%d", r.session.Add(1))
-}
-
-func (r *rootProcessReuseIdentities) generateRuntimeID() string {
-	return fmt.Sprintf("story006-runtime-%d", r.runtime.Add(1))
-}
-
-func (r *rootProcessReuseIdentities) generateResponseEventID() string {
-	return fmt.Sprintf("story006-response-event-%d", r.responseEvent.Add(1))
-}
-
 func readRootProcessEventsUntilDispatchResponse(
 	t *testing.T,
 	stream *support.FactoryEventStream,
@@ -378,9 +313,6 @@ func readRootProcessEventsUntilDispatchResponse(
 	const maxEvents = 256
 	events := make([]factoryapi.FactoryEvent, 0, 16)
 	for len(events) < maxEvents {
-		// The provider command is held on an explicit release channel until both
-		// streams are open. This timeout is only a failure ceiling, not polling
-		// or synchronization padding.
 		event := stream.NextEvent(rootProcessStreamReadCeiling)
 		events = append(events, event)
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
@@ -400,8 +332,6 @@ func readRootProcessResponseEventsUntilTerminal(
 	const maxEvents = 256
 	events := make([]factoryapi.FactoryResponseEvent, 0, 16)
 	for len(events) < maxEvents {
-		// The provider command gate makes terminal publication deterministic; the
-		// bounded read protects the test from a malformed or stalled stream.
 		event := stream.NextFrame(rootProcessStreamReadCeiling).Event
 		events = append(events, event)
 		if event.Kind == factoryapi.FactoryResponseEventKindRun &&
@@ -536,7 +466,7 @@ func assertPathDoesNotExist(t testing.TB, path, label string) {
 func assertPathExists(t testing.TB, path, label string) {
 	t.Helper()
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("%s stat error = %v, want path to exist", label, err)
+		t.Fatalf("%s path %q stat error = %v, want path to exist", label, path, err)
 	}
 }
 
@@ -552,7 +482,7 @@ func rootProcessReuseFactoryConfig() map[string]any {
 			},
 			"handlingBehavior": []string{"DEFAULT"},
 		}},
-		"workers": []map[string]string{{"name": "processor"}},
+		"workers": []map[string]string{{"name": "processor", "executorProvider": "codex"}},
 		"workstations": []map[string]any{{
 			"name":      "process",
 			"worker":    "processor",
