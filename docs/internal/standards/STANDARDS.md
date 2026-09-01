@@ -22,6 +22,7 @@ This index is the entry point to the standards used by this repository. Read it 
 - [`factory/docs/standards/meta-planning-standards.md`](../../../factory/docs/standards/meta-planning-standards.md) — queue shaping, reconciliation, batching, loopback, and continuous-improvement behavior
 - [`factory/docs/standards/implementation-standards.md`](../../../factory/docs/standards/implementation-standards.md) — implementation evidence, escalation, and review-handoff behavior
 - [`factory/docs/standards/review-standards.md`](../../../factory/docs/standards/review-standards.md) — independent review, evidence, convergence, CI, merge, and loopback behavior
+- [`factory/docs/standards/testing-standards.md`](../../../factory/docs/standards/testing-standards.md) — authoritative factory test-layer classification, customer-behavior rules, functional-session and parallelism requirements, compiled-artifact integration policy, and load/static-check placement
 - [`factory/docs/standards/plan-template.md`](../../../factory/docs/standards/plan-template.md), [`task-template.md`](../../../factory/docs/standards/task-template.md), and [`validation-loopback-template.md`](../../../factory/docs/standards/validation-loopback-template.md) — required factory artifact shapes
 
 ## Customer writing
@@ -37,4 +38,7 @@ This index is the entry point to the standards used by this repository. Read it 
 - For backend and runtime work, also read the general backend standard before making structural, stateful, testing, or CI-related changes.
 - For frontend and website work, also read the general website standard before making structural, UI, state, or testing changes.
 - For feature work that changes tests, contracts, or public behavior, use the review standard to confirm the required evidence is present.
+- For any factory work that adds, changes, moves, optimizes, or reviews tests,
+  use the factory testing standard to select the layer and required execution
+  model before writing the plan or code.
 - If this standards corpus expands, add new standards here and keep this index current.

@@ -15,6 +15,10 @@ to the surfaces they change.
   execution, evidence, escalation, and the handoff to review.
 - [Review standards](./review-standards.md) define independent verification,
   finding severity, convergence, and validation-loopback behavior.
+- [Testing standards](./testing-standards.md) define the authoritative test
+  layers, customer-behavior boundary, functional-session model, parallelism,
+  compiled-artifact integration lane, and load/static-check placement used by
+  planners, implementers, reviewers, and validation workers.
 
 ## Templates
 

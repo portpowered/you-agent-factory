@@ -72,6 +72,10 @@ verify.>
   - Does not prove: <Boundary outside this evidence.>
 - Highest feasible level: <Scope and fidelity, with reason.>
 - Remaining unproven edges: <Edge -> later gate ID, or `None`.>
+- Test-layer design when tests change: <Behavior and observer; selected layer;
+  public/testable boundary; controlled dependencies; session and shared-process
+  strategy; parallel isolation; prebuilt artifact owner for integration;
+  dedicated load/stress or lint placement.>
 
 **Paid validation, when applicable:**
 

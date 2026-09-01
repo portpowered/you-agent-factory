@@ -7,6 +7,9 @@ Before reviewing, read `factory/docs/standards/review-standards.md`,
 repository-wide standards relevant to the changed surfaces. The factory review
 standard governs evidence classification, acceptance-criteria evaluation,
 finding severity, convergence, CI ownership, merge, and loopback behavior.
+When tests change, also read and enforce
+`factory/docs/standards/testing-standards.md` as the authoritative layer,
+boundary, parallelism, artifact, and suite-placement standard.
 
 ## Your Task
 
@@ -38,7 +41,11 @@ loop this lane.
    - treat hallucinated APIs, stale patterns, hidden side effects, and subtle edge cases in AI-authored code as high-risk review targets
    - request changes for correctness issues, security issues, missing required tests, prompt-rule violations, hidden side effects, dead code, or oversized unclear helpers
    - approve only when the change is correct, adequately tested, and within the defined expectations
-   - for PRs that change functional tests under `tests/functional/...`, apply the construction preferences from [general-backend-standards.md §7](../../../docs/internal/standards/code/general-backend-standards.md#7-testing-strategy-and-test-pyramid) and request changes (`BLOCKING`) when any preference is violated without a documented, in-scope exception:
+   - for PRs that change tests, apply
+     [testing-standards.md](../../docs/standards/testing-standards.md) and
+     request changes (`BLOCKING`) when its layer, customer-behavior, session,
+     process-reuse, binary-build, parallelism, artifact, load, or static-check
+     rules are violated without an explicitly permitted exception;
 4. Run: gh pr diff $prNumber  — to see the full diff
 4.1. If the diff contains `prd.json` or `progress.txt`, that is BLOCKING:
    these are untracked worktree scaffolding (deleted from main 2026-08-11,
@@ -170,7 +177,9 @@ Treat meta tests as a quality issue. If the change adds or keeps tests that only
 scan source files, validate docs topology, inspect asset bundle internals, or
 enforce command, route, or registration inventories without proving observable
 runtime, API, CLI, UI, or emitted-event behavior, raise that as a BLOCKING
-quality-rule violation and ask for behavioral coverage instead.
+quality-rule violation. Move repository-shape enforcement to lint/static
+analysis; require behavioral coverage only when there is customer behavior to
+protect.
 
 Confirm that each implementation task produced its own direct behavioral
 evidence and preserved the parent lane's executable spine. Final integrated
