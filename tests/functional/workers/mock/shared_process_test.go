@@ -86,7 +86,32 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "PlainBatchDrainRejectsPreActivationCancellation", run: testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation},
 		{name: "PlainBatchDrainStopsAfterWorkerActivationCancellation", run: testPlainBatchDrainStopsAfterWorkerActivationCancellation},
 	}
-	for _, test := range tests {
+	const sessionScenarioCount = 15
+	t.Run("FactorySessionScenarios", func(t *testing.T) {
+		parallelTests := append(
+			append([]struct {
+				name string
+				run  func(*testing.T, *sharedWorkersMockFixture)
+			}{}, tests[:10]...),
+			tests[11:sessionScenarioCount]...,
+		)
+		for _, test := range parallelTests {
+			test := test
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				test.run(t, fixture)
+			})
+		}
+	})
+	// Inline JavaScript execution is customer-visible, but the public async
+	// endpoint deliberately targets the server's current Factory rather than a
+	// caller-selected Factory Session. Its command edge therefore has no stable
+	// per-directory route and must not overlap the explicit-session scenarios.
+	t.Run(tests[10].name, func(t *testing.T) {
+		tests[10].run(t, fixture)
+	})
+	for _, test := range tests[sessionScenarioCount:] {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			test.run(t, fixture)
 		})
@@ -108,17 +133,34 @@ type sharedWorkersMockFixture struct {
 
 type sharedWorkersMockCommandRunner struct {
 	mu       sync.RWMutex
-	delegate platformprocess.CommandRunner
+	fallback platformprocess.CommandRunner
+	routes   map[string]platformprocess.CommandRunner
 }
 
 func newSharedWorkersMockCommandRunner() *sharedWorkersMockCommandRunner {
-	return &sharedWorkersMockCommandRunner{}
+	return &sharedWorkersMockCommandRunner{
+		routes: make(map[string]platformprocess.CommandRunner),
+	}
 }
 
 func (runner *sharedWorkersMockCommandRunner) set(delegate platformprocess.CommandRunner) {
 	runner.mu.Lock()
-	runner.delegate = delegate
+	runner.fallback = delegate
 	runner.mu.Unlock()
+}
+
+func (runner *sharedWorkersMockCommandRunner) setFor(
+	workDir string,
+	delegate platformprocess.CommandRunner,
+) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	key := filepath.Clean(workDir)
+	if delegate == nil {
+		delete(runner.routes, key)
+		return
+	}
+	runner.routes[key] = delegate
 }
 
 func (runner *sharedWorkersMockCommandRunner) Run(
@@ -126,12 +168,38 @@ func (runner *sharedWorkersMockCommandRunner) Run(
 	req platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	runner.mu.RLock()
-	delegate := runner.delegate
+	delegate := runner.delegateForLocked(req.WorkDir)
+	if delegate == nil {
+		delegate = runner.fallback
+	}
 	runner.mu.RUnlock()
 	if delegate == nil {
 		return platformprocess.CommandResult{}, errors.New("shared workers mock command runner delegate is not configured")
 	}
 	return delegate.Run(ctx, req)
+}
+
+func (runner *sharedWorkersMockCommandRunner) delegateForLocked(
+	workDir string,
+) platformprocess.CommandRunner {
+	requestDir := filepath.Clean(workDir)
+	if delegate := runner.routes[requestDir]; delegate != nil {
+		return delegate
+	}
+	for routeDir, delegate := range runner.routes {
+		if sharedWorkersMockPathContains(routeDir, requestDir) ||
+			sharedWorkersMockPathContains(requestDir, routeDir) {
+			return delegate
+		}
+	}
+	return nil
+}
+
+func sharedWorkersMockPathContains(parent, child string) bool {
+	relative, err := filepath.Rel(parent, child)
+	return err == nil &&
+		relative != ".." &&
+		!strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 type sharedWorkersMockSessionIDGenerator struct {
@@ -286,6 +354,21 @@ func (fixture *sharedWorkersMockFixture) useCommandRunners(
 ) {
 	fixture.providerEdge.set(provider)
 	fixture.scriptEdge.set(script)
+}
+
+func (fixture *sharedWorkersMockFixture) useCommandRunnersFor(
+	t testing.TB,
+	workDir string,
+	provider platformprocess.CommandRunner,
+	script platformprocess.CommandRunner,
+) {
+	t.Helper()
+	fixture.providerEdge.setFor(workDir, provider)
+	fixture.scriptEdge.setFor(workDir, script)
+	t.Cleanup(func() {
+		fixture.providerEdge.setFor(workDir, nil)
+		fixture.scriptEdge.setFor(workDir, nil)
+	})
 }
 
 // prepareLocalActivation closes the one continuous host before a documented

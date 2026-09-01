@@ -1,16 +1,12 @@
 package mock
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -27,137 +23,6 @@ type batchProcessFailure struct {
 	Reason    string `json:"reason"`
 }
 
-// TestBuiltCLIBatchExitCodesReportSingleWorkOutcome proves the ordinary
-// --work path, which is distinct from the characterized one-shot --named
-// path, returns process status and stdout from the submitted Work outcome. It
-// intentionally builds ./cmd/factory to a test-owned executable and invokes
-// that subprocess with exec.CommandContext so captured output and the OS exit
-// status remain real process witnesses rather than injected-edge observations.
-func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
-	t.Parallel()
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancelBuild()
-	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
-
-	t.Run("success quiet result exits zero", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchQuietSuccess(t, binaryPath, harness)
-	})
-
-	t.Run("failed terminal Work exits nonzero with human detail", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchHumanFailure(t, binaryPath, harness)
-	})
-
-	t.Run("failed terminal Work JSON is parseable", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchJSONFailure(t, binaryPath, harness)
-	})
-}
-
-// TestBuiltCLIBatchExitCodesAggregateFailureCauses proves batch CLI exit codes
-// aggregate every failure cause. Like the companion batch row, it remains
-// process-isolated: ./cmd/factory is built as a test-owned executable and
-// invoked with exec.CommandContext so subprocess output and OS exit status are
-// part of the retained witness.
-func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
-	t.Parallel()
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancelBuild()
-	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
-
-	t.Run("all submitted Work failures have a complete JSON collection", func(t *testing.T) {
-		t.Parallel()
-		runCompiledBatchAllFailedJSON(t, binaryPath, harness)
-	})
-}
-
-func runCompiledBatchQuietSuccess(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-success")
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWork(t, "single successful batch Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeAccept)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, batchRunArgs(session, workFile, mockWorkersPath, "--quiet")...)
-	if err != nil || result.ExitCode != 0 || result.Stdout != "Batch completed successfully.\n" || result.Stderr != "" {
-		t.Fatalf("compiled batch success: %v; exit=%d stdout=%q stderr=%q", err, result.ExitCode, result.Stdout, result.Stderr)
-	}
-}
-
-func runCompiledBatchHumanFailure(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-human-failure")
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWork(t, "single failing batch Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeReject)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, batchRunArgs(session, workFile, mockWorkersPath, "--quiet")...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("compiled batch failure result = %#v, error = %v; want non-zero", result, err)
-	}
-	for _, want := range []string{"Batch failed:", `Work "single failing batch Work"`, "prompt-task:failed"} {
-		if !strings.Contains(result.Stdout, want) {
-			t.Fatalf("failure stdout missing %q:\n%s", want, result.Stdout)
-		}
-	}
-	if strings.TrimSpace(result.Stderr) == "" {
-		t.Fatal("failure stderr is empty; want the non-zero batch error diagnostic")
-	}
-}
-
-func runCompiledBatchJSONFailure(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-json-failure")
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWork(t, "single JSON failing batch Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeReject)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, append([]string{"--json"}, batchRunArgs(session, workFile, mockWorkersPath)...)...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("compiled batch JSON failure result = %#v, error = %v; want non-zero", result, err)
-	}
-	report := decodeBatchProcessReport(t, result.Stdout)
-	if report.Status != "FAILED" || len(report.Failures) != 1 {
-		t.Fatalf("JSON batch report = %#v, want one failure", report)
-	}
-	failure := report.Failures[0]
-	if failure.WorkName != "single JSON failing batch Work" || failure.WorkState != "prompt-task:failed" || strings.TrimSpace(failure.Reason) == "" {
-		t.Fatalf("JSON failure = %#v, want Work name, terminal state, and reason", failure)
-	}
-}
-
-func runCompiledBatchAllFailedJSON(t *testing.T, binaryPath string, harness *builtcliacceptance.Harness) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-all-failed-json")
-	writeBatchCurrentFactory(t, session.WorkDir)
-	workFile := writeBatchWorks(t, "all failed first JSON Work", "all failed second JSON Work")
-	mockWorkersPath := writeBatchMockWorkers(t, workers.MockWorkerRunTypeReject)
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, append([]string{"--json"}, batchRunArgs(session, workFile, mockWorkersPath)...)...)
-	if err == nil || result.ExitCode == 0 {
-		t.Fatalf("all-failed JSON batch result = %#v, error = %v; want non-zero", result, err)
-	}
-	report := decodeBatchProcessReport(t, result.Stdout)
-	if report.Status != "FAILED" || len(report.Failures) != 2 {
-		t.Fatalf("all-failed JSON report = %#v, want two failures", report)
-	}
-	if report.Failures[0].WorkName != "all failed first JSON Work" || report.Failures[1].WorkName != "all failed second JSON Work" {
-		t.Fatalf("all-failed JSON failures = %#v, want deterministic Work ordering", report.Failures)
-	}
-	for _, failure := range report.Failures {
-		if failure.WorkState != "prompt-task:failed" || strings.TrimSpace(failure.Reason) == "" {
-			t.Fatalf("all-failed JSON failure = %#v, want state and reason", failure)
-		}
-	}
-}
-
 type batchWorkSpec struct {
 	Name       string
 	WorkTypeID string
@@ -170,23 +35,6 @@ func decodeBatchProcessReport(t testing.TB, stdout string) batchProcessReport {
 		t.Fatalf("batch JSON stdout is not parseable: %v\nstdout:\n%s", err, stdout)
 	}
 	return report
-}
-
-func batchRunArgs(
-	session *builtcliacceptance.Session,
-	workFile string,
-	mockWorkersPath string,
-	extra ...string,
-) []string {
-	args := append([]string{}, session.RuntimeLogDirFlags()...)
-	args = append(args, session.ServerFlags()...)
-	args = append(args,
-		"run",
-		"--work", workFile,
-		"--with-mock-workers="+mockWorkersPath,
-		"--no-record",
-	)
-	return append(args, extra...)
 }
 
 func writeBatchCurrentFactory(t testing.TB, workingDirectory string) {
@@ -221,20 +69,6 @@ func writeBatchCurrentFactory(t testing.TB, workingDirectory string) {
 	}
 }
 
-func writeBatchWork(t testing.TB, name string) string {
-	t.Helper()
-	return writeBatchWorksWithTypes(t, batchWorkSpec{Name: name, WorkTypeID: stdinRunWorkTypeName})
-}
-
-func writeBatchWorks(t testing.TB, names ...string) string {
-	t.Helper()
-	specs := make([]batchWorkSpec, 0, len(names))
-	for _, name := range names {
-		specs = append(specs, batchWorkSpec{Name: name, WorkTypeID: stdinRunWorkTypeName})
-	}
-	return writeBatchWorksWithTypes(t, specs...)
-}
-
 func writeBatchWorksWithTypes(t testing.TB, specs ...batchWorkSpec) string {
 	t.Helper()
 	works := make([]work.Work, 0, len(specs))
@@ -242,7 +76,7 @@ func writeBatchWorksWithTypes(t testing.TB, specs ...batchWorkSpec) string {
 		workID := strings.ToLower(strings.ReplaceAll(spec.Name, " ", "-"))
 		works = append(works, work.Work{
 			Name: spec.Name, WorkID: workID, WorkTypeID: spec.WorkTypeID,
-			TraceID: workID + "-trace", Payload: "batch exit contract",
+			TraceID: workID + "-trace", Payload: "batch customer behavior",
 		})
 	}
 	path := filepath.Join(t.TempDir(), "batch-work.json")

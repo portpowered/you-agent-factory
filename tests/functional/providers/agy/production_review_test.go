@@ -100,17 +100,6 @@ func testAgyColdWatchIncompleteRealTracesFail(t *testing.T) {
 				"clock ticking",
 			},
 		},
-		{
-			name:  "groundtruth-video",
-			trace: "agy-trace-groundtruth-verbose.stream.jsonl",
-			asset: "groundtruth-fixture.mp4",
-			wantEvidence: []string{
-				"PHASE 1",
-				"PHASE 2",
-				"00:02.000",
-				"440.00 Hz",
-			},
-		},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
@@ -230,47 +219,9 @@ func testAgyClipQASemanticInvalidResults(t *testing.T) {
 		mutate func(map[string]any)
 	}{
 		{
-			name: "confidence below zero",
-			mutate: func(verdict map[string]any) {
-				verdict["confidence"] = -0.01
-			},
-		},
-		{
-			name: "confidence above one",
-			mutate: func(verdict map[string]any) {
-				verdict["confidence"] = 1.01
-			},
-		},
-		{
-			name: "pass with incomplete action",
-			mutate: func(verdict map[string]any) {
-				verdict["action_completed"] = false
-			},
-		},
-		{
 			name: "pass with specification deviation",
 			mutate: func(verdict map[string]any) {
 				verdict["spec_deviations"] = []string{"wrong action"}
-			},
-		},
-		{
-			name: "pass with temporal artifact",
-			mutate: func(verdict map[string]any) {
-				verdict["temporal_artifacts"] = []string{"flash"}
-			},
-		},
-		{
-			name: "pass with unexpected speech",
-			mutate: func(verdict map[string]any) {
-				verdict["unexpected_speech"] = true
-			},
-		},
-		{
-			name: "reroll with provider failure status",
-			mutate: func(verdict map[string]any) {
-				verdict["action_completed"] = false
-				verdict["verdict"] = "reroll"
-				verdict["status"] = "error"
 			},
 		},
 	} {

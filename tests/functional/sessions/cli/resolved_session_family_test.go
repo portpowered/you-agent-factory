@@ -16,25 +16,43 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+var resolvedSessionCLIProcess support.ApplicationProcess
+
+func TestMain(m *testing.M) {
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build resolved-session CLI process: %v\n", err)
+		os.Exit(1)
+	}
+	resolvedSessionCLIProcess = process
+	exitCode := m.Run()
+	closeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := process.Close(closeContext); err != nil {
+		fmt.Fprintf(os.Stderr, "close resolved-session CLI process: %v\n", err)
+		exitCode = 1
+	}
+	os.Exit(exitCode)
+}
+
 // TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition proves
 // every public session CLI leaf command executes through root.BuildProcess against
 // the resolved production composition without bypassing the customer process boundary.
 func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(t *testing.T) {
+	t.Parallel()
 	var requests sessionRequests
 	server := httptest.NewServer(http.HandlerFunc(requests.handle))
 	defer server.Close()
 
 	port := testServerPort(t, server.URL)
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	process := resolvedSessionCLIProcess
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
 	invocations := [][]string{
@@ -61,7 +79,7 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 	}
 
 	var failedShowOutput bytes.Buffer
-	err = process.Execute(root.Input{
+	err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--server", server.URL, "session", "show",
 		},
@@ -100,17 +118,15 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 // TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch proves submit rejects
 // deprecated --port wiring before any dispatch attempt and directs callers to --server.
 func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
+	t.Parallel()
+	process := resolvedSessionCLIProcess
 	home := t.TempDir()
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("must not be submitted"), 0o600); err != nil {
 		t.Fatalf("write payload: %v", err)
 	}
 	var stdout bytes.Buffer
-	err = process.Execute(root.Input{
+	err := process.Execute(root.Input{
 		Args: []string{
 			"you", "submit", "--port", "9090", "--name", "rejected",
 			"--work-type-name", "task", "--payload", payloadPath,

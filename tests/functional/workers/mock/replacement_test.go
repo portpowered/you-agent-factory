@@ -50,7 +50,7 @@ func testMockWorkersReplaceOnlyNamedChildren(
 		platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
 	)
 
-	fixture.useCommandRunners(runner, nil)
+	fixture.useCommandRunnersFor(t, dir, runner, nil)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)
@@ -115,7 +115,7 @@ func testUnknownWorkerOverrideFailsActionably(
 			runner := testutil.NewProviderCommandRunner(
 				platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
 			)
-			fixture.useCommandRunners(runner, nil)
+			fixture.useCommandRunnersFor(t, dir, runner, nil)
 			mockWorkersPath := writeRawMockWorkersConfig(t, tc.payload)
 			diagnostic := executeRunWithMockWorkersExpectingFailure(
 				t,
@@ -151,7 +151,7 @@ func testFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(
 	fixture *sharedWorkersMockFixture,
 ) {
 	dir := scaffoldFutureReplacementFactory(t)
-	fixture.useCommandRunners(nil, nil)
+	fixture.useCommandRunnersFor(t, dir, nil, nil)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)
@@ -182,7 +182,7 @@ func testMockWorkerFailureReturnsStablePublicFailure(
 		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
 	)
 
-	fixture.useCommandRunners(runner, nil)
+	fixture.useCommandRunnersFor(t, dir, runner, nil)
 	session := fixture.openSession(t, dir)
 	gateWaitStarted := time.Now()
 	fixture.gate.WaitForArrival(t, 5*time.Second)

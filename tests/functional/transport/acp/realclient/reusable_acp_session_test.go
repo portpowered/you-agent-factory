@@ -21,7 +21,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const reusableACPInitializeParams = `{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true}}`
+const (
+	reusableACPInitializeParams = `{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true}}`
+	defaultFactoryBuilderTarget = "factory:@you/factory-builder"
+	deterministicProviderName   = "codex"
+)
 
 // TestReusableACPServerTurnsThroughOneProcess keeps the prompt assertions on
 // one production root.BuildProcess and one Process.Execute ACP server. The

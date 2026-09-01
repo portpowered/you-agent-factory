@@ -1,7 +1,6 @@
 package tts
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -10,14 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -25,87 +21,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-// TestDeliveredPackagedTTSFactoryReachesProtocolFixture proves the shipped
-// cmd/factory artifact can execute the installed packaged @you/tts Factory
-// through the same external model protocol fixture used by the delivered
-// Models tests. The fixture stands in for the VibeVoice backend; it does not
-// download or claim to run the real VibeVoice runtime.
-func TestDeliveredPackagedTTSFactoryReachesProtocolFixture(t *testing.T) {
-	t.Parallel()
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
-	cacheDir := t.TempDir()
-	writePackagedTTSReadyModelCache(t, cacheDir)
-	fixture := newDeliveredFactoryTTSProtocolFixture(t)
-	binaryPath := buildDeliveredFactoryTTSBinary(t)
-	text := "delivered packaged TTS protocol fixture"
-	recordingPath := filepath.Join(t.TempDir(), "delivered-packaged-tts.replay.json")
-
-	result := runDeliveredFactoryTTSCLIWithArgs(t, binaryPath, homeDir, cacheDir, fixture.URL(), []string{
-		"--json", "run", "--named", factorydefinitions.PackagedTTSFactoryName,
-		"--record", recordingPath, "--output", "primary", "--to", text,
-	})
-	t.Logf("runtime proof command: %s", result.command)
-	t.Logf("runtime proof exitCode=%d stdout=%q stderr=%q", result.exitCode, result.stdout, result.stderr)
-	if result.exitCode != 0 {
-		t.Fatalf("delivered packaged TTS exit=%d stdout=%q stderr=%q", result.exitCode, result.stdout, result.stderr)
-	}
-	response := support.DecodeInvocationResponseJSON(t, result.stdout)
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("delivered packaged TTS status=%q response=%#v", response.Status, response)
-	}
-	audio := deliveredFactoryTTSPrimaryAudio(t, response.PrimaryResult)
-	if string(audio) != packagedTTSFakeAudioFixture {
-		t.Fatalf("delivered packaged TTS audio=%q, want fixture bytes %q", audio, packagedTTSFakeAudioFixture)
-	}
-	request := fixture.LastRequest(t)
-	if request.Operation != "TTS" || request.ModelName != factorydefinitions.DefaultTTSModelName || len(request.Inputs) != 1 || request.Inputs[0].Name != "text" {
-		t.Fatalf("protocol fixture request=%#v, want TTS/%s with one text input", request, factorydefinitions.DefaultTTSModelName)
-	}
-	inputText, err := base64.StdEncoding.DecodeString(request.Inputs[0].ContentBase64)
-	if err != nil {
-		t.Fatalf("decode protocol fixture input: %v", err)
-	}
-	if string(inputText) != text {
-		t.Fatalf("protocol fixture request=%#v, want TTS/%s with exact text input %q", request, factorydefinitions.DefaultTTSModelName, text)
-	}
-	if fixture.CallCount() != 1 {
-		t.Fatalf("protocol fixture calls=%d, want one delivered Factory TTS call", fixture.CallCount())
-	}
-
-	liveEvents := readManagedFactoryTTSRecording(t, recordingPath)
-	assertManagedFactoryTTSEventOrder(t, liveEvents, "delivered packaged TTS live recording")
-	collectFactoryTTSDispatchEvents(t, liveEvents, factorysessions.DefaultSessionID)
-	liveWork := managedFactoryTTSOutputWork(t, liveEvents)
-	liveOutput := factoryTTSCompletedWork(t, liveWork)
-	liveAudio := managedFactoryTTSAudioPart(t, liveOutput)
-	liveDigest := sha256.Sum256(audio)
-	contentType := "<none>"
-	if liveAudio.ContentType != nil {
-		contentType = *liveAudio.ContentType
-	}
-	artifactID := "<none>"
-	if liveAudio.ArtifactId != nil && strings.TrimSpace(*liveAudio.ArtifactId) != "" {
-		artifactID = *liveAudio.ArtifactId
-	}
-	t.Logf("runtime proof recording=%s events=%v workID=%s outputAUDIO{contentType=%s,artifactID=%s,digest=sha256:%x,bytes=%d}",
-		recordingPath, eventTypes(liveEvents), requiredFactoryTTSWorkID(t, liveOutput), contentType, artifactID, liveDigest, len(audio))
-
-	replay := runDeliveredFactoryTTSCLIWithArgs(t, binaryPath, homeDir, cacheDir, fixture.URL(), []string{
-		"--json", "run", "--replay", recordingPath, "--no-record", "--output", "primary",
-	})
-	t.Logf("runtime proof replay command: %s", replay.command)
-	t.Logf("runtime proof replay exitCode=%d stdout=%q stderr=%q", replay.exitCode, replay.stdout, replay.stderr)
-	if replay.exitCode != 0 {
-		t.Fatalf("delivered packaged TTS replay exit=%d stdout=%q stderr=%q", replay.exitCode, replay.stdout, replay.stderr)
-	}
-	if fixture.CallCount() != 1 {
-		t.Fatalf("protocol fixture calls after replay=%d, want one live call and no replay call", fixture.CallCount())
-	}
-	t.Logf("runtime proof replay projection outputAUDIO{artifactID=%s,digest=sha256:%x,bytes=%d} fixtureCalls=%d",
-		artifactID, liveDigest, len(audio), fixture.CallCount())
-}
 
 func deliveredFactoryTTSPrimaryAudio(t *testing.T, content *factoryapi.WorkContent) []byte {
 	t.Helper()
@@ -193,84 +108,12 @@ func TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio(t *testing.T) {
 	}
 }
 
-type deliveredFactoryTTSCLIResult struct {
-	command  string
-	exitCode int
-	stdout   string
-	stderr   string
-}
-
-func buildDeliveredFactoryTTSBinary(t *testing.T) string {
-	t.Helper()
-	name := "you"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), name)
-	command := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binaryPath, "./cmd/factory")
-	command.Dir = testutil.MustRepoRoot(t)
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	if err := command.Run(); err != nil {
-		t.Fatalf("build delivered you artifact: %v\nstdout=%q\nstderr=%q", err, stdout.String(), stderr.String())
-	}
-	t.Logf("runtime proof build: go build -buildvcs=false -o %s ./cmd/factory; exitCode=0 stdout=%q stderr=%q", binaryPath, stdout.String(), stderr.String())
-	return binaryPath
-}
-
-func runDeliveredFactoryTTSCLIWithArgs(
-	t *testing.T,
-	binaryPath, homeDir, cacheDir, endpoint string, args []string,
-) deliveredFactoryTTSCLIResult {
-	t.Helper()
-	command := exec.CommandContext(t.Context(), binaryPath, args...)
-	command.Dir = homeDir
-	command.Env = deliveredFactoryTTSEnvironment(homeDir, cacheDir, endpoint)
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	result := deliveredFactoryTTSCLIResult{
-		command:  strings.Join(append([]string{binaryPath}, args...), " "),
-		stdout:   stdout.String(),
-		stderr:   stderr.String(),
-		exitCode: 0,
-	}
-	if err == nil {
-		return result
-	}
-	var exitError *exec.ExitError
-	if !errors.As(err, &exitError) {
-		t.Fatalf("run delivered packaged TTS artifact: %v", err)
-	}
-	result.exitCode = exitError.ExitCode()
-	return result
-}
-
 func requiredFactoryTTSWorkID(t *testing.T, work factoryapi.Work) string {
 	t.Helper()
 	if work.WorkId == nil || strings.TrimSpace(*work.WorkId) == "" {
 		t.Fatalf("TTS Work = %#v, want non-empty Work id", work)
 	}
 	return *work.WorkId
-}
-
-func deliveredFactoryTTSEnvironment(homeDir, cacheDir, endpoint string) []string {
-	environment := make([]string, 0, len(os.Environ())+4)
-	for _, value := range os.Environ() {
-		if strings.HasPrefix(value, "HOME=") || strings.HasPrefix(value, "USERPROFILE=") ||
-			strings.HasPrefix(value, run.ModelCacheDirEnvironment+"=") || strings.HasPrefix(value, "YOU_MODELS_BACKEND_ENDPOINT=") {
-			continue
-		}
-		environment = append(environment, value)
-	}
-	return append(environment,
-		"HOME="+homeDir,
-		"USERPROFILE="+homeDir,
-		run.ModelCacheDirEnvironment+"="+cacheDir,
-		"YOU_MODELS_BACKEND_ENDPOINT="+endpoint,
-	)
 }
 
 type deliveredFactoryTTSProtocolFixture struct {

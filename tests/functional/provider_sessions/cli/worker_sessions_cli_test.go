@@ -892,11 +892,6 @@ func functionalEnvironment(homeDir string) []string {
 	return env
 }
 
-func buildWorkerSessionsCLIBinary(t *testing.T) string {
-	t.Helper()
-	return cachedWorkerSessionsCLIBinary(t)
-}
-
 func nonEmptyLines(contents string) []string {
 	lines := make([]string, 0)
 	for _, line := range strings.Split(contents, "\n") {

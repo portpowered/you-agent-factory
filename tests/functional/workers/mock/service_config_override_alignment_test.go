@@ -25,7 +25,7 @@ func testServiceConfigOverrideAlignmentCustomerProcess(
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_mixed_command"}`),
 		},
 	)
-	fixture.useCommandRunners(runner, runner)
+	fixture.useCommandRunnersFor(t, dir, runner, runner)
 	session := fixture.openSession(t, dir)
 	_, _ = session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)

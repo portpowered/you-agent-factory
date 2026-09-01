@@ -69,7 +69,7 @@ func runArtifactRegistryScenario(
 		produceArtifacts: produceArtifacts,
 		workName:         artifactRegistryWorkName,
 	}
-	fixture.useCommandRunners(nil, runner)
+	fixture.useCommandRunnersFor(t, dir, nil, runner)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	scenario := artifactRegistryScenario{
