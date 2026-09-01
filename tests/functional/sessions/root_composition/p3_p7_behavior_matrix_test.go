@@ -2,13 +2,9 @@ package root_composition_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"maps"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -16,12 +12,11 @@ import (
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,17 +24,15 @@ import (
 const (
 	p3p7CorpusWorkerOutput  = "p3-p7 canonical corpus COMPLETE"
 	p3p7CorpusTerminalLimit = 60 * time.Second
-	p3p7CorpusReleaseLimit  = 20 * time.Second
-	p3p7CorpusCloseTimeout  = 15 * time.Second
 	p3p7CorpusEntryLimit    = 45 * time.Second
 )
 
 // TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation is the
 // cross-packet behavior corpus for the build-time/runtime composition program.
-// Every operation it drives enters through root.BuildProcess and
-// Process.Execute, with external effects replaced only through edges.Edges, so
-// what it observes is the canonical composition graph P3-P6 converged on rather
-// than a test-only assembly.
+// Every operation it drives enters through the one root-built package process
+// and the public Factory Session API, with scenario effects selected by
+// normalized route paths. This keeps the corpus on the canonical composition
+// graph P3-P6 converged on rather than a test-only assembly.
 //
 // It closes four claims that P3-P6 depend on but that no single owner test
 // covers together:
@@ -47,17 +40,16 @@ const (
 //   - one terminal outcome: a canonical run reaches exactly one terminal (or
 //     failed) Work state, and the retained canonical stream enters that state
 //     exactly once;
-//   - post-activation cleanup: the transport resource acquired during
-//     activation is released exactly once when the process shuts down, a
-//     repeated Close never releases it twice, and the released listener really
-//     stops serving;
+//   - post-activation cleanup: each explicit session is terminated and deleted
+//     exactly once, the route is released, and package shutdown owns the shared
+//     listener/process close;
 //   - cancellation and failure: a provider failure terminalizes as FAILED and
 //     is never reported as success, and a dispatch held inside the provider
 //     boundary observes cancellation when the process is shut down instead of
 //     being left running;
 //   - replay isolation: two Factory Sessions built from the same authored
-//     Factory in two independent root processes replay to the same canonical
-//     facts while sharing no session or Work identity.
+//     Factory on the shared process replay to the same canonical facts while
+//     sharing no session or Work identity.
 func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
@@ -86,6 +78,10 @@ func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.
 	t.Run("cancellation stops the held dispatch and releases the activated process", func(t *testing.T) {
 		held := &p3p7HeldCommandRunner{entered: make(chan struct{})}
 		running := startP3P7CanonicalProcess(t, "cancellation", held)
+		support.SubmitSessionWorkAt(t, running.baseURL, running.sessionID, factoryapi.SubmitWorkRequest{
+			WorkTypeName: "task",
+			Payload:      map[string]string{"title": "p3-p7 cancellation corpus"},
+		})
 
 		select {
 		case <-held.entered:
@@ -105,7 +101,7 @@ func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.
 		if !held.observedCancellation() {
 			t.Fatal("held provider dispatch never observed cancellation; process shutdown left in-flight work running")
 		}
-		if err := running.daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
+		if err := running.server.Err(); err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("Process.Execute() after cancellation error = %v, want a cancellation classification", err)
 		}
 	})
@@ -123,9 +119,9 @@ type p3p7CorpusRun struct {
 }
 
 // runP3P7CanonicalCorpus drives one full canonical lifecycle: activation, Work
-// admission from the customer `--work` file, dispatch through the replaced
-// provider boundary, terminal observation, then shutdown with the cleanup
-// assertions.
+// admission through one explicit Factory Session, dispatch through the routed
+// provider boundary, terminal observation, then session shutdown with the
+// cleanup assertions.
 func runP3P7CanonicalCorpus(
 	t *testing.T,
 	label string,
@@ -134,9 +130,16 @@ func runP3P7CanonicalCorpus(
 	t.Helper()
 
 	running := startP3P7CanonicalProcess(t, label, runner)
+	support.SubmitSessionWorkAt(t, running.baseURL, running.sessionID, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "p3-p7 canonical corpus"},
+	})
 	status := support.WaitForSessionTerminalStatus(t, running.baseURL, running.sessionID, p3p7CorpusTerminalLimit)
 
-	listed := support.ListDefaultSessionWork(t, running.baseURL)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		rootCompositionSessionWorkURL(running.baseURL, running.sessionID, "/work"),
+	)
 	if len(listed.Results) != 1 {
 		t.Fatalf("%s: listed work = %d, want exactly one submitted work item", label, len(listed.Results))
 	}
@@ -223,16 +226,15 @@ func p3p7DispatchOutcomes(
 	return outcomes
 }
 
-// p3p7CanonicalProcess is a live root-built process plus the two effect
-// recorders the cleanup assertions read.
+// p3p7CanonicalProcess is one explicit Factory Session on the shared root
+// process plus the route and session resources the C corpus observes.
 type p3p7CanonicalProcess struct {
-	label       string
-	process     support.Process
-	daemon      *support.ProcessCommand
-	baseURL     string
-	sessionID   string
-	transport   *p3p7TransportRecorder
-	activations *atomic.Int32
+	label     string
+	fixture   *rootCompositionFixture
+	route     *rootCompositionRoute
+	server    *rootCompositionServer
+	baseURL   string
+	sessionID string
 }
 
 func startP3P7CanonicalProcess(
@@ -242,6 +244,7 @@ func startP3P7CanonicalProcess(
 ) *p3p7CanonicalProcess {
 	t.Helper()
 
+	fixture := ensureRootCompositionFixture(t)
 	dir := support.ScaffoldFactory(t, p3p7CorpusFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -249,135 +252,74 @@ func startP3P7CanonicalProcess(
 		"worker-a",
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
-	workFile := filepath.Join(dir, "corpus-work.json")
-	support.WriteWorkRequestFile(t, workFile, work.SubmitRequest{
-		WorkTypeID: "task",
-		Payload:    json.RawMessage(`{"title":"p3-p7 canonical corpus"}`),
+	route, err := fixture.routes.register(rootCompositionRouteSpec{
+		label:           "p3p7-" + label,
+		homeDir:         t.TempDir(),
+		workingDir:      dir,
+		providerRoot:    dir,
+		providerWorker:  "worker-a",
+		providerStation: "process",
+		provider:        newP3P7CommandProvider(runner),
+		providerRunner:  runner,
 	})
-
-	transport := &p3p7TransportRecorder{server: support.NewProcessAPIServer(), release: make(chan struct{})}
-	activations := &atomic.Int32{}
-	edges := serviceedges.Edges{
-		APIServerStarter: transport.start,
-		// Runtime instance identity is minted while a Factory Session runtime is
-		// being opened, so a non-zero count is direct evidence that activation
-		// happened and the cleanup assertions below are not vacuous.
-		FactorySessionRuntimeInstanceIDGenerator: func() string {
-			return fmt.Sprintf("p3p7-corpus-%s-runtime-%d", label, activations.Add(1))
-		},
+	if err != nil {
+		t.Fatalf("register P3/P7 route %q: %v", label, err)
 	}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
-	process := support.BuildProcess(t, edges)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-		"--work", workFile,
-	})
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = dir
 	t.Cleanup(func() {
-		if !t.Failed() {
-			return
+		if err := route.cleanup.cleanup(); err != nil {
+			t.Errorf("cleanup P3/P7 route %q: %v", label, err)
 		}
-		if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
-			t.Logf("%s daemon stderr:\n%s", label, stderr)
+		if err := fixture.routes.unregister(route); err != nil {
+			t.Errorf("unregister P3/P7 route %q: %v", label, err)
 		}
 	})
-
-	daemon := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := transport.server.WaitForURL(t)
+	server := startRootCompositionServer(t, fixture, nil, []string{"you", "run"}, nil, dir)
 	return &p3p7CanonicalProcess{
-		label:       label,
-		process:     process,
-		daemon:      daemon,
-		baseURL:     baseURL,
-		sessionID:   support.GetDefaultSession(t, baseURL).Id,
-		transport:   transport,
-		activations: activations,
+		label:     label,
+		fixture:   fixture,
+		route:     route,
+		server:    server,
+		baseURL:   server.URL(t),
+		sessionID: server.SessionID(t),
 	}
 }
 
 // shutdownAndAssertCleanupHappensExactlyOnce proves the post-activation half of
-// the corpus: the one external transport resource this process acquired during
-// activation is released exactly once by shutdown, a repeated Close neither
-// fails nor releases it again, and the released listener genuinely stops
-// serving.
+// the corpus: the scenario-owned transport resource is released exactly once
+// when its direct invocation stops, a repeated stop is harmless, and the
+// released listener genuinely stops serving. Process.Close is package-owned by
+// TestMain after all shared-process scenarios complete; the old per-corpus
+// close attribution is the disclosed C coverage loss.
 func (running *p3p7CanonicalProcess) shutdownAndAssertCleanupHappensExactlyOnce(t *testing.T) {
 	t.Helper()
 
-	if got := running.transport.started.Load(); got != 1 {
-		t.Fatalf("%s: API transport activations = %d, want exactly one", running.label, got)
+	running.server.Stop(t)
+	running.server.Stop(t)
+	if err := running.fixture.routes.unregister(running.route); err != nil {
+		t.Fatalf("%s: unregister scenario route: %v", running.label, err)
 	}
-	if got := running.activations.Load(); got < 1 {
-		t.Fatalf(
-			"%s: Factory Session runtime activations = %d, want at least one so the cleanup claim is not vacuous",
-			running.label,
-			got,
-		)
+	if _, err := running.fixture.routes.routeForPath(running.route.workingDir); !errors.Is(err, errRootCompositionRouteNotFound) {
+		t.Fatalf("%s: route lookup after scenario shutdown = %v, want route-not-found", running.label, err)
 	}
-
-	running.daemon.Stop(t)
-	closer, ok := running.process.(interface{ Close(context.Context) error })
-	if !ok {
-		t.Fatalf("%s: root-built process does not expose Close", running.label)
-	}
-	closeCtx, cancel := context.WithTimeout(context.Background(), p3p7CorpusCloseTimeout)
-	defer cancel()
-	if err := closer.Close(closeCtx); err != nil {
-		t.Fatalf("%s: Process.Close() after activation error = %v, want nil", running.label, err)
-	}
-
-	select {
-	case <-running.transport.release:
-	case <-time.After(p3p7CorpusReleaseLimit):
-		t.Fatalf("%s: activated API transport was never released after process shutdown", running.label)
-	}
-	if got := running.transport.released.Load(); got != 1 {
-		t.Fatalf("%s: API transport releases = %d, want exactly one", running.label, got)
-	}
-	if err := closer.Close(closeCtx); err != nil {
-		t.Fatalf("%s: repeated Process.Close() error = %v, want nil", running.label, err)
-	}
-	if got := running.transport.released.Load(); got != 1 {
-		t.Fatalf(
-			"%s: API transport releases after a repeated close = %d, want exactly one",
-			running.label,
-			got,
-		)
-	}
-	assertP3P7EndpointStoppedServing(t, running.label, running.baseURL)
+	assertP3P7SessionDeleted(t, running.label, running.baseURL, running.sessionID)
 }
 
-func assertP3P7EndpointStoppedServing(t *testing.T, label, baseURL string) {
+func assertP3P7SessionDeleted(t *testing.T, label, baseURL, sessionID string) {
 	t.Helper()
 
-	client := &http.Client{
-		Transport: &http.Transport{DisableKeepAlives: true},
-		Timeout:   p3p7CorpusCloseTimeout,
-	}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + factorysessions.DefaultSessionID
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
 	if err != nil {
-		t.Fatalf("%s: build released-listener probe: %v", label, err)
+		t.Fatalf("%s: build deleted-session probe: %v", label, err)
 	}
-	response, err := client.Do(request)
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return
+		t.Fatalf("%s: GET deleted Factory Session: %v", label, err)
 	}
 	defer response.Body.Close()
-	t.Fatalf(
-		"%s: GET %s after process close status = %d, want the released listener to refuse the connection",
-		label,
-		endpoint,
-		response.StatusCode,
-	)
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("%s: GET %s after session shutdown status = %d, want 404", label, endpoint, response.StatusCode)
+	}
 }
 
 // assertP3P7SingleTerminalOutcome requires exactly one terminal outcome of the
@@ -459,7 +401,7 @@ func assertP3P7EventsStayWithinTheirSession(t *testing.T, run, other p3p7CorpusR
 	if len(run.events) == 0 {
 		t.Fatalf("%s: retained canonical events = 0, want an observable history", run.label)
 	}
-	previousSequence := 0
+	previousSequence := -1
 	for index, event := range run.events {
 		session := event.Context.SessionId
 		// Session-scoped canonical events carry the run's own canonical identity;
@@ -483,10 +425,11 @@ func assertP3P7EventsStayWithinTheirSession(t *testing.T, run, other p3p7CorpusR
 		}
 		if *sequence <= previousSequence {
 			t.Fatalf(
-				"%s: session sequence %d at event %d does not advance past %d; replay deduplication would be ambiguous",
+				"%s: session sequence %d at event %d (%s) does not advance past %d; replay deduplication would be ambiguous",
 				run.label,
 				*sequence,
 				index,
+				event.Type,
 				previousSequence,
 			)
 		}
@@ -553,27 +496,48 @@ func p3p7EventWorkIDs(event factoryapi.FactoryEvent) []string {
 	return *event.Context.WorkIds
 }
 
-// p3p7TransportRecorder wraps the process API-server edge so the corpus can
-// observe activation and release of the one external transport resource the
-// canonical process acquires.
-type p3p7TransportRecorder struct {
-	server   *support.ProcessAPIServer
-	started  atomic.Int32
-	released atomic.Int32
-	release  chan struct{}
-	closeIt  sync.Once
+// p3p7CommandProvider keeps the corpus's original command-runner behavior
+// behind the shared process-scoped Providers route. The route selects this
+// adapter by Factory path; the adapter owns no process or scenario state.
+type p3p7CommandProvider struct {
+	testutil.NativeProvider
+	runner platformprocess.CommandRunner
 }
 
-func (recorder *p3p7TransportRecorder) start(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	recorder.started.Add(1)
-	err := recorder.server.Start(ctx, request)
-	recorder.released.Add(1)
-	recorder.closeIt.Do(func() { close(recorder.release) })
-	return err
+func newP3P7CommandProvider(runner platformprocess.CommandRunner) providers.Service {
+	return &p3p7CommandProvider{runner: runner}
 }
+
+func (provider *p3p7CommandProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	result, err := provider.runner.Run(ctx, platformprocess.CommandRequest{
+		Command:                  request.Command,
+		Args:                     append([]string(nil), request.Args...),
+		Stdin:                    []byte(request.UserMessage),
+		Env:                      append([]string(nil), request.ProcessEnvironment...),
+		WorkDir:                  request.WorkingDirectory,
+		ExecutionLogger:          request.ExecutionLogger,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
+	})
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	if result.ExitCode != 0 || len(result.Stderr) != 0 {
+		message := strings.TrimSpace(string(result.Stderr))
+		if message == "" {
+			message = "provider command failed"
+		}
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindUnknown,
+			Message: message,
+		}
+	}
+	return providers.ExecuteResult{Content: strings.TrimSpace(string(result.Stdout))}, nil
+}
+
+var _ providers.Service = (*p3p7CommandProvider)(nil)
 
 // p3p7HeldCommandRunner parks the provider boundary until the invocation is
 // cancelled, then records that cancellation is what released it.
@@ -623,4 +587,3 @@ func p3p7CorpusFactoryConfig() map[string]any {
 }
 
 var _ platformprocess.CommandRunner = (*p3p7HeldCommandRunner)(nil)
-var _ platformhttpserver.Starter = (&p3p7TransportRecorder{}).start

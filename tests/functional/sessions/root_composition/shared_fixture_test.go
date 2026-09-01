@@ -61,8 +61,10 @@ var sharedRootCompositionFixture rootCompositionFixtureState
 // prove that package setup does not activate a Factory Session.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
-	if err := closeRootCompositionFixture(); err != nil {
-		fmt.Fprintf(os.Stderr, "root composition fixture cleanup: %v\n", err)
+	firstCloseErr := closeRootCompositionFixture()
+	secondCloseErr := closeRootCompositionFixture()
+	if err := errors.Join(firstCloseErr, secondCloseErr); err != nil {
+		fmt.Fprintf(os.Stderr, "root composition fixture cleanup (including repeated close): %v\n", err)
 		if exitCode == 0 {
 			exitCode = 1
 		}
@@ -85,7 +87,10 @@ type rootCompositionFixture struct {
 	hostRecordPath  string
 	hostLogsRoot    string
 	hostMetricsRoot string
-	hostOnce        sync.Once
+	hostMu          sync.Mutex
+	hostStarting    chan struct{}
+	hostStopped     bool
+	hostGeneration  uint64
 	hostErr         error
 	hostCmd         *rootCompositionProcessCommand
 }
@@ -184,8 +189,13 @@ func closeRootCompositionFixture() error {
 		return sharedRootCompositionFixture.err
 	}
 	var errs []error
-	if fixture.hostCmd != nil {
-		if err := fixture.hostCmd.stop(); err != nil {
+	fixture.hostMu.Lock()
+	hostCmd := fixture.hostCmd
+	fixture.hostStopped = true
+	fixture.hostURL = ""
+	fixture.hostMu.Unlock()
+	if hostCmd != nil {
+		if err := hostCmd.stop(); err != nil {
 			errs = append(errs, fmt.Errorf("stop shared host Process.Execute: %w", err))
 		}
 	}
@@ -254,7 +264,9 @@ func (fixture *rootCompositionFixture) startAPIServer(ctx context.Context, reque
 			return fmt.Errorf("API server route %q has no server", route.label)
 		}
 	}
+	fixture.hostMu.Lock()
 	api := fixture.hostAPI
+	fixture.hostMu.Unlock()
 	if api == nil {
 		fixture.routes.unmatched.Add(1)
 		return errors.New("shared host API server is not initialized")
@@ -265,29 +277,102 @@ func (fixture *rootCompositionFixture) startAPIServer(ctx context.Context, reque
 
 func (fixture *rootCompositionFixture) startSharedHost(t testing.TB) string {
 	t.Helper()
-	fixture.hostOnce.Do(func() {
-		fixture.hostAPI = support.NewProcessAPIServer()
-		fixture.hostRecordPath = filepath.Join(fixture.hostDir, "recordings", "session-__factory_session_id__.replay.json")
-		fixture.hostLogsRoot = filepath.Join(fixture.hostDir, "runtime-logs")
-		fixture.hostMetricsRoot = filepath.Join(fixture.hostDir, "runtime-metrics")
+	for {
+		fixture.hostMu.Lock()
+		if fixture.hostStarting != nil {
+			ready := fixture.hostStarting
+			fixture.hostMu.Unlock()
+			<-ready
+			continue
+		}
+		if fixture.hostCmd != nil && !fixture.hostStopped && fixture.hostErr == nil && fixture.hostURL != "" {
+			baseURL := fixture.hostURL
+			fixture.hostMu.Unlock()
+			return baseURL
+		}
+
+		fixture.hostGeneration++
+		generation := fixture.hostGeneration
+		api := support.NewProcessAPIServer()
+		recordPath := filepath.Join(
+			fixture.hostDir,
+			"recordings",
+			fmt.Sprintf("session-%d-__factory_session_id__.replay.json", generation),
+		)
+		logsRoot := filepath.Join(fixture.hostDir, fmt.Sprintf("runtime-logs-%d", generation))
+		metricsRoot := filepath.Join(fixture.hostDir, fmt.Sprintf("runtime-metrics-%d", generation))
 		inputs := support.FakeInputs(context.Background(), []string{
 			"you", "run", "--continuously", "--with-server", "--quiet", "--dir", fixture.hostDir,
-			"--record", fixture.hostRecordPath,
-			"--runtime-log-dir", fixture.hostLogsRoot,
-			"--runtime-metrics-dir", fixture.hostMetricsRoot,
+			"--record", recordPath,
+			"--runtime-log-dir", logsRoot,
+			"--runtime-metrics-dir", metricsRoot,
 		})
 		inputs.Input.WorkingDirectory = fixture.hostDir
 		inputs.Input.Env = append(os.Environ(), "HOME="+fixture.hostHome, "USERPROFILE="+fixture.hostHome)
-		fixture.hostCmd = startRootCompositionProcessCommand(fixture.process, inputs.Input)
-		fixture.hostURL, fixture.hostErr = fixture.hostAPI.WaitForBaseURL(15 * time.Second)
-		if fixture.hostErr != nil {
-			_ = fixture.hostCmd.stop()
+		ready := make(chan struct{})
+		fixture.hostAPI = api
+		fixture.hostRecordPath = recordPath
+		fixture.hostLogsRoot = logsRoot
+		fixture.hostMetricsRoot = metricsRoot
+		fixture.hostURL = ""
+		fixture.hostErr = nil
+		fixture.hostStopped = false
+		fixture.hostStarting = ready
+		command := startRootCompositionProcessCommand(fixture.process, inputs.Input)
+		fixture.hostCmd = command
+		fixture.hostMu.Unlock()
+
+		baseURL, waitErr := api.WaitForBaseURL(15 * time.Second)
+		fixture.hostMu.Lock()
+		fixture.hostURL = baseURL
+		fixture.hostErr = waitErr
+		fixture.hostStarting = nil
+		close(ready)
+		fixture.hostMu.Unlock()
+		if waitErr != nil {
+			_ = command.stop()
+			t.Fatalf("start shared root composition host: %v", waitErr)
 		}
-	})
-	if fixture.hostErr != nil {
-		t.Fatalf("start shared root composition host: %v", fixture.hostErr)
+		return baseURL
 	}
-	return fixture.hostURL
+}
+
+// stopSharedHostForDirectProcess releases the default runtime before a
+// serial direct CLI witness uses the same immutable Process. The host is
+// restarted lazily by the next API-backed scenario; no scenario-wide lease or
+// package-wide execution lock is held while the direct witness runs.
+func (fixture *rootCompositionFixture) stopSharedHostForDirectProcess(t testing.TB) {
+	t.Helper()
+	for {
+		fixture.hostMu.Lock()
+		if fixture.hostStarting != nil {
+			ready := fixture.hostStarting
+			fixture.hostMu.Unlock()
+			<-ready
+			continue
+		}
+		if fixture.hostCmd == nil || fixture.hostStopped {
+			fixture.hostMu.Unlock()
+			return
+		}
+		command := fixture.hostCmd
+		fixture.hostStopped = true
+		fixture.hostURL = ""
+		fixture.hostMu.Unlock()
+		if err := command.stop(); err != nil {
+			t.Errorf("stop shared host before direct Process.Execute: %v", err)
+		}
+		return
+	}
+}
+
+func (fixture *rootCompositionFixture) sharedHostAPI() *support.ProcessAPIServer {
+	if fixture == nil {
+		return nil
+	}
+	fixture.hostMu.Lock()
+	defer fixture.hostMu.Unlock()
+	return fixture.hostAPI
 }
 
 func (fixture *rootCompositionFixture) constructionSnapshot() rootCompositionConstructionSnapshot {

@@ -59,6 +59,7 @@ func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T)
 func TestRecordingFormatsRemainObservableThroughReusableRootProcess(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 	fixture := ensureRootCompositionFixture(t)
+	fixture.stopSharedHostForDirectProcess(t)
 	t.Run("default recording reserves distinct dated UUID artifacts and replays", func(t *testing.T) {
 		homeDir := t.TempDir()
 		factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")

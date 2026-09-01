@@ -205,7 +205,7 @@ func testProcessExecuteUnavailableFactoryDoesNotRegisterSession(
 ) {
 	t.Helper()
 
-	before := fixture.effects.liveSnapshot()
+	baseURL := fixture.startSharedHost(t)
 
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--factory", missingFactory, "--quiet", "--no-record",
@@ -218,12 +218,17 @@ func testProcessExecuteUnavailableFactoryDoesNotRegisterSession(
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf("Process.Execute() error = %v, want unavailable Factory diagnostic", err)
 	}
-	after := fixture.effects.liveSnapshot()
-	if got := after.sessionID - before.sessionID; got != 0 {
-		t.Fatalf("Factory Session identity allocations after unavailable definition = %d, want 0", got)
-	}
-	if got := after.runtimeID - before.runtimeID; got != 0 {
-		t.Fatalf("runtime identity allocations after unavailable definition = %d, want 0", got)
+	assertNoFactorySessionForPath(t, baseURL, filepath.Dir(missingFactory))
+}
+
+func assertNoFactorySessionForPath(t *testing.T, baseURL, path string) {
+	t.Helper()
+	wantPath := filepath.Clean(path)
+	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, strings.TrimSuffix(baseURL, "/")+"/factory-sessions")
+	for _, session := range listed.Sessions {
+		if filepath.Clean(session.FactoryDir) == wantPath || filepath.Clean(session.FolderPath) == wantPath {
+			t.Fatalf("Factory Session %q was registered for unavailable path %q: %#v", session.Id, wantPath, session)
+		}
 	}
 }
 

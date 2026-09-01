@@ -172,6 +172,7 @@ func TestRecordedFactoryRedactsSecretStepsAcrossLifecycle(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
 
 	fixture := ensureRootCompositionFixture(t)
+	fixture.stopSharedHostForDirectProcess(t)
 	t.Run("secret step", func(t *testing.T) {
 		runRecordedTwoWorkstationLifecycle(t, fixture, false)
 	})

@@ -113,6 +113,8 @@ type rootCompositionServer struct {
 	stopOnce     sync.Once
 	stop         func() error
 	stopErr      error
+	restore      func()
+	restoreOnce  sync.Once
 }
 
 func startRootCompositionServer(
@@ -129,6 +131,7 @@ func startRootCompositionServer(
 		t.Fatalf("select route for shared Factory Session: %v", err)
 	}
 	if rootCompositionArgsRequireDirectProcess(args) {
+		fixture.stopSharedHostForDirectProcess(t)
 		return startRootCompositionDirectServer(t, fixture, route, api, args, env, workingDirectory)
 	}
 
@@ -145,7 +148,7 @@ func startRootCompositionServer(
 		t.Fatalf("register shared Factory Session cleanup: %v", err)
 	}
 	return &rootCompositionServer{
-		api:       fixture.hostAPI,
+		api:       fixture.sharedHostAPI(),
 		baseURL:   baseURL,
 		sessionID: opened.Session.Id,
 		stop:      stop,
@@ -194,6 +197,13 @@ func startRootCompositionDirectServerWithGate(
 	bound := make(chan struct{})
 	boundURL := make(chan string, 1)
 	route.mu.Lock()
+	originalStarter := route.apiStarter
+	starter := originalStarter
+	if starter == nil {
+		starter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return api.Start(ctx, request)
+		}
+	}
 	route.apiStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
 		if release != nil {
 			onBound := request.OnBound
@@ -213,9 +223,14 @@ func startRootCompositionDirectServerWithGate(
 				}
 			}
 		}
-		return api.Start(ctx, request)
+		return starter(ctx, request)
 	}
 	route.mu.Unlock()
+	restore := func() {
+		route.mu.Lock()
+		route.apiStarter = originalStarter
+		route.mu.Unlock()
+	}
 	inputs := support.FakeInputs(t.Context(), append([]string(nil), args...))
 	inputs.Input.WorkingDirectory = workingDirectory
 	if env == nil {
@@ -248,6 +263,7 @@ func startRootCompositionDirectServerWithGate(
 		command:   command,
 		shutdown:  func() { close(shutdown) },
 		stop:      command.stop,
+		restore:   restore,
 	}
 }
 
@@ -341,6 +357,7 @@ func (server *rootCompositionServer) Stop(t testing.TB) {
 	if server == nil {
 		return
 	}
+	server.closeDirectSession(t)
 	server.shutdownOnce.Do(func() {
 		if server.shutdown != nil {
 			server.shutdown()
@@ -354,6 +371,9 @@ func (server *rootCompositionServer) Stop(t testing.TB) {
 	if server.stopErr != nil {
 		t.Errorf("stop shared root composition server: %v", server.stopErr)
 	}
+	if server.restore != nil {
+		server.restoreOnce.Do(server.restore)
+	}
 }
 
 func (server *rootCompositionServer) Finish(t testing.TB) {
@@ -361,6 +381,7 @@ func (server *rootCompositionServer) Finish(t testing.TB) {
 	if server == nil {
 		return
 	}
+	server.closeDirectSession(t)
 	server.shutdownOnce.Do(func() {
 		if server.shutdown != nil {
 			server.shutdown()
@@ -373,6 +394,24 @@ func (server *rootCompositionServer) Finish(t testing.TB) {
 	})
 	if server.stopErr != nil && !errors.Is(server.stopErr, context.Canceled) && !server.command.errorWasAccepted() {
 		t.Errorf("finish shared root composition server: %v", server.stopErr)
+	}
+	if server.restore != nil {
+		server.restoreOnce.Do(server.restore)
+	}
+}
+
+// closeDirectSession retires the default Factory Session left behind by a
+// direct CLI invocation. Shared API-session invocations already register a
+// cleanup action for their explicit session; only the direct path needs this
+// extra public close so the one shared process can accept the next default
+// invocation in the same package run.
+func (server *rootCompositionServer) closeDirectSession(t testing.TB) {
+	t.Helper()
+	if server == nil || server.sessionID != factorysessions.DefaultSessionID || server.baseURL == "" {
+		return
+	}
+	if err := closeRootCompositionSession(server.baseURL, server.sessionID); err != nil {
+		t.Errorf("close direct default Factory Session: %v", err)
 	}
 }
 
@@ -451,6 +490,13 @@ func closeRootCompositionSession(baseURL, sessionID string) error {
 	}
 	if !terminalSession && time.Now().After(deadline) {
 		return fmt.Errorf("timed out waiting for Factory Session %q to stop", sessionID)
+	}
+	// The public contract keeps ~default as the stable default alias and does
+	// not permit deleting that registry entry. Termination still releases its
+	// active runtime binding, which is the resource a subsequent direct CLI
+	// invocation needs to reuse this process.
+	if sessionID == factorysessions.DefaultSessionID {
+		return nil
 	}
 
 	deleteEndpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
