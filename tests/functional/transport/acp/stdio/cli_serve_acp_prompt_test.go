@@ -1,7 +1,6 @@
 package stdio_test
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -116,8 +114,11 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		Stderr:           &stderr,
 		WorkingDirectory: cwd,
 	})
+	t.Cleanup(func() {
+		closeACPStreamFiles(stdinRead, stdinWrite, stdoutRead, stdoutWrite)
+	})
 
-	stdout := bufio.NewReader(stdoutRead)
+	stdout := newACPFrameReader(stdoutRead, t.Name())
 
 	writeRPCLine(t, stdinWrite, fmt.Sprintf(
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`,
@@ -176,20 +177,11 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if err := stdinWrite.Close(); err != nil {
 		t.Fatalf("close stdin: %v", err)
 	}
-	// command.Done() is the deterministic completion signal (closed exactly
-	// when Process.Execute returns); the surrounding time.After is only a
-	// hang guard against a genuine regression (Execute never returning after
-	// clean stdin EOF), not a substitute for it -- 5s is generous versus this
-	// in-process fixture's actual completion time (well under 1s in
-	// practice), matching the same bounded-wait-as-hang-guard shape already
-	// used for the real production stdio server's own cancellation test.
-	select {
-	case <-command.Done():
-		if err := command.Err(); err != nil {
-			t.Fatalf("Process.Execute(you server acp) error = %v after clean stdin EOF; stderr=%s", err, stderr.String())
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
+	waitForACPCommand(t, command.Done(), "clean stdin EOF / ACP server teardown", func() {
+		closeACPStreamFiles(stdinRead, stdinWrite, stdoutRead, stdoutWrite)
+	})
+	if err := command.Err(); err != nil {
+		t.Fatalf("Process.Execute(you server acp) error = %v after clean stdin EOF; stderr=%s", err, stderr.String())
 	}
 	command.AcceptError()
 
@@ -217,10 +209,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if err := stdoutWrite.Close(); err != nil {
 		t.Fatalf("close stdout: %v", err)
 	}
-	remaining, readErr := io.ReadAll(stdout)
-	if readErr != nil && readErr != io.EOF {
-		t.Fatalf("read remaining stdout: %v", readErr)
-	}
+	remaining := stdout.readAll(t, "drain trailing stdout after ACP server teardown")
 	if trimmed := strings.TrimSpace(string(remaining)); trimmed != "" {
 		assertLineIsProtocolFrame(t, trimmed)
 	}
@@ -233,23 +222,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 
 func writeRPCLine(t *testing.T, w io.Writer, line string) {
 	t.Helper()
-	if _, err := w.Write([]byte(line + "\n")); err != nil {
-		t.Fatalf("write RPC line %q: %v", line, err)
-	}
-}
-
-func readRPCFrame(t *testing.T, r *bufio.Reader) rpcFrame {
-	t.Helper()
-	line, err := r.ReadString('\n')
-	if err != nil {
-		t.Fatalf("read RPC line: %v", err)
-	}
-	assertLineIsProtocolFrame(t, line)
-	var frame rpcFrame
-	if err := json.Unmarshal([]byte(line), &frame); err != nil {
-		t.Fatalf("unmarshal RPC line %q: %v", line, err)
-	}
-	return frame
+	writeACPBytes(t, w, []byte(line+"\n"), "write ACP request frame")
 }
 
 // assertLineIsProtocolFrame proves a captured stdout line parses as a
@@ -270,10 +243,10 @@ func assertLineIsProtocolFrame(t *testing.T, line string) {
 // session/update notifications the connection emits alongside it. session/new
 // advertises its available commands, so a notification can legitimately
 // precede the response it belongs to.
-func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
+func readRPCResponse(t *testing.T, r *acpFrameReader) rpcFrame {
 	t.Helper()
 	for {
-		frame := readRPCFrame(t, r)
+		frame := readRPCFrame(t, r, "read ACP response or session/update frame")
 		if frame.Method == "" {
 			return frame
 		}
@@ -385,11 +358,11 @@ func seedFixtureFactory(t *testing.T, cwd string) string {
 // so a tool_call notification legitimately precedes the message. Reading a
 // single frame and asserting its shape encodes an ordering the transport never
 // guaranteed.
-func readNotificationsUntilResponse(t *testing.T, r *bufio.Reader) (rpcFrame, []acpsdk.SessionNotification) {
+func readNotificationsUntilResponse(t *testing.T, r *acpFrameReader) (rpcFrame, []acpsdk.SessionNotification) {
 	t.Helper()
 	var notifications []acpsdk.SessionNotification
 	for {
-		frame := readRPCFrame(t, r)
+		frame := readRPCFrame(t, r, "read ACP prompt response or session/update frame")
 		if frame.Method == "" {
 			return frame, notifications
 		}
