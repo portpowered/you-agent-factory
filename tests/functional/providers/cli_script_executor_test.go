@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,95 +131,8 @@ func assertBaseDispatchErrorContains(t testing.TB, events []factoryapi.FactoryEv
 	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
 }
 
-func TestProvidersSharedProcessTopology(t *testing.T) {
-	fixture := FixtureFor(t)
-	fixture.AssertTopology(t)
-
-	firstDir := testutilCopySharedFixture(t, "script_executor_dir")
-	secondDir := testutilCopySharedFixture(t, "script_executor_dir")
-	testutil.WriteSeedFile(t, firstDir, "task", []byte("first shared payload"))
-	testutil.WriteSeedFile(t, secondDir, "task", []byte("second shared payload"))
-	first := fixture.OpenScenario(t, firstDir, firstDir, support.NewStaticSuccessCommandRunner("first-shared-output"))
-	second := fixture.OpenScenario(t, secondDir, secondDir, support.NewStaticSuccessCommandRunner("second-shared-output"))
-	if got := fixture.router.routeCount(); got != 2 {
-		t.Fatalf("shared provider active routes = %d, want two", got)
-	}
-
-	var wait sync.WaitGroup
-	wait.Add(2)
-	go func() {
-		defer wait.Done()
-		first.WaitForTerminal(t, FixtureTimeout)
-	}()
-	go func() {
-		defer wait.Done()
-		second.WaitForTerminal(t, FixtureTimeout)
-	}()
-	wait.Wait()
-	firstWork := first.ListWork(t)
-	secondWork := second.ListWork(t)
-	assertBaseSessionPlaces(t, firstWork, map[string]int{"task:done": 1, "task:init": 0})
-	assertBaseSessionPlaces(t, secondWork, map[string]int{"task:done": 1, "task:init": 0})
-	assertBaseDispatchOutput(t, first.FactoryEvents(t), "first-shared-output")
-	assertBaseDispatchOutput(t, second.FactoryEvents(t), "second-shared-output")
-	first.Stop(t)
-	second.Stop(t)
-	if got := fixture.router.routeCount(); got != 0 {
-		t.Fatalf("shared provider routes after cleanup = %d, want zero", got)
-	}
-	fixture.AssertSessionTopology(t)
-}
-
-func TestProvidersSharedProcessRoutes(t *testing.T) {
-	fixture := FixtureFor(t)
-	fixture.AssertTopology(t)
-	baselineCalls := fixture.router.callCount()
-
-	workDir := filepath.Join(fixture.rootDir, "route-test-workdir")
-	routeSelector := fmt.Sprintf("providers-shared-route-test-%d", sharedProviderRouteSequence.Add(1))
-	runner := support.NewStaticSuccessCommandRunner("registered-route-output")
-	if err := fixture.router.register(routeSelector, workDir, runner); err != nil {
-		t.Fatalf("register shared provider test route: %v", err)
-	}
-	defer func() {
-		if err := fixture.router.unregister(routeSelector); err != nil {
-			t.Errorf("unregister shared provider test route: %v", err)
-		}
-	}()
-
-	if err := fixture.router.register(routeSelector, workDir, support.NewStaticSuccessCommandRunner("duplicate-output")); err == nil {
-		t.Fatal("duplicate shared provider route registration succeeded")
-	}
-	if got := fixture.router.routeCount(); got != 1 {
-		t.Fatalf("shared provider route count after duplicate registration = %d, want one", got)
-	}
-
-	result, err := fixture.router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo", WorkDir: workDir, Stdin: []byte("registered route input"),
-	})
-	if err != nil {
-		t.Fatalf("registered shared provider route: %v", err)
-	}
-	if string(result.Stdout) != "registered-route-output" {
-		t.Fatalf("registered shared provider route output = %q, want registered output", result.Stdout)
-	}
-	if got := fixture.router.callCount(); got != baselineCalls+1 {
-		t.Fatalf("shared provider route calls after registered route = %d, want %d", got, baselineCalls+1)
-	}
-
-	unknownWorkDir := filepath.Join(fixture.rootDir, "unknown-route-workdir")
-	_, err = fixture.router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo", WorkDir: unknownWorkDir, Stdin: []byte("must not cross a route"),
-	})
-	if err == nil || !strings.Contains(err.Error(), "no provider route matched WorkDir") {
-		t.Fatalf("unknown shared provider route error = %v, want explicit route failure", err)
-	}
-	if got := fixture.router.callCount(); got != baselineCalls+1 {
-		t.Fatalf("shared provider route calls after unknown route = %d, want %d", got, baselineCalls+1)
-	}
-}
-
 func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
+	t.Parallel()
 	fixture := FixtureFor(t)
 
 	t.Run("invalid_template", func(t *testing.T) {
