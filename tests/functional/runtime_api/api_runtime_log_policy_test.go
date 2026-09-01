@@ -23,6 +23,7 @@ const (
 )
 
 func TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault(t *testing.T) {
+	t.Parallel()
 	// C06-ISOLATED CASE-19: --runtime-log-dir is a process input and the
 	// production log/selector-404 witness must own its log root.
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
@@ -53,6 +54,7 @@ func TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault(t *testing.
 }
 
 func TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput(t *testing.T) {
+	t.Parallel()
 	// C06-ISOLATED CASE-20: the startup record's exact path/root/appender
 	// fields are process-scoped output under a caller-selected log directory.
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())

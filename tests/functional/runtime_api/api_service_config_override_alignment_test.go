@@ -11,6 +11,7 @@ import (
 )
 
 func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner(t *testing.T) {
+	t.Parallel()
 	// C06-ISOLATED CASE-21: this witness proves a shaped provider runner is
 	// installed before root/service construction, which a reused process cannot
 	// establish without changing the behavior under test.

@@ -23,6 +23,7 @@ type functionalStateCategories struct {
 }
 
 func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow functional-server override sweep")
 	t.Run("StartFunctionalServerMockWorkersCompletes", func(t *testing.T) {
 		// C06-ISOLATED CASE-03: --with-mock-workers is a process startup

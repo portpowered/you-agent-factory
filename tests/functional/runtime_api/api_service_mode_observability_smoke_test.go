@@ -11,6 +11,7 @@ import (
 )
 
 func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow service-mode lifecycle smoke")
 	// C06-ISOLATED CASE-37: listener reachability until explicit cancellation
 	// and Done-after-cancel are process lifecycle properties, not session data.
@@ -44,6 +45,7 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 }
 
 func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow observability smoke")
 	server, dispatchRelease := newSharedServiceModeObservabilityServer(t)
 

@@ -23,6 +23,7 @@ import (
 
 // TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork confirms model pull returns a configured legacy cache hit without upstream network requests.
 func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *testing.T) {
+	t.Parallel()
 	// C06-ISOLATED CASE-08: the managed-cache environment and rejecting model
 	// HTTP edge are process inputs whose no-network witness must not share the
 	// model host catalog or environment with another scenario.
@@ -84,6 +85,7 @@ func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *test
 }
 
 func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, providerBackedModelTransportSmokeConfig())
 	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
 

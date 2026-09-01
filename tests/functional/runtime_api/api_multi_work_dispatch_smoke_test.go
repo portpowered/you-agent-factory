@@ -11,6 +11,7 @@ import (
 // TestSubmitMultipleRuntimeWorkItemsCompletes exercises customer-facing
 // multi-submit admission and dispatch planning publication for concurrent Work.
 func TestSubmitMultipleRuntimeWorkItemsCompletes(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldInvocationFactory(t, nil)
 	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
 		providerRunner: support.NewStaticSuccessCommandRunner("Done. COMPLETE"),

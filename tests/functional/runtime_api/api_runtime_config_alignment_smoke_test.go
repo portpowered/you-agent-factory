@@ -26,6 +26,7 @@ const (
 )
 
 func TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow runtime config boundary alignment sweep")
 
 	for _, tc := range []struct {

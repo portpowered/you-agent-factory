@@ -16,6 +16,7 @@ import (
 )
 
 func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow inference-event artifact sweep")
 	// C06-ISOLATED CASE-05: --record finalization and the live-to-artifact
 	// identity comparison require this process to close before replay data is
