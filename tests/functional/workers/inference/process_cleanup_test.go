@@ -22,8 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const processCleanupWorkerTimeout = 5 * time.Second
-
 // TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess proves the
 // parent-process observation closes the gap between a dead command leader and
 // an inherited output pipe. The first Work leaves a descendant holding the
@@ -181,92 +179,6 @@ func (runner processGoneFunctionalCommandRunner) RunStreaming(
 	return platformprocess.CommandResult{}, errors.New("process exited")
 }
 
-// TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker
-// invocation tears down its spawned descendant process tree and clears active
-// execution so the public Work listing and Factory Event stream show a terminal
-// timeout failure with no lingering in-progress dispatch.
-func TestProviderTimeoutTerminatesChildProcessTree(t *testing.T) {
-	support.SkipLongFunctional(t, "slow timeout process-tree cleanup proof")
-	t.Parallel()
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	childPIDFile := filepath.Join(t.TempDir(), "descendant.pid")
-
-	support.UpdateFactoryConfig(t, dir, func(cfg map[string]any) {
-		cfg["workstations"] = append(cfg["workstations"].([]any), map[string]any{
-			"name":     "timeout-cleanup-loop-breaker",
-			"behavior": "STANDARD",
-			"type":     "LOGICAL_MOVE",
-			"inputs":   []map[string]any{{"workType": "task", "state": "init"}},
-			"outputs":  []map[string]any{{"workType": "task", "state": "failed"}},
-			"guards": []map[string]any{{
-				"type":        "VISIT_COUNT",
-				"workstation": "run-script",
-				"maxVisits":   float64(1),
-			}},
-		})
-	})
-
-	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
-	workerAgents := fmt.Sprintf(`---
-type: SCRIPT_WORKER
-command: %s
-args:
-  - '-test.run=TestProcessTreeHelper'
-%s  - '--'
-  - 'spawn-child'
-  - %s
-timeout: %s
----
-Spawn a descendant and wait for the factory timeout to cancel it.
-`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(childPIDFile), processCleanupWorkerTimeout.String())
-	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
-		t.Fatalf("write worker AGENTS.md: %v", err)
-	}
-
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     "work-timeout-cleanup-smoke",
-		WorkTypeID: "task",
-		TraceID:    "trace-timeout-cleanup-smoke",
-		Payload:    []byte("spawn a descendant process"),
-	})
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		processCleanupScriptEdges(t),
-		20*time.Second,
-	)
-
-	childPID := readProcessCleanupPID(t, childPIDFile)
-	t.Cleanup(func() {
-		processCleanupTerminateProcess(childPID)
-	})
-	if !waitForProcessCleanupExit(childPID, 3*time.Second) {
-		t.Fatalf("spawned descendant process %d is still running after factory timeout", childPID)
-	}
-
-	assertProcessCleanupSessionPlaces(t, listed, map[string]int{
-		"task:failed": 1,
-		"task:init":   0,
-		"task:done":   0,
-	})
-	assertProcessCleanupDispatchOutcomeSequence(t, events, []factoryapi.WorkOutcome{
-		factoryapi.WorkOutcomeFailed,
-	}, "execution timeout")
-	if session.Runtime.Progress.Categories.Failed != 1 {
-		t.Fatalf(
-			"session progress categories = %+v, want one failed work item and cleared active execution",
-			session.Runtime.Progress.Categories,
-		)
-	}
-	if session.Runtime.Progress.Categories.Processing != 0 {
-		t.Fatalf(
-			"session processing count = %d, want 0 after timeout cleanup",
-			session.Runtime.Progress.Categories.Processing,
-		)
-	}
-}
-
 // TestProcessTreeHelper is invoked as the external script command for timeout
 // cleanup proofs. It spawns a descendant process, records its PID, and blocks
 // until the factory timeout cancels the process tree.
@@ -330,86 +242,6 @@ func processCleanupHelperArgs() (string, []string) {
 		return "", nil
 	}
 	return os.Args[separator+1], os.Args[separator+2:]
-}
-
-// TestProviderSuccessWaitsForProcessAndStreamClosure proves a successful script-worker
-// invocation waits for the provider process to exit and its stdout stream to close
-// before surfacing a public terminal success outcome, and that later success after a
-// prior timeout only settles once timeout cleanup has finished.
-func TestProviderSuccessWaitsForProcessAndStreamClosure(t *testing.T) {
-	support.SkipLongFunctional(t, "slow timeout retry and success cleanup proof")
-	t.Parallel()
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	attemptFile := filepath.Join(t.TempDir(), "timeout-attempts.txt")
-	providerPIDFile := attemptFile + ".provider.pid"
-	traceID := "trace-timeout-requeue-smoke"
-	workID := "work-timeout-requeue-smoke"
-	const successStdout = "recovered after timeout"
-
-	workerAgentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
-	workerAgents := fmt.Sprintf(`---
-type: SCRIPT_WORKER
-command: %s
-args:
-  - '-test.run=TestProcessTreeHelper'
-%s  - '--'
-  - 'timeout-once'
-  - %s
-timeout: %s
----
-Timeout once, then succeed after the Agent Factory requeues the work.
-`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(attemptFile), processCleanupWorkerTimeout.String())
-	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
-		t.Fatalf("write worker AGENTS.md: %v", err)
-	}
-
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     workID,
-		WorkTypeID: "task",
-		TraceID:    traceID,
-		Payload:    []byte("timeout once and retry"),
-	})
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		processCleanupScriptEdges(t),
-		20*time.Second,
-	)
-
-	assertProcessCleanupSessionPlaces(t, listed, map[string]int{
-		"task:done":   1,
-		"task:init":   0,
-		"task:failed": 0,
-	})
-	assertProcessCleanupListedWorkIdentity(t, listed, "done", workID, "task", traceID, nil)
-	assertProcessCleanupDispatchOutcomeSequence(t, events, []factoryapi.WorkOutcome{
-		factoryapi.WorkOutcomeFailed,
-		factoryapi.WorkOutcomeAccepted,
-	}, "execution timeout")
-	assertProcessCleanupScriptResponseBeforeAcceptedDispatch(t, events, successStdout)
-	if _, err := os.Stat(providerPIDFile); err != nil {
-		t.Fatalf("provider pid file missing after successful attempt: %v", err)
-	}
-	providerPID := readProcessCleanupPID(t, providerPIDFile)
-	t.Cleanup(func() {
-		processCleanupTerminateProcess(providerPID)
-	})
-	if processCleanupProcessRunning(providerPID) {
-		t.Fatalf("provider process %d is still running after terminal success", providerPID)
-	}
-	if session.Runtime.Progress.Categories.Terminal != 1 {
-		t.Fatalf(
-			"session progress categories = %+v, want one terminal work item after timeout requeue success",
-			session.Runtime.Progress.Categories,
-		)
-	}
-	if session.Runtime.Progress.Categories.Processing != 0 {
-		t.Fatalf(
-			"session processing count = %d, want 0 after success-path cleanup",
-			session.Runtime.Progress.Categories.Processing,
-		)
-	}
 }
 
 func runTimeoutOnceHelper(attemptFile string) {

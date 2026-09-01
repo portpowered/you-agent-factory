@@ -246,58 +246,67 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 		},
 	}
 
-	seenReasons := make(map[factoryapi.WorkFailureType]struct{}, len(tests))
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-			support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
-				support.BuildModelWorkerConfig(
-					modelprovider.ProviderCodex,
-					"gpt-5-codex",
-				),
-				"CODEX",
-			))
-			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"`+tc.name+`"}`))
+	reasons := make([]factoryapi.WorkFailureType, len(tests))
+	t.Run("public failure classes", func(t *testing.T) {
+		for index, tc := range tests {
+			index, tc := index, tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+				support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+					support.BuildModelWorkerConfig(
+						modelprovider.ProviderCodex,
+						"gpt-5-codex",
+					),
+					"CODEX",
+				))
+				testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"`+tc.name+`"}`))
 
-			runner := testutil.NewProviderCommandRunner(tc.results...)
-			if tc.name == "timeout failure" {
-				runner = testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-					ExitCode: 1,
-					Stderr:   []byte(codexTimeoutFailureStderr),
-				})
-				runner.Queue(repeatedCodexTimeoutCommandResults(12)...)
-			}
-			session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
-				commandRunner: runner,
-			}, 20*time.Second)
+				runner := testutil.NewProviderCommandRunner(tc.results...)
+				if tc.name == "timeout failure" {
+					runner = testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+						ExitCode: 1,
+						Stderr:   []byte(codexTimeoutFailureStderr),
+					})
+					runner.Queue(repeatedCodexTimeoutCommandResults(12)...)
+				}
+				session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+					commandRunner: runner,
+				}, 20*time.Second)
 
-			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-				t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
-			}
-			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
-				t.Fatalf("done place tokens = %d, want 0 after %s", got, tc.name)
-			}
-			if session.Runtime.Progress.Categories.Failed != 1 {
-				t.Fatalf(
-					"session progress categories = %+v, want one failed work item",
-					session.Runtime.Progress.Categories,
-				)
-			}
-			if runner.CallCount() != tc.wantCalls {
-				t.Fatalf(
-					"provider command runner calls = %d, want %d for %s",
-					runner.CallCount(),
-					tc.wantCalls,
-					tc.name,
-				)
-			}
+				if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+					t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+				}
+				if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+					t.Fatalf("done place tokens = %d, want 0 after %s", got, tc.name)
+				}
+				if session.Runtime.Progress.Categories.Failed != 1 {
+					t.Fatalf(
+						"session progress categories = %+v, want one failed work item",
+						session.Runtime.Progress.Categories,
+					)
+				}
+				if runner.CallCount() != tc.wantCalls {
+					t.Fatalf(
+						"provider command runner calls = %d, want %d for %s",
+						runner.CallCount(),
+						tc.wantCalls,
+						tc.name,
+					)
+				}
 
-			reason := terminalInferenceFailureReason(t, events)
-			if reason != tc.wantReason {
-				t.Fatalf("terminal inference failure reason = %q, want %q", reason, tc.wantReason)
-			}
-			seenReasons[reason] = struct{}{}
-		})
+				reason := terminalInferenceFailureReason(t, events)
+				if reason != tc.wantReason {
+					t.Fatalf("terminal inference failure reason = %q, want %q", reason, tc.wantReason)
+				}
+				reasons[index] = reason
+			})
+		}
+	})
+
+	seenReasons := make(map[factoryapi.WorkFailureType]struct{}, len(reasons))
+	for _, reason := range reasons {
+		seenReasons[reason] = struct{}{}
 	}
 
 	if len(seenReasons) != len(tests) {

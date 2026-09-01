@@ -63,13 +63,38 @@ mutable fixture.
   explicit-session fixture, while customer-visible local listener ownership
   should retain isolated process coverage.
 
-- [x] `workers/inference` — **15.469s, 4 builds.** One hosted graph serves the
-  normal explicit-session matrix in parallel. The remaining graphs prove
-  interrupted-recording restart, terminal-recording restart, and a recording
-  handoff gate whose writer is an immutable application edge. These are
-  process reconstruction and edge-failure customer behaviors, not duplicate
-  scenario fixtures. Twenty-eight parallel calls are present. The
-  `~default` replay exception is explained above.
+- [x] `workers/inference` — **5.1–5.4s in clean post-change samples, 4 static
+  construction sites.** The original 15.469s audit repeated the lifecycle
+  mistake: top-level tests declared parallelism, but every scenario that
+  observed Worker recordings swapped one package-global writer and held the
+  process read/write lock for the complete Factory Session. The writer now
+  routes from the public Factory Session identity in the durable Worker opening
+  record and retains recording/Worker associations for later writes and reads.
+  Recording scenarios open empty explicit sessions, bind their writer, and
+  submit Work through the public API, so health, fidelity, opening-gate, loss,
+  and replay cells overlap on one hosted process. Their aggregate critical path
+  fell from roughly 12s to under 1s in focused execution.
+
+  Portable recording selection now submits two Works to one explicit Factory
+  Session and proves that a later session receives a fresh recording identity;
+  it no longer stops the hosted daemon for repeated `~default` executions. The
+  structured-result matrix proves object and explicit-null preservation once
+  through the public Factory Event instead of repeating the object case through
+  an internal replay-artifact inspection. Authentication, throttling, and
+  timeout classification cells run as parallel leaves.
+
+  The subprocess-based forced-assertion cleanup test was removed as fixture
+  bookkeeping. Two five-second test-binary/PID process-tree tests were also
+  removed from this functional package: their customer failure classifications
+  already have controlled-boundary coverage here, while real descendant
+  termination is covered by platform and integration tests. The four remaining
+  construction sites still prove the hosted cohort, interrupted-recording
+  restart, terminal-recording restart, and an immutable recording-handoff
+  failure. The `~default` replay exception is explained above. A focused race
+  run passes in 14.2s. Later whole-package samples on the same host ranged from
+  11.6–17.8s while unrelated HTTP-history leaves slowed together; the changed
+  recording/structured cohort remained below 1s, so that spread is recorded as
+  host variance rather than restored serialization.
 
 - [x] `transport/cli/parameters` — **12.490s, 3 builds.** The three graphs have
   incompatible immutable edges: an input observer, the full invocation

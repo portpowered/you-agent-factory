@@ -2,6 +2,7 @@ package inference_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type inferenceCommandRoute struct {
@@ -85,9 +87,17 @@ type inferenceCommandRouter struct {
 // value store; production file persistence remains covered by the recording
 // service's own composition tests.
 type inferenceWorkerRecordingRouter struct {
-	mu       sync.RWMutex
-	fallback recordings.WorkerRecordingWriter
-	delegate recordings.WorkerRecordingWriter
+	mu          sync.RWMutex
+	fallback    recordings.WorkerRecordingWriter
+	delegate    recordings.WorkerRecordingWriter
+	bySession   map[string]recordings.WorkerRecordingWriter
+	byWorker    map[string]inferenceWorkerRecordingRoute
+	byRecording map[string]inferenceWorkerRecordingRoute
+}
+
+type inferenceWorkerRecordingRoute struct {
+	sessionID string
+	writer    recordings.WorkerRecordingWriter
 }
 
 func (router *inferenceWorkerRecordingRouter) set(delegate recordings.WorkerRecordingWriter) {
@@ -96,6 +106,40 @@ func (router *inferenceWorkerRecordingRouter) set(delegate recordings.WorkerReco
 	}
 	router.mu.Lock()
 	router.delegate = delegate
+	router.mu.Unlock()
+}
+
+func (router *inferenceWorkerRecordingRouter) setSession(
+	sessionID string,
+	delegate recordings.WorkerRecordingWriter,
+) {
+	if router == nil {
+		return
+	}
+	router.mu.Lock()
+	if router.bySession == nil {
+		router.bySession = make(map[string]recordings.WorkerRecordingWriter)
+	}
+	router.bySession[sessionID] = delegate
+	router.mu.Unlock()
+}
+
+func (router *inferenceWorkerRecordingRouter) clearSession(sessionID string) {
+	if router == nil {
+		return
+	}
+	router.mu.Lock()
+	delete(router.bySession, sessionID)
+	for workerSessionID, route := range router.byWorker {
+		if route.sessionID == sessionID {
+			delete(router.byWorker, workerSessionID)
+		}
+	}
+	for recordingID, route := range router.byRecording {
+		if route.sessionID == sessionID {
+			delete(router.byRecording, recordingID)
+		}
+	}
 	router.mu.Unlock()
 }
 
@@ -111,11 +155,73 @@ func (router *inferenceWorkerRecordingRouter) current() recordings.WorkerRecordi
 	return router.fallback
 }
 
+func (router *inferenceWorkerRecordingRouter) routeRecord(
+	record recordings.WorkerRecordingRecord,
+) recordings.WorkerRecordingWriter {
+	if router == nil {
+		return nil
+	}
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	if route := router.byWorker[record.WorkerSessionID]; route.writer != nil {
+		return route.writer
+	}
+	if route := router.byRecording[record.RecordingID]; route.writer != nil {
+		router.byWorker[record.WorkerSessionID] = route
+		return route.writer
+	}
+	sessionID := inferenceRecordingFactorySessionID(record.Record.Payload)
+	writer := router.bySession[sessionID]
+	if writer == nil {
+		if router.delegate != nil {
+			return router.delegate
+		}
+		return router.fallback
+	}
+	route := inferenceWorkerRecordingRoute{sessionID: sessionID, writer: writer}
+	router.byWorker[record.WorkerSessionID] = route
+	router.byRecording[record.RecordingID] = route
+	return writer
+}
+
+func (router *inferenceWorkerRecordingRouter) routeIdentity(
+	recordingID string,
+	workerSessionID string,
+) recordings.WorkerRecordingWriter {
+	if router == nil {
+		return nil
+	}
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	if route := router.byWorker[workerSessionID]; route.writer != nil {
+		return route.writer
+	}
+	if route := router.byRecording[recordingID]; route.writer != nil {
+		return route.writer
+	}
+	if router.delegate != nil {
+		return router.delegate
+	}
+	return router.fallback
+}
+
+func inferenceRecordingFactorySessionID(payload json.RawMessage) string {
+	var draft workers.Draft
+	if json.Unmarshal(payload, &draft) != nil || draft.Kind != workers.KindSession {
+		return ""
+	}
+	var session workers.SessionPayload
+	if json.Unmarshal(draft.Payload, &session) != nil {
+		return ""
+	}
+	return session.FactorySessionID
+}
+
 func (router *inferenceWorkerRecordingRouter) PersistWorkerRecord(
 	ctx context.Context,
 	record recordings.WorkerRecordingRecord,
 ) error {
-	writer := router.current()
+	writer := router.routeRecord(record)
 	if writer == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
 	}
@@ -126,7 +232,7 @@ func (router *inferenceWorkerRecordingRouter) PersistWorkerRecordingFailure(
 	ctx context.Context,
 	failure recordings.WorkerRecordingFailure,
 ) error {
-	writer := router.current()
+	writer := router.routeIdentity(failure.RecordingID, failure.WorkerSessionID)
 	failureWriter, ok := writer.(recordings.WorkerRecordingFailureWriter)
 	if !ok || failureWriter == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
@@ -138,7 +244,7 @@ func (router *inferenceWorkerRecordingRouter) LoadWorkerRecording(
 	ctx context.Context,
 	recordingID string,
 ) (recordings.WorkerRecordingSnapshot, error) {
-	reader, ok := router.current().(recordings.WorkerRecordingReader)
+	reader, ok := router.routeIdentity(recordingID, "").(recordings.WorkerRecordingReader)
 	if !ok || reader == nil {
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
 	}

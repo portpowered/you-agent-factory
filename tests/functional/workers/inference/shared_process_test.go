@@ -45,12 +45,6 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-	if err := writeForcedInferenceCleanupReport(sharedInferenceGroup, closeErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write forced inference cleanup report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
 
@@ -112,7 +106,12 @@ func (group *inferenceProcessGroup) setup() {
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = &inferenceProviderOverride{}
-	group.workerRecordings = &inferenceWorkerRecordingRouter{fallback: newWSRFT004RecordingStore()}
+	group.workerRecordings = &inferenceWorkerRecordingRouter{
+		fallback:    newWSRFT004RecordingStore(),
+		bySession:   make(map[string]recordings.WorkerRecordingWriter),
+		byWorker:    make(map[string]inferenceWorkerRecordingRoute),
+		byRecording: make(map[string]inferenceWorkerRecordingRoute),
+	}
 	group.externals = make(map[string]*inferenceIntegrationRouter)
 	providerDefinitions := []struct {
 		id    string
@@ -263,11 +262,12 @@ type sharedInferenceScenario struct {
 	providerOverride      providers.Service
 	providerRegistrations []sharedInferenceProviderRegistration
 	workerRecordingWriter recordings.WorkerRecordingWriter
+	submittedWork         *factoryapi.SubmitWorkRequest
+	submittedWorks        []factoryapi.SubmitWorkRequest
 	env                   []string
 	scenarioName          string
 	captureResponse       bool
 	captureWorkerEvents   bool
-	stopDaemonForExecute  bool
 }
 
 func runSharedInferenceFactoryToCompletion(
@@ -338,6 +338,10 @@ func runSharedInferenceFactory(
 		}
 	}()
 	updateSharedInferenceRouteContext(t, group, dir, scenario, sessionID)
+	if scenario.workerRecordingWriter != nil && sharedInferenceScenarioSubmitsWork(scenario) {
+		group.workerRecordings.setSession(sessionID, scenario.workerRecordingWriter)
+		defer group.workerRecordings.clearSession(sessionID)
+	}
 	var responseStream *support.FactoryResponseEventStream
 	if scenario.captureResponse {
 		responseStream = support.OpenFactoryResponseEventStreamAt(
@@ -345,6 +349,12 @@ func runSharedInferenceFactory(
 			support.SessionResponseEventsURL(group.baseURL, sessionID),
 		)
 		defer responseStream.Close()
+	}
+	if scenario.submittedWork != nil {
+		support.SubmitSessionWorkAt(t, group.baseURL, sessionID, *scenario.submittedWork)
+	}
+	for _, request := range scenario.submittedWorks {
+		support.SubmitSessionWorkAt(t, group.baseURL, sessionID, request)
 	}
 	releaseResponse()
 
@@ -367,8 +377,7 @@ func runSharedInferenceFactory(
 func sharedInferenceScenarioRequiresExclusiveProcess(scenario sharedInferenceScenario) bool {
 	return scenario.providerOverride != nil ||
 		len(scenario.providerRegistrations) > 0 ||
-		scenario.workerRecordingWriter != nil ||
-		scenario.stopDaemonForExecute
+		(scenario.workerRecordingWriter != nil && !sharedInferenceScenarioSubmitsWork(scenario))
 }
 
 func prepareSharedInferenceScenario(
@@ -387,7 +396,9 @@ func prepareSharedInferenceScenario(
 			release:  responseRelease,
 		}
 	}
-	group.workerRecordings.set(scenario.workerRecordingWriter)
+	if !sharedInferenceScenarioSubmitsWork(scenario) {
+		group.workerRecordings.set(scenario.workerRecordingWriter)
+	}
 	group.setExternalRegistrations(scenario.providerRegistrations)
 
 	// Register the exact WorkDir selector before opening the session. Opening a
@@ -603,52 +614,31 @@ func withSharedInferenceProcess(
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
 		group.override.set(nil)
-		group.workerRecordings.set(nil)
+		if scenario.submittedWork == nil {
+			group.workerRecordings.set(nil)
+		}
 		group.setExternalRegistrations(nil)
 	}()
 	fn(group.process)
 }
 
-func withSharedInferenceProcessAt(
-	t *testing.T,
-	dir string,
-	scenario sharedInferenceScenario,
-	fn func(support.ApplicationProcess),
-) {
-	t.Helper()
-	group := sharedInferenceGroup
-	group.ensure(t)
-	group.mu.Lock()
-	defer group.mu.Unlock()
-	group.override.set(scenario.providerOverride)
-	if scenario.stopDaemonForExecute {
-		if err := group.stopDaemon(); err != nil {
-			t.Fatalf("stop shared inference daemon for direct execution: %v", err)
-		}
-		group.setServer(support.NewProcessAPIServer())
+func sharedInferenceWork(title string) *factoryapi.SubmitWorkRequest {
+	return &factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task",
+		Payload:      map[string]any{"title": title},
 	}
-	routeContext := sharedInferenceRouteContext(scenario, "direct-execution", dir)
-	if err := group.commands.set(dir, scenario.commandRunner, scenario.env, routeContext); err != nil {
-		t.Fatalf("register shared inference command route: %v", err)
+}
+
+func sharedInferenceWorks(titles ...string) []factoryapi.SubmitWorkRequest {
+	requests := make([]factoryapi.SubmitWorkRequest, len(titles))
+	for index, title := range titles {
+		requests[index] = *sharedInferenceWork(title)
 	}
-	if err := group.scripts.set(dir, scenario.scriptRunner, nil, routeContext); err != nil {
-		t.Fatalf("register shared inference script route: %v", err)
-	}
-	group.workerRecordings.set(scenario.workerRecordingWriter)
-	group.setExternalRegistrations(scenario.providerRegistrations)
-	defer func() {
-		group.override.set(nil)
-		group.commands.clear(dir)
-		group.scripts.clear(dir)
-		group.workerRecordings.set(nil)
-		group.setExternalRegistrations(nil)
-		if scenario.stopDaemonForExecute {
-			if err := group.startDaemon(); err != nil {
-				t.Errorf("restart shared inference daemon after direct execution: %v", err)
-			}
-		}
-	}()
-	fn(group.process)
+	return requests
+}
+
+func sharedInferenceScenarioSubmitsWork(scenario sharedInferenceScenario) bool {
+	return scenario.submittedWork != nil || len(scenario.submittedWorks) > 0
 }
 
 func readSharedInferenceWorkerEvents(

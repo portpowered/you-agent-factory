@@ -30,6 +30,7 @@ import (
 func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 	t.Parallel()
 	t.Run("durable opening precedes provider call", func(t *testing.T) {
+		t.Parallel()
 		probe := newWSRFT004RecordingProbe(t, false)
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
@@ -44,6 +45,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 	})
 
 	t.Run("opening durability failure prevents provider call", func(t *testing.T) {
+		t.Parallel()
 		probe := newWSRFT004RecordingProbe(t, true)
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
@@ -134,7 +136,9 @@ func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			probe := newWSRFT004RecordingProbe(t, false)
 			probe.failPosition = 2
 			runner := newWSRFT004ProviderRunner(t, probe)
@@ -145,12 +149,11 @@ func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
 				support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
 				"CODEX",
 			))
-			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-008 recording loss"}`))
-
 			queueWSRFT004ProviderResult(t, runner, test.exitCode, "injected execution result")
 			runSharedInferenceFactory(t, dir, sharedInferenceScenario{
 				commandRunner:         runner,
 				workerRecordingWriter: probe,
+				submittedWork:         sharedInferenceWork("WSR-FT-008 recording loss"),
 			}, sharedInferenceScenarioTimeout)
 			reader := recordings.WorkerRecordingReader(probe)
 			recordingID, workerSessionID := probe.RecordingIdentity(t)
@@ -207,10 +210,12 @@ func runWSRFT004FactoryShared(
 	writer recordings.WorkerRecordingWriter,
 ) recordings.WorkerRecordingReader {
 	t.Helper()
+	support.ClearSeedInputs(t, dir)
 	queueWSRFT004ProviderResult(t, runner, 0)
 	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
 		commandRunner:         runner,
 		workerRecordingWriter: writer,
+		submittedWork:         sharedInferenceWork("WSR-FT-004 durable opening"),
 	}, sharedInferenceScenarioTimeout)
 	reader, ok := writer.(recordings.WorkerRecordingReader)
 	if !ok || reader == nil {

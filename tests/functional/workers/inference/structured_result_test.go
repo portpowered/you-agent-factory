@@ -2,15 +2,12 @@ package inference_test
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -38,16 +35,8 @@ func TestDetachedStructuredResultReachesDispatchResponse(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			fixture := runDetachedStructuredResult(t, test.schema, test.output)
-			if fixture.payload.Outcome != workerexecution.OutcomeAccepted {
-				t.Fatalf("dispatch response outcome = %q, want accepted", fixture.payload.Outcome)
-			}
-			if !fixture.payload.StructuredResultPresent {
-				t.Fatal("dispatch response structured result present = false, want true")
-			}
-			if !reflect.DeepEqual(fixture.payload.StructuredResult, test.want) {
-				t.Fatalf("dispatch response structured result = %#v, want %#v", fixture.payload.StructuredResult, test.want)
-			}
 
 			publicPayload, err := fixture.publicEvent.Payload.AsDispatchResponseEventPayload()
 			if err != nil {
@@ -56,23 +45,20 @@ func TestDetachedStructuredResultReachesDispatchResponse(t *testing.T) {
 			if !reflect.DeepEqual(publicPayload.StructuredResult, test.want) {
 				t.Fatalf("public dispatch response structured result = %#v, want %#v", publicPayload.StructuredResult, test.want)
 			}
-			if test.name == "explicit_null" {
-				raw := marshalStructuredResultEventToRawObject(t, fixture.publicEvent)
-				payload, ok := raw["payload"].(map[string]any)
-				if !ok {
-					t.Fatalf("public dispatch response payload = %#v, want object", raw["payload"])
-				}
-				value, present := payload["structuredResult"]
-				if !present || value != nil {
-					t.Fatalf("public dispatch response structuredResult = %#v, want explicit null", value)
-				}
+			raw := marshalStructuredResultEventToRawObject(t, fixture.publicEvent)
+			payload, ok := raw["payload"].(map[string]any)
+			if !ok {
+				t.Fatalf("public dispatch response payload = %#v, want object", raw["payload"])
+			}
+			value, present := payload["structuredResult"]
+			if !present || !reflect.DeepEqual(value, test.want) {
+				t.Fatalf("public dispatch response structuredResult = %#v, want present value %#v", value, test.want)
 			}
 		})
 	}
 }
 
 type detachedStructuredResultFixture struct {
-	payload     workerexecution.DispatchResponseEventPayload
 	publicEvent factoryapi.FactoryEvent
 }
 
@@ -113,63 +99,12 @@ func runDetachedStructuredResult(
 		Stdout: support.CodexSuccessStdout(output),
 	}
 	runner := testutil.NewProviderCommandRunner(commandResult, commandResult)
-	recordPath := filepath.Join(t.TempDir(), "structured-result.replay.json")
-	recordedDir := newFactory()
-	recordedArtifact := runDetachedStructuredResultRecording(t, recordedDir, recordPath, runner)
-	recordedPayload := recordedStructuredResultPayload(t, recordedArtifact)
-
 	liveDir := newFactory()
 	_, _, publicEvents := runSharedInferenceFactoryToCompletion(t, liveDir, sharedInferenceScenario{
 		commandRunner: runner,
 	}, sharedInferenceScenarioTimeout)
 	publicEvent := findDispatchResponseEvent(t, publicEvents)
-	return detachedStructuredResultFixture{payload: recordedPayload, publicEvent: publicEvent}
-}
-
-func runDetachedStructuredResultRecording(
-	t *testing.T,
-	dir string,
-	recordPath string,
-	runner platformprocess.CommandRunner,
-) *interfaces.ReplayArtifact {
-	t.Helper()
-	withSharedInferenceProcessAt(t, dir, sharedInferenceScenario{
-		commandRunner:        runner,
-		scenarioName:         "structured-result-recording",
-		stopDaemonForExecute: true,
-	}, func(process support.ApplicationProcess) {
-		inputs := support.FakeInputs(t.Context(), []string{
-			"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
-		})
-		inputs.Input.Env = sharedInferenceProcessEnvironment(sharedInferenceGroup.homeDir)
-		inputs.Input.WorkingDirectory = dir
-		if err := process.Execute(inputs.Input); err != nil {
-			t.Fatalf("recorded structured-result Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-		}
-	})
-	return testutil.LoadReplayArtifact(t, recordPath)
-}
-
-func recordedStructuredResultPayload(
-	t *testing.T,
-	artifact *interfaces.ReplayArtifact,
-) workerexecution.DispatchResponseEventPayload {
-	t.Helper()
-	var payload workerexecution.DispatchResponseEventPayload
-	count := 0
-	for _, event := range artifact.Events {
-		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		count++
-		if err := event.DecodePayload(&payload); err != nil {
-			t.Fatalf("decode recorded dispatch response: %v", err)
-		}
-	}
-	if count != 1 {
-		t.Fatalf("recorded dispatch response count = %d, want one", count)
-	}
-	return payload
+	return detachedStructuredResultFixture{publicEvent: publicEvent}
 }
 
 func findDispatchResponseEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {

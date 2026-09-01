@@ -70,46 +70,50 @@ func TestWSRFT007WorkerRecordingHealthMatrix(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			snapshot := test.build(t)
-			if len(snapshot.Sessions) != 1 {
-				t.Fatalf("durable Worker snapshot = %#v, want one session", snapshot)
-			}
-			session := snapshot.Sessions[0]
-			if session.Status != test.wantStatus {
-				t.Fatalf("recording health = %q, want %q; session=%#v", session.Status, test.wantStatus, session)
-			}
-			if test.wantRecords >= 0 && len(session.Records) != test.wantRecords {
-				t.Fatalf("durable records = %d, want %d: %#v", len(session.Records), test.wantRecords, session.Records)
-			}
-			if session.Failure != test.wantFailure {
-				t.Fatalf("recording failure = %q, want %q", session.Failure, test.wantFailure)
-			}
-			replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
-				Snapshot: snapshot,
-			})
-			if err != nil {
-				t.Fatalf("ReplayWorkerRecording() error = %v", err)
-			}
-			if replayed.Projection.Status != test.wantStatus {
-				t.Fatalf("replayed recording health = %q, want %q", replayed.Projection.Status, test.wantStatus)
-			}
-			if test.wantStatus == recordings.WorkerRecordingStatusIncomplete &&
-				replayed.Projection.InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped {
-				t.Fatalf("replayed interruption reason = %q, want %q", replayed.Projection.InterruptionReason, recordings.WorkerRecordingInterruptionProcessStopped)
-			}
-			if test.wantExecutionPhase == "" {
-				if session.ExecutionTerminal != nil {
-					t.Fatalf("execution terminal = %#v, want no trustworthy durable terminal", session.ExecutionTerminal)
+	t.Run("recording health cases", func(t *testing.T) {
+		for _, test := range tests {
+			test := test
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				snapshot := test.build(t)
+				if len(snapshot.Sessions) != 1 {
+					t.Fatalf("durable Worker snapshot = %#v, want one session", snapshot)
 				}
-				return
-			}
-			if session.ExecutionTerminal == nil || session.ExecutionTerminal.Phase != test.wantExecutionPhase {
-				t.Fatalf("execution terminal = %#v, want phase %q", session.ExecutionTerminal, test.wantExecutionPhase)
-			}
-		})
-	}
+				session := snapshot.Sessions[0]
+				if session.Status != test.wantStatus {
+					t.Fatalf("recording health = %q, want %q; session=%#v", session.Status, test.wantStatus, session)
+				}
+				if test.wantRecords >= 0 && len(session.Records) != test.wantRecords {
+					t.Fatalf("durable records = %d, want %d: %#v", len(session.Records), test.wantRecords, session.Records)
+				}
+				if session.Failure != test.wantFailure {
+					t.Fatalf("recording failure = %q, want %q", session.Failure, test.wantFailure)
+				}
+				replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+					Snapshot: snapshot,
+				})
+				if err != nil {
+					t.Fatalf("ReplayWorkerRecording() error = %v", err)
+				}
+				if replayed.Projection.Status != test.wantStatus {
+					t.Fatalf("replayed recording health = %q, want %q", replayed.Projection.Status, test.wantStatus)
+				}
+				if test.wantStatus == recordings.WorkerRecordingStatusIncomplete &&
+					replayed.Projection.InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped {
+					t.Fatalf("replayed interruption reason = %q, want %q", replayed.Projection.InterruptionReason, recordings.WorkerRecordingInterruptionProcessStopped)
+				}
+				if test.wantExecutionPhase == "" {
+					if session.ExecutionTerminal != nil {
+						t.Fatalf("execution terminal = %#v, want no trustworthy durable terminal", session.ExecutionTerminal)
+					}
+					return
+				}
+				if session.ExecutionTerminal == nil || session.ExecutionTerminal.Phase != test.wantExecutionPhase {
+					t.Fatalf("execution terminal = %#v, want phase %q", session.ExecutionTerminal, test.wantExecutionPhase)
+				}
+			})
+		}
+	})
 
 	assertWSRFT007TerminalOutcomes(t)
 }
@@ -157,6 +161,7 @@ func runWSRFT007RootRecording(
 	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
 		commandRunner:         runner,
 		workerRecordingWriter: probe,
+		submittedWork:         sharedInferenceWork("WSR-FT-007 recording health"),
 	}, sharedInferenceScenarioTimeout)
 	reader := recordings.WorkerRecordingReader(probe)
 	recordingID, _ := probe.RecordingIdentity(t)
@@ -176,7 +181,6 @@ func wsrFT004FactoryForFixture(t *testing.T, fixture string) string {
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
 		"CODEX",
 	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-007 recording health"}`))
 	return dir
 }
 
