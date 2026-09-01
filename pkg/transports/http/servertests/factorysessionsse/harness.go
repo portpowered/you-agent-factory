@@ -47,28 +47,16 @@ type FactorySessionSSEKeepaliveSignal struct {
 // FactorySessionSSEHarness opens session-scoped GET /factory-sessions/{session_id}/events
 // streams and reads SSE data frames within bounded timeouts.
 type FactorySessionSSEHarness struct {
-	t       *testing.T
-	timeout time.Duration
-	doer    HTTPDoer
-	ctx     context.Context
+	t                     *testing.T
+	timeout               time.Duration
+	doer                  HTTPDoer
+	ctx                   context.Context
+	ProductionWiredServer func(recordingshttp.LegacyLiveEvents) *api.Server
 }
 
 // HTTPDoer is the explicit HTTP edge used by the SSE test harness.
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
-}
-
-// NewProductionWiredAPIServer composes the generated HTTP route shell with
-// the existing Factory Sessions and Recordings adapters for owner-boundary
-// integration tests. The supplied legacy-live role is the controlled runtime
-// edge; route registration and legacy adapter behavior remain production code.
-func NewProductionWiredAPIServer(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
-	logger := zap.NewNop()
-	return api.NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapterWithLive(nil, nil, liveEvents),
-		factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger),
-		nil, nil, nil, nil, logger,
-	)
 }
 
 // FactorySessionSSEStreamIdentity preserves the four independent identities
@@ -224,7 +212,20 @@ func NewFactorySessionSSEHarness(t *testing.T, timeout time.Duration, doer HTTPD
 	if ctx == nil {
 		t.Fatal("Factory Session SSE caller context is required")
 	}
-	return &FactorySessionSSEHarness{t: t, timeout: timeout, doer: doer, ctx: ctx}
+	logger := zap.NewNop()
+	return &FactorySessionSSEHarness{
+		t:       t,
+		timeout: timeout,
+		doer:    doer,
+		ctx:     ctx,
+		ProductionWiredServer: func(liveEvents recordingshttp.LegacyLiveEvents) *api.Server {
+			return api.NewServerWithRecordings(
+				recordingshttp.NewLegacyAdapterWithLive(nil, nil, liveEvents),
+				factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger),
+				nil, nil, nil, nil, logger,
+			)
+		},
+	}
 }
 
 // Open starts GET /factory-sessions/{sessionID}/events with an optional raw query

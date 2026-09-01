@@ -567,9 +567,9 @@ func TestLegacyEventSSEHTTPUsesResolvedCanonicalIDForExactAndDefault(t *testing.
 		backendScopeID: backendScopeID,
 	}
 	gateway := newLegacyHTTPGateway(host)
-	server := httptest.NewServer(factorysessionsse.NewProductionWiredAPIServer(gateway).Handler())
-	t.Cleanup(server.Close)
 	harness := factorysessionsse.NewFactorySessionSSEHarness(t, 2*time.Second, http.DefaultClient, context.Background())
+	server := httptest.NewServer(harness.ProductionWiredServer(gateway).Handler())
+	t.Cleanup(server.Close)
 
 	for _, test := range []struct {
 		name      string
@@ -623,7 +623,8 @@ func TestLegacyEventSSEHTTPPreservesTypedFailuresWithoutIdentity(t *testing.T) {
 		},
 	}
 	host := &legacyHTTPGatewayHost{sessions: sessions, runtimes: runtimes}
-	server := httptest.NewServer(factorysessionsse.NewProductionWiredAPIServer(newLegacyHTTPGateway(host)).Handler())
+	harness := factorysessionsse.NewFactorySessionSSEHarness(t, 2*time.Second, http.DefaultClient, context.Background())
+	server := httptest.NewServer(harness.ProductionWiredServer(newLegacyHTTPGateway(host)).Handler())
 	t.Cleanup(server.Close)
 
 	for _, test := range []struct {
