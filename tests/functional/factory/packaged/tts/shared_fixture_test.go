@@ -389,6 +389,7 @@ func removeString(values []string, target string) []string {
 }
 
 func TestPackagedTTSSharedScenarios(t *testing.T) {
+	t.Parallel()
 	fixture := newPackagedTTSSharedFixture(t)
 	if err := fixture.assertDuplicateRouteRejected(t); err != nil {
 		t.Fatal(err)

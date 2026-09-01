@@ -32,6 +32,7 @@ import (
 // Models tests. The fixture stands in for the VibeVoice backend; it does not
 // download or claim to run the real VibeVoice runtime.
 func TestDeliveredPackagedTTSFactoryReachesProtocolFixture(t *testing.T) {
+	t.Parallel()
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
 	cacheDir := t.TempDir()
@@ -127,6 +128,7 @@ func deliveredFactoryTTSPrimaryAudio(t *testing.T, content *factoryapi.WorkConte
 // the packaged Factory is invoked with Process.Execute, while only the exact
 // Models backend effect is replaced through edges.Edges.
 func TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio(t *testing.T) {
+	t.Parallel()
 	homeDir := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
 	cacheDir := t.TempDir()
@@ -365,6 +367,7 @@ func (fixture *deliveredFactoryTTSProtocolFixture) LastRequest(t testing.TB) del
 // only backend effect replaced by the fixture is ModelInvocationBackend; the
 // live Factory history is then replayed without another backend call.
 func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *testing.T) {
+	t.Parallel()
 	fixture := newManagedFactoryTTSFixture(t)
 	t.Run("success", func(t *testing.T) {
 		text := "models-backed factory tts success"

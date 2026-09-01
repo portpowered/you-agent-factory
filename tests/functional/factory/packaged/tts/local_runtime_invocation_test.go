@@ -26,6 +26,7 @@ import (
 // installed local TTS route carries the complete customer value through the
 // operation-binding boundary and into Models' joined built-in invocation.
 func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
+	t.Parallel()
 	text := "The release is ready, with every submitted word preserved exactly."
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(

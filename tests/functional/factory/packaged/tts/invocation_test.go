@@ -23,6 +23,7 @@ const packagedTTSFakeAudioFixture = "RIFF....WAVEpayload"
 // with the canonical per-input Work data while preserving the complete text
 // binding that the TTS operation consumes.
 func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
+	t.Parallel()
 	text := "The release is ready, with the complete bound sentence preserved."
 	homeDir := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(
