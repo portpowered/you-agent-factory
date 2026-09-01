@@ -182,6 +182,7 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 		prompt,
 	)
 	cmd.Dir = factoryDir
+	cmd.Env = runWiringCustomerHomeEnvironment(t.TempDir())
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -383,6 +384,7 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 		"trigger unresolved result",
 	)
 	cmd.Dir = factoryDir
+	cmd.Env = runWiringCustomerHomeEnvironment(t.TempDir())
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

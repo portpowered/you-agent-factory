@@ -54,9 +54,9 @@ func TestWindowsRecordingFlushBeforeGracefulStopReturns(t *testing.T) {
 	beforeBytes := beforeInfo.Size()
 
 	stopArgs := []string{"--server", run.target.server, "server", "stop"}
-	stop := exec.Command(binaryPath, stopArgs...)
+	stop := recordingProcessCLICommand(binaryPath, stopArgs...)
 	stop.Dir = run.target.command.Dir
-	stop.Env = run.target.command.Env
+	stop.Env = append(run.target.command.Env, recordingProcessCLIHelperEnv+"=1")
 	var stopStdout, stopStderr bytes.Buffer
 	stop.Stdout = &stopStdout
 	stop.Stderr = &stopStderr
@@ -222,9 +222,12 @@ func startWindowsRecordingRun(
 		"--with-mock-workers=" + mockWorkersPath,
 		"--record", recordingPath,
 	}
-	command := exec.Command(binaryPath, args...)
+	command := recordingProcessCLICommand(binaryPath, args...)
 	command.Dir = session.WorkDir
-	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(session.HomeDir)
+	command.Env = append(
+		builtcliacceptance.ProcessEnvForIsolatedHome(session.HomeDir),
+		recordingProcessCLIHelperEnv+"=1",
+	)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatalf("open recorded Windows run stdout: %v", err)
@@ -298,9 +301,9 @@ func submitWindowsRecordingShutdownWork(t testing.TB, binaryPath string, target 
 		"--server", target.server, "--json", "submit",
 		"--name", name, "--work-type-name", "task", "--payload", payloadPath,
 	}
-	command := exec.Command(binaryPath, args...)
+	command := recordingProcessCLICommand(binaryPath, args...)
 	command.Dir = target.command.Dir
-	command.Env = target.command.Env
+	command.Env = append(target.command.Env, recordingProcessCLIHelperEnv+"=1")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Windows CLI submit %q failed: %v; output=%q", strings.Join(args, " "), err, string(output))

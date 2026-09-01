@@ -4,66 +4,81 @@ package recordingsprocess_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
-	"sync"
+	"os/signal"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-var recordingProcessCLIBinary struct {
-	once     sync.Once
-	tempDir  string
-	path     string
-	err      error
-	buildLog []byte
-}
+const recordingProcessCLIHelperEnv = "YOU_RECORDING_PROCESS_CLI_HELPER"
 
-func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
+func buildYouBinary(t testing.TB, _ context.Context, _ string) string {
 	t.Helper()
-	recordingProcessCLIBinary.once.Do(func() {
-		recordingProcessCLIBinary.tempDir, recordingProcessCLIBinary.err = os.MkdirTemp("", "you-cli-recordings-process-")
-		if recordingProcessCLIBinary.err != nil {
-			return
-		}
-		binaryName := "you"
-		if runtime.GOOS == "windows" {
-			binaryName += ".exe"
-		}
-		recordingProcessCLIBinary.path = filepath.Join(recordingProcessCLIBinary.tempDir, binaryName)
-		command := exec.CommandContext(ctx, "go", "build", "-o", recordingProcessCLIBinary.path, "./cmd/factory")
-		command.Dir = repoRoot
-		recordingProcessCLIBinary.buildLog, recordingProcessCLIBinary.err = command.CombinedOutput()
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatalf("resolve functional test executable: %v", err)
+	}
+	return path
+}
+
+func recordingProcessCLICommand(binaryPath string, args ...string) *exec.Cmd {
+	helperArgs := []string{"-test.run=^TestRecordingProcessCLIHelper$", "--", "you"}
+	helperArgs = append(helperArgs, args...)
+	return exec.Command(binaryPath, helperArgs...)
+}
+
+func TestRecordingProcessCLIHelper(t *testing.T) {
+	if os.Getenv(recordingProcessCLIHelperEnv) != "1" {
+		return
+	}
+	os.Exit(runRecordingProcessCLI())
+}
+
+func runRecordingProcessCLI() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{})
+	if err != nil {
+		return 1
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = process.Close(closeCtx)
+	}()
+
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		return 1
+	}
+	stdinTTY := false
+	stdoutTTY := false
+	err = process.Execute(root.Input{
+		Args: recordingProcessCLIArgs(os.Args),
+		Env:  os.Environ(), Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
+		Context: ctx, WorkingDirectory: workingDirectory,
+		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY,
 	})
-	if recordingProcessCLIBinary.err != nil {
-		t.Fatalf("build you CLI: %v\n%s", recordingProcessCLIBinary.err, recordingProcessCLIBinary.buildLog)
+	if ctx.Err() != nil {
+		return 130
 	}
-	return recordingProcessCLIBinary.path
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return 1
+	}
+	return 0
 }
 
-// TestMain builds the CLI once for the recordings process package.
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
-	if recordingProcessCLIBinary.tempDir != "" {
-		if err := removeRecordingProcessCLIBinaryDir(recordingProcessCLIBinary.tempDir); err != nil && exitCode == 0 {
-			fmt.Fprintf(os.Stderr, "remove recordings process CLI binary directory %s: %v\n", recordingProcessCLIBinary.tempDir, err)
-			exitCode = 1
+func recordingProcessCLIArgs(args []string) []string {
+	for index, arg := range args {
+		if arg == "--" && index+1 < len(args) {
+			return append([]string(nil), args[index+1:]...)
 		}
 	}
-	os.Exit(exitCode)
-}
-
-func removeRecordingProcessCLIBinaryDir(path string) error {
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		err := os.RemoveAll(path)
-		if err == nil || time.Now().After(deadline) {
-			return err
-		}
-		// Windows can retain an executable image briefly after Wait returns.
-		time.Sleep(50 * time.Millisecond)
-	}
+	return []string{"you"}
 }

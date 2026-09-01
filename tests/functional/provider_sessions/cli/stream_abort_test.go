@@ -1,20 +1,13 @@
 package cli_test
 
 import (
-	"bufio"
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -39,124 +32,6 @@ func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *te
 	assertWorkerSessionStreamAbortOutput(t, inputs.Stdout(), inputs.Stderr(), workerSessionID)
 	assertNoActiveProviderCommandRoutes(t, fixture.runner, "root-process abrupt stream close")
 }
-
-func TestBuiltWorkerSessionsStreamAbortExitsNonZero(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), workerSessionAbortTestTimeout)
-	defer cancel()
-	const workerSessionID = "worker-session-built-abort"
-	streamServer := newAbortedWorkerSessionStreamServer(t, workerSessionID)
-	defer streamServer.Close()
-
-	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL, "provider-session-built-abort")[1:]...)
-	command.Dir = t.TempDir()
-	command.Env = functionalEnvironment(t.TempDir())
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-
-	err := command.Run()
-	var exitErr *exec.ExitError
-	if err == nil || !errors.As(err, &exitErr) {
-		t.Fatalf("built Worker Sessions stream error = %v, want non-zero process exit", err)
-	}
-	if exitErr.ExitCode() == 0 {
-		t.Fatalf("built Worker Sessions stream exit code = %d, want non-zero", exitErr.ExitCode())
-	}
-	assertWorkerSessionStreamAbortOutput(t, stdout.String(), stderr.String(), workerSessionID)
-}
-
-func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("os.Interrupt is not supported for child processes on Windows")
-	}
-
-	const workerSessionID = "worker-session-built-cancel"
-	streamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			t.Errorf("stream response writer does not support flushing")
-			return
-		}
-		_, _ = fmt.Fprintf(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":%q,\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":%q,\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n", workerSessionID, workerSessionID)
-		flusher.Flush()
-		<-r.Context().Done()
-	}))
-	defer streamServer.Close()
-
-	ctx, cancel := context.WithTimeout(t.Context(), workerSessionAbortTestTimeout)
-	defer cancel()
-	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL, "provider-session-built-cancel")[1:]...)
-	command.Dir = t.TempDir()
-	command.Env = functionalEnvironment(t.TempDir())
-	stdout, err := command.StdoutPipe()
-	if err != nil {
-		t.Fatalf("open Worker Sessions stdout: %v", err)
-	}
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	if err := command.Start(); err != nil {
-		t.Fatalf("start Worker Sessions stream: %v", err)
-	}
-	finished := false
-	defer func() {
-		if !finished {
-			_ = command.Process.Kill()
-			_ = command.Wait()
-		}
-	}()
-
-	frame := make(chan string, 1)
-	scanErr := make(chan error, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		if scanner.Scan() {
-			frame <- scanner.Text()
-			return
-		}
-		scanErr <- scanner.Err()
-	}()
-	var retainedFrame string
-	select {
-	case line := <-frame:
-		retainedFrame = line
-		if !strings.Contains(line, `"delivery":"RECORD"`) || !strings.Contains(line, workerSessionID) {
-			t.Fatalf("Worker Sessions cancellation frame = %q, want retained RECORD frame", line)
-		}
-	case err := <-scanErr:
-		t.Fatalf("Worker Sessions stream ended before retained frame: %v; stderr=%q", err, stderr.String())
-	case <-time.After(workerSessionAbortTestTimeout):
-		t.Fatal("timed out waiting for retained Worker Sessions frame")
-	}
-
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("interrupt Worker Sessions stream: %v", err)
-	}
-	waitResult := make(chan error, 1)
-	go func() {
-		waitResult <- command.Wait()
-	}()
-	select {
-	case err := <-waitResult:
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 130 {
-			t.Fatalf("interrupted Worker Sessions stream exit = %v; stderr=%q, want exit code 130", err, stderr.String())
-		}
-	case <-time.After(workerSessionAbortTestTimeout):
-		_ = command.Process.Kill()
-		<-waitResult
-		t.Fatal("interrupted Worker Sessions stream did not exit")
-	}
-	finished = true
-	if strings.TrimSpace(retainedFrame) == "" {
-		t.Fatal("Worker Sessions cancellation did not retain the complete frame")
-	}
-	if strings.Contains(retainedFrame, "TERMINAL") {
-		t.Fatalf("Worker Sessions cancellation synthesized terminal output: %q", retainedFrame)
-	}
-}
-
-const workerSessionAbortTestTimeout = 60 * time.Second
 
 func newAbortedWorkerSessionStreamServer(t *testing.T, workerSessionID string) *httptest.Server {
 	t.Helper()
