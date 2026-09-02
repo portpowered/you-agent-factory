@@ -17,26 +17,6 @@
       ]
     },
     {
-      "packagePath": "tests/functional/factory/packaged/tts",
-      "count": 2,
-      "siteIds": [
-        "OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01",
-        "OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-runDeliveredFactoryTTSCLIWithArgs-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/models/root_composition",
-      "count": 6,
-      "siteIds": [
-        "OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-buildDeliveredYouBinary-01",
-        "OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-runDeliveredCLI-01",
-        "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture-01",
-        "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-buildDeliveredEmbedYouBinary-01",
-        "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-runDeliveredEmbedCLI-01",
-        "OSSPAWN-tests-functional-models-root-composition-forced-cleanup-test-runForcedModelsCleanupParent-01"
-      ]
-    },
-    {
       "packagePath": "tests/functional/observability/coverage",
       "count": 1,
       "siteIds": [
@@ -54,36 +34,14 @@
       ]
     },
     {
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "count": 5,
-      "siteIds": [
-        "OSSPAWN-tests-functional-provider-sessions-cli-forced-cleanup-test-runForcedProviderSessionsCleanupParent-01",
-        "OSSPAWN-tests-functional-provider-sessions-cli-shared-fixture-test-cachedWorkerSessionsCLIBinary-01",
-        "OSSPAWN-tests-functional-provider-sessions-cli-stream-abort-test-TestBuiltWorkerSessionsStreamAbortExitsNonZero-01",
-        "OSSPAWN-tests-functional-provider-sessions-cli-stream-abort-test-TestBuiltWorkerSessionsStreamCancellationExits130-01",
-        "OSSPAWN-tests-functional-provider-sessions-cli-worker-sessions-cli-replay-test-runBuiltWorkerSessionReplay-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/providers",
-      "count": 2,
-      "siteIds": [
-        "OSSPAWN-tests-functional-providers-cli-timeout-cleanup-smoke-test-runForcedProviderCleanupParent-01",
-        "OSSPAWN-tests-functional-providers-cli-timeout-cleanup-smoke-test-spawnTimeoutCleanupChild-01"
-      ]
-    },
-    {
       "packagePath": "tests/functional/providers/acp",
-      "count": 13,
+      "count": 10,
       "siteIds": [
         "OSSPAWN-tests-functional-providers-acp-acp-error-test-TestACPCommandStartFailureMapsToDependencyFailure-01",
         "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-acpHelperCommandFactoryWithProvider-01",
         "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-acpHelperCommandFactoryWithProvider-02",
         "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-01",
         "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-02",
-        "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-01",
-        "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-02",
-        "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-03",
         "OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-01",
         "OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-02",
         "OSSPAWN-tests-functional-providers-acp-packaged-conformance-test-packagedACPCommandFactory-01",
@@ -100,13 +58,10 @@
     },
     {
       "packagePath": "tests/functional/recordings/process",
-      "count": 7,
+      "count": 4,
       "siteIds": [
-        "OSSPAWN-tests-functional-recordings-process-built-cli-test-buildYouBinary-01",
-        "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-TestWindowsRecordingFlushBeforeGracefulStopReturns-01",
+        "OSSPAWN-tests-functional-recordings-process-built-cli-test-recordingProcessCLICommand-01",
         "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-TestWindowsRecordingTaskkillLeavesPartialValidSnapshot-01",
-        "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-startWindowsRecordingRun-01",
-        "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-submitWindowsRecordingShutdownWork-01",
         "OSSPAWN-tests-functional-recordings-process-windows-harness-test-windowsGracefulStopTarget-cleanup-01",
         "OSSPAWN-tests-functional-recordings-process-windows-harness-test-windowsTasklist-01"
       ]
@@ -122,31 +77,10 @@
       ]
     },
     {
-      "packagePath": "tests/functional/sessions/restart",
-      "count": 4,
-      "siteIds": [
-        "OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01",
-        "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-TestBoardPersistenceSharedBinaryPartialSetupFailure-01",
-        "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01",
-        "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01"
-      ]
-    },
-    {
       "packagePath": "tests/functional/sessions/resume_from_recording",
       "count": 1,
       "siteIds": [
         "OSSPAWN-tests-functional-sessions-resume-from-recording-resume-from-recording-test-resumeFromRecordingScenario-startFirstProcess-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "count": 5,
-      "siteIds": [
-        "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-test-runProcessTreeParent-01",
-        "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-windows-test-processHasExited-01",
-        "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-windows-test-terminateCommandProcessTree-01",
-        "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-test-nodeSupportsPinnedAcpx-01",
-        "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-test-runBoundedCommandWithTimeout-01"
       ]
     },
     {
@@ -161,21 +95,6 @@
       "count": 1,
       "siteIds": [
         "OSSPAWN-tests-functional-workers-concurrency-shared-process-cleanup-test-runConcurrencyForcedCleanupParent-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/workers/inference",
-      "count": 2,
-      "siteIds": [
-        "OSSPAWN-tests-functional-workers-inference-forced-cleanup-test-runForcedInferenceCleanupParent-01",
-        "OSSPAWN-tests-functional-workers-inference-process-cleanup-test-spawnProcessCleanupChild-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/workers/inference/claude",
-      "count": 1,
-      "siteIds": [
-        "OSSPAWN-tests-functional-workers-inference-claude-conductor-forced-cleanup-test-TestClaudeForcedAssertionFailureCleansOwnedResources-01"
       ]
     },
     {
@@ -195,18 +114,9 @@
     },
     {
       "packagePath": "tests/functional/workers/mock",
-      "count": 3,
-      "siteIds": [
-        "OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-buildYouBinary-01",
-        "OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-runBuiltYouBinary-01",
-        "OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01"
-      ]
-    },
-    {
-      "packagePath": "tests/functional/workers/transports/cli/run/lifecycle",
       "count": 1,
       "siteIds": [
-        "OSSPAWN-tests-functional-workers-transports-cli-run-lifecycle-lifecycle-forced-cleanup-test-runForcedLifecycleCleanupParent-01"
+        "OSSPAWN-tests-functional-workers-mock-javascript-acp-test-mockACPCommandFactory-01"
       ]
     }
   ]

@@ -140,6 +140,19 @@ func mapNativeProgressFragment(
 	if err != nil {
 		return responseevents.FactoryResponseEvent{}, true, err
 	}
+	return nativeProgressEvent(ctx, fragment, kind, phase, nativeEvent, representation, payload, itemID), true, nil
+}
+
+func nativeProgressEvent(
+	ctx Context,
+	fragment responsestream.Event,
+	kind responseevents.Kind,
+	phase responseevents.Phase,
+	nativeEvent string,
+	representation responseevents.Representation,
+	payload []byte,
+	itemID string,
+) responseevents.FactoryResponseEvent {
 	return responseevents.FactoryResponseEvent{
 		SchemaVersion:    responseevents.SchemaVersionV1,
 		EventID:          synthesizedEventID(ctx, fragment),
@@ -160,7 +173,7 @@ func mapNativeProgressFragment(
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
 		ItemID:             itemID,
 		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
-	}, true, nil
+	}
 }
 
 func nativeResponsePhase(value string) (responseevents.Phase, bool) {

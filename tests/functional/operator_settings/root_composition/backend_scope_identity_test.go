@@ -120,7 +120,7 @@ func writeOperatorConfigWithBackendScope(t *testing.T, scopeID string) string {
 func readBackendScopeIDFromHome(t *testing.T, homeDir string) string {
 	t.Helper()
 
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read operator config at %q: %v", configPath, err)

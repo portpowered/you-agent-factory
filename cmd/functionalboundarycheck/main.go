@@ -101,7 +101,6 @@ var grandfatheredAggregateProviderTestFiles = map[string]struct{}{
 	"cli_template_resolution_long_test.go":        {},
 	"cli_timeout_cleanup_process_unix_test.go":    {},
 	"cli_timeout_cleanup_process_windows_test.go": {},
-	"cli_timeout_cleanup_smoke_test.go":           {},
 	"cli_timeout_companion_smoke_long_test.go":    {},
 	"helpers_long_test.go":                        {},
 	"helpers_test.go":                             {},

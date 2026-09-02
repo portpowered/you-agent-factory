@@ -1,4 +1,4 @@
-package service_test
+package correlation_test
 
 import (
 	"context"

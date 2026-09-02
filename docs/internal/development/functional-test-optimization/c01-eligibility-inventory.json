@@ -6554,7 +6554,7 @@
       "lookupExclusion": "exec.LookPath is an executable lookup, not a process-start site; it is not counted",
       "siteCount": 69,
       "sourceRoot": "tests/functional",
-      "stableIdentity": "OSSPAWN-\u003csource-path-without-.go\u003e-\u003cenclosing-function\u003e-\u003ctwo-digit-occurrence\u003e",
+      "stableIdentity": "OSSPAWN-<source-path-without-.go>-<enclosing-function>-<two-digit-occurrence>",
       "rowMapping": "37 sites have retained row IDs; 32 helper-only sites have an explicit rowMappingStatus because their source files are outside the retained C01-C07 row spine"
     },
     "testListObservation": {
@@ -6757,140 +6757,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-buildDeliveredFactoryTTSBinary-01",
-      "packagePath": "tests/functional/factory/packaged/tts",
-      "sourcePath": "tests/functional/factory/packaged/tts/models_replay_test.go",
-      "sourceLine": 208,
-      "enclosingIdentity": "buildDeliveredFactoryTTSBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/factory/packaged/tts/models_replay_test.go:208 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F019-top-level-test-TestDeliveredPackagedTTSFactoryReachesProtocolFixture",
-        "C07-F019-top-level-test-TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio",
-        "C07-F019-top-level-test-TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-factory-packaged-tts-models-replay-test-runDeliveredFactoryTTSCLIWithArgs-01",
-      "packagePath": "tests/functional/factory/packaged/tts",
-      "sourcePath": "tests/functional/factory/packaged/tts/models_replay_test.go",
-      "sourceLine": 225,
-      "enclosingIdentity": "runDeliveredFactoryTTSCLIWithArgs",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/factory/packaged/tts/models_replay_test.go:225 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F019-top-level-test-TestDeliveredPackagedTTSFactoryReachesProtocolFixture",
-        "C07-F019-top-level-test-TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio",
-        "C07-F019-top-level-test-TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-buildDeliveredYouBinary-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/delivered_cli_story_test.go",
-      "sourceLine": 144,
-      "enclosingIdentity": "buildDeliveredYouBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/delivered_cli_story_test.go:144 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestDeliveredCLIArtifactReachesProtocolFixture"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-delivered-cli-story-test-runDeliveredCLI-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/delivered_cli_story_test.go",
-      "sourceLine": 154,
-      "enclosingIdentity": "runDeliveredCLI",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/delivered_cli_story_test.go:154 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestDeliveredCLIArtifactReachesProtocolFixture"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/delivered_embed_story_test.go",
-      "sourceLine": 110,
-      "enclosingIdentity": "TestDeliveredEmbedHTTPArtifactReachesProtocolFixture",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/delivered_embed_story_test.go:110 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-buildDeliveredEmbedYouBinary-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/delivered_embed_story_test.go",
-      "sourceLine": 206,
-      "enclosingIdentity": "buildDeliveredEmbedYouBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/delivered_embed_story_test.go:206 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestDeliveredEmbedCLIArtifactReachesProtocolFixture",
-        "C07-F077-top-level-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-delivered-embed-story-test-runDeliveredEmbedCLI-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/delivered_embed_story_test.go",
-      "sourceLine": 216,
-      "enclosingIdentity": "runDeliveredEmbedCLI",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/delivered_embed_story_test.go:216 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestDeliveredEmbedCLIArtifactReachesProtocolFixture",
-        "C07-F077-top-level-test-TestDeliveredEmbedHTTPArtifactReachesProtocolFixture"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-models-root-composition-forced-cleanup-test-runForcedModelsCleanupParent-01",
-      "packagePath": "tests/functional/models/root_composition",
-      "sourcePath": "tests/functional/models/root_composition/forced_cleanup_test.go",
-      "sourceLine": 45,
-      "enclosingIdentity": "runForcedModelsCleanupParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/models/root_composition/forced_cleanup_test.go:45 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F077-top-level-test-TestModels-ForcedAssertionFailureCleansOwnedResources"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-observability-coverage-makefile-helpers-test-runMakefileTargetWithArgs-01",
       "packagePath": "tests/functional/observability/coverage",
       "sourcePath": "tests/functional/observability/coverage/makefile_helpers_test.go",
@@ -6964,87 +6830,6 @@
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-provider-sessions-cli-forced-cleanup-test-runForcedProviderSessionsCleanupParent-01",
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "sourcePath": "tests/functional/provider_sessions/cli/forced_cleanup_test.go",
-      "sourceLine": 44,
-      "enclosingIdentity": "runForcedProviderSessionsCleanupParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/provider_sessions/cli/forced_cleanup_test.go:44 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F076-top-level-test-TestProviderSessionsCLI-ForcedAssertionFailureCleansOwnedResources"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-provider-sessions-cli-shared-fixture-test-cachedWorkerSessionsCLIBinary-01",
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "sourcePath": "tests/functional/provider_sessions/cli/shared_fixture_test.go",
-      "sourceLine": 556,
-      "enclosingIdentity": "cachedWorkerSessionsCLIBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/provider_sessions/cli/shared_fixture_test.go:556 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-provider-sessions-cli-stream-abort-test-TestBuiltWorkerSessionsStreamAbortExitsNonZero-01",
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "sourcePath": "tests/functional/provider_sessions/cli/stream_abort_test.go",
-      "sourceLine": 50,
-      "enclosingIdentity": "TestBuiltWorkerSessionsStreamAbortExitsNonZero",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "exit-status",
-      "assertionEvidence": "The assertion owning tests/functional/provider_sessions/cli/stream_abort_test.go:50 reads the launched command's exit status and maps it to the documented success or failure outcome.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F076-top-level-test-TestBuiltWorkerSessionsStreamAbortExitsNonZero"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-provider-sessions-cli-stream-abort-test-TestBuiltWorkerSessionsStreamCancellationExits130-01",
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "sourcePath": "tests/functional/provider_sessions/cli/stream_abort_test.go",
-      "sourceLine": 89,
-      "enclosingIdentity": "TestBuiltWorkerSessionsStreamCancellationExits130",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "exit-status",
-      "assertionEvidence": "The assertion owning tests/functional/provider_sessions/cli/stream_abort_test.go:89 reads the launched command's exit status and maps it to the documented success or failure outcome.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F076-top-level-test-TestBuiltWorkerSessionsStreamCancellationExits130"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-provider-sessions-cli-worker-sessions-cli-replay-test-runBuiltWorkerSessionReplay-01",
-      "packagePath": "tests/functional/provider_sessions/cli",
-      "sourcePath": "tests/functional/provider_sessions/cli/worker_sessions_cli_replay_test.go",
-      "sourceLine": 306,
-      "enclosingIdentity": "runBuiltWorkerSessionReplay",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/provider_sessions/cli/worker_sessions_cli_replay_test.go:306 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F076-top-level-test-TestWSRFT001OpeningRecordPrecedesProviderOutput",
-        "C07-F076-top-level-test-TestWSRFT002LiveAndReplayCorrelationRemainStable",
-        "C07-F076-top-level-test-TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON"
-      ]
     },
     {
       "siteId": "OSSPAWN-tests-functional-providers-acp-acp-error-test-TestACPCommandStartFailureMapsToDependencyFailure-01",
@@ -7139,51 +6924,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-01",
-      "packagePath": "tests/functional/providers/acp",
-      "sourcePath": "tests/functional/providers/acp/fixture_test.go",
-      "sourceLine": 222,
-      "enclosingIdentity": "TestACPFixtureContractRejectsInvalidInvocationScopedData",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/providers/acp/fixture_test.go:222 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-02",
-      "packagePath": "tests/functional/providers/acp",
-      "sourcePath": "tests/functional/providers/acp/fixture_test.go",
-      "sourceLine": 243,
-      "enclosingIdentity": "TestACPFixtureContractRejectsInvalidInvocationScopedData",
-      "launcherKind": "test-helper-process",
-      "occurrence": 2,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/providers/acp/fixture_test.go:243 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-providers-acp-fixture-test-TestACPFixtureContractRejectsInvalidInvocationScopedData-03",
-      "packagePath": "tests/functional/providers/acp",
-      "sourcePath": "tests/functional/providers/acp/fixture_test.go",
-      "sourceLine": 251,
-      "enclosingIdentity": "TestACPFixtureContractRejectsInvalidInvocationScopedData",
-      "launcherKind": "test-helper-process",
-      "occurrence": 3,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/providers/acp/fixture_test.go:251 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-01",
       "packagePath": "tests/functional/providers/acp",
       "sourcePath": "tests/functional/providers/acp/golden_rpc_peer_test.go",
@@ -7265,44 +7005,6 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-providers-cli-timeout-cleanup-smoke-test-runForcedProviderCleanupParent-01",
-      "packagePath": "tests/functional/providers",
-      "sourcePath": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
-      "sourceLine": 280,
-      "enclosingIdentity": "runForcedProviderCleanupParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/providers/cli_timeout_cleanup_smoke_test.go:280 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F065-top-level-test-TestIntegrationSmoke-ProcessTreeHelper",
-        "C07-F065-top-level-test-TestIntegrationSmoke-TimeoutCancelsProcessTreeAndClearsActiveExecution",
-        "C07-F065-top-level-test-TestIntegrationSmoke-TimeoutRequeuesWorkAndSucceedsOnLaterAttempt",
-        "C07-F065-top-level-test-TestProviders-ForcedAssertionFailureCleansOwnedResources"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-providers-cli-timeout-cleanup-smoke-test-spawnTimeoutCleanupChild-01",
-      "packagePath": "tests/functional/providers",
-      "sourcePath": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
-      "sourceLine": 160,
-      "enclosingIdentity": "spawnTimeoutCleanupChild",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/providers/cli_timeout_cleanup_smoke_test.go:160 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F065-top-level-test-TestIntegrationSmoke-ProcessTreeHelper",
-        "C07-F065-top-level-test-TestIntegrationSmoke-TimeoutCancelsProcessTreeAndClearsActiveExecution",
-        "C07-F065-top-level-test-TestIntegrationSmoke-TimeoutRequeuesWorkAndSucceedsOnLaterAttempt",
-        "C07-F065-top-level-test-TestProviders-ForcedAssertionFailureCleansOwnedResources"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-providers-codex-codex-untrusted-working-directory-test-initTrustedGitRepository-01",
       "packagePath": "tests/functional/providers/codex",
       "sourcePath": "tests/functional/providers/codex/codex_untrusted_working_directory_test.go",
@@ -7318,31 +7020,16 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-recordings-process-built-cli-test-buildYouBinary-01",
+      "siteId": "OSSPAWN-tests-functional-recordings-process-built-cli-test-recordingProcessCLICommand-01",
       "packagePath": "tests/functional/recordings/process",
       "sourcePath": "tests/functional/recordings/process/built_cli_test.go",
-      "sourceLine": 36,
-      "enclosingIdentity": "buildYouBinary",
-      "launcherKind": "built-cli-builder",
+      "sourceLine": 33,
+      "enclosingIdentity": "recordingProcessCLICommand",
+      "launcherKind": "test-helper-process",
       "occurrence": 1,
       "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/recordings/process/built_cli_test.go:36 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-TestWindowsRecordingFlushBeforeGracefulStopReturns-01",
-      "packagePath": "tests/functional/recordings/process",
-      "sourcePath": "tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go",
-      "sourceLine": 57,
-      "enclosingIdentity": "TestWindowsRecordingFlushBeforeGracefulStopReturns",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go:57 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
+      "requiredProperty": "signal-delivery",
+      "assertionEvidence": "The Windows recording shutdown scenarios launch the current test executable as a child so the customer-visible interrupt, graceful-stop, and recording-flush behavior crosses a real operating-system signal boundary without building the delivered CLI.",
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
@@ -7358,36 +7045,6 @@
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "descendant-cleanup",
       "assertionEvidence": "The assertion at tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go:145 observes the child PID's process-tree presence or termination through the platform process-inspection/control command.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-startWindowsRecordingRun-01",
-      "packagePath": "tests/functional/recordings/process",
-      "sourcePath": "tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go",
-      "sourceLine": 225,
-      "enclosingIdentity": "startWindowsRecordingRun",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go:225 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-recordings-process-recording-flush-before-shutdown-windows-test-submitWindowsRecordingShutdownWork-01",
-      "packagePath": "tests/functional/recordings/process",
-      "sourcePath": "tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go",
-      "sourceLine": 301,
-      "enclosingIdentity": "submitWindowsRecordingShutdownWork",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/recordings/process/recording_flush_before_shutdown_windows_test.go:301 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
@@ -7497,66 +7154,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-sessions-restart-board-persistence-cli-test-runBoardPersistenceCLI-01",
-      "packagePath": "tests/functional/sessions/restart",
-      "sourcePath": "tests/functional/sessions/restart/board_persistence_cli_test.go",
-      "sourceLine": 19,
-      "enclosingIdentity": "runBoardPersistenceCLI",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/restart/board_persistence_cli_test.go:19 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-buildBoardPersistenceBinary-01",
-      "packagePath": "tests/functional/sessions/restart",
-      "sourcePath": "tests/functional/sessions/restart/board_persistence_process_test.go",
-      "sourceLine": 121,
-      "enclosingIdentity": "buildBoardPersistenceBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/restart/board_persistence_process_test.go:121 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-startBoardPersistenceDaemonProcess-01",
-      "packagePath": "tests/functional/sessions/restart",
-      "sourcePath": "tests/functional/sessions/restart/board_persistence_process_test.go",
-      "sourceLine": 252,
-      "enclosingIdentity": "startBoardPersistenceDaemonProcess",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/restart/board_persistence_process_test.go:252 observes the selected built or external executable at the delivered command boundary before evaluating its public result.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-sessions-restart-board-persistence-process-test-TestBoardPersistenceSharedBinaryPartialSetupFailure-01",
-      "packagePath": "tests/functional/sessions/restart",
-      "sourcePath": "tests/functional/sessions/restart/board_persistence_process_test.go",
-      "sourceLine": 169,
-      "enclosingIdentity": "TestBoardPersistenceSharedBinaryPartialSetupFailure",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "exit-status",
-      "assertionEvidence": "The assertion at tests/functional/sessions/restart/board_persistence_process_test.go:169 launches an isolated test process and verifies its nonzero exit status after deterministic partial setup failure, while also asserting teardown removed both reported artifacts.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-sessions-resume-from-recording-resume-from-recording-test-resumeFromRecordingScenario-startFirstProcess-01",
       "packagePath": "tests/functional/sessions/resume_from_recording",
       "sourcePath": "tests/functional/sessions/resume_from_recording/resume_from_recording_test.go",
@@ -7570,85 +7167,6 @@
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-test-runProcessTreeParent-01",
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "sourcePath": "tests/functional/transport/acp/realclient/pinned_acpx_process_test.go",
-      "sourceLine": 112,
-      "enclosingIdentity": "runProcessTreeParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/transport/acp/realclient/pinned_acpx_process_test.go:112 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F026-top-level-test-TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit",
-        "C07-F026-top-level-test-TestRunBoundedCommandTerminatesScenarioDescendants"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-windows-test-processHasExited-01",
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "sourcePath": "tests/functional/transport/acp/realclient/pinned_acpx_process_windows_test.go",
-      "sourceLine": 85,
-      "enclosingIdentity": "processHasExited",
-      "launcherKind": "process-inspection",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion at tests/functional/transport/acp/realclient/pinned_acpx_process_windows_test.go:85 observes the child PID's process-tree presence or termination through the platform process-inspection/control command.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-process-windows-test-terminateCommandProcessTree-01",
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "sourcePath": "tests/functional/transport/acp/realclient/pinned_acpx_process_windows_test.go",
-      "sourceLine": 72,
-      "enclosingIdentity": "terminateCommandProcessTree",
-      "launcherKind": "process-control",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion at tests/functional/transport/acp/realclient/pinned_acpx_process_windows_test.go:72 observes the child PID's process-tree presence or termination through the platform process-inspection/control command.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-test-nodeSupportsPinnedAcpx-01",
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "sourcePath": "tests/functional/transport/acp/realclient/pinned_acpx_test.go",
-      "sourceLine": 479,
-      "enclosingIdentity": "nodeSupportsPinnedAcpx",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/transport/acp/realclient/pinned_acpx_test.go:479 observes executable discovery or the documented missing-executable diagnostic before a child process can start.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F026-top-level-test-TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-transport-acp-realclient-pinned-acpx-test-runBoundedCommandWithTimeout-01",
-      "packagePath": "tests/functional/transport/acp/realclient",
-      "sourcePath": "tests/functional/transport/acp/realclient/pinned_acpx_test.go",
-      "sourceLine": 434,
-      "enclosingIdentity": "runBoundedCommandWithTimeout",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/transport/acp/realclient/pinned_acpx_test.go:434 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F026-top-level-test-TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt"
-      ]
     },
     {
       "siteId": "OSSPAWN-tests-functional-workers-agent-shared-process-cleanup-test-runAgentForcedCleanupParent-01",
@@ -7676,21 +7194,6 @@
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "descendant-cleanup",
       "assertionEvidence": "The assertion owning tests/functional/workers/concurrency/shared_process_cleanup_test.go:43 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-inference-claude-conductor-forced-cleanup-test-TestClaudeForcedAssertionFailureCleansOwnedResources-01",
-      "packagePath": "tests/functional/workers/inference/claude",
-      "sourcePath": "tests/functional/workers/inference/claude/conductor_forced_cleanup_test.go",
-      "sourceLine": 27,
-      "enclosingIdentity": "TestClaudeForcedAssertionFailureCleansOwnedResources",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/workers/inference/claude/conductor_forced_cleanup_test.go:27 observes termination and cleanup of a separately launched helper process and its descendants.",
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
@@ -7728,42 +7231,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-workers-inference-forced-cleanup-test-runForcedInferenceCleanupParent-01",
-      "packagePath": "tests/functional/workers/inference",
-      "sourcePath": "tests/functional/workers/inference/forced_cleanup_test.go",
-      "sourceLine": 47,
-      "enclosingIdentity": "runForcedInferenceCleanupParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/workers/inference/forced_cleanup_test.go:47 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F054-top-level-test-TestWorkers-ForcedAssertionFailureCleansOwnedResources"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-inference-process-cleanup-test-spawnProcessCleanupChild-01",
-      "packagePath": "tests/functional/workers/inference",
-      "sourcePath": "tests/functional/workers/inference/process_cleanup_test.go",
-      "sourceLine": 486,
-      "enclosingIdentity": "spawnProcessCleanupChild",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/workers/inference/process_cleanup_test.go:486 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F054-top-level-test-TestProcessGoneReconciliationThroughRootProcess",
-        "C07-F054-top-level-test-TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess",
-        "C07-F054-top-level-test-TestProcessTreeHelper",
-        "C07-F054-top-level-test-TestProviderSuccessWaitsForProcessAndStreamClosure",
-        "C07-F054-top-level-test-TestProviderTimeoutTerminatesChildProcessTree"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-workers-invoke-continue-forced-cleanup-test-TestInvokeContinueForcedAssertionCleansOwnedResources-01",
       "packagePath": "tests/functional/workers/invoke_continue",
       "sourcePath": "tests/functional/workers/invoke_continue/forced_cleanup_test.go",
@@ -7774,36 +7241,6 @@
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "descendant-cleanup",
       "assertionEvidence": "The assertion owning tests/functional/workers/invoke_continue/forced_cleanup_test.go:28 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-buildYouBinary-01",
-      "packagePath": "tests/functional/workers/mock",
-      "sourcePath": "tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go",
-      "sourceLine": 86,
-      "enclosingIdentity": "buildYouBinary",
-      "launcherKind": "built-cli-builder",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "executable-selection",
-      "assertionEvidence": "The assertion owning tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go:86 checks the delivered build and then exercises the selected executable at the public command boundary.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-mock-compiled-cli-exit-codes-helpers-test-runBuiltYouBinary-01",
-      "packagePath": "tests/functional/workers/mock",
-      "sourcePath": "tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go",
-      "sourceLine": 103,
-      "enclosingIdentity": "runBuiltYouBinary",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "exit-status",
-      "assertionEvidence": "The assertion owning tests/functional/workers/mock/compiled_cli_exit_codes_helpers_test.go:103 reads the launched command's exit status and maps it to the documented success or failure outcome.",
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
@@ -7823,21 +7260,6 @@
       "testRowIds": [
         "C07-F059-top-level-test-TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected"
       ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-workers-transports-cli-run-lifecycle-lifecycle-forced-cleanup-test-runForcedLifecycleCleanupParent-01",
-      "packagePath": "tests/functional/workers/transports/cli/run/lifecycle",
-      "sourcePath": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_forced_cleanup_test.go",
-      "sourceLine": 38,
-      "enclosingIdentity": "runForcedLifecycleCleanupParent",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "descendant-cleanup",
-      "assertionEvidence": "The assertion owning tests/functional/workers/transports/cli/run/lifecycle/lifecycle_forced_cleanup_test.go:38 observes termination and cleanup of a separately launched helper process and its descendants.",
-      "conversionObligation": null,
-      "testRowIds": [],
-      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     }
   ],
   "testRows": [
@@ -69291,7 +68713,7 @@
       }
     ],
     "specialCases": {
-        "rowId": "C07-F066-top-level-test-TestPackagedACPUnexpectedCommand",
+      "rowId": "C07-F066-top-level-test-TestPackagedACPUnexpectedCommand",
       "kind": "helper-only",
       "sourceReference": "tests/functional/providers/acp/packaged_acp_test.go:245",
       "assertionOwner": "sibling ACP protocol test",

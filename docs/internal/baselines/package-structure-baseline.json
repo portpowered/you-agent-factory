@@ -594,11 +594,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/automat_portability_integration_test.go",
-      "target": "bootstrap_portability"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/bootstrap_portability/export_import_fixture_test.go",
       "target": "bootstrap_portability"
     },
@@ -744,11 +739,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/providers/cli_timeout_cleanup_smoke_test.go",
-      "target": "providers"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/providers/cli_timeout_companion_smoke_long_test.go",
       "target": "providers"
     },
@@ -810,11 +800,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/helpers_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go",
       "target": "replay_contracts"
     },
     {
@@ -994,41 +979,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/input_contract/canonical_input_contract_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/input_contract/generic_constructor_contract_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/input_contract/generic_constructor_coverage_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/input_contract/generic_constructor_helpers_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "target": "factory_definitions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "target": "factory_definitions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
-      "target": "factory_definitions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/doc.go",
       "target": "factory_runtime"
     },
@@ -1074,11 +1024,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
       "target": "factory_runtime"
     },
@@ -1091,51 +1036,6 @@
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/internal/restclient/adapter_test.go",
       "target": "internal"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/build_process_inert_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/defaults_resolution_fallback_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/identity_input_inventory_activation_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/operator_config_activation_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/packaged_root_shape_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/testmain_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/transport_activation_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/wire_composition_coverage_test.go",
-      "target": "operator_settings"
     },
     {
       "rule": "service-root-exported-function",
