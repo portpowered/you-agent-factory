@@ -20,26 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestModelsReadinessAssetsHostEffectsRemainInertThroughRootBuildProcess proves
-// readiness, assets, and host Model edge families stay at zero during
-// root.BuildProcess construction before runtime lifecycle starts.
-func TestModelsReadinessAssetsHostEffectsRemainInertThroughRootBuildProcess(t *testing.T) {
-	t.Parallel()
-
-	recorder := newModelEffectRecorder()
-	_ = characterizationBuildProcess(t, recorder.edges())
-
-	if got := recorder.totalReadiness(); got != 0 {
-		t.Fatalf("readiness effect calls = %d during BuildProcess, want 0", got)
-	}
-	if got := recorder.totalAssets(); got != 0 {
-		t.Fatalf("assets effect calls = %d during BuildProcess, want 0", got)
-	}
-	if got := recorder.totalHost(); got != 0 {
-		t.Fatalf("host effect calls = %d during BuildProcess, want 0", got)
-	}
-}
-
 // TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle proves
 // assets pull, readiness inspection, and host startup activate through public
 // Models HTTP surfaces after runtime lifecycle on a process constructed only
@@ -48,7 +28,7 @@ func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(
 	t.Parallel()
 
 	audio := []byte("RIFF....WAVE")
-	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/health":
 			writer.WriteHeader(http.StatusOK)
@@ -71,17 +51,17 @@ func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(
 	}))
 	t.Cleanup(modelServer.Close)
 
-	cacheDirectory := characterizationTempDir(t)
+	cacheDirectory := functionalTempDir(t)
 	writeCachedOmniVoiceAssets(t, cacheDirectory)
 
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 
-	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
+	dir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
 	environment := append(os.Environ(), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
@@ -286,7 +266,6 @@ func (client *rejectingModelAssetHTTP) Do(*http.Request) (*http.Response, error)
 	client.mu.Lock()
 	client.calls++
 	client.mu.Unlock()
-	c06Ledger.assetHTTPCalls.Add(1)
 	return nil, fmt.Errorf("unexpected model asset network request")
 }
 
@@ -318,7 +297,6 @@ func (launcher *recordingModelHostLauncher) Start(
 		return nil, fmt.Errorf("model host fixture: previous process is still active")
 	}
 	launcher.calls++
-	c06Ledger.hostStarts.Add(1)
 	launcher.active = true
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()

@@ -85,6 +85,7 @@ type CommandRequest struct {
 	Stdin                    []byte                   `json:"stdin,omitempty"`
 	Env                      []string                 `json:"env,omitempty"`
 	WorkDir                  string                   `json:"work_dir,omitempty"`
+	ExecutionScopeID         string                   `json:"execution_scope_id,omitempty"`
 	ExecutionLogger          logging.Logger           `json:"-"`
 	ProcessLifecycleObserver ProcessLifecycleObserver `json:"-"`
 }

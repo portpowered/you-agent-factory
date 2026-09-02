@@ -36,7 +36,7 @@ func TestCLIRelativeFactoryPathResolvesFromInvocationDirectory(t *testing.T) {
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(Current Factory from invocation directory) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -59,6 +59,7 @@ func TestCLIRelativeFactoryPathResolvesFromInvocationDirectory(t *testing.T) {
 // Factory config flatten output omits the absolute host invocation working
 // directory while still returning canonical portable JSON from the public CLI.
 func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
+	t.Parallel()
 	invocationDirectory := t.TempDir()
 	factoryDirectory := seedFlattenableFactoryUnderInvocation(t, invocationDirectory)
 
@@ -67,7 +68,7 @@ func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
 
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config flatten) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -93,6 +94,7 @@ func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
 // invocation-local Current Factory asset fails with a stable diagnostic before
 // provider dispatch or other lifecycle activation side effects can start.
 func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
+	t.Parallel()
 	invocationDirectory := t.TempDir()
 	missingFactoryJSON := filepath.Join(invocationDirectory, "factory", "factory.json")
 

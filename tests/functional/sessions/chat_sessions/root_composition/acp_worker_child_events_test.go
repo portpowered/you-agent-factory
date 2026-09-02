@@ -317,7 +317,6 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 	home, cwd := seedACPWorkerChildHome(t, name, stages)
 	var starts atomic.Int32
 	peerOwner := "ACP worker child peer " + t.Name()
-	trackChatPeerOwner(t, peerOwner)
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpWorkerChildCommandFactory(&starts, peerOwner),
 		ProvidersExecutableLocator:    acpWorkerChildExecutableLocator{},
@@ -378,7 +377,6 @@ func seedACPWorkerChildFactory(t testing.TB, home, name string, stages int) {
 func seedACPWorkerChildFactoryAtRoot(t testing.TB, root, name string, stages int) {
 	t.Helper()
 	dir := filepath.Join(root, "@acp-child-test", name)
-	registerChatFactoryPath(t, dir)
 	writeACPWorkerChildFile(t, dir, "factory.json", acpWorkerChildFactoryJSON(name, stages))
 	for stage := 1; stage <= stages; stage++ {
 		worker := fmt.Sprintf("worker%d", stage)
@@ -477,7 +475,6 @@ func acpWorkerChildCommandFactory(starts *atomic.Int32, peerOwner string) platfo
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
-			beginChatPeer(peerOwner)
 			return exec.Command(os.Args[0], "-test.run=^TestACPWorkerChildPeerProcess$", "-"+acpWorkerChildPeerFlag)
 		}
 		return exec.Command(name, args...)

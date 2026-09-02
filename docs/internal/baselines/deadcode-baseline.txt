@@ -71,6 +71,7 @@ internal/builtcliacceptance/harness.go: unreachable func: Harness.Command
 internal/builtcliacceptance/harness.go: unreachable func: Harness.CommandContext
 internal/builtcliacceptance/harness.go: unreachable func: Harness.NewSession
 internal/builtcliacceptance/harness.go: unreachable func: Harness.acquireInvocation
+internal/builtcliacceptance/harness.go: unreachable func: NewConcurrentReusableHarness
 internal/builtcliacceptance/harness.go: unreachable func: NewHarness
 internal/builtcliacceptance/harness.go: unreachable func: NewReusableHarness
 internal/builtcliacceptance/harness.go: unreachable func: ScenarioFailure.Error
@@ -86,6 +87,7 @@ internal/builtcliacceptance/harness.go: unreachable func: Session.WithNoExternal
 internal/builtcliacceptance/harness.go: unreachable func: Session.failure
 internal/builtcliacceptance/harness.go: unreachable func: Session.run
 internal/builtcliacceptance/harness.go: unreachable func: newHarness
+internal/builtcliacceptance/harness.go: unreachable func: newReusableHarness
 internal/builtcliacceptance/harness.go: unreachable func: newReusableHarnessState
 internal/builtcliacceptance/harness.go: unreachable func: tailBytes
 internal/builtcliacceptance/port.go: unreachable func: ReserveLocalTCPPort
@@ -2437,18 +2439,18 @@ pkg/transports/cli/generated/load.go: unreachable func: WorkCommandByID
 pkg/transports/cli/observation/observation.go: unreachable func: CaptureAppend
 pkg/transports/cli/observation/observation.go: unreachable func: Flag
 pkg/transports/cli/root_submit_batch.go: unreachable func: prepareRunInvocationInput
-pkg/transports/cli/run/api_server.go: unreachable func: APIServerStarterWithListener
 pkg/transports/cli/run/factory_invocation_help.go: unreachable func: WriteFactoryInvocationHelp
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: resolveFactoryInvocationRequest
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: responseStreamOutputCancelOnWriteError
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: runFactoryInvocation
-pkg/transports/cli/run/invocation_error.go: unreachable func: RunRemoteInvocation
 pkg/transports/cli/run/invocation_hosted_runtime.go: unreachable func: emitStartupMessages
 pkg/transports/cli/run/invocation_observability.go: unreachable func: invocationSourceLabels
 pkg/transports/cli/run/invocation_observability.go: unreachable func: recordCLIInvocationFailure
 pkg/transports/cli/run/invocation_observability.go: unreachable func: recordInvocationMetric
 pkg/transports/cli/run/invocation_observability.go: unreachable func: resetCleanInvocationMetricsForTest
 pkg/transports/cli/run/invocation_observability.go: unreachable func: snapshotCleanInvocationMetrics
+pkg/transports/cli/run/remote_invocation_run.go: unreachable func: RunRemoteInvocation
+pkg/transports/cli/run/run.go: unreachable func: APIServerStarterWithListener
 pkg/transports/cli/run/run.go: unreachable func: CountTokenStates
 pkg/transports/cli/run/run.go: unreachable func: FormatDuration
 pkg/transports/cli/run/run.go: unreachable func: Open
@@ -2806,7 +2808,6 @@ tests/functional/internal/support/named_invocation_fixtures.go: unreachable func
 tests/functional/internal/support/observation.go: unreachable func: WaitForObservation
 tests/functional/internal/support/observation.go: unreachable func: waitForObservationAtInterval
 tests/functional/internal/support/process.go: unreachable func: BuildProcess
-tests/functional/internal/support/process.go: unreachable func: BuildProcessWithRecordingReader
 tests/functional/internal/support/process.go: unreachable func: CleanupProcess
 tests/functional/internal/support/process.go: unreachable func: CopyFactoryAsNamed
 tests/functional/internal/support/process.go: unreachable func: CreateAndActivateNamedFactoryAtRoot

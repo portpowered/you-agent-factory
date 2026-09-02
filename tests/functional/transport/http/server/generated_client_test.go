@@ -23,13 +23,14 @@ import (
 
 const generatedClientTestTimeout = 10 * time.Second
 
-const generatedClientDeadline = 2 * time.Second
+const generatedClientDeadline = 100 * time.Millisecond
 
 // TestGeneratedClientStatusAndSessionRoundTrip proves status and Factory Session
 // round-trips through the published generated HTTP client succeed with typed success
 // decoding against the live functional server, use a caller-owned HTTP dependency for
 // public requests, and honor caller-owned cancellation and deadline context bounds.
 func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-round-trip", dir)
 	server.registerRunner(t, []string{dir}, generatedClientStreamingRunner{})
@@ -119,6 +120,7 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 // typed failure results with documented HTTP status and error family/code, not
 // opaque transport errors or unstructured response bodies.
 func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-errors", dir)
 	httpClient := &http.Client{Transport: server.trackingTransport(http.DefaultTransport)}
@@ -174,6 +176,7 @@ func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
 // demonstrating typed success decoding for status and session-visible observations
 // after a representative work submission against the live runtime.
 func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-schema", dir)
 	server.registerRunner(t, []string{dir}, generatedClientStreamingRunner{})

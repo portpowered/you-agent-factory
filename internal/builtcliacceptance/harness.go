@@ -32,6 +32,9 @@ type reusableProcess interface {
 
 type reusableHarnessState struct {
 	invocationGate chan struct{}
+	concurrent     bool
+	active         int
+	idle           chan struct{}
 	mu             sync.Mutex
 	closed         bool
 	closeOnce      sync.Once
@@ -42,6 +45,10 @@ type reusableHarnessState struct {
 type Harness struct {
 	RepoRoot string
 	Edges    serviceedges.Edges
+	// DefaultEnv is copied into commands that do not provide an invocation-local
+	// environment. It lets a reusable in-process CLI fixture isolate customer
+	// state without mutating the test process environment.
+	DefaultEnv []string
 
 	process       reusableProcess
 	reusableState *reusableHarnessState
@@ -147,7 +154,12 @@ func (c *Command) Wait() error {
 
 // CommandContext prepares one invocation against the harness root process.
 func (h *Harness) CommandContext(ctx context.Context, args ...string) *Command {
-	return &Command{harness: h, ctx: ctx, args: append([]string(nil), args...)}
+	return &Command{
+		harness: h,
+		ctx:     ctx,
+		args:    append([]string(nil), args...),
+		Env:     append([]string(nil), h.DefaultEnv...),
+	}
 }
 
 // Command prepares one invocation with a background context.
@@ -278,6 +290,17 @@ func NewHarness(t testing.TB, repoRoot string) *Harness {
 // invocations. Each Command still executes a fresh command tree with
 // invocation-local inputs.
 func NewReusableHarness(t testing.TB, repoRoot string) *Harness {
+	return newReusableHarness(t, repoRoot, false)
+}
+
+// NewConcurrentReusableHarness prepares one root-built process whose command
+// invocations may overlap. Callers must keep all mutable command inputs and
+// selected product state invocation- or session-owned.
+func NewConcurrentReusableHarness(t testing.TB, repoRoot string) *Harness {
+	return newReusableHarness(t, repoRoot, true)
+}
+
+func newReusableHarness(t testing.TB, repoRoot string, concurrent bool) *Harness {
 	t.Helper()
 	harness := newHarness(repoRoot)
 	// Build from a value snapshot. The process retains the injected edge
@@ -289,7 +312,7 @@ func NewReusableHarness(t testing.TB, repoRoot string) *Harness {
 		return nil
 	}
 	harness.process = process
-	harness.reusableState = newReusableHarnessState()
+	harness.reusableState = newReusableHarnessState(concurrent)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), reusableHarnessCloseTimeout)
 		defer cancel()
@@ -309,7 +332,12 @@ func newHarness(repoRoot string) *Harness {
 	}
 }
 
-func newReusableHarnessState() *reusableHarnessState {
+func newReusableHarnessState(concurrent bool) *reusableHarnessState {
+	if concurrent {
+		idle := make(chan struct{})
+		close(idle)
+		return &reusableHarnessState{concurrent: true, idle: idle}
+	}
 	gate := make(chan struct{}, 1)
 	gate <- struct{}{}
 	return &reusableHarnessState{invocationGate: gate}
@@ -327,6 +355,23 @@ func (h *Harness) acquireInvocation() (func(), error) {
 	defer state.mu.Unlock()
 	if state.closed {
 		return nil, errors.New(reusableHarnessClosedMessage)
+	}
+	if state.concurrent {
+		if state.active == 0 {
+			state.idle = make(chan struct{})
+		}
+		state.active++
+		var once sync.Once
+		return func() {
+			once.Do(func() {
+				state.mu.Lock()
+				state.active--
+				if state.active == 0 {
+					close(state.idle)
+				}
+				state.mu.Unlock()
+			})
+		}, nil
 	}
 	select {
 	case <-state.invocationGate:
@@ -353,6 +398,17 @@ func (h *Harness) Close(ctx context.Context) error {
 	state.closeOnce.Do(func() {
 		state.mu.Lock()
 		state.closed = true
+		if state.concurrent {
+			idle := state.idle
+			state.mu.Unlock()
+			select {
+			case <-idle:
+				state.closeErr = h.process.Close(ctx)
+			case <-ctx.Done():
+				state.closeErr = fmt.Errorf("close reusable CLI harness: wait for active invocations: %w", ctx.Err())
+			}
+			return
+		}
 		state.mu.Unlock()
 
 		select {

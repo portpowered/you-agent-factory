@@ -15,7 +15,7 @@ var runSubmitFamilySpecs = []struct {
 		id: "you.run", path: "you run",
 		flags: []string{
 			"continuously", "debug", "dir",
-			"factory", "json", "listen", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay", "resume", "to-file",
+			"factory", "json", "listen", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay", "resume", "session", "to-file",
 			"runtime-log-compress", "runtime-log-dir", "runtime-log-max-age-days", "runtime-log-max-backups",
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",

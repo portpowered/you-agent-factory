@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,29 +44,15 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
-
+	t.Parallel()
 	home := t.TempDir()
 	cwd := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	runner := newTranscriptProviderRunner()
 	process := newTranscriptProcess(t, home, cwd, runner)
 
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
-	})
+	stdinRead, stdinWrite := io.Pipe()
+	stdoutRead, stdoutWrite := io.Pipe()
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
@@ -75,6 +62,12 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 		Stdout:           stdoutWrite,
 		Stderr:           &stderr,
 		WorkingDirectory: cwd,
+	})
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		_ = stdoutWrite.Close()
 	})
 
 	stdout := &transcriptRPCReader{reader: bufio.NewReader(stdoutRead)}
@@ -96,22 +89,18 @@ func newTranscriptProcess(
 	t.Helper()
 	seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ACPWireRecorder:       newRotatingWireRecorder(t, home),
-		ProviderCommandRunner: runner,
+	return support.BuildProcess(t, serviceedges.Edges{
+		ACPWireRecorder:                    newRotatingWireRecorder(t, home),
+		ProviderCommandRunner:              runner,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-	return process
 }
 
 func exerciseTranscriptConversation(
 	t *testing.T,
 	home string,
 	cwd string,
-	stdinWrite *os.File,
+	stdinWrite *io.PipeWriter,
 	stdout *transcriptRPCReader,
 ) []string {
 	t.Helper()
@@ -185,8 +174,8 @@ func finishTranscriptConversation(
 	t *testing.T,
 	home string,
 	command *support.ProcessCommand,
-	stdinWrite *os.File,
-	stdoutWrite *os.File,
+	stdinWrite *io.PipeWriter,
+	stdoutWrite *io.PipeWriter,
 	runner *support.ShapedProviderCommandRunner,
 	stdout *transcriptRPCReader,
 	sent []string,
@@ -467,24 +456,19 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
-
+	t.Parallel()
 	home := t.TempDir()
 	cwd := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ACPWireRecorder: newRotatingWireRecorder(t, home),
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ACPWireRecorder:                    newRotatingWireRecorder(t, home),
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
 
 	stdoutErr := errors.New("stdout failed")
 	var stderr bytes.Buffer
-	err = process.Execute(root.Input{
+	err := process.Execute(root.Input{
 		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`, fixtureInitializeParams) + "\n"),
@@ -520,17 +504,14 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
-
+	t.Parallel()
 	home := t.TempDir()
 	cwd := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+	})
 
 	var stdout, stderr bytes.Buffer
 	if err := process.Execute(root.Input{

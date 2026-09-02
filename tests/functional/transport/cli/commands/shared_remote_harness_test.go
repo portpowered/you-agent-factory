@@ -27,8 +27,9 @@ type sharedRemoteCLI struct {
 }
 
 // TestCLISharedRemoteScenarios keeps the eligible remote command witnesses on
-// one production service-mode host and serializes their explicit-session
-// fixtures so the reusable CLI root remains deterministic.
+// one production service-mode host. Scenarios that select invocation-owned or
+// explicit-session state overlap on one concurrent root process; cases that
+// characterize or mutate the named default session remain serialized.
 func TestCLISharedRemoteScenarios(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow shared remote CLI wiring")
@@ -46,15 +47,29 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 			FactorySessionResolveHomeDirectory: func() (string, error) { return recordingHome, nil },
 		},
 	})
-	defer server.Stop(t)
+	t.Cleanup(func() { server.Stop(t) })
 
 	remote := &sharedRemoteCLI{
-		process:        newLocalReusableProcessHarness(t),
+		process:        newLocalConcurrentProcessHarness(t),
 		baseURL:        server.URL(),
 		hostFactoryDir: hostFactoryDir,
 	}
 
-	tests := []struct {
+	serialized := []struct {
+		name string
+		run  func(*testing.T, *sharedRemoteCLI)
+	}{
+		{name: "TestCLIFactoryInitValidateAndShow", run: testCLIFactoryInitValidateAndShow},
+		{name: "TestCLIFactoryReplaceCurrentChangesSessionFactory", run: testCLIFactoryReplaceCurrentChangesSessionFactory},
+		{name: "TestCLISessionListUsesIsolatedRecordingHome", run: testCLISessionListUsesIsolatedRecordingHome},
+	}
+	for _, test := range serialized {
+		t.Run(test.name, func(t *testing.T) {
+			test.run(t, remote)
+		})
+	}
+
+	parallel := []struct {
 		name string
 		run  func(*testing.T, *sharedRemoteCLI)
 	}{
@@ -65,17 +80,15 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 		{name: "TestCLIWorkListAndShowReflectSubmittedWork", run: testCLIWorkListAndShowReflectSubmittedWork},
 		{name: "TestCLIWorkMoveChangesState", run: testCLIWorkMoveChangesState},
 		{name: "TestCLIWorkShowMissingReturnsNotFound", run: testCLIWorkShowMissingReturnsNotFound},
-		{name: "TestCLIFactoryInitValidateAndShow", run: testCLIFactoryInitValidateAndShow},
-		{name: "TestCLIFactoryReplaceCurrentChangesSessionFactory", run: testCLIFactoryReplaceCurrentChangesSessionFactory},
 		{name: "TestCLISessionCreateListShowDelete", run: testCLISessionCreateListShowDelete},
-		{name: "TestCLISessionListUsesIsolatedRecordingHome", run: testCLISessionListUsesIsolatedRecordingHome},
 		{name: "TestCLISessionPauseBuffersAndResumeDispatches", run: testCLISessionPauseBuffersAndResumeDispatches},
 		{name: "TestCLISessionMissingIDReturnsNotFound", run: testCLISessionMissingIDReturnsNotFound},
 		{name: "TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors", run: testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors},
 		{name: "TestCLIExplicitSessionIsolation", run: testCLIExplicitSessionIsolation},
 	}
-	for _, test := range tests {
+	for _, test := range parallel {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			test.run(t, remote)
 		})
 	}

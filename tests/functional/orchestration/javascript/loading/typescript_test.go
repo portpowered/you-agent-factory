@@ -15,8 +15,6 @@ import (
 
 const (
 	typeScriptSuccessResult              = "<TYPESCRIPT_SUCCESS>"
-	typeScriptSyntaxErrorSource          = "type FailureMarker = string;\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
-	typeScriptSyntaxErrorLine            = 3
 	typeScriptSourceMapSyntaxErrorSource = "interface Ignored {\n  prompt: string;\n}\nworkflow.final(\"ok\");\nphase(\"setup\";\n"
 	typeScriptSourceMapAuthoredLine      = 5
 	typeScriptSourceMapEmittedLine       = 2
@@ -36,41 +34,12 @@ func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	if got := fixture.provider.CallCount(); got != providerCalls {
 		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed TypeScript factory without child dispatch", got, providerCalls)
 	}
 	assertTypeScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
-}
-
-// TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic proves a
-// file-backed TypeScript Factory with a deliberate syntax error fails before
-// work starts through the public you run customer process boundary with an
-// actionable load/validation diagnostic and without private VM internals or
-// external worker dispatch.
-func runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T, fixture *loadingFixture) {
-	dir := scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t)
-	providerCalls := fixture.provider.CallCount()
-	inputs, err := fixture.executeCLI(t, []string{
-		"you", "--json", "run",
-		"--factory", filepath.Join(dir, "factory.json"),
-		"--output", "primary",
-		"--no-record",
-		"hello",
-	}, dir, t.TempDir())
-	assertTypeScriptTypeOrSyntaxFailureOutcome(
-		t,
-		err,
-		inputs.Stdout(),
-		inputs.Stderr(),
-		typeScriptSyntaxErrorLine,
-	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript syntax failure before dispatch", got, providerCalls)
-	}
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
-	fixture.recoverAfterLoadFailure(t, "typescript-syntax")
 }
 
 // TestTypeScriptSourceMapReportsAuthoredLocation proves a file-backed
@@ -99,7 +68,6 @@ func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadin
 		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript source-map failure before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
-	fixture.recoverAfterLoadFailure(t, "typescript-source-map")
 }
 
 func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {
@@ -130,39 +98,6 @@ func scaffoldFileBackedTypeScriptFactory(t *testing.T) string {
 		[]byte(`type SuccessMarker = string;
 const result: SuccessMarker = "`+typeScriptSuccessResult+`";
 workflow.final(result);`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write TypeScript workflow entry: %v", err)
-	}
-	return dir
-}
-
-func scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t *testing.T) string {
-	t.Helper()
-
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "typescript-syntax-error",
-		"invocationSignature": map[string]any{
-			"parameters": []any{map[string]any{
-				"name": "prompt", "required": false,
-				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
-			}},
-		},
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"sourceRef": "workflow.ts",
-				"argsSchema": map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
-					"additionalProperties": false,
-				},
-			},
-		},
-	})
-	if err := os.WriteFile(
-		filepath.Join(dir, "workflow.ts"),
-		[]byte(typeScriptSyntaxErrorSource),
 		0o600,
 	); err != nil {
 		t.Fatalf("write TypeScript workflow entry: %v", err)

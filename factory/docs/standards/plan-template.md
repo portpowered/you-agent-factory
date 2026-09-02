@@ -159,6 +159,18 @@ every changed shape.>
 | Case ID | Kind (happy/unhappy/boundary) | Given | When | Then (observable outcome) | Owning task |
 | --- | --- | --- | --- | --- | --- |
 
+### Test-layer design [Required when tests change]
+
+- Behavior and observer:
+- Selected layer and why a lower layer cannot prove it:
+- Public or testable boundary:
+- Real and controlled dependencies:
+- Factory Session and shared `root.BuildProcess` strategy, if functional:
+- Parallel-isolation model and customer-visible reason for any serialization:
+- Prebuilt artifact owner and deliberately limited case set, if integration:
+- Dedicated package and resource budget, if load/stress:
+- Static/lint ownership for any inventory or repository-shape enforcement:
+
 ### Paid-validation budgets and evidence-reuse keys
 ### Remaining unproven edges and owning gates
 

@@ -925,7 +925,7 @@ func testRunServerBindings() RunServerFlagBindings {
 		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
-		"you.run.flag.listen", "you.server.flag.listen",
+		"you.run.flag.listen", "you.run.flag.session", "you.server.flag.listen",
 	} {
 		targets[inputID] = testScalarTarget("")
 	}

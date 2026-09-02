@@ -1,10 +1,10 @@
 package inference_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -12,10 +12,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -41,6 +40,7 @@ type wsrFT006Case struct {
 // final-only fidelity, including a provider history without a Provider Session
 // reference and rejection of tampered ordering and overstated fidelity.
 func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
+	t.Parallel()
 	cases := []wsrFT006Case{
 		{
 			name:            "streaming",
@@ -67,61 +67,43 @@ func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
 		},
 	}
 
-	portableByClass := make(map[string]recordings.WorkerPortableRecording, len(cases))
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			portable := runWSRFT006Case(t, testCase)
-			portableByClass[testCase.name] = portable
-		})
-	}
+	portableByClass := make([]recordings.WorkerPortableRecording, len(cases))
+	t.Run("portable fidelity cases", func(t *testing.T) {
+		for index, testCase := range cases {
+			index, testCase := index, testCase
+			t.Run(testCase.name, func(t *testing.T) {
+				t.Parallel()
+				portableByClass[index] = runWSRFT006Case(t, testCase)
+			})
+		}
+	})
 
-	streaming := portableByClass["streaming"]
+	streaming := portableByClass[0]
 	assertWSRFT006OrderingTamperRejected(t, streaming)
 	assertWSRFT006FidelityTamperRejected(t, streaming)
 }
 
 // TestWSRFT006PortableExportSelectsRootBuiltWorkerSession proves that one
-// concrete Factory recording can contain more than one Worker Session while a
-// later recording at the same artifact path gets a fresh durable identity.
-// Both recordings use one reusable root-built process and the same writer.
+// explicit Factory Session recording can contain more than one Worker Session
+// and requires an explicit Worker Session selector for portable export.
 func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
+	t.Parallel()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	support.ClearSeedInputs(t, firstDir)
-	batchPath := filepath.Join(t.TempDir(), "wsr-ft-006 two sessions.json")
-	batch, err := json.Marshal(work.WorkRequest{
-		RequestID: "wsr-ft-006-two-sessions",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{
-			{Name: "first-session", WorkTypeID: "task", State: "init", Payload: map[string]any{"title": "first"}},
-			{Name: "second-session", WorkTypeID: "task", State: "init", Payload: map[string]any{"title": "second"}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal two-session batch: %v", err)
-	}
-	if err := os.WriteFile(batchPath, batch, 0o644); err != nil {
-		t.Fatalf("write two-session batch: %v", err)
-	}
-	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
 
-	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006 multi session.json")
-	t.Cleanup(func() {
-		if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("remove temporary replay record %q: %v", recordPath, err)
-		}
-	})
 	queueWSRFT006ProviderResult(t, loaded, runner)
 	queueWSRFT006ProviderResult(t, loaded, runner)
-	withSharedInferenceProcessAt(t, firstDir, sharedInferenceScenario{
+	runSharedInferenceFactory(t, firstDir, sharedInferenceScenario{
 		commandRunner:         runner,
 		workerRecordingWriter: probe,
-		stopDaemonForExecute:  true,
-	}, func(process support.ApplicationProcess) {
-		executeWSRFT006FactoryWithWork(t, process, firstDir, recordPath, batchPath)
-	})
+		submittedWorks: sharedInferenceWorks(
+			"WSR-FT-006 first Worker Session",
+			"WSR-FT-006 second Worker Session",
+		),
+	}, sharedInferenceScenarioTimeout)
 	reader := recordings.WorkerRecordingReader(probe)
 	firstRecordingID, _ := probe.RecordingIdentity(t)
 	firstSnapshot, err := reader.LoadWorkerRecording(t.Context(), firstRecordingID)
@@ -146,32 +128,66 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	if portable.Identity.RecordingID != firstRecordingID || portable.Identity.WorkerSessionID != selected {
 		t.Fatalf("portable identity = %#v, want recording %q and Worker Session %q", portable.Identity, firstRecordingID, selected)
 	}
+}
 
-	queueWSRFT006ProviderResult(t, loaded, runner)
-	withSharedInferenceProcessAt(t, secondDir, sharedInferenceScenario{
-		commandRunner:         runner,
-		workerRecordingWriter: probe,
-		stopDaemonForExecute:  true,
-	}, func(process support.ApplicationProcess) {
-		executeWSRFT006Factory(t, process, secondDir, recordPath)
+// TestWSRFT006ReusedRecordingPathStartsFreshWorkerHistory proves the
+// customer-selected --record path can be reused without merging the prior
+// invocation's durable Worker history. This one-shot CLI contract cannot be
+// expressed by two hosted sessions, so it owns one reusable root-built process
+// and executes both invocations through Process.Execute.
+func TestWSRFT006ReusedRecordingPathStartsFreshWorkerHistory(t *testing.T) {
+	t.Parallel()
+	loaded := loadOpeningRecordFixture(t, "codex", "success")
+	probe := newWSRFT004RecordingProbe(t, false)
+	runner := newWSRFT004ProviderRunner(t, probe)
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		WorkerRecordingWriter: probe,
 	})
-	secondRecordingID, _ := probe.RecordingIdentity(t)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006-reused.replay.json")
+
+	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006RecordedFactory(t, process, firstDir, recordPath)
+	firstRecordingID, firstWorkerID := probe.RecordingIdentity(t)
+
+	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006RecordedFactory(t, process, secondDir, recordPath)
+	secondRecordingID, secondWorkerID := probe.RecordingIdentity(t)
 	if secondRecordingID == firstRecordingID {
 		t.Fatalf("same-path recording identity = %q after second execution, want a fresh identity", secondRecordingID)
 	}
-	secondSnapshot, err := reader.LoadWorkerRecording(t.Context(), secondRecordingID)
+	if secondWorkerID == firstWorkerID {
+		t.Fatalf("same-path Worker Session identity = %q after second execution, want a fresh identity", secondWorkerID)
+	}
+
+	secondSnapshot, err := probe.LoadWorkerRecording(t.Context(), secondRecordingID)
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording(%q) error = %v", secondRecordingID, err)
 	}
-	if len(secondSnapshot.Sessions) != 1 {
-		t.Fatalf("later same-path snapshot contains %d sessions, want one", len(secondSnapshot.Sessions))
+	if len(secondSnapshot.Sessions) != 1 || secondSnapshot.Sessions[0].WorkerSessionID != secondWorkerID {
+		t.Fatalf("later same-path snapshot = %#v, want only fresh Worker Session %q", secondSnapshot, secondWorkerID)
 	}
-	for _, session := range secondSnapshot.Sessions {
-		for _, first := range firstSnapshot.Sessions {
-			if session.WorkerSessionID == first.WorkerSessionID {
-				t.Fatalf("later recording inherited Worker Session %q from recording %q", session.WorkerSessionID, firstRecordingID)
-			}
-		}
+}
+
+func executeWSRFT006RecordedFactory(
+	t *testing.T,
+	process support.ApplicationProcess,
+	dir string,
+	recordPath string,
+) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 }
 
@@ -217,6 +233,7 @@ func wsrFT006Factory(
 ) string {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.ClearSeedInputs(t, dir)
 	config := support.BuildModelWorkerConfig(provider, loaded.Process.Model)
 	config = sharedInferenceWithExecutorProvider(config, strings.ToUpper(string(provider)))
 	if provider == modelprovider.ProviderClaude || provider == modelprovider.ProviderAntigravity {
@@ -235,10 +252,12 @@ func runWSRFT006FactoryWithSharedProcess(
 	probe *wsrFT004RecordingProbe,
 ) recordings.WorkerRecordingReader {
 	t.Helper()
+	support.ClearSeedInputs(t, dir)
 	queueWSRFT006ProviderResult(t, loaded, runner)
 	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
 		commandRunner:         runner,
 		workerRecordingWriter: probe,
+		submittedWork:         sharedInferenceWork("WSR-FT-006 portable recording parity"),
 	}, sharedInferenceScenarioTimeout)
 	return probe
 }
@@ -258,34 +277,6 @@ func queueWSRFT006ProviderResult(
 		Stderr:   []byte(loaded.Stderr),
 		ExitCode: exitCode,
 	})
-}
-
-func executeWSRFT006Factory(
-	t *testing.T,
-	process interface{ Execute(root.Input) error },
-	dir string,
-	recordPath string,
-) {
-	executeWSRFT006FactoryWithWork(t, process, dir, recordPath, "")
-}
-
-func executeWSRFT006FactoryWithWork(
-	t *testing.T,
-	process interface{ Execute(root.Input) error },
-	dir string,
-	recordPath string,
-	workPath string,
-) {
-	t.Helper()
-	arguments := []string{"you", "run", "--dir", dir, "--quiet", "--record", recordPath}
-	if workPath != "" {
-		arguments = append(arguments, "--work", workPath)
-	}
-	inputs := support.FakeInputs(t.Context(), arguments)
-	inputs.Input.WorkingDirectory = dir
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
 }
 
 func assertWSRFT006Fidelity(t *testing.T, portable recordings.WorkerPortableRecording, testCase wsrFT006Case) {

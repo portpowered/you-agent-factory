@@ -29,6 +29,7 @@ const (
 
 // TestReplayPricedUsageReachesPublicCosts proves replayed priced usage reaches the public cost projection.
 func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
+	t.Parallel()
 	repoRoot := testutil.MustRepoRoot(t)
 	fixturePath := filepath.Join(
 		repoRoot,
@@ -54,11 +55,7 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	support.CleanupProcess(t, process)
+	process := runtimeMetricsCLIProcess
 
 	humanOutput := executeReplayCostsCLI(t, process, environment, server.URL(), false)
 	wantCost := expectedPricedReplayCost()

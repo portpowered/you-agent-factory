@@ -34,6 +34,12 @@ func FactoryEventsPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/events", escapedSessionID(sessionID))
 }
 
+// FactoryInvocationsPath returns the compatibility invocation route for one
+// already-open Factory Session.
+func FactoryInvocationsPath(sessionID string) string {
+	return fmt.Sprintf("/factory-sessions/%s/invocations", escapedSessionID(sessionID))
+}
+
 // WorkerSessionsCollectionPath returns the Worker Sessions observation route
 // for one factory session.
 func WorkerSessionsCollectionPath(sessionID string) string {

@@ -83,6 +83,7 @@ var packagedFixPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json
 // not a controlled worktree substitute. The t.TempDir-owned repository and
 // worktrees are its cleanup boundary.
 func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
+	t.Parallel()
 	workspace := initPackagedFixGitRepository(t)
 	unrelated := createPackagedFixWorktree(t, workspace, "unrelated-work")
 	runner := &packagedFixCommandRunner{firstIteratorContinue: true}
@@ -146,8 +147,7 @@ func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 // share one root-built process while retaining explicit Factory Session and
 // selector isolation for each invocation.
 func TestPackagedFixSharedProcess(t *testing.T) {
-	fixture := sharedPackagedFixFixture(t)
-	fixture.census.resetForRun()
+	t.Parallel()
 	t.Run("UsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", testPackagedFixOperatorDefaults)
 
 	t.Run("CarriesIndependentRejectionFeedback", testPackagedFixRejectionFeedback)
@@ -155,13 +155,10 @@ func TestPackagedFixSharedProcess(t *testing.T) {
 	t.Run("UsesConfiguredAndExplicitRoleModels", testPackagedFixConfiguredAndExplicitRoleModels)
 
 	t.Run("ReviewLoopExhaustionIsStable", testPackagedFixReviewLoopExhaustion)
+	t.Run("RejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution", testPackagedFixWorktreeValidation)
+	t.Run("WorkerFailureIsStable", testPackagedFixWorkerFailure)
 
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedFixCLIResponseParity)
-	t.Run("CleanupPathCensus", testPackagedFixCleanupPathCensus)
-	t.Cleanup(func() {
-		assertPackagedFixResourceCensus(t, fixture)
-	})
-	failPackagedFixForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedFixOperatorDefaults(t *testing.T) {
@@ -189,7 +186,6 @@ func testPackagedFixRejectionFeedback(t *testing.T) {
 	runner := &packagedFixCommandRunner{rejectFirstReview: true}
 	worktreeName := "shared-reviewed-fix"
 	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
-	scenario.fixture.census.recordPath(packagedFixCleanupRejection)
 	response := invokePackagedFixSession(t, scenario, map[string]any{
 		"request":      "revise the requested fix",
 		"worktreeName": worktreeName,
@@ -388,6 +384,24 @@ func invokePackagedFixSession(
 	// TestPackagedFixSharedProcess/CLIResponseMatchesExplicitSession still
 	// executes the same invocation through the root-built customer CLI and
 	// compares its terminal response with this explicit-session API path.
+	statusCode, body := invokePackagedFixSessionRaw(t, scenario, args)
+	if statusCode != http.StatusOK {
+		t.Fatalf("invoke packaged Fix session status = %d: %s", statusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("decode packaged Fix invocation response: %v", err)
+	}
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, packagedFixFixtureShutdownTimeout)
+	return decoded
+}
+
+func invokePackagedFixSessionRaw(
+	t *testing.T,
+	scenario *packagedFixScenario,
+	args map[string]any,
+) (int, []byte) {
+	t.Helper()
 	payload, err := json.Marshal(factoryapi.InvocationRequest{
 		RequestId: &scenario.requestID,
 		Args:      &args,
@@ -402,16 +416,11 @@ func invokePackagedFixSession(
 		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
 	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode POST %s: %v", endpoint, err)
-	}
-	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, packagedFixFixtureShutdownTimeout)
-	return decoded
+	return response.StatusCode, body
 }
 
 func assertPackagedFixSharedEvidence(
@@ -522,52 +531,34 @@ func assertPackagedFixReplayAndRecord(
 			t.Fatalf("retained replay event %d = %q, want %q", index, replayed[index].Id, events[index+1].Id)
 		}
 	}
-	eventIDs := make([]string, 0, len(events))
-	for _, event := range events {
-		eventIDs = append(eventIDs, event.Id)
-	}
-	scenario.fixture.census.recordEvidence(
-		scenario.requestID,
-		scenario.worktreeName,
-		workID,
-		runner.PlanPath(),
-		eventIDs,
-	)
-	if wantWorkStateName == "fix:failed" {
-		scenario.fixture.census.recordPath(packagedFixCleanupFailure)
-	} else {
-		scenario.fixture.census.recordPath(packagedFixCleanupSuccess)
-	}
-	if runner.rejectFirstReview || runner.alwaysRejectReview {
-		scenario.fixture.census.recordPath(packagedFixCleanupRejection)
-	}
 }
 
-// TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution
-// proves required and path-traversing names fail at the public boundary without
-// launching planner work.
-//
-// Retained-edge fidelity: path validation is the property under test, so this
-// scenario remains isolated with the controlled runner only observing that no
-// provider command is attempted. Its t.TempDir workspace owns cleanup.
-func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(t *testing.T) {
+func testPackagedFixWorktreeValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
-		args []string
+		args map[string]any
 	}{
-		{name: "missing", args: []string{"--to", "missing worktree name"}},
-		{name: "path traversal", args: []string{
-			"--provider", "CODEX", "--model", "validation-model",
-			"--to", "unsafe worktree name", "--worktree-name", `..\escape`,
+		{name: "missing", args: map[string]any{"request": "missing worktree name"}},
+		{name: "path traversal", args: map[string]any{
+			"request": "unsafe worktree name", "worktreeName": `..\escape`,
 		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			workspace := t.TempDir()
 			runner := &packagedFixCommandRunner{}
-			response, _, err := runPackagedFixCLI(t, runner, workspace, test.args...)
-			if err == nil {
-				t.Fatalf("Process.Execute error = nil, want worktree validation failure; response = %#v", response)
+			scenario := openPackagedFixScenario(t, runner, "validation-"+strings.ReplaceAll(test.name, " ", "-"), nil)
+			statusCode, body := invokePackagedFixSessionRaw(t, scenario, test.args)
+			if statusCode == http.StatusOK {
+				var response factoryapi.InvocationResponse
+				if err := json.Unmarshal(body, &response); err != nil {
+					t.Fatalf("decode invalid worktree response: %v", err)
+				}
+				if response.Status != factoryapi.InvocationTerminalStatusFailed {
+					t.Fatalf("invalid worktree response = %#v, want failed customer outcome", response)
+				}
+			} else if statusCode < http.StatusBadRequest {
+				t.Fatalf("invalid worktree invocation status = %d, want customer rejection: %s", statusCode, body)
 			}
 			if got := len(runner.Requests()); got != 0 {
 				t.Fatalf("provider request count = %d, want zero before worktree validation", got)
@@ -583,6 +574,7 @@ func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(
 // local-real witness and must not be replaced by a mocked worktree result. The
 // t.TempDir workspace owns the failed-attempt cleanup.
 func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
+	t.Parallel()
 	workspace := t.TempDir()
 	runner := &packagedFixCommandRunner{}
 	response, _, err := runPackagedFixCLI(
@@ -607,26 +599,13 @@ func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
 	}
 }
 
-// TestPackagedFixWorkerFailureIsStable proves a provider failure routes the
-// public invocation to the failed terminal state rather than approval.
-//
-// Retained-edge fidelity: the command-runner error is the failure property, so
-// this remains an isolated root-built cell with a controlled
-// ProviderCommandRunner and t.TempDir-owned filesystem.
-func TestPackagedFixWorkerFailureIsStable(t *testing.T) {
-	workspace := initPackagedFixGitRepository(t)
+func testPackagedFixWorkerFailure(t *testing.T) {
+	t.Parallel()
 	runner := &packagedFixCommandRunner{failRole: "iterator"}
-	response, _, err := runPackagedFixCLI(
-		t,
-		runner,
-		workspace,
-		"--provider", "CODEX", "--model", "worker-failure-model",
-		"--to", "fail the Fix iterator",
-		"--worktree-name", "worker-failure",
-	)
-	if err == nil {
-		t.Fatal("Process.Execute error = nil, want worker failure")
-	}
+	scenario := openPackagedFixScenario(t, runner, "worker-failure", nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request": "fail the Fix iterator", "worktreeName": "worker-failure",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
 	}

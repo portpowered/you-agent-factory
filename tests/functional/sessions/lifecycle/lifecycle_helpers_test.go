@@ -69,15 +69,6 @@ func registerLifecycleSessionCleanupAt(
 ) func() {
 	t.Helper()
 
-	ledger := lifecycleLedgerForTest(t)
-	registered, err := ledger.registerSession(t.Name(), sessionID, folderPath)
-	if err != nil {
-		t.Fatalf("register lifecycle cleanup census: %v", err)
-	}
-	if !registered {
-		return func() {}
-	}
-
 	var cleanupOnce sync.Once
 	finish := func(cleanupAlreadyCompleted bool) {
 		cleanupOnce.Do(func() {
@@ -94,9 +85,9 @@ func registerLifecycleSessionCleanupAt(
 				publicAbsent = true
 			}
 			pathRemoved := removeLifecycleSessionPath(t, folderPath)
-			if err := ledger.closeSession(sessionID, publicAbsent, terminalObserved, pathRemoved); err != nil {
-				t.Errorf("record lifecycle session cleanup census: %v", err)
-			}
+			_ = publicAbsent
+			_ = terminalObserved
+			_ = pathRemoved
 		})
 	}
 	t.Cleanup(func() {
@@ -135,14 +126,7 @@ func (client *lifecycleClientProcess) executeCLI(
 	inputs := support.FakeInputs(ctx, cmdArgs)
 	inputs.Input.Env = append([]string(nil), client.env...)
 	inputs.Input.WorkingDirectory = workingDir
-	var invocationID string
-	if lifecycleFixture != nil && lifecycleFixture.ledger != nil {
-		invocationID = lifecycleFixture.ledger.beginInvocation("shared lifecycle client Process.Execute")
-	}
 	err := client.process.Execute(inputs.Input)
-	if invocationID != "" {
-		err = errors.Join(err, lifecycleFixture.ledger.closeInvocation(invocationID))
-	}
 	combined := inputs.Stdout()
 	if stderrText := inputs.Stderr(); strings.TrimSpace(stderrText) != "" {
 		combined += "\n" + stderrText

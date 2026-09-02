@@ -187,6 +187,36 @@ func TestRemoteInvocationClientFactoryEventsUsesCanonicalCursor(t *testing.T) {
 	}
 }
 
+func TestRemoteInvocationClientFactoryEventReplayStopsAtCapturedRetainedHead(t *testing.T) {
+	events := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents()[:2])
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "1")
+		for _, event := range events {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", mustJSON(event))
+		}
+	}))
+	defer server.Close()
+	transport, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+	if err != nil {
+		t.Fatalf("NewProtocol: %v", err)
+	}
+	operation := NewRemoteInvocation(transport).(RemoteInvocationEventOperation)
+	stream, err := operation.OpenFactorySessionEvents(context.Background(), RemoteInvocationEventRequest{
+		Server: server.URL, SessionID: "session-1", ReplayOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionEvents: %v", err)
+	}
+	defer stream.Close()
+	if got, err := stream.Next(context.Background()); err != nil || got.Id != events[0].Id {
+		t.Fatalf("first retained event = (%#v, %v), want %q", got, err, events[0].Id)
+	}
+	if _, err := stream.Next(context.Background()); !errors.Is(err, io.EOF) {
+		t.Fatalf("read after retained head error = %v, want EOF", err)
+	}
+}
+
 func TestRemoteInvocationClientFactoryEventsRejectsInvalidResponses(t *testing.T) {
 	request := RemoteInvocationEventRequest{Server: "https://selected.test", SessionID: "durable-remote"}
 	client := remoteInvocationClient{}

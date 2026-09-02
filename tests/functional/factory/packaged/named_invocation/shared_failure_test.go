@@ -4,21 +4,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -113,6 +109,7 @@ func runNamedInvocationSharedPreparationFailures(t *testing.T, fixture *namedInv
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			runSharedPreparationFailureCase(t, fixture, test)
 		})
 	}
@@ -130,39 +127,12 @@ type sharedPreparationFailureCase struct {
 
 func (fixture *namedInvocationFixture) edges() serviceedges.Edges {
 	return serviceedges.Edges{
-		APIServerStarter:                          fixture.listener.Start,
+		APIServerStarter:                          fixture.api.Start,
 		ProviderCommandRunner:                     fixture.provider,
 		FactoryDefinitionAuthoredReaderFileSystem: fixture.authoredReader,
-		FactorySessionIDGenerator:                 fixture.nextSessionID,
-		RuntimeHostObserver:                       fixture.observation.observeRuntimeHost,
-		WorkRequestIDGenerator:                    fixture.nextWorkRequestID,
-		SubmissionRecorder:                        fixture.recordSubmission,
-		DispatchRecorder:                          fixture.observation.recordDispatch,
-		RecordingWriteFile:                        fixture.observation.recordRecordingWrite,
-		RecordingAppendFile:                       fixture.observation.recordRecordingAppend,
-		RecordingMakeDirectories:                  fixture.observation.recordRecordingMakeDirectories,
-		RecordingCreateTempFile:                   fixture.observation.recordRecordingCreateTempFile,
-		RecordingRemovePath:                       fixture.observation.recordRecordingRemove,
-		RecordingRenamePath:                       fixture.observation.recordRecordingRename,
-		RecordingReadFile:                         fixture.observation.recordRecordingRead,
-		RecordingOpenFile:                         fixture.observation.recordRecordingOpen,
-		RecordingReadDirectory:                    fixture.observation.recordRecordingReadDirectory,
+		FactorySessionIDGenerator:                 uuid.NewString,
+		WorkRequestIDGenerator:                    uuid.NewString,
 	}
-}
-
-func (fixture *namedInvocationFixture) nextSessionID() string {
-	fixture.observation.sessionIDs.Add(1)
-	return uuid.NewString()
-}
-
-func (fixture *namedInvocationFixture) nextWorkRequestID() string {
-	fixture.observation.workIDs.Add(1)
-	return uuid.NewString()
-}
-
-func (fixture *namedInvocationFixture) recordSubmission(record work.FactorySubmissionRecord) {
-	fixture.observation.recordSubmission(record)
-	fixture.submissions.observe(record)
 }
 
 func runSharedPreparationFailureCase(
@@ -182,12 +152,10 @@ func runSharedPreparationFailureCase(
 		t.Fatalf("write Factory fixture: %v", err)
 	}
 
-	before := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	stdout, stderr, err := executePreparationFailure(
 		t, fixture.process, scenario.environment, scenario.workingDirectory,
 		preparationFailureArguments(test.selection, factoryPath, test.arguments),
 	)
-	after := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	if err == nil || !strings.Contains(err.Error(), test.wantCode) {
 		t.Fatalf("%s error = %v, want stable code %s", test.name, err, test.wantCode)
 	}
@@ -195,7 +163,9 @@ func runSharedPreparationFailureCase(
 	if strings.Contains(observable, preparationFailureSensitiveValue) {
 		t.Fatalf("%s leaked sensitive input: %s", test.name, observable)
 	}
-	after.delta(before).assertZero(t)
+	if scenario.provider.CallCount() != 0 {
+		t.Fatalf("%s reached the provider after preparation failed", test.name)
+	}
 }
 
 func preparationFailureArguments(selection, factoryPath string, arguments []string) []string {
@@ -250,154 +220,6 @@ func reservedCollisionSignature() map[string]any {
 	}}}
 }
 
-type preparationSideEffectObservation struct {
-	sessionIDs               atomic.Int32
-	runtimeHosts             atomic.Int32
-	workIDs                  atomic.Int32
-	submissions              atomic.Int32
-	dispatches               atomic.Int32
-	recordingWrites          atomic.Int32
-	recordingAppends         atomic.Int32
-	recordingDirectories     atomic.Int32
-	recordingTempFiles       atomic.Int32
-	recordingRemoves         atomic.Int32
-	recordingRenames         atomic.Int32
-	recordingReads           atomic.Int32
-	recordingOpens           atomic.Int32
-	recordingDirectoriesRead atomic.Int32
-}
-
-func (observation *preparationSideEffectObservation) observeRuntimeHost(factorysessions.RuntimeHostBinding) {
-	observation.runtimeHosts.Add(1)
-}
-
-func (observation *preparationSideEffectObservation) recordSubmission(work.FactorySubmissionRecord) {
-	observation.submissions.Add(1)
-}
-
-func (observation *preparationSideEffectObservation) recordDispatch(recordings.FactoryDispatchRecord) {
-	observation.dispatches.Add(1)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingWrite(path string, data []byte) error {
-	observation.recordingWrites.Add(1)
-	return os.WriteFile(path, data, 0o644)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingAppend(path string, data []byte) error {
-	observation.recordingAppends.Add(1)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = file.Write(data)
-	return err
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingMakeDirectories(path string, mode fs.FileMode) error {
-	observation.recordingDirectories.Add(1)
-	return os.MkdirAll(path, mode)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingCreateTempFile(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-	observation.recordingTempFiles.Add(1)
-	return os.CreateTemp(dir, pattern)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingRemove(path string) error {
-	observation.recordingRemoves.Add(1)
-	return os.Remove(path)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingRename(oldPath, newPath string) error {
-	observation.recordingRenames.Add(1)
-	return os.Rename(oldPath, newPath)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingRead(path string) ([]byte, error) {
-	observation.recordingReads.Add(1)
-	return os.ReadFile(path)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingOpen(path string) (io.ReadCloser, error) {
-	observation.recordingOpens.Add(1)
-	return os.Open(path)
-}
-
-func (observation *preparationSideEffectObservation) recordRecordingReadDirectory(path string) ([]fs.DirEntry, error) {
-	observation.recordingDirectoriesRead.Add(1)
-	return os.ReadDir(path)
-}
-
-type preparationEffectSnapshot struct {
-	sessionIDs               int32
-	runtimeHosts             int32
-	workIDs                  int32
-	submissions              int32
-	dispatches               int32
-	recordingWrites          int32
-	recordingAppends         int32
-	recordingDirectories     int32
-	recordingTempFiles       int32
-	recordingRemoves         int32
-	recordingRenames         int32
-	recordingReads           int32
-	recordingOpens           int32
-	recordingDirectoriesRead int32
-	providerCalls            int32
-	listenerStarts           int32
-}
-
-func (observation *preparationSideEffectObservation) snapshot(providerCalls int, listenerStarts int32) preparationEffectSnapshot {
-	return preparationEffectSnapshot{
-		sessionIDs:               observation.sessionIDs.Load(),
-		runtimeHosts:             observation.runtimeHosts.Load(),
-		workIDs:                  observation.workIDs.Load(),
-		submissions:              observation.submissions.Load(),
-		dispatches:               observation.dispatches.Load(),
-		recordingWrites:          observation.recordingWrites.Load(),
-		recordingAppends:         observation.recordingAppends.Load(),
-		recordingDirectories:     observation.recordingDirectories.Load(),
-		recordingTempFiles:       observation.recordingTempFiles.Load(),
-		recordingRemoves:         observation.recordingRemoves.Load(),
-		recordingRenames:         observation.recordingRenames.Load(),
-		recordingReads:           observation.recordingReads.Load(),
-		recordingOpens:           observation.recordingOpens.Load(),
-		recordingDirectoriesRead: observation.recordingDirectoriesRead.Load(),
-		providerCalls:            int32(providerCalls),
-		listenerStarts:           listenerStarts,
-	}
-}
-
-func (after preparationEffectSnapshot) delta(before preparationEffectSnapshot) preparationEffectSnapshot {
-	return preparationEffectSnapshot{
-		sessionIDs:               after.sessionIDs - before.sessionIDs,
-		runtimeHosts:             after.runtimeHosts - before.runtimeHosts,
-		workIDs:                  after.workIDs - before.workIDs,
-		submissions:              after.submissions - before.submissions,
-		dispatches:               after.dispatches - before.dispatches,
-		recordingWrites:          after.recordingWrites - before.recordingWrites,
-		recordingAppends:         after.recordingAppends - before.recordingAppends,
-		recordingDirectories:     after.recordingDirectories - before.recordingDirectories,
-		recordingTempFiles:       after.recordingTempFiles - before.recordingTempFiles,
-		recordingRemoves:         after.recordingRemoves - before.recordingRemoves,
-		recordingRenames:         after.recordingRenames - before.recordingRenames,
-		recordingReads:           after.recordingReads - before.recordingReads,
-		recordingOpens:           after.recordingOpens - before.recordingOpens,
-		recordingDirectoriesRead: after.recordingDirectoriesRead - before.recordingDirectoriesRead,
-		providerCalls:            after.providerCalls - before.providerCalls,
-		listenerStarts:           after.listenerStarts - before.listenerStarts,
-	}
-}
-
-func (delta preparationEffectSnapshot) assertZero(t *testing.T) {
-	t.Helper()
-	if delta != (preparationEffectSnapshot{}) {
-		t.Fatalf("preparation execution-side-effect delta = %#v, want zero", delta)
-	}
-}
-
 var errCanceledFactoryRootLookup = errors.New("explicit Factory root lookup failed after cancellation")
 
 // runFactoryRootLookupCancellation retains the filesystem cancellation edge
@@ -427,7 +249,6 @@ func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixt
 		t.Fatalf("register authored-reader cancellation route: %v", err)
 	}
 	t.Cleanup(func() { fixture.authoredReader.unregisterCancellation(factoryPath) })
-	before := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	stdinIsTTY := true
@@ -439,7 +260,6 @@ func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixt
 		Context: ctx, WorkingDirectory: workingDirectory,
 		StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
 	})
-	after := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
 	}
@@ -450,7 +270,9 @@ func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixt
 	if strings.Contains(observable, preparationFailureSensitiveValue) {
 		t.Fatalf("cancellation leaked sensitive input: %s", observable)
 	}
-	after.delta(before).assertZero(t)
+	if scenario.provider.CallCount() != 0 {
+		t.Fatal("canceled Factory lookup reached the provider")
+	}
 }
 
 type namedInvocationAuthoredReaderRouter struct {

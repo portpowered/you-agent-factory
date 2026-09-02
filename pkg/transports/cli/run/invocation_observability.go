@@ -220,6 +220,7 @@ type RemoteInvocationEventRequest struct {
 	SessionID     string
 	AfterEventID  string
 	AfterSequence *int
+	ReplayOnly    bool
 	Diagnostics   io.Writer
 	Verbose       bool
 }
@@ -237,8 +238,9 @@ type RemoteInvocationEventOperation interface {
 }
 
 type remoteFactoryEventStream struct {
-	reader *bufio.Reader
-	body   io.ReadCloser
+	reader            *bufio.Reader
+	body              io.ReadCloser
+	retainedRemaining *int
 }
 
 func (client remoteInvocationClient) OpenFactorySessionEvents(
@@ -273,7 +275,7 @@ func (client remoteInvocationClient) OpenFactorySessionEvents(
 			cause:   err,
 		}
 	}
-	return openRemoteFactoryEventStreamResponse(response, endpointURL)
+	return openRemoteFactoryEventStreamResponse(response, endpointURL, cfg.ReplayOnly)
 }
 
 func newRemoteFactoryEventRequest(
@@ -315,6 +317,7 @@ func newRemoteFactoryEventRequest(
 func openRemoteFactoryEventStreamResponse(
 	response clihttp.Response,
 	endpointURL string,
+	replayOnly bool,
 ) (RemoteInvocationEventStream, error) {
 	if response.HTTP == nil {
 		return nil, &remoteInvocationEventTransportError{
@@ -345,7 +348,19 @@ func openRemoteFactoryEventStreamResponse(
 			message: fmt.Sprintf("remote Factory Event stream at %s returned content type %q", safeRemoteEndpoint(endpointURL), response.HTTP.Header.Get("Content-Type")),
 		}
 	}
-	return &remoteFactoryEventStream{reader: bufio.NewReader(response.HTTP.Body), body: response.HTTP.Body}, nil
+	stream := &remoteFactoryEventStream{reader: bufio.NewReader(response.HTTP.Body), body: response.HTTP.Body}
+	if replayOnly {
+		retained, err := strconv.Atoi(strings.TrimSpace(response.HTTP.Header.Get(factorysessions.SessionEventStreamRetainedCountHeader)))
+		if err != nil || retained < 0 {
+			response.HTTP.Body.Close()
+			return nil, &remoteInvocationEventTransportError{
+				status:  response.HTTP.StatusCode,
+				message: fmt.Sprintf("remote Factory Event replay at %s returned invalid retained-event count", safeRemoteEndpoint(endpointURL)),
+			}
+		}
+		stream.retainedRemaining = &retained
+	}
+	return stream, nil
 }
 
 func formatRemoteEventSequence(sequence *int) string {
@@ -365,7 +380,14 @@ func (stream *remoteFactoryEventStream) Next(ctx context.Context) (factoryapi.Fa
 	if err := ctx.Err(); err != nil {
 		return factoryapi.FactoryEvent{}, err
 	}
-	return readRemoteFactoryEventSSE(stream.reader)
+	if stream.retainedRemaining != nil && *stream.retainedRemaining == 0 {
+		return factoryapi.FactoryEvent{}, io.EOF
+	}
+	event, err := readRemoteFactoryEventSSE(stream.reader)
+	if err == nil && stream.retainedRemaining != nil {
+		(*stream.retainedRemaining)--
+	}
+	return event, err
 }
 
 func (stream *remoteFactoryEventStream) Close() error {

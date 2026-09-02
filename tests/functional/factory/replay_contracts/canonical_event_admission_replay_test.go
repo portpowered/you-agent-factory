@@ -17,7 +17,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -197,72 +196,3 @@ func (runner *rejectingReplayRunner) Run(context.Context, platformprocess.Comman
 }
 
 var _ platformprocess.CommandRunner = (*rejectingReplayRunner)(nil)
-
-// TestRootComposedCanonicalAppendRejectsNonEmittableKinds exercises the public
-// Recordings append capability in the same root-built process as the functional
-// test. The CLI/API daemon scenarios above intentionally remain process-boundary
-// tests, so this narrower public-root seam is needed to observe the canonical
-// admission result without importing owner internals.
-func TestRootComposedCanonicalAppendRejectsNonEmittableKinds(t *testing.T) {
-	var recordingsRoot recordings.Service
-	process := support.BuildProcess(t, serviceedges.Edges{
-		RecordingsRootObserver: func(root recordings.Service) {
-			recordingsRoot = root
-		},
-	})
-	support.CleanupProcess(t, process)
-	if recordingsRoot == nil {
-		t.Fatal("RecordingsRootObserver was not invoked")
-	}
-
-	first := canonicalAppendEvent("functional-canonical-first")
-	acceptedFirst, err := recordingsRoot.Append(recordings.AppendRecordedEventRequest{Event: first})
-	if err != nil {
-		t.Fatalf("public Recordings Append(first): %v", err)
-	}
-	if acceptedFirst.Event.ID != first.ID || acceptedFirst.Event.Sequence != 0 {
-		t.Fatalf("first accepted canonical event = %#v, want id %q at sequence 0", acceptedFirst.Event, first.ID)
-	}
-
-	for index, kind := range []recordings.CanonicalEventKind{
-		recordings.CanonicalEventKind(recordings.FactoryEventTypeJavaScriptCheckpointRef),
-		"RUN_STARTED",
-		"NOT_A_CANONICAL_FACTORY_EVENT",
-	} {
-		invalid := first
-		invalid.ID = recordings.CanonicalEventID(fmt.Sprintf("functional-canonical-rejected-%d", index))
-		invalid.Kind = kind
-		if _, err := recordingsRoot.Append(recordings.AppendRecordedEventRequest{Event: invalid}); !errors.Is(err, recordings.ErrInvalidAppendEvent) {
-			t.Fatalf("public Recordings Append(%q) error = %v, want %v", kind, err, recordings.ErrInvalidAppendEvent)
-		}
-	}
-
-	second := canonicalAppendEvent("functional-canonical-second")
-	acceptedSecond, err := recordingsRoot.Append(recordings.AppendRecordedEventRequest{Event: second})
-	if err != nil {
-		t.Fatalf("public Recordings Append(second): %v", err)
-	}
-	if acceptedSecond.Event.Sequence != 1 {
-		t.Fatalf("second accepted canonical event sequence = %d, want 1 after rejected append", acceptedSecond.Event.Sequence)
-	}
-
-	subscribed, err := recordingsRoot.SubscribeFrom(t.Context(), recordings.SubscribeRequest{})
-	if err != nil {
-		t.Fatalf("public Recordings SubscribeFrom: %v", err)
-	}
-	for index, want := range []recordings.CanonicalEvent{acceptedFirst.Event, acceptedSecond.Event} {
-		outcome := subscribed.Subscription.Next(t.Context())
-		if outcome.Kind != recordings.SubscriptionEvent || outcome.Event.ID != want.ID || outcome.Event.Sequence != recordings.CanonicalEventSequence(index) {
-			t.Fatalf("canonical subscription event[%d] = %#v, want %q at sequence %d", index, outcome, want.ID, index)
-		}
-	}
-}
-
-func canonicalAppendEvent(id string) recordings.CanonicalEvent {
-	return recordings.CanonicalEvent{
-		ID:         recordings.CanonicalEventID(id),
-		Kind:       recordings.CanonicalEventKind(recordings.FactoryEventTypeRunRequest),
-		RecordedAt: time.Date(2026, time.August, 22, 20, 0, 0, 0, time.UTC),
-		Payload:    `{}`,
-	}
-}

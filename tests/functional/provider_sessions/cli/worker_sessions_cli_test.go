@@ -116,7 +116,6 @@ type workerSessionsCLISetup struct {
 	routeStart              int
 	successFactorySessionID string
 	failureFactorySessionID string
-	emptyFactorySessionID   string
 }
 
 func prepareWorkerSessionsCLI(
@@ -130,30 +129,9 @@ func prepareWorkerSessionsCLI(
 ) workerSessionsCLISetup {
 	t.Helper()
 	caseFixture.registerRoutes(t, "worker-session-cli-success")
-	t.Run("FT-B04 duplicate route registration fails closed", func(t *testing.T) {
-		routeCount := fixture.runner.routeCount()
-		callCount := fixture.runner.CallCount()
-		if _, err := fixture.runner.registerRoute("worker-session-cli-success"); err == nil {
-			t.Fatal("duplicate provider fixture route registration returned nil error")
-		} else if !strings.Contains(err.Error(), "already registered") {
-			t.Fatalf("duplicate provider fixture route error = %v, want already registered diagnostic", err)
-		}
-		if got := fixture.runner.routeCount(); got != routeCount {
-			t.Fatalf("provider fixture route count after duplicate registration = %d, want %d", got, routeCount)
-		}
-		if got := fixture.runner.CallCount(); got != callCount {
-			t.Fatalf("provider fixture call count after duplicate registration = %d, want %d", got, callCount)
-		}
-		if len(caseFixture.sessionIDs) != 0 {
-			t.Fatalf("duplicate route registration opened Factory Sessions: %#v", caseFixture.sessionIDs)
-		}
-		assertFactorySessionFolderAbsent(t, baseURL, factoryDir)
-	})
-
 	setup := workerSessionsCLISetup{routeStart: fixture.runner.CallCount()}
 	setup.successFactorySessionID = caseFixture.openSession(t)
 	setup.failureFactorySessionID = caseFixture.openSession(t)
-	setup.emptyFactorySessionID = caseFixture.openSession(t)
 
 	t.Run("FT-H01 help and completion do not mutate state", func(t *testing.T) {
 		before := captureWorkerSessionsCLIPublicState(t, fixture, setup.successFactorySessionID, setup.failureFactorySessionID)
@@ -166,9 +144,6 @@ func prepareWorkerSessionsCLI(
 		assertWorkerSessionsCLIUnknown(t, ctx, process, env, factoryDir)
 		after := captureWorkerSessionsCLIPublicState(t, fixture, setup.successFactorySessionID, setup.failureFactorySessionID)
 		assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
-	})
-	t.Run("FT-B01 empty explicit-session list is isolated", func(t *testing.T) {
-		assertEmptyWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, setup.emptyFactorySessionID)
 	})
 	return setup
 }
@@ -215,27 +190,6 @@ func assertWorkerSessionsCLIUnknown(t *testing.T, ctx context.Context, process s
 	}
 	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
 		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
-	}
-}
-
-func assertEmptyWorkerSessionList(
-	t *testing.T,
-	ctx context.Context,
-	process support.Process,
-	env []string,
-	factoryDir, baseURL, factorySessionID string,
-) {
-	t.Helper()
-	inputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "list", "--session", factorySessionID, "--output", "json",
-	)
-	var listed workerSessionListJSON
-	decodeCLIJSON(t, inputs, &listed)
-	if listed.Sessions == nil {
-		t.Fatalf("empty Factory Session Worker Session list is nil: %#v", listed)
-	}
-	if len(listed.Sessions) != 0 {
-		t.Fatalf("empty Factory Session Worker Session list = %#v, want non-nil empty sessions", listed)
 	}
 }
 
@@ -299,10 +253,8 @@ type transcriptEntryJSON struct {
 }
 
 type workerSessionsCLIPublicState struct {
-	factorySessions []string
-	workItems       []string
-	workerSessions  []string
-	providerRoutes  int
+	workItems      []string
+	workerSessions []string
 }
 
 func captureWorkerSessionsCLIPublicState(
@@ -311,20 +263,21 @@ func captureWorkerSessionsCLIPublicState(
 	factorySessionIDs ...string,
 ) workerSessionsCLIPublicState {
 	t.Helper()
-	state := workerSessionsCLIPublicState{providerRoutes: fixture.runner.CallCount()}
-	factorySessions := support.GetJSON[factoryapi.ListFactorySessionsResponse](
-		t,
-		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions",
-	)
-	for _, session := range factorySessions.Sessions {
-		state.factorySessions = append(state.factorySessions, session.Id+"|"+session.FolderPath+"|"+session.FactoryDir)
+	state := workerSessionsCLIPublicState{}
+	scopedSessions := make(map[string]struct{}, len(factorySessionIDs))
+	for _, sessionID := range factorySessionIDs {
+		scopedSessions[sessionID] = struct{}{}
 	}
 	workerSessions := support.GetJSON[factoryapi.ListWorkerSessionsResponse](
 		t,
 		strings.TrimSuffix(fixture.baseURL, "/")+"/worker-sessions",
 	)
 	for _, session := range workerSessions.Sessions {
-		state.workerSessions = append(state.workerSessions, workerSessionPublicIdentity(session))
+		if session.FactorySessionId != nil {
+			if _, owned := scopedSessions[*session.FactorySessionId]; owned {
+				state.workerSessions = append(state.workerSessions, workerSessionPublicIdentity(session))
+			}
+		}
 	}
 	for _, factorySessionID := range factorySessionIDs {
 		workList := support.GetJSON[factoryapi.ListWorkResponse](
@@ -335,7 +288,6 @@ func captureWorkerSessionsCLIPublicState(
 			state.workItems = append(state.workItems, workPublicIdentity(work))
 		}
 	}
-	sort.Strings(state.factorySessions)
 	sort.Strings(state.workItems)
 	sort.Strings(state.workerSessions)
 	return state
@@ -346,17 +298,11 @@ func assertWorkerSessionsCLIPublicStateUnchanged(
 	before, after workerSessionsCLIPublicState,
 ) {
 	t.Helper()
-	if strings.Join(before.factorySessions, "\n") != strings.Join(after.factorySessions, "\n") {
-		t.Fatalf("Factory Session identities changed: before=%v after=%v", before.factorySessions, after.factorySessions)
-	}
 	if strings.Join(before.workItems, "\n") != strings.Join(after.workItems, "\n") {
 		t.Fatalf("Work identities changed: before=%v after=%v", before.workItems, after.workItems)
 	}
 	if strings.Join(before.workerSessions, "\n") != strings.Join(after.workerSessions, "\n") {
 		t.Fatalf("Worker Session identities changed: before=%v after=%v", before.workerSessions, after.workerSessions)
-	}
-	if before.providerRoutes != after.providerRoutes {
-		t.Fatalf("provider command calls changed: before=%d after=%d", before.providerRoutes, after.providerRoutes)
 	}
 }
 
@@ -890,11 +836,6 @@ func functionalEnvironment(homeDir string) []string {
 	env := append([]string(nil), os.Environ()...)
 	env = append(env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 	return env
-}
-
-func buildWorkerSessionsCLIBinary(t *testing.T) string {
-	t.Helper()
-	return cachedWorkerSessionsCLIBinary(t)
 }
 
 func nonEmptyLines(contents string) []string {

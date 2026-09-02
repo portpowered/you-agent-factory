@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,6 +24,7 @@ const (
 // lifecycle through root.BuildProcess + Process.Execute, persisting and
 // revising factory.json under the named catalog root before removal.
 func TestCLIFactoryNamedCreateListUpdateDelete(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	initialSourceDir := support.ScaffoldFactory(t, namedLifecycleFactoryConfig(namedLifecycleWorkType))
@@ -32,7 +32,7 @@ func TestCLIFactoryNamedCreateListUpdateDelete(t *testing.T) {
 	initialSourcePath := filepath.Join(initialSourceDir, "factory.json")
 	updatedSourcePath := filepath.Join(updatedSourceDir, "factory.json")
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := namedLifecycleProcess
 
 	create := support.FakeInputs(t.Context(), []string{
 		"you",
@@ -111,12 +111,13 @@ func TestCLIFactoryNamedCreateListUpdateDelete(t *testing.T) {
 // includes a named Factory after create and omits it after delete through
 // root.BuildProcess + Process.Execute.
 func TestCLIFactoryListReflectsCreateAndDelete(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourceDir := support.ScaffoldFactory(t, listMembershipFactoryConfig(listMembershipWorkType))
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := namedLifecycleProcess
 
 	create := support.FakeInputs(t.Context(), []string{
 		"you",
@@ -161,10 +162,11 @@ func TestCLIFactoryListReflectsCreateAndDelete(t *testing.T) {
 // through root.BuildProcess + Process.Execute without reporting delete success
 // or creating catalog entries.
 func TestCLIFactoryDeleteMissingReturnsActionableFailure(t *testing.T) {
+	t.Parallel()
 	workingDirectory := t.TempDir()
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := namedLifecycleProcess
 
 	deleteInputs := support.FakeInputs(t.Context(), []string{
 		"you",

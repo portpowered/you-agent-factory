@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,29 +19,25 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const parameterProcessCloseTimeout = 5 * time.Second
 
 type parameterProcessFixture struct {
-	observerProcess     support.ApplicationProcess
-	fullHandlerProcess  support.ApplicationProcess
+	process             support.ApplicationProcess
 	missingAssetProcess support.ApplicationProcess
-	observations        *cliObservationLog
-	submissions         *invocationSubmissionObservation
 	providerRunner      *support.ShapedProviderCommandRunner
 	missingProvider     *testutil.ProviderCommandRunner
 	lifecycleEffects    *atomic.Int32
-	operatorMutations   *atomic.Int32
 }
 
 var parameterProcesses *parameterProcessFixture
 
-// TestMain constructs the three immutable process variants once for the
-// package. Every normal leaf executes sequentially through one of these roots;
-// only the missing-asset witness receives lifecycle-observation edges.
+// TestMain constructs the two immutable process variants once for the package.
+// The ordinary public command process is shared; only the missing-asset witness
+// receives lifecycle-observation edges and a provider that must remain unused.
 func TestMain(m *testing.M) {
 	fixture, err := buildParameterProcessFixture()
 	if err != nil {
@@ -62,30 +57,14 @@ func TestMain(m *testing.M) {
 }
 
 func buildParameterProcessFixture() (*parameterProcessFixture, error) {
-	observations := &cliObservationLog{}
-	submissions := &invocationSubmissionObservation{}
 	providerRunner := support.NewShapedProviderCommandRunner(
 		successfulProviderResults(64)...,
 	)
-	operatorMutations := &atomic.Int32{}
-
-	observerProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		CLIObserver: observations.observe,
-		OperatorSettingsFileSystem: mutationTrackingOperatorSettingsFileSystem{
-			mutations: operatorMutations,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("build observer process: %w", err)
-	}
-
-	fullHandlerProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: providerRunner,
-		SubmissionRecorder:    submissions.observe,
 	})
 	if err != nil {
-		_ = observerProcess.Close(context.Background())
-		return nil, fmt.Errorf("build full-handler process: %w", err)
+		return nil, fmt.Errorf("build parameter process: %w", err)
 	}
 
 	lifecycleEffects := &atomic.Int32{}
@@ -109,21 +88,16 @@ func buildParameterProcessFixture() (*parameterProcessFixture, error) {
 		},
 	})
 	if err != nil {
-		_ = observerProcess.Close(context.Background())
-		_ = fullHandlerProcess.Close(context.Background())
+		_ = process.Close(context.Background())
 		return nil, fmt.Errorf("build missing-asset process: %w", err)
 	}
 
 	return &parameterProcessFixture{
-		observerProcess:     observerProcess,
-		fullHandlerProcess:  fullHandlerProcess,
+		process:             process,
 		missingAssetProcess: missingAssetProcess,
-		observations:        observations,
-		submissions:         submissions,
 		providerRunner:      providerRunner,
 		missingProvider:     missingProvider,
 		lifecycleEffects:    lifecycleEffects,
-		operatorMutations:   operatorMutations,
 	}, nil
 }
 
@@ -144,8 +118,7 @@ func (fixture *parameterProcessFixture) close() error {
 		name    string
 		process support.ApplicationProcess
 	}{
-		{name: "observer", process: fixture.observerProcess},
-		{name: "full-handler", process: fixture.fullHandlerProcess},
+		{name: "parameters", process: fixture.process},
 		{name: "missing-asset", process: fixture.missingAssetProcess},
 	}
 	for _, entry := range processes {
@@ -157,56 +130,12 @@ func (fixture *parameterProcessFixture) close() error {
 	return closeErr
 }
 
-type cliObservationLog struct {
-	mu      sync.Mutex
-	results []cliobservation.Result
-}
-
-func (log *cliObservationLog) observe(observed platformprocess.CLIObservation) error {
-	result, err := cliobservation.Decode(observed)
-	if err != nil {
-		return err
-	}
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	log.results = append(log.results, result)
-	return nil
-}
-
-func (log *cliObservationLog) snapshot() []cliobservation.Result {
-	log.mu.Lock()
-	defer log.mu.Unlock()
-	return append([]cliobservation.Result(nil), log.results...)
-}
-
 func parameterInputs(t *testing.T, args []string) *support.CapturedInputs {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = t.TempDir()
 	inputs.Input.Env = spineEnvironment(inputs.Input.Env, t.TempDir())
 	return inputs
-}
-
-func executeParameterObservation(t *testing.T, args []string) cliobservation.Result {
-	t.Helper()
-	if parameterProcesses == nil {
-		t.Fatal("parameter process fixture is not initialized")
-	}
-	before := len(parameterProcesses.observations.snapshot())
-	inputs := parameterInputs(t, args)
-	if err := parameterProcesses.observerProcess.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(parser observation) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	results := parameterProcesses.observations.snapshot()
-	if got := len(results) - before; got != 1 {
-		t.Fatalf("detached CLI observation delta = %d, want 1", got)
-	}
-	return results[before]
 }
 
 const (
@@ -223,77 +152,137 @@ const (
 )
 
 // TestCLIParameterReusableProcessSpine establishes the shared process shape
-// for the parameter package. The reusable root-built processes are immutable
+// for the parameter package. The reusable root-built process is immutable
 // and their customer invocations run in lexical order with fresh inputs.
 func TestCLIParameterReusableProcessSpine(t *testing.T) {
 	if parameterProcesses == nil {
 		t.Fatal("parameter process fixture is not initialized")
 	}
 
-	t.Run("observer root parses generic flags", func(t *testing.T) {
-		testObserverRootParsesGenericFlags(t)
-	})
-
 	t.Run("full handler submits combined signature once", func(t *testing.T) {
 		testFullHandlerSubmitsCombinedSignature(t)
 	})
-}
 
-func testObserverRootParsesGenericFlags(t *testing.T) {
-	t.Helper()
-	first := executeSpineObservation(t, []string{
-		"you", "--server", "https://factory.example", "-v",
-		"worker-sessions", "list", "--state", "RESERVED", "--state", "RUNNING", "--json",
+	t.Run("malformed parameters fail without dispatch", func(t *testing.T) {
+		t.Parallel()
+		testMalformedCombinedSignature(t)
 	})
-	if first.Parse.CommandPath != "you worker-sessions list" || len(first.Parse.Positionals) != 0 {
-		t.Fatalf("first observed parse = %#v, want worker-sessions list with no positionals", first.Parse)
-	}
-	assertSpineParsedFlag(t, first, "server", true, "https://factory.example")
-	assertSpineParsedFlag(t, first, "verbose", true, "true")
-	assertSpineParsedFlag(t, first, "json", true, "true")
-	assertSpineParsedFlag(t, first, "state", true, "[RESERVED,RUNNING]")
 
-	second := executeSpineObservation(t, []string{
-		"you", "--server", "https://second.example", "worker-sessions", "list", "--state", "COMPLETED",
+	t.Run("invalid JSON names the parameter", func(t *testing.T) {
+		t.Parallel()
+		testInvalidJSONCombinedSignature(t)
 	})
-	if second.Parse.CommandPath != "you worker-sessions list" {
-		t.Fatalf("second observed command path = %q, want you worker-sessions list", second.Parse.CommandPath)
-	}
-	assertSpineParsedFlag(t, second, "server", true, "https://second.example")
-	assertSpineParsedFlag(t, second, "state", true, "[COMPLETED]")
-	verbose, found := cliobservation.Flag(second.Parse, "verbose")
-	if !found || verbose.Changed {
-		t.Fatalf("second observed --verbose parse = %#v found=%v, want unchanged", verbose, found)
-	}
-	firstState, found := cliobservation.Flag(first.Parse, "state")
-	if !found || firstState.Value != "[RESERVED,RUNNING]" {
-		t.Fatalf("first detached state observation = %#v found=%v, want [RESERVED,RUNNING]", firstState, found)
-	}
 }
 
 func testFullHandlerSubmitsCombinedSignature(t *testing.T) {
 	t.Helper()
-	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
 	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 	factoryDir := scaffoldCombinedInvocationFactory(t)
 	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	inputs := spineInputs(t, combinedSignatureArgs(factoryPath))
-	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 
-	records := parameterProcesses.submissions.snapshot()
-	if got := len(records) - beforeSubmissions; got != 1 {
-		t.Fatalf("canonical submission delta = %d, want 1; records=%#v", got, records)
-	}
-	arguments := records[beforeSubmissions].Request.InvocationArguments
-	if arguments == nil {
-		t.Fatal("submitted invocation arguments = nil")
-	}
-	assertCombinedSignatureArguments(t, arguments)
 	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 1 {
 		t.Fatalf("controlled provider command call delta = %d, want 1", got)
+	}
+	prompt := string(parameterProcesses.providerRunner.LastRequest().Stdin)
+	for _, want := range []string{
+		spinePositionalValue, spinePriorityValue, spineCallbackValue,
+		spineMetadataValue,
+		spineNullableValue, spineEmptyString, spineEmptyObject, spineEmptyArray,
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expanded provider prompt omitted customer parameter value %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func testMalformedCombinedSignature(t *testing.T) {
+	t.Helper()
+	factoryDir := scaffoldCombinedInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	tests := []struct {
+		name          string
+		args          []string
+		wantFragments []string
+	}{
+		{
+			name: "missing named value",
+			args: []string{"invoke marker", "--priority"},
+			wantFragments: []string{
+				"INVOCATION_ARGUMENT_MISSING_VALUE",
+				"factory argument --priority requires a value",
+			},
+		},
+		{
+			name: "bare key=value is positional overflow",
+			args: []string{"invoke marker", "priority=urgent"},
+			wantFragments: []string{
+				"INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW",
+				"received 2 positional arguments but the active invocationSignature only accepts 1",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+			args := append([]string{"you", "run", "--factory", factoryPath, "--no-record"}, test.args...)
+			inputs := parameterInputs(t, args)
+			executeErr := parameterProcesses.process.Execute(inputs.Input)
+			if executeErr == nil {
+				t.Fatalf("Process.Execute(malformed parameter) succeeded; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
+			}
+			diagnostic := executeErr.Error() + "\n" + inputs.Stderr()
+			for _, want := range test.wantFragments {
+				if !strings.Contains(diagnostic, want) {
+					t.Fatalf("malformed parameter diagnostic missing %q:\n%s", want, diagnostic)
+				}
+			}
+			if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
+				t.Fatalf("provider dispatch call delta = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func testInvalidJSONCombinedSignature(t *testing.T) {
+	t.Helper()
+	factoryDir := scaffoldCombinedInvocationFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	args := combinedSignatureArgs(factoryPath)
+	for index, arg := range args {
+		if strings.HasPrefix(arg, "--metadata=") {
+			args[index] = "--metadata={not-json"
+		}
+	}
+	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+	inputs := parameterInputs(t, args)
+	executeErr := parameterProcesses.process.Execute(inputs.Input)
+	if executeErr == nil {
+		t.Fatalf("Process.Execute(invalid JSON parameter) succeeded; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
+	}
+	diagnostic := executeErr.Error() + "\n" + inputs.Stderr()
+	for _, want := range []string{
+		string(work.ArgumentErrorCodeStringValidationMismatch), `parameter "metadata"`, "is not valid JSON",
+	} {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("invalid JSON diagnostic missing %q:\n%s", want, diagnostic)
+		}
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", err, inputs.Stderr())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(work.ArgumentErrorCodeStringValidationMismatch) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("ErrorResponse = %#v, want string-validation code and BAD_REQUEST", response)
+	}
+	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
+		t.Fatalf("provider dispatch call delta = %d, want 0", got)
 	}
 }
 
@@ -305,107 +294,6 @@ func combinedSignatureArgs(factoryPath string) []string {
 		"--metadata=" + spineMetadataValue, "--nullable=" + spineNullableValue,
 		"--emptyString=" + spineEmptyString, "--emptyObject=" + spineEmptyObject,
 		"--emptyArray=" + spineEmptyArray,
-	}
-}
-
-func assertCombinedSignatureArguments(t *testing.T, arguments *work.InvocationArguments) {
-	t.Helper()
-	assertSpineArgument(t, arguments, "input", []string{spinePositionalValue}, work.ArgumentSourceKindPositional)
-	assertSpineArgument(t, arguments, "priority", []string{spinePriorityValue}, work.ArgumentSourceKindNamed)
-	assertSpineArgument(t, arguments, "callback", []string{spineCallbackValue}, work.ArgumentSourceKindNamed)
-	assertSpineArgument(t, arguments, "tag", []string{spineFirstTagValue, spineSecondTagValue}, work.ArgumentSourceKindNamed)
-	assertSpineJSONArgument(t, arguments, "metadata", spineMetadataValue)
-	assertSpineJSONArgument(t, arguments, "nullable", spineNullableValue)
-	assertSpineJSONArgument(t, arguments, "emptyString", spineEmptyString)
-	assertSpineJSONArgument(t, arguments, "emptyObject", spineEmptyObject)
-	assertSpineJSONArgument(t, arguments, "emptyArray", spineEmptyArray)
-
-	values := []string{
-		arguments.Arguments["nullable"].Values[0], arguments.Arguments["emptyString"].Values[0],
-		arguments.Arguments["emptyObject"].Values[0], arguments.Arguments["emptyArray"].Values[0],
-	}
-	for left, value := range values {
-		for right := left + 1; right < len(values); right++ {
-			if value == values[right] {
-				t.Fatalf("JSON values at indexes %d and %d normalized to %q", left, right, value)
-			}
-		}
-	}
-}
-
-func executeSpineObservation(t *testing.T, args []string) cliobservation.Result {
-	t.Helper()
-	return executeParameterObservation(t, args)
-}
-
-func assertSpineParsedFlag(
-	t *testing.T,
-	result cliobservation.Result,
-	name string,
-	wantChanged bool,
-	wantValue string,
-) {
-	t.Helper()
-	flag, found := cliobservation.Flag(result.Parse, name)
-	if !found || flag.Changed != wantChanged || flag.Value != wantValue {
-		t.Fatalf(
-			"observed --%s parse = %#v found=%v, want changed=%v value=%q",
-			name,
-			flag,
-			found,
-			wantChanged,
-			wantValue,
-		)
-	}
-}
-
-func assertSpineArgument(
-	t *testing.T,
-	arguments *work.InvocationArguments,
-	name string,
-	wantValues []string,
-	wantKind work.ArgumentSourceKind,
-) {
-	t.Helper()
-	argument, found := arguments.Arguments[name]
-	if !found {
-		t.Fatalf("invocation argument %q missing from %#v", name, arguments.Arguments)
-	}
-	if len(argument.Values) != len(wantValues) {
-		t.Fatalf("invocation argument %q values = %#v, want %#v", name, argument.Values, wantValues)
-	}
-	for index, want := range wantValues {
-		if argument.Values[index] != want {
-			t.Fatalf("invocation argument %q value[%d] = %q, want %q", name, index, argument.Values[index], want)
-		}
-	}
-	if len(argument.Sources) == 0 {
-		t.Fatalf("invocation argument %q sources = nil, want %q", name, wantKind)
-	}
-	for index, source := range argument.Sources {
-		if source.Kind != string(wantKind) {
-			t.Fatalf(
-				"invocation argument %q source[%d] kind = %q, want %q",
-				name,
-				index,
-				source.Kind,
-				wantKind,
-			)
-		}
-	}
-}
-
-func assertSpineJSONArgument(
-	t *testing.T,
-	arguments *work.InvocationArguments,
-	name string,
-	want string,
-) {
-	t.Helper()
-	assertSpineArgument(t, arguments, name, []string{want}, work.ArgumentSourceKindNamed)
-	argument := arguments.Arguments[name]
-	if !json.Valid([]byte(argument.Values[0])) {
-		t.Fatalf("invocation argument %q value is not valid JSON: %q", name, argument.Values[0])
 	}
 }
 
@@ -428,7 +316,7 @@ func spineEnvironment(environment []string, home string) []string {
 func scaffoldCombinedInvocationFactory(t *testing.T) string {
 	t.Helper()
 
-	return support.ScaffoldFactory(t, map[string]any{
+	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "combined-parameter-spine",
 		"invocationSignature": map[string]any{
 			"parameters": []any{
@@ -503,4 +391,17 @@ func scaffoldCombinedInvocationFactory(t *testing.T) string {
 			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
 		}},
 	})
+	support.WriteWorkstationConfig(t, dir, "process", `---
+type: MODEL_WORKSTATION
+---
+input=${input}
+priority=${priority}
+callback=${callback}
+metadata=${metadata}
+nullable=${nullable}
+emptyString=${emptyString}
+emptyObject=${emptyObject}
+emptyArray=${emptyArray}
+`)
+	return dir
 }

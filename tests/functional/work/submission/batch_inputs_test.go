@@ -56,6 +56,7 @@ const (
 // atomic-rejection witnesses on one serialized Factory fixture. The fixture
 // includes both task and review so every existing CLI shape remains valid.
 func TestWorkBatchCLIIngress(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
@@ -79,6 +80,7 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 // request and Work identities, so the shared list and event history remain
 // unambiguous.
 func TestWorkBatchHTTPSubmission(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
@@ -262,6 +264,7 @@ func assertWorkBatchRejectsUnknownTypeWithoutPartialMutation(
 // stays HTTP-observable (WORK_REQUEST plus Work list/get) while an unrelated
 // dispatch remains blocked, and same-request-ID replay stays idempotent.
 func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	dispatchRunner := newSubmissionBlockingCommandRunner()
@@ -404,6 +407,7 @@ func batchIngressWorkListingContainsID(listed factoryapi.ListWorkResponse, workI
 // DEPENDS_ON relations dispatches dependent work only after prerequisite terminal
 // outcomes and preserves canonical work type names in public projections.
 func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, competingPipelineFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "worker-a", "worker-b")
 	serverConfig := submissionServerConfig(factoryDir, submissionStaticProviderRunner())

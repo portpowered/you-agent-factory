@@ -21,6 +21,7 @@ import (
 // server fixture composes the runtime through root.BuildProcess and public CLI
 // argv/stdio exactly as a customer invocation would.
 func TestCurrentFactoryActivationSwitchesPersistedFactories(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow current-factory activation persistence smoke")
 
 	rootDir := t.TempDir()
@@ -55,6 +56,7 @@ func TestCurrentFactoryActivationSwitchesPersistedFactories(t *testing.T) {
 // Factory through root.BuildProcess and the public session API, with provider
 // execution captured through ProviderCommandRunner.
 func TestCurrentFactoryLiveAPIReadsFollowActivatedFactory(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow current-factory live API activation smoke")
 
 	rootDir := t.TempDir()
@@ -140,6 +142,7 @@ func TestCurrentFactoryLiveAPIReadsFollowActivatedFactory(t *testing.T) {
 // watched-file execution follows the activated Current Factory and does not
 // continue dispatching on the previously active Factory after handoff.
 func TestCurrentFactoryWatchedFileExecutionFollowsActivatedFactory(t *testing.T) {
+	t.Parallel()
 	support.SkipLongFunctional(t, "slow current-factory watcher activation smoke")
 
 	rootDir := t.TempDir()

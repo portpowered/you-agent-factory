@@ -14,6 +14,7 @@ import (
 )
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{

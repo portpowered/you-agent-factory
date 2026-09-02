@@ -103,6 +103,7 @@ func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 // canonical camelCase JSON whose customer-visible payload matches the original
 // Factory meaning without asserting definitions-domain import/export internals.
 func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI factory wiring")
 	}

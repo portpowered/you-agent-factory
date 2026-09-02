@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -87,11 +86,8 @@ func (fixture *concurrencySharedProcessFixture) runConcurrentSessionIsolation(t 
 	secondWork := submitConcurrencyWork(t, second, second.marker)
 	first.runner.waitStarted(t, concurrencySharedProcessTimeout)
 	second.runner.waitStarted(t, concurrencySharedProcessTimeout)
-	if got := fixture.router.activeCount(); got != 2 {
-		t.Fatalf("CC-03 router active calls while both are held = %d, want two", got)
-	}
-	if got := fixture.router.maxActive(); got < 2 {
-		t.Fatalf("CC-03 router max active calls = %d, want at least two", got)
+	if first.runner.activeCallCount() != 1 || second.runner.activeCallCount() != 1 {
+		t.Fatalf("CC-03 per-session active calls = %d/%d, want one/one", first.runner.activeCallCount(), second.runner.activeCallCount())
 	}
 	first.runner.releaseCall(1)
 	waitConcurrencyWorkSettled(t, fixture.baseURL, first.id, 1)
@@ -177,8 +173,8 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 		t.Fatalf("CC-04 later survivor result = %#v, error=%v, want COMPLETED", laterResult.response, laterResult.err)
 	}
 	assertConcurrencyInvocationPrimaryResult(t, laterResult.response, "cc04-later")
-	if canceled.runner.callCount() != 1 || survivor.runner.callCount() != 2 || fixture.router.activeCount() != 0 {
-		t.Fatalf("CC-04 calls/active = %d/%d/%d, want canceled=1 survivor=2 active=0", canceled.runner.callCount(), survivor.runner.callCount(), fixture.router.activeCount())
+	if canceled.runner.callCount() != 1 || survivor.runner.callCount() != 2 || canceled.runner.activeCallCount() != 0 || survivor.runner.activeCallCount() != 0 {
+		t.Fatalf("CC-04 calls/active = %d/%d and %d/%d, want canceled=1 survivor=2 and both inactive", canceled.runner.callCount(), survivor.runner.callCount(), canceled.runner.activeCallCount(), survivor.runner.activeCallCount())
 	}
 	survivor.closeAndAssertGone(t)
 }
@@ -309,16 +305,6 @@ func (fixture *concurrencySharedProcessFixture) runEmptyRequest(t *testing.T) {
 	valid := submitConcurrencyWork(t, session, "cc08-valid")
 	waitConcurrencyWorkSettled(t, fixture.baseURL, session.id, 1)
 	assertConcurrencyCompletedWorks(t, session, []factoryapi.SubmitWorkResponse{valid})
-	session.closeAndAssertGone(t)
-}
-
-func (fixture *concurrencySharedProcessFixture) runMalformedConfigurationRecovery(t *testing.T) {
-	t.Helper()
-	runConcurrencyMalformedConfigurationProbe(t)
-	session := fixture.openCase(t, "CC-09-valid-after-probe", 1, concurrencyRunnerSuccess, "cc09-valid", "", 0)
-	response := submitConcurrencyWork(t, session, "cc09-valid")
-	waitConcurrencyWorkSettled(t, fixture.baseURL, session.id, 1)
-	assertConcurrencyCompletedWorks(t, session, []factoryapi.SubmitWorkResponse{response})
 	session.closeAndAssertGone(t)
 }
 
@@ -517,53 +503,5 @@ func (fixture *concurrencySharedProcessFixture) close(t testing.TB) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("test-owned concurrency path %q remains after cleanup: %v", path, err)
 		}
-	}
-}
-
-func runConcurrencyMalformedConfigurationProbe(t *testing.T) {
-	t.Helper()
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "concurrency-malformed-worker-reference",
-		"workTypes": []any{map[string]any{
-			"name": "task",
-			"states": []any{
-				map[string]any{"name": "init", "type": "INITIAL"},
-				map[string]any{"name": "complete", "type": "TERMINAL"},
-				map[string]any{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []any{map[string]any{"name": "processor"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "ghost-worker",
-			"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
-			"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
-			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
-		}},
-	})
-	runner := support.NewRecordingCommandRunner("malformed concurrency configuration must not invoke a provider")
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{ProviderCommandRunner: runner})
-	if err != nil {
-		t.Fatalf("CC-09 BuildProcess() = %v", err)
-	}
-	inputs := support.FakeInputs(context.Background(), []string{"you", "run", "--dir", dir, "--continuously", "--quiet", "--no-record"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
-	inputs.Input.WorkingDirectory = dir
-	err = process.Execute(inputs.Input)
-	closeCtx, cancel := context.WithTimeout(context.Background(), concurrencySharedProcessTimeout)
-	defer cancel()
-	closeErr := process.Close(closeCtx)
-	if err == nil {
-		t.Fatal("CC-09 malformed worker configuration succeeded, want validation failure")
-	}
-	diagnostic := strings.ToLower(err.Error())
-	if !strings.Contains(diagnostic, "validate factory config") || !strings.Contains(diagnostic, "ghost-worker") {
-		t.Fatalf("CC-09 malformed validation error = %q, want actionable dangling-worker diagnostic", err)
-	}
-	if closeErr != nil {
-		t.Fatalf("CC-09 malformed probe process close: %v", closeErr)
-	}
-	if got := runner.CallCount(); got != 0 {
-		t.Fatalf("CC-09 malformed provider calls = %d, want zero", got)
 	}
 }

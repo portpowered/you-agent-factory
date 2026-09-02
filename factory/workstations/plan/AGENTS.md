@@ -9,7 +9,9 @@ Before planning, read these files in full:
 2. `factory/docs/standards/plan-template.md`
 3. `factory/docs/standards/task-template.md`
 4. `factory/docs/standards/review-standards.md`
-5. `docs/internal/standards/STANDARDS.md` and the repository-wide standards
+5. `factory/docs/standards/testing-standards.md` whenever the work adds,
+   changes, moves, optimizes, or reviews tests
+6. `docs/internal/standards/STANDARDS.md` and the repository-wide standards
    relevant to the affected backend, frontend, contract, testing, or writing
    surfaces
 
@@ -52,6 +54,10 @@ Required planning behavior:
   prose or a field list cannot replace these blocks, and an optional diff
   cannot replace either canonical shape;
 - classify evidence by scope, dependency fidelity, cadence, and cost;
+- classify every changed test using the factory testing standard and specify
+  its behavior/observer, boundary, Factory Session and shared-process strategy,
+  parallel isolation, prebuilt-artifact owner, or dedicated load/lint lane as
+  applicable;
 - give every task a behavioral witness, executable-spine effect, exact evidence,
   highest feasible level, and remaining unproven edges with owning gates;
 - budget paid or real-remote validation and schedule it as soon as the minimal
@@ -61,11 +67,12 @@ Required planning behavior:
   repair defects;
 - use observable, measurable project and task acceptance criteria;
 - when a task adds or changes functional tests, enumerate the complete
-  intended case matrix in the plan — every happy case, every unhappy case
-  (bad input, authorization, dependency failure/timeout, partial completion,
-  concurrency, cancellation, recovery), and boundary cases — each as
-  given/when/then with its observable outcome. "Add functional tests for X"
-  without the enumerated matrix is not a plannable task; and
+  intended customer-behavior matrix in the plan — each materially distinct
+  happy, unhappy, and public boundary behavior as given/when/then with its
+  observable outcome. Use representative inputs when variants have the same
+  behavior; keep pure validation branches in unit tests and never turn the
+  matrix into an inventory. "Add functional tests for X" without the selected
+  behavioral matrix is not a plannable task; and
 - include the canonical implementation/review delivery criterion verbatim.
 
 For Work whose acceptance includes measured test latency or performance,
@@ -92,8 +99,9 @@ throughput rather than laboratory benchmark purity:
 
 Do not plan meta tests that merely scan source files, documentation topology,
 bundle internals, or inventories unless that structure is itself the product
-contract. Do not use `Typecheck passes`, `Tests pass`, or an inspected diff as
-the sole behavioral evidence.
+contract. Plan repository-shape enforcement as lint/static analysis instead.
+Do not use `Typecheck passes`, `Tests pass`, or an inspected diff as the sole
+behavioral evidence.
 
 ## Step 2 — create the implementation JSON
 

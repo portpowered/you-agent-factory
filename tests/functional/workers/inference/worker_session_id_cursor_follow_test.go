@@ -32,6 +32,7 @@ import (
 // WSR-FT-011: exclusive Worker-ID cursor resume across restart and malformed,
 // foreign, future, stale, and unavailable cursor outcomes.
 func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-011-worker-id-cursor")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-011-worker-id-cursor.replay.json")
 	homeDir := t.TempDir()
@@ -116,6 +117,7 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 //
 // WSR-FT-012: race-safe durable/live follow and Provider-reference parity.
 func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-worker-id-follow")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

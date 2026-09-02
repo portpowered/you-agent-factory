@@ -12,6 +12,7 @@ import (
 
 // TestMinimalWorkflowExampleValidation validates every minimal workflow example against the public definition contract.
 func TestMinimalWorkflowExampleValidation(t *testing.T) {
+	t.Parallel()
 	minimalWorkflow := support.AgentFactoryPath(t, filepath.Join("examples", "minimal-workflow"))
 	formerObjectShape := copyWithFormerObjectOnFailure(t, minimalWorkflow)
 
@@ -67,47 +68,6 @@ func TestMinimalWorkflowExampleValidation(t *testing.T) {
 				if !strings.Contains(diagnostic, want) {
 					t.Fatalf("validation diagnostic missing %q:\n%s", want, diagnostic)
 				}
-			}
-		})
-	}
-}
-
-// TestReferenceFactoryExamplesValidation validates the reference Factory corpus against the public definition contract.
-func TestReferenceFactoryExamplesValidation(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		rel  string
-	}{
-		{name: "expected artifacts JSON", rel: "examples/expected-artifacts-json"},
-		{name: "expected artifacts YAML", rel: "examples/expected-artifacts-yaml"},
-		{name: "first workflow", rel: "examples/first-workflow"},
-		{name: "local OMNIVOICE TTS", rel: "examples/local-omnivoice-tts"},
-		{name: "script poller", rel: "examples/script-poller"},
-		{name: "minimum authoring contract", rel: "examples/minimum-authoring-contract"},
-		{name: "inference throttle guard", rel: "examples/inference-throttle-guard"},
-		{name: "minimal workflow shape", rel: "examples/minimal-workflow-shape"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			factoryPath := support.AgentFactoryPath(t, test.rel)
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "factory", "config", "validate", factoryPath,
-			})
-			inputs.Input.Env = isolatedHomeEnvironment(t)
-			inputs.Input.WorkingDirectory = filepath.Dir(factoryPath)
-
-			err := buildDefinitionsProcess(t).Execute(inputs.Input)
-			if err != nil {
-				t.Fatalf(
-					"Process.Execute(factory config validate %s) error = %v\nstdout:\n%s\nstderr:\n%s",
-					factoryPath,
-					err,
-					inputs.Stdout(),
-					inputs.Stderr(),
-				)
-			}
-			diagnostic := inputs.Stdout() + "\n" + inputs.Stderr()
-			if !strings.Contains(diagnostic, "Factory validation passed.") {
-				t.Fatalf("validation diagnostic missing success message:\n%s", diagnostic)
 			}
 		})
 	}

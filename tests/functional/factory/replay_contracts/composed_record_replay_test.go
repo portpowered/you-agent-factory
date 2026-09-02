@@ -3,10 +3,12 @@ package replay_contracts_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,13 +28,16 @@ import (
 // inert until Process.Execute opens the lifecycle, and replay reconstructs the
 // terminal Work state without changing the source artifact or calling a host.
 func TestComposedRecordReplayUsesRootBuildProcessAndExecute(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, replayContractFactoryConfig())
+	config := replayContractFactoryConfig()
+	config["workstations"].([]map[string]any)[0]["outputSchema"] =
+		`{"type":"object","properties":{"verdict":{"type":"string"}},"required":["verdict"]}`
+	factoryDir := support.ScaffoldFactory(t, config)
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte(`{"title":"composed Recordings record/replay"}`))
 	artifactPath := filepath.Join(t.TempDir(), "composed-recordings.replay.json")
 	effects := newComposedRecordingEffects()
 
 	recordAPI := support.NewProcessAPIServer()
-	recordProcess := buildComposedProcess(t, effects, recordAPI, support.NewStaticSuccessCommandRunner("record provider COMPLETE"))
+	recordProcess := buildComposedProcess(t, effects, recordAPI, support.NewStaticSuccessCommandRunner(`{"verdict":"pass"}`))
 	assertComposedBuildIsInert(t, effects, artifactPath)
 	recordCommand, recordURL := startComposedRun(t, recordProcess, recordAPI, factoryDir, "--record", artifactPath)
 	support.WaitForTerminalStatus(t, recordURL, 15*time.Second)
@@ -125,6 +130,7 @@ func assertComposedRecordedState(t *testing.T, baseURL, artifactPath string) {
 	if composedLiveEventCount(events, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
 		t.Fatal("recorded public Factory Events missing dispatch response")
 	}
+	assertComposedStructuredResult(t, events)
 	if _, err := os.Stat(artifactPath); err != nil {
 		t.Fatalf("recording artifact after terminal observation: %v", err)
 	}
@@ -140,6 +146,38 @@ func assertComposedReplayedState(t *testing.T, baseURL string) {
 	if composedLiveEventCount(events, factoryapi.FactoryEventTypeDispatchResponse) == 0 {
 		t.Fatal("replayed public Factory Events missing dispatch response")
 	}
+	assertComposedStructuredResult(t, events)
+}
+
+func assertComposedStructuredResult(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	want := map[string]any{"verdict": "pass"}
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode public dispatch response: %v", err)
+		}
+		if !reflect.DeepEqual(payload.StructuredResult, want) {
+			t.Fatalf("public dispatch response structured result = %#v, want %#v", payload.StructuredResult, want)
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal public dispatch response: %v", err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(encoded, &raw); err != nil {
+			t.Fatalf("decode public dispatch response JSON: %v", err)
+		}
+		rawPayload, ok := raw["payload"].(map[string]any)
+		if !ok || !reflect.DeepEqual(rawPayload["structuredResult"], want) {
+			t.Fatalf("public dispatch response JSON structuredResult = %#v, want %#v", rawPayload["structuredResult"], want)
+		}
+		return
+	}
+	t.Fatal("public Factory Events missing structured dispatch response")
 }
 
 func composedEventCount(events []factorydefinitions.FactoryEvent, kind factoryapi.FactoryEventType) int {

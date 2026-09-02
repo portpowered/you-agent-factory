@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,9 +31,6 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	assertDispatchOutcomeSequence(t, server.factoryEvents(t), []factoryapi.WorkOutcome{
-		factoryapi.WorkOutcomeFailed,
-		factoryapi.WorkOutcomeAccepted,
-	}, "execution timeout")
+	assertDispatchTimeoutEventuallyAccepted(t, server.factoryEvents(t))
 	server.stop(t)
 }

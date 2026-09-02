@@ -38,9 +38,10 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := recordings.WorkerSessionRecordingRequest{
-		RecordingID:     "recording-1",
-		WorkerSessionID: "worker-1",
-		Topic:           events.Topic("worker-session/worker-1/events"),
+		RecordingID:      "recording-1",
+		FactorySessionID: "factory-session-1",
+		WorkerSessionID:  "worker-1",
+		Topic:            events.Topic("worker-session/worker-1/events"),
 	}
 	handle, err := service.StartWorkerSessionRecording(context.Background(), request)
 	if err != nil {
@@ -69,8 +70,19 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
+	assertPersistedWorkerHistory(t, persisted, request.FactorySessionID)
+}
+
+func assertPersistedWorkerHistory(t *testing.T, persisted []recordings.WorkerRecordingRecord, factorySessionID string) {
+	t.Helper()
+
 	if len(persisted) != 2 || persisted[0].Record.ID.Position != 1 || persisted[1].Record.ID.Position != 2 {
 		t.Fatalf("persisted Worker history = %#v, want positions 1 and 2", persisted)
+	}
+	for _, record := range persisted {
+		if record.FactorySessionID != factorySessionID {
+			t.Fatalf("persisted Factory Session ID = %q, want %q", record.FactorySessionID, factorySessionID)
+		}
 	}
 }
 

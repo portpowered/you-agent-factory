@@ -31,8 +31,9 @@ func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 		WorkerType:      "mocked-worker",
 		WorkstationName: "mock-process",
 		Correlation: providers.ExecuteCorrelation{
-			RequestID: "request-1",
-			TraceID:   "trace-1",
+			FactorySessionID: "factory-session-1",
+			RequestID:        "request-1",
+			TraceID:          "trace-1",
 		},
 	}}, func([]byte) error { return nil })
 	if err != nil {
@@ -42,6 +43,7 @@ func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 		t.Fatalf("provider runner calls = %d, want 1", runner.calls)
 	}
 	if runner.request.AttemptID != "mock-dispatch" ||
+		runner.request.FactorySessionID != "factory-session-1" ||
 		runner.request.WorkerType != "mocked-worker" ||
 		runner.request.WorkstationName != "mock-process" ||
 		runner.request.Execution.RequestID != "request-1" ||

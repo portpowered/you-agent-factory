@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -51,14 +50,14 @@ type workListFiltersCountsMoveResponse struct {
 // customer-visible state category, then the public CLI proves composition,
 // failed-state terminality, zero matches, and count stability across pages.
 func TestWorkListFiltersAndCounts(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 	})
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workCLIProcess
 	home := t.TempDir()
 
 	works := []workListFiltersCountsWork{
@@ -142,13 +141,13 @@ func TestWorkListFiltersAndCounts(t *testing.T) {
 // exhausts a three-page REST collection while an independent direct REST walk
 // remains page-shaped and canonical.
 func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workCLIProcess
 	home := t.TempDir()
 
 	works := make([]workListFiltersCountsWork, 0, 51)
@@ -231,13 +230,13 @@ func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
 // TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage proves that Work detail
 // lookup remains independent of collection pagination on a large board.
 func TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workCLIProcess
 	home := t.TempDir()
 
 	works := make([]workListFiltersCountsWork, 0, 51)
@@ -266,14 +265,14 @@ func TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *testing.T) {
 // superseded attempt and identifies its successor in both JSON and human
 // output.
 func TestWorkListAllAnnotatesSupersededSameName(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 	})
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workCLIProcess
 	home := t.TempDir()
 	oldWork := workListFiltersCountsWork{
 		Name:         "retryable-task",

@@ -35,7 +35,7 @@ func testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess(
 		Payload:    []byte(`{"title":"price mock usage"}`),
 	})
 
-	fixture.useCommandRunners(nil, nil)
+	fixture.useCommandRunnersFor(t, factoryDir, nil, nil)
 	session := fixture.openSession(t, factoryDir)
 	listed, _ := session.terminalObservations(t, 15*time.Second)
 	defer session.closeAndAssertGone(t)

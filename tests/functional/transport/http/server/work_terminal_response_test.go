@@ -25,7 +25,9 @@ const (
 // and that a failure terminal outcome carrying the same content is never
 // reported as success.
 func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t *testing.T) {
+	t.Parallel()
 	t.Run("terminal success keeps ordered typed parts", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldC06HTTPFactory(t, workTerminalResponseFactoryConfig())
 		fixture := c06SharedHTTPServer(t)
 		scenario := fixture.newScenario(t, "work-terminal-success", dir)
@@ -54,6 +56,7 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 	})
 
 	t.Run("terminal failure is not reported as success", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldC06HTTPFactory(t, workTerminalResponseFactoryConfig())
 		fixture := c06SharedHTTPServer(t)
 		scenario := fixture.newScenario(t, "work-terminal-failure", dir)

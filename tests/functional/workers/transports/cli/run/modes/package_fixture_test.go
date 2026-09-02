@@ -57,6 +57,7 @@ type modesInvocationSpec struct {
 type modesInvocationResources struct {
 	id          string
 	routeID     string
+	sessionID   string
 	workingRoot string
 	homeDir     string
 	factoryPath string
@@ -96,6 +97,9 @@ type modesPackageFixture struct {
 	router      *modesCommandRouter
 	rootDir     string
 	factoryPath string
+	serverURL   string
+	daemonStop  context.CancelFunc
+	daemonDone  chan error
 
 	processBuilds  atomic.Int32
 	nextInvocation atomic.Uint64
@@ -147,11 +151,28 @@ func newModesPackageFixture() (*modesPackageFixture, error) {
 		return nil, err
 	}
 	router := newModesCommandRouter()
+	api := support.NewProcessAPIServer()
 	process, err := support.BuildProcessWithContext(
 		context.Background(),
-		serviceedges.Edges{ProviderCommandRunner: router},
+		serviceedges.Edges{ProviderCommandRunner: router, APIServerStarter: api.Start},
 	)
 	if err != nil {
+		_ = os.RemoveAll(rootDir)
+		return nil, err
+	}
+	daemonContext, daemonStop := context.WithCancel(context.Background())
+	daemonInputs := support.FakeInputs(daemonContext, []string{
+		"you", "run", "--continuously", "--with-server", "--quiet",
+		"--factory", factoryPath, "--no-record",
+	})
+	daemonInputs.Input.WorkingDirectory = rootDir
+	daemonInputs.Input.Env = modesInvocationEnvironment(filepath.Join(rootDir, "daemon-home"))
+	daemonDone := make(chan error, 1)
+	go func() { daemonDone <- process.Execute(daemonInputs.Input) }()
+	serverURL, err := api.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		daemonStop()
+		_ = process.Close(context.Background())
 		_ = os.RemoveAll(rootDir)
 		return nil, err
 	}
@@ -160,6 +181,9 @@ func newModesPackageFixture() (*modesPackageFixture, error) {
 		router:            router,
 		rootDir:           rootDir,
 		factoryPath:       factoryPath,
+		serverURL:         serverURL,
+		daemonStop:        daemonStop,
+		daemonDone:        daemonDone,
 		activeInvocations: make(map[string]struct{}),
 	}
 	fixture.processBuilds.Store(1)
@@ -180,6 +204,19 @@ func closeModesPackageFixture() {
 
 func (fixture *modesPackageFixture) close(ctx context.Context) error {
 	var errs []error
+	if fixture.daemonStop != nil {
+		fixture.daemonStop()
+	}
+	if fixture.daemonDone != nil {
+		select {
+		case err := <-fixture.daemonDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				errs = append(errs, fmt.Errorf("stop hosted daemon: %w", err))
+			}
+		case <-ctx.Done():
+			errs = append(errs, fmt.Errorf("stop hosted daemon: %w", ctx.Err()))
+		}
+	}
 	if fixture.process != nil {
 		if err := fixture.process.Close(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("close process: %w", err))
@@ -232,22 +269,26 @@ func (fixture *modesPackageFixture) start(t testing.TB, spec modesInvocationSpec
 	if err := copyModesFactory(fixture.factoryPath, invocationFactoryPath, spec.emptyResult, spec.stdinSignature); err != nil {
 		t.Fatalf("copy invocation Factory: %v", err)
 	}
+	opened := support.OpenFactorySessionAt(t, fixture.serverURL, filepath.Dir(invocationFactoryPath))
+	sessionID := opened.Session.Id
 	resources := modesInvocationResources{
 		id:          id,
 		routeID:     id + "-route",
+		sessionID:   sessionID,
 		workingRoot: workingRoot,
 		homeDir:     homeDir,
 		factoryPath: invocationFactoryPath,
 	}
 	route := newModesCommandRoute(resources.routeID, spec)
-	if err := fixture.router.Register(workingRoot, route); err != nil {
+	if err := fixture.router.Register(sessionID, route); err != nil {
 		t.Fatalf("register provider route: %v", err)
 	}
 	fixture.openInvocation(resources)
 
 	args := []string{"you"}
 	args = append(args, spec.globalArgs...)
-	args = append(args, "run", "--factory", invocationFactoryPath, "--no-record")
+	args = append(args, "--remote", "--server", fixture.serverURL)
+	args = append(args, "run", "--session", sessionID, "--factory", invocationFactoryPath, "--no-record")
 	args = append(args, spec.runArgs...)
 	if spec.includePrompt {
 		args = append(args, spec.prompt)
@@ -320,7 +361,7 @@ func (handle *modesInvocationHandle) isFinished() bool {
 func (handle *modesInvocationHandle) finish() {
 	handle.finishOnce.Do(func() {
 		handle.cancel()
-		handle.fixture.router.Unregister(handle.inputs.Input.WorkingDirectory, handle.route)
+		handle.fixture.router.Unregister(handle.resources.sessionID, handle.route)
 		handle.fixture.closeInvocation(handle.resources)
 		handle.finished.Store(true)
 	})
@@ -490,21 +531,21 @@ func newModesCommandRouter() *modesCommandRouter {
 	return &modesCommandRouter{routes: make(map[string]*modesCommandRoute)}
 }
 
-func (router *modesCommandRouter) Register(workDir string, route *modesCommandRoute) error {
+func (router *modesCommandRouter) Register(executionScopeID string, route *modesCommandRoute) error {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	key := filepath.Clean(workDir)
+	key := strings.TrimSpace(executionScopeID)
 	if _, exists := router.routes[key]; exists {
-		return fmt.Errorf("provider route already registered for %q", key)
+		return fmt.Errorf("provider route already registered for execution scope %q", key)
 	}
 	router.routes[key] = route
 	return nil
 }
 
-func (router *modesCommandRouter) Unregister(workDir string, route *modesCommandRoute) {
+func (router *modesCommandRouter) Unregister(executionScopeID string, route *modesCommandRoute) {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	key := filepath.Clean(workDir)
+	key := strings.TrimSpace(executionScopeID)
 	if current, ok := router.routes[key]; ok && current == route {
 		delete(router.routes, key)
 	}
@@ -531,7 +572,7 @@ func (router *modesCommandRouter) run(
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
 	router.mu.Lock()
-	key := filepath.Clean(request.WorkDir)
+	key := strings.TrimSpace(request.ExecutionScopeID)
 	route := router.routes[key]
 	if route != nil {
 		router.calls = append(router.calls, modesRoutedCommand{
@@ -541,7 +582,7 @@ func (router *modesCommandRouter) run(
 	}
 	router.mu.Unlock()
 	if route == nil {
-		return platformprocess.CommandResult{}, fmt.Errorf("no provider route for work directory %q", request.WorkDir)
+		return platformprocess.CommandResult{}, fmt.Errorf("no provider route for execution scope %q", request.ExecutionScopeID)
 	}
 	return route.run(ctx, request, observer)
 }
@@ -614,6 +655,8 @@ type modesCommandRoute struct {
 	releaseOnce sync.Once
 	started     chan struct{}
 	startedOnce sync.Once
+	stopped     chan struct{}
+	stoppedOnce sync.Once
 	active      atomic.Int32
 }
 
@@ -635,6 +678,7 @@ func newModesCommandRoute(id string, spec modesInvocationSpec) *modesCommandRout
 		stderr:      deterministicProviderFailureStderr,
 		release:     make(chan struct{}),
 		started:     make(chan struct{}),
+		stopped:     make(chan struct{}),
 	}
 }
 
@@ -644,7 +688,10 @@ func (route *modesCommandRoute) run(
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
 	route.active.Add(1)
-	defer route.active.Add(-1)
+	defer func() {
+		route.active.Add(-1)
+		route.stoppedOnce.Do(func() { close(route.stopped) })
+	}()
 	route.startedOnce.Do(func() { close(route.started) })
 	if route.behavior == modesRouteBlock {
 		select {
@@ -689,6 +736,15 @@ func (route *modesCommandRoute) WaitStarted(t testing.TB) {
 	case <-route.started:
 	case <-time.After(modesProcessStopTimeout):
 		t.Fatalf("timed out waiting for provider route %s", route.id)
+	}
+}
+
+func (route *modesCommandRoute) WaitStopped(t testing.TB) {
+	t.Helper()
+	select {
+	case <-route.stopped:
+	case <-time.After(modesProcessStopTimeout):
+		t.Fatalf("timed out waiting for provider route %s to stop", route.id)
 	}
 }
 

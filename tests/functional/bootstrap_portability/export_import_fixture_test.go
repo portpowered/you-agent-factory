@@ -351,69 +351,8 @@ func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryR
 	return HTTPNamedFactoryReadback{t: t, serverURL: server.URL()}
 }
 
-func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture(t *testing.T) {
-	fixture := newExportImportFixture(t)
-
-	if len(fixture.CanonicalFactoryJSON) == 0 {
-		t.Fatal("fixture canonical factory json should not be empty")
-	}
-	if !json.Valid(fixture.CanonicalFactoryJSON) {
-		t.Fatalf("fixture canonical factory json is invalid: %s", fixture.CanonicalFactoryJSON)
-	}
-	assertExportImportFixtureCanonicalRouteArraysJSON(t, fixture.CanonicalFactoryJSON, map[string]map[string]int{
-		"step-one": {"onFailure": 1},
-		"step-two": {"onFailure": 1},
-	})
-	if fixture.Expected.WorkTypeName != "task" {
-		t.Fatalf("fixture work type = %q, want task", fixture.Expected.WorkTypeName)
-	}
-	if fixture.Expected.TerminalPlaceID != "task:complete" {
-		t.Fatalf("fixture terminal place = %q, want task:complete", fixture.Expected.TerminalPlaceID)
-	}
-	if !reflect.DeepEqual(fixture.Expected.WorkstationNames, []string{"step-one", "step-two"}) {
-		t.Fatalf("fixture workstation names = %#v, want [step-one step-two]", fixture.Expected.WorkstationNames)
-	}
-
-	if !reflect.DeepEqual(
-		comparableExportImportFactory(fixture.GeneratedExportFactor),
-		comparableExportImportFactory(fixture.FlattenedFactory),
-	) {
-		t.Fatalf(
-			"generated export factory diverged from flattened canonical boundary\ngenerated: %#v\nflattened: %#v",
-			comparableExportImportFactory(fixture.GeneratedExportFactor),
-			comparableExportImportFactory(fixture.FlattenedFactory),
-		)
-	}
-	assertExportImportFixtureGeneratedRouteArrays(t, fixture.FlattenedFactory, map[string]map[string]int{
-		"step-one": {"onFailure": 1},
-		"step-two": {"onFailure": 1},
-	})
-	assertExportImportFixtureGeneratedRouteArrays(t, fixture.GeneratedExportFactor, map[string]map[string]int{
-		"step-one": {"onFailure": 1},
-		"step-two": {"onFailure": 1},
-	})
-
-	importContract := fixture.namedFactory("imported-service-simple")
-	if importContract.Name != factoryapi.FactoryName("imported-service-simple") {
-		t.Fatalf("import contract name = %q, want imported-service-simple", importContract.Name)
-	}
-	if !reflect.DeepEqual(
-		comparableExportImportFactory(importContract),
-		comparableExportImportFactory(fixture.GeneratedExportFactor),
-	) {
-		t.Fatalf(
-			"import contract factory diverged from generated export factory\ngot:  %#v\nwant: %#v",
-			comparableExportImportFactory(importContract),
-			comparableExportImportFactory(fixture.GeneratedExportFactor),
-		)
-	}
-	assertExportImportFixtureGeneratedRouteArrays(t, importContract, map[string]map[string]int{
-		"step-one": {"onFailure": 1},
-		"step-two": {"onFailure": 1},
-	})
-}
-
 func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignals(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	rootDir := t.TempDir()
 

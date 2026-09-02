@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
@@ -33,6 +35,13 @@ import (
 )
 
 type RunConfig = runconfig.Config
+
+// APIServerStarterWithListener returns the production API server starter bound
+// to one process-owned listener. The listener is consumed at most once and the
+// normal API server remains responsible for serving and closing it.
+func APIServerStarterWithListener(listener net.Listener) platformhttpserver.Starter {
+	return platformhttpserver.StarterWithListener(listener, nil, nil)
+}
 
 // ValidateRecordingInvocationFlags exposes the pure Recordings input-shape
 // check to the process startup boundary before any local activation effects.
@@ -185,6 +194,37 @@ func consumeRemoteFactoryEventStream(
 	for {
 		event, err := stream.Next(ctx)
 		if err != nil {
+			return err
+		}
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return fmt.Errorf("decode remote canonical Factory Event %q: %w", event.Id, err)
+		}
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{domainEvent})
+		if cursor != nil {
+			*cursor = remoteFactoryEventCursor(event)
+		}
+	}
+}
+
+func consumeRemoteFactoryEventReplay(
+	ctx context.Context,
+	stream RemoteInvocationEventStream,
+	renderer visualizationcliFactoryEventRenderer,
+	cursor *RemoteInvocationEventCursor,
+) error {
+	if stream == nil {
+		return errors.New("remote Factory Event stream is unavailable")
+	}
+	if renderer == nil {
+		return errors.New("remote response stream renderer is unavailable")
+	}
+	for {
+		event, err := stream.Next(ctx)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
 		domainEvent, err := interfaces.NewFactoryEvent(event)

@@ -34,6 +34,7 @@ const (
 // parts. Its top-level name is retained because the functional-evidence
 // registry owns this public endpoint coverage identity.
 func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))

@@ -19,6 +19,7 @@ import (
 // legacy runtime submit ingress path records canonical FACTORY_REQUEST_BATCH work
 // requests in the public Factory Event history.
 func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow legacy unary retirement boundary smoke")
 	}

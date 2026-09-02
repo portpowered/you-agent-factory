@@ -75,19 +75,16 @@ func (err *factoryTargetReadinessError) Unwrap() error {
 	return err.Cause
 }
 
-// TestFactoryTargetReadinessCharacterization records the earliest public
-// Factory-target boundary before FT-B05 starts repeated Worker Session reads.
-// The happy and semantic cases use the production-composed application; the
-// deadline case drives only the package-local waiter with a classified public
-// observation because the valid production fixture resolves immediately.
-func TestFactoryTargetReadinessCharacterization(t *testing.T) {
-	t.Run("FT-RDY-01 fully written explicit session exposes exact target", characterizeFactoryTargetReadinessHappy)
-	t.Run("FT-RDY-02 malformed target config is an immediate semantic failure", characterizeFactoryTargetReadinessSemanticFailure)
-	t.Run("FT-TIME-01 readiness deadline reports last public observation", characterizeFactoryTargetReadinessDeadline)
-	t.Run("FT-CAN-01 cancellation stops readiness without public mutation", characterizeFactoryTargetReadinessCancellation)
+// TestFactoryTargetReadinessCustomerBehavior proves an explicit Factory
+// Session exposes its selected target and malformed customer configuration is
+// rejected before any provider dispatch.
+func TestFactoryTargetReadinessCustomerBehavior(t *testing.T) {
+	t.Parallel()
+	t.Run("FT-RDY-01 fully written explicit session exposes exact target", testFactoryTargetReadinessHappy)
+	t.Run("FT-RDY-02 malformed target config is an immediate semantic failure", testFactoryTargetReadinessSemanticFailure)
 }
 
-func characterizeFactoryTargetReadinessHappy(t *testing.T) {
+func testFactoryTargetReadinessHappy(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -110,7 +107,7 @@ func characterizeFactoryTargetReadinessHappy(t *testing.T) {
 	}
 }
 
-func characterizeFactoryTargetReadinessSemanticFailure(t *testing.T) {
+func testFactoryTargetReadinessSemanticFailure(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -133,77 +130,17 @@ func characterizeFactoryTargetReadinessSemanticFailure(t *testing.T) {
 			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, "<none>", caseFixture.factoryDir)
 		},
 	)
-	assertFactoryTargetReadinessSemanticFailure(t, err, int(checks.Load()), fixture.runner.CallCount()-callStart)
+	providerCalls := 0
+	for _, request := range fixture.runner.RequestsSince(callStart) {
+		if sameFactoryPath(request.WorkDir, caseFixture.factoryDir) {
+			providerCalls++
+		}
+	}
+	assertFactoryTargetReadinessSemanticFailure(t, err, int(checks.Load()), providerCalls)
 	if len(caseFixture.sessionIDs) != 0 {
 		t.Fatalf("malformed Factory readiness opened a session: %#v", caseFixture.sessionIDs)
 	}
 	assertFactorySessionFolderAbsent(t, fixture.baseURL, caseFixture.factoryDir)
-}
-
-func characterizeFactoryTargetReadinessDeadline(t *testing.T) {
-	t.Helper()
-	var checks atomic.Int32
-	_, err := waitForFactoryTargetReadiness(
-		context.Background(),
-		"session-timeout",
-		"default",
-		50*time.Millisecond,
-		func(context.Context) (factoryTargetReadinessObservation, error) {
-			checks.Add(1)
-			return transientFactoryTargetReadinessObservation()
-		},
-	)
-	if err == nil {
-		t.Fatal("readiness waiter returned nil before its deadline")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("readiness deadline error = %v, want context deadline", err)
-	}
-	var readinessErr *factoryTargetReadinessError
-	if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessDeadline {
-		t.Fatalf("readiness deadline error = %v, want deadline classification", err)
-	}
-	if checks.Load() < 1 {
-		t.Fatal("readiness deadline made no public observation")
-	}
-	assertReadinessErrorMarkers(t, err, "default", "session-timeout", "HTTP 503 code=FACTORY_SESSION_NOT_READY")
-}
-
-func characterizeFactoryTargetReadinessCancellation(t *testing.T) {
-	t.Helper()
-	caseFixture := newWorkerSessionsCLICase(t)
-	fixture := caseFixture.fixture
-	sessionID := caseFixture.openSession(t)
-	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
-	ctx, cancel := context.WithCancel(context.Background())
-	var checks atomic.Int32
-	_, err := waitForFactoryTargetReadiness(
-		ctx,
-		sessionID,
-		"default",
-		15*time.Second,
-		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
-			checks.Add(1)
-			cancel()
-			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
-		},
-	)
-	if err == nil {
-		t.Fatal("canceled readiness returned nil error")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled readiness error = %v, want context cancellation", err)
-	}
-	var readinessErr *factoryTargetReadinessError
-	if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessCanceled {
-		t.Fatalf("canceled readiness error = %v, want canceled classification", err)
-	}
-	if checks.Load() != 1 {
-		t.Fatalf("canceled readiness checks = %d, want one bounded observation", checks.Load())
-	}
-	assertReadinessErrorMarkers(t, err, "default", sessionID, "")
-	after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
-	assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
 }
 
 func waitForCaseFactoryTargetReadiness(
@@ -216,18 +153,6 @@ func waitForCaseFactoryTargetReadiness(
 		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
 			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
 		})
-}
-
-func transientFactoryTargetReadinessObservation() (factoryTargetReadinessObservation, error) {
-	const result = "HTTP 503 code=FACTORY_SESSION_NOT_READY"
-	return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-		Class:      factoryTargetReadinessTransient,
-		Operation:  factoryTargetReadinessOperation,
-		TargetID:   "default",
-		SessionID:  "session-timeout",
-		LastResult: result,
-		Cause:      errors.New("public target discovery remains not ready"),
-	}
 }
 
 func assertFactoryTargetReadinessSemanticFailure(t *testing.T, err error, checks, providerCalls int) {

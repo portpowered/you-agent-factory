@@ -35,7 +35,6 @@ type packagedFixSharedFixture struct {
 	baseURL        string
 	process        support.ApplicationProcess
 	providerRunner *packagedFixSelectorRunner
-	census         *packagedFixResourceCensus
 	cancel         context.CancelFunc
 	done           chan error
 }
@@ -414,12 +413,6 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	if err := writePackagedFixForcedUnwindReport(packagedFixFixture, closeErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write packaged Fix forced-unwind report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	if packagedFixGitSeedInstance != nil {
 		if err := packagedFixGitSeedInstance.close(); err != nil {
 			fmt.Fprintf(os.Stderr, "close packaged Fix Git seed: %v\n", err)
@@ -475,9 +468,6 @@ func startPackagedFixFixture() (*packagedFixSharedFixture, error) {
 		cleanupRoot()
 		return nil, fmt.Errorf("build root process: %w", err)
 	}
-	census := newPackagedFixResourceCensus()
-	census.recordProcessStart()
-
 	env := packagedFixFixtureEnvironment(homeDir)
 	if err := initializePackagedFixHome(process, env, workingDir); err != nil {
 		closePackagedFixProcess(process)
@@ -533,7 +523,6 @@ func startPackagedFixFixture() (*packagedFixSharedFixture, error) {
 		baseURL:        baseURL,
 		process:        process,
 		providerRunner: providerRunner,
-		census:         census,
 		cancel:         cancel,
 		done:           done,
 	}, nil
@@ -596,9 +585,6 @@ func (fixture *packagedFixSharedFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
-	if fixture.census != nil {
-		fixture.census.recordPath(packagedFixCleanupCancellation)
-	}
 	fixture.cancel()
 	var errs []error
 	select {
@@ -612,9 +598,6 @@ func (fixture *packagedFixSharedFixture) close() error {
 		// failed to honor cancellation; without it TestMain could hang while
 		// closing the injected API server. It is not normal scenario waiting.
 		errs = append(errs, errors.New("timed out waiting for continuous command shutdown"))
-		if fixture.census != nil {
-			fixture.census.recordPath(packagedFixCleanupTimeout)
-		}
 	}
 	closeContext, cancel := context.WithTimeout(context.Background(), packagedFixFixtureShutdownTimeout)
 	if err := fixture.process.Close(closeContext); err != nil {
@@ -632,13 +615,6 @@ func (fixture *packagedFixSharedFixture) close() error {
 	}
 	if fixture.providerRunner.registeredCount() != 0 {
 		errs = append(errs, fmt.Errorf("%d provider selectors remain after cleanup", fixture.providerRunner.registeredCount()))
-	}
-	if fixture.census != nil {
-		fixture.census.recordPath(packagedFixCleanupPackageTeardown)
-		fmt.Fprintf(os.Stderr, "GATE-CLEAN-004 Fix cleanup paths: %s\n", fixture.census.cleanupPathSummary())
-		if err := fixture.census.closedError(); err != nil {
-			errs = append(errs, err)
-		}
 	}
 	return errors.Join(errs...)
 }
@@ -694,37 +670,16 @@ func openPackagedFixScenario(
 		sessionID:    opened.Session.Id,
 		requestID:    requestID,
 	}
-	fixture.census.register(packagedFixCensusRecord{
-		name:         worktreeName,
-		rootDir:      rootDir,
-		factoryDir:   factoryDir,
-		workspace:    factoryDir,
-		selector:     selector,
-		worktreeName: worktreeName,
-		requestID:    requestID,
-		sessionID:    scenario.sessionID,
-	})
 	t.Cleanup(func() {
-		sessionDeleted := false
-		rootAbsent := false
-		if t.Failed() {
-			fixture.census.recordPath(packagedFixCleanupAssertionFailure)
-		}
-		defer func() {
-			if err := os.RemoveAll(rootDir); err != nil {
-				t.Errorf("remove packaged Fix scenario root: %v", err)
-			}
-			if _, err := os.Stat(rootDir); errors.Is(err, os.ErrNotExist) {
-				rootAbsent = true
-			} else {
-				t.Errorf("packaged Fix scenario root remains after cleanup: %v", err)
-			}
-			selectorGone := !fixture.providerRunner.registered(scenario.selector)
-			fixture.census.recordCleanup(scenario.requestID, sessionDeleted, rootAbsent, selectorGone)
-		}()
 		support.CloseFactorySessionAt(t, fixture.baseURL, scenario.sessionID)
-		sessionDeleted = assertPackagedFixSessionDeleted(t, fixture.baseURL, scenario.sessionID)
+		assertPackagedFixSessionDeleted(t, fixture.baseURL, scenario.sessionID)
 		fixture.providerRunner.unregister(scenario.selector)
+		if err := os.RemoveAll(rootDir); err != nil {
+			t.Errorf("remove packaged Fix scenario root: %v", err)
+		}
+		if _, err := os.Stat(rootDir); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("packaged Fix scenario root remains after cleanup: %v", err)
+		}
 	})
 	return scenario
 }

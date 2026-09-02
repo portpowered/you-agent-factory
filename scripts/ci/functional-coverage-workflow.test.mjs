@@ -134,3 +134,21 @@ test("functional coverage joins quarantine after concurrent execution and publis
 		assert.match(job, new RegExp(path.replaceAll("/", "\\/")));
 	}
 });
+
+test("pinned real ACP evidence belongs to backend integration, not functional coverage", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const coverageJob = jobSection(workflow, "backend-coverage");
+	const integrationJob = jobSection(workflow, "backend-integration");
+
+	assert.doesNotMatch(coverageJob, /INFINITE_YOU_RUN_ACPX_REAL_CLIENT|real-acpx-evidence/);
+	assert.match(integrationJob, /uses: actions\/setup-node@v4/);
+	assert.match(integrationJob, /name: Build shared CLI artifact for compiled integration evidence/);
+	assert.match(integrationJob, /go build -o \.artifacts\/integration\/bin\/you \.\/cmd\/factory/);
+	assert.match(integrationJob, /name: Run pinned real ACP integration/);
+	assert.match(integrationJob, /INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"/);
+	assert.match(integrationJob, /INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"/);
+	assert.match(integrationJob, /INFINITE_YOU_INTEGRATION_BINARY:/);
+	assert.match(integrationJob, /\.artifacts\/integration\/real-acpx-evidence\.json/);
+	assert.match(integrationJob, /name: Require pinned real ACP integration evidence/);
+	assert.match(integrationJob, /if-no-files-found: error/);
+});

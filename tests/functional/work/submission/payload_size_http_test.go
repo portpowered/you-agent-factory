@@ -29,6 +29,7 @@ const (
 // TestPayloadSizeHTTPSubmission preserves the inclusive payload boundary and
 // atomic rejection witnesses on one serialized provider-backed fixture.
 func TestPayloadSizeHTTPSubmission(t *testing.T) {
+	t.Parallel()
 	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 

@@ -21,11 +21,12 @@ import (
 const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
 
 func TestLocalModelInvoke_JSONWithoutOutputReportsValidationOnly(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow built-CLI local model invoke readiness acceptance")
 	}
 
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -81,11 +82,12 @@ func TestLocalModelInvoke_JSONWithoutOutputReportsValidationOnly(t *testing.T) {
 }
 
 func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseInstalledCopy(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow built-CLI goal repeat acceptance")
 	}
 
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -150,6 +152,7 @@ func TestGoalRepeat_RepeatedNamedRunsAssignDistinctInvocationIdentityAndReuseIns
 }
 
 func TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow built-CLI subagent primary JSON acceptance")
 	}
@@ -182,7 +185,7 @@ func TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResult
 func prepareNamedSubagentAcceptanceSession(t *testing.T) (*builtcliacceptance.Session, string) {
 	t.Helper()
 
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

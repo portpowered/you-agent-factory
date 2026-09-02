@@ -7,11 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -21,10 +20,9 @@ import (
 const machineOutputProcessCloseTimeout = 5 * time.Second
 
 var machineOutputShared struct {
-	once      sync.Once
-	fixture   *machineOutputFixture
-	err       error
-	rootBuild atomic.Int32
+	once    sync.Once
+	fixture *machineOutputFixture
+	err     error
 }
 
 // TestMain owns the machine-readable output process for the package. The
@@ -46,50 +44,11 @@ func TestMain(m *testing.M) {
 type machineOutputFixture struct {
 	process        support.ApplicationProcess
 	router         *machineOutputCommandRouter
-	effects        *machineOutputEffects
 	factorySources map[string]string
 	sourceRoot     string
-	mu             sync.Mutex
-	active         atomic.Int32
-}
-
-type machineOutputPreActivationInvocation struct {
-	inputs         *support.CapturedInputs
-	providerRunner platformprocess.CommandRunner
-}
-
-type machineOutputPreActivationBatchResult struct {
-	errors        []error
-	maxConcurrent int32
-}
-
-type machineOutputPreActivationResult struct {
-	index int
-	err   error
-}
-
-type machineOutputEffects struct {
-	mu      sync.Mutex
-	counter *atomic.Int32
-	session atomic.Uint64
-}
-
-func (effects *machineOutputEffects) observe() {
-	effects.mu.Lock()
-	defer effects.mu.Unlock()
-	if effects.counter != nil {
-		effects.counter.Add(1)
-	}
-}
-
-func (effects *machineOutputEffects) setCounter(counter *atomic.Int32) {
-	effects.mu.Lock()
-	defer effects.mu.Unlock()
-	effects.counter = counter
-}
-
-func (effects *machineOutputEffects) nextSessionID() string {
-	return fmt.Sprintf("machine-output-session-%d", effects.session.Add(1))
+	baseURL        string
+	daemonCancel   context.CancelFunc
+	daemonDone     chan error
 }
 
 type machineOutputCommandRouter struct {
@@ -99,7 +58,7 @@ type machineOutputCommandRouter struct {
 }
 
 type machineOutputRoute struct {
-	workingDirectory string
+	executionScopeID string
 	runner           platformprocess.CommandRunner
 }
 
@@ -108,7 +67,7 @@ func newMachineOutputCommandRouter() *machineOutputCommandRouter {
 }
 
 func (router *machineOutputCommandRouter) bind(
-	workingDirectory string,
+	executionScopeID string,
 	runner platformprocess.CommandRunner,
 ) string {
 	router.mu.Lock()
@@ -116,7 +75,7 @@ func (router *machineOutputCommandRouter) bind(
 	router.nextID++
 	routeID := fmt.Sprintf("machine-output-route-%d", router.nextID)
 	router.routes[routeID] = machineOutputRoute{
-		workingDirectory: workingDirectory,
+		executionScopeID: executionScopeID,
 		runner:           runner,
 	}
 	return routeID
@@ -134,7 +93,7 @@ func (router *machineOutputCommandRouter) Run(
 ) (platformprocess.CommandResult, error) {
 	router.mu.Lock()
 	for _, route := range router.routes {
-		if filepath.Clean(route.workingDirectory) != filepath.Clean(request.WorkDir) {
+		if route.executionScopeID != request.ExecutionScopeID {
 			continue
 		}
 		runner := route.runner
@@ -143,39 +102,23 @@ func (router *machineOutputCommandRouter) Run(
 	}
 	router.mu.Unlock()
 	return platformprocess.CommandResult{}, fmt.Errorf(
-		"CLI output provider route not found for working directory %q",
-		request.WorkDir,
+		"CLI output provider route not found for Factory Session %q",
+		request.ExecutionScopeID,
 	)
-}
-
-func (router *machineOutputCommandRouter) routeCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.routes)
 }
 
 func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 	t.Helper()
 	machineOutputShared.once.Do(func() {
 		router := newMachineOutputCommandRouter()
-		effects := &machineOutputEffects{}
-		machineOutputShared.rootBuild.Add(1)
+		api := support.NewProcessAPIServer()
 		process, err := support.BuildProcessWithContext(
 			context.Background(),
 			serviceedges.Edges{
 				ProviderCommandRunner: router,
-				APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-					effects.observe()
-					return nil
-				},
-				BrowserOpener: func(context.Context, string) error {
-					effects.observe()
-					return nil
-				},
-				RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-					effects.observe()
-				},
-				FactorySessionIDGenerator: effects.nextSessionID,
+				APIServerStarter:      api.Start,
+				BrowserOpener:         func(context.Context, string) error { return nil },
+				RuntimeHostObserver:   func(factorysessions.RuntimeHostBinding) {},
 			},
 		)
 		if err != nil {
@@ -188,12 +131,31 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 			machineOutputShared.err = sourceErr
 			return
 		}
+		daemonContext, daemonCancel := context.WithCancel(context.Background())
+		daemonInputs := support.FakeInputs(daemonContext, []string{
+			"you", "run", "--continuously", "--with-server", "--quiet",
+			"--factory", machineOutputFactorySources(sourceHome)["@you/goal"], "--no-record",
+		})
+		daemonInputs.Input.Env = builtcliacceptance.ProcessEnvForIsolatedHome(filepath.Join(sourceRoot, "daemon-home"))
+		daemonInputs.Input.WorkingDirectory = sourceRoot
+		daemonDone := make(chan error, 1)
+		go func() { daemonDone <- process.Execute(daemonInputs.Input) }()
+		baseURL, startErr := api.WaitForBaseURL(15 * time.Second)
+		if startErr != nil {
+			daemonCancel()
+			_ = process.Close(context.Background())
+			_ = os.RemoveAll(sourceRoot)
+			machineOutputShared.err = startErr
+			return
+		}
 		machineOutputShared.fixture = &machineOutputFixture{
 			process:        process,
 			router:         router,
-			effects:        effects,
 			factorySources: machineOutputFactorySources(sourceHome),
 			sourceRoot:     sourceRoot,
+			baseURL:        baseURL,
+			daemonCancel:   daemonCancel,
+			daemonDone:     daemonDone,
 		}
 	})
 	if machineOutputShared.err != nil {
@@ -210,14 +172,18 @@ func (fixture *machineOutputFixture) close(ctx context.Context) error {
 		return nil
 	}
 	var closeErrors []error
-	if builds := machineOutputShared.rootBuild.Load(); builds != 1 {
-		closeErrors = append(closeErrors, fmt.Errorf("shared CLI output root builds: %d, want 1", builds))
+	if fixture.daemonCancel != nil {
+		fixture.daemonCancel()
 	}
-	if routes := fixture.router.routeCount(); routes != 0 {
-		closeErrors = append(closeErrors, fmt.Errorf("shared CLI output provider routes remaining at close: %d", routes))
-	}
-	if active := fixture.active.Load(); active != 0 {
-		closeErrors = append(closeErrors, fmt.Errorf("shared CLI output invocations active at close: %d", active))
+	if fixture.daemonDone != nil {
+		select {
+		case err := <-fixture.daemonDone:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				closeErrors = append(closeErrors, fmt.Errorf("stop shared CLI output host: %w", err))
+			}
+		case <-ctx.Done():
+			closeErrors = append(closeErrors, fmt.Errorf("stop shared CLI output host: %w", ctx.Err()))
+		}
 	}
 	if err := fixture.process.Close(ctx); err != nil {
 		closeErrors = append(closeErrors, err)
@@ -253,7 +219,7 @@ func materializeMachineOutputSources(
 	if err := os.MkdirAll(workingDirectory, 0o755); err != nil {
 		return "", "", fmt.Errorf("create shared CLI output source work directory: %w", err)
 	}
-	env := append(os.Environ(), "HOME="+sourceHome, "USERPROFILE="+sourceHome)
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(sourceHome)
 	support.InstallPackagedFactoryWithProcess(
 		t,
 		process,
@@ -267,8 +233,7 @@ func materializeMachineOutputSources(
 func machineOutputFactorySources(sourceHome string) map[string]string {
 	factoriesRoot := filepath.Join(sourceHome, ".you-agent-factory", "factories")
 	return map[string]string{
-		"@you/goal":          filepath.Join(factoriesRoot, "@you", "goal"),
-		"@you/plan-parallel": filepath.Join(factoriesRoot, "@you", "plan-parallel"),
+		"@you/goal": filepath.Join(factoriesRoot, "@you", "goal"),
 	}
 }
 
@@ -277,11 +242,10 @@ func runMachineOutputInvocation(
 	args []string,
 	packagedFactoryName string,
 	providerRunner platformprocess.CommandRunner,
-	effectsCounter *atomic.Int32,
 ) (stdout, stderr string, err error) {
 	t.Helper()
-	fixture, inputs := newMachineOutputInputs(t, args, packagedFactoryName)
-	err = fixture.execute(inputs, providerRunner, effectsCounter)
+	fixture, inputs, factoryDir := newMachineOutputInputs(t, args, packagedFactoryName)
+	err = fixture.execute(t, inputs, factoryDir, providerRunner)
 	return inputs.Stdout(), inputs.Stderr(), err
 }
 
@@ -289,140 +253,86 @@ func newMachineOutputInputs(
 	t testing.TB,
 	args []string,
 	packagedFactoryName string,
-) (*machineOutputFixture, *support.CapturedInputs) {
+) (*machineOutputFixture, *support.CapturedInputs, string) {
 	t.Helper()
 	fixture := sharedMachineOutputFixture(t)
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
 	inputs := support.FakeInputs(t.Context(), append([]string(nil), args...))
 	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = workingDirectory
+	factoryDir := machineOutputExplicitFactoryDir(args)
 	if packagedFactoryName != "" {
 		sourceDir := fixture.factorySources[packagedFactoryName]
 		if sourceDir == "" {
 			t.Fatalf("no shared packaged Factory source for %q", packagedFactoryName)
 		}
-		support.CopyFactoryAsNamed(t, sourceDir, homeDir, packagedFactoryName)
+		factoryDir = support.CopyFactoryAsNamed(t, sourceDir, homeDir, packagedFactoryName)
 	}
-	return fixture, inputs
+	return fixture, inputs, factoryDir
 }
 
-// execute serializes shared-process calls while keeping each invocation's
-// route, streams, environment, home, and session state independent.
 func (fixture *machineOutputFixture) execute(
+	t testing.TB,
 	inputs *support.CapturedInputs,
+	factoryDir string,
 	providerRunner platformprocess.CommandRunner,
-	effectsCounter *atomic.Int32,
 ) error {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	fixture.effects.setCounter(effectsCounter)
-	defer fixture.effects.setCounter(nil)
+	t.Helper()
+	if factoryDir == "" {
+		// Missing targets and command-shape failures return before runtime
+		// ownership and therefore need no hosted Factory Session.
+		return fixture.process.Execute(inputs.Input)
+	}
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
+	sessionID := opened.Session.Id
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
 	var routeID string
 	if providerRunner != nil {
-		routeID = fixture.router.bind(inputs.Input.WorkingDirectory, providerRunner)
+		routeID = fixture.router.bind(sessionID, providerRunner)
 		defer fixture.router.unbind(routeID)
 	}
-	fixture.active.Add(1)
-	defer fixture.active.Add(-1)
+	args := []string{"you", "--remote", "--server", fixture.baseURL}
+	for _, arg := range inputs.Input.Args[1:] {
+		args = append(args, arg)
+		if arg == "run" {
+			args = append(args, "--session", sessionID)
+		}
+	}
+	inputs.Input.Args = args
 	return fixture.process.Execute(inputs.Input)
 }
 
-func assertMachineOutputFixtureIdle(t testing.TB, fixture *machineOutputFixture) {
-	t.Helper()
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	if routes := fixture.router.routeCount(); routes != 0 {
-		t.Fatalf("shared CLI output provider routes = %d, want 0", routes)
-	}
-	if active := fixture.active.Load(); active != 0 {
-		t.Fatalf("shared CLI output invocations active = %d, want 0", active)
-	}
-}
-
-// executePreActivationBatch admits the fixed bad-input/output-selection batch
-// concurrently while keeping all other shared-root executions serialized. The
-// cases in this batch return during CLI parsing or output validation, before
-// Factory/runtime activation; unique inputs and working-directory routes keep
-// their streams and controlled provider edges independent if that invariant
-// regresses. The shared effect counter proves that no activation boundary was
-// crossed by any member of the batch.
-func (fixture *machineOutputFixture) executePreActivationBatch(
-	invocations []machineOutputPreActivationInvocation,
-	effectsCounter *atomic.Int32,
-) machineOutputPreActivationBatchResult {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	fixture.effects.setCounter(effectsCounter)
-	defer fixture.effects.setCounter(nil)
-
-	routeIDs := make([]string, len(invocations))
-	for index, invocation := range invocations {
-		if invocation.providerRunner == nil {
+func machineOutputExplicitFactoryDir(args []string) string {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] != "--factory" {
 			continue
 		}
-		routeIDs[index] = fixture.router.bind(
-			invocation.inputs.Input.WorkingDirectory,
-			invocation.providerRunner,
-		)
-	}
-	defer func() {
-		for _, routeID := range routeIDs {
-			if routeID != "" {
-				fixture.router.unbind(routeID)
-			}
+		path := args[index+1]
+		if filepath.Ext(path) != "" {
+			return filepath.Dir(path)
 		}
-	}()
+		return path
+	}
+	return ""
+}
 
-	if len(invocations) == 0 {
-		return machineOutputPreActivationBatchResult{}
-	}
+// executeValidation is limited to command-shape failures that return before a
+// Factory Session is opened. Those calls do not own ~default and can overlap
+// customer invocations that do.
+func (fixture *machineOutputFixture) executeValidation(inputs *support.CapturedInputs) error {
+	return fixture.process.Execute(inputs.Input)
+}
 
-	start := make(chan struct{})
-	ready := make(chan struct{}, len(invocations))
-	results := make(chan machineOutputPreActivationResult, len(invocations))
-	var current atomic.Int32
-	var maxConcurrent atomic.Int32
-	var waitGroup sync.WaitGroup
-	for index, invocation := range invocations {
-		fixture.active.Add(1)
-		waitGroup.Add(1)
-		go func(index int, invocation machineOutputPreActivationInvocation) {
-			defer waitGroup.Done()
-			defer fixture.active.Add(-1)
-			ready <- struct{}{}
-			<-start
-
-			active := current.Add(1)
-			for {
-				observed := maxConcurrent.Load()
-				if active <= observed || maxConcurrent.CompareAndSwap(observed, active) {
-					break
-				}
-			}
-			err := fixture.process.Execute(invocation.inputs.Input)
-			current.Add(-1)
-			results <- machineOutputPreActivationResult{index: index, err: err}
-		}(index, invocation)
-	}
-	for range invocations {
-		<-ready
-	}
-	close(start)
-	batchErrors := make([]error, len(invocations))
-	for range invocations {
-		result := <-results
-		batchErrors[result.index] = result.err
-	}
-	waitGroup.Wait()
-
-	// The buffered result channel lets each invocation publish independently;
-	// this collection restores the caller's original case order.
-	return machineOutputPreActivationBatchResult{
-		errors:        batchErrors,
-		maxConcurrent: maxConcurrent.Load(),
-	}
+func runMachineOutputValidationInvocation(
+	t testing.TB,
+	args []string,
+) (stdout, stderr string, err error) {
+	t.Helper()
+	fixture, inputs, _ := newMachineOutputInputs(t, args, "")
+	err = fixture.executeValidation(inputs)
+	return inputs.Stdout(), inputs.Stderr(), err
 }
 
 func machineOutputAcceptedProviderRunner() platformprocess.CommandRunner {

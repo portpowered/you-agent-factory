@@ -16,6 +16,7 @@ const agyFunctionalModel = agyGoldenModel
 // print-mode execution through the customer process boundary and
 // Providers-backed command adapter.
 func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, responseEvents, route, callStart := fixture.runDirect(t, "direct-conductor-success")
 
@@ -41,6 +42,7 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 // TestAgyNativeFailureThroughRootBuildProcessIsSafe proves native Agy failures
 // remain safe and observable through the customer process boundary.
 func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-native-failure")
 	const leaked = "/tmp/secret-key"
@@ -68,6 +70,7 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 // TestAgyTimeoutFailureThroughRootBuildProcess proves timeout normalization
 // through the customer process boundary without leaking partial output.
 func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-timeout")
 
@@ -88,6 +91,7 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 // cancellation returns the canonical outcome through the Providers command
 // adapter.
 func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-cancellation")
 

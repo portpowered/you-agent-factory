@@ -68,6 +68,7 @@ type providerCommandRequest struct {
 	Stdin                    []byte
 	Env                      []string
 	WorkDir                  string
+	FactorySessionID         string
 	DispatchID               string
 	AttemptID                string
 	TransitionID             string
@@ -129,6 +130,7 @@ func workerCommandRequest(request providerCommandRequest) workerprocess.CommandR
 	private.Stdin = request.Stdin
 	private.Env = request.Env
 	private.WorkDir = request.WorkDir
+	private.FactorySessionID = request.FactorySessionID
 	private.ExecutionLogger = request.ExecutionLogger
 	private.ProcessLifecycleObserver = request.ProcessLifecycleObserver
 	return private

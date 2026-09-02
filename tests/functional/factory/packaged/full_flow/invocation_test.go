@@ -23,15 +23,19 @@ import (
 func TestPackagedFullFlow(t *testing.T) {
 	fixture := newFullFlowSharedFixture(t)
 	t.Run("TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion", func(t *testing.T) {
+		t.Parallel()
 		testPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t, fixture)
 	})
 	t.Run("TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject", func(t *testing.T) {
+		t.Parallel()
 		testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t, fixture)
 	})
 	t.Run("TestPackagedFullFlowEnforcesCallerSelectedTaskBound", func(t *testing.T) {
+		t.Parallel()
 		testPackagedFullFlowEnforcesCallerSelectedTaskBound(t, fixture)
 	})
 	t.Run("TestPackagedFullFlowEnforcesCallerSelectedCycleBound", func(t *testing.T) {
+		t.Parallel()
 		testPackagedFullFlowEnforcesCallerSelectedCycleBound(t, fixture)
 	})
 }
@@ -279,8 +283,6 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		runner.mu.Unlock()
 		if runner.detectConcurrentImplementations {
 			runner.awaitConcurrentImplementation()
-		} else {
-			time.Sleep(75 * time.Millisecond)
 		}
 		if runner.stallImplementation {
 			runner.mu.Lock()

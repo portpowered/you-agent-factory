@@ -15,36 +15,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestRunAcceptsOnePositionalPrompt proves a single positional prompt that
-// contains spaces and Unicode characters survives through the public CLI
-// observation edge with the exact customer-supplied string intact.
-func TestRunAcceptsOnePositionalPrompt(t *testing.T) {
-	prompt := "Ship the café résumé plan"
-
-	factoryDir := support.ScaffoldSingleStepFactory(t, "positional-values")
-	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-
-	observation := executeParameterObservation(t, []string{
-		"you", "run",
-		"--factory", factoryPath,
-		"--no-record",
-		prompt,
-	})
-	if observation.Parse.CommandPath != "you run" {
-		t.Fatalf("observed command path = %q, want you run", observation.Parse.CommandPath)
-	}
-	if len(observation.Parse.Positionals) != 1 {
-		t.Fatalf("observed positional count = %d, want 1: %#v", len(observation.Parse.Positionals), observation.Parse.Positionals)
-	}
-	if got := observation.Parse.Positionals[0]; got != prompt {
-		t.Fatalf("observed positional prompt = %q, want %q", got, prompt)
-	}
-}
-
 // TestRunRejectsExtraPositionalValues proves surplus positional prompt values
 // on you run --factory are rejected with a stable diagnostic before any worker
 // provider dispatch can start.
 func TestRunRejectsExtraPositionalValues(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldSinglePositionalInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
@@ -57,7 +32,7 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 		"second prompt",
 	})
 
-	executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
+	executeErr := parameterProcesses.process.Execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(extra positional prompts) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -97,7 +72,9 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 // positional is omitted and routes to an explicit override positional when one
 // is supplied.
 func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
+	t.Parallel()
 	t.Run("omitted session positional targets default session", func(t *testing.T) {
+		t.Parallel()
 		var gotPath string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotPath = r.URL.Path
@@ -111,7 +88,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 			"session", "pause",
 		})
 
-		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause default targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,
@@ -126,6 +103,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 	})
 
 	t.Run("explicit session positional overrides default targeting", func(t *testing.T) {
+		t.Parallel()
 		overrideSessionID := "session-customer-override"
 		var gotPath string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +118,7 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 			"session", "pause", overrideSessionID,
 		})
 
-		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.process.Execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause override targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -20,6 +19,7 @@ const codedDiagnosticUnknownModelName = "missing-model"
 
 // TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic proves local removal renders a coded diagnostic for a missing cache entry.
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		flags []string
@@ -64,9 +64,10 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 
 // TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic proves local and HTTP removal expose equivalent missing-cache diagnostics.
 func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
+	t.Parallel()
 	const message = "model cache is not installed; run you models pull " + codedDiagnosticModelName + " first"
 
-	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodDelete || request.URL.Path != "/models/"+codedDiagnosticModelName {
 			http.NotFound(writer, request)
 			return
@@ -85,12 +86,11 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
 	})
-	remoteInputs.Input.WorkingDirectory = characterizationTempDir(t)
+	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelCacheNotFound) {
 		t.Fatalf("remote Process.Execute(models remove) error = %v, want ErrModelCacheNotFound", remoteErr)
@@ -106,6 +106,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 
 // TestModelsLocalInspectUnknownRendersCodedDiagnostic proves local inspection renders a coded diagnostic for an unknown model.
 func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		flags []string
@@ -150,7 +151,8 @@ func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 
 // TestModelsLocalInspectUnknownMatchesHTTPDiagnostic proves local and HTTP inspection expose equivalent unknown-model diagnostics.
 func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
-	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	t.Parallel()
+	server := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {
 			http.NotFound(writer, request)
 			return
@@ -171,12 +173,11 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
 	})
-	remoteInputs.Input.WorkingDirectory = characterizationTempDir(t)
+	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelNotFound) {
 		t.Fatalf("remote Process.Execute(models inspect) error = %v, want ErrModelNotFound", remoteErr)
@@ -195,33 +196,31 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 
 func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
-	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := characterizationTempDir(t)
+	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := functionalTempDir(t)
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "remove", codedDiagnosticModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
 	inputs.Input.Env = append(
-		functionalHomeEnvironment(characterizationTempDir(t)),
+		functionalHomeEnvironment(functionalTempDir(t)),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
 	)
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	return inputs, process.Execute(inputs.Input)
 }
 
 func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
-	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "inspect", codedDiagnosticUnknownModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = functionalHomeEnvironment(characterizationTempDir(t))
+	inputs.Input.Env = functionalHomeEnvironment(functionalTempDir(t))
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	return inputs, process.Execute(inputs.Input)
 }
 

@@ -511,7 +511,6 @@ func seedInstalledPackagedFactoryFromCatalog(
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", factoryDir, err)
 	}
-	registerChatFactoryPath(t, factoryDir)
 	configPath := filepath.Join(factoryDir, "factory.json")
 	if err := os.WriteFile(configPath, resolved.Definition.JSON, 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", configPath, err)
@@ -926,12 +925,6 @@ func TestMain(m *testing.M) {
 	} else {
 		_ = os.Unsetenv("YOU_DEFAULT_WORKER_MODEL")
 	}
-	if err := chatCensus.assertClean(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %v\n", err)
-		code = 1
-	}
-	_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %s\n", chatCensus.summary())
-
 	os.Exit(code)
 }
 

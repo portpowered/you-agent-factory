@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -18,6 +20,18 @@ import (
 type liveSessionAPIFake struct {
 	apisurface.LiveSessionAPI
 	get func(context.Context, string) (factoryapi.FactorySession, error)
+}
+
+type invocationAPIFake struct {
+	err error
+}
+
+func (fake invocationAPIFake) InvokeFactorySession(
+	context.Context,
+	string,
+	factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	return apisurface.FactoryInvocationResult{}, fake.err
 }
 
 func (fake liveSessionAPIFake) GetFactorySession(ctx context.Context, id string) (factoryapi.FactorySession, error) {
@@ -57,6 +71,27 @@ func TestHandlerOpenFactorySessionRejectsInvalidPayloadBeforeServiceInvocation(t
 
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"BAD_REQUEST"`) {
 		t.Fatalf("response = %d %s, want typed bad request", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHandlerInvokeFactorySessionPreservesWrappedPayloadLimitDiagnostic(t *testing.T) {
+	payloadSize := &work.PayloadSizeError{
+		WorkName: "invocation", PayloadBytes: 65537, PayloadLimitBytes: 65536,
+	}
+	handler := NewHandler(Dependencies{
+		Invocation: invocationAPIFake{err: fmt.Errorf("prepare invocation: %w", payloadSize)},
+	}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.InvokeFactorySessionBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/session-alpha/invocations", strings.NewReader(`{}`)),
+		"session-alpha",
+	)
+
+	if recorder.Code != http.StatusBadRequest ||
+		!strings.Contains(recorder.Body.String(), "payloadBytes=65537 payloadLimitBytes=65536") {
+		t.Fatalf("response = %d %s, want preserved Work payload limit", recorder.Code, recorder.Body.String())
 	}
 }
 

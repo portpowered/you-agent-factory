@@ -54,7 +54,7 @@ func testMockWorkerSelectedThroughCustomerProcess(
 		Payload:    []byte("root mock payload"),
 	})
 
-	fixture.useCommandRunners(nil, nil)
+	fixture.useCommandRunnersFor(t, dir, nil, nil)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)

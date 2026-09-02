@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -19,6 +20,7 @@ import (
 // command edge and provider command runner make a regression observable while
 // ensuring this compatibility route never reaches a live provider.
 func TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(t *testing.T) {
+	t.Parallel()
 	dir := writeMockJavaScriptACPFactory(t)
 	support.SetWorkingDirectory(t, dir)
 
@@ -28,7 +30,7 @@ func TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(t *testing.T) 
 		"you", "run", "--factory", "./acp.js", "--with-mock-workers", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = os.Environ()
+	inputs.Input.Env = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())
 	process := support.BuildProcess(t, serviceedges.Edges{
 		PlatformProcessCommandFactory: mockACPCommandFactory(&acpStarts),
 		ProvidersExecutableLocator:    mockACPExecutableLocator{},

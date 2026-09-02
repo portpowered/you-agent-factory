@@ -234,7 +234,9 @@ func newCodexPackageProcess(
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
 	apiStarts := &atomic.Int32{}
-	process := support.BuildProcess(t, serviceedges.Edges{
+	// TestMain owns this package-wide process. Do not register its cleanup on
+	// the first top-level test that happens to initialize the fixture.
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: router,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
@@ -246,6 +248,9 @@ func newCodexPackageProcess(
 		FactorySessionRuntimeInstanceIDGenerator: identities.nextRuntimeID,
 		FactorySessionResponseEventIDGenerator:   identities.nextResponseEventID,
 	})
+	if err != nil {
+		t.Fatalf("build shared Codex package process: %v", err)
+	}
 
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",

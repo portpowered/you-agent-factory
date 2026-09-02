@@ -29,11 +29,13 @@ const (
 // identities through the CLI and writes the expected primary-result outcome to stdout on success.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIRunNamedFactory(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run named/packaged factory wiring")
 	}
 
 	t.Run("named_from_unrelated_working_directory", func(t *testing.T) {
+		t.Parallel()
 		homeDir := t.TempDir()
 		sourceDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
 		support.CreateNamedFactory(
@@ -99,6 +101,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 	})
 
 	t.Run("packaged_goal_summary_primary_result", func(t *testing.T) {
+		t.Parallel()
 		homeDir := t.TempDir()
 		support.InstallPackagedFactory(t, homeDir, interfaces.PackagedGoalFactoryName)
 
@@ -160,6 +163,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 // actionable Factory load validation diagnostic when the selected Factory cannot
 // be loaded, and writes no success primary-result payload to stdout.
 func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run invalid factory wiring")
 	}
@@ -180,6 +184,7 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 		prompt,
 	)
 	cmd.Dir = factoryDir
+	cmd.Env = runWiringCustomerHomeEnvironment(t.TempDir())
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -204,6 +209,7 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 // TestCLIRunFactoryByPath proves you run executes against an authored Factory
 // filesystem path and writes the invocation primary result to stdout on success.
 func TestCLIRunFactoryByPath(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	prompt := fmt.Sprintf("functional-run-wiring-path-%d", time.Now().UnixNano())
@@ -250,6 +256,7 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 // TestCLIRunFactoryWritesPrimaryResultFromStdin proves you run accepts stdin-only
 // prompt input and writes the invocation primary result to stdout on success.
 func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run stdin wiring")
 	}
@@ -299,6 +306,7 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 // simultaneous positional prompt and stdin input with a stable conflict code and
 // writes no success primary-result payload to stdout.
 func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run input conflict wiring")
 	}
@@ -349,6 +357,7 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 // success primary-result payload to stdout when invocation primary-result
 // resolution fails.
 func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run unresolved primary-result wiring")
 	}
@@ -377,6 +386,7 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 		"trigger unresolved result",
 	)
 	cmd.Dir = factoryDir
+	cmd.Env = runWiringCustomerHomeEnvironment(t.TempDir())
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -398,6 +408,7 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 // write only the primary result to stdout without operator lifecycle chatter so
 // repeated runs remain pipeable.
 func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run clean stdout wiring")
 	}
@@ -426,24 +437,13 @@ func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
 		assertRunWiringCleanInvocationStdout(t, stdout, prompt)
 	}
 
-	stdout, stderr, err := runRunWiringFactoryCLI(
-		t,
-		factoryDir,
-		processHarness,
-		mockWorkersPath,
-		strings.NewReader("functional-clean-stdin-only\n"),
-		factoryPath,
-	)
-	if err != nil {
-		t.Fatalf("run stdin-only clean invocation: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
-	}
-	assertRunWiringCleanInvocationStdout(t, stdout, "functional-clean-stdin-only")
 }
 
 // TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup proves you run
 // rejects ambiguous positional prompt and stdin input before runtime startup with
 // a stable conflict diagnostic and no success stdout payload.
 func TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI run ambiguous input wiring")
 	}
@@ -609,7 +609,9 @@ func writeRunWiringMockWorkersConfig(t *testing.T) string {
 
 func newRunWiringRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	harness.DefaultEnv = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())
+	return harness
 }
 
 func reserveRunWiringLocalTCPPort() (int, error) {

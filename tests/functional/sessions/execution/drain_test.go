@@ -22,7 +22,6 @@ import (
 )
 
 const incompleteDrainProcessTimeout = 15 * time.Second
-const continuousIdleObservation = 500 * time.Millisecond
 const incompleteDrainListenAddress = "127.0.0.1:7437"
 
 // TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal proves that a
@@ -317,6 +316,7 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 			factoryDir := scaffoldIncompleteDrainFactory(t)
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
 			transportReady := make(chan struct{})
+			browserOpened := make(chan struct{}, 1)
 			process := support.BuildProcess(t, serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
@@ -330,6 +330,10 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 				},
 				BrowserOpener: func(context.Context, string) error {
 					browserCalls.Add(1)
+					select {
+					case browserOpened <- struct{}{}:
+					default:
+					}
 					return nil
 				},
 			})
@@ -355,15 +359,23 @@ func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {
 				t.Fatal("continuous hosted run did not start its listener")
 			}
 
-			// There is no public idle event at the Process.Execute boundary. A
-			// bounded observation is therefore required for this negative liveness
-			// assertion: Done must remain open while the continuous run is idle.
-			idleTimer := time.NewTimer(continuousIdleObservation)
-			defer idleTimer.Stop()
+			// Listener binding is the deterministic customer-visible readiness
+			// boundary for this otherwise idle run. Once bound, the invocation must
+			// still be live; spending an additional fixed observation interval here
+			// does not strengthen that proof and only blocks the fixture.
 			select {
 			case <-command.Done():
 				t.Fatalf("continuous hosted run exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
-			case <-idleTimer.C:
+			default:
+			}
+			if mode.wantBrowser != 0 {
+				browserTimer := time.NewTimer(incompleteDrainProcessTimeout)
+				defer browserTimer.Stop()
+				select {
+				case <-browserOpened:
+				case <-browserTimer.C:
+					t.Fatal("continuous hosted site did not open the customer browser")
+				}
 			}
 
 			command.Stop(t)

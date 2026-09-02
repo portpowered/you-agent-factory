@@ -96,7 +96,8 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
-	process, recordingReader := BuildProcessWithRecordingReader(t, edges)
+	process := BuildProcess(t, edges)
+	recordingReader := process.WorkerRecordingReader()
 	var closeProcess func(context.Context) error
 	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
 		closeProcess = closer.Close

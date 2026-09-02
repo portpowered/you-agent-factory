@@ -21,6 +21,7 @@ import (
 // paused runtime is the synchronization boundary that keeps the admitted Work
 // from producing a Worker Session before either read.
 func TestWorkerSessionRouteFunctionalKnownEmptyWork(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "worker-sessions-route-empty",
 		"workTypes": []any{map[string]any{
@@ -88,6 +89,7 @@ func TestWorkerSessionRouteFunctionalKnownEmptyWork(t *testing.T) {
 // Each result is checked against its independent public association event, so
 // a successful response cannot hide a Work or session mix-up.
 func TestWorkerSessionRouteFunctionalConcurrentReadsPreserveScope(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-concurrent")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 
@@ -205,6 +207,7 @@ func assertConcurrentWorkerSessionDispatchesCompleted(
 // API-owned failure rows through the live root-built server and checks the
 // same unknown-Work outcome through Process.Execute.
 func TestWorkerSessionRouteFunctionalBadInputAndUnknownWork(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-failures")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{

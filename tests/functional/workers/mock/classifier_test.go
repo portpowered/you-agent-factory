@@ -35,7 +35,7 @@ func testScriptWorkerClassifierRoutesWithoutModelCalls(
 	})
 	providerRunner := testutil.NewProviderCommandRunner()
 
-	fixture.useCommandRunners(providerRunner, scriptRunner)
+	fixture.useCommandRunnersFor(t, dir, providerRunner, scriptRunner)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)

@@ -89,7 +89,7 @@ func TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly(t *testing.T) 
 func TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges(t *testing.T) {
 	t.Parallel()
 
-	outputDirectory := characterizationTempDir(t)
+	outputDirectory := functionalTempDir(t)
 	textPath := filepath.Join(outputDirectory, "text.out")
 	usagePath := filepath.Join(outputDirectory, "usage.out")
 	if err := os.WriteFile(textPath, []byte("old text"), 0o644); err != nil {
@@ -229,7 +229,7 @@ func buildGenericCLIProcess(
 	compatibility genericCLICompatibilityChecker,
 ) (support.Process, string, []string) {
 	t.Helper()
-	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -237,7 +237,7 @@ func buildGenericCLIProcess(
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	selection := genericLlamaBackendSelection()
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
@@ -252,7 +252,7 @@ func buildGenericCLIProcess(
 	}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	config := configFactory(modelServer.URL)
-	directory := characterizationScaffoldFactory(t, config)
+	directory := functionalScaffoldFactory(t, config)
 	edges := serviceedges.Edges{
 		ModelAssetHTTPClient: &rejectingModelAssetHTTP{},
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
@@ -283,7 +283,7 @@ func buildGenericCLIProcess(
 		edges.ModelCLIOutputRemovePath = outputEffects.Remove
 		edges.ModelCLIOutputRenamePath = outputEffects.Rename
 	}
-	return characterizationBuildProcess(t, edges), directory, functionalHomeEnvironment(home)
+	return functionalBuildProcess(t, edges), directory, functionalHomeEnvironment(home)
 }
 
 type genericCLIProtocolClient struct{}
@@ -396,7 +396,6 @@ func (launcher *stoppableGenericCLIHostLauncher) Start(
 	Stop(context.Context) error
 }, error) {
 	launcher.mu.Lock()
-	c06Ledger.hostStarts.Add(1)
 	if launcher.endpoint == "" {
 		launcher.endpoint = spec.HealthEndpoint
 	}
@@ -441,7 +440,6 @@ func (launcher *crashedGenericCLIHostLauncher) Start(
 	Stop(context.Context) error
 }, error) {
 	launcher.startCall.Add(1)
-	c06Ledger.hostStarts.Add(1)
 	return nil, launcher.waitErr
 }
 

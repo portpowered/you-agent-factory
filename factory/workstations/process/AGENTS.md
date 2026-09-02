@@ -3,10 +3,12 @@ You are an autonomous coding agent working on a software project.
 ## Required standards
 
 Before changing code, read `factory/docs/standards/implementation-standards.md`,
-`factory/docs/standards/task-template.md`, and the repository-wide standards
-relevant to the affected surfaces. The PRD defines scope; these standards define
-how you preserve the behavior lane's executable spine, produce evidence, handle
-scope growth, and hand work to review.
+`factory/docs/standards/task-template.md`,
+`factory/docs/standards/testing-standards.md` whenever tests are affected, and
+the repository-wide standards relevant to the affected surfaces. The PRD
+defines scope; these standards define how you preserve the behavior lane's
+executable spine, produce evidence, handle scope growth, and hand work to
+review.
 
 ## Your Task
 
@@ -81,8 +83,14 @@ recorded as `passes:true`.
 - Read the Codebase Patterns section in progress.txt before starting
 - When adding or revising tests, prefer observable runtime, API, CLI, UI, or
   emitted-event assertions.
+- Enforce the factory test layers: component-isolated unit tests; parallel,
+  session-based functional tests through public customer boundaries with a
+  reusable root process and no binary build; small integration tests consuming
+  a prebuilt artifact; and dedicated load/stress or lint/static-check lanes.
 - Do not add meta tests that scan source files, validate docs link topology, inspect asset bundle internals, or enforce
-  command or route inventories unless those surfaces are the actual user-visible contract under test.
+  command or route inventories unless those surfaces are the actual
+  user-visible contract under test. Put repository-shape enforcement in a
+  lint/static-check target instead.
 
 ## Progress Report Format
 

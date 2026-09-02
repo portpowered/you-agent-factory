@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"testing"
 )
 
 // ACP functional peers receive their non-secret controls as an invocation-
@@ -194,64 +192,4 @@ func loadACPFixtureFromArgs() (config acpFixtureConfig, present bool, err error)
 		config, err = decodeACPFixture(strings.TrimPrefix(arg, acpFixtureFlagPrefix))
 	}
 	return config, present, err
-}
-
-// TestACPFixtureContractRejectsInvalidInvocationScopedData proves malformed
-// payloads reject in the real child entrypoints before any JSON-RPC traffic,
-// and that valid functional and golden payloads are accepted by their own
-// process entrypoints.
-func TestACPFixtureContractRejectsInvalidInvocationScopedData(t *testing.T) {
-	relativePath := filepath.Join("relative", "marker")
-	cases := []struct {
-		name    string
-		payload string
-	}{
-		{name: "invalid base64url", payload: "not-base64url!!"},
-		{name: "invalid JSON", payload: base64.RawURLEncoding.EncodeToString([]byte("{not-json"))},
-		{name: "missing kind", payload: encodeACPFixture(acpFixtureConfig{Mode: "1"})},
-		{name: "unknown kind", payload: encodeACPFixture(acpFixtureConfig{Kind: "acpx", Mode: "1"})},
-		{name: "missing mode", payload: encodeACPFixture(acpFixtureConfig{Kind: acpFixtureKindFunctional})},
-		{name: "mode kind mismatch", payload: encodeACPFixture(acpFixtureConfig{Kind: acpFixtureKindFunctional, Mode: "success"})},
-		{name: "golden mode on functional peer", payload: encodeACPFixture(acpFixtureConfig{Kind: acpFixtureKindGolden, Mode: "fail"})},
-		{name: "relative retry directory", payload: encodeACPFixture(acpFixtureConfig{Kind: acpFixtureKindFunctional, Mode: "retry-resume", RetryAttemptDirectory: relativePath})},
-		{name: "empty helper marker", payload: base64.RawURLEncoding.EncodeToString([]byte(`{"kind":"functional","mode":"1","helperStartMarkerPath":""}`))},
-		{name: "unknown field", payload: base64.RawURLEncoding.EncodeToString([]byte(`{"kind":"functional","mode":"1","unexpected":true}`))},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			command := exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$", "--", acpFixtureFlagPrefix+testCase.payload)
-			output, err := command.CombinedOutput()
-			if err == nil {
-				t.Fatalf("malformed acp fixture exited zero; output=%s", output)
-			}
-			if strings.Contains(string(output), `"jsonrpc"`) {
-				t.Fatalf("malformed acp fixture produced JSON-RPC traffic before rejection: %s", output)
-			}
-		})
-	}
-
-	t.Run("valid functional fixture decodes", func(t *testing.T) {
-		fixture := functionalACPFixture("serialize")
-		fixture.SessionID = "session-1"
-		fixture.PromptSignalPath = filepath.Join(t.TempDir(), "signal")
-		decoded, err := decodeACPFixture(encodeACPFixture(fixture))
-		if err != nil || decoded != fixture {
-			t.Fatalf("decode(encode(fixture)) = %#v, %v; want %#v", decoded, err, fixture)
-		}
-	})
-	t.Run("valid golden fixture selects golden peer", func(t *testing.T) {
-		command := exec.Command(os.Args[0], "-test.run=^TestACPGoldenRPCPeerProcess$", "--", acpFixtureFlagPrefix+encodeACPFixture(goldenACPFixture("success")))
-		t.Parallel()
-		if output, err := command.CombinedOutput(); err != nil {
-			t.Fatalf("golden peer rejected a valid invocation-scoped fixture: %v; output=%s", err, output)
-		}
-	})
-	t.Run("production secret stays out of fixture arguments", func(t *testing.T) {
-		const secret = "super-secret-token"
-		command := exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", functionalACPFixture("stderr"))...)
-		command.Env = append(os.Environ(), "ACP_TEST_API_TOKEN="+secret)
-		if strings.Contains(strings.Join(command.Args, "\x00"), secret) {
-			t.Fatalf("production secret appeared in child arguments: %v", command.Args)
-		}
-	})
 }

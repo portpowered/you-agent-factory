@@ -23,6 +23,7 @@ import (
 )
 
 func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
+	t.Parallel()
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	server := startDirectWorkerSessionServer(t, runner)
@@ -79,6 +80,7 @@ func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
 }
 
 func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {
+	t.Parallel()
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	server := startDirectWorkerSessionServer(t, runner)
@@ -100,6 +102,7 @@ func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {
 }
 
 func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T) {
+	t.Parallel()
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	server := startDirectWorkerSessionServer(t, runner)
@@ -160,6 +163,7 @@ func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T)
 // Worker Session whose public history records request, outcome, and the
 // resulting terminal consequence in aggregate order.
 func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
+	t.Parallel()
 	runner := newFunctionalWorkerGate(make(chan struct{}))
 	server := startDirectWorkerSessionServer(t, runner)
 

@@ -56,7 +56,7 @@ func testLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(
 ) {
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 1)
-	fixture.useCommandRunners(nil, runner)
+	fixture.useCommandRunnersFor(t, dir, nil, runner)
 	session := fixture.openSession(t, dir)
 	defer session.closeAndAssertGone(t)
 
@@ -122,7 +122,7 @@ func testLiveResourceCapacityReductionPreservesActiveWork(
 ) {
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 3)
-	fixture.useCommandRunners(nil, runner)
+	fixture.useCommandRunnersFor(t, dir, nil, runner)
 	session := fixture.openSession(t, dir)
 	defer session.closeAndAssertGone(t)
 
@@ -159,7 +159,7 @@ func testLiveResourceCapacityRejectsReductionBelowActiveUse(
 ) {
 	runner := newLiveCapacityBarrierRunner(2)
 	dir := scaffoldLiveCapacityFactory(t, 2)
-	fixture.useCommandRunners(nil, runner)
+	fixture.useCommandRunnersFor(t, dir, nil, runner)
 	session := fixture.openSession(t, dir)
 	defer session.closeAndAssertGone(t)
 
@@ -226,7 +226,7 @@ func testLiveResourceCapacityRecordingReplayAndCursor(
 ) {
 	runner := newLiveCapacityBarrierRunner(0)
 	dir := scaffoldLiveCapacityFactory(t, 1)
-	fixture.useCommandRunners(nil, runner)
+	fixture.useCommandRunnersFor(t, dir, nil, runner)
 	session := fixture.openSession(t, dir)
 	defer session.closeAndAssertGone(t)
 

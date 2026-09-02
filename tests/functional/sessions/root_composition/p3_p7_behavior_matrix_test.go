@@ -63,6 +63,7 @@ func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.
 	acquireRootCompositionFixtureSlot(t)
 
 	t.Run("isolated sessions reach one terminal outcome and replay equivalent facts", func(t *testing.T) {
+		t.Parallel()
 		first := runP3P7CanonicalCorpus(t, "alpha", support.NewStaticSuccessCommandRunner(p3p7CorpusWorkerOutput))
 		second := runP3P7CanonicalCorpus(t, "beta", support.NewStaticSuccessCommandRunner(p3p7CorpusWorkerOutput))
 
@@ -73,6 +74,7 @@ func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.
 	})
 
 	t.Run("provider failure terminalizes as failed and is never reported as success", func(t *testing.T) {
+		t.Parallel()
 		run := runP3P7CanonicalCorpus(t, "provider-failure", support.NewShapedProviderCommandRunner(
 			platformprocess.CommandResult{
 				ExitCode: 1,
@@ -84,6 +86,7 @@ func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.
 	})
 
 	t.Run("cancellation stops the held dispatch and releases the activated process", func(t *testing.T) {
+		t.Parallel()
 		held := &p3p7HeldCommandRunner{entered: make(chan struct{})}
 		running := startP3P7CanonicalProcess(t, "cancellation", held)
 

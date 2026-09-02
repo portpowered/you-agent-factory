@@ -45,12 +45,6 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-	if err := writeForcedInferenceCleanupReport(sharedInferenceGroup, closeErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write forced inference cleanup report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
 
@@ -58,7 +52,7 @@ type inferenceProcessGroup struct {
 	once     sync.Once
 	setupErr error
 
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	process  support.ApplicationProcess
 	serverMu sync.RWMutex
 	server   *support.ProcessAPIServer
@@ -75,6 +69,7 @@ type inferenceProcessGroup struct {
 
 	externals         map[string]*inferenceIntegrationRouter
 	sessions          map[string]struct{}
+	sessionMu         sync.Mutex
 	openedSessionIDs  []string
 	deletedSessionIDs []string
 }
@@ -111,7 +106,12 @@ func (group *inferenceProcessGroup) setup() {
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = &inferenceProviderOverride{}
-	group.workerRecordings = &inferenceWorkerRecordingRouter{fallback: newWSRFT004RecordingStore()}
+	group.workerRecordings = &inferenceWorkerRecordingRouter{
+		fallback:    newWSRFT004RecordingStore(),
+		bySession:   make(map[string]recordings.WorkerRecordingWriter),
+		byWorker:    make(map[string]inferenceWorkerRecordingRoute),
+		byRecording: make(map[string]inferenceWorkerRecordingRoute),
+	}
 	group.externals = make(map[string]*inferenceIntegrationRouter)
 	providerDefinitions := []struct {
 		id    string
@@ -262,11 +262,12 @@ type sharedInferenceScenario struct {
 	providerOverride      providers.Service
 	providerRegistrations []sharedInferenceProviderRegistration
 	workerRecordingWriter recordings.WorkerRecordingWriter
+	submittedWork         *factoryapi.SubmitWorkRequest
+	submittedWorks        []factoryapi.SubmitWorkRequest
 	env                   []string
 	scenarioName          string
 	captureResponse       bool
 	captureWorkerEvents   bool
-	stopDaemonForExecute  bool
 }
 
 func runSharedInferenceFactoryToCompletion(
@@ -310,17 +311,27 @@ func runSharedInferenceFactory(
 	t.Helper()
 	group := sharedInferenceGroup
 	group.ensure(t)
-	group.mu.Lock()
-	defer group.mu.Unlock()
+	exclusive := sharedInferenceScenarioRequiresExclusiveProcess(scenario)
+	if exclusive {
+		group.mu.Lock()
+		defer group.mu.Unlock()
+	} else {
+		group.mu.RLock()
+		defer group.mu.RUnlock()
+	}
 	group.override.set(scenario.providerOverride)
-	releaseResponse := prepareSharedInferenceScenario(t, group, dir, scenario)
+	releaseExternalProviders, err := group.bindExternalRegistrations(scenario.providerRegistrations)
+	if err != nil {
+		t.Fatalf("bind shared inference provider routes: %v", err)
+	}
+	releaseProvider := prepareSharedInferenceScenario(t, group, dir, scenario)
 	defer func() {
 		group.override.set(nil)
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
 		group.workerRecordings.set(nil)
-		group.setExternalRegistrations(nil)
-		releaseResponse()
+		releaseExternalProviders()
+		releaseProvider()
 	}()
 
 	sessionID := openSharedInferenceSession(t, group, dir)
@@ -331,6 +342,10 @@ func runSharedInferenceFactory(
 		}
 	}()
 	updateSharedInferenceRouteContext(t, group, dir, scenario, sessionID)
+	if scenario.workerRecordingWriter != nil && sharedInferenceScenarioSubmitsWork(scenario) {
+		group.workerRecordings.setSession(sessionID, scenario.workerRecordingWriter)
+		defer group.workerRecordings.clearSession(sessionID)
+	}
 	var responseStream *support.FactoryResponseEventStream
 	if scenario.captureResponse {
 		responseStream = support.OpenFactoryResponseEventStreamAt(
@@ -339,7 +354,13 @@ func runSharedInferenceFactory(
 		)
 		defer responseStream.Close()
 	}
-	releaseResponse()
+	if scenario.submittedWork != nil {
+		support.SubmitSessionWorkAt(t, group.baseURL, sessionID, *scenario.submittedWork)
+	}
+	for _, request := range scenario.submittedWorks {
+		support.SubmitSessionWorkAt(t, group.baseURL, sessionID, request)
+	}
+	releaseProvider()
 
 	// The terminal status is the public completion boundary for the whole
 	// session, including provider retry policy. Read the retained Factory
@@ -357,6 +378,11 @@ func runSharedInferenceFactory(
 	return result
 }
 
+func sharedInferenceScenarioRequiresExclusiveProcess(scenario sharedInferenceScenario) bool {
+	return scenario.providerOverride != nil ||
+		(scenario.workerRecordingWriter != nil && !sharedInferenceScenarioSubmitsWork(scenario))
+}
+
 func prepareSharedInferenceScenario(
 	t *testing.T,
 	group *inferenceProcessGroup,
@@ -364,18 +390,22 @@ func prepareSharedInferenceScenario(
 	scenario sharedInferenceScenario,
 ) func() {
 	t.Helper()
-	var responseRelease chan struct{}
-	responseReleased := false
-	if scenario.captureResponse && scenario.commandRunner != nil {
-		responseRelease = make(chan struct{})
+	var providerRelease chan struct{}
+	providerReleased := false
+	// A response stream must be subscribed before a fast provider completes.
+	// Likewise, a scenario that proves multiple coexisting Works must finish
+	// their public admission before the first provider result can settle the
+	// session. One deterministic command-edge gate covers both boundaries.
+	if scenario.commandRunner != nil && (scenario.captureResponse || len(scenario.submittedWorks) > 1) {
+		providerRelease = make(chan struct{})
 		scenario.commandRunner = &inferenceResponseCaptureRunner{
 			delegate: scenario.commandRunner,
-			release:  responseRelease,
+			release:  providerRelease,
 		}
 	}
-	group.workerRecordings.set(scenario.workerRecordingWriter)
-	group.setExternalRegistrations(scenario.providerRegistrations)
-
+	if !sharedInferenceScenarioSubmitsWork(scenario) {
+		group.workerRecordings.set(scenario.workerRecordingWriter)
+	}
 	// Register the exact WorkDir selector before opening the session. Opening a
 	// session starts its hosted runtime, so the seed Work can reach the command
 	// edge before the open request returns.
@@ -387,9 +417,9 @@ func prepareSharedInferenceScenario(
 		t.Fatalf("register shared inference script route: %v", err)
 	}
 	return func() {
-		if responseRelease != nil && !responseReleased {
-			close(responseRelease)
-			responseReleased = true
+		if providerRelease != nil && !providerReleased {
+			close(providerRelease)
+			providerReleased = true
 		}
 	}
 }
@@ -405,6 +435,8 @@ func openSharedInferenceSession(
 	if sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened Factory Session ID = %q, want an explicit non-default session", sessionID)
 	}
+	group.sessionMu.Lock()
+	defer group.sessionMu.Unlock()
 	if _, exists := group.sessions[sessionID]; exists {
 		t.Fatalf("Factory Session ID %q was reused by the shared process group", sessionID)
 	}
@@ -419,6 +451,8 @@ func openSharedInferenceSession(
 func closeSharedInferenceSession(t *testing.T, group *inferenceProcessGroup, sessionID string) {
 	t.Helper()
 	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	group.sessionMu.Lock()
+	defer group.sessionMu.Unlock()
 	group.deletedSessionIDs = append(group.deletedSessionIDs, sessionID)
 }
 
@@ -585,52 +619,31 @@ func withSharedInferenceProcess(
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
 		group.override.set(nil)
-		group.workerRecordings.set(nil)
+		if scenario.submittedWork == nil {
+			group.workerRecordings.set(nil)
+		}
 		group.setExternalRegistrations(nil)
 	}()
 	fn(group.process)
 }
 
-func withSharedInferenceProcessAt(
-	t *testing.T,
-	dir string,
-	scenario sharedInferenceScenario,
-	fn func(support.ApplicationProcess),
-) {
-	t.Helper()
-	group := sharedInferenceGroup
-	group.ensure(t)
-	group.mu.Lock()
-	defer group.mu.Unlock()
-	group.override.set(scenario.providerOverride)
-	if scenario.stopDaemonForExecute {
-		if err := group.stopDaemon(); err != nil {
-			t.Fatalf("stop shared inference daemon for direct execution: %v", err)
-		}
-		group.setServer(support.NewProcessAPIServer())
+func sharedInferenceWork(title string) *factoryapi.SubmitWorkRequest {
+	return &factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task",
+		Payload:      map[string]any{"title": title},
 	}
-	routeContext := sharedInferenceRouteContext(scenario, "direct-execution", dir)
-	if err := group.commands.set(dir, scenario.commandRunner, scenario.env, routeContext); err != nil {
-		t.Fatalf("register shared inference command route: %v", err)
+}
+
+func sharedInferenceWorks(titles ...string) []factoryapi.SubmitWorkRequest {
+	requests := make([]factoryapi.SubmitWorkRequest, len(titles))
+	for index, title := range titles {
+		requests[index] = *sharedInferenceWork(title)
 	}
-	if err := group.scripts.set(dir, scenario.scriptRunner, nil, routeContext); err != nil {
-		t.Fatalf("register shared inference script route: %v", err)
-	}
-	group.workerRecordings.set(scenario.workerRecordingWriter)
-	group.setExternalRegistrations(scenario.providerRegistrations)
-	defer func() {
-		group.override.set(nil)
-		group.commands.clear(dir)
-		group.scripts.clear(dir)
-		group.workerRecordings.set(nil)
-		group.setExternalRegistrations(nil)
-		if scenario.stopDaemonForExecute {
-			if err := group.startDaemon(); err != nil {
-				t.Errorf("restart shared inference daemon after direct execution: %v", err)
-			}
-		}
-	}()
-	fn(group.process)
+	return requests
+}
+
+func sharedInferenceScenarioSubmitsWork(scenario sharedInferenceScenario) bool {
+	return scenario.submittedWork != nil || len(scenario.submittedWorks) > 0
 }
 
 func readSharedInferenceWorkerEvents(

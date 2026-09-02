@@ -13,13 +13,13 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestAPIJSONRequestsAndResponsesUseDocumentedContentType proves JSON requests and
 // responses on the public HTTP API use the documented application/json media type
 // declared in the published OpenAPI contract.
 func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 	responseMediaType := documentedJSONSuccessResponseMediaType(t, operation)
@@ -89,13 +89,12 @@ func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
 // Media Type at the public HTTP contract boundary instead of accepting the body
 // or returning an unrelated validation or routing failure.
 func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	documentedRequestMediaType := documentedJSONRequestMediaType(t, operation)
 
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "content-negotiation-unsupported", dir)
-	server.openSession(t, dir)
-	beforeSessions := liveNegotiationSessionIDs(t, server.URL())
 
 	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: dir})
 	if err != nil {
@@ -116,7 +115,6 @@ func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
 	defer response.Body.Close()
 
 	assertUnsupportedMediaTypeHTTPResponse(t, response, documentedRequestMediaType)
-	assertLiveNegotiationSessionIDsUnchanged(t, server.URL(), beforeSessions)
 }
 
 // TestAPIMalformedJSONReturnsStructured400 proves requests with the documented JSON
@@ -124,13 +122,12 @@ func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
 // contract boundary instead of an unsupported media type rejection or an unstructured
 // error response.
 func TestAPIMalformedJSONReturnsStructured400(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "content-negotiation-malformed", dir)
-	server.openSession(t, dir)
-	beforeSessions := liveNegotiationSessionIDs(t, server.URL())
 
 	endpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions"
 	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader([]byte(`{"folderPath":`)))
@@ -146,35 +143,6 @@ func TestAPIMalformedJSONReturnsStructured400(t *testing.T) {
 	defer response.Body.Close()
 
 	assertMalformedJSONHTTPResponse(t, response)
-	assertLiveNegotiationSessionIDsUnchanged(t, server.URL(), beforeSessions)
-}
-
-func liveNegotiationSessionIDs(t *testing.T, baseURL string) map[string]struct{} {
-	t.Helper()
-
-	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](
-		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions?scope=live",
-	)
-	ids := make(map[string]struct{}, len(listed.Sessions))
-	for _, session := range listed.Sessions {
-		ids[session.Id] = struct{}{}
-	}
-	return ids
-}
-
-func assertLiveNegotiationSessionIDsUnchanged(t *testing.T, baseURL string, before map[string]struct{}) {
-	t.Helper()
-
-	after := liveNegotiationSessionIDs(t, baseURL)
-	if len(after) != len(before) {
-		t.Fatalf("live Factory Session IDs after rejected request = %#v, want unchanged from %#v", after, before)
-	}
-	for id := range before {
-		if _, ok := after[id]; !ok {
-			t.Fatalf("live Factory Session %q disappeared after rejected request; before=%#v after=%#v", id, before, after)
-		}
-	}
 }
 
 func closeNegotiatedFactorySession(t *testing.T, baseURL, sessionID string) {

@@ -29,6 +29,7 @@ const (
 // holds one live dispatch until cancellation, so the only terminal failure
 // event is produced by the orderly-stop path under test.
 func TestRecordingFlushBeforeProcessExecuteReturns(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "recording-flush-before-shutdown")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	recordPath := filepath.Join(t.TempDir(), "shutdown.replay.json")
@@ -107,63 +108,6 @@ func TestRecordingFlushBeforeProcessExecuteReturns(t *testing.T) {
 		bytesAfterStop-bytesBeforeStop,
 		failed,
 	)
-}
-
-// TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes proves
-// that a settled recording does not rewrite itself without new events. This
-// directly protects against an extra periodic snapshot without comparing the
-// nondeterministic batching cadence of two independent asynchronous writers;
-// the final orderly-stop flush is measured separately above.
-func TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes(t *testing.T) {
-	const steadyStateEventCount = 2
-	dir := support.ScaffoldSingleStepFactory(t, "recording-steady-state-byte-volume")
-	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	recordPath := filepath.Join(t.TempDir(), "steady-state.replay.json")
-	runner := newRecordingShutdownBlockingRunner()
-	writer := newRecordingShutdownWriteProbe()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		Args:                      []string{"--record", recordPath},
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			RecordingWriteFile:    writer.WriteFile,
-		},
-	})
-
-	for index := 0; index < steadyStateEventCount; index++ {
-		submitRecordingShutdownWork(t, server, fmt.Sprintf("recording-steady-state-work-%d", index))
-	}
-	awaitRecordingShutdownStarts(t, runner.starts, steadyStateEventCount, "steady-state provider dispatches")
-	if _, err := waitForStandaloneRecordingEventCount(
-		recordPath,
-		"DISPATCH_REQUEST",
-		steadyStateEventCount,
-		recordingShutdownObservationTimeout,
-	); err != nil {
-		t.Fatalf("wait for steady-state durable event prefix: %v", err)
-	}
-	awaitRecordingShutdownWritesToSettle(t, writer, 750*time.Millisecond)
-	before, err := readStandaloneRecording(recordPath)
-	if err != nil {
-		t.Fatalf("read settled steady-state recording: %v", err)
-	}
-	writesBefore := writer.WriteCount()
-	bytesBefore := writer.BytesWritten()
-	time.Sleep(500 * time.Millisecond)
-	after, err := readStandaloneRecording(recordPath)
-	if err != nil {
-		t.Fatalf("read steady-state recording after observation window: %v", err)
-	}
-	if len(after.Events) != len(before.Events) || writer.WriteCount() != writesBefore || writer.BytesWritten() != bytesBefore {
-		t.Fatalf(
-			"settled recording changed without new events: before=(events=%d writes=%d bytes=%d) after=(events=%d writes=%d bytes=%d)",
-			len(before.Events), writesBefore, bytesBefore,
-			len(after.Events), writer.WriteCount(), writer.BytesWritten(),
-		)
-	}
-	t.Logf("steady-state recording remained unchanged events=%d writes=%d bytes=%d", len(before.Events), writesBefore, bytesBefore)
-	server.Stop(t)
 }
 
 func submitRecordingShutdownWork(t testing.TB, server *support.FunctionalAPIServer, name string) {

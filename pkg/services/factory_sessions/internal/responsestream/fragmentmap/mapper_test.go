@@ -215,6 +215,39 @@ func TestMapFragment_NativeToolProgressUsesObjectResultSummary(t *testing.T) {
 	}
 }
 
+func TestMapFragment_NativeToolDeltaUsesDeltaPayload(t *testing.T) {
+	t.Parallel()
+
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
+		FactorySessionID: "session-1",
+		RunID:            "run-1",
+	}, responsestream.Event{
+		Kind:              responsestream.EventKindProgressFragment,
+		Type:              responsestream.EventTypeProgress,
+		DispatchID:        "dispatch-tool",
+		Payload:           `{"city":"Oslo"}`,
+		ExternalEventType: "tool.delta",
+		Metadata: map[string]string{
+			"correlation_id": "call-1",
+			"tool_name":      "weather",
+		},
+	})
+	if err != nil {
+		t.Fatalf("MapFragment() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Phase != responseevents.PhaseDelta ||
+		events[0].Provenance.Representation != responseevents.RepresentationDelta {
+		t.Fatalf("mapped events = %#v, want one TOOL/DELTA event", events)
+	}
+	var payload responseevents.ToolDeltaPayload
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal tool delta payload: %v", err)
+	}
+	if payload.ToolCallID != "call-1" || payload.OutputDelta != `{"city":"Oslo"}` {
+		t.Fatalf("tool delta payload = %#v", payload)
+	}
+}
+
 func TestMapFragment_ProgressProvenanceNeverClaimsLossless(t *testing.T) {
 	t.Parallel()
 

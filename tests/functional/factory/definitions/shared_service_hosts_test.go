@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const sharedDefinitionsServiceHostShutdownTimeout = 15 * time.Second
+const sharedDefinitionsServiceHostShutdownTimeout = 60 * time.Second
 
 // sharedDefinitionsServiceHost owns one continuous service-mode invocation.
 // The host Factory and process wiring are shared only by scenarios that use
@@ -231,22 +231,36 @@ func writeSharedDefinitionsFactory(cfg map[string]any) (string, error) {
 
 func closeSharedDefinitionsServiceHosts() error {
 	sharedDefinitionsInitClientCloseErr = nil
-	var failures []string
-	for name, host := range map[string]*sharedDefinitionsServiceHost{
-		"validation": sharedDefinitionsValidationHost,
-		"init":       sharedDefinitionsInitHost,
-	} {
-		if err := stopSharedDefinitionsServiceHost(host); err != nil {
-			failures = append(failures, fmt.Sprintf("%s host: %v", name, err))
-		}
+	type closeResult struct {
+		name string
+		err  error
 	}
-	if sharedDefinitionsInitClient != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), sharedDefinitionsServiceHostShutdownTimeout)
-		sharedDefinitionsInitClientCloseErr = sharedDefinitionsInitClient.Close(ctx)
-		if sharedDefinitionsInitClientCloseErr != nil {
-			failures = append(failures, fmt.Sprintf("init client: %v", sharedDefinitionsInitClientCloseErr))
+	results := make(chan closeResult, 3)
+	pending := 0
+	closeHost := func(name string, host *sharedDefinitionsServiceHost) {
+		if host == nil {
+			return
 		}
-		cancel()
+		pending++
+		go func() { results <- closeResult{name: name + " host", err: stopSharedDefinitionsServiceHost(host)} }()
+	}
+	closeHost("validation", sharedDefinitionsValidationHost)
+	closeHost("init", sharedDefinitionsInitHost)
+	if sharedDefinitionsInitClient != nil {
+		pending++
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), sharedDefinitionsServiceHostShutdownTimeout)
+			defer cancel()
+			sharedDefinitionsInitClientCloseErr = sharedDefinitionsInitClient.Close(ctx)
+			results <- closeResult{name: "init client", err: sharedDefinitionsInitClientCloseErr}
+		}()
+	}
+	var failures []string
+	for range pending {
+		result := <-results
+		if result.err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", result.name, result.err))
+		}
 	}
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "; "))

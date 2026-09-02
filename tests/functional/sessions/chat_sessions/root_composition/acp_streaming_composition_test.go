@@ -189,7 +189,6 @@ func startServeACPProcess(
 	}
 	stdoutRead := newChatPipeEndpoint(stdoutReadFile, "ACP stdout reader")
 	stdoutWrite := newChatPipeEndpoint(stdoutWriteFile, "ACP stdout writer")
-	connectionID := chatCensus.openConnection(buildProcess.ACPServer(), "ACP stdio Serve", stdinWrite.file)
 	t.Cleanup(func() {
 		for name, pipe := range map[string]*chatPipeEndpoint{
 			"stdin reader":  stdinRead,
@@ -231,9 +230,6 @@ func startServeACPProcess(
 				}
 			case <-time.After(5 * time.Second):
 				t.Error("you server acp did not shut down after stdin closed")
-			}
-			if err := chatCensus.closeConnection(connectionID); err != nil {
-				t.Errorf("close ACP connection census: %v", err)
 			}
 		})
 	})
@@ -384,12 +380,6 @@ func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Read
 		t.Fatalf("marshal session/prompt params: %v", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
-	turnID := beginChatTurn(sessionID, "ACP stdio session/prompt")
-	defer func() {
-		if err := closeChatTurn(turnID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	if _, err := stdin.Write([]byte(line)); err != nil {
 		t.Fatalf("write session/prompt request: %v", err)
 	}

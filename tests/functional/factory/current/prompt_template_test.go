@@ -160,6 +160,7 @@ func testSharedTemplateValidationDoesNotMutate(t *testing.T, fixture *sharedCurr
 // TestProcessWorkNameMapsIntoPromptTemplate proves that a submitted Work name is
 // rendered into the workstation prompt template before provider invocation.
 func TestProcessWorkNameMapsIntoPromptTemplate(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "design-doc-review",
@@ -193,6 +194,7 @@ func TestProcessWorkNameMapsIntoPromptTemplate(t *testing.T) {
 // TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate proves that seeded
 // markdown Work name and payload content render into the workstation prompt.
 func TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 	testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -228,6 +230,7 @@ func TestProcessMarkdownWorkNameAndPayloadMapIntoPromptTemplate(t *testing.T) {
 // TestProcessSubmissionTagsReachDispatchInputTokens proves that submission tags
 // remain available on dispatch input tokens for parameterized workstation fields.
 func TestProcessSubmissionTagsReachDispatchInputTokens(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
@@ -270,6 +273,7 @@ func TestProcessSubmissionTagsReachDispatchInputTokens(t *testing.T) {
 // unresolved workstation prompt template routes Work to failed without invoking
 // the provider.
 func TestProcessParameterizedTemplateFailureRoutesWorkToFailed(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "parameterized_failure"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "unresolved template test"}`))
 

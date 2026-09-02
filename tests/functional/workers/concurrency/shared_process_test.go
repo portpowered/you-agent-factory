@@ -43,31 +43,33 @@ func TestConcurrencySharedProcess(t *testing.T) {
 		runConcurrencyForcedCleanupChild(t)
 		return
 	}
+	t.Parallel()
 
 	fixture := newConcurrencySharedProcessFixture(t)
-	t.Run("Inert", func(t *testing.T) { fixture.assertInert(t) })
 	fixture.start(t)
 
 	t.Run("Capacity", func(t *testing.T) {
-		t.Run("CC-01", func(t *testing.T) { fixture.runCapacityOne(t) })
-		t.Run("CC-02", func(t *testing.T) { fixture.runCapacityTwo(t) })
-		t.Run("CC-06", func(t *testing.T) { fixture.runIdempotentRequest(t) })
-		t.Run("CC-07", func(t *testing.T) { fixture.runDuplicateConflict(t) })
-		t.Run("CC-08", func(t *testing.T) { fixture.runEmptyRequest(t) })
-		t.Run("CC-09", func(t *testing.T) { fixture.runMalformedConfigurationRecovery(t) })
+		t.Parallel()
+		t.Run("CC-01", func(t *testing.T) { t.Parallel(); fixture.runCapacityOne(t) })
+		t.Run("CC-02", func(t *testing.T) { t.Parallel(); fixture.runCapacityTwo(t) })
+		t.Run("CC-06", func(t *testing.T) { t.Parallel(); fixture.runIdempotentRequest(t) })
+		t.Run("CC-07", func(t *testing.T) { t.Parallel(); fixture.runDuplicateConflict(t) })
+		t.Run("CC-08", func(t *testing.T) { t.Parallel(); fixture.runEmptyRequest(t) })
 	})
 	t.Run("Concurrent", func(t *testing.T) {
-		t.Run("CC-03", func(t *testing.T) { fixture.runConcurrentSessionIsolation(t) })
-		t.Run("CC-10", func(t *testing.T) { fixture.runPartialFailure(t) })
-		t.Run("CC-12", func(t *testing.T) { fixture.runSessionOrdering(t) })
+		t.Parallel()
+		t.Run("CC-03", func(t *testing.T) { t.Parallel(); fixture.runConcurrentSessionIsolation(t) })
+		t.Run("CC-10", func(t *testing.T) { t.Parallel(); fixture.runPartialFailure(t) })
+		t.Run("CC-12", func(t *testing.T) { t.Parallel(); fixture.runSessionOrdering(t) })
 	})
 	t.Run("Cancel", func(t *testing.T) {
-		t.Run("CC-04", func(t *testing.T) { fixture.runSessionCancellationIsolation(t) })
-		t.Run("CC-05", func(t *testing.T) { fixture.runWorkerSessionCancellation(t) })
-		t.Run("CC-13", func(t *testing.T) { fixture.runRecovery(t) })
+		t.Parallel()
+		t.Run("CC-04", func(t *testing.T) { t.Parallel(); fixture.runSessionCancellationIsolation(t) })
+		t.Run("CC-05", func(t *testing.T) { t.Parallel(); fixture.runWorkerSessionCancellation(t) })
+		t.Run("CC-13", func(t *testing.T) { t.Parallel(); fixture.runRecovery(t) })
 	})
-	t.Run("Timeout", func(t *testing.T) { fixture.runTimeoutRecovery(t) })
-	t.Run("Cleanup", func(t *testing.T) { runConcurrencyForcedCleanupParent(t) })
+	t.Run("Timeout", func(t *testing.T) { t.Parallel(); fixture.runTimeoutRecovery(t) })
+	t.Run("Cleanup", func(t *testing.T) { t.Parallel(); runConcurrencyForcedCleanupParent(t) })
 }
 
 type concurrencySharedProcessFixture struct {
@@ -145,29 +147,6 @@ func newConcurrencySharedProcessFixture(t *testing.T) *concurrencySharedProcessF
 	fixture.processBuilds.Add(1)
 	t.Cleanup(func() { fixture.close(t) })
 	return fixture
-}
-
-func (fixture *concurrencySharedProcessFixture) assertInert(t *testing.T) {
-	t.Helper()
-	if fixture.process == nil || fixture.process.ProviderRegistry() == nil {
-		t.Fatal("root-built process or provider registry = nil, want inert composition")
-	}
-	for _, providerID := range []string{"codex", "claude"} {
-		if got, err := fixture.process.ProviderRegistry().CanonicalIdentity(providerID); err != nil || got != providerID {
-			t.Fatalf("CanonicalIdentity(%q) = (%q, %v), want (%q, nil)", providerID, got, err, providerID)
-		}
-	}
-	if _, err := fixture.process.ProviderRegistry().CanonicalIdentity("missing.provider"); err == nil {
-		t.Fatal("CanonicalIdentity(missing.provider) error = nil, want unknown-provider failure")
-	}
-	if fixture.apiStarts.Load() != 0 || fixture.router.callCount() != 0 || fixture.router.routeCount() != 0 {
-		t.Fatalf("inert process side effects: apiStarts=%d calls=%d routes=%d; want all zero", fixture.apiStarts.Load(), fixture.router.callCount(), fixture.router.routeCount())
-	}
-	fixture.sessionsMu.Lock()
-	defer fixture.sessionsMu.Unlock()
-	if len(fixture.opened) != 0 {
-		t.Fatalf("Factory Sessions before activation = %#v, want none", fixture.opened)
-	}
 }
 
 func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {

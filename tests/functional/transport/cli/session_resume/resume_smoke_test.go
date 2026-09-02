@@ -8,11 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/root"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -339,7 +339,7 @@ func (h *cliResumeSmokeHarness) executeCLI(t *testing.T, args ...string) (bytes.
 	inputArgs = append(inputArgs, args...)
 	err := h.process.Execute(root.Input{
 		Args:             inputArgs,
-		Env:              os.Environ(),
+		Env:              builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir()),
 		Context:          t.Context(),
 		WorkingDirectory: h.projectRoot,
 		Stdout:           &stdout,

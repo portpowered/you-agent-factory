@@ -39,6 +39,7 @@ type agyGoldenCase struct {
 // command effect, provider result, Worker result, Factory Events, and terminal
 // Work projection remain aligned.
 func TestAgyMultimodalGoldenThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	tests := []agyGoldenCase{
 		{
 			name:   "video-watch",
@@ -87,7 +88,9 @@ func TestAgyMultimodalGoldenThroughRootBuildProcess(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			assertAgyMultimodalGoldenCase(t, test)
 		})
 	}
@@ -131,6 +134,7 @@ func assertAgyMultimodalGoldenCase(t *testing.T, test agyGoldenCase) {
 // TestAgyClipQAGoldenPassThroughRootBuildProcess proves the real clip-QA
 // review survives the Provider and Worker boundaries.
 func TestAgyClipQAGoldenPassThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, route, callStart := fixture.runGolden(t, "golden-clipqa")
 
@@ -162,6 +166,7 @@ func TestAgyClipQAGoldenPassThroughRootBuildProcess(t *testing.T) {
 // envelope satisfies an authored schema at the Worker boundary instead of
 // being accepted solely because the Provider returned exit-zero output.
 func TestAgyStructuredJSONGoldenThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, route, callStart := fixture.runGolden(t, "golden-structured")
 
@@ -192,6 +197,7 @@ func TestAgyStructuredJSONGoldenThroughRootBuildProcess(t *testing.T) {
 // refusal with exit code zero cannot become successful Work merely because the
 // native process reported status SUCCESS.
 func TestAgyMissingFileRefusalFailsWorkThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	_, listed, events, route, callStart := fixture.runGolden(t, "golden-missing-file")
 

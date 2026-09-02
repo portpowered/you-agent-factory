@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"syscall"
-	"testing"
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -80,39 +79,5 @@ func lifecycleListenerClosed(baseURL string, closeSignal <-chan struct{}) bool {
 			return false
 		case <-pollTimer.C:
 		}
-	}
-}
-
-func TestLifecycleListenerClosedRejectsLiveNonresponsiveListener(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	release := make(chan struct{})
-	accepted := make(chan struct{})
-	go func() {
-		connection, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		close(accepted)
-		<-release
-		_ = connection.Close()
-	}()
-	t.Cleanup(func() {
-		close(release)
-		_ = listener.Close()
-	})
-
-	baseURL := "http://" + listener.Addr().String()
-	if lifecycleListenerClosed(baseURL, nil) {
-		t.Fatalf("live nonresponsive listener at %s was reported closed", baseURL)
-	}
-	timer := time.NewTimer(lifecycleHTTPTimeout)
-	defer timer.Stop()
-	select {
-	case <-accepted:
-	case <-timer.C:
-		t.Fatal("listener probe did not reach the nonresponsive listener")
 	}
 }

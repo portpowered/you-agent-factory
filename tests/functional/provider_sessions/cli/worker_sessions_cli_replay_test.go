@@ -1,13 +1,9 @@
 package cli_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +16,7 @@ import (
 // published you process can finish a finite replay through shell redirection
 // without cancellation or diagnostics contaminating stdout.
 func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -57,6 +54,7 @@ type workerSessionReplayFixture struct {
 // WSR-FT-001: opening-first, provider-before-output, terminal-last.
 // golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -79,6 +77,7 @@ func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
 //
 // WSR-FT-002: live/replay correlation and exact opening timestamp.
 func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -296,33 +295,17 @@ func (fixture workerSessionReplayFixture) stop(t *testing.T) {
 
 func runBuiltWorkerSessionReplay(t *testing.T, ctx context.Context, fixture workerSessionReplayFixture) ([]byte, string) {
 	t.Helper()
-	capturePath := filepath.Join(t.TempDir(), "worker-session.jsonl")
-	capture, err := os.Create(capturePath)
-	if err != nil {
-		t.Fatalf("create replay capture: %v", err)
-	}
-	defer capture.Close()
-	var diagnostics bytes.Buffer
-	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t),
-		"--verbose", "--server", fixture.baseURL, "worker-sessions", "stream",
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--verbose", "--server", fixture.baseURL, "worker-sessions", "stream",
 		"--session", fixture.sessionID, "--provider", "codex", "--kind", "session_id", "--id", fixture.providerSessionID,
 		"--replay-only", "--output", "json",
-	)
-	command.Dir = fixture.factoryDir
-	command.Env = fixture.env
-	command.Stdout = capture
-	command.Stderr = &diagnostics
-	if err := command.Run(); err != nil {
-		t.Fatalf("built you replay-only stream: %v\nstderr:\n%s", err, diagnostics.String())
+	})
+	inputs.Input.WorkingDirectory = fixture.factoryDir
+	inputs.Input.Env = fixture.env
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("root process replay-only stream: %v\nstderr:\n%s", err, inputs.Stderr())
 	}
-	if err := capture.Close(); err != nil {
-		t.Fatalf("close replay capture: %v", err)
-	}
-	contents, err := os.ReadFile(capturePath)
-	if err != nil {
-		t.Fatalf("read replay capture: %v", err)
-	}
-	return contents, diagnostics.String()
+	return []byte(inputs.Stdout()), inputs.Stderr()
 }
 
 func assertWorkerSessionReplayCapture(t *testing.T, contents []byte, diagnostics string) {

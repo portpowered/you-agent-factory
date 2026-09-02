@@ -33,6 +33,7 @@ type CommandRequest struct {
 	Stdin                    []byte
 	Env                      []string
 	WorkDir                  string
+	FactorySessionID         string
 	DispatchID               string
 	TransitionID             string
 	WorkerType               string
@@ -375,6 +376,7 @@ func platformRequest(request CommandRequest) platformprocess.CommandRequest {
 	return platformprocess.CommandRequest{
 		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
 		Env: request.Env, WorkDir: request.WorkDir,
+		ExecutionScopeID:         request.FactorySessionID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
@@ -384,6 +386,7 @@ func workerRequest(request platformprocess.CommandRequest) CommandRequest {
 	return CommandRequest{
 		Command: request.Command, Args: request.Args, Stdin: request.Stdin,
 		Env: request.Env, WorkDir: request.WorkDir,
+		FactorySessionID:         request.ExecutionScopeID,
 		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}

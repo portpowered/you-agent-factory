@@ -16,7 +16,7 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	t.Parallel()
 
 	const generated = "Moonlit moss beneath the rain\nSoft steps vanish into dawn\nThe quiet wakes"
-	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -25,7 +25,7 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	}))
 	t.Cleanup(modelServer.Close)
 
-	home := characterizationTempDir(t)
+	home := functionalTempDir(t)
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	selection := serviceedges.ModelBackendArtifactSelection{
 		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
@@ -43,8 +43,8 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := &omniTextProtocolFixture{response: generated}
-	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := characterizationBuildProcess(t, serviceedges.Edges{
+	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	process := functionalBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,

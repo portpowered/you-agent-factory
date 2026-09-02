@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -807,6 +808,51 @@ func TestRemoteInvocationClientRejectsInvalidInputsAndResponses(t *testing.T) {
 	t.Run("successful response requires a durable identity", testRemoteInvocationRejectsEmptySuccessBody)
 }
 
+func TestRemoteExistingSessionInvocationPreservesContextOutcome(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus factoryapi.InvocationTerminalStatus
+		wantCode   factoryapi.InvocationResponseErrorCode
+	}{
+		{
+			name:       "deadline",
+			err:        fmt.Errorf("execute request: %w", context.DeadlineExceeded),
+			wantStatus: factoryapi.InvocationTerminalStatusTimedOut,
+			wantCode:   factoryapi.INVOCATIONTIMEDOUT,
+		},
+		{
+			name:       "cancellation",
+			err:        fmt.Errorf("execute request: %w", context.Canceled),
+			wantStatus: factoryapi.InvocationTerminalStatusCanceled,
+			wantCode:   factoryapi.INVOCATIONCANCELED,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requestID := "request-context-outcome"
+			response, err := (remoteInvocationClient{transport: &remoteProtocolStub{err: tt.err}}).InvokeFactorySession(
+				context.Background(),
+				RemoteExistingSessionInvocationRequest{
+					Server:    "http://selected.test",
+					SessionID: "session-context-outcome",
+					Request:   factoryapi.InvocationRequest{RequestId: &requestID},
+				},
+			)
+			if err != nil {
+				t.Fatalf("InvokeFactorySession: %v", err)
+			}
+			if response.Status != tt.wantStatus || response.ErrorCode == nil || *response.ErrorCode != tt.wantCode {
+				t.Fatalf("response = %#v, want status %q and code %q", response, tt.wantStatus, tt.wantCode)
+			}
+			if response.SessionId == nil || *response.SessionId != "session-context-outcome" ||
+				response.RequestId != requestID {
+				t.Fatalf("response identity = %#v, want session and request identity preserved", response)
+			}
+		})
+	}
+}
+
 func testRemoteInvocationRequiresContext(t *testing.T) {
 	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.StartFactorySession(nil, RemoteInvocationRequest{})
 	if err == nil || !strings.Contains(err.Error(), "context is required") {
@@ -930,29 +976,4 @@ func TestRunRemoteInvocationReportsDurableInputAndResponseErrors(t *testing.T) {
 			t.Fatalf("error = %v, want %s", err, RemoteDurableResponseInvalidCode)
 		}
 	})
-}
-
-func TestSafeRemoteEndpointRedactsCredentialsAndFailsClosedForInvalidInput(t *testing.T) {
-	if got := safeRemoteEndpoint("https://user:secret@selected.test/path"); got != "https://selected.test/path" {
-		t.Fatalf("safe endpoint = %q, want credentials removed", got)
-	}
-	for _, test := range []struct {
-		name     string
-		endpoint string
-		secret   string
-	}{
-		{name: "malformed URI", endpoint: "http://[::1", secret: "::1"},
-		{name: "malformed URI with userinfo", endpoint: "http://user:secret@[::1", secret: "secret"},
-		{name: "opaque HTTPS URI", endpoint: "https:user:secret@selected.test", secret: "secret"},
-		{name: "unsupported scheme", endpoint: "ftp://user:secret@selected.test", secret: "secret"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := safeRemoteEndpoint(test.endpoint); got != invalidRemoteEndpointLabel {
-				t.Fatalf("invalid safe endpoint %q = %q, want fixed redacted label", test.endpoint, got)
-			}
-			if strings.Contains(safeRemoteEndpoint(test.endpoint), test.secret) {
-				t.Fatalf("safe endpoint leaked %q", test.secret)
-			}
-		})
-	}
 }

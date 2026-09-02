@@ -2,13 +2,14 @@
 
 ---
 author: andreas abdi
-last modified: 2026, august, 24
+last modified: 2026, august, 31
 doc-id: FSTD-003
 ---
 
 This standard governs factory code review and independent validation. It extends
 the repository code-review standard with workflow, evidence, and convergence
-rules.
+rules. Reviews that touch tests **MUST** enforce
+[testing-standards.md](./testing-standards.md).
 
 ## Quick rules
 
@@ -90,6 +91,15 @@ only scan source topology, docs links, bundle internals, or inventories are not
 a substitute for runtime, contract, CLI, API, UI, or event behavior unless the
 topology itself is the public contract.
 
+Reviewers **MUST** verify test classification and execution topology: unit
+tests remain component-isolated; functional tests assert customer-observable
+behavior through public boundaries, use Factory Sessions and a shared root
+process where possible, never build a binary, and run in parallel; integration
+tests consume a prebuilt artifact and stay small; load/stress and repository
+shape checks live in their dedicated suites. Exceptions are blocking unless
+the testing standard explicitly permits them and the plan records the required
+justification.
+
 ## 4. Findings and convergence
 
 Every finding **MUST** state:
@@ -145,6 +155,8 @@ integrated customer proof.
 - Runtime proof used an isolated delivered artifact when applicable.
 - Architecture, contracts, failure behavior, and operational concerns fit.
 - Tests are behavioral, focused, and not silently weakened.
+- Test layer, boundary, parallelism, artifact ownership, and suite placement
+  conform to the factory testing standard.
 - Findings are classified, actionable, and convergent.
 - CI and conflict status belong to the current head.
 - The PR is merged only after all blocking conditions are cleared.

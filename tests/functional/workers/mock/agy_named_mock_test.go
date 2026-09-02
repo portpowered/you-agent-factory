@@ -37,7 +37,12 @@ func testNamedAgyMockPreservesDispatchMetadataAndCompletionLog(
 	})
 
 	liveRunner := support.NewRecordingCommandRunner("live Agy edge must not run")
-	fixture.useCommandRunners(liveRunner, support.NewRecordingCommandRunner("live script edge must not run"))
+	fixture.useCommandRunnersFor(
+		t,
+		dir,
+		liveRunner,
+		support.NewRecordingCommandRunner("live script edge must not run"),
+	)
 	session := fixture.openSession(t, dir)
 	listed, events := session.terminalObservations(t, 20*time.Second)
 	defer session.closeAndAssertGone(t)

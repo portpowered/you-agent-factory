@@ -31,6 +31,7 @@ const (
 // and both Work types reach terminal success through the public process
 // boundary with asserted provider-process edge captures.
 func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_work_type"))
 	support.WriteAgentConfig(
 		t,
@@ -98,6 +99,7 @@ func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
 // workstations, or routes before runtime execution and reports customer-visible
 // diagnostics through the CLI validate path.
 func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) {
+	t.Parallel()
 	process := buildDefinitionsProcess(t)
 	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
 
@@ -151,6 +153,7 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 // Factory validation reports every independent actionable defect in one CLI
 // outcome instead of stopping after the first error.
 func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
+	t.Parallel()
 	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
 
 	dir := support.ScaffoldFactory(t, multipleActionableDefectsFactoryConfig())
@@ -183,6 +186,7 @@ func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
 // list and returns actionable validation targets for invalid definitions without
 // persisting or activating runtime work.
 func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsValidationServer(t)
 	validFactory, err := support.LoadedFactoryWithProcessAndEnv(
 		t,
@@ -261,6 +265,7 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 // customer-facing preview projection for a valid orchestrator source: resolved workflow
 // reference, effective policy bounds, and result constraints without Petri-net vocabulary.
 func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsValidationServer(t)
 	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
 	writeDefinitionsPreviewWorkflow(t, hostDir)
@@ -284,6 +289,7 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 // Factory definitions without starting workers, dispatch activation, or new Factory
 // Sessions beyond the already-running service session.
 func TestAPIPreviewDoesNotStartWorkersOrSessions(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsValidationServer(t)
 	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
 	writeDefinitionsPreviewWorkflow(t, hostDir)

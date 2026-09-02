@@ -37,6 +37,7 @@ const (
 // invocation is in flight, then completes with canonical presentation and no
 // structured or operator noise.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
+	t.Parallel()
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
 
@@ -101,6 +102,7 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 // a non-quiet operator continuous CLI run with --with-server reports Factory
 // initiated and Dashboard URL startup output on stdout.
 func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI operator continuous text-stream startup")
 	}
@@ -162,6 +164,7 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 // human response-stream CLI run ends with the documented cancellation outcome
 // and does not print successful-completion or primary-result claims on stdout.
 func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
+	t.Parallel()
 	// This case intentionally owns an independent root: cancellation and the
 	// external-work join are the behavior under test.
 	externalWork := newCancellableExternalWorkRunner()
@@ -291,7 +294,6 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 		args,
 		goalFactoryName,
 		textStreamAcceptedProviderRunner(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
@@ -382,7 +384,7 @@ func waitForFirstChunkStdoutContent(t *testing.T, writer *firstChunkGatedStdoutW
 	select {
 	case <-writer.firstChunk:
 		return
-	case <-time.After(5 * time.Second):
+	case <-time.After(humanTextStreamScenarioTimeout):
 		t.Fatal("timed out waiting for first human response-stream stdout chunk")
 	}
 }
@@ -608,12 +610,12 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream incremental contract",
 	}
-	fixture, inputs := newMachineOutputInputs(t, args, goalFactoryName)
+	fixture, inputs, factoryDir := newMachineOutputInputs(t, args, goalFactoryName)
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
 
 	go func() {
-		stdout.err = fixture.execute(inputs, providerRunner, nil)
+		stdout.err = fixture.execute(t, inputs, factoryDir, providerRunner)
 		close(stdout.done)
 	}()
 

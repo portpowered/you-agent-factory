@@ -2,13 +2,14 @@
 
 ---
 author: andreas abdi
-last modified: 2026, august, 24
+last modified: 2026, august, 31
 doc-id: FSTD-001
 ---
 
 This standard governs plans, PRDs, behavior lanes, and task packets produced by
-the agent factory. Authors **MUST** use [plan-template.md](./plan-template.md)
-and [task-template.md](./task-template.md).
+the agent factory. Authors **MUST** use [plan-template.md](./plan-template.md),
+[task-template.md](./task-template.md), and the test-layer rules in
+[testing-standards.md](./testing-standards.md).
 
 ## Quick rules
 
@@ -154,6 +155,11 @@ Each behavior lane **MUST** define an evidence progression from local logic to
 the highest practical end-to-end proof. Evidence has four independent
 properties:
 
+Test layers, execution boundaries, suite placement, parallelism, artifact
+ownership, and case-selection rules **MUST** follow
+[testing-standards.md](./testing-standards.md). A plan **MUST NOT** relabel a
+test to avoid those constraints.
+
 | Property | Required description |
 | --- | --- |
 | Scope | unit, functional, integration, or end-to-end |
@@ -163,13 +169,12 @@ properties:
 
 Definitions:
 
-- A unit test proves one bounded operation or transformation.
-- A functional test proves an internal use case through a stable application
-  boundary while controlling external effects.
-- An integration test crosses at least one production boundary using
-  production wiring. A mock belongs outside that boundary; mocking internal
-  collaborators does not become integration testing merely because several
-  modules participate.
+- A unit test proves one package-owned component in isolation.
+- A functional test proves customer-observable behavior through a stable
+  public application boundary while controlling external effects.
+- An integration test exercises an already compiled deliverable across a real
+  production boundary. Compilation belongs to the invoking build or release
+  lane, not to the test.
 - A paid integration test crosses a real billable remote boundary and proves
   only properties that require it, such as credentials, endpoint/model
   availability, serialization compatibility, and response decoding.
@@ -288,20 +293,30 @@ A task that adds or changes functional tests **MUST** enumerate its complete
 intended case matrix in the plan, not delegate case discovery to the
 implementer:
 
-- every happy case: each supported input shape, actor, and journey with its
-  observable outcome;
-- every unhappy case that applies: bad input, authorization failure,
-  dependency failure and timeout, partial completion, concurrency,
-  cancellation, capacity, persistence, and recovery — each with the defined
-  error behavior and state outcome;
-- boundary cases: empty, minimum, maximum, duplicate, ordering, and
-  idempotency conditions where the contract defines them.
+The matrix contains distinct customer behaviors, not every internal branch or
+inventory entry. The plan **MUST** also name the Factory Session strategy,
+shared `root.BuildProcess` ownership, testable external boundaries, parallel
+isolation model, and the customer-visible invariant behind any required
+serialization, as required by
+[testing-standards.md](./testing-standards.md).
+
+- every materially distinct happy customer behavior, actor, and journey with
+  its observable outcome; input shapes that produce the same behavior use a
+  representative case rather than an inventory;
+- every materially distinct customer-visible unhappy behavior that applies,
+  such as authorization, dependency failure/timeout, partial completion,
+  cancellation, persistence, or recovery; pure validation branches stay in
+  unit tests; and
+- boundary cases such as empty, minimum, maximum, duplicate, ordering, and
+  idempotency only where the public contract gives that boundary distinct
+  customer behavior.
 
 Each case is written given/when/then with the observable result it asserts.
-"Add functional tests for X" without the enumerated matrix is not a plannable
-task. The matrix is the review contract: a delivered test suite is measured
-against the enumerated cases, and an intentionally omitted case is named with
-its owning later gate rather than silently skipped.
+"Add functional tests for X" without the selected behavioral matrix is not a
+plannable task. The matrix is the review contract: a delivered test suite is
+measured against the selected distinct behaviors, and an intentionally omitted
+behavior is named with its owning lower or later gate rather than silently
+skipped.
 
 ## Plan review checklist
 
@@ -320,3 +335,6 @@ its owning later gate rather than silently skipped.
 - Delivery responsibility matches the canonical implementation/review split.
 - Every task traces to its source-plan section when a source plan governs.
 - Functional-test work enumerates its full happy/unhappy/boundary case matrix.
+- Every test is classified and designed according to the factory testing
+  standard, including sessions, process reuse, parallelism, artifact ownership,
+  and dedicated load/static-check placement.

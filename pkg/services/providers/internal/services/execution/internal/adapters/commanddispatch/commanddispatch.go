@@ -55,6 +55,7 @@ func Request(
 		dispatchID = request.AttemptID
 	}
 	command.DispatchID = dispatchID
+	command.FactorySessionID = request.Correlation.FactorySessionID
 	command.AttemptID = request.AttemptID
 	command.TransitionID = request.TransitionID
 	command.WorkerType = request.WorkerType

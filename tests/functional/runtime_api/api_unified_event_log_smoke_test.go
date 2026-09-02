@@ -16,6 +16,7 @@ import (
 
 // portos:func-length-exception owner=agent-factory reason=unified-event-log-e2e-smoke review=2026-07-18 removal=split-live-record-replay-projection-and-divergence-assertions-before-next-unified-smoke-change
 func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow unified event-log smoke")
 	}

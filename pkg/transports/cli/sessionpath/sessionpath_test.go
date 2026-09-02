@@ -58,6 +58,14 @@ func TestCurrentFactoryPath(t *testing.T) {
 	}
 }
 
+func TestFactoryInvocationsPath(t *testing.T) {
+	t.Parallel()
+
+	if got := FactoryInvocationsPath("session/beta"); got != "/factory-sessions/session%2Fbeta/invocations" {
+		t.Fatalf("FactoryInvocationsPath() = %q, want escaped session invocation route", got)
+	}
+}
+
 func TestWorkPaths(t *testing.T) {
 	t.Parallel()
 

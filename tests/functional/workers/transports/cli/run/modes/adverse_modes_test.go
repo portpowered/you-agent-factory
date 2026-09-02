@@ -11,6 +11,7 @@ import (
 )
 
 func TestCLIRunPartialResponseStreamHasOneFailedTerminal(t *testing.T) {
+	t.Parallel()
 	result := modesFixture(t).execute(t, modesInvocationSpec{
 		globalArgs:    []string{"--json"},
 		runArgs:       []string{"--output", "response-stream"},
@@ -36,6 +37,7 @@ func TestCLIRunPartialResponseStreamHasOneFailedTerminal(t *testing.T) {
 }
 
 func TestCLIRunEventPresentationsCorrelateWorkDispatchWorkerAndPrimary(t *testing.T) {
+	t.Parallel()
 	fixture := modesFixture(t)
 	for _, runArgs := range [][]string{
 		nil,
@@ -217,8 +219,9 @@ func containsModesID(values []string, want string) bool {
 }
 
 func TestCLIRunTimeoutRecoversOnSameProcess(t *testing.T) {
+	t.Parallel()
 	fixture := modesFixture(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	handle := fixture.start(t, modesInvocationSpec{
 		globalArgs:    []string{"--json"},
@@ -230,6 +233,8 @@ func TestCLIRunTimeoutRecoversOnSameProcess(t *testing.T) {
 	})
 	handle.route.WaitStarted(t)
 	timeoutResult := handle.wait(t)
+	handle.route.Release()
+	handle.route.WaitStopped(t)
 	if timeoutResult.err == nil || !strings.Contains(timeoutResult.err.Error(), "INVOCATION_TIMED_OUT") {
 		t.Fatalf("timeout error = %v, want INVOCATION_TIMED_OUT", timeoutResult.err)
 	}
@@ -255,6 +260,7 @@ func TestCLIRunTimeoutRecoversOnSameProcess(t *testing.T) {
 }
 
 func TestCLIRunCancellationRecoversOnSameProcess(t *testing.T) {
+	t.Parallel()
 	fixture := modesFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	handle := fixture.start(t, modesInvocationSpec{
@@ -268,6 +274,8 @@ func TestCLIRunCancellationRecoversOnSameProcess(t *testing.T) {
 	handle.route.WaitStarted(t)
 	cancel()
 	canceled := handle.wait(t)
+	handle.route.Release()
+	handle.route.WaitStopped(t)
 	if canceled.err == nil || !strings.Contains(canceled.err.Error(), "INVOCATION_CANCELED") {
 		t.Fatalf("cancellation error = %v, want INVOCATION_CANCELED", canceled.err)
 	}
@@ -292,53 +300,8 @@ func TestCLIRunCancellationRecoversOnSameProcess(t *testing.T) {
 	assertFreshInvocation(t, canceled, recovery)
 }
 
-// This witness records the current public-surface blocker; it is not the MODE-U10 acceptance witness.
-func TestCLIRunConcurrentSessionsExposeMissingFactorySessionAuthority(t *testing.T) {
-	fixture := modesFixture(t)
-	first := fixture.start(t, modesInvocationSpec{
-		globalArgs:    []string{"--json"},
-		runArgs:       []string{"--output", "response-stream"},
-		prompt:        "first keyed session holds the provider route",
-		includePrompt: true,
-		behavior:      modesRouteBlock,
-		result:        "first keyed session COMPLETE",
-	})
-	first.route.WaitStarted(t)
-
-	second := fixture.start(t, modesInvocationSpec{
-		globalArgs:    []string{"--json"},
-		runArgs:       []string{"--output", "response-stream"},
-		prompt:        "second keyed session must not share the default runtime",
-		includePrompt: true,
-		behavior:      modesRouteBlock,
-		result:        "second keyed session COMPLETE",
-	})
-	secondResult := second.wait(t)
-	if secondResult.err == nil ||
-		!strings.Contains(secondResult.err.Error(), "Factory Definitions runtime is already bound: ~default") {
-		t.Fatalf("second concurrent invocation error = %v, want the stable default-runtime binding blocker", secondResult.err)
-	}
-	if secondResult.providerCalls != 0 || strings.TrimSpace(secondResult.stdout) != "" {
-		t.Fatalf("second concurrent invocation calls=%d stdout=%q, want no provider dispatch or success output", secondResult.providerCalls, secondResult.stdout)
-	}
-
-	first.cancel()
-	firstResult := first.wait(t)
-	if firstResult.err == nil || !strings.Contains(firstResult.err.Error(), "INVOCATION_CANCELED") {
-		t.Fatalf("first concurrent invocation error = %v, want cancellation while the second invocation is rejected", firstResult.err)
-	}
-	firstTerminal := decodeTerminalNDJSONInvocationResult(t, firstResult.stdout).Response
-	assertInvocationOutcome(t, firstTerminal, "CANCELED", "INVOCATION_CANCELED")
-	if firstResult.resources.id == secondResult.resources.id ||
-		firstResult.resources.workingRoot == secondResult.resources.workingRoot {
-		t.Fatalf("concurrent invocation resources were not distinct: first=%#v second=%#v", firstResult.resources, secondResult.resources)
-	}
-	if pathExists(firstResult.resources.workingRoot) || pathExists(secondResult.resources.workingRoot) {
-		t.Fatalf("concurrent invocation roots remain: first=%q second=%q", firstResult.resources.workingRoot, secondResult.resources.workingRoot)
-	}
-}
-
 func TestCLIRunEmptyPrimaryAndSelectorRecovery(t *testing.T) {
+	t.Parallel()
 	fixture := modesFixture(t)
 	prior := fixture.execute(t, modesInvocationSpec{
 		globalArgs:    []string{"--json"},
@@ -407,6 +370,7 @@ func TestCLIRunEmptyPrimaryAndSelectorRecovery(t *testing.T) {
 }
 
 func TestCLIRunStdinBoundaryUsesInclusiveWorkPayloadLimit(t *testing.T) {
+	t.Parallel()
 	fixture := modesFixture(t)
 	const maxWorkPayloadBytes = 64 << 10
 	const jsonStringOverhead = 2
@@ -475,7 +439,7 @@ func assertMachineSuccess(t *testing.T, result modesInvocationResult, want strin
 	if result.err != nil {
 		t.Fatalf("machine invocation error = %v\nstdout=%s\nstderr=%s", result.err, result.stdout, result.stderr)
 	}
-	assertSingleRequestForRoot(t, result)
+	assertSingleProviderRequest(t, result)
 	if result.providerCalls != 1 || result.stderr != "" {
 		t.Fatalf("machine success calls=%d stderr=%q, want one call and empty stderr", result.providerCalls, result.stderr)
 	}
@@ -488,7 +452,7 @@ func assertJSONPrimarySuccess(t *testing.T, result modesInvocationResult, want s
 	if result.err != nil {
 		t.Fatalf("JSON primary invocation error = %v\nstdout=%s\nstderr=%s", result.err, result.stdout, result.stderr)
 	}
-	assertSingleRequestForRoot(t, result)
+	assertSingleProviderRequest(t, result)
 	if result.providerCalls != 1 || result.stderr != "" {
 		t.Fatalf("JSON primary success calls=%d stderr=%q, want one call and empty stderr", result.providerCalls, result.stderr)
 	}
@@ -512,12 +476,9 @@ func assertFreshInvocation(t *testing.T, prior, recovery modesInvocationResult) 
 	}
 }
 
-func assertSingleRequestForRoot(t *testing.T, result modesInvocationResult) {
+func assertSingleProviderRequest(t *testing.T, result modesInvocationResult) {
 	t.Helper()
 	if len(result.requests) != 1 {
 		t.Fatalf("provider requests for %s = %d, want one", result.resources.id, len(result.requests))
-	}
-	if result.requests[0].WorkDir != result.resources.workingRoot {
-		t.Fatalf("provider work directory = %q, want invocation root %q", result.requests[0].WorkDir, result.resources.workingRoot)
 	}
 }

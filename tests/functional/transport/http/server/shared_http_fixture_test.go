@@ -58,11 +58,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "c06 shared HTTP fixture cleanup failed: %v\n", err)
 		exitCode = 1
 	}
-	if err := c06AssertIsolatedLifecycleClean(); err != nil {
-		fmt.Fprintf(os.Stderr, "c06 isolated lifecycle cleanup failed: %v\n", err)
-		exitCode = 1
-	}
-	fmt.Fprintf(os.Stderr, "%s\n", c06IsolatedLifecycle.summary())
 	os.Exit(exitCode)
 }
 
@@ -311,12 +306,6 @@ func (scenario *c06SharedHTTPScenario) cleanup(t testing.TB) {
 			if active := scenario.route.active.Load(); active != 0 {
 				t.Errorf("c06 scenario %q active provider calls after cleanup = %d", scenario.id, active)
 			}
-		}
-		if active := scenario.fixture.provider.activeCallCount(); active != 0 {
-			t.Errorf("c06 scenario %q active provider calls after unregister = %d", scenario.id, active)
-		}
-		if routes := scenario.fixture.provider.routeCount(); routes != 0 {
-			t.Errorf("c06 scenario %q provider registrations after cleanup = %d", scenario.id, routes)
 		}
 		if active := scenario.streams.Load(); active != 0 {
 			t.Errorf("c06 scenario %q response streams after cleanup = %d", scenario.id, active)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -37,6 +38,7 @@ const (
 // provider and model inherit operator global defaults at run time and dispatch
 // through the resolved provider-process edge with the configured default model.
 func TestGlobalConfigSuppliesDefaultProviderAndModel(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
@@ -81,6 +83,7 @@ Process the input task.
 // and dispatch through the resolved provider-process edge with the authored
 // model selection.
 func TestExplicitFactoryConfigOverridesGlobalDefaults(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -130,6 +133,7 @@ func TestExplicitFactoryConfigOverridesGlobalDefaults(t *testing.T) {
 // provider/model selection at the public process and provider-edge boundary
 // through a JavaScript workflow executed against a root-built API server.
 func TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	homeDir := writeOperatorGlobalDefaultsAndPresetsConfig(t)
@@ -142,10 +146,20 @@ func TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge(t *testing.T
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
+		Env:                       defaultsOperatorEnvironment(homeDir),
+		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
+			// Complete the scenario-owned customer bootstrap before starting the
+			// hosted readiness clock. The behavior under test is defaults/preset
+			// selection, not first-run packaged Factory installation, and a loaded
+			// race run must not turn that unrelated blocking setup into a server
+			// readiness failure.
+			support.InitializeCustomerHomeWithProcess(
+				tb,
+				process,
+				inputs.Env,
+				inputs.WorkingDirectory,
+			)
+		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -169,9 +183,7 @@ func TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge(t *testing.T
 // operator or Factory default provider is configured and exactly one supported
 // provider is discoverable, model-backed Work dispatches through that provider.
 func TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists(t *testing.T) {
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "")
-
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", `---
 type: MODEL_WORKER
@@ -422,7 +434,7 @@ func runFactoryWithOperatorHome(
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = defaultsOperatorEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = dir
 	daemon := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
@@ -432,6 +444,23 @@ func runFactoryWithOperatorHome(
 	work := support.ListDefaultSessionWork(t, baseURL)
 	daemon.Stop(t)
 	return session, work
+}
+
+func defaultsOperatorEnvironment(homeDir string) []string {
+	blocked := map[string]struct{}{
+		"HOME": {}, "USERPROFILE": {},
+		strings.ToUpper(operatorsettings.EnvDefaultWorkerModelProvider): {},
+		strings.ToUpper(operatorsettings.EnvDefaultWorkerModel):         {},
+	}
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		name := strings.ToUpper(strings.SplitN(entry, "=", 2)[0])
+		if _, skip := blocked[name]; skip {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
 }
 
 type singleCommandExecutableLocator struct {

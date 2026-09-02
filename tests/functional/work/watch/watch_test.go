@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -25,6 +24,7 @@ const (
 // finite CLI watch invocation observes canonical Work transitions through the
 // terminal transition and exits successfully.
 func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, workWatchFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -33,16 +33,7 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 	defer server.Stop(t)
 	streamGate := newWorkWatchStreamGate(t, server.URL())
 
-	moveProcess, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess(move) error = %v", err)
-	}
-	support.CleanupProcess(t, moveProcess)
-	watchProcess, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess(watch) error = %v", err)
-	}
-	support.CleanupProcess(t, watchProcess)
+	process := workWatchProcess
 
 	payloadPath := filepath.Join(t.TempDir(), "watch-request.md")
 	if err := os.WriteFile(payloadPath, []byte("# observe terminal work\n"), 0o600); err != nil {
@@ -57,7 +48,7 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 		"--work-type-name", workWatchWorkType,
 		"--payload", payloadPath,
 	})
-	if err := moveProcess.Execute(submitInputs.Input); err != nil {
+	if err := process.Execute(submitInputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(submit) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -71,14 +62,14 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 		"you", "--server", streamGate.URL(), "work", "watch",
 		"--session", sessionID,
 	})
-	watchCommand := support.StartProcessCommand(t, watchProcess, watchInputs.Input)
+	watchCommand := support.StartProcessCommand(t, process, watchInputs.Input)
 	streamGate.wait(t)
 	for _, state := range []string{"processing", "complete"} {
 		moveInputs := workWatchInputs(t, []string{
 			"you", "--server", server.URL(), "--json", "work", "move",
 			workID, state, "--session", sessionID,
 		})
-		if err := moveProcess.Execute(moveInputs.Input); err != nil {
+		if err := process.Execute(moveInputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(work move %s) error = %v\nstdout:\n%s\nstderr:\n%s",
 				state,

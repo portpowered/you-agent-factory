@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -45,9 +44,9 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	assertProductionLedgerFixture(t, fixture)
 
 	t.Run("CASE-WW-008 finite drains terminal retained history", func(t *testing.T) {
+		t.Parallel()
 		stream := newProductionLedgerStream(t, fixture.Events)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
+		process := workWatchProcess
 		stdout := newLedgerOutput()
 		stderr := newLedgerOutput()
 		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
@@ -59,10 +58,10 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-017 finite exposes a replayed structured result on its first transition", func(t *testing.T) {
+		t.Parallel()
 		events := productionLedgerEventsWithStructuredResult(t, fixture.Events)
 		stream := newProductionLedgerStream(t, events)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
+		process := workWatchProcess
 		stdout := newLedgerOutput()
 		stderr := newLedgerOutput()
 		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
@@ -81,17 +80,18 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	})
 
 	t.Run("CASE-WW-017 replayed ledger follow remains attached and consumes later transitions", func(t *testing.T) {
+		t.Parallel()
 		runProductionLedgerFollowCase(t, fixture.Events)
 	})
 
 	t.Run("CASE-WW-005 rejects a same-sequence conflicting retry record", func(t *testing.T) {
+		t.Parallel()
 		responseIndex := productionLedgerEventIndex(t, fixture.Events, factoryapi.FactoryEventTypeModelResponse)
 		conflict := conflictingProductionLedgerEvent(t, fixture.Events[responseIndex], fixture.Events[responseIndex].Context.Sequence)
 		history := append([]factoryapi.FactoryEvent(nil), fixture.Events[:responseIndex+1]...)
 		history = append(history, conflict)
 		stream := newProductionLedgerStream(t, history)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
+		process := workWatchProcess
 		stdout := newLedgerOutput()
 		stderr := newLedgerOutput()
 		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
@@ -113,8 +113,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 func runProductionLedgerFollowCase(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	stream := newProductionLedgerStream(t, events)
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := workWatchProcess
 	stdout := newLedgerOutput()
 	stderr := newLedgerOutput()
 	inputs := productionLedgerWatchInput(t, stream.URL(), true, stdout, stderr)

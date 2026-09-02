@@ -13,81 +13,54 @@ import (
 
 var packagedDocsIndexTopicPattern = regexp.MustCompile(`(?m)^- ` + "`" + `([a-z][a-z0-9-]*)` + "`" + ` - `)
 
-// TestCLIDocsListsPackagedTopics proves you docs with no topic prints a
-// non-empty packaged-topic index through the public CLI boundary so customers
-// can discover reference topics without reading repository source trees.
-func TestCLIDocsListsPackagedTopics(t *testing.T) {
+// TestCLIDocsCustomerExperience proves customers can discover packaged docs and
+// receive an actionable error for an unsupported topic through one reusable
+// public CLI process. Per-topic packaged-content conformance belongs to the
+// docs smoke/contract lane rather than a functional inventory.
+func TestCLIDocsCustomerExperience(t *testing.T) {
+	t.Parallel()
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
 	processHarness := newLocalReusableProcessHarness(t)
 
-	output := executeDocsWiringCommand(t, processHarness, workingDir, "docs")
-	if strings.TrimSpace(output) == "" {
-		t.Fatal("you docs index stdout is empty")
-	}
-
-	for _, marker := range []string{
-		"# Docs",
-		"Packaged reference topics:",
-	} {
-		if !strings.Contains(output, marker) {
-			t.Fatalf("docs index missing packaged discovery marker %q:\n%s", marker, output)
+	t.Run("lists packaged topics", func(t *testing.T) {
+		output := executeDocsWiringCommand(t, processHarness, workingDir, "docs")
+		if strings.TrimSpace(output) == "" {
+			t.Fatal("you docs index stdout is empty")
 		}
-	}
 
-	topics := parsePackagedDocsIndexTopics(output)
-	if len(topics) == 0 {
-		t.Fatalf("docs index did not expose any discoverable packaged topics:\n%s", output)
-	}
-
-	for _, topic := range topics {
-		if !strings.Contains(output, "you docs "+topic) {
-			t.Fatalf("docs index missing customer-visible retrieval hint for topic %q:\n%s", topic, output)
-		}
-	}
-}
-
-// TestCLIDocsEveryTopicRendersNonEmptyContent proves every topic named by the
-// packaged docs index renders non-empty content through the public CLI boundary
-// so discovery and retrieval stay consistent for customers.
-func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
-	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
-	processHarness := newLocalReusableProcessHarness(t)
-
-	index := executeDocsWiringCommand(t, processHarness, workingDir, "docs")
-	topics := parsePackagedDocsIndexTopics(index)
-	if len(topics) == 0 {
-		t.Fatalf("docs index did not expose any discoverable packaged topics:\n%s", index)
-	}
-
-	for _, topic := range topics {
-		topic := topic
-		t.Run(topic, func(t *testing.T) {
-			output := executeDocsWiringCommand(t, processHarness, workingDir, "docs", topic)
-			if strings.TrimSpace(output) == "" {
-				t.Fatalf("you docs %s stdout is empty", topic)
+		for _, marker := range []string{
+			"# Docs",
+			"Packaged reference topics:",
+		} {
+			if !strings.Contains(output, marker) {
+				t.Fatalf("docs index missing packaged discovery marker %q:\n%s", marker, output)
 			}
-		})
-	}
-}
+		}
 
-// TestCLIDocsUnknownTopicReturnsActionableFailure proves you docs with an
-// unsupported topic fails with a clear diagnostic naming the topic and does not
-// write misleading success content to stdout.
-func TestCLIDocsUnknownTopicReturnsActionableFailure(t *testing.T) {
-	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
-	processHarness := newLocalReusableProcessHarness(t)
-	const unknownTopic = "unknown"
+		topics := parsePackagedDocsIndexTopics(output)
+		if len(topics) == 0 {
+			t.Fatalf("docs index did not expose any discoverable packaged topics:\n%s", output)
+		}
+		for _, topic := range topics {
+			if !strings.Contains(output, "you docs "+topic) {
+				t.Fatalf("docs index missing customer-visible retrieval hint for topic %q:\n%s", topic, output)
+			}
+		}
+	})
 
-	stdout, err := executeDocsWiringCommandResult(t, processHarness, workingDir, "docs", unknownTopic)
-	if err == nil {
-		t.Fatal("expected unknown docs topic to fail")
-	}
-	if !strings.Contains(err.Error(), `unsupported docs topic "`+unknownTopic+`"`) {
-		t.Fatalf("unexpected unsupported topic error %q", err.Error())
-	}
-	if strings.TrimSpace(stdout) != "" {
-		t.Fatalf("unsupported docs topic should not write stdout, got %q", stdout)
-	}
+	t.Run("unknown topic is actionable", func(t *testing.T) {
+		const unknownTopic = "unknown"
+		stdout, err := executeDocsWiringCommandResult(t, processHarness, workingDir, "docs", unknownTopic)
+		if err == nil {
+			t.Fatal("expected unknown docs topic to fail")
+		}
+		if !strings.Contains(err.Error(), `unsupported docs topic "`+unknownTopic+`"`) {
+			t.Fatalf("unexpected unsupported topic error %q", err.Error())
+		}
+		if strings.TrimSpace(stdout) != "" {
+			t.Fatalf("unsupported docs topic should not write stdout, got %q", stdout)
+		}
+	})
 }
 
 func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {

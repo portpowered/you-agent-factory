@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -17,8 +16,7 @@ import (
 func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testing.T) {
 	t.Parallel()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := runtimeMetricsCLIProcess
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "metrics", "--group-by", "region",
 	})
@@ -38,6 +36,7 @@ func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testin
 // both public presenters consume the query result returned by the canonical
 // process rather than relying on a presenter-local cost constant.
 func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	factoryDirectory := support.ScaffoldSingleStepFactory(t, "metrics-cost-availability")
 	workingDirectory := t.TempDir()
@@ -49,8 +48,7 @@ func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing
 		Env:                       environment,
 	})
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := runtimeMetricsCLIProcess
 
 	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "metrics"})
 	human.Input.Env = environment

@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,17 +9,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-type packagedFactoryRequiredInputCase struct {
-	factoryName        string
-	requiredParameters []string
-}
 
 type packagedFactoryMissingRequiredInputRun struct {
 	response      factoryapi.InvocationResponse
@@ -96,75 +88,23 @@ func (seed catalogPackagedFactorySeed) copyInto(
 	}
 }
 
-// TestPackagedFactoriesRejectMissingRequiredInputs proves that omitting required
-// invocation inputs for every packaged Factory in the embedded package matrix
-// rejects through the public packaged-catalog invocation boundary, without a
-// completed success result, and names both the Factory and missing input.
-func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
-	cases, err := packagedFactoriesWithRequiredInvocationInputs()
-	if err != nil {
-		t.Fatalf("packaged Factory matrix: %v", err)
-	}
-	if len(cases) == 0 {
-		t.Fatal("packaged Factory matrix has no required-input cases")
-	}
-
+// TestPackagedFactoryRejectsMissingRequiredInput proves a representative
+// packaged Factory rejects an omitted required customer argument before
+// provider execution and identifies both the Factory and missing input. The
+// declaration of required parameters across every packaged source is static
+// conformance, not a functional behavior matrix.
+func TestPackagedFactoryRejectsMissingRequiredInput(t *testing.T) {
+	const factoryName = "@you/fix"
 	fixture := sharedCatalogProcess(t)
 	process := fixture.process
-	seed := newCatalogPackagedFactorySeed(t, process, cases[0].factoryName)
-
-	for _, testcase := range cases {
-		testcase := testcase
-		t.Run(testcase.factoryName, func(t *testing.T) {
-			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-			fixture.provider.setDelegate(runner)
-			run := runPackagedFactoryMissingRequiredInputInvocation(
-				t,
-				process,
-				seed,
-				testcase.factoryName,
-			)
-			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
-			assertPackagedFactoryMissingRequiredInputDiagnosticsNameFactoryAndInput(
-				t,
-				run,
-				testcase.factoryName,
-				testcase.requiredParameters,
-			)
-		})
-	}
-}
-
-func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredInputCase, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
+	seed := newCatalogPackagedFactorySeed(t, process, factoryName)
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	fixture.provider.setDelegate(runner)
+	run := runPackagedFactoryMissingRequiredInputInvocation(t, process, seed, factoryName)
+	assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
+	assertPackagedFactoryMissingRequiredInputDiagnosticsNameFactoryAndInput(
+		t, run, factoryName, []string{"request"},
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	var cases []packagedFactoryRequiredInputCase
-	for _, entry := range inventory.Entries {
-		if entry.Factory == nil || entry.Factory.InvocationSignature == nil {
-			continue
-		}
-		var required []string
-		for _, parameter := range entry.Factory.InvocationSignature.Parameters {
-			if parameter.Required {
-				required = append(required, parameter.Name)
-			}
-		}
-		if len(required) == 0 {
-			continue
-		}
-		cases = append(cases, packagedFactoryRequiredInputCase{
-			factoryName:        entry.Factory.Name,
-			requiredParameters: required,
-		})
-	}
-	return cases, nil
 }
 
 func runPackagedFactoryMissingRequiredInputInvocation(

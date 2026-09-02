@@ -8,6 +8,7 @@ import (
 )
 
 func TestFactoryValidationDocsCommandDescribesStaticGate(t *testing.T) {
+	t.Parallel()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "docs", "factory-validation"})
 	inputs.Input.Env = isolatedHomeEnvironment(t)
 	inputs.Input.WorkingDirectory = t.TempDir()

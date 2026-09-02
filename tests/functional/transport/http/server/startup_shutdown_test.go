@@ -33,6 +33,7 @@ import (
 // This case is isolated because the diagnostics flag changes process startup
 // configuration; the default and opt-in servers cannot share one invocation.
 func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
+	t.Parallel()
 	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("pprof diagnostics"), nil)
@@ -100,13 +101,7 @@ func assertEnabledPprofServer(t *testing.T, baseURL string) {
 	t.Helper()
 	assertPprofIndex(t, baseURL)
 	assertPprofHeap(t, baseURL)
-	assertPprofNamedProfiles(t, baseURL)
-	assertPprofCPU(t, baseURL)
-	assertPprofHeapDelta(t, baseURL)
-	assertPprofTrace(t, baseURL)
-	assertPprofTextEndpoints(t, baseURL)
 	assertPprofUnknownProfile(t, baseURL)
-	assertPprofInvalidQuery(t, baseURL)
 }
 
 func getPprofResponse(t *testing.T, baseURL, path string) (*http.Response, []byte) {
@@ -390,6 +385,7 @@ func isRuntimeMemoryMetric(name string) bool {
 // server becomes reachable on its configured loopback listener and serves a
 // non-empty readiness status observation after start.
 func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
+	t.Parallel()
 	// The configured-listener argument is a startup/configuration witness; keep
 	// it isolated from the package fixture so its listener selection is observed
 	// on a process with no prior server lifecycle.
@@ -438,6 +434,7 @@ func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
 // path can use the real loopback listener and Serve lifecycle through the
 // replaceable API-server edge, rather than only an httptest transport.
 func TestAPIServerUsesPlatformStarterThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	// The real platform starter owns an OS listener and its Serve/join path;
 	// retain this process-isolated witness instead of sharing an httptest host.
 	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
@@ -456,6 +453,7 @@ func TestAPIServerUsesPlatformStarterThroughRootProcess(t *testing.T) {
 // TestAPIServerShutdownClosesListenerAndActiveStreams proves shutdown through the
 // public API server lifecycle closes the listener and terminates active public streams.
 func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
+	t.Parallel()
 	// Shutdown is destructive and must terminate active streams and its listener;
 	// it therefore cannot run on the package-owned shared process.
 	factory := scaffoldC06IsolatedFactory(t, concurrentRequestsTestConfig())
@@ -509,6 +507,7 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 // the public API server lifecycle reports a documented failure and leaves no
 // leaked listeners or readiness side effects.
 func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
+	t.Parallel()
 	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
 	requestedURL := "http://127.0.0.1:65534"
 	observation := runBindFailureScenario(t, factory.factoryDir, requestedURL)

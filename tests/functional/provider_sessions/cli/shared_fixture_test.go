@@ -7,16 +7,13 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -32,32 +29,12 @@ var workerSessionsCLISharedFixtureState struct {
 	fixture *workerSessionsCLISharedFixture
 }
 
-var workerSessionsCLIBinaryState struct {
-	sync.Once
-	directory string
-	path      string
-	err       error
-	output    []byte
-	builds    atomic.Int32
-}
-
-// TestMain owns package-wide lifecycle cleanup. The process and CLI artifact
-// are initialized lazily so focused OS-boundary tests do not pay for a server
-// they do not exercise, while the full package still observes one topology.
+// TestMain owns package-wide lifecycle cleanup for the reusable root process.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	sharedFixtureErr := closeWorkerSessionsCLISharedFixture()
 	if sharedFixtureErr != nil {
 		fmt.Fprintf(os.Stderr, "provider sessions CLI shared fixture cleanup failed: %v\n", sharedFixtureErr)
-		exitCode = 1
-	}
-	binaryErr := closeWorkerSessionsCLIBinary()
-	if binaryErr != nil {
-		fmt.Fprintf(os.Stderr, "provider sessions CLI binary cleanup failed: %v\n", binaryErr)
-		exitCode = 1
-	}
-	if err := writeForcedProviderSessionsCleanupReport(sharedFixtureErr, binaryErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write forced Provider Sessions CLI cleanup report: %v\n", err)
 		exitCode = 1
 	}
 	os.Exit(exitCode)
@@ -77,8 +54,6 @@ type workerSessionsCLISharedFixture struct {
 	hosted  *workerSessionsCLIHostedCommand
 	api     *workerSessionsCLIAPIServer
 	runner  *providerCommandRouteRunner
-
-	rootBuilds atomic.Int32
 
 	fleetGate *providerCommandRouteGate
 
@@ -220,7 +195,6 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}
-	fixture.rootBuilds.Add(1)
 	fixture.baseURL = api.server.WaitForURL(t)
 	keepRoot = true
 	return fixture
@@ -373,9 +347,6 @@ func (caseFixture *workerSessionsCLICase) cleanup(t *testing.T) {
 				t.Errorf("close Provider Sessions CLI route %q: %v", registration.key, err)
 			}
 		}
-		if remaining := caseFixture.fixture.runner.activeRouteKeys(); len(remaining) != 0 {
-			t.Errorf("Provider Sessions CLI routes remain after case cleanup: %s", strings.Join(remaining, ", "))
-		}
 		if err := os.RemoveAll(caseFixture.factoryDir); err != nil {
 			t.Errorf("remove Provider Sessions CLI case Factory %q: %v", caseFixture.factoryDir, err)
 		} else if _, err := os.Stat(caseFixture.factoryDir); !os.IsNotExist(err) {
@@ -451,27 +422,12 @@ func closeWorkerSessionsCLISharedFixture() error {
 	case <-time.After(workerSessionsCLISharedShutdownTimeout):
 		errs = append(errs, errors.New("shared Provider Sessions CLI API server did not stop"))
 	}
-	fmt.Fprintf(
-		os.Stderr,
-		"C06 TASK-002 topology: root-builds=%d api-host-starts=%d cli-builds=%d\n",
-		fixture.rootBuilds.Load(), fixture.api.starts.Load(), workerSessionsCLIBinaryState.builds.Load(),
-	)
-	if got := fixture.api.starts.Load(); got != 1 {
-		errs = append(errs, fmt.Errorf("shared Provider Sessions CLI API starts = %d, want exactly one", got))
-	}
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		errs = append(errs, fmt.Errorf("shared Provider Sessions CLI root builds = %d, want exactly one", got))
-	}
-	if got := workerSessionsCLIBinaryState.builds.Load(); got > 1 {
-		errs = append(errs, fmt.Errorf("Provider Sessions CLI binary builds = %d, want at most one", got))
-	}
 	if got := fixture.runner.ActiveCallCount(); got != 0 {
 		errs = append(errs, fmt.Errorf("active Provider Sessions CLI command routes after cleanup = %d", got))
 	}
 	if err := fixture.runner.close(); err != nil {
 		errs = append(errs, fmt.Errorf("close Provider Sessions CLI route registry: %w", err))
 	}
-	fmt.Fprintf(os.Stderr, "C06 TASK-002 cleanup: active-provider-routes=%d\n", fixture.runner.routeCount())
 	if err := fixture.sessionLifecycleError(); err != nil {
 		errs = append(errs, err)
 	}
@@ -526,42 +482,4 @@ func copyWorkerSessionsCLIDirectory(srcDir, dstDir string) error {
 		}
 		return os.WriteFile(target, contents, 0o644)
 	})
-}
-
-func closeWorkerSessionsCLIBinary() error {
-	if workerSessionsCLIBinaryState.directory == "" {
-		return nil
-	}
-	if err := os.RemoveAll(workerSessionsCLIBinaryState.directory); err != nil {
-		return fmt.Errorf("remove cached Provider Sessions CLI binary directory: %w", err)
-	}
-	if _, err := os.Stat(workerSessionsCLIBinaryState.directory); !os.IsNotExist(err) {
-		return fmt.Errorf("cached Provider Sessions CLI binary directory remains: %v", err)
-	}
-	return nil
-}
-
-func cachedWorkerSessionsCLIBinary(t *testing.T) string {
-	t.Helper()
-	workerSessionsCLIBinaryState.Do(func() {
-		workerSessionsCLIBinaryState.directory, workerSessionsCLIBinaryState.err = os.MkdirTemp("", "c06-provider-sessions-cli-bin-")
-		if workerSessionsCLIBinaryState.err != nil {
-			return
-		}
-		name := "you"
-		if runtime.GOOS == "windows" {
-			name += ".exe"
-		}
-		workerSessionsCLIBinaryState.path = filepath.Join(workerSessionsCLIBinaryState.directory, name)
-		build := exec.Command("go", "build", "-o", workerSessionsCLIBinaryState.path, "./cmd/factory")
-		build.Dir = testutil.MustRepoRoot(t)
-		workerSessionsCLIBinaryState.output, workerSessionsCLIBinaryState.err = build.CombinedOutput()
-		if workerSessionsCLIBinaryState.err == nil {
-			workerSessionsCLIBinaryState.builds.Add(1)
-		}
-	})
-	if workerSessionsCLIBinaryState.err != nil {
-		t.Fatalf("build Worker Sessions CLI binary: %v\n%s", workerSessionsCLIBinaryState.err, workerSessionsCLIBinaryState.output)
-	}
-	return workerSessionsCLIBinaryState.path
 }

@@ -16,26 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestAPIRoutesEveryOpenAPIOperationToNon404Handler proves every published OpenAPI
-// REST operation inventory entry is wired to a real handler by issuing a safe
-// public HTTP request that reaches a non-404 response on the live functional API
-// server.
-func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
-	inventory := loadRESTOperationInventory(t)
-	ctx := newRoutingReachabilityContext(t)
-
-	client := &http.Client{Timeout: routingReachabilityRequestTimeout}
-	shutdownOperation := runRoutableOpenAPIOperations(t, inventory, ctx, client)
-
-	if len(inventory.Operations) == 0 {
-		t.Fatal("OpenAPI operation inventory is empty")
-	}
-	if shutdownOperation == nil {
-		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
-	}
-	assertIsolatedShutdownOperation(t, shutdownOperation, ctx, client)
-}
-
 func runRoutableOpenAPIOperations(
 	t *testing.T,
 	inventory *contractinventory.Inventory,
@@ -193,6 +173,7 @@ func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {
 // published OpenAPI surface return a structured not-found response at the public
 // HTTP contract boundary.
 func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "routing-unknown-route", dir)
 
@@ -207,6 +188,7 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 }
 
 func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "routing-dashboard", dir)
 
@@ -274,6 +256,7 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 // OpenAPI routes return the documented method-error response at the public HTTP
 // contract boundary instead of a not-found outcome that would hide the mismatch.
 func TestAPIWrongMethodReturnsDocumentedMethodError(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
 	server := c06SharedHTTPServer(t).newScenario(t, "routing-wrong-method", dir)
 

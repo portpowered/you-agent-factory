@@ -280,6 +280,13 @@ func validateRunCommandInputs(cmd *cobra.Command, cfg *runcli.RunConfig, globals
 	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
 		return err, true
 	}
+	sessionExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.session")
+	if err != nil {
+		return err, false
+	}
+	if sessionExplicit && (globals == nil || !globals.remote) {
+		return fmt.Errorf("--session requires --remote and targets an already-open Factory Session on --server"), true
+	}
 	if err := applyRunCommandInvocationOutputMode(cmd, cfg); err != nil {
 		return err, true
 	}

@@ -17,6 +17,7 @@ import (
 
 // portos:func-length-exception owner=agent-factory reason=provider-throttle-runtime-observability-smoke review=2026-07-19 removal=split-pause-setup-runtime-polling-and-dashboard-assertions-before-next-throttle-observability-change
 func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession(t *testing.T) {
+	t.Parallel()
 	fixture := newThrottlePauseObservabilityFixture(t)
 
 	waitForThrottlePausePublicSession(

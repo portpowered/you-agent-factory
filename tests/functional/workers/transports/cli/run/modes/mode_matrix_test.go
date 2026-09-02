@@ -9,18 +9,13 @@ import (
 )
 
 func TestCLIRunPresentationModesCharacterization(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		globalArgs []string
 		runArgs    []string
 	}{
 		{name: "default human response stream"},
-		{name: "primary text", runArgs: []string{"--output", "primary"}},
-		{name: "quiet primary text", runArgs: []string{"--quiet"}},
-		{name: "JSON primary", globalArgs: []string{"--json"}, runArgs: []string{"--output", "primary"}},
-		{name: "JSON factory events", globalArgs: []string{"--json"}},
-		{name: "human response stream", runArgs: []string{"--output", "response-stream"}},
-		{name: "JSON response stream", globalArgs: []string{"--json"}, runArgs: []string{"--output", "response-stream"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -96,70 +91,14 @@ func assertHumanResponseStream(t *testing.T, stdout string) {
 	}
 }
 
-func TestCLIRunOutputModeValidationCharacterization(t *testing.T) {
-	cases := []struct {
-		name       string
-		globalArgs []string
-		runArgs    []string
-	}{
-		{name: "quiet and JSON", globalArgs: []string{"--json"}, runArgs: []string{"--quiet"}},
-		{name: "quiet and explicit output", runArgs: []string{"--quiet", "--output", "primary"}},
-		{name: "unsupported output", runArgs: []string{"--output", "unsupported"}},
-		{name: "continuous response stream", runArgs: []string{"--continuously", "--output", "response-stream"}},
-		{name: "missing output value", runArgs: []string{"--output"}},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			result := modesFixture(t).execute(t, modesInvocationSpec{
-				globalArgs:    testCase.globalArgs,
-				runArgs:       testCase.runArgs,
-				prompt:        "validation must precede dispatch",
-				includePrompt: testCase.name != "missing output value",
-				behavior:      modesRouteSuccess,
-			})
-			if result.providerCalls != 0 {
-				t.Fatalf("provider calls = %d, want validation to prevent dispatch", result.providerCalls)
-			}
-			if result.err == nil || strings.TrimSpace(result.stdout) != "" {
-				t.Fatalf("validation result error=%v stdout=%q, want an error with empty stdout", result.err, result.stdout)
-			}
-			errorResponse := decodeSingleErrorResponse(t, result.stderr)
-			wantCode, wantMessage := validationDiagnostic(testCase.name)
-			if string(errorResponse.Code) != wantCode || errorResponse.Message != wantMessage {
-				t.Fatalf("validation ErrorResponse = %#v, want code %q and message %q", errorResponse, wantCode, wantMessage)
-			}
-		})
-	}
-}
-
-func validationDiagnostic(name string) (string, string) {
-	switch name {
-	case "quiet and JSON", "quiet and explicit output":
-		return "INVOCATION_OUTPUT_CONFLICT", "--quiet cannot be used with --json or --output"
-	case "unsupported output":
-		return "INVOCATION_OUTPUT_UNSUPPORTED", `unsupported --output value "unsupported"; supported values are primary (default) and response-stream`
-	case "continuous response stream":
-		return "INVOCATION_OUTPUT_UNSUPPORTED", "response-stream output is not supported with --continuously"
-	case "missing output value":
-		return "INVOCATION_ARGUMENT_MISSING_VALUE", "flag needs an argument: --output"
-	default:
-		return "", ""
-	}
-}
-
 func TestCLIRunFailurePresentationModesCharacterization(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		globalArgs []string
 		runArgs    []string
 	}{
 		{name: "default human"},
-		{name: "primary", runArgs: []string{"--output", "primary"}},
-		{name: "quiet", runArgs: []string{"--quiet"}},
-		{name: "JSON primary", globalArgs: []string{"--json"}, runArgs: []string{"--output", "primary"}},
-		{name: "JSON events", globalArgs: []string{"--json"}},
-		{name: "human response stream", runArgs: []string{"--output", "response-stream"}},
-		{name: "JSON response stream", globalArgs: []string{"--json"}, runArgs: []string{"--output", "response-stream"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

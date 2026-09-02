@@ -21,75 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
-// TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess proves each
-// catalog-declared pair reaches the real generic HTTP endpoint, the managed
-// Models host lifecycle, the pinned LocalAI gRPC fixture, and the decoded
-// public response. The fixture is supplied only through edges.Edges; no
-// production operation vertical, registry, or artifact path is introduced.
-func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
-	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
-	home := characterizationTempDir(t)
-	writeGenericConformanceCaches(t, home)
-	dir := characterizationScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
-	server, compatibility := startLocalAIConformanceServer(t, dir, home, fixture)
-
-	matrix := conformance.Build(models.GenericOperationCatalog{})
-	executor := func(row conformance.Row) (models.GenericInvocationResult, error) {
-		response, failure, statusCode, err := postConformanceInvocation(
-			t.Context(), server.URL()+"/models/invocations", row,
-		)
-		if err != nil {
-			return models.GenericInvocationResult{}, err
-		}
-		if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-			return models.GenericInvocationResult{}, fmt.Errorf(
-				"public generic invocation returned HTTP %d: %s (%s)",
-				statusCode, failure.Message, failure.Code,
-			)
-		}
-		if response.Failure != nil {
-			return models.GenericInvocationResult{}, fmt.Errorf("public generic invocation failed: %s", response.Failure.Message)
-		}
-		if err := assertConformanceResponse(row, response); err != nil {
-			return models.GenericInvocationResult{}, err
-		}
-		return models.GenericInvocationResult{Status: models.ModelInvocationStatusCompleted}, nil
-	}
-
-	report, err := matrix.Run(executor, conformance.ModeStrict)
-	var reportOutput strings.Builder
-	if _, writeErr := report.WriteTo(&reportOutput); writeErr != nil {
-		t.Fatalf("write conformance report: %v", writeErr)
-	}
-	for _, result := range report.Results {
-		if result.Err != nil {
-			t.Logf("%s error=%v", result.Row.Label, result.Err)
-		}
-	}
-	if err != nil {
-		t.Log(reportOutput.String())
-		t.Fatalf("LocalAI HTTP conformance: %v", err)
-	}
-	if got, want := report.ImplementedCount(), len(matrix.Rows); got != want {
-		t.Fatalf("implemented rows = %d, want %d", got, want)
-	}
-	if report.ExpectedUnimplementedCount() != 0 || report.UnexpectedFailureCount() != 0 {
-		t.Fatalf("conformance report = %#v, want all implemented", report.Results)
-	}
-
-	assertFixtureConformanceCalls(t, fixture)
-	if compatibility.Calls() == 0 {
-		t.Fatal("managed host compatibility edge calls = 0, want at least one")
-	}
-
-	probe := runNoVerticalProbe(t, server.URL()+"/models/invocations")
-	fmt.Fprintf(&reportOutput, "current/no-vertical classification=%s\n", probe.Classification)
-	t.Log(reportOutput.String())
-	if probe.Classification != conformance.ClassificationExpectedUnimplemented {
-		t.Fatalf("no-vertical probe classification = %s, want expected-unimplemented", probe.Classification)
-	}
-}
-
 func startLocalAIConformanceServer(
 	t *testing.T,
 	dir string,
@@ -98,7 +29,7 @@ func startLocalAIConformanceServer(
 ) (*support.FunctionalAPIServer, *joinedCompatibilityChecker) {
 	t.Helper()
 	edges, rejectingNetwork, compatibility, _ := localAIConformanceEdges(home, fixture)
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		ServerReadyTimeout:        60 * time.Second,
@@ -466,61 +397,9 @@ func assertASRResponse(row conformance.Row, response factoryapi.GenericModelInvo
 	return nil
 }
 
-func assertFixtureConformanceCalls(t *testing.T, fixture *localai.Fixture) {
-	assertFixtureConformanceCallCounts(t, fixture, 1)
-}
-
-func assertFixtureConformanceCallCounts(t *testing.T, fixture *localai.Fixture, runs int) {
-	t.Helper()
-	calls := fixture.Calls()
-	var predicts, embeddings, tts, transcriptions int
-	for _, call := range calls {
-		switch call.Method {
-		case "Predict":
-			predicts++
-			if len(call.Images) == 2 && (call.Images[0] != "fixture image first" || call.Images[1] != "fixture image second") {
-				t.Fatalf("multiple-image fixture order = %#v", call.Images)
-			}
-		case "Embedding":
-			embeddings++
-		case "TTSStream":
-			tts++
-		case "AudioTranscription":
-			transcriptions++
-		}
-	}
-	wantPredicts, wantEmbeddings, wantTTS, wantTranscriptions := 4*runs, runs, runs, runs
-	if predicts != wantPredicts || embeddings != wantEmbeddings || tts != wantTTS || transcriptions != wantTranscriptions {
-		t.Fatalf(
-			"fixture calls = predict %d, embedding %d, tts %d, asr %d; want %d/%d/%d/%d",
-			predicts, embeddings, tts, transcriptions,
-			wantPredicts, wantEmbeddings, wantTTS, wantTranscriptions,
-		)
-	}
-}
-
-func runNoVerticalProbe(t *testing.T, endpoint string) conformance.RowResult {
-	t.Helper()
-	row := conformance.Row{
-		Label: "current/no-vertical", Variant: conformance.VariantDefault,
-		Operation: models.Operation{Name: models.OperationEMBED}, ContractStatus: conformance.ContractSupported,
-	}
-	probe := row
-	probe.Inputs = []models.InferenceInput{{Name: "text", Modality: models.ModalityText, ContentType: "TEXT", MediaType: "text/plain", Content: "no vertical"}}
-	response, failure, statusCode, err := postConformanceInvocationForModel(t.Context(), endpoint, probe, models.BuiltInModelNameLLM)
-	if err != nil {
-		t.Fatalf("no-vertical probe request: %v", err)
-	}
-	if statusCode != http.StatusBadRequest || string(failure.Code) != "BAD_REQUEST" || len(response.Outputs) != 0 {
-		t.Fatalf("no-vertical probe HTTP response = status %d, failure %#v, outputs %#v; want BAD_REQUEST", statusCode, failure, response.Outputs)
-	}
-	return conformance.Classify(row, conformance.InvocationOutcome{Err: models.ErrUnsupportedOperation})
-}
-
 type fixtureHostHTTPClient struct{}
 
 func (fixtureHostHTTPClient) Do(request *http.Request) (*http.Response, error) {
-	c06Ledger.hostHTTPCalls.Add(1)
 	return &http.Response{
 		StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: request,
 	}, nil

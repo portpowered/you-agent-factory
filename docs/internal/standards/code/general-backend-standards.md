@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, july, 30
+last modified: 2026, september, 1
 doc-id: STD-017
 ---
 
@@ -24,7 +24,9 @@ Every contributor who changes backend logic, APIs, runtime behavior, persistence
 - Separate pure domain logic from transport, IO, time, filesystem, environment, and process boundaries.
 - Reject unexplained magic values, oversized functions, oversized files, and hidden side effects.
 - Use linting, static checks, and CI gates to enforce backend quality rather than relying on reviewer memory alone.
-- Favor a healthy test pyramid: few fast unit tests, majority integration tests, targeted functional tests, and explicit stress coverage where concurrency or scale matters.
+- Favor fast component-isolated unit tests, targeted customer-behavior
+  functional tests, a deliberately small compiled-artifact integration suite,
+  and dedicated load/stress coverage where concurrency or scale matters.
 - Log service operations and important outcomes with structured, safe context; add metrics, traces, and operational diagnostics where the path warrants them.
 - Design dependency calls with explicit latency, timeout, retry, and backoff behavior.
 - Test performance, load, and failure modes intentionally rather than assuming correctness implies resilience.
@@ -196,19 +198,28 @@ Rules:
 ### 7. Testing Strategy and Test Pyramid
 
 Backend changes **MUST** include evidence at the correct testing layer.
+Factory planning, implementation, review, and validation **MUST** use
+[`factory/docs/standards/testing-standards.md`](../../../../factory/docs/standards/testing-standards.md)
+as the authoritative layer-classification and execution standard. The rules
+below summarize backend-specific application of that standard.
 
 The expected testing layers are:
 
-- unit tests for pure logic, mappings, selectors, reducers, parsers, and validation
-- package integration tests for component collaboration inside a bounded runtime slice
-- functional tests for user-visible or system-visible flows across subsystem boundaries
-- stress or race-oriented tests for concurrency, throughput, resource exhaustion, and long-running behavior
+- unit tests for package-owned pure logic, mappings, selectors, reducers,
+  parsers, validation, and isolated components
+- functional tests for customer-visible flows through public application
+  boundaries with controlled external effects
+- integration tests for a small number of real-boundary properties exercised
+  through an already compiled deliverable
+- dedicated load, stress, or race-oriented tests for concurrency, throughput,
+  resource exhaustion, and long-running behavior
 - contract tests for schema alignment, generated artifacts, and public surface guarantees
 - asset conformance tests for declared external artifacts, pinned dependencies, and published locations
 
 Rules:
 
-- Most confidence **SHOULD** come from fast unit and package-level integration tests.
+- Most confidence **SHOULD** come from fast unit tests and targeted functional
+  customer-behavior tests.
 - Functional tests **SHOULD** focus on high-value end-to-end behavior, not every branch.
 - Functional application tests **MUST** construct the reusable customer process
   through `root.BuildProcess`, provide product configuration through the same
@@ -223,7 +234,33 @@ Rules:
   `Process.Execute` after constructing through `root.BuildProcess`. They
   **MUST NOT** build or invoke the `you` CLI executable. Tests that prove OS
   process, pipe, signal, executable, or exit-status behavior belong in the
-  integration lane and **MUST** run through the real built binary there.
+  integration lane and **MUST** run through the real built binary there. The Go
+  test executable is also a real executable for this classification; helper
+  modes, long-test names, and build tags do not make process behavior
+  functional coverage.
+- Functional tests **MUST** use Factory Sessions wherever the behavior admits
+  a session, reuse one package process where safe, and run independent
+  scenarios in parallel. Serialization requires a documented customer-visible
+  invariant; shared fixture state or route collisions are harness defects. A
+  package with a small local `~default` cohort and independent hosted-session
+  behavior must partition those phases rather than serializing every scenario.
+- Functional package concurrency **MUST** use the canonical functional-lane job
+  budget. Independent tests should overlap inside that budget, but broad
+  verification **MUST NOT** rely on the test tool's unbounded package wildcard
+  default. Parallel children must retain parent-owned fixtures through
+  `t.Cleanup`, and their cleanup may assert only scenario-owned resources while
+  peers remain live.
+- A shared functional application process **MUST NOT** imply a shared mutable
+  customer home. Concurrent invocations must own separate profiles whenever
+  first-run installation, migration, selection, or cleanup can write profile
+  state. A shared profile is allowed only after its prerequisite bootstrap has
+  completed and the tests prove concurrent commands do not contend on its
+  installation or migration locks.
+- A functional scenario that reads a deliberately global customer projection
+  may use a documented isolated observation window. Reviewers **MUST** verify
+  the emitted public request actually has global semantics and that any claimed
+  session, Work, or route selector reaches the product boundary; tests must not
+  rely on package quiescence to make an ignored selector appear effective.
 - Functional tests **MUST** prefer public CLI invocation over HTTP/API for
   ordinary customer flows. HTTP or API entry **MAY** be used only for
   API-owned contracts or explicit CLI+API parity cells.
@@ -244,6 +281,17 @@ Rules:
   causes first. Any sleep, polling loop, or timeout-padded wait helper **MUST**
   include an in-code justification for why deterministic observation or edge
   mocking cannot substitute.
+- Hosted readiness deadlines **MUST** measure host readiness, not unrelated
+  fixture bootstrap. When first-run initialization is outside the customer
+  claim, prepare the test-owned home through the same reusable public process
+  before starting the host. When first-run behavior is the claim, keep it in
+  the measured path and assert its customer-visible result.
+- Integration tests **MUST** consume an artifact compiled once by the invoking
+  build or release lane. They **MUST NOT** compile inside test setup and
+  **MUST** keep the real-boundary case set intentionally small.
+- Inventory, package-shape, dependency-direction, source-topology, and similar
+  structural enforcement **MUST** be implemented as lint or static checks, not
+  runtime tests, unless that structure is itself a published customer contract.
 - Functional test sources **MUST** live under
   `tests/functional/<domain>/<subsection>/...`, where `<domain>` is a durable
   product-domain noun such as `transport`, `workers`, `orchestration`,
@@ -262,15 +310,23 @@ Rules:
   receive new files or scenarios; its exact file and `Test*` inventory is
   enforced by `make pkg-structure`. Historical catch-alls such as `smoke` and
   `workflow` are not durable owners for new scenarios.
-- Stress tests **SHOULD** exist where concurrency, queues, retries, watchers, or scheduler behavior create risk.
+- Load and stress tests **MUST** live under a dedicated `tests/load/`,
+  `tests/stress/`, or more specific performance package rather than functional
+  or integration packages. They **SHOULD** exist where concurrency, queues,
+  retries, watchers, schedulers, throughput, or saturation create risk.
 - Contract tests **SHOULD** protect generated surfaces, schema completeness, and compatibility boundaries.
 - Slow tests **MUST** justify their cost by protecting a real regression class.
 - Flaky tests **MUST** be fixed or removed quickly.
+- Test optimization **MUST NOT** weaken a distinct customer-visible behavior.
+  Persistence and replay claims **MUST** be observed through a public customer
+  surface; internal artifact decoding belongs with the owning serializer's
+  unit or contract coverage.
 
 Minimum expectations for non-trivial backend changes:
 
 - Pure logic has direct unit coverage where applicable.
-- Cross-package behavior has integration or functional coverage.
+- Customer behavior crossing packages has functional coverage; real compiled
+  artifact boundaries have limited integration coverage.
 - Concurrency-sensitive behavior has race, stress, or repeat-run coverage where relevant.
 - Public contract changes have contract or smoke coverage.
 

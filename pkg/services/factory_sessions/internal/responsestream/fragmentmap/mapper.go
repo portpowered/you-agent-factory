@@ -116,6 +116,14 @@ func mapNativeProgressFragment(
 	case "tool":
 		kind = responseevents.KindTool
 		itemID = nativeItemID(fragment, "tool")
+		if phase == responseevents.PhaseDelta {
+			representation = responseevents.RepresentationDelta
+			payload, err = json.Marshal(responseevents.ToolDeltaPayload{
+				ToolCallID:  itemID,
+				OutputDelta: fragment.Payload,
+			})
+			break
+		}
 		var result json.RawMessage
 		if strings.TrimSpace(fragment.Payload) != "" {
 			result, _ = json.Marshal(map[string]string{"detail": fragment.Payload})
@@ -132,6 +140,19 @@ func mapNativeProgressFragment(
 	if err != nil {
 		return responseevents.FactoryResponseEvent{}, true, err
 	}
+	return nativeProgressEvent(ctx, fragment, kind, phase, nativeEvent, representation, payload, itemID), true, nil
+}
+
+func nativeProgressEvent(
+	ctx Context,
+	fragment responsestream.Event,
+	kind responseevents.Kind,
+	phase responseevents.Phase,
+	nativeEvent string,
+	representation responseevents.Representation,
+	payload []byte,
+	itemID string,
+) responseevents.FactoryResponseEvent {
 	return responseevents.FactoryResponseEvent{
 		SchemaVersion:    responseevents.SchemaVersionV1,
 		EventID:          synthesizedEventID(ctx, fragment),
@@ -152,7 +173,7 @@ func mapNativeProgressFragment(
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
 		ItemID:             itemID,
 		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
-	}, true, nil
+	}
 }
 
 func nativeResponsePhase(value string) (responseevents.Phase, bool) {

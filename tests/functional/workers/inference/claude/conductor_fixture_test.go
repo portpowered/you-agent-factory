@@ -42,21 +42,20 @@ type claudeDefaultLaneFixture struct {
 }
 
 type claudeScenario struct {
-	name                  string
-	factoryDir            string
-	model                 string
-	workID                string
-	requestID             string
-	traceID               string
-	providerSessionID     string
-	runner                *claudeScenarioCommandRunner
-	golden                *support.ProviderSessionCase
-	wantWorkState         string
-	wantOutcome           factoryapi.WorkOutcome
-	wantFailure           string
-	wantProviderCalls     int
-	wantDispatches        int
-	forceAssertionFailure bool
+	name              string
+	factoryDir        string
+	model             string
+	workID            string
+	requestID         string
+	traceID           string
+	providerSessionID string
+	runner            *claudeScenarioCommandRunner
+	golden            *support.ProviderSessionCase
+	wantWorkState     string
+	wantOutcome       factoryapi.WorkOutcome
+	wantFailure       string
+	wantProviderCalls int
+	wantDispatches    int
 }
 
 type claudeScenarioObservation struct {

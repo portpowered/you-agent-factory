@@ -2,13 +2,14 @@
 
 ---
 author: andreas abdi
-last modified: 2026, august, 24
+last modified: 2026, august, 31
 doc-id: FSTD-002
 ---
 
 This standard governs implementation agents executing a factory task. The task
 packet and its parent plan define scope; repository engineering standards
-define the quality floor.
+define the quality floor. Any test work **MUST** follow
+[testing-standards.md](./testing-standards.md).
 
 ## Quick rules
 
@@ -21,6 +22,9 @@ define the quality floor.
   to a later test-only task or to loopback.
 - Use production wiring for integration evidence and place controlled
   substitutes at external boundaries.
+- Keep unit tests inside one component, run functional customer scenarios as
+  parallel Factory Sessions without building a binary, and keep compiled
+  integration and load evidence in their dedicated lanes.
 - Do not overclaim evidence. Record what remains unproven and its owning gate.
 - Do not silently broaden scope. Return a structured blocker or delta request.
 - Never commit transient planning state, CI transcripts, audit notes, secrets,
@@ -71,9 +75,11 @@ The implementer **MUST** run the verification declared by the task and record:
 - remaining unproven edges.
 
 Focused unit evidence localizes rules. Functional evidence proves internal use
-cases. Integration evidence **MUST** use production wiring and cross a real
-production boundary. Runtime proof **MUST** exercise the actual delivered
-artifact when the task changes runtime-observable behavior.
+cases visible through a public customer boundary. Integration evidence
+**MUST** consume an already compiled delivered artifact, use production wiring,
+and cross a real production boundary. The test itself **MUST NOT** compile that
+artifact. Runtime proof **MUST** exercise the actual delivered artifact when
+the task changes runtime-observable behavior.
 
 Paid validation must stay within the task's call, cost, and duration budgets.
 It **MUST NOT** be used for failure matrices that controlled fault injection can
@@ -125,6 +131,8 @@ CI-run evidence belongs in a PR conversation comment and never in a commit.
 - Scope matches one behavior task or justified bounded enabler.
 - Existing work and generated-source boundaries are preserved.
 - Contracts, implementation, tests, and documentation agree.
+- Test classification, boundaries, sessions, process reuse, parallelism,
+  artifact ownership, and suite placement follow the factory testing standard.
 - Failure and operational behavior required by the task are implemented.
 - Evidence proves the named property at the declared fidelity.
 - Remaining unproven edges have named gates.

@@ -24,12 +24,15 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const logicalIdentityMaxEventLineBytes = 4 * 1024 * 1024
+
 // TestFactorySessionRestartRemapsLiveIDToLogicalIdentity proves that after a
 // simulated backend restart invalidates a previously live factorySessionID, the
 // public sync-preflight surface remaps the stale selector through logical
 // identity (backendScopeID + logicalSessionKeyID) to the current live session
 // and stream generation for the same logical target.
 func TestFactorySessionRestartRemapsLiveIDToLogicalIdentity(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "logical-identity-restart")
 	home := t.TempDir()
 	env := functionalHomeEnvironment(home)
@@ -112,13 +115,16 @@ func TestFactorySessionRestartRemapsLiveIDToLogicalIdentity(t *testing.T) {
 // and progress on public session surfaces reflects durable continuity.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
+	t.Parallel()
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
 	provider := newLogicalIdentityResumeBlockingProvider(workflowName)
+	env := functionalHomeEnvironment(t.TempDir())
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
 		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Env:        env,
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -217,6 +223,7 @@ func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 // Factory Session remains inspectable after the public process is restarted
 // with the same project-local durable session store.
 func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
+	t.Parallel()
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
 	home := t.TempDir()
@@ -569,7 +576,7 @@ func listFactorySessionEvents(
 
 	var collected []factoryapi.FactoryEvent
 	scanner := bufio.NewScanner(response.Body)
-	scanner.Buffer(make([]byte, 64*1024), boardPersistenceMaxEventLineBytes)
+	scanner.Buffer(make([]byte, 64*1024), logicalIdentityMaxEventLineBytes)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {

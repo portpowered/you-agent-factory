@@ -140,12 +140,6 @@ func (runner *controlledACPCommandRunner) Run(
 	ctx context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("controlled ACP provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, request)
 	busyStarted := runner.busyStarted

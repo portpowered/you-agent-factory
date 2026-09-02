@@ -3,12 +3,12 @@ package discovery_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -132,7 +132,7 @@ func execute(t *testing.T, process support.Process, args []string) (string, stri
 	inputs := support.FakeInputs(t.Context(), args)
 	stdinIsTTY := false
 	stdoutIsTTY := false
-	inputs.Input.Env = os.Environ()
+	inputs.Input.Env = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())
 	inputs.Input.Stdin = strings.NewReader("")
 	inputs.Input.Context = t.Context()
 	inputs.Input.WorkingDirectory = t.TempDir()

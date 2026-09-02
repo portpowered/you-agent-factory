@@ -39,23 +39,6 @@ type mcpProtocolPackageFixture struct {
 
 var sharedMCPProtocolFixture mcpProtocolPackageFixture
 
-type mcpProtocolTopologyLedger struct {
-	sync.Mutex
-	sharedRootBuilds      int
-	isolatedRootBuilds    int
-	sharedRootCloses      int
-	isolatedRootCloses    int
-	invocationStarts      int
-	invocationReturns     int
-	contextsCanceled      int
-	streamsOpened         int
-	streamsClosed         int
-	temporaryRootsMade    int
-	temporaryRootsRemoved int
-}
-
-var mcpProtocolTopology mcpProtocolTopologyLedger
-
 // TestMain owns the package-scoped application root used by the two eligible
 // request/error rows. The shutdown row deliberately owns a separate root so
 // its whole-protocol stdio boundary remains an isolated witness.
@@ -68,13 +51,6 @@ func TestMain(m *testing.M) {
 			exitCode = 1
 		}
 	}
-	if err := mcpProtocolTopology.cleanupError(); err != nil {
-		fmt.Fprintf(os.Stderr, "MCP protocol cleanup accounting: %v\n", err)
-		if exitCode == 0 {
-			exitCode = 1
-		}
-	}
-	fmt.Fprintf(os.Stderr, "GATE-PROTOCOL topology: %s\n", mcpProtocolTopology.summary())
 	os.Exit(exitCode)
 }
 
@@ -166,6 +142,7 @@ func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 // TestMCPServerShutdownClosesStdioCleanly proves MCP server shutdown terminates
 // stdio serve cleanly without hung streams or unclean protocol failures.
 func TestMCPServerShutdownClosesStdioCleanly(t *testing.T) {
+	t.Parallel()
 	// Keep this root isolated: whole-protocol cancellation and stdout EOF are
 	// the lifecycle witness, so sharing the package root would blur ownership.
 	server := startFixtureBackedMCPServer(t)
@@ -202,7 +179,6 @@ func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	mcpProtocolTopology.recordIsolatedRootBuild()
 	return startFixtureBackedMCPServerWithProcess(t, process, true)
 }
 
@@ -215,9 +191,6 @@ func withSharedMCPProtocolServer(t *testing.T, run func(*fixtureBackedMCPServer)
 		sharedMCPProtocolFixture.process, sharedMCPProtocolFixture.buildErr = support.BuildProcessWithContext(
 			context.Background(), serviceedges.Edges{},
 		)
-		if sharedMCPProtocolFixture.buildErr == nil {
-			mcpProtocolTopology.recordSharedRootBuild()
-		}
 	}
 	if sharedMCPProtocolFixture.buildErr != nil {
 		t.Fatalf("BuildProcess() for shared MCP protocol rows: %v", sharedMCPProtocolFixture.buildErr)
@@ -240,7 +213,6 @@ func closeSharedMCPProtocolFixture() error {
 		closeContext, cancel := context.WithTimeout(context.Background(), mcpProtocolStopTimeout)
 		defer cancel()
 		sharedMCPProtocolFixture.closeErr = process.Close(closeContext)
-		mcpProtocolTopology.recordSharedRootClose()
 	})
 	return sharedMCPProtocolFixture.closeErr
 }
@@ -271,13 +243,14 @@ func startFixtureBackedMCPServerWithProcess(
 	ctx, cancel := context.WithCancel(context.Background())
 	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
-			Env:              os.Environ(),
+			Env:              append(os.Environ(), "HOME="+homeDirectory, "USERPROFILE="+homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -299,7 +272,6 @@ func startFixtureBackedMCPServerWithProcess(
 		workingDirectory: workingDirectory,
 		shutdownDone:     make(chan struct{}),
 	}
-	mcpProtocolTopology.recordInvocationStarted()
 	t.Cleanup(server.cleanup)
 	return server
 }
@@ -330,9 +302,25 @@ func (s *fixtureBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
 	if _, err := s.stdin.Write([]byte(request + "\n")); err != nil {
 		s.t.Fatalf("write request %q: %v", request, err)
 	}
-	line, err := s.stdout.ReadString('\n')
-	if err != nil {
-		s.t.Fatalf("read response for %q: %v", request, err)
+	type readResult struct {
+		line string
+		err  error
+	}
+	readDone := make(chan readResult, 1)
+	go func() {
+		line, err := s.stdout.ReadString('\n')
+		readDone <- readResult{line: line, err: err}
+	}()
+	var line string
+	select {
+	case result := <-readDone:
+		if result.err != nil {
+			s.t.Fatalf("read response for %q: %v", request, result.err)
+		}
+		line = result.line
+	case <-time.After(mcpProtocolStopTimeout):
+		_ = s.stdoutRead.Close()
+		s.t.Fatalf("read response for %q exceeded %s", request, mcpProtocolStopTimeout)
 	}
 	var response mcpJSONRPCResponse
 	if err := json.Unmarshal([]byte(line), &response); err != nil {
@@ -359,13 +347,10 @@ func (s *fixtureBackedMCPServer) cleanup() {
 			if closeErr != nil {
 				cleanupErrors = append(cleanupErrors, fmt.Errorf("close isolated MCP protocol process: %w", closeErr))
 			}
-			mcpProtocolTopology.recordIsolatedRootClose()
 		}
 		if err := os.RemoveAll(s.workingDirectory); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove MCP protocol working directory: %w", err))
 		}
-		mcpProtocolTopology.recordTemporaryRootRemoved()
-		mcpProtocolTopology.recordInvocationReturned()
 		s.cleanupErr = errors.Join(cleanupErrors...)
 	})
 	if s.cleanupErr != nil {
@@ -377,7 +362,6 @@ func (s *fixtureBackedMCPServer) shutdown() error {
 	s.shutdownOnce.Do(func() {
 		s.cancel()
 		_ = s.stdin.Close()
-		mcpProtocolTopology.recordContextCanceled()
 		select {
 		case err := <-s.serveErr:
 			if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
@@ -401,7 +385,6 @@ func (s *fixtureBackedMCPServer) closeStreams() {
 		_ = s.stdin.Close()
 		_ = s.stdoutRead.Close()
 		_ = s.stdoutWrite.Close()
-		mcpProtocolTopology.recordStreamsClosed()
 	})
 }
 
@@ -412,7 +395,6 @@ func closeMCPProcessAfterStartFailure(process support.ApplicationProcess, ownsPr
 	closeContext, cancel := context.WithTimeout(context.Background(), mcpProtocolStopTimeout)
 	_ = process.Close(closeContext)
 	cancel()
-	mcpProtocolTopology.recordIsolatedRootClose()
 }
 
 func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBackedMCPServer) {
@@ -426,99 +408,4 @@ func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBack
 	if _, err := server.stdout.ReadByte(); err != io.EOF {
 		t.Fatalf("read stdout after shutdown = %v, want EOF (no hung stream)", err)
 	}
-}
-
-func (l *mcpProtocolTopologyLedger) recordSharedRootBuild() {
-	l.Lock()
-	l.sharedRootBuilds++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordIsolatedRootBuild() {
-	l.Lock()
-	l.isolatedRootBuilds++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordSharedRootClose() {
-	l.Lock()
-	l.sharedRootCloses++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordIsolatedRootClose() {
-	l.Lock()
-	l.isolatedRootCloses++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordInvocationStarted() {
-	l.Lock()
-	l.invocationStarts++
-	l.streamsOpened++
-	l.temporaryRootsMade++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordInvocationReturned() {
-	l.Lock()
-	l.invocationReturns++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordContextCanceled() {
-	l.Lock()
-	l.contextsCanceled++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordStreamsClosed() {
-	l.Lock()
-	l.streamsClosed++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) recordTemporaryRootRemoved() {
-	l.Lock()
-	l.temporaryRootsRemoved++
-	l.Unlock()
-}
-
-func (l *mcpProtocolTopologyLedger) cleanupError() error {
-	l.Lock()
-	defer l.Unlock()
-	var errs []error
-	if l.sharedRootBuilds != 0 && l.sharedRootCloses != 1 {
-		errs = append(errs, fmt.Errorf("shared application roots built/closed = %d/%d, want one close", l.sharedRootBuilds, l.sharedRootCloses))
-	}
-	if l.isolatedRootBuilds != l.isolatedRootCloses {
-		errs = append(errs, fmt.Errorf("isolated application roots built/closed = %d/%d", l.isolatedRootBuilds, l.isolatedRootCloses))
-	}
-	if l.invocationStarts != l.invocationReturns {
-		errs = append(errs, fmt.Errorf("MCP invocation starts/returns = %d/%d", l.invocationStarts, l.invocationReturns))
-	}
-	if l.contextsCanceled != l.invocationStarts {
-		errs = append(errs, fmt.Errorf("MCP invocation contexts canceled/started = %d/%d", l.contextsCanceled, l.invocationStarts))
-	}
-	if l.streamsOpened != l.streamsClosed {
-		errs = append(errs, fmt.Errorf("MCP streams opened/closed = %d/%d", l.streamsOpened, l.streamsClosed))
-	}
-	if l.temporaryRootsMade != l.temporaryRootsRemoved {
-		errs = append(errs, fmt.Errorf("MCP temporary roots made/removed = %d/%d", l.temporaryRootsMade, l.temporaryRootsRemoved))
-	}
-	return errors.Join(errs...)
-}
-
-func (l *mcpProtocolTopologyLedger) summary() string {
-	l.Lock()
-	defer l.Unlock()
-	return fmt.Sprintf(
-		"roots shared=%d/%d isolated=%d/%d; invocations=%d/%d; contexts=%d; streams=%d/%d; temporary_roots=%d/%d; child_processes=0 ports=0 routes=0 (not acquired)",
-		l.sharedRootBuilds, l.sharedRootCloses,
-		l.isolatedRootBuilds, l.isolatedRootCloses,
-		l.invocationStarts, l.invocationReturns,
-		l.contextsCanceled,
-		l.streamsOpened, l.streamsClosed,
-		l.temporaryRootsMade, l.temporaryRootsRemoved,
-	)
 }

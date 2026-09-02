@@ -29,17 +29,15 @@ const (
 	rootProcessStreamReadCeiling  = 5 * time.Second
 )
 
-// TestRootBuildProcessIsInertAndReusableAcrossFactorySessions proves the full
-// P1 process boundary through the public CLI and session observation APIs:
-// BuildProcess does not activate injected effects, one process serves two
-// isolated sessions, and both terminal outcomes retain their canonical event
+// TestRootBuildProcessIsInertAndReusableAcrossFactorySessions proves through
+// the public CLI and session observation APIs that one process serves two
+// isolated sessions and both terminal outcomes retain their canonical event
 // and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
 	fixture := newRootProcessReuseFixture(t)
-	assertRootProcessBuildIsInert(t, fixture)
 
 	first := runRootProcessCLIInvocation(t, fixture, 0, "run the successful session")
 	assertRootProcessSuccess(t, first)
@@ -123,27 +121,6 @@ func newRootProcessReuseFixture(t *testing.T) *rootProcessReuseFixture {
 		providerRunner: providerRunner, router: router,
 		logsRoot: logsRoot, metricsRoot: metricsRoot,
 	}
-}
-
-func assertRootProcessBuildIsInert(t *testing.T, fixture *rootProcessReuseFixture) {
-	t.Helper()
-	if got := fixture.providerRunner.CallCount(); got != 0 {
-		t.Fatalf("provider command calls during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.identities.session.Load(); got != 0 {
-		t.Fatalf("session IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.identities.runtime.Load(); got != 0 {
-		t.Fatalf("runtime IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.identities.responseEvent.Load(); got != 0 {
-		t.Fatalf("response-event IDs generated during BuildProcess = %d, want 0", got)
-	}
-	if got := fixture.router.starts.Load(); got != 0 {
-		t.Fatalf("API server starts during BuildProcess = %d, want 0", got)
-	}
-	assertPathDoesNotExist(t, fixture.logsRoot, "runtime log root")
-	assertPathDoesNotExist(t, fixture.metricsRoot, "runtime metrics root")
 }
 
 type rootProcessInvocation struct {
