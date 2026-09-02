@@ -130,7 +130,13 @@ func testFactoryTargetReadinessSemanticFailure(t *testing.T) {
 			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, "<none>", caseFixture.factoryDir)
 		},
 	)
-	assertFactoryTargetReadinessSemanticFailure(t, err, int(checks.Load()), fixture.runner.CallCount()-callStart)
+	providerCalls := 0
+	for _, request := range fixture.runner.RequestsSince(callStart) {
+		if sameFactoryPath(request.WorkDir, caseFixture.factoryDir) {
+			providerCalls++
+		}
+	}
+	assertFactoryTargetReadinessSemanticFailure(t, err, int(checks.Load()), providerCalls)
 	if len(caseFixture.sessionIDs) != 0 {
 		t.Fatalf("malformed Factory readiness opened a session: %#v", caseFixture.sessionIDs)
 	}
