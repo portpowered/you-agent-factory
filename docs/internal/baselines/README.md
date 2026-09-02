@@ -168,7 +168,7 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/functional-undocumented-tests.json` | `make verify-tests` → `test-maintenance` | `internal/functionaltestmetadata/baseline_repo_test.go:TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests` | Functional test metadata | Relative test file and `Test*` name | `go test ./internal/functionaltestmetadata -run TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests -count=1` | R-04 | `sha256:6fb6ce8170a2c0518acb65051d830a38a4d122c343475023112ab2ad2aeaa7b0` |
 | `docs/internal/baselines/go-functional-coverage-package-minimums.json` | `make functional-test-viz` → backend functional coverage | `cmd/functionaltestviz/main.go:packageManifestPath`, `Makefile:GO_FUNCTIONAL_COVERAGE_MANIFEST` | Functional coverage gate | Go import package and minimum statement-coverage percentage | `make functional-test-viz` | R-05 | `sha256:cc5069ee2152659a502ec202eebbec917c29e1e82791393fc17cf7717288f407` |
 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `make test-unit-coverage` → backend unit coverage | `cmd/unitcoverage/main.go`, `Makefile:GO_UNIT_COVERAGE_MANIFEST` | Unit coverage gate | Go import package and minimum statement-coverage percentage | `make test-unit-coverage` | R-06 | `sha256:ee1faa58bad1f07903868c3eb791184ea299c10250cfddb5478adfbecb299eb3` |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:6add0f6ef92dec8e91b0d1279f2a4cd7e9da411d14c648e19c1e06a5d1327fbe` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:5dad63c005c56b9b57036844d1ac0288377bd466ccf115c546a9921a449b46e1` |
 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `make lint` → `ui-lint` | `ui/scripts/check-hardcoded-ui-copy.ts`, `ui/package.json:check:localized-copy` | Dashboard localization gate | Source location and literal finding | `cd ui && bun run check:localized-copy` | R-07 | `sha256:bb6ee7e94bc96d013f164dc81004471112e457fa8a22d11ab17c1804982c609a` |
 | `docs/internal/baselines/package-structure-baseline.json` | `make lint` → `pkg-structure` | `cmd/pkgstructurecheck/main.go` | Packaged Service Structure | Package path and exact recorded structure finding | `make pkg-structure` | R-08 | `sha256:83fa29f913faf932babb7593767e375e1499fc4e6f2a96290bbf74206edb635e` |
 | `docs/internal/baselines/package-target-test-only-baseline.json` | `make lint` → `package-target-manifest-check` | `cmd/packagetargetmanifestcheck/manifest.go` | Package-target migration gate | Open-move package path and test-only source identity | `make package-target-manifest-check` | R-09 | `sha256:64c98e7f5ee3b25d74bda79ee50a571b1b3a21e985946bc34688b330df5af40a` |
@@ -215,7 +215,7 @@ content observations, not permission to rewrite a ratchet or snapshot.
 | R-04 | `functional-undocumented-tests.json` | 356 committed undocumented-test identities; the current parser discovers 359 identities, so the consumer fails without a baseline edit |
 | R-05 | `go-functional-coverage-package-minimums.json` | 363 packages and 29 floor holds |
 | R-06 | `go-unit-coverage-package-minimums.json` | 403 packages and 33 floor holds |
-| S-02 | `go-unit-lane-latency-budget.v1.json` | 445 packages and 18,286 final-mode test identities; stored `reference.baseCommit` `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce` is historical relative to this audit |
+| S-02 | `go-unit-lane-latency-budget.v1.json` | 445 packages and 18,296 final-mode test identities; stored `reference.baseCommit` `605a6e5385698b67b7b140ea3b5f2219d7464276` identifies the hosted inventory capture |
 | R-07 | `hardcoded-ui-copy-baseline.txt` | 2 accepted literal findings |
 | R-08 | `package-structure-baseline.json` | 505 structure findings |
 | R-09 | `package-target-test-only-baseline.json` | 31 test-only migration findings |
@@ -504,17 +504,17 @@ terminal CI, merge conflicts, and merge after that handoff.
 
 The unit-lane budget contains two deliberately different inventory units that
 must remain visible. The checked-in comparison file has **445 packages and
-18,286 current test identities** at the audit commit. Its internal
-`reference.baseCommit` is `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce`, the
-historical source revision used for the accepted timing sample. It is not the
-catalog audit SHA. The accepted historical sample evidence records **444
+18,296 current test identities** at the audit commit. Its internal
+`reference.baseCommit` is `605a6e5385698b67b7b140ea3b5f2219d7464276`, the
+hosted source revision used to capture the current inventory. The accepted
+historical timing evidence records **444
 packages and 18,122 tests** in each of its three captures. The latter is not
 silently substituted for the former: it is a historical timing distribution,
 while the budget's `testInventory` is the current final-mode identity set.
 
 | Evidence source | Reproduction command | Unit and observed value | SHA-256 |
 | --- | --- | --- | --- |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 445 packages, 18,286 test identities. Stored `reference.baseCommit` is historical `e39e614dab8a2ea31b49fda5b99ad3b9cd5ab0ce` | `6add0f6ef92dec8e91b0d1279f2a4cd7e9da411d14c648e19c1e06a5d1327fbe` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 445 packages, 18,296 test identities. Stored `reference.baseCommit` is the hosted inventory capture `605a6e5385698b67b7b140ea3b5f2219d7464276` | `5dad63c005c56b9b57036844d1ac0288377bd466ccf115c546a9921a449b46e1` |
 | `docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-summary.md` and its three linked `baseline-make-run-*.v2.json` captures | `go run ./cmd/unitlanebudget -mode baseline -samples docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json` | Historical baseline distribution: 444 packages, 18,122 tests per capture. The three wall samples are 222.006s, 239.612s, and 258.271s | Summary `801e62cbff17729f7c256309f058fc961ed0959a321de86e3783933049d43a93`, captures `ba7e1364ed5c88d66071d4cac4b2bf027571044ef7d159b16d25435f7fc95d8a`, `d30fdc0215d50a14c0a4cef65b234fde68a680e4015e37b5d9a463c9f361723f`, `e4288d9085e19ea3e7f8a87e0ad67ca52b38a255e0bc1e1a569ad59fbd008d98` |
 
 The mapping is therefore **same package unit, different test-inventory
