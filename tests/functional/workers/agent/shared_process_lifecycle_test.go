@@ -398,12 +398,10 @@ func readAgentResponseEventsUntilTerminal(
 func isAgentTerminalResponseEvent(event factoryapi.FactoryResponseEvent) bool {
 	if event.Kind == factoryapi.FactoryResponseEventKindRun {
 		return event.Phase == factoryapi.FactoryResponseEventPhaseCompleted ||
-			event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
-			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled
+			event.Phase == factoryapi.FactoryResponseEventPhaseFailed
 	}
 	return event.Kind == factoryapi.FactoryResponseEventKindError &&
-		(event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
-			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled)
+		event.Phase == factoryapi.FactoryResponseEventPhaseFailed
 }
 
 func assertAgentCancellationResponseEvents(
