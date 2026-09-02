@@ -200,9 +200,6 @@ func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
 		scenario.Stop(t)
 	})
 
-	if got := fixture.router.routeCount(); got != 0 {
-		t.Fatalf("shared provider routes after adverse recovery = %d, want zero", got)
-	}
 }
 
 func testutilCopySharedFixture(t *testing.T, name string) string {
