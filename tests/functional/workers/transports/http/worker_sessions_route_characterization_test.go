@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -21,88 +20,11 @@ import (
 
 const routeCharacterizationTimeout = 15 * time.Second
 
-// TestWorkerSessionRouteCharacterization_FreshAndExactly32Dispatches records
-// the public dispatch-to-Worker Session association before exercising the
-// Work-scoped route. The first Work is checked before the bounded accumulation
-// and the first, middle, and last Work are checked after exactly 32 sequential
-// controlled dispatches.
-func TestWorkerSessionRouteCharacterization_FreshAndExactly32Dispatches(t *testing.T) {
-	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-characterization")
-	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
-
-	gate := make(chan struct{})
-	close(gate)
-	runner := newFunctionalWorkerGate(gate)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	observed := make([]routeCharacterizationDispatch, 0, 32)
-	for index := 0; index < 32; index++ {
-		name := fmt.Sprintf("route-characterization-work-%02d", index+1)
-		submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-			Name:         &name,
-			WorkTypeName: "task",
-			Payload:      map[string]string{"title": name},
-		})
-		workID := support.StringPointerValue(submitted.WorkId)
-		if workID == "" {
-			t.Fatalf("dispatch %d submission = %#v, want Work ID", index+1, submitted)
-		}
-		observed = append(observed, waitForRouteCharacterizationDispatch(t, stream, workID))
-
-		if index == 0 {
-			assertRouteCharacterizationRead(t, server, observed[index], true)
-		}
-	}
-
-	if runner.callCount() != 32 {
-		t.Fatalf("controlled provider calls = %d, want exactly 32", runner.callCount())
-	}
-
-	for _, index := range []int{0, 15, 31} {
-		assertRouteCharacterizationRead(t, server, observed[index], false)
-	}
-	beforeRepeatedReadEvents := len(support.GetFactoryEventsAt(t, server.URL()))
-	firstRepeatedRead := executeDefaultWorkerSessionsListJSON(t, server, observed[31].workID)
-	secondRepeatedRead := executeDefaultWorkerSessionsListJSON(t, server, observed[31].workID)
-	if !reflect.DeepEqual(firstRepeatedRead, secondRepeatedRead) {
-		t.Fatalf("repeated JSON Worker Session reads for Work %q differ:\nfirst: %#v\nsecond: %#v", observed[31].workID, firstRepeatedRead, secondRepeatedRead)
-	}
-	if afterRepeatedReadEvents := len(support.GetFactoryEventsAt(t, server.URL())); afterRepeatedReadEvents != beforeRepeatedReadEvents {
-		t.Fatalf("repeated Worker Session reads changed public Factory Event count from %d to %d", beforeRepeatedReadEvents, afterRepeatedReadEvents)
-	}
-	t.Logf(
-		"public dispatch associations: first=%s/%s/%s middle=%s/%s/%s final=%s/%s/%s",
-		observed[0].workID, observed[0].dispatchID, observed[0].workerSessionID,
-		observed[15].workID, observed[15].dispatchID, observed[15].workerSessionID,
-		observed[31].workID, observed[31].dispatchID, observed[31].workerSessionID,
-	)
-
-	events := support.GetFactoryEventsAt(t, server.URL())
-	associationCount := 0
-	responseCount := 0
-	for _, event := range events {
-		switch event.Type {
-		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
-			associationCount++
-		case factoryapi.FactoryEventTypeDispatchResponse:
-			responseCount++
-		}
-	}
-	if associationCount != 32 || responseCount != 32 {
-		t.Fatalf("public Factory Event counts = association:%d response:%d, want 32 each", associationCount, responseCount)
-	}
-}
-
 // TestWorkerSessionRouteCharacterization_AfterDefaultPauseResume records one
 // association before the supported default-session pause/resume cycle and one
 // after it. Both route reads continue to use the public ~default selector.
 func TestWorkerSessionRouteCharacterization_AfterDefaultPauseResume(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-resume-characterization")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 

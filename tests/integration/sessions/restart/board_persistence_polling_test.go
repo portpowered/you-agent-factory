@@ -13,7 +13,6 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func waitForBoardDaemonReady(t *testing.T, daemon *boardPersistenceDaemon, timeout time.Duration) {
@@ -180,7 +179,7 @@ func waitForBoardStates(t *testing.T, baseURL string, want map[string]string, ti
 }
 
 func readBoardWorkList(ctx context.Context, baseURL string) (factoryapi.ListWorkResponse, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(baseURL, "/")+"/factory-sessions/~default/work", nil)
 	if err != nil {
 		return factoryapi.ListWorkResponse{}, err
 	}
@@ -206,7 +205,7 @@ func boardStatesMatch(listed factoryapi.ListWorkResponse, want map[string]string
 	}
 	seen := make(map[string]struct{}, len(listed.Results))
 	for _, item := range listed.Results {
-		workID := support.StringPointerValue(item.WorkId)
+		workID := boardPersistenceStringPointerValue(item.WorkId)
 		state := ""
 		if item.State != nil {
 			state = item.State.Name

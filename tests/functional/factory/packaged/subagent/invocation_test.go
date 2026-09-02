@@ -29,17 +29,27 @@ func TestPackagedSubagent(t *testing.T) {
 	t.Run("TestPackagedSubagentReturnsChildResult", func(t *testing.T) {
 		testPackagedSubagentReturnsChildResult(t, fixture)
 	})
-	t.Run("TestPackagedSubagentChildFailureReturnsStableFailure", func(t *testing.T) {
-		testPackagedSubagentChildFailureReturnsStableFailure(t, fixture)
+	t.Run("TestPackagedSubagentCLIChildFailureReturnsStableFailure", func(t *testing.T) {
+		testPackagedSubagentCLIChildFailureReturnsStableFailure(t, fixture)
 	})
-	t.Run("TestPackagedSubagentStreamsChildResponseEvents", func(t *testing.T) {
-		testPackagedSubagentStreamsChildResponseEvents(t, fixture)
-	})
-	t.Run("TestPackagedSubagentPropagatesLunaXHighReasoningEffort", func(t *testing.T) {
-		testPackagedSubagentPropagatesLunaXHighReasoningEffort(t, fixture)
-	})
-	t.Run("TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault", func(t *testing.T) {
-		testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t, fixture)
+	fixture.startHost(t)
+	t.Run("hosted customer scenarios", func(t *testing.T) {
+		tests := []struct {
+			name string
+			run  func(*testing.T, *subagentSharedFixture)
+		}{
+			{name: "TestPackagedSubagentAPIChildFailureReturnsStableFailure", run: testPackagedSubagentAPIChildFailureReturnsStableFailure},
+			{name: "TestPackagedSubagentStreamsChildResponseEvents", run: testPackagedSubagentStreamsChildResponseEvents},
+			{name: "TestPackagedSubagentPropagatesLunaXHighReasoningEffort", run: testPackagedSubagentPropagatesLunaXHighReasoningEffort},
+			{name: "TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault", run: testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault},
+		}
+		for _, test := range tests {
+			test := test
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				test.run(t, fixture)
+			})
+		}
 	})
 }
 
@@ -156,42 +166,39 @@ func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testi
 // @you/subagent invocation returns a stable failed public terminal outcome when
 // the child worker rejects, without emitting a success primary result for the
 // failing run.
-func testPackagedSubagentChildFailureReturnsStableFailure(t *testing.T, fixture *subagentSharedFixture) {
-	t.Run("CLI JSON returns stable failed terminal outcome", func(t *testing.T) {
-		requestText := fmt.Sprintf("functional-packaged-subagent-failure-%d", time.Now().UnixNano())
-		runner := newPackagedSubagentRejectingRunner()
-		scenario := fixture.newScenario(t, runner)
-		response, stderr, execErr := runPackagedSubagentCLIJSONFailureInvocation(t, scenario, requestText)
+func testPackagedSubagentCLIChildFailureReturnsStableFailure(t *testing.T, fixture *subagentSharedFixture) {
+	requestText := fmt.Sprintf("functional-packaged-subagent-failure-%d", time.Now().UnixNano())
+	runner := newPackagedSubagentRejectingRunner()
+	scenario := fixture.newScenario(t, runner)
+	response, stderr, execErr := runPackagedSubagentCLIJSONFailureInvocation(t, scenario, requestText)
 
-		if execErr == nil {
-			t.Fatal("Process.Execute error = nil, want terminal packaged-subagent child failure")
-		}
-		assertPackagedSubagentStableFailureInvocation(t, response)
-		assertPackagedSubagentStableFailureErrorResponse(t, response, stderr)
-		if invocationPrimaryResultPresent(response) {
-			t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
-		}
-		if strings.Contains(invocationResponseJSON(t, response), packagedSubagentChildPrimaryResult) {
-			t.Fatal("failed invocation JSON contained child success primary result text")
-		}
-		if strings.Contains(invocationResponseJSON(t, response), requestText) {
-			t.Fatalf("failed invocation JSON echoed submitted request text %q", requestText)
-		}
-	})
-	fixture.openPendingScenarioSessions(t)
+	if execErr == nil {
+		t.Fatal("Process.Execute error = nil, want terminal packaged-subagent child failure")
+	}
+	assertPackagedSubagentStableFailureInvocation(t, response)
+	assertPackagedSubagentStableFailureErrorResponse(t, response, stderr)
+	if invocationPrimaryResultPresent(response) {
+		t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
+	}
+	if strings.Contains(invocationResponseJSON(t, response), packagedSubagentChildPrimaryResult) {
+		t.Fatal("failed invocation JSON contained child success primary result text")
+	}
+	if strings.Contains(invocationResponseJSON(t, response), requestText) {
+		t.Fatalf("failed invocation JSON echoed submitted request text %q", requestText)
+	}
+}
 
-	t.Run("API returns stable failed terminal outcome", func(t *testing.T) {
-		requestText := fmt.Sprintf("functional-packaged-subagent-api-failure-%d", time.Now().UnixNano())
-		runner := newPackagedSubagentRejectingRunner()
-		scenario := fixture.newScenario(t, runner)
-		scenario.open(t)
-		response := runPackagedSubagentAPIFailureInvocation(t, scenario, requestText)
+func testPackagedSubagentAPIChildFailureReturnsStableFailure(t *testing.T, fixture *subagentSharedFixture) {
+	requestText := fmt.Sprintf("functional-packaged-subagent-api-failure-%d", time.Now().UnixNano())
+	runner := newPackagedSubagentRejectingRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := runPackagedSubagentAPIFailureInvocation(t, scenario, requestText)
 
-		assertPackagedSubagentStableFailureInvocation(t, response)
-		if invocationPrimaryResultPresent(response) {
-			t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
-		}
-	})
+	assertPackagedSubagentStableFailureInvocation(t, response)
+	if invocationPrimaryResultPresent(response) {
+		t.Fatalf("primaryResult = %#v, want no success primary result after child worker failure", response.PrimaryResult)
+	}
 }
 
 func runPackagedSubagentAPIInvocationWithResponseEvents(

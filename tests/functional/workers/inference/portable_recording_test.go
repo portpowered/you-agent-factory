@@ -1,15 +1,18 @@
 package inference_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -81,16 +84,13 @@ func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
 }
 
 // TestWSRFT006PortableExportSelectsRootBuiltWorkerSession proves that one
-// explicit Factory Session recording can contain more than one Worker Session,
-// and that a later Factory Session gets a fresh durable recording identity.
-// Both sessions use one reusable root-built host and the same writer.
+// explicit Factory Session recording can contain more than one Worker Session
+// and requires an explicit Worker Session selector for portable export.
 func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	t.Parallel()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	support.ClearSeedInputs(t, firstDir)
-	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
-	support.ClearSeedInputs(t, secondDir)
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
 
@@ -128,30 +128,66 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	if portable.Identity.RecordingID != firstRecordingID || portable.Identity.WorkerSessionID != selected {
 		t.Fatalf("portable identity = %#v, want recording %q and Worker Session %q", portable.Identity, firstRecordingID, selected)
 	}
+}
 
-	queueWSRFT006ProviderResult(t, loaded, runner)
-	runSharedInferenceFactory(t, secondDir, sharedInferenceScenario{
-		commandRunner:         runner,
-		workerRecordingWriter: probe,
-		submittedWork:         sharedInferenceWork("WSR-FT-006 later Factory Session"),
-	}, sharedInferenceScenarioTimeout)
-	secondRecordingID, _ := probe.RecordingIdentity(t)
-	if secondRecordingID == firstRecordingID {
-		t.Fatalf("later Factory Session recording identity = %q, want a fresh identity", secondRecordingID)
+// TestWSRFT006ReusedRecordingPathStartsFreshWorkerHistory proves the
+// customer-selected --record path can be reused without merging the prior
+// invocation's durable Worker history. This one-shot CLI contract cannot be
+// expressed by two hosted sessions, so it owns one reusable root-built process
+// and executes both invocations through Process.Execute.
+func TestWSRFT006ReusedRecordingPathStartsFreshWorkerHistory(t *testing.T) {
+	t.Parallel()
+	loaded := loadOpeningRecordFixture(t, "codex", "success")
+	probe := newWSRFT004RecordingProbe(t, false)
+	runner := newWSRFT004ProviderRunner(t, probe)
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		WorkerRecordingWriter: probe,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	secondSnapshot, err := reader.LoadWorkerRecording(t.Context(), secondRecordingID)
+	support.CleanupProcess(t, process)
+	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006-reused.replay.json")
+
+	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006RecordedFactory(t, process, firstDir, recordPath)
+	firstRecordingID, firstWorkerID := probe.RecordingIdentity(t)
+
+	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006RecordedFactory(t, process, secondDir, recordPath)
+	secondRecordingID, secondWorkerID := probe.RecordingIdentity(t)
+	if secondRecordingID == firstRecordingID {
+		t.Fatalf("same-path recording identity = %q after second execution, want a fresh identity", secondRecordingID)
+	}
+	if secondWorkerID == firstWorkerID {
+		t.Fatalf("same-path Worker Session identity = %q after second execution, want a fresh identity", secondWorkerID)
+	}
+
+	secondSnapshot, err := probe.LoadWorkerRecording(t.Context(), secondRecordingID)
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording(%q) error = %v", secondRecordingID, err)
 	}
-	if len(secondSnapshot.Sessions) != 1 {
-		t.Fatalf("later Factory Session snapshot contains %d Worker Sessions, want one", len(secondSnapshot.Sessions))
+	if len(secondSnapshot.Sessions) != 1 || secondSnapshot.Sessions[0].WorkerSessionID != secondWorkerID {
+		t.Fatalf("later same-path snapshot = %#v, want only fresh Worker Session %q", secondSnapshot, secondWorkerID)
 	}
-	for _, session := range secondSnapshot.Sessions {
-		for _, first := range firstSnapshot.Sessions {
-			if session.WorkerSessionID == first.WorkerSessionID {
-				t.Fatalf("later recording inherited Worker Session %q from recording %q", session.WorkerSessionID, firstRecordingID)
-			}
-		}
+}
+
+func executeWSRFT006RecordedFactory(
+	t *testing.T,
+	process support.ApplicationProcess,
+	dir string,
+	recordPath string,
+) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 }
 

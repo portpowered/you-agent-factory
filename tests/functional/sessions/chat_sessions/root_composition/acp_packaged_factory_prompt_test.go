@@ -90,12 +90,6 @@ func (runner *packagedFactoryPromptRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("packaged Factory provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, request)
 	runner.mu.Unlock()
@@ -245,12 +239,6 @@ func (runner *planParallelACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("plan-parallel provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	runner.mu.Lock()
 	runner.requests++
 	runner.mu.Unlock()
@@ -334,12 +322,6 @@ func (runner *builderGreetingACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("Factory Builder provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	prompt := string(request.Stdin)
 	switch {
 	case strings.Contains(prompt, "return exactly one lowercase label: `build` or `help`"):
@@ -415,12 +397,6 @@ func (runner *spawnACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("spawn provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()
@@ -527,12 +503,6 @@ func (runner *deepResearchACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
-	callID := beginChatCall("deep-research provider")
-	defer func() {
-		if err := closeChatCall(callID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()

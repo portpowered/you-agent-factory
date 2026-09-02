@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -24,48 +25,6 @@ import (
 )
 
 const mcpStdioStopTimeout = 5 * time.Second
-
-type mcpStdioTopologyLedger struct {
-	sync.Mutex
-	rootBuilds            int
-	rootCloses            int
-	invocationStarts      int
-	invocationReturns     int
-	stdioSessionsOpened   int
-	stdioSessionsClosed   int
-	contextsCreated       int
-	contextsCanceled      int
-	streamsOpened         int
-	streamsClosed         int
-	temporaryRootsMade    int
-	temporaryRootsRemoved int
-}
-
-var mcpStdioTopology mcpStdioTopologyLedger
-
-// TestMain reports the stdio inventory and verifies package-owned lifecycle
-// accounting after every scenario cleanup has run. The eight isolated rows
-// are the six non-constructor top-level rows plus the two named initializer
-// rows; the constructor validation row is process-free.
-func TestMain(m *testing.M) {
-	exitCode := m.Run()
-
-	if err := mcpStdioTopology.cleanupError(); err != nil {
-		fmt.Fprintf(os.Stderr, "GATE-CLEANUP failure: %v\n", err)
-		if exitCode == 0 {
-			exitCode = 1
-		}
-	}
-
-	fmt.Fprintln(os.Stderr, "GATE-INVENTORY stdio: top_level_tests=7 named_initializer_rows=2 eligible_process_free_rows=1 isolated_rows=8")
-	fmt.Fprintf(os.Stderr, "GATE-STDIO-ISOLATED: %s\n", mcpStdioTopology.isolationSummary())
-	fmt.Fprintf(os.Stderr, "GATE-LIFECYCLE: %s\n", mcpStdioTopology.lifecycleSummary())
-	fmt.Fprintf(os.Stderr, "GATE-CLEANUP: %s\n", mcpStdioTopology.summary())
-	fmt.Fprintln(os.Stderr, "GATE-REPEAT: per-invocation resource balances are checked for each package run; use the declared -count=3 gate for repeatability")
-	fmt.Fprintln(os.Stderr, "GATE-MCP-CONFORMANCE: empty/duplicate IDs and maximum-frame semantics remain unspecified; no assertion is invented")
-	fmt.Fprintln(os.Stderr, "GATE-ROOT-PROCESS-INTEGRATION: built-child crash, signal, and exit-status behavior are not exercised by this Process.Execute lane")
-	os.Exit(exitCode)
-}
 
 // TestMCPStdioInitializeAndToolDiscovery proves MCP stdio initialize and
 // tools/list succeed through the public you server mcp boundary without widening
@@ -213,7 +172,6 @@ func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 	})
 	t.Run("runtime-backed", func(t *testing.T) {
 		projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-stdio-discovery-runtime")
-		trackMCPTempRoot(t, projectRoot)
 
 		// Keep the runtime-backed initializer row isolated: its project root
 		// and environment are distinct from the fixture-backed row.
@@ -361,12 +319,10 @@ func buildMCPProcess(t testing.TB) support.ApplicationProcess {
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	mcpStdioTopology.recordRootBuild()
 	t.Cleanup(func() {
 		closeContext, cancel := context.WithTimeout(context.Background(), mcpStdioStopTimeout)
 		closeErr := process.Close(closeContext)
 		cancel()
-		mcpStdioTopology.recordRootClose()
 		if closeErr != nil {
 			t.Errorf("close MCP application process: %v", closeErr)
 		}
@@ -379,30 +335,12 @@ func executeMCPProcess(t testing.TB, process support.ApplicationProcess, input r
 	if process == nil {
 		t.Fatal("execute MCP process requires an application process")
 	}
-	mcpStdioTopology.recordInvocationStarted()
-	defer mcpStdioTopology.recordInvocationReturned()
 	return process.Execute(input)
 }
 
 func trackedMCPTempDir(t testing.TB) string {
 	t.Helper()
-	directory := t.TempDir()
-	trackMCPTempRoot(t, directory)
-	return directory
-}
-
-func trackMCPTempRoot(t testing.TB, directory string) {
-	t.Helper()
-	if strings.TrimSpace(directory) == "" {
-		t.Fatal("track MCP temporary root requires a directory")
-	}
-	mcpStdioTopology.recordTemporaryRootMade()
-	t.Cleanup(func() {
-		if err := os.RemoveAll(directory); err != nil {
-			t.Errorf("remove MCP temporary root %q: %v", directory, err)
-		}
-		mcpStdioTopology.recordTemporaryRootRemoved()
-	})
+	return t.TempDir()
 }
 
 func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
@@ -424,10 +362,6 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	workingDirectory := trackedMCPTempDir(t)
-	mcpStdioTopology.recordInvocationStarted()
-	mcpStdioTopology.recordStdioSessionOpened()
-	mcpStdioTopology.recordContextCreated()
-	mcpStdioTopology.recordStreamsOpened()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
@@ -437,7 +371,7 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 				"you", "server", "mcp",
 				"--fixture-catalog", fixtureCatalog,
 			},
-			Env:              os.Environ(),
+			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir()),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -482,10 +416,6 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 	ctx, cancel := context.WithCancel(context.Background())
 	homeDir := trackedMCPTempDir(t)
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	mcpStdioTopology.recordInvocationStarted()
-	mcpStdioTopology.recordStdioSessionOpened()
-	mcpStdioTopology.recordContextCreated()
-	mcpStdioTopology.recordStreamsOpened()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
@@ -528,8 +458,6 @@ func (s *stdioMCPServer) cleanup() {
 			cleanupErrors = append(cleanupErrors, err)
 		}
 		s.closeStreams()
-		mcpStdioTopology.recordStdioSessionClosed()
-		mcpStdioTopology.recordInvocationReturned()
 		s.cleanupErr = errors.Join(cleanupErrors...)
 	})
 	if s.cleanupErr != nil {
@@ -567,7 +495,6 @@ func (s *stdioMCPServer) shutdown() error {
 	s.shutdownOnce.Do(func() {
 		s.cancel()
 		_ = s.stdin.Close()
-		mcpStdioTopology.recordContextCanceled()
 		if err := s.awaitServe(); err != nil &&
 			!s.serveResultAccepted &&
 			!errors.Is(err, io.EOF) &&
@@ -587,7 +514,6 @@ func (s *stdioMCPServer) closeStreams() {
 		_ = s.stdin.Close()
 		_ = s.stdoutRead.Close()
 		_ = s.stdoutWrite.Close()
-		mcpStdioTopology.recordStreamsClosed()
 	})
 }
 
@@ -608,137 +534,4 @@ func assertIncompleteMCPFrameTerminates(t *testing.T, server *stdioMCPServer) {
 	if _, err := server.stdout.ReadByte(); err != io.EOF {
 		t.Fatalf("read stdout after incomplete MCP frame = %v, want EOF without a success response", err)
 	}
-}
-
-func (l *mcpStdioTopologyLedger) recordRootBuild() {
-	l.Lock()
-	l.rootBuilds++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordRootClose() {
-	l.Lock()
-	l.rootCloses++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordInvocationStarted() {
-	l.Lock()
-	l.invocationStarts++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordInvocationReturned() {
-	l.Lock()
-	l.invocationReturns++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordStdioSessionOpened() {
-	l.Lock()
-	l.stdioSessionsOpened++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordStdioSessionClosed() {
-	l.Lock()
-	l.stdioSessionsClosed++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordContextCreated() {
-	l.Lock()
-	l.contextsCreated++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordContextCanceled() {
-	l.Lock()
-	l.contextsCanceled++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordStreamsOpened() {
-	l.Lock()
-	l.streamsOpened++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordStreamsClosed() {
-	l.Lock()
-	l.streamsClosed++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordTemporaryRootMade() {
-	l.Lock()
-	l.temporaryRootsMade++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) recordTemporaryRootRemoved() {
-	l.Lock()
-	l.temporaryRootsRemoved++
-	l.Unlock()
-}
-
-func (l *mcpStdioTopologyLedger) cleanupError() error {
-	l.Lock()
-	defer l.Unlock()
-	var errs []error
-	if l.rootBuilds != l.rootCloses {
-		errs = append(errs, fmt.Errorf("MCP application roots built/closed = %d/%d", l.rootBuilds, l.rootCloses))
-	}
-	if l.invocationStarts != l.invocationReturns {
-		errs = append(errs, fmt.Errorf("MCP invocation starts/returns = %d/%d", l.invocationStarts, l.invocationReturns))
-	}
-	if l.stdioSessionsOpened != l.stdioSessionsClosed {
-		errs = append(errs, fmt.Errorf("MCP stdio sessions opened/closed = %d/%d", l.stdioSessionsOpened, l.stdioSessionsClosed))
-	}
-	if l.contextsCreated != l.contextsCanceled {
-		errs = append(errs, fmt.Errorf("MCP invocation contexts created/canceled = %d/%d", l.contextsCreated, l.contextsCanceled))
-	}
-	if l.streamsOpened != l.streamsClosed {
-		errs = append(errs, fmt.Errorf("MCP streams opened/closed = %d/%d", l.streamsOpened, l.streamsClosed))
-	}
-	if l.temporaryRootsMade != l.temporaryRootsRemoved {
-		errs = append(errs, fmt.Errorf("MCP temporary roots made/removed = %d/%d", l.temporaryRootsMade, l.temporaryRootsRemoved))
-	}
-	return errors.Join(errs...)
-}
-
-func (l *mcpStdioTopologyLedger) isolationSummary() string {
-	l.Lock()
-	defer l.Unlock()
-	return fmt.Sprintf(
-		"root_builds=%d root_closes=%d; root-backed rows retain distinct Process instances; process_free_constructor=not_acquired",
-		l.rootBuilds, l.rootCloses,
-	)
-}
-
-func (l *mcpStdioTopologyLedger) lifecycleSummary() string {
-	l.Lock()
-	defer l.Unlock()
-	return fmt.Sprintf(
-		"invocations=%d/%d sessions=%d/%d contexts=%d/%d streams=%d/%d temporary_roots=%d/%d; shutdown observes cancellation and stdout EOF; pre-initialize environment failures remain session-free",
-		l.invocationStarts, l.invocationReturns,
-		l.stdioSessionsOpened, l.stdioSessionsClosed,
-		l.contextsCreated, l.contextsCanceled,
-		l.streamsOpened, l.streamsClosed,
-		l.temporaryRootsMade, l.temporaryRootsRemoved,
-	)
-}
-
-func (l *mcpStdioTopologyLedger) summary() string {
-	l.Lock()
-	defer l.Unlock()
-	return fmt.Sprintf(
-		"roots=%d/%d; invocations=%d/%d; sessions=%d/%d; contexts=%d/%d; streams=%d/%d; temporary_roots=%d/%d; child_processes=0 ports=0 routes=0 (not acquired)",
-		l.rootBuilds, l.rootCloses,
-		l.invocationStarts, l.invocationReturns,
-		l.stdioSessionsOpened, l.stdioSessionsClosed,
-		l.contextsCreated, l.contextsCanceled,
-		l.streamsOpened, l.streamsClosed,
-		l.temporaryRootsMade, l.temporaryRootsRemoved,
-	)
 }

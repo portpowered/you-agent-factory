@@ -272,9 +272,10 @@ func (capture *capture) accept(record events.Record) error {
 		return err
 	}
 	if err := capture.writer.PersistWorkerRecord(capture.runCtx, recordings.WorkerRecordingRecord{
-		RecordingID:     capture.request.RecordingID,
-		WorkerSessionID: capture.request.WorkerSessionID,
-		Record:          record.Detached(),
+		RecordingID:      capture.request.RecordingID,
+		FactorySessionID: capture.request.FactorySessionID,
+		WorkerSessionID:  capture.request.WorkerSessionID,
+		Record:           record.Detached(),
 	}); err != nil {
 		return fmt.Errorf("%w: position %d: %v", recordings.ErrWorkerRecordingPersistence, record.ID.Position, err)
 	}

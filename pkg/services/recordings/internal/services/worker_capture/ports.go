@@ -28,9 +28,10 @@ var _ Service = WorkerRecordingCodec{}
 // must capture. Topic is explicit so a caller cannot accidentally subscribe to
 // a sibling or provider-owned stream.
 type WorkerSessionRecordingRequest struct {
-	RecordingID     string
-	WorkerSessionID string
-	Topic           events.Topic
+	RecordingID      string
+	FactorySessionID string
+	WorkerSessionID  string
+	Topic            events.Topic
 }
 
 // Validate reports whether the request names one concrete Worker topic.
@@ -52,9 +53,10 @@ func (request WorkerSessionRecordingRequest) Validate() error {
 // The writer receives the Events record unchanged, including its aggregate
 // position and complete source idempotency identity.
 type WorkerRecordingRecord struct {
-	RecordingID     string
-	WorkerSessionID string
-	Record          events.Record
+	RecordingID      string
+	FactorySessionID string
+	WorkerSessionID  string
+	Record           events.Record
 }
 
 // WorkerRecordingFailure is the safe durable classification written when

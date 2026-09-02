@@ -15,6 +15,7 @@ import (
 )
 
 func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	const workerSessionID = "worker-session-root-abort"
 	streamServer := newAbortedWorkerSessionStreamServer(t, workerSessionID)
 	defer streamServer.Close()
@@ -30,7 +31,6 @@ func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *te
 		t.Fatalf("Process.Execute() error = %v, want typed WORKER_SESSION_STREAM_CLOSED", err)
 	}
 	assertWorkerSessionStreamAbortOutput(t, inputs.Stdout(), inputs.Stderr(), workerSessionID)
-	assertNoActiveProviderCommandRoutes(t, fixture.runner, "root-process abrupt stream close")
 }
 
 func newAbortedWorkerSessionStreamServer(t *testing.T, workerSessionID string) *httptest.Server {

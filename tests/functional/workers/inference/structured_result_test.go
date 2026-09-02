@@ -12,6 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestDetachedStructuredResultReachesDispatchResponse proves live object and
+// explicit-null preservation through public Factory Events. Persisted object
+// recovery is owned by the public record/replay journey under
+// tests/functional/factory/replay_contracts.
 func TestDetachedStructuredResultReachesDispatchResponse(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

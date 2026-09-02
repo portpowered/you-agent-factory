@@ -184,12 +184,8 @@ func testMockWorkerFailureReturnsStablePublicFailure(
 
 	fixture.useCommandRunnersFor(t, dir, runner, nil)
 	session := fixture.openSession(t, dir)
-	gateWaitStarted := time.Now()
 	fixture.gate.WaitForArrival(t, 5*time.Second)
 	listed, events := session.terminalObservations(t, 20*time.Second)
-	if elapsed := time.Since(gateWaitStarted); elapsed < gateTimeoutDuration {
-		t.Fatalf("mock-worker gate completed after %s, want at least configured timeout %s", elapsed, gateTimeoutDuration)
-	}
 	for placeID, want := range map[string]int{
 		support.WorkCustomerLocation(rejectWorkType, "failed"):      1,
 		support.WorkCustomerLocation(rejectWorkType, "init"):        0,
@@ -227,9 +223,9 @@ func testMockWorkerFailureReturnsStablePublicFailure(
 			t.Fatalf("unexpected mock failure dispatch transition = %q", observation.Request.TransitionId)
 		}
 	}
-	if rejectDispatches != 1 || timeoutDispatches == 0 {
+	if rejectDispatches != 1 || timeoutDispatches != 1 {
 		t.Fatalf(
-			"mock failure dispatch counts = reject %d, gate-timeout %d; want one reject and at least one configured timeout",
+			"mock failure dispatch counts = reject %d, gate-timeout %d; want one of each without retry duplication",
 			rejectDispatches,
 			timeoutDispatches,
 		)
@@ -419,6 +415,7 @@ func scaffoldMockRejectFactory(t *testing.T) string {
 			{
 				"name":      gateTimeoutWorkstation,
 				"worker":    gateTimeoutWorker,
+				"limits":    map[string]any{"maxRetries": 1},
 				"inputs":    []map[string]string{{"workType": gateTimeoutWorkType, "state": "init"}},
 				"outputs":   []map[string]string{{"workType": gateTimeoutWorkType, "state": "done"}},
 				"onFailure": []map[string]string{{"workType": gateTimeoutWorkType, "state": "failed"}},

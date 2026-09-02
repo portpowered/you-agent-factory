@@ -141,6 +141,18 @@ func executeSharedLifecycleInputs(
 	return fixture.execute(t, inputs, runner, nil)
 }
 
+func executeSharedLifecyclePreRuntimeInputs(
+	t testing.TB,
+	inputs *support.CapturedInputs,
+	runner platformprocess.CommandRunner,
+) error {
+	t.Helper()
+	if inputs == nil {
+		return errors.New("shared lifecycle invocation inputs are required")
+	}
+	return sharedLifecycleProcess(t).executeInputWithoutRuntimeLease(inputs.Input, runner)
+}
+
 func sharedLifecycleInvocationProcess(
 	t testing.TB,
 	runner platformprocess.CommandRunner,
@@ -224,6 +236,36 @@ func (fixture *lifecycleSharedProcessFixture) executeInput(
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	if err := fixture.router.bind(workingDirectory, runner, apiStarter); err != nil {
+		return err
+	}
+	fixture.active.Add(1)
+	fixture.executions.Add(1)
+	defer func() {
+		fixture.active.Add(-1)
+		fixture.router.unbind(workingDirectory)
+	}()
+	return fixture.process.Execute(input)
+}
+
+// executeInputWithoutRuntimeLease is reserved for customer input validation
+// that is guaranteed to fail before runtime/session activation. Such cases can
+// share the immutable process graph without joining the runtime serialization
+// lane used by successful invocations.
+func (fixture *lifecycleSharedProcessFixture) executeInputWithoutRuntimeLease(
+	input root.Input,
+	runner platformprocess.CommandRunner,
+) error {
+	if fixture == nil || fixture.process == nil || fixture.router == nil {
+		return errors.New("shared lifecycle process is unavailable")
+	}
+	if runner == nil {
+		return errors.New("shared lifecycle provider runner is required")
+	}
+	workingDirectory := filepath.Clean(input.WorkingDirectory)
+	if workingDirectory == "." || workingDirectory == "" {
+		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", input.WorkingDirectory)
+	}
+	if err := fixture.router.bind(workingDirectory, runner, nil); err != nil {
 		return err
 	}
 	fixture.active.Add(1)

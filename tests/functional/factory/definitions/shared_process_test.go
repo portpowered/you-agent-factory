@@ -60,12 +60,6 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	if err := writeDefinitionsForcedUnwindReport(serviceHostsCloseErr, processCloseErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write Factory Definitions forced-unwind report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
 
@@ -169,7 +163,6 @@ func TestFactoryDefinitionsSharedProcessKeepsHomesAndCurrentFactoriesIsolated(t 
 	if got := sharedDefinitionsProviderCallCount(t); got != providerCallsBefore {
 		t.Fatalf("provider edge calls during static isolation canary = %d, want unchanged %d", got, providerCallsBefore)
 	}
-	failDefinitionsForcedUnwindAfterAssertion(t)
 }
 
 func sharedDefinitionsHome(t *testing.T) (string, string, []string) {

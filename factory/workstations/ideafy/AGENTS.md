@@ -65,7 +65,7 @@ Before submitting new work, inspect the current queue and active sessions.
 Use:
 
 ```sh
-you work list --session {{.Context.SessionID}}
+you --server http://127.0.0.1:7438 work list --session {{.Context.SessionID}}
 ```
 
 to see current work items, work types, states, names, and whether previous
@@ -74,7 +74,7 @@ batches are still running, blocked, failed, or ready to be consumed.
 Use:
 
 ```sh
-you session list
+you --server http://127.0.0.1:7438 session list
 ```
 
 to enumerate active and recent sessions. This helps determine whether work is
@@ -116,7 +116,7 @@ returned to a workstation after a failed or interrupted pass, use the complete
 command form:
 
 ```sh
-you work move <work-id> <state-name> --session {{.Context.SessionID}} --request-id <stable-repair-id>
+you --server http://127.0.0.1:7438 work move <work-id> <state-name> --session {{.Context.SessionID}} --request-id <stable-repair-id>
 ```
 
 Use `you work move` to move work deliberately between valid states in
@@ -198,10 +198,10 @@ Submit work using the batch-input format documented by `you docs batch-inputs`.
 For autonomous meta-planner operation against a running factory, prefer:
 
 ```sh
-you submit batch <path>
+you --server http://127.0.0.1:7438 submit batch <path>
 ```
 
-Use `you submit batch --dry-run <path> --session {{.Context.SessionID}}` before submitting a real batch. The Worker prompt context currently exposes the Session ID but not the server URI, so never rely on the CLI's default server until that contract is extended.
+Use `you --server http://127.0.0.1:7438 submit batch --dry-run <path> --session {{.Context.SessionID}}` before submitting a real batch. The Worker prompt context currently exposes the Session ID but not the server URI, so never rely on the CLI's default server until that contract is extended.
 
 ### loopback flow 
 

@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, august, 31
+last modified: 2026, september, 1
 doc-id: STD-017
 ---
 
@@ -234,11 +234,33 @@ Rules:
   `Process.Execute` after constructing through `root.BuildProcess`. They
   **MUST NOT** build or invoke the `you` CLI executable. Tests that prove OS
   process, pipe, signal, executable, or exit-status behavior belong in the
-  integration lane and **MUST** run through the real built binary there.
+  integration lane and **MUST** run through the real built binary there. The Go
+  test executable is also a real executable for this classification; helper
+  modes, long-test names, and build tags do not make process behavior
+  functional coverage.
 - Functional tests **MUST** use Factory Sessions wherever the behavior admits
   a session, reuse one package process where safe, and run independent
   scenarios in parallel. Serialization requires a documented customer-visible
-  invariant; shared fixture state or route collisions are harness defects.
+  invariant; shared fixture state or route collisions are harness defects. A
+  package with a small local `~default` cohort and independent hosted-session
+  behavior must partition those phases rather than serializing every scenario.
+- Functional package concurrency **MUST** use the canonical functional-lane job
+  budget. Independent tests should overlap inside that budget, but broad
+  verification **MUST NOT** rely on the test tool's unbounded package wildcard
+  default. Parallel children must retain parent-owned fixtures through
+  `t.Cleanup`, and their cleanup may assert only scenario-owned resources while
+  peers remain live.
+- A shared functional application process **MUST NOT** imply a shared mutable
+  customer home. Concurrent invocations must own separate profiles whenever
+  first-run installation, migration, selection, or cleanup can write profile
+  state. A shared profile is allowed only after its prerequisite bootstrap has
+  completed and the tests prove concurrent commands do not contend on its
+  installation or migration locks.
+- A functional scenario that reads a deliberately global customer projection
+  may use a documented isolated observation window. Reviewers **MUST** verify
+  the emitted public request actually has global semantics and that any claimed
+  session, Work, or route selector reaches the product boundary; tests must not
+  rely on package quiescence to make an ignored selector appear effective.
 - Functional tests **MUST** prefer public CLI invocation over HTTP/API for
   ordinary customer flows. HTTP or API entry **MAY** be used only for
   API-owned contracts or explicit CLI+API parity cells.
@@ -259,6 +281,11 @@ Rules:
   causes first. Any sleep, polling loop, or timeout-padded wait helper **MUST**
   include an in-code justification for why deterministic observation or edge
   mocking cannot substitute.
+- Hosted readiness deadlines **MUST** measure host readiness, not unrelated
+  fixture bootstrap. When first-run initialization is outside the customer
+  claim, prepare the test-owned home through the same reusable public process
+  before starting the host. When first-run behavior is the claim, keep it in
+  the measured path and assert its customer-visible result.
 - Integration tests **MUST** consume an artifact compiled once by the invoking
   build or release lane. They **MUST NOT** compile inside test setup and
   **MUST** keep the real-boundary case set intentionally small.
@@ -290,6 +317,10 @@ Rules:
 - Contract tests **SHOULD** protect generated surfaces, schema completeness, and compatibility boundaries.
 - Slow tests **MUST** justify their cost by protecting a real regression class.
 - Flaky tests **MUST** be fixed or removed quickly.
+- Test optimization **MUST NOT** weaken a distinct customer-visible behavior.
+  Persistence and replay claims **MUST** be observed through a public customer
+  surface; internal artifact decoding belongs with the owning serializer's
+  unit or contract coverage.
 
 Minimum expectations for non-trivial backend changes:
 

@@ -108,7 +108,7 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	if got := fixture.provider.CallCount(); got != providerCalls {
 		t.Fatalf("provider command runner call count = %d, want unchanged at %d for inline factory without child dispatch", got, providerCalls)
 	}
@@ -130,7 +130,7 @@ func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	if got := fixture.provider.CallCount(); got != providerCalls+2 {
 		t.Fatalf("provider command runner call count = %d, want %d for two ordered child dispatches", got, providerCalls+2)
 	}
@@ -174,7 +174,7 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	assertInlineJavaScriptSyntaxFailureOutcome(
 		t,
 		err,

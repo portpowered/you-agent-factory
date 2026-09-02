@@ -34,46 +34,35 @@ delta, never a silent goal rewrite.
 
 ## Admission
 
-Admit each outcome as one uniquely named `project:init` Work item. Projects are
-domain-agnostic: any outcome with a source plan and provable acceptance
-criteria is admissible through the same shape, and no workstation prompt may
-carry policy specific to one Project — Project-specific policy travels in the
-payload and source plan.
+Admit each outcome as one uniquely named `project:init` Work item. Its payload
+must identify `projectRoot`, `sourcePlan`, `contractRevision`, the authorized
+request, and the complete immutable acceptance criteria needed to bootstrap the
+Project root. The meta-planner must not create or populate `projectRoot`.
+Separate Projects have separate roots and no Work relation unless their outcomes
+have a real semantic dependency.
 
-The payload must identify `sourcePlan` and the authorized `request`. The other
-fields default: `projectRoot` defaults to `docs/temp/<project-name>/`,
-`contractRevision` defaults to `<project-name>-v1`, and when `acceptance` is
-omitted the acceptance criteria are the acceptance-criteria section of the
-source plan, extracted verbatim by the Project Lead at bootstrap. The source
-plan file is the source of truth either way. Contract or plan revisions are
-recorded as dated addenda in `addenda.md` under the Project root; that file
-is the Project's revision history. The meta-planner must not create or
-populate `projectRoot`. Separate Projects have separate roots and no Work
-relation unless their outcomes have a real semantic dependency.
-
-Minimal admission — point a Project at a plan file and let it run end to end:
+Example:
 
 ```json
 {
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     {
-      "name": "test-functional-improvement",
+      "name": "example-project",
       "workTypeName": "project",
       "state": "init",
       "payload": {
-        "sourcePlan": "docs/temp/test-functional-improvement.md",
-        "request": "Read the source plan and implement it end to end. Continue cycling until every acceptance criterion in the plan is independently proven."
+        "projectRoot": "docs/temp/example-project",
+        "sourcePlan": "docs/internal/development/plans/backlog/example.md",
+        "contractRevision": "example-project-v1",
+        "request": "Implement and validate every acceptance criterion.",
+        "acceptance": ["The behavior is proven from a clean build."]
       }
     }
   ],
   "relations": []
 }
 ```
-
-A fully explicit admission may additionally pin `projectRoot`,
-`contractRevision`, an inline `acceptance` array, and a `recovery` object for
-work interrupted in a prior Factory Session.
 
 ## Cycle semantics
 
@@ -94,14 +83,14 @@ integration gates remain separate from package implementation lanes. A
 recovered umbrella worktree preserves prior evidence but does not force
 unrelated remaining packages through the same sequential task.
 
-For Projects whose acceptance includes measured performance, shared-host
-compute saturation is normal. Local timings prioritize and diagnose work; they
-do not gate package implementation on an idle runner, low variance, repeated
-pristine baselines, or an imported absolute threshold. A Project Lead should
-continue when a change materially uses a proven optimization shape and
-preserves observable behavior, submit the PR, and use its package-level
-latency result as the hill-climbing signal. An improving package advances; a
-non-improving package receives the next bounded optimization pass.
+For test-optimization Projects, shared-host compute saturation is normal. Local
+timings prioritize and diagnose work; they do not gate package implementation
+on an idle runner, low variance, repeated pristine baselines, or an imported
+absolute threshold. A Project Lead should continue when a change materially
+uses a proven optimization shape and preserves observable behavior, submit the
+PR, and use its package-level latency result as the hill-climbing signal. An
+improving package advances; a non-improving package receives the next bounded
+optimization pass.
 
 Cycle payloads are explicit:
 

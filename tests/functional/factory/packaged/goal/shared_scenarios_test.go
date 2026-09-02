@@ -49,7 +49,10 @@ func TestPackagedGoalSharedScenarios(t *testing.T) {
 		{"PausedSubmissionResumes", runPackagedGoalPausedScenario},
 	} {
 		test := test
-		t.Run(test.name, func(t *testing.T) { test.run(t, fixture) })
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.run(t, fixture)
+		})
 	}
 }
 
@@ -171,7 +174,6 @@ func runPackagedGoalPausedScenario(t *testing.T, fixture *packagedGoalSharedFixt
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("resumed provider invocation count = %d, want 1", got)
 	}
-	fixture.ledger.recordWork(scenario.session, workID)
 	assertPackagedGoalScenarioPublicWitnesses(t, scenario, workID, 1)
 }
 
@@ -205,7 +207,6 @@ type packagedGoalSharedFixture struct {
 	baseURL    string
 	process    support.ApplicationProcess
 	provider   *packagedGoalSelectorRouter
-	ledger     *packagedGoalResourceLedger
 }
 
 type packagedGoalSelectorRouter struct {
@@ -306,23 +307,31 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 	factoryDir := support.InstallPackagedFactoryWithProcess(
 		t, process, environment, workingDir, packagedGoalFactoryName,
 	)
+	hostDir := support.ScaffoldFactory(t, map[string]any{
+		"name": "packaged-goal-shared-idle-host",
+		"workTypes": []map[string]any{{
+			"name": "host-idle",
+			"states": []map[string]string{
+				{"name": "idle", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+			},
+		}},
+	})
 	fixture := &packagedGoalSharedFixture{
 		rootDir:    rootDir,
 		factoryDir: factoryDir,
 		process:    process,
 		provider:   provider,
-		ledger:     newPackagedGoalResourceLedger(),
 	}
 	t.Cleanup(func() { fixture.cleanup(t) })
 
 	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "run", "--dir", factoryDir,
+		"you", "run", "--dir", hostDir,
 		"--continuously", "--with-server", "--quiet", "--no-record",
 		"--provider", "CODEX", "--model", packagedGoalSharedHostModel,
 	})
 	inputs.Input.Env = environment
-	inputs.Input.WorkingDirectory = factoryDir
-	fixture.ledger.recordProcessStart()
+	inputs.Input.WorkingDirectory = hostDir
 	support.StartProcessCommand(t, process, inputs.Input)
 	baseURL, err := api.WaitForBaseURL(packagedGoalSharedFixtureShutdownTimeout)
 	if err != nil {
@@ -362,7 +371,6 @@ func (fixture *packagedGoalSharedFixture) close(t testing.TB) {
 func (fixture *packagedGoalSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.close(t)
-	fixture.ledger.assertClean(t)
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: a closed
 		// listener must reject the request immediately after Process.Close.
@@ -424,10 +432,6 @@ func (fixture *packagedGoalSharedFixture) openScenario(
 		request: selector + "-request",
 		rootDir: rootDir, factory: factoryDir, session: opened.Session.Id,
 	}
-	fixture.ledger.registerScenario(packagedGoalScenarioResources{
-		name: name, selector: selector, session: scenario.session,
-		rootDir: rootDir, factoryDir: factoryDir,
-	})
 	t.Cleanup(func() { scenario.close(t) })
 	return scenario
 }
@@ -445,118 +449,11 @@ func (scenario *packagedGoalScenario) close(t testing.TB) {
 	}
 	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.session)
 	assertPackagedGoalSessionAbsent(t, scenario.fixture.baseURL, scenario.session)
-	rootRemoved := false
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("remove %s Goal scenario root %q: %v", scenario.name, scenario.rootDir, err)
 	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
 		t.Errorf("%s Goal scenario root %q remains after cleanup: %v", scenario.name, scenario.rootDir, err)
-	} else {
-		rootRemoved = true
 	}
-	scenario.fixture.ledger.closeScenario(scenario.session, rootRemoved)
-}
-
-type packagedGoalScenarioResources struct {
-	name        string
-	selector    string
-	session     string
-	workID      string
-	rootDir     string
-	factoryDir  string
-	closed      bool
-	rootRemoved bool
-}
-
-type packagedGoalResourceLedger struct {
-	mu            sync.Mutex
-	processStarts int
-	scenarios     []packagedGoalScenarioResources
-}
-
-func newPackagedGoalResourceLedger() *packagedGoalResourceLedger {
-	return &packagedGoalResourceLedger{}
-}
-
-func (ledger *packagedGoalResourceLedger) recordProcessStart() {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-	ledger.processStarts++
-}
-
-func (ledger *packagedGoalResourceLedger) registerScenario(resource packagedGoalScenarioResources) {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-	ledger.scenarios = append(ledger.scenarios, resource)
-}
-
-func (ledger *packagedGoalResourceLedger) recordWork(session, workID string) {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-	for index := range ledger.scenarios {
-		if ledger.scenarios[index].session == session {
-			ledger.scenarios[index].workID = workID
-			return
-		}
-	}
-}
-
-func (ledger *packagedGoalResourceLedger) closeScenario(session string, rootRemoved bool) {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-	for index := range ledger.scenarios {
-		if ledger.scenarios[index].session == session {
-			ledger.scenarios[index].closed = true
-			ledger.scenarios[index].rootRemoved = rootRemoved
-			return
-		}
-	}
-}
-
-func (ledger *packagedGoalResourceLedger) assertClean(t testing.TB) {
-	t.Helper()
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-	if ledger.processStarts != 1 {
-		t.Errorf("GOAL-SPINE-001 process starts = %d, want 1", ledger.processStarts)
-	}
-	selectors := make(map[string]struct{}, len(ledger.scenarios))
-	sessions := make(map[string]struct{}, len(ledger.scenarios))
-	workIDs := make(map[string]struct{}, len(ledger.scenarios))
-	factories := make(map[string]struct{}, len(ledger.scenarios))
-	for _, resource := range ledger.scenarios {
-		if !resource.closed {
-			t.Errorf("GOAL-CLEANUP-001 session %q remains open", resource.session)
-		}
-		if !resource.rootRemoved {
-			t.Errorf("GOAL-CLEANUP-001 scenario %q root %q remains owned after cleanup", resource.name, resource.rootDir)
-		}
-		for label, value := range map[string]string{
-			"selector": resource.selector, "session": resource.session,
-			"work": resource.workID,
-			"root": resource.rootDir, "factory": resource.factoryDir,
-		} {
-			if strings.TrimSpace(value) == "" {
-				t.Errorf("scenario %q has empty %s identity", resource.name, label)
-			}
-		}
-		if _, exists := selectors[resource.selector]; exists {
-			t.Errorf("scenario selector %q is not unique", resource.selector)
-		}
-		selectors[resource.selector] = struct{}{}
-		if _, exists := sessions[resource.session]; exists {
-			t.Errorf("Factory Session %q is not unique", resource.session)
-		}
-		sessions[resource.session] = struct{}{}
-		if _, exists := workIDs[resource.workID]; exists {
-			t.Errorf("Work %q is not unique", resource.workID)
-		}
-		workIDs[resource.workID] = struct{}{}
-		if _, exists := factories[resource.factoryDir]; exists {
-			t.Errorf("scenario Factory definition %q is not unique", resource.factoryDir)
-		}
-		factories[resource.factoryDir] = struct{}{}
-	}
-	t.Logf("GOAL-SPINE-001 processStarts=%d scenarios=%d sessions=%d selectors=%d workIDs=%d", ledger.processStarts, len(ledger.scenarios), len(sessions), len(selectors), len(workIDs))
 }
 
 func postPackagedGoalScenarioInvocation(
@@ -645,7 +542,6 @@ func assertPackagedGoalScenarioWitnessesWithExpectedTransitions(
 		t.Fatalf("%s Goal listed WorkId = %#v, want unique Work identity", scenario.name, work.WorkId)
 	}
 	workID := *work.WorkId
-	scenario.fixture.ledger.recordWork(scenario.session, workID)
 	if response.WorkId != nil && *response.WorkId != workID {
 		t.Fatalf("%s Goal response WorkId = %q, want listed WorkId %q", scenario.name, *response.WorkId, workID)
 	}

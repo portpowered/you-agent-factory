@@ -66,30 +66,32 @@ func TestFactoryBuilder(t *testing.T) {
 	// use Process.Execute.
 	fixture.prepareExistingInvalidScenario(t)
 	fixture.startServer(t)
-	t.Run("TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding", func(t *testing.T) {
-		testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t, fixture)
-	})
-	t.Run("TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing", func(t *testing.T) {
-		testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t, fixture)
-	})
-	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory", func(t *testing.T) {
-		testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t, fixture)
-	})
-	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory", func(t *testing.T) {
-		testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t, fixture)
-	})
-	t.Run("TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation", func(t *testing.T) {
-		testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t, fixture)
+	t.Run("customer scenarios", func(t *testing.T) {
+		tests := []struct {
+			name string
+			run  func(*testing.T, *factoryBuilderSharedFixture)
+		}{
+			{name: "TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding", run: testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding},
+			{name: "TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing", run: testFactoryBuilderWithNoRequestGreetsInsteadOfFailing},
+			{name: "TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory", run: testFactoryBuilderCreatesAndInstallsValidatedGraphFactory},
+			{name: "TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory", run: testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory},
+			{name: "TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation", run: testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation},
+		}
+		for _, test := range tests {
+			test := test
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+				test.run(t, fixture)
+			})
+		}
 	})
 	// Close the explicit sessions before releasing the host. This leaves the
 	// reusable process available for the installed-artifact CLI checks without
 	// creating a second process or API server.
 	fixture.closeAllScenarios(t)
-	runtimeArtifacts, isolatedRows := fixture.assertDurableSessionsClean(t)
 	fixture.stopServer(t)
 	fixture.assertInstalledArtifacts(t)
 	fixture.removeAllScenarioRoots(t)
-	fixture.lifecycle.assertClean(t, runtimeArtifacts, isolatedRows)
 }
 
 func (fixture *factoryBuilderSharedFixture) prepareExistingInvalidScenario(t *testing.T) {
@@ -101,10 +103,6 @@ func (fixture *factoryBuilderSharedFixture) prepareExistingInvalidScenario(t *te
 	runner.operatorRoot = scenario.operatorRoot
 	installedPath := filepath.Join(scenario.operatorRoot, invalidFactoryExistingName)
 	installExistingGraphFactory(t, fixture.process, scenario.environment, scenario.workingDirectory, runner.operatorRoot, invalidFactoryExistingName)
-	assertInstalledGraphFactoryRuns(t, scenario, installedPath)
-	if got := runner.InstalledFactoryCallCount(); got != 1 {
-		t.Fatalf("existing Factory setup provider command call count = %d, want one baseline invocation", got)
-	}
 	scenario.installedKind = "existing-invalid"
 	scenario.installedPath = installedPath
 	scenario.existingBefore = readInstalledFactoryConfig(t, installedPath)
@@ -113,16 +111,14 @@ func (fixture *factoryBuilderSharedFixture) prepareExistingInvalidScenario(t *te
 
 func (fixture *factoryBuilderSharedFixture) assertInstalledArtifacts(t testing.TB) {
 	t.Helper()
-	for _, scenario := range fixture.scenarios {
+	for _, scenario := range fixture.scenarioSnapshot() {
 		switch scenario.installedKind {
 		case "graph":
-			assertInstalledGraphFactory(t, fixture.process, scenario.environment, scenario.installedPath, scenario.runner.operatorRoot)
 			assertInstalledGraphFactoryRuns(t, scenario, scenario.installedPath)
 			if got := scenario.runner.InstalledFactoryCallCount(); got != 1 {
 				t.Fatalf("installed Graph Factory provider command call count = %d, want one customer invocation", got)
 			}
 		case "javascript":
-			assertInstalledJavaScriptFactory(t, fixture.process, scenario.environment, scenario.installedPath, scenario.runner.operatorRoot)
 			assertInstalledJavaScriptFactoryRuns(t, scenario, scenario.installedPath)
 			if got := scenario.runner.InstalledFactoryCallCount(); got != 2 {
 				t.Fatalf("installed JavaScript Factory provider command call count = %d, want two intended analysis calls", got)

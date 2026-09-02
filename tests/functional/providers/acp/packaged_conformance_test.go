@@ -30,13 +30,6 @@ type packagedACPConformanceEntry struct {
 	Command   string   `json:"command"`
 }
 
-type packagedACPInitializeFixture struct {
-	Protocol        string `json:"protocol"`
-	ProtocolVersion string `json:"protocolVersion"`
-	Provider        string `json:"provider"`
-	Fixture         string `json:"fixture"`
-}
-
 // TestPackagedACPProfilesUseSharedConformanceBehavior exercises every
 // package-owned ACP launch projection through the customer process. The
 // package profiles intentionally share one typed ACP implementation today, so
@@ -53,24 +46,13 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 	if err := json.Unmarshal(modelproviders.RuntimeACPJSON(), &catalog); err != nil {
 		t.Fatalf("decode generated ACP runtime catalog: %v", err)
 	}
-	if len(catalog.ACP) != 20 {
-		t.Fatalf("generated ACP runtime profile count = %d, want 20", len(catalog.ACP))
+	if len(catalog.ACP) == 0 {
+		t.Fatal("generated ACP runtime catalog has no customer-selectable profile")
 	}
 
-	for _, entry := range catalog.ACP {
-		entry := entry
-		t.Run(entry.Name, func(t *testing.T) {
-			fixture := readPackagedACPInitializeFixture(t, entry.Name)
-			if fixture.Provider != entry.Name || fixture.Protocol != "acp" || fixture.ProtocolVersion != "1" || fixture.Fixture != "initialize-conformance" {
-				t.Fatalf("package initialize fixture = %#v, want ACP v1 fixture for %q", fixture, entry.Name)
-			}
-		})
-	}
-
-	// Every generated profile above is schema-checked against its own pinned
-	// fixture. Run the shared ACP implementation once: repeating the identical
-	// process/session lifecycle for all 20 command projections adds no distinct
-	// behavioral evidence and made this one test dominate the package runtime.
+	// Generated profile shape belongs to the provider-catalog contract/lint
+	// lane. One representative profile proves the shared customer execution
+	// behavior without turning this functional test into a package inventory.
 	entry := catalog.ACP[0]
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "packaged ACP conformance", WorkTypeID: "task"})
@@ -96,20 +78,6 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 	}
 	assertProviderSessionID(t, events, entry.Name, "acp-session-functional-1")
 	assertPackagedACPResponse(t, events, entry.Name)
-}
-
-func readPackagedACPInitializeFixture(t *testing.T, providerID string) packagedACPInitializeFixture {
-	t.Helper()
-	path := testutil.MustRepoPath(t, "packages/model-providers/providers/"+providerID+"/testdata/initialize.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s initialize fixture: %v", providerID, err)
-	}
-	var fixture packagedACPInitializeFixture
-	if err := json.Unmarshal(data, &fixture); err != nil {
-		t.Fatalf("decode %s initialize fixture: %v", providerID, err)
-	}
-	return fixture
 }
 
 func packagedACPCommandFactory(

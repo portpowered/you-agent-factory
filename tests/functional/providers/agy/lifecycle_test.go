@@ -1,11 +1,9 @@
 package agy
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -16,11 +14,12 @@ import (
 // The two named-Factory executions retain separate Work, dispatch, event and
 // recording identities while using the same frozen external route.
 func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	fixture.startRoleHost(t)
-	t.Cleanup(func() { fixture.stopRoleHost(t) })
 	selector := "role-recovery-empty-then-valid"
 	route := fixture.routes[selector]
+	route.resetOutcomeSequence()
 
 	firstResponse, firstEvents, _, _, firstCallStart := fixture.runRoleFailure(t, selector, []string{
 		"you", "--json", "run",
@@ -59,93 +58,47 @@ func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
 
 }
 
-// TestAgySharedProcessEarlyHostedExitReleasesResources proves that stopping
-// a blocked hosted invocation releases its provider call and HTTP server while
-// preserving the reusable process for later tests.
-func TestAgySharedProcessEarlyHostedExitReleasesResources(t *testing.T) {
-	fixture := agySharedProcess(t)
-	route := fixture.routes["early-exit"]
-	runnerCallStart := fixture.runner.callCount()
-	callStart := route.callCount()
-	hosted := fixture.startHosted(t, route.selector, []string{
-		"you", "run",
-		"--dir", route.workDir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	}, true)
-	fixture.runner.waitForCallCount(t, runnerCallStart+1)
-
-	released := false
-	t.Cleanup(func() {
-		if !released {
-			close(fixture.earlyExitRelease)
-		}
-	})
-	hosted.command.Stop(t)
-	close(fixture.earlyExitRelease)
-	released = true
-	hosted.responseStream.Close()
-	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := hosted.httpRun.waitClosed(closeCtx); err != nil {
-		t.Fatalf("close shared AGY early-exit HTTP server: %v", err)
-	}
-	if got := fixture.runner.activeCallCount(); got != 0 {
-		t.Fatalf("active AGY calls after early hosted exit = %d, want 0", got)
-	}
-	if got := route.callCount() - callStart; got != 1 {
-		t.Fatalf("early-exit provider calls = %d, want exactly one", got)
-	}
-}
-
 // TestAgySharedProcessConcurrentRoutesRemainIsolated proves that two hosted
 // invocations can overlap on the one immutable process without sharing route,
 // Work, Factory Event, Response Event or HTTP-server state.
 func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
+	host := fixture.startRoleHost(t)
 	firstRoute := fixture.routes["concurrency-a"]
 	secondRoute := fixture.routes["concurrency-b"]
+	release := make(chan struct{})
+	released := false
+	firstRoute.setRelease(release)
+	secondRoute.setRelease(release)
+	t.Cleanup(func() {
+		if !released {
+			close(release)
+		}
+		firstRoute.setRelease(nil)
+		secondRoute.setRelease(nil)
+	})
 	runnerCallStart := fixture.runner.callCount()
 	firstCallStart := firstRoute.callCount()
 	secondCallStart := secondRoute.callCount()
-	commandArgs := func(route *agySharedCommandRoute) []string {
-		return []string{
-			"you", "run",
-			"--dir", route.workDir,
-			"--continuously",
-			"--with-server",
-			"--server", "http://127.0.0.1:1",
-			"--quiet",
-			"--no-record",
+	openRoute := func(route *agySharedCommandRoute) (string, *support.FactoryResponseEventStream) {
+		opened := support.OpenFactorySessionAt(t, host.baseURL, route.workDir)
+		sessionID := opened.Session.Id
+		if err := fixture.runner.registerScope(sessionID, route); err != nil {
+			t.Fatalf("register concurrent AGY route: %v", err)
 		}
+		stream := support.OpenFactoryResponseEventStreamAt(
+			t, support.SessionResponseEventsURL(host.baseURL, sessionID),
+		)
+		t.Cleanup(func() {
+			stream.Close()
+			fixture.runner.unregisterScope(sessionID, route)
+			support.CloseFactorySessionAt(t, host.baseURL, sessionID)
+		})
+		return sessionID, stream
 	}
-
-	first := fixture.startHosted(t, firstRoute.selector, commandArgs(firstRoute), true)
-	fixture.runner.waitForCallCount(t, runnerCallStart+1)
-	opened := support.OpenFactorySessionAt(t, first.baseURL, secondRoute.workDir)
-	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
-		t.Fatalf("second concurrent Factory Session = %#v, want session identity", opened)
-	}
-	secondSessionID := opened.Session.Id
-	secondStream := support.OpenFactoryResponseEventStreamAt(
-		t,
-		support.SessionResponseEventsURL(first.baseURL, secondSessionID),
-	)
-	released := false
-	t.Cleanup(func() {
-		if !released {
-			close(fixture.concurrencyRelease)
-		}
-	})
-	secondClosed := false
-	t.Cleanup(func() {
-		if !secondClosed {
-			support.CloseFactorySessionAt(t, first.baseURL, secondSessionID)
-		}
-	})
+	firstSessionID, firstStream := openRoute(firstRoute)
+	secondSessionID, secondStream := openRoute(secondRoute)
 	fixture.runner.waitForCallCount(t, runnerCallStart+2)
 	if got := fixture.runner.activeCallCount(); got != 2 {
 		t.Fatalf("active AGY calls while routes are held = %d, want 2", got)
@@ -153,26 +106,17 @@ func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 	if got := fixture.runner.maxActiveCallCount(); got < 2 {
 		t.Fatalf("maximum active AGY calls = %d, want overlap of both routes", got)
 	}
-	close(fixture.concurrencyRelease)
+	close(release)
 	released = true
 	firstSession, firstListed, firstEvents, firstResponseEvents := fixture.observeHostedSession(
-		t, first.baseURL, "~default", first.responseStream,
+		t, host.baseURL, firstSessionID, firstStream,
 	)
 	secondSession, secondListed, secondEvents, secondResponseEvents := fixture.observeHostedSession(
-		t, first.baseURL, secondSessionID, secondStream,
+		t, host.baseURL, secondSessionID, secondStream,
 	)
-	secondStream.Close()
-	support.CloseFactorySessionAt(t, first.baseURL, secondSessionID)
-	secondClosed = true
-	first.command.Stop(t)
-	closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := first.httpRun.waitClosed(closeCtx); err != nil {
-		t.Fatalf("close shared AGY concurrent HTTP server: %v", err)
-	}
 
-	assertAgyConcurrentInvocation(t, firstSession, firstListed, firstEvents, firstResponseEvents, firstRoute, firstCallStart, "~default", "shared concurrency A COMPLETE", "shared concurrency B COMPLETE")
-	assertAgyConcurrentInvocation(t, secondSession, secondListed, secondEvents, secondResponseEvents, secondRoute, secondCallStart, secondSession.Id, "shared concurrency B COMPLETE", "shared concurrency A COMPLETE")
+	assertAgyConcurrentInvocation(t, firstSession, firstListed, firstEvents, firstResponseEvents, firstRoute, firstCallStart, firstSessionID, "shared concurrency A COMPLETE", "shared concurrency B COMPLETE")
+	assertAgyConcurrentInvocation(t, secondSession, secondListed, secondEvents, secondResponseEvents, secondRoute, secondCallStart, secondSessionID, "shared concurrency B COMPLETE", "shared concurrency A COMPLETE")
 }
 
 func assertAgyFailedInvocation(

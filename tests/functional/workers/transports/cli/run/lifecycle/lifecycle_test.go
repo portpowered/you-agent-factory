@@ -169,7 +169,7 @@ func assertFilePromptConflicts(t *testing.T, factoryPath, promptPath string, fil
 			inputs := newSharedLifecycleInputs(t, test.args)
 			inputs.Input.Stdin = strings.NewReader(test.stdin)
 			inputs.Input.StdinIsTTY = &test.stdinIsTTY
-			err := executeSharedLifecycleInputs(t, inputs, runner)
+			err := executeSharedLifecyclePreRuntimeInputs(t, inputs, runner)
 			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
 			}
@@ -193,7 +193,8 @@ func assertUnreadableFilePrompt(t *testing.T, factoryPath, promptDir string) {
 		"you", "run", "--factory", factoryPath,
 		"--to-file", missingPath, "--no-record", "--quiet",
 	}
-	_, err := executeSharedLifecycleInvocation(t, missingArgs, runner)
+	missingInputs := newSharedLifecycleInputs(t, missingArgs)
+	err := executeSharedLifecyclePreRuntimeInputs(t, missingInputs, runner)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
 	}
@@ -205,7 +206,8 @@ func assertUnreadableFilePrompt(t *testing.T, factoryPath, promptDir string) {
 		"you", "run", "--factory", factoryPath,
 		"--to-file", promptDir, "--no-record", "--quiet",
 	}
-	_, err = executeSharedLifecycleInvocation(t, directoryArgs, runner)
+	directoryInputs := newSharedLifecycleInputs(t, directoryArgs)
+	err = executeSharedLifecyclePreRuntimeInputs(t, directoryInputs, runner)
 	if err == nil || !strings.Contains(err.Error(), "regular file") {
 		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
 	}
@@ -271,7 +273,8 @@ func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *
 		"--quiet",
 		"reject the unsupported reasoning effort",
 	}
-	_, err := executeSharedLifecycleInvocation(t, args, runner)
+	inputs := newSharedLifecycleInputs(t, args)
+	err := executeSharedLifecyclePreRuntimeInputs(t, inputs, runner)
 	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
 		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
 	}

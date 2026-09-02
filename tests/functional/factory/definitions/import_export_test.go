@@ -36,6 +36,7 @@ const (
 // the public flatten path can be imported through factory create and then run to
 // a customer-visible terminal success outcome.
 func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
+	t.Parallel()
 	sourceDir := support.ScaffoldFactory(t, importExportFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -124,6 +125,7 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 // scripts, and portable layout metadata authored with a Factory survive export
 // and import through the public flatten and create customer paths.
 func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
+	t.Parallel()
 	sourceDir := support.ScaffoldFactory(t, importExportPortableFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -228,6 +230,7 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 // the prior Current Factory definition unchanged on public readback.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
+	t.Parallel()
 	runner := sharedDefinitionsProviderRunner(t)
 	providerCallsBefore := runner.CallCount()
 	process := buildDefinitionsProcess(t)

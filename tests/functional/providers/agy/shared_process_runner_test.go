@@ -31,9 +31,9 @@ type agySharedCommandRoute struct {
 	factoryName string
 	outcomes    []agySharedCommandOutcome
 
-	mu             sync.Mutex
-	requests       []platformprocess.CommandRequest
-	recordingPaths []string
+	mu            sync.Mutex
+	requests      []platformprocess.CommandRequest
+	outcomeCursor int
 }
 
 func (route *agySharedCommandRoute) record(
@@ -41,7 +41,8 @@ func (route *agySharedCommandRoute) record(
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	route.mu.Lock()
-	index := len(route.requests)
+	index := route.outcomeCursor
+	route.outcomeCursor++
 	route.requests = append(route.requests, cloneAgyCommandRequest(request))
 	outcome := route.outcome(index)
 	route.mu.Unlock()
@@ -81,16 +82,18 @@ func (route *agySharedCommandRoute) lastRequest() platformprocess.CommandRequest
 	return cloneAgyCommandRequest(route.requests[len(route.requests)-1])
 }
 
-func (route *agySharedCommandRoute) recordRecordingPath(path string) {
+func (route *agySharedCommandRoute) resetOutcomeSequence() {
 	route.mu.Lock()
 	defer route.mu.Unlock()
-	route.recordingPaths = append(route.recordingPaths, path)
+	route.outcomeCursor = 0
 }
 
-func (route *agySharedCommandRoute) recordingPathsSnapshot() []string {
+func (route *agySharedCommandRoute) setRelease(release <-chan struct{}) {
 	route.mu.Lock()
 	defer route.mu.Unlock()
-	return append([]string(nil), route.recordingPaths...)
+	for index := range route.outcomes {
+		route.outcomes[index].release = release
+	}
 }
 
 // agySharedCommandRunner selects solely from the normalized provider WorkDir.
@@ -188,12 +191,6 @@ func (runner *agySharedCommandRunner) freeze() {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	runner.frozen = true
-}
-
-func (runner *agySharedCommandRunner) routeCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return len(runner.routes)
 }
 
 func (runner *agySharedCommandRunner) callCount() int {

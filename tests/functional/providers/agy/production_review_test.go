@@ -32,9 +32,9 @@ type agyClipQAVerdict struct {
 // root.BuildProcess + Process.Execute boundary. The provider edge replays the
 // real AGY media traces, so the test never starts a live AGY process.
 func TestAgyProductionReviewRolesThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcess(t)
 	fixture.startRoleHost(t)
-	t.Cleanup(func() { fixture.stopRoleHost(t) })
 
 	tests := []struct {
 		name string

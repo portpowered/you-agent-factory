@@ -55,11 +55,12 @@ func TestProviderPosture_RemovedDefaultProviderFlagIsRejected(t *testing.T) {
 }
 
 func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPath(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow built-CLI configured provider named goal acceptance")
 	}
 
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
@@ -109,11 +110,12 @@ func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPat
 }
 
 func TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow built-CLI discovered provider named goal acceptance")
 	}
 
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

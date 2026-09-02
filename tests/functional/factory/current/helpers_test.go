@@ -135,14 +135,6 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 				"alpha-prompt-nonmutation",
 				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-nonmutation", "alpha-prompt-nonmutation-task"),
 			)
-			createNamedFactoryFixtureWithProcess(
-				t,
-				process,
-				env,
-				fixture.rootDir,
-				"forced-unwind",
-				functionalNamedFactoryPayloadWithWorkType(t, "forced-unwind", "forced-unwind-task"),
-			)
 		}),
 	)
 	t.Cleanup(func() {

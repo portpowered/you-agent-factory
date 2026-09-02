@@ -2789,6 +2789,9 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		errCh <- err
 	}()
 	<-recording.started
+	if recording.request.FactorySessionID != request.Execution.Execution.FactorySessionID {
+		t.Fatalf("recording Factory Session ID = %q, want %q", recording.request.FactorySessionID, request.Execution.Execution.FactorySessionID)
+	}
 	if got := execution.callCount(); got != 0 {
 		t.Fatalf("provider calls before durable opening = %d, want 0", got)
 	}
@@ -3017,6 +3020,7 @@ type controlledRecordingService struct {
 	started chan struct{}
 	release chan struct{}
 	handle  *controlledRecording
+	request recordings.WorkerSessionRecordingRequest
 }
 
 func newControlledRecording() *controlledRecordingService {
@@ -3025,9 +3029,10 @@ func newControlledRecording() *controlledRecordingService {
 }
 
 func (service *controlledRecordingService) StartWorkerSessionRecording(
-	context.Context,
-	recordings.WorkerSessionRecordingRequest,
+	_ context.Context,
+	request recordings.WorkerSessionRecordingRequest,
 ) (recordings.WorkerSessionRecording, error) {
+	service.request = request
 	close(service.started)
 	return service.handle, nil
 }

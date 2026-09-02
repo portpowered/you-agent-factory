@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -137,46 +135,6 @@ func writeAgentFactoryExportImportFile(t *testing.T, path string, contents []byt
 	if err := os.WriteFile(path, contents, 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", path, err)
 	}
-}
-
-func TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent(t *testing.T) {
-	fixture := newAgentFactoryExportImportFixture(t, "acme-export")
-
-	workerPromptPath := filepath.Join(fixture.AuthoredDir, "workers", "worker-a", "AGENTS.md")
-	workerPrompt, err := os.ReadFile(workerPromptPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", workerPromptPath, err)
-	}
-	if strings.Contains(string(workerPrompt), "+project+") {
-		t.Fatalf("worker prompt kept literal +project+ placeholder: %s", workerPrompt)
-	}
-	if !strings.Contains(string(workerPrompt), "acme-export") {
-		t.Fatalf("worker prompt = %q, want project-specific content", string(workerPrompt))
-	}
-
-	workstationPromptPath := filepath.Join(fixture.AuthoredDir, "workstations", "process", "AGENTS.md")
-	workstationPrompt, err := os.ReadFile(workstationPromptPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", workstationPromptPath, err)
-	}
-	if strings.Contains(string(workstationPrompt), "+project+") {
-		t.Fatalf("workstation prompt kept literal +project+ placeholder: %s", workstationPrompt)
-	}
-	if !strings.Contains(string(workstationPrompt), "acme-export") {
-		t.Fatalf("workstation prompt = %q, want project-specific content", string(workstationPrompt))
-	}
-}
-
-func TestAgentFactoryExportImportFixture_FlattenedPayloadKeepsCanonicalArrayRoutes(t *testing.T) {
-	fixture := newAgentFactoryExportImportFixture(t, "array-routes-export")
-
-	assertAgentFactoryExportImportCanonicalRouteArraysJSON(t, fixture.CanonicalPayload)
-
-	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(fixture.CanonicalPayload)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", fixture.Name, err)
-	}
-	assertAgentFactoryExportImportGeneratedRouteArrays(t, generated)
 }
 
 func assertAgentFactoryExportImportCanonicalRouteArraysJSON(t *testing.T, data []byte) {

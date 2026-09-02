@@ -14,6 +14,7 @@ const (
 )
 
 func TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture, withExportImportBeforeExport(seedNestedFactoryDocOnDisk))
 

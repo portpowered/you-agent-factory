@@ -26,6 +26,11 @@ The affected paths currently include:
   select an already-open session;
 - explicit non-default session replay, whose fresh process does not currently
   rehydrate the original public session route.
+- ACP activation, whose production home/settings resolver still reads
+  process-global environment state during startup and the first prompt. Tests
+  with different customer homes must hold a global environment lease across
+  that lifecycle, so otherwise independent Chat Session scenarios are merely
+  scheduled in parallel and then queue behind the lease.
 
 The external command-effect identity gap is complete: provider correlation and
 script workflow context now copy the Factory Session ID through their owned
@@ -42,6 +47,9 @@ Customers and API clients can start concurrent invocations on one hosted process
 - Add explicit Factory/session selection to customer invocation contracts that currently rely on the Current Factory.
 - Resolve that selection once at admission and carry the immutable Factory Session ID through execution.
 - Include an immutable execution/session identity at replaceable external-effect boundaries so deterministic adapters can route concurrent calls without reading mutable global state.
+- Resolve ACP home and operator settings from invocation/session-owned input,
+  capture them on the Chat/Factory Session, and stop consulting or mutating
+  process-global environment state after admission.
 - Migrate affected functional packages to one hosted package process, one explicit session per scenario, and `t.Parallel()` for isolated scenarios.
 - Remove characterization tests that merely assert the internal `~default` binding error after the supported concurrent customer path exists.
 
@@ -59,6 +67,9 @@ Customers and API clients can start concurrent invocations on one hosted process
 3. Define precedence and validation when a Current Factory, Factory target, and session selector are all available.
 4. [x] Keep domain-owned `FactorySessionID` and project it to the platform-owned `ExecutionScopeID` at the effect boundary.
 5. Preserve CLI/API equivalence for shared invocation behaviors and generated OpenAPI clients.
+6. Define the ACP admission contract for home/profile and operator-setting
+   resolution so two different profiles can initialize concurrently without a
+   process-global environment lease.
 
 ## Implementation sequence
 
@@ -69,7 +80,10 @@ Customers and API clients can start concurrent invocations on one hosted process
 5. [x] Add focused unit tests for manifest parsing, mapping, retained-event replay, and propagation. These tests do not start an assembled process.
 6. Add a small integration test using a compiled `you` artifact to prove CLI transport wiring.
 7. [x] Convert run modes and AGY review scenarios to a shared hosted process with unique explicit sessions and parallel subtests. Inline JavaScript remains blocked on the durable inline-definition mismatch.
-8. Run normal and race-enabled package tests, then three full functional timing runs.
+8. Replace ACP's process-global home resolver with an invocation/session-owned
+   resolver and convert the Chat root-composition cohorts to independent
+   parallel leaves with scenario-scoped observations.
+9. Run normal and race-enabled package tests, then three full functional timing runs.
 
 ## Acceptance criteria
 
@@ -77,6 +91,9 @@ Customers and API clients can start concurrent invocations on one hosted process
 - Work, Factory Events, response events, provider calls, and cleanup remain correlated to the selected session with no cross-session leakage.
 - Inline JavaScript execution can select its owning Factory/session without mutating or depending on the Current Factory.
 - Replaceable external effects can route concurrent calls using immutable execution identity.
+- Two ACP invocations with different isolated customer homes initialize and
+  execute concurrently without changing `os.Environ` or waiting on a fixture
+  home mutex.
 - The race detector passes for every migrated functional package.
 - Functional tests do not build a binary, do not assert internal binding details, and use `t.Parallel()` wherever their sessions are independent.
 - Compiled CLI coverage remains in the integration lane and uses a prebuilt artifact.

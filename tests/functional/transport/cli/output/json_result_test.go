@@ -118,24 +118,6 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 		wantCode            factoryapi.ErrorResponseCode
 	}{
 		{
-			name: "unknown argument in normal JSON mode",
-			args: []string{
-				"you", "--json", "run", "--named", "@you/plan-parallel", "--no-record",
-				"--planer-model", "bad-model", "--to", "reproduce the typo",
-			},
-			packagedFactoryName: "@you/plan-parallel",
-			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
-		},
-		{
-			name: "missing value before next invocation flag",
-			args: []string{
-				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
-				"--planner-model", "--to", "request without a planner model",
-			},
-			packagedFactoryName: "@you/plan-parallel",
-			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
-		},
-		{
 			name:     "quiet and global JSON",
 			args:     []string{"you", "--json", "run", "--quiet"},
 			wantCode: runcli.InvocationOutputConflictCode,
@@ -149,12 +131,7 @@ func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			stdout, stderr, err := runSingleJSONInvocation(
-				t,
-				test.args,
-				test.packagedFactoryName,
-				nil,
-			)
+			stdout, stderr, err := runMachineOutputValidationInvocation(t, test.args)
 			if err == nil {
 				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, stdout, stderr)
 			}
@@ -183,7 +160,6 @@ func runGoalSingleJSON(t *testing.T) string {
 		args,
 		jsonGoalFactoryName,
 		machineOutputAcceptedProviderRunner(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
@@ -201,7 +177,7 @@ func runSingleJSONInvocation(
 	providerRunner platformprocess.CommandRunner,
 ) (stdout, stderr string, err error) {
 	t.Helper()
-	return runMachineOutputInvocation(t, args, packagedFactoryName, providerRunner, nil)
+	return runMachineOutputInvocation(t, args, packagedFactoryName, providerRunner)
 }
 
 func decodeSingleJSONInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

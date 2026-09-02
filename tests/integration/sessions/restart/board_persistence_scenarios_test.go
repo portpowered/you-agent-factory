@@ -14,7 +14,6 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestBoardPersistenceWorkerHelper is launched by the real SCRIPT_WORKER child
@@ -54,6 +53,7 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 // cover service composition; this test intentionally crosses the OS boundary
 // because a daemon restart is the failure boundary being repaired.
 func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
+	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
 	runBoardPersistenceInitialGeneration(t, scenario)
 	runBoardPersistenceRecoveryGeneration(t, scenario)
@@ -66,6 +66,7 @@ func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 // process boundary is intentional: BuildProcess covers composition, while
 // only a real child process can prove kill-and-reopen behavior.
 func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *testing.T) {
+	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
 	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
 	batchJSON := boardPersistenceBatchJSON(t, boardPersistenceRequestID, []boardPersistenceBatchWork{
@@ -136,6 +137,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 // write. The child process is intentional so the assertion covers the actual
 // operator-facing startup diagnostic emitted by the real CLI.
 func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) {
+	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
 	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
 	if err := os.WriteFile(scenario.recordPath, corruptPayload, 0o600); err != nil {
@@ -212,11 +214,11 @@ func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	if err != nil {
 		t.Fatalf("resolve functional test executable: %v", err)
 	}
-	factoryDir := support.ScaffoldFactory(t, boardPersistenceFactoryConfig())
+	factoryDir := scaffoldBoardPersistenceFactory(t, boardPersistenceFactoryConfig())
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-worker")
 	recordPath := filepath.Join(factoryDir, "board-persistence.recording.json")
-	support.WriteAgentConfig(
+	writeBoardPersistenceAgentConfig(
 		t,
 		factoryDir,
 		"restart-blocker",
@@ -226,6 +228,37 @@ func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 		binaryPath: binaryPath, factoryDir: factoryDir, homeDir: homeDir,
 		releasePath: releasePath, recordPath: recordPath,
 		expected: boardPersistenceExpectedWorks(),
+	}
+}
+
+func scaffoldBoardPersistenceFactory(t *testing.T, config map[string]any) string {
+	t.Helper()
+	dir := t.TempDir()
+	raw, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal board-persistence Factory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), raw, 0o644); err != nil {
+		t.Fatalf("write board-persistence Factory: %v", err)
+	}
+	workstationPath := filepath.Join(dir, "workstations", "hold-processing", "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(workstationPath), 0o755); err != nil {
+		t.Fatalf("create board-persistence workstation directory: %v", err)
+	}
+	if err := os.WriteFile(workstationPath, []byte("---\ntype: MODEL_WORKSTATION\n---\nHold the Work attempt.\n"), 0o644); err != nil {
+		t.Fatalf("write board-persistence workstation: %v", err)
+	}
+	return dir
+}
+
+func writeBoardPersistenceAgentConfig(t *testing.T, dir, workerName, content string) {
+	t.Helper()
+	path := filepath.Join(dir, "workers", workerName, "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create board-persistence worker directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write board-persistence worker config: %v", err)
 	}
 }
 

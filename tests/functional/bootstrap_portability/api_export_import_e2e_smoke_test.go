@@ -82,6 +82,7 @@ func assertExportImportPortableLayoutPayload(t *testing.T, value any, contextLab
 }
 
 func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture)
 
@@ -118,6 +119,7 @@ func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *
 }
 
 func TestExportImportSmoke_PreservesBatchInboxGitkeepAfterImport(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture, withExportImportBeforeExport(seedBatchInboxGitkeep))
 
@@ -128,6 +130,7 @@ func TestExportImportSmoke_PreservesBatchInboxGitkeepAfterImport(t *testing.T) {
 }
 
 func TestExportImportSmoke_PreservesPortableLayoutThroughExportImportAndActivation(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture)
 
@@ -150,6 +153,7 @@ func TestExportImportSmoke_PreservesPortableLayoutThroughExportImportAndActivati
 }
 
 func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture)
 
@@ -163,6 +167,7 @@ func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *test
 }
 
 func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t *testing.T) {
+	t.Parallel()
 	fixture := newExportImportFixture(t)
 	sourceRootDir := t.TempDir()
 	importRootDir := t.TempDir()

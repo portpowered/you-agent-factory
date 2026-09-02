@@ -421,17 +421,6 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) prompt
 	input := strings.Repeat(promptLine, deliveries)
 
 	var out bytes.Buffer
-	turnIDs := make([]string, deliveries)
-	for index := range turnIDs {
-		turnIDs[index] = beginChatTurn(sessionID, "redelivery")
-	}
-	defer func() {
-		for _, turnID := range turnIDs {
-			if err := closeChatTurn(turnID); err != nil {
-				chatCensus.recordViolation(err)
-			}
-		}
-	}()
 	if err := serveChatRequest(server, context.Background(), strings.NewReader(input), &out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
@@ -517,13 +506,6 @@ func doSessionPrompt(server acp.Server, sessionID, text string) (rpcMessage, err
 		return rpcMessage{}, fmt.Errorf("marshal session/prompt params: %w", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
-	turnID := beginChatTurn(sessionID, "one-shot session/prompt")
-	defer func() {
-		if err := closeChatTurn(turnID); err != nil {
-			chatCensus.recordViolation(err)
-		}
-	}()
-
 	var out bytes.Buffer
 	if err := serveChatRequest(server, context.Background(), strings.NewReader(line), &out); err != nil {
 		return rpcMessage{}, fmt.Errorf("Serve(session/prompt): %w", err)

@@ -40,6 +40,7 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 		{name: "enabled by opt-in", pprof: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			lifecycleID := "c06-production-diagnostics-disabled"
 			if test.pprof {
 				lifecycleID = "c06-production-diagnostics-enabled"

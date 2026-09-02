@@ -16,6 +16,7 @@ import (
 // published you process can finish a finite replay through shell redirection
 // without cancellation or diagnostics contaminating stdout.
 func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -53,6 +54,7 @@ type workerSessionReplayFixture struct {
 // WSR-FT-001: opening-first, provider-before-output, terminal-last.
 // golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -75,6 +77,7 @@ func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
 //
 // WSR-FT-002: live/replay correlation and exact opening timestamp.
 func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 

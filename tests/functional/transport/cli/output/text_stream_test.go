@@ -294,7 +294,6 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 		args,
 		goalFactoryName,
 		textStreamAcceptedProviderRunner(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
@@ -611,12 +610,12 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream incremental contract",
 	}
-	fixture, inputs := newMachineOutputInputs(t, args, goalFactoryName)
+	fixture, inputs, factoryDir := newMachineOutputInputs(t, args, goalFactoryName)
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
 
 	go func() {
-		stdout.err = fixture.execute(inputs, providerRunner, nil)
+		stdout.err = fixture.execute(t, inputs, factoryDir, providerRunner)
 		close(stdout.done)
 	}()
 

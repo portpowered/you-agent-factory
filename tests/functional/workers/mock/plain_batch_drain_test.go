@@ -1,9 +1,7 @@
 package mock
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +14,6 @@ import (
 )
 
 const plainBatchDrainTestTimeout = 15 * time.Second
-const plainBatchContinuousIdleObservation = 500 * time.Millisecond
 
 // plainBatchScenario is the isolation scope for one no-server invocation.
 // These rows intentionally retain the local CLI's invocation-scoped default
@@ -32,8 +29,6 @@ type plainBatchScenario struct {
 	requestID       string
 	traceID         string
 	workName        string
-	gateID          string
-	runtimeID       string
 }
 
 func newPlainBatchScenario(t *testing.T) *plainBatchScenario {
@@ -47,8 +42,6 @@ func newPlainBatchScenario(t *testing.T) *plainBatchScenario {
 		requestID:       "plain-batch-request-" + identity,
 		traceID:         "plain-batch-trace-" + identity,
 		workName:        "plain-batch-work-" + identity,
-		gateID:          "plain-batch-gate-" + identity,
-		runtimeID:       "plain-batch-runtime-" + identity,
 	}
 	scenario.factoryDir = scaffoldPlainBatchDrainFactory(t, scenario)
 	return scenario
@@ -94,124 +87,6 @@ func testPlainBatchDrainReportsStrandedWork(
 	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 	if stdout := inputs.Stdout(); stdout != "" {
 		t.Fatalf("stdout = %q, want no success or completion output", stdout)
-	}
-}
-
-func testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(
-	t *testing.T,
-	fixture *sharedWorkersMockFixture,
-) {
-	fixture.prepareLocalActivation(t)
-
-	for _, scenario := range []struct {
-		name    string
-		hasWork bool
-	}{
-		{name: "empty"},
-		{name: "terminal work", hasWork: true},
-	} {
-		scenario := scenario
-		t.Run(scenario.name, func(t *testing.T) {
-			invocation := newPlainBatchScenario(t)
-			var workFile string
-			if scenario.hasWork {
-				workFile = writePlainBatchDrainWorkState(t, invocation, "complete")
-			}
-			inputs := plainBatchInputs(t, invocation, workFile, false)
-
-			if err := fixture.executeLocal(t, inputs.Input); err != nil {
-				t.Fatalf("finite plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
-			}
-			wantStdout := ""
-			if scenario.hasWork {
-				wantStdout = "Batch completed successfully.\n"
-			}
-			if inputs.Stdout() != wantStdout || inputs.Stderr() != "" {
-				t.Fatalf("finite plain success output = stdout:%q stderr:%q, want stdout:%q and quiet stderr", inputs.Stdout(), inputs.Stderr(), wantStdout)
-			}
-		})
-	}
-
-	t.Run("continuous idle", func(t *testing.T) {
-		invocation := newPlainBatchScenario(t)
-		inputs := plainBatchInputs(t, invocation, "", true)
-		command := support.StartProcessCommand(t, &sharedWorkersMockLocalProcess{
-			fixture: fixture,
-			tb:      t,
-		}, inputs.Input)
-
-		// Process.Execute exposes no public idle event for a continuous plain
-		// run, and this empty scenario has no edge callback that can certify
-		// idleness. A bounded observation is therefore required for this
-		// negative-liveness assertion: Done must remain open while the run is
-		// idle; without it a regression would leave the test blocked forever.
-		idleTimer := time.NewTimer(plainBatchContinuousIdleObservation)
-		defer idleTimer.Stop()
-		select {
-		case <-command.Done():
-			command.AcceptError()
-			t.Fatalf("continuous plain batch exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
-		case <-idleTimer.C:
-		}
-		command.Stop(t)
-		if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("continuous plain batch cancellation error = %v", err)
-		}
-		if inputs.Stdout() != "" {
-			t.Fatalf("continuous plain output = stdout:%q, want quiet output", inputs.Stdout())
-		}
-		if stderr := inputs.Stderr(); stderr != "" && stderr != "Error: context canceled\n" {
-			t.Fatalf("continuous plain stderr = %q, want empty or the cancellation diagnostic", stderr)
-		}
-	})
-}
-
-func testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(
-	t *testing.T,
-	fixture *sharedWorkersMockFixture,
-) {
-	fixture.prepareLocalActivation(t)
-	scenario := newPlainBatchScenario(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	inputs := plainBatchInputs(t, scenario, "", true)
-	inputs.Input.Context = ctx
-
-	fixture.sessionIDGenerator.armCancellation(cancel, scenario.runtimeID)
-
-	if err := fixture.executeLocal(t, inputs.Input); err != nil {
-		t.Fatalf("canceled continuous plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
-	}
-	if got := fixture.sessionIDGenerator.lastGeneratedID(); got != scenario.runtimeID {
-		t.Fatalf("local runtime identity = %q, want unique scenario identity %q", got, scenario.runtimeID)
-	}
-	if inputs.Stdout() != "" || inputs.Stderr() != "" {
-		t.Fatalf("canceled pre-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
-	}
-}
-
-func testPlainBatchDrainStopsAfterWorkerActivationCancellation(
-	t *testing.T,
-	fixture *sharedWorkersMockFixture,
-) {
-	fixture.prepareLocalActivation(t)
-	scenario := newPlainBatchScenario(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	inputs := plainBatchInputs(t, scenario, "", true)
-	inputs.Input.Context = ctx
-	inputs.Input.Args = append(inputs.Input.Args, "--with-server")
-
-	fixture.inputDirectoryWalker.armCancellation(cancel, scenario.gateID)
-
-	if err := fixture.executeLocal(t, inputs.Input); err != nil {
-		t.Fatalf("canceled service-mode plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
-	}
-	if got := fixture.inputDirectoryWalker.lastCancellationID(); got != scenario.gateID {
-		t.Fatalf("worker-activation cancellation gate = %q, want unique scenario gate %q", got, scenario.gateID)
-	}
-	if inputs.Stdout() != "" || inputs.Stderr() != "" {
-		t.Fatalf("canceled post-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
 	}
 }
 

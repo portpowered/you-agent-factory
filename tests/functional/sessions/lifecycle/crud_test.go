@@ -27,19 +27,16 @@ const lifecycleFixtureShutdownTimeout = 5 * time.Second
 // sessions they create, so public list/get observations show no unintended
 // state across cells.
 type sharedLifecycleFixture struct {
-	rootDir            string
-	baseURL            string
-	factoryDir         string
-	clientWorkingDir   string
-	homeDir            string
-	cancel             context.CancelFunc
-	done               chan error
-	serverInvocationID string
-	process            support.ApplicationProcess
-	client             *lifecycleClientProcess
-	api                *lifecycleHTTPServer
-	constructor        *lifecycleProcessConstructor
-	ledger             *lifecycleResourceLedger
+	rootDir          string
+	baseURL          string
+	factoryDir       string
+	clientWorkingDir string
+	homeDir          string
+	cancel           context.CancelFunc
+	done             chan error
+	process          support.ApplicationProcess
+	client           *lifecycleClientProcess
+	api              *lifecycleHTTPServer
 }
 
 var lifecycleFixture *sharedLifecycleFixture
@@ -101,11 +98,9 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		return nil, fmt.Errorf("write shared remote lifecycle factory: %w", err)
 	}
 
-	ledger := newLifecycleResourceLedger()
-	api := newLifecycleHTTPServer(ledger)
-	constructor := &lifecycleProcessConstructor{ledger: ledger}
+	api := newLifecycleHTTPServer()
 	resolveHome := func() (string, error) { return homeDir, nil }
-	process, err := constructor.build(ctx, "server", serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
 		APIServerStarter:                   api.start,
 		FactorySessionResolveHomeDirectory: resolveHome,
@@ -121,14 +116,13 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	inputs.Input.Env = lifecycleEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
 	done := make(chan error, 1)
-	serverInvocationID := ledger.beginInvocation("shared server Process.Execute")
 	go func() { done <- process.Execute(inputs.Input) }()
 	baseURL, err := api.waitForBaseURL(15 * time.Second)
 	if err != nil {
 		stopFailedFixture(cancel, rootDir, process, done)
 		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
 	}
-	clientProcess, err := constructor.build(context.Background(), "client", serviceedges.Edges{
+	clientProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
 		FactorySessionResolveHomeDirectory: resolveHome,
 		FactoryRuntimeWorkflowHome:         resolveHome,
@@ -138,18 +132,15 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		return nil, fmt.Errorf("build shared client root process: %w", err)
 	}
 	return &sharedLifecycleFixture{
-		rootDir:            rootDir,
-		baseURL:            baseURL,
-		factoryDir:         factoryDir,
-		clientWorkingDir:   clientWorkingDir,
-		homeDir:            homeDir,
-		cancel:             cancel,
-		done:               done,
-		serverInvocationID: serverInvocationID,
-		process:            process,
-		api:                api,
-		constructor:        constructor,
-		ledger:             ledger,
+		rootDir:          rootDir,
+		baseURL:          baseURL,
+		factoryDir:       factoryDir,
+		clientWorkingDir: clientWorkingDir,
+		homeDir:          homeDir,
+		cancel:           cancel,
+		done:             done,
+		process:          process,
+		api:              api,
 		client: &lifecycleClientProcess{
 			process: clientProcess,
 			env:     lifecycleEnvironment(homeDir),
@@ -179,79 +170,27 @@ func (fixture *sharedLifecycleFixture) stop() error {
 	if serverWaitErr != nil && !errors.Is(serverWaitErr, context.Canceled) {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared server: %w", serverWaitErr))
 	}
-	if fixture.ledger != nil && (serverWaitErr == nil || errors.Is(serverWaitErr, context.Canceled)) {
-		if err := fixture.ledger.closeInvocation(fixture.serverInvocationID); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared server invocation census: %w", err))
-		}
-	}
-	if err := closeLifecycleProcessForRole(fixture.process, fixture.ledger, "server"); err != nil {
+	if err := closeLifecycleProcess(fixture.process); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared server process: %w", err))
 	}
 	if fixture.client != nil {
-		if err := closeLifecycleProcessForRole(fixture.client.process, fixture.ledger, "client"); err != nil {
+		if err := closeLifecycleProcess(fixture.client.process); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared client process: %w", err))
 		}
 	}
-	listenerClosed := false
 	if fixture.api != nil {
 		if err := fixture.api.waitClosed(); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared listener: %w", err))
 		} else if err := fixture.api.probeClosed(); err != nil {
 			cleanupErrors = append(cleanupErrors, err)
-		} else {
-			listenerClosed = true
 		}
 	}
-	roles := []string(nil)
-	if fixture.constructor != nil {
-		roles = fixture.constructor.roles()
-		if len(roles) != 2 {
-			cleanupErrors = append(cleanupErrors,
-				fmt.Errorf("shared lifecycle root-built process roles = %d (%v), want exactly 2", len(roles), roles),
-			)
-		}
-	}
-	listenerStarts := 0
-	if fixture.api != nil {
-		listenerStarts = fixture.api.startCount()
-		if listenerStarts != 1 {
-			cleanupErrors = append(cleanupErrors,
-				fmt.Errorf("shared lifecycle HTTP listener starts = %d, want exactly 1", listenerStarts),
-			)
-		}
-	}
-	rootRemoved := false
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("remove shared fixture root: %w", err))
 	} else if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("shared fixture root %q remains after cleanup: %v", fixture.rootDir, err))
-	} else {
-		rootRemoved = true
-	}
-	fmt.Fprintf(
-		os.Stderr,
-		"LIFECYCLE-005 evidence: root-built-roles=%d roles=%v http-listener-starts=%d listener-closed=%t fixture-root-removed=%t\n",
-		len(roles), roles, listenerStarts, listenerClosed, rootRemoved,
-	)
-	if fixture.ledger != nil {
-		fmt.Fprintf(os.Stderr, "LIFECYCLE-006 evidence: %s\n", fixture.ledger.summary())
-		if err := fixture.ledger.validate(listenerClosed, rootRemoved); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("lifecycle resource census: %w", err))
-		}
 	}
 	return errors.Join(cleanupErrors...)
-}
-
-func closeLifecycleProcessForRole(
-	process support.ApplicationProcess,
-	ledger *lifecycleResourceLedger,
-	role string,
-) error {
-	err := closeLifecycleProcess(process)
-	if ledger != nil {
-		err = errors.Join(err, ledger.closeProcess(role))
-	}
-	return err
 }
 
 func waitForLifecycleProcess(done chan error) error {

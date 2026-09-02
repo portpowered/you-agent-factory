@@ -15,159 +15,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestPackagedFactoryCatalogListsEveryEmbeddedFactory proves runtime packaged
-// Factory catalog discovery through GET /packaged-factories returns every
-// Factory in the embedded authored inventory and does not invent names absent
-// from that inventory.
-func TestPackagedFactoryCatalogListsEveryEmbeddedFactory(t *testing.T) {
-
-	embeddedNames, err := embeddedPackagedFactoryNames()
-	if err != nil {
-		t.Fatalf("embedded packaged Factory inventory: %v", err)
-	}
-
-	discoveredNames, err := discoveredPackagedFactoryNamesViaHTTP(t)
-	if err != nil {
-		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
-	}
-
-	if missing, extra := nameSetDiff(embeddedNames, discoveredNames); len(missing) > 0 || len(extra) > 0 {
-		t.Fatalf(
-			"catalog discovery drift: missing from discovery %v, invented by discovery %v; embedded=%v discovered=%v",
-			missing,
-			extra,
-			embeddedNames,
-			discoveredNames,
-		)
-	}
-
-	failCatalogForcedUnwindAfterAssertion(t)
-}
-
-// TestPackagedFactoryCatalogHasUniqueStableNames proves runtime packaged
-// Factory catalog discovery through GET /packaged-factories publishes each
-// Factory under a unique, stable customer-facing identity: lexical name order,
-// no duplicate names/slugs/projects, and consistent @you/<slug> name binding
-// suitable for matrix targeting.
-func TestPackagedFactoryCatalogHasUniqueStableNames(t *testing.T) {
-	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
-	if err != nil {
-		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
-	}
-	if len(catalog.Factories) == 0 {
-		t.Fatal("catalog discovery returned no published factories")
-	}
-
-	embeddedSlugByName, err := embeddedPackagedFactorySlugByName()
-	if err != nil {
-		t.Fatalf("embedded packaged Factory inventory: %v", err)
-	}
-
-	names := make([]string, len(catalog.Factories))
-	seenNames := make(map[string]struct{}, len(catalog.Factories))
-	seenSlugs := make(map[string]struct{}, len(catalog.Factories))
-	seenProjects := make(map[string]struct{}, len(catalog.Factories))
-	for index, factory := range catalog.Factories {
-		names[index] = factory.Name
-		if factory.Name == "" || factory.Slug == "" || factory.Project == "" {
-			t.Fatalf("catalog entry missing stable identity fields: %#v", factory)
-		}
-		expectedName := "@you/" + factory.Slug
-		if factory.Name != expectedName {
-			t.Fatalf("name/slug binding drift: name=%q slug=%q want name %q", factory.Name, factory.Slug, expectedName)
-		}
-		if embeddedSlug, ok := embeddedSlugByName[factory.Name]; !ok {
-			t.Fatalf("catalog name %q absent from embedded inventory", factory.Name)
-		} else if embeddedSlug != factory.Slug {
-			t.Fatalf(
-				"catalog slug drift for %q: discovered=%q embedded=%q",
-				factory.Name,
-				factory.Slug,
-				embeddedSlug,
-			)
-		}
-		if _, duplicate := seenNames[factory.Name]; duplicate {
-			t.Fatalf("duplicate catalog name %q", factory.Name)
-		}
-		seenNames[factory.Name] = struct{}{}
-		if _, duplicate := seenSlugs[factory.Slug]; duplicate {
-			t.Fatalf("duplicate catalog slug %q", factory.Slug)
-		}
-		seenSlugs[factory.Slug] = struct{}{}
-		if _, duplicate := seenProjects[factory.Project]; duplicate {
-			t.Fatalf("duplicate catalog project %q", factory.Project)
-		}
-		seenProjects[factory.Project] = struct{}{}
-	}
-	if !slices.IsSorted(names) {
-		t.Fatalf("catalog names not in stable lexical order: %v", names)
-	}
-}
-
-// TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry proves runtime packaged
-// Factory catalog discovery through GET /packaged-factories publishes every
-// embedded inventory slug as an invocation-targetable Factory with stable
-// builtin project identity and a non-empty executable work graph suitable for
-// functional-matrix binding.
-func TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry(t *testing.T) {
-	embeddedSlugs, err := embeddedPackagedFactorySlugs()
-	if err != nil {
-		t.Fatalf("embedded packaged Factory inventory: %v", err)
-	}
-
-	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
-	if err != nil {
-		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
-	}
-
-	catalogBySlug := make(map[string]factoryapi.PackagedFactoryCatalogEntry, len(catalog.Factories))
-	for _, factory := range catalog.Factories {
-		catalogBySlug[factory.Slug] = factory
-	}
-
-	for _, slug := range embeddedSlugs {
-		factory, ok := catalogBySlug[slug]
-		if !ok {
-			t.Fatalf("embedded slug %q missing from runtime catalog discovery", slug)
-		}
-		wantProject := builtinProjectForPackagedFactorySlug(slug)
-		if factory.Project != wantProject {
-			t.Fatalf(
-				"matrix project binding drift for slug %q: discovered=%q want=%q",
-				slug,
-				factory.Project,
-				wantProject,
-			)
-		}
-		if !publishedPackagedFactoryHasInvocationMatrixBinding(factory) {
-			t.Fatalf(
-				"catalog entry for slug %q is not invocation-matrix ready: %#v",
-				slug,
-				factory,
-			)
-		}
-	}
-}
-
-// TestPackagedFactoriesAPI_ReturnsPublishedCatalog proves the HTTP API exposes
-// the published packaged Factory catalog with complete customer-facing fields.
-func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
+// TestPackagedFactoriesAPIExposesDiscoverableEntries proves customers receive
+// a non-empty catalog and representative packaged entries contain the fields
+// needed to understand and invoke them. Whole-source parity, exact counts, and
+// per-entry shape are static publication checks rather than functional cases.
+func TestPackagedFactoriesAPIExposesDiscoverableEntries(t *testing.T) {
 	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
 	if err != nil {
 		t.Fatalf("GET /packaged-factories: %v", err)
 	}
 	if len(catalog.Factories) == 0 {
 		t.Fatal("GET /packaged-factories returned no published factories")
-	}
-	if len(catalog.Factories) != 19 {
-		t.Fatalf("GET /packaged-factories count = %d, want exact published catalog count 19", len(catalog.Factories))
 	}
 	for _, name := range []string{"@you/fix", "@you/ralph"} {
 		factory, ok := slices.BinarySearchFunc(catalog.Factories, name, func(factory factoryapi.PackagedFactoryCatalogEntry, target string) int {
@@ -177,16 +40,9 @@ func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 			t.Fatalf("GET /packaged-factories is missing %s", name)
 		}
 		entry := catalog.Factories[factory]
-		if strings.TrimSpace(entry.Description.Value) == "" || len(entry.Examples) == 0 || !publishedPackagedFactoryHasInvocationMatrixBinding(entry) {
+		if strings.TrimSpace(entry.Description.Value) == "" || len(entry.Examples) == 0 ||
+			entry.Name == "" || entry.Project == "" || entry.Slug == "" || len(entry.Json) == 0 || entry.Yaml == "" {
 			t.Fatalf("GET /packaged-factories entry %s is not customer-discoverable: %#v", name, entry)
-		}
-	}
-	for _, factory := range catalog.Factories {
-		if factory.Name == "" || factory.Project == "" || factory.Slug == "" || len(factory.Json) == 0 || factory.Yaml == "" {
-			t.Fatalf("GET /packaged-factories returned incomplete factory: %#v", factory)
-		}
-		if strings.TrimSpace(factory.Description.Value) == "" || len(factory.Examples) == 0 {
-			t.Fatalf("GET /packaged-factories returned undiscoverable factory metadata: %#v", factory)
 		}
 	}
 }
@@ -345,97 +201,6 @@ func TestFactoryListHonorsPreCanceledContextAtomically(t *testing.T) {
 	}
 }
 
-func embeddedPackagedFactoryNames() ([]string, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(inventory.Entries))
-	for index, entry := range inventory.Entries {
-		names[index] = entry.Factory.Name
-	}
-	slices.Sort(names)
-	return names, nil
-}
-
-func embeddedPackagedFactorySlugs() ([]string, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
-	if err != nil {
-		return nil, err
-	}
-	slugs := make([]string, len(inventory.Entries))
-	for index, entry := range inventory.Entries {
-		slugs[index] = entry.Slug
-	}
-	slices.Sort(slugs)
-	return slugs, nil
-}
-
-func embeddedPackagedFactorySlugByName() (map[string]string, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
-	if err != nil {
-		return nil, err
-	}
-	slugByName := make(map[string]string, len(inventory.Entries))
-	for _, entry := range inventory.Entries {
-		slugByName[entry.Factory.Name] = entry.Slug
-	}
-	return slugByName, nil
-}
-
-func builtinProjectForPackagedFactorySlug(slug string) string {
-	return "builtin-" + slug
-}
-
-func publishedPackagedFactoryHasInvocationMatrixBinding(factory factoryapi.PackagedFactoryCatalogEntry) bool {
-	if factory.Json == nil {
-		return false
-	}
-	if invocationSignature, hasSignature := factory.Json["invocationSignature"].(map[string]any); hasSignature {
-		if parameters, ok := invocationSignature["parameters"].([]any); ok && len(parameters) > 0 {
-			return true
-		}
-	}
-	if invocationReturn, hasReturn := factory.Json["invocationReturn"].(map[string]any); hasReturn {
-		if policy, ok := invocationReturn["policy"].(string); ok && strings.TrimSpace(policy) != "" {
-			return true
-		}
-	}
-	if orchestrator, hasOrchestrator := factory.Json["orchestrator"].(map[string]any); hasOrchestrator && len(orchestrator) > 0 {
-		return true
-	}
-	workTypes, workTypesOK := factory.Json["workTypes"].([]any)
-	workstations, workstationsOK := factory.Json["workstations"].([]any)
-	return workTypesOK && workstationsOK && len(workTypes) > 0 && len(workstations) > 0
-}
-
-func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
-	t.Helper()
-
-	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, len(catalog.Factories))
-	for index, factory := range catalog.Factories {
-		names[index] = factory.Name
-	}
-	slices.Sort(names)
-	return names, nil
-}
-
 // sharedPackagedFactoryCatalog caches one local service-mode HTTP catalog
 // response for all compatible API-owned catalog observations in this package.
 // The server, root process, and temporary directories live entirely inside a
@@ -508,28 +273,6 @@ func fetchPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactor
 	}
 	command.Stop(t)
 	return catalog, nil
-}
-
-func nameSetDiff(want, got []string) (missing, extra []string) {
-	wantSet := make(map[string]struct{}, len(want))
-	for _, name := range want {
-		wantSet[name] = struct{}{}
-	}
-	gotSet := make(map[string]struct{}, len(got))
-	for _, name := range got {
-		gotSet[name] = struct{}{}
-		if _, ok := wantSet[name]; !ok {
-			extra = append(extra, name)
-		}
-	}
-	for _, name := range want {
-		if _, ok := gotSet[name]; !ok {
-			missing = append(missing, name)
-		}
-	}
-	slices.Sort(missing)
-	slices.Sort(extra)
-	return missing, extra
 }
 
 func writeFactory(t *testing.T, root, name, description string) {

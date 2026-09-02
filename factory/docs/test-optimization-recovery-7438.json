@@ -1,0 +1,79 @@
+{
+  "requestId": "test-optimization-recovery-7438-20260827",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "functional-test-optimization",
+      "workTypeName": "project",
+      "state": "init",
+      "payload": {
+        "projectRoot": "docs/temp/functional-test-optimization",
+        "sourcePlan": "docs/internal/development/plans/backlog/shared-functional-process-sessions.md",
+        "contractRevision": "functional-test-optimization-v1",
+        "request": "Implement and independently validate the shared-process functional-test migration specified by the source plan.",
+        "acceptance": [
+          "Three consecutive uncached reference-CI make test-functional runs pass in less than three minutes.",
+          "Eligible scenarios share package-scoped processes while retaining explicit isolated Factory Sessions and unique durable state.",
+          "Tests proving startup, shutdown, malformed configuration, port binding, executable selection, crashes, or process-level environment behavior remain process-isolated and inventoried.",
+          "Public Work, Factory Event, dispatch, replay, ACP/AGY, and packaged-factory behavior remains unchanged except for explicitly authorized fixture-only changes.",
+          "Cleanup is deterministic and leaks no processes, ports, worktrees, sessions, or runtime state.",
+          "Focused race and fixture checks, make test-lane-audit, make test-functional, make verify-fast, and source-plan documentation checks pass.",
+          "Two blind clean-room probes independently report PASS for behavior/regression fidelity and reproducible latency/isolation evidence."
+        ],
+        "recovery": {
+          "interruptedHost": "http://localhost:7437",
+          "interruptedSessionId": "ce21401a-ec6a-48db-a262-bdbefe31a6c0",
+          "ideaName": "functional-test-optimization-c01-eligibility-inventory",
+          "worktree": ".claude/worktrees/functional-test-optimization-c01-eligibility-inventory",
+          "branch": "functional-test-optimization-c01-eligibility-inventory",
+          "verifiedCommits": [
+            "0cd7b66b4184de996aa60e54fcf75e8ac6970997",
+            "ddbb8ff72",
+            "716d0b683"
+          ],
+          "lastKnownStatus": "Stories 001-003 completed in the recovered umbrella worktree: inventory spine plus application and process/protocol classification. Timing, lane audit, clean-room validation, package migrations, review, and delivery remain.",
+          "requiredAction": "Preserve the recovered umbrella branch as evidence and integration history. Reuse it only for indivisible inventory completion; emit every well-scoped remaining package- or ownership-scoped idea, encode real prerequisites as relations, and let Factory resources control active concurrency.",
+          "partitionDirective": "Maximize concurrent package-family lanes. A single child idea requires a concrete serialization reason recorded in Project state."
+        }
+      }
+    },
+    {
+      "name": "unit-test-optimization",
+      "workTypeName": "project",
+      "state": "init",
+      "payload": {
+        "projectRoot": "docs/temp/unit-test-optimization",
+        "sourcePlan": "docs/internal/development/plans/backlog/test-improvement.md",
+        "contractRevision": "unit-test-optimization-v1",
+        "request": "Baseline, optimize, and independently validate the uncached Go unit-test lane.",
+        "acceptance": [
+          "A clean baseline records three uncached make test-unit-fresh runs with wall time, package timing, inventory, jobs, and machine identity.",
+          "Three consecutive uncached reference-CI final runs improve median wall time by at least 25 percent versus the accepted baseline, and no final run exceeds the final median by more than 10 percent.",
+          "Every canonical unit-lane package and test still executes and passes; all inventory drift is explained and reviewed.",
+          "Behavior, race safety, isolation, diagnostics, and package ownership remain intact, with explicit evidence for new parallelism.",
+          "make test-unit-fresh, make test, make test-lane-audit, and make verify-fast pass.",
+          "CI owns a documented, machine-readable, non-flaky unit-lane latency budget or regression check.",
+          "Two blind clean-room probes independently report PASS for correctness/inventory fidelity and reproducible performance/isolation evidence."
+        ],
+        "recovery": {
+          "interruptedHost": "http://localhost:7437",
+          "interruptedSessionId": "ce21401a-ec6a-48db-a262-bdbefe31a6c0",
+          "ideaName": "unit-test-optimization-c01-wire-timeout-witness",
+          "worktree": ".claude/worktrees/unit-test-optimization-c01-wire-timeout-witness",
+          "branch": "unit-test-optimization-c01-wire-timeout-witness",
+          "verifiedCommits": [
+            "b4a8ba2c7",
+            "3bce9985aaa90ea46a1f114553cb04c3d00bc30a",
+            "7d766f36c",
+            "b3c1ad198"
+          ],
+          "uncommittedArtifacts": "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/final-run-* and make-run-*",
+          "lastKnownStatus": "Recovered baseline/witness work and the deterministic latency evidence budget commit are present. Accepted reference baseline/final runs, additional evidence-backed package optimizations, clean-room validation, review, and delivery remain.",
+          "requiredAction": "Preserve the recovered umbrella branch and artifacts. Emit the complete known task graph for package hotspots, checker/CI ownership, and other package- or ownership-scoped work; encode real prerequisites as relations and let Factory resources control active concurrency.",
+          "partitionDirective": "Maximize concurrent lanes between serialized measurement gates. A single child idea requires a concrete serialization reason recorded in Project state."
+        }
+      }
+    }
+  ],
+  "relations": []
+}

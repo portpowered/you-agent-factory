@@ -16,6 +16,7 @@ import (
 // case uses a distinct name or trace, so prior completed Work cannot satisfy a
 // later case's public projection assertions.
 func TestStructuredSubmissionSimplePipeline(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
@@ -179,6 +180,7 @@ func assertAPISubmitWorkAcceptsCanonicalContentParts(
 // TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner proves mixed text
 // and image structured submissions complete on a capability-supported runner.
 func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -238,6 +240,7 @@ func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
 // TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner proves mixed text
 // and image structured submissions fail before provider launch on unsupported runners.
 func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	support.WriteAgentConfig(
 		t,

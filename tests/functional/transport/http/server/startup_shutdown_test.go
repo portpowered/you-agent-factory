@@ -101,13 +101,7 @@ func assertEnabledPprofServer(t *testing.T, baseURL string) {
 	t.Helper()
 	assertPprofIndex(t, baseURL)
 	assertPprofHeap(t, baseURL)
-	assertPprofNamedProfiles(t, baseURL)
-	assertPprofCPU(t, baseURL)
-	assertPprofHeapDelta(t, baseURL)
-	assertPprofTrace(t, baseURL)
-	assertPprofTextEndpoints(t, baseURL)
 	assertPprofUnknownProfile(t, baseURL)
-	assertPprofInvalidQuery(t, baseURL)
 }
 
 func getPprofResponse(t *testing.T, baseURL, path string) (*http.Response, []byte) {

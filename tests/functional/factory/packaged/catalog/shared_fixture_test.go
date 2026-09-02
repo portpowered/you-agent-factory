@@ -191,12 +191,6 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	if err := writeCatalogForcedUnwindReport(catalogFixture, closeErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write catalog forced-unwind report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
 

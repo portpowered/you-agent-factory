@@ -34,6 +34,7 @@ func TestWindowsRecordingFlushBeforeGracefulStopReturns(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows process-boundary coverage requires Windows")
 	}
+	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildCtx, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
@@ -115,6 +116,7 @@ func TestWindowsRecordingTaskkillLeavesPartialValidSnapshot(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows process-boundary coverage requires Windows")
 	}
+	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildCtx, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)

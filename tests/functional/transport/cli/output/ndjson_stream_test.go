@@ -271,7 +271,6 @@ func runGoalResponseStream(t *testing.T) string {
 		args,
 		goalFactoryName,
 		machineOutputAcceptedProviderRunner(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
@@ -295,7 +294,6 @@ func runGoalResponseStreamFailure(t *testing.T) string {
 		args,
 		goalFactoryName,
 		machineOutputRejectedProviderRunner(),
-		nil,
 	)
 	if err == nil {
 		t.Fatalf("Process.Execute(%v) error = nil, want terminal invocation failure\nstdout:\n%s\nstderr:\n%s", args, stdout, stderr)

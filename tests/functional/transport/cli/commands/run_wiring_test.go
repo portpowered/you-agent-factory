@@ -35,6 +35,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 	}
 
 	t.Run("named_from_unrelated_working_directory", func(t *testing.T) {
+		t.Parallel()
 		homeDir := t.TempDir()
 		sourceDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
 		support.CreateNamedFactory(
@@ -100,6 +101,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 	})
 
 	t.Run("packaged_goal_summary_primary_result", func(t *testing.T) {
+		t.Parallel()
 		homeDir := t.TempDir()
 		support.InstallPackagedFactory(t, homeDir, interfaces.PackagedGoalFactoryName)
 
@@ -435,18 +437,6 @@ func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
 		assertRunWiringCleanInvocationStdout(t, stdout, prompt)
 	}
 
-	stdout, stderr, err := runRunWiringFactoryCLI(
-		t,
-		factoryDir,
-		processHarness,
-		mockWorkersPath,
-		strings.NewReader("functional-clean-stdin-only\n"),
-		factoryPath,
-	)
-	if err != nil {
-		t.Fatalf("run stdin-only clean invocation: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
-	}
-	assertRunWiringCleanInvocationStdout(t, stdout, "functional-clean-stdin-only")
 }
 
 // TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup proves you run
@@ -619,7 +609,9 @@ func writeRunWiringMockWorkersConfig(t *testing.T) string {
 
 func newRunWiringRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	harness := builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
+	harness.DefaultEnv = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())
+	return harness
 }
 
 func reserveRunWiringLocalTCPPort() (int, error) {

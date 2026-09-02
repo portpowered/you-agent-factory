@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -39,7 +37,7 @@ const (
 	gateTimeoutWorkstation = "gate-timeout-process"
 	gateTimeoutWorkType    = "gate-timeout-task"
 	gateTimeoutWorkID      = "gate-timeout-work"
-	gateTimeoutDuration    = 250 * time.Millisecond
+	gateTimeoutDuration    = 100 * time.Millisecond
 )
 
 // TestSharedProcessWorkersMock keeps the Workers mock selection/routing
@@ -51,6 +49,7 @@ const (
 // package-scoped group because its executable behavior is exercised by the
 // LiveCapacityIncrease child row below.
 func TestSharedProcessWorkersMock(t *testing.T) {
+	t.Parallel()
 	fixture := newSharedWorkersMockFixture(t)
 
 	tests := []struct {
@@ -64,7 +63,6 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "FutureFields", run: testFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved},
 		{name: "MockWorkerFailure", run: testMockWorkerFailureReturnsStablePublicFailure},
 		{name: "RootSelection", run: testMockWorkerSelectedThroughCustomerProcess},
-		{name: "ServiceConfigAlignment", run: testServiceConfigOverrideAlignmentCustomerProcess},
 		{name: "ExpectedArtifacts", run: testExpectedArtifactsEnforceThroughSharedProcess},
 		{name: "MockUsage", run: testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess},
 		{name: "JavaScriptLiveCapacity", run: testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren},
@@ -72,28 +70,19 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "LiveCapacitySafeReduction", run: testLiveResourceCapacityReductionPreservesActiveWork},
 		{name: "LiveCapacityUnsafeReduction", run: testLiveResourceCapacityRejectsReductionBelowActiveUse},
 		{name: "LiveCapacityRecording", run: testLiveResourceCapacityRecordingReplayAndCursor},
-		{name: "BatchDefaultSuccess", run: testSharedBatchDefaultSuccess},
-		{name: "BatchVerboseSuccess", run: testSharedBatchVerboseSuccess},
 		{name: "BatchAllFailedHuman", run: testSharedBatchAllFailedHuman},
 		{name: "BatchMixedJSON", run: testSharedBatchMixedJSON},
 		{name: "BatchCircuitBreakerHuman", run: testSharedBatchCircuitBreakerHuman},
-		{name: "BatchCircuitBreakerJSON", run: testSharedBatchCircuitBreakerJSON},
-		{name: "BatchScriptFailureHuman", run: testSharedBatchScriptFailureHuman},
-		{name: "BatchScriptFailureJSON", run: testSharedBatchScriptFailureJSON},
-		{name: "NamedHumanFailure", run: testSharedNamedHumanFailure},
 		{name: "PlainBatchDrainReportsStrandedWork", run: testPlainBatchDrainReportsStrandedWork},
-		{name: "PlainBatchDrainCounterexamples", run: testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples},
-		{name: "PlainBatchDrainRejectsPreActivationCancellation", run: testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation},
-		{name: "PlainBatchDrainStopsAfterWorkerActivationCancellation", run: testPlainBatchDrainStopsAfterWorkerActivationCancellation},
 	}
-	const sessionScenarioCount = 15
+	const sessionScenarioCount = 14
 	t.Run("FactorySessionScenarios", func(t *testing.T) {
 		parallelTests := append(
 			append([]struct {
 				name string
 				run  func(*testing.T, *sharedWorkersMockFixture)
-			}{}, tests[:10]...),
-			tests[11:sessionScenarioCount]...,
+			}{}, tests[:9]...),
+			tests[10:sessionScenarioCount]...,
 		)
 		for _, test := range parallelTests {
 			test := test
@@ -107,8 +96,8 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 	// endpoint deliberately targets the server's current Factory rather than a
 	// caller-selected Factory Session. Its command edge therefore has no stable
 	// per-directory route and must not overlap the explicit-session scenarios.
-	t.Run(tests[10].name, func(t *testing.T) {
-		tests[10].run(t, fixture)
+	t.Run(tests[9].name, func(t *testing.T) {
+		tests[9].run(t, fixture)
 	})
 	for _, test := range tests[sessionScenarioCount:] {
 		test := test
@@ -120,15 +109,13 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 }
 
 type sharedWorkersMockFixture struct {
-	server               *support.FunctionalAPIServer
-	providerEdge         *sharedWorkersMockCommandRunner
-	scriptEdge           *sharedWorkersMockCommandRunner
-	gate                 *support.MockWorkerGate
-	runtimeLogDir        string
-	sessionIDGenerator   *sharedWorkersMockSessionIDGenerator
-	inputDirectoryWalker *sharedWorkersMockInputDirectoryWalker
-	activationMu         sync.Mutex
-	localReady           bool
+	server        *support.FunctionalAPIServer
+	providerEdge  *sharedWorkersMockCommandRunner
+	scriptEdge    *sharedWorkersMockCommandRunner
+	gate          *support.MockWorkerGate
+	runtimeLogDir string
+	activationMu  sync.Mutex
+	localReady    bool
 }
 
 type sharedWorkersMockCommandRunner struct {
@@ -202,87 +189,6 @@ func sharedWorkersMockPathContains(parent, child string) bool {
 		!strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-type sharedWorkersMockSessionIDGenerator struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	id     string
-	lastID string
-}
-
-func (generator *sharedWorkersMockSessionIDGenerator) armCancellation(
-	cancel context.CancelFunc,
-	id string,
-) {
-	generator.mu.Lock()
-	generator.cancel = cancel
-	generator.id = id
-	generator.mu.Unlock()
-}
-
-func (generator *sharedWorkersMockSessionIDGenerator) Generate() string {
-	generator.mu.Lock()
-	cancel := generator.cancel
-	id := generator.id
-	generator.cancel = nil
-	generator.id = ""
-	if id == "" {
-		id = uuid.NewString()
-	}
-	generator.lastID = id
-	generator.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	return id
-}
-
-func (generator *sharedWorkersMockSessionIDGenerator) lastGeneratedID() string {
-	generator.mu.Lock()
-	defer generator.mu.Unlock()
-	return generator.lastID
-}
-
-type sharedWorkersMockInputDirectoryWalker struct {
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	cancelID string
-	lastID   string
-}
-
-func (walker *sharedWorkersMockInputDirectoryWalker) armCancellation(
-	cancel context.CancelFunc,
-	cancelID string,
-) {
-	walker.mu.Lock()
-	walker.cancel = cancel
-	walker.cancelID = cancelID
-	walker.mu.Unlock()
-}
-
-func (walker *sharedWorkersMockInputDirectoryWalker) Walk(
-	directory string,
-	walk fs.WalkDirFunc,
-) error {
-	walker.mu.Lock()
-	cancel := walker.cancel
-	cancelID := walker.cancelID
-	walker.cancel = nil
-	walker.cancelID = ""
-	walker.lastID = cancelID
-	walker.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		return nil
-	}
-	return filepath.WalkDir(directory, walk)
-}
-
-func (walker *sharedWorkersMockInputDirectoryWalker) lastCancellationID() string {
-	walker.mu.Lock()
-	defer walker.mu.Unlock()
-	return walker.lastID
-}
-
 func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 	t.Helper()
 
@@ -317,8 +223,6 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 	providerEdge := newSharedWorkersMockCommandRunner()
 	scriptEdge := newSharedWorkersMockCommandRunner()
 	gate := support.NewMockWorkerGate(t)
-	sessionIDGenerator := &sharedWorkersMockSessionIDGenerator{}
-	inputDirectoryWalker := &sharedWorkersMockInputDirectoryWalker{}
 	runtimeLogDir := t.TempDir()
 	mockWorkersPath := writeSharedMockWorkersConfig(t, gate)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -330,21 +234,17 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 			"--runtime-log-dir", runtimeLogDir,
 		},
 		Edges: serviceedges.Edges{
-			ProviderCommandRunner:              providerEdge,
-			ScriptCommandRunner:                scriptEdge,
-			FactorySessionIDGenerator:          sessionIDGenerator.Generate,
-			FactoryRuntimeInputDirectoryWalker: inputDirectoryWalker.Walk,
+			ProviderCommandRunner: providerEdge,
+			ScriptCommandRunner:   scriptEdge,
 		},
 	})
 
 	return &sharedWorkersMockFixture{
-		server:               server,
-		providerEdge:         providerEdge,
-		scriptEdge:           scriptEdge,
-		gate:                 gate,
-		runtimeLogDir:        runtimeLogDir,
-		sessionIDGenerator:   sessionIDGenerator,
-		inputDirectoryWalker: inputDirectoryWalker,
+		server:        server,
+		providerEdge:  providerEdge,
+		scriptEdge:    scriptEdge,
+		gate:          gate,
+		runtimeLogDir: runtimeLogDir,
 	}
 }
 

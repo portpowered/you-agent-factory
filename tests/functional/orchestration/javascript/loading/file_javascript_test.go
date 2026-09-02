@@ -32,7 +32,7 @@ func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fi
 		"--output", "primary",
 		"--no-record",
 		"hello",
-	}, dir, t.TempDir())
+	}, dir, fixture.homeDir)
 	if got := fixture.provider.CallCount(); got != providerCalls {
 		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed factory without child dispatch", got, providerCalls)
 	}
@@ -66,7 +66,6 @@ func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loa
 		t.Fatalf("provider command runner call count = %d, want unchanged at %d for missing import before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
-	fixture.recoverAfterLoadFailure(t, "missing-import")
 }
 
 func scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t *testing.T) string {

@@ -23,6 +23,7 @@ const initFactoryWorkType = "task"
 // task:complete through a controlled provider edge using public Work and
 // session observations.
 func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-workspace")
@@ -61,6 +62,7 @@ func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
 // same workspace preserves customer-edited scaffold files instead of rewriting
 // generated starter content.
 func TestFactoryInitIsIdempotent(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-idempotent-workspace")
@@ -102,6 +104,7 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 // failure on the default initialized portable scaffold routes seeded Work to
 // task:failed through public Work and session observations instead of complete.
 func TestFactoryInitFailureRoutingProducesFailedWork(t *testing.T) {
+	t.Parallel()
 	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-failure-workspace")

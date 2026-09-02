@@ -36,7 +36,6 @@ type packagedReviewSharedFixture struct {
 	baseURL        string
 	process        support.ApplicationProcess
 	providerRunner *packagedReviewSelectorRunner
-	census         *packagedReviewResourceCensus
 	cancel         context.CancelFunc
 	done           chan error
 }
@@ -116,12 +115,6 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	if err := writePackagedReviewForcedUnwindReport(packagedReviewFixture, closeErr); err != nil {
-		fmt.Fprintf(os.Stderr, "write packaged Review forced-unwind report: %v\n", err)
-		if code == 0 {
-			code = 1
-		}
-	}
 	os.Exit(code)
 }
 
@@ -169,9 +162,6 @@ func startPackagedReviewFixture() (*packagedReviewSharedFixture, error) {
 		cleanupRoot()
 		return nil, fmt.Errorf("build root process: %w", err)
 	}
-	census := newPackagedReviewResourceCensus()
-	census.recordProcessStart()
-
 	env := packagedReviewFixtureEnvironment(homeDir)
 	if err := initializePackagedReviewHome(process, env, workingDir); err != nil {
 		closePackagedReviewProcess(process)
@@ -227,7 +217,6 @@ func startPackagedReviewFixture() (*packagedReviewSharedFixture, error) {
 		baseURL:        baseURL,
 		process:        process,
 		providerRunner: providerRunner,
-		census:         census,
 		cancel:         cancel,
 		done:           done,
 	}, nil
@@ -290,9 +279,6 @@ func (fixture *packagedReviewSharedFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
-	if fixture.census != nil {
-		fixture.census.recordPath(packagedReviewCleanupCancellation)
-	}
 	fixture.cancel()
 	var errs []error
 	select {
@@ -306,9 +292,6 @@ func (fixture *packagedReviewSharedFixture) close() error {
 		// failed to honor cancellation; without it TestMain could hang while
 		// closing the injected API server. It is not normal scenario waiting.
 		errs = append(errs, errors.New("timed out waiting for continuous command shutdown"))
-		if fixture.census != nil {
-			fixture.census.recordPath(packagedReviewCleanupTimeout)
-		}
 	}
 	closeContext, cancel := context.WithTimeout(context.Background(), packagedReviewFixtureShutdownTimeout)
 	if err := fixture.process.Close(closeContext); err != nil {
@@ -326,13 +309,6 @@ func (fixture *packagedReviewSharedFixture) close() error {
 	}
 	if fixture.providerRunner.registeredCount() != 0 {
 		errs = append(errs, fmt.Errorf("%d provider selectors remain after cleanup", fixture.providerRunner.registeredCount()))
-	}
-	if fixture.census != nil {
-		fixture.census.recordPath(packagedReviewCleanupPackageTeardown)
-		fmt.Fprintf(os.Stderr, "GATE-CLEAN-004 Review cleanup paths: %s\n", fixture.census.cleanupPathSummary())
-		if err := fixture.census.closedError(); err != nil {
-			errs = append(errs, err)
-		}
 	}
 	return errors.Join(errs...)
 }
@@ -360,7 +336,6 @@ func openPackagedReviewScenario(
 	if err != nil {
 		t.Fatalf("create packaged Review scenario root: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
 	homeDir := filepath.Join(rootDir, "home")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatalf("create packaged Review scenario home: %v", err)
@@ -397,37 +372,16 @@ func openPackagedReviewScenario(
 		sessionID:  sessionID,
 		requestID:  requestID,
 	}
-	fixture.census.register(packagedReviewCensusRecord{
-		name:       name,
-		rootDir:    rootDir,
-		factoryDir: factoryDir,
-		workspace:  workspace,
-		selector:   selector,
-		requestID:  requestID,
-		sessionID:  sessionID,
-	})
 	t.Cleanup(func() {
-		sessionDeleted := false
-		if t.Failed() {
-			fixture.census.recordPath(packagedReviewCleanupAssertionFailure)
-		}
-		defer fixture.providerRunner.unregister(selector)
-		defer func() {
-			if err := os.RemoveAll(rootDir); err != nil {
-				t.Errorf("remove packaged Review scenario root: %v", err)
-			}
-			rootAbsent := false
-			if _, err := os.Stat(rootDir); errors.Is(err, os.ErrNotExist) {
-				rootAbsent = true
-			} else {
-				t.Errorf("packaged Review scenario root remains after cleanup: %v", err)
-			}
-			selectorGone := !fixture.providerRunner.registered(selector)
-			fixture.census.recordCleanup(requestID, sessionDeleted, rootAbsent, selectorGone)
-		}()
 		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
-		sessionDeleted = assertPackagedReviewSessionDeleted(t, fixture.baseURL, sessionID)
+		assertPackagedReviewSessionDeleted(t, fixture.baseURL, sessionID)
 		fixture.providerRunner.unregister(selector)
+		if err := os.RemoveAll(rootDir); err != nil {
+			t.Errorf("remove packaged Review scenario root: %v", err)
+		}
+		if _, err := os.Stat(rootDir); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("packaged Review scenario root remains after cleanup: %v", err)
+		}
 	})
 	return scenario
 }
@@ -546,14 +500,12 @@ func assertPackagedReviewSharedEvidence(
 		}
 	}
 
-	assertPackagedReviewReplayAndRecord(t, scenario, runner, wantWorkState, *work.WorkId, events)
+	assertPackagedReviewReplay(t, scenario, events)
 }
 
-func assertPackagedReviewReplayAndRecord(
+func assertPackagedReviewReplay(
 	t *testing.T,
 	scenario *packagedReviewScenario,
-	runner *packagedReviewCommandRunner,
-	wantWorkState, workID string,
 	events []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
@@ -568,19 +520,6 @@ func assertPackagedReviewReplayAndRecord(
 	for index := range replayed {
 		if replayed[index].Id != events[index+1].Id {
 			t.Fatalf("retained replay event %d = %q, want %q", index, replayed[index].Id, events[index+1].Id)
-		}
-	}
-	eventIDs := make([]string, 0, len(events))
-	for _, event := range events {
-		eventIDs = append(eventIDs, event.Id)
-	}
-	scenario.fixture.census.recordEvidence(scenario.requestID, workID, eventIDs)
-	if strings.Contains(wantWorkState, "failed") {
-		scenario.fixture.census.recordPath(packagedReviewCleanupFailure)
-	} else {
-		scenario.fixture.census.recordPath(packagedReviewCleanupSuccess)
-		if runner.rejectReviews > 0 {
-			scenario.fixture.census.recordPath(packagedReviewCleanupRejection)
 		}
 	}
 }

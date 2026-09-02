@@ -19,6 +19,7 @@ import (
 // edge. The route must remain readable during the in-flight recording and must
 // return the same scoped attempt after the recording becomes terminal.
 func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-read-surface")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 

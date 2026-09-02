@@ -72,9 +72,6 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 	assertClaudeEventScope(t, scenario, sessionID, events)
 	responseEventIDs := assertClaudeResponseEvents(t, scenario, sessionID, responseEvents)
 	assertClaudeGoldenScenario(t, scenario, events, responseEvents)
-	if scenario.forceAssertionFailure {
-		t.Fatal("intentional Claude cleanup assertion after acquiring session, stream, route, and command")
-	}
 
 	closeSession()
 	closeResponseStream()

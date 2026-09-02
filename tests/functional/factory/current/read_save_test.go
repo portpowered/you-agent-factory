@@ -19,6 +19,7 @@ import (
 // named Factory files are created once before the server starts and are never
 // rewritten by the child scenarios.
 func TestSharedCurrentFactoryAPI(t *testing.T) {
+	t.Parallel()
 	fixture := startSharedCurrentFactoryAPI(t)
 
 	t.Run("GetAndSave", func(t *testing.T) {
@@ -46,7 +47,6 @@ func TestSharedCurrentFactoryAPI(t *testing.T) {
 		testSharedTemplateValidationDoesNotMutate(t, fixture)
 	})
 
-	failCurrentFactoryForcedUnwindAfterAssertion(t, fixture)
 }
 
 // testSharedCurrentFactoryGetAndSave proves that one explicit Factory Session
@@ -203,6 +203,7 @@ func assertNotFoundFactorySessionError(
 // TestProcessFactoryConfigVersionChangesObservableRouting proves that distinct
 // on-disk factory configs route Work through their authored workstation graphs.
 func TestProcessFactoryConfigVersionChangesObservableRouting(t *testing.T) {
+	t.Parallel()
 	v1Dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, v1Dir, "task", []byte("v1 work item"))
 
@@ -262,6 +263,7 @@ func TestProcessFactoryConfigVersionChangesObservableRouting(t *testing.T) {
 // TestProcessRejectionLoopCompletesAfterRetry proves that a factory config with
 // rejection routing completes after one reject-then-accept cycle.
 func TestProcessRejectionLoopCompletesAfterRetry(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_rejection_dir"))
 	testutil.WriteSeedFile(t, dir, "doc", []byte("needs-revision draft"))
 	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
@@ -290,6 +292,7 @@ func TestProcessRejectionLoopCompletesAfterRetry(t *testing.T) {
 // TestProcessIndependentFactoryRootsRemainIsolated proves that separate factory
 // roots run to completion without cross-contaminating each other's Work state.
 func TestProcessIndependentFactoryRootsRemainIsolated(t *testing.T) {
+	t.Parallel()
 	dirA := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	testutil.WriteSeedFile(t, dirA, "task", []byte("item for A"))
 

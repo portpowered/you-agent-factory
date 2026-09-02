@@ -438,8 +438,9 @@ func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.
 	})
 
 	assertEffectiveBuiltinDiscovery(t, server.URL())
-	assertEffectiveBuiltinReadinessFailures(t, server.URL())
-	assertUnknownBuiltinFailure(t, server.URL())
+	t.Run("readiness failures", func(t *testing.T) {
+		assertEffectiveBuiltinReadinessFailures(t, server.URL())
+	})
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
 	}
@@ -459,20 +460,29 @@ func assertEffectiveBuiltinDiscovery(t *testing.T, serverURL string) {
 
 func assertEffectiveBuiltinReadinessFailures(t *testing.T, serverURL string) {
 	t.Helper()
-	for _, modelName := range []string{models.BuiltInModelNameTTS, models.BuiltInModelNameASR} {
-		operation := models.OperationTTS
-		if modelName == models.BuiltInModelNameASR {
-			operation = models.OperationASR
-		}
-		failure := postNamedBuiltinFailure(t, serverURL, modelName, operation)
-		if failure.StatusCode != http.StatusNotFound || string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" {
-			t.Fatalf("POST /models/%s/invocations = status %d, failure %#v; want effective-definition readiness failure", modelName, failure.StatusCode, failure.Body)
-		}
-		if strings.Contains(strings.ToLower(failure.Body.Message), "model not found") ||
-			strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
-			failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
-			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure.Body)
-		}
+	for _, test := range []struct {
+		name      string
+		modelName string
+		operation string
+	}{
+		{name: "TTS unavailable", modelName: models.BuiltInModelNameTTS, operation: models.OperationTTS},
+		{name: "unknown model", modelName: "unknown-discovered-model", operation: models.OperationTTS},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			failure := postNamedBuiltinFailure(t, serverURL, test.modelName, test.operation)
+			if failure.StatusCode != http.StatusNotFound ||
+				string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" ||
+				failure.Body.Family != factoryapi.ErrorFamilyNotFound {
+				t.Fatalf("POST /models/%s/invocations = status %d, failure %#v; want effective-definition readiness failure", test.modelName, failure.StatusCode, failure.Body)
+			}
+			if strings.Contains(strings.ToLower(failure.Body.Message), "model not found") ||
+				strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+				failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
+				t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", test.modelName, failure.Body)
+			}
+		})
 	}
 }
 
@@ -497,20 +507,6 @@ func postNamedBuiltinFailure(t *testing.T, serverURL, modelName, operation strin
 		t.Fatalf("decode %s invocation failure: %v", modelName, err)
 	}
 	return namedBuiltinFailure{StatusCode: response.StatusCode, Body: failure}
-}
-
-func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
-	t.Helper()
-	failure := postNamedBuiltinFailure(t, serverURL, "unknown-discovered-model", models.OperationTTS)
-	if failure.StatusCode != http.StatusNotFound ||
-		string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" ||
-		failure.Body.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("POST /models/unknown-discovered-model/invocations = status %d, failure %#v; want actionable model-not-available 404", failure.StatusCode, failure.Body)
-	}
-	if strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
-		failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
-		t.Fatalf("unknown model invocation retained an internal failure classification: %#v", failure.Body)
-	}
 }
 
 func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {

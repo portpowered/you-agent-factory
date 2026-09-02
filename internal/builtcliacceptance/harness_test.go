@@ -324,6 +324,57 @@ func TestReusableHarnessRejectsOverlappingStartedCommandAndRecovers(t *testing.T
 	}
 }
 
+func TestConcurrentReusableHarnessOverlapsCommandsAndWaitsForIdleBeforeClose(t *testing.T) {
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	process := &recordingReusableProcess{execute: func(root.Input) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}}
+	harness := &Harness{
+		process:       process,
+		reusableState: newReusableHarnessState(true),
+	}
+
+	first := harness.Command("first")
+	second := harness.Command("second")
+	if err := first.Start(); err != nil {
+		t.Fatalf("first.Start() error = %v, want nil", err)
+	}
+	if err := second.Start(); err != nil {
+		t.Fatalf("second.Start() error = %v, want nil", err)
+	}
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent commands did not both enter the reusable process")
+		}
+	}
+
+	closed := make(chan error, 1)
+	go func() { closed <- harness.Close(context.Background()) }()
+	select {
+	case err := <-closed:
+		t.Fatalf("Close() returned before active commands completed: %v", err)
+	default:
+	}
+	close(release)
+	if err := first.Wait(); err != nil {
+		t.Fatalf("first.Wait() error = %v, want nil", err)
+	}
+	if err := second.Wait(); err != nil {
+		t.Fatalf("second.Wait() error = %v, want nil", err)
+	}
+	if err := <-closed; err != nil {
+		t.Fatalf("Close() error = %v, want nil", err)
+	}
+	if got := process.closeCallCount(); got != 1 {
+		t.Fatalf("reusable process close calls = %d, want exactly one", got)
+	}
+}
+
 func TestReusableHarnessCloseIsExactlyOnceAndReportsError(t *testing.T) {
 	expectedCloseError := errors.New("real reusable process close failure")
 	process := &recordingReusableProcess{closeErr: expectedCloseError}
@@ -425,5 +476,5 @@ func (p *recordingReusableProcess) closeCallCount() int {
 }
 
 func newTestReusableHarness(process reusableProcess) *Harness {
-	return &Harness{process: process, reusableState: newReusableHarnessState()}
+	return &Harness{process: process, reusableState: newReusableHarnessState(false)}
 }

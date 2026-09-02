@@ -320,14 +320,18 @@ func runSharedInferenceFactory(
 		defer group.mu.RUnlock()
 	}
 	group.override.set(scenario.providerOverride)
-	releaseResponse := prepareSharedInferenceScenario(t, group, dir, scenario)
+	releaseExternalProviders, err := group.bindExternalRegistrations(scenario.providerRegistrations)
+	if err != nil {
+		t.Fatalf("bind shared inference provider routes: %v", err)
+	}
+	releaseProvider := prepareSharedInferenceScenario(t, group, dir, scenario)
 	defer func() {
 		group.override.set(nil)
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
 		group.workerRecordings.set(nil)
-		group.setExternalRegistrations(nil)
-		releaseResponse()
+		releaseExternalProviders()
+		releaseProvider()
 	}()
 
 	sessionID := openSharedInferenceSession(t, group, dir)
@@ -356,7 +360,7 @@ func runSharedInferenceFactory(
 	for _, request := range scenario.submittedWorks {
 		support.SubmitSessionWorkAt(t, group.baseURL, sessionID, request)
 	}
-	releaseResponse()
+	releaseProvider()
 
 	// The terminal status is the public completion boundary for the whole
 	// session, including provider retry policy. Read the retained Factory
@@ -376,7 +380,6 @@ func runSharedInferenceFactory(
 
 func sharedInferenceScenarioRequiresExclusiveProcess(scenario sharedInferenceScenario) bool {
 	return scenario.providerOverride != nil ||
-		len(scenario.providerRegistrations) > 0 ||
 		(scenario.workerRecordingWriter != nil && !sharedInferenceScenarioSubmitsWork(scenario))
 }
 
@@ -387,20 +390,22 @@ func prepareSharedInferenceScenario(
 	scenario sharedInferenceScenario,
 ) func() {
 	t.Helper()
-	var responseRelease chan struct{}
-	responseReleased := false
-	if scenario.captureResponse && scenario.commandRunner != nil {
-		responseRelease = make(chan struct{})
+	var providerRelease chan struct{}
+	providerReleased := false
+	// A response stream must be subscribed before a fast provider completes.
+	// Likewise, a scenario that proves multiple coexisting Works must finish
+	// their public admission before the first provider result can settle the
+	// session. One deterministic command-edge gate covers both boundaries.
+	if scenario.commandRunner != nil && (scenario.captureResponse || len(scenario.submittedWorks) > 1) {
+		providerRelease = make(chan struct{})
 		scenario.commandRunner = &inferenceResponseCaptureRunner{
 			delegate: scenario.commandRunner,
-			release:  responseRelease,
+			release:  providerRelease,
 		}
 	}
 	if !sharedInferenceScenarioSubmitsWork(scenario) {
 		group.workerRecordings.set(scenario.workerRecordingWriter)
 	}
-	group.setExternalRegistrations(scenario.providerRegistrations)
-
 	// Register the exact WorkDir selector before opening the session. Opening a
 	// session starts its hosted runtime, so the seed Work can reach the command
 	// edge before the open request returns.
@@ -412,9 +417,9 @@ func prepareSharedInferenceScenario(
 		t.Fatalf("register shared inference script route: %v", err)
 	}
 	return func() {
-		if responseRelease != nil && !responseReleased {
-			close(responseRelease)
-			responseReleased = true
+		if providerRelease != nil && !providerReleased {
+			close(providerRelease)
+			providerReleased = true
 		}
 	}
 }

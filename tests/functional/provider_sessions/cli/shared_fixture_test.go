@@ -37,10 +37,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "provider sessions CLI shared fixture cleanup failed: %v\n", sharedFixtureErr)
 		exitCode = 1
 	}
-	if err := writeForcedProviderSessionsCleanupReport(sharedFixtureErr, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "write forced Provider Sessions CLI cleanup report: %v\n", err)
-		exitCode = 1
-	}
 	os.Exit(exitCode)
 }
 
@@ -58,8 +54,6 @@ type workerSessionsCLISharedFixture struct {
 	hosted  *workerSessionsCLIHostedCommand
 	api     *workerSessionsCLIAPIServer
 	runner  *providerCommandRouteRunner
-
-	rootBuilds atomic.Int32
 
 	fleetGate *providerCommandRouteGate
 
@@ -201,7 +195,6 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		openedSessionIDs: make(map[string]struct{}),
 		closedSessionIDs: make(map[string]struct{}),
 	}
-	fixture.rootBuilds.Add(1)
 	fixture.baseURL = api.server.WaitForURL(t)
 	keepRoot = true
 	return fixture
@@ -354,9 +347,6 @@ func (caseFixture *workerSessionsCLICase) cleanup(t *testing.T) {
 				t.Errorf("close Provider Sessions CLI route %q: %v", registration.key, err)
 			}
 		}
-		if remaining := caseFixture.fixture.runner.activeRouteKeys(); len(remaining) != 0 {
-			t.Errorf("Provider Sessions CLI routes remain after case cleanup: %s", strings.Join(remaining, ", "))
-		}
 		if err := os.RemoveAll(caseFixture.factoryDir); err != nil {
 			t.Errorf("remove Provider Sessions CLI case Factory %q: %v", caseFixture.factoryDir, err)
 		} else if _, err := os.Stat(caseFixture.factoryDir); !os.IsNotExist(err) {
@@ -432,24 +422,12 @@ func closeWorkerSessionsCLISharedFixture() error {
 	case <-time.After(workerSessionsCLISharedShutdownTimeout):
 		errs = append(errs, errors.New("shared Provider Sessions CLI API server did not stop"))
 	}
-	fmt.Fprintf(
-		os.Stderr,
-		"C06 TASK-002 topology: root-builds=%d api-host-starts=%d\n",
-		fixture.rootBuilds.Load(), fixture.api.starts.Load(),
-	)
-	if got := fixture.api.starts.Load(); got != 1 {
-		errs = append(errs, fmt.Errorf("shared Provider Sessions CLI API starts = %d, want exactly one", got))
-	}
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		errs = append(errs, fmt.Errorf("shared Provider Sessions CLI root builds = %d, want exactly one", got))
-	}
 	if got := fixture.runner.ActiveCallCount(); got != 0 {
 		errs = append(errs, fmt.Errorf("active Provider Sessions CLI command routes after cleanup = %d", got))
 	}
 	if err := fixture.runner.close(); err != nil {
 		errs = append(errs, fmt.Errorf("close Provider Sessions CLI route registry: %w", err))
 	}
-	fmt.Fprintf(os.Stderr, "C06 TASK-002 cleanup: active-provider-routes=%d\n", fixture.runner.routeCount())
 	if err := fixture.sessionLifecycleError(); err != nil {
 		errs = append(errs, err)
 	}

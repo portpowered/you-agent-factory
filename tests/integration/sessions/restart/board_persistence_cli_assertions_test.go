@@ -11,7 +11,6 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const boardPersistenceCLIOperationTimeout = 30 * time.Second
@@ -65,14 +64,14 @@ func assertBoardCLIWorkerSessionsForWork(
 
 func assertBoardWork(t *testing.T, item factoryapi.Work, want boardPersistenceExpectedWork) {
 	t.Helper()
-	if item.Name != want.Name || support.StringPointerValue(item.WorkId) != want.WorkID || support.StringPointerValue(item.RequestId) != want.RequestID {
+	if item.Name != want.Name || boardPersistenceStringPointerValue(item.WorkId) != want.WorkID || boardPersistenceStringPointerValue(item.RequestId) != want.RequestID {
 		t.Fatalf("Work identity = %#v, want name=%q workId=%q requestId=%q", item, want.Name, want.WorkID, want.RequestID)
 	}
 	if item.State == nil || item.State.Name != want.State || string(item.State.Type) != want.StateType {
 		t.Fatalf("Work %q state = %#v, want %s/%s", want.WorkID, item.State, want.State, want.StateType)
 	}
-	if support.StringPointerValue(item.TraceId) != want.TraceID || support.StringPointerValue(item.CurrentChainingTraceId) != want.CurrentTraceID {
-		t.Fatalf("Work %q lineage = trace=%q current=%q, want %q/%q", want.WorkID, support.StringPointerValue(item.TraceId), support.StringPointerValue(item.CurrentChainingTraceId), want.TraceID, want.CurrentTraceID)
+	if boardPersistenceStringPointerValue(item.TraceId) != want.TraceID || boardPersistenceStringPointerValue(item.CurrentChainingTraceId) != want.CurrentTraceID {
+		t.Fatalf("Work %q lineage = trace=%q current=%q, want %q/%q", want.WorkID, boardPersistenceStringPointerValue(item.TraceId), boardPersistenceStringPointerValue(item.CurrentChainingTraceId), want.TraceID, want.CurrentTraceID)
 	}
 	if item.Content == nil || len(*item.Content) != 1 {
 		t.Fatalf("Work %q content = %#v, want one text part", want.WorkID, item.Content)
@@ -350,7 +349,7 @@ func assertBoardList(t *testing.T, listed factoryapi.ListWorkResponse, expected 
 	}
 	seen := make(map[string]struct{}, len(listed.Results))
 	for _, item := range listed.Results {
-		workID := support.StringPointerValue(item.WorkId)
+		workID := boardPersistenceStringPointerValue(item.WorkId)
 		if _, duplicate := seen[workID]; duplicate {
 			t.Fatalf("Work list duplicated Work ID %q", workID)
 		}
@@ -361,6 +360,13 @@ func assertBoardList(t *testing.T, listed factoryapi.ListWorkResponse, expected 
 		seen[workID] = struct{}{}
 		assertBoardWork(t, item, want)
 	}
+}
+
+func boardPersistenceStringPointerValue[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func assertBoardCLIListAndShows(

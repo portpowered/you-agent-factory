@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,6 +21,7 @@ const (
 // customer-facing flatten and expand commands preserve a representative
 // Factory definition when they are executed through the reusable root process.
 func TestFactoryConfigFlattenExpandRoundTripsThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
 	if err := os.WriteFile(factoryPath, authoredLayoutFactoryJSON(), 0o644); err != nil {
@@ -71,44 +71,6 @@ func TestFactoryConfigFlattenExpandRoundTripsThroughRootProcess(t *testing.T) {
 	}
 
 	assertAuthoredLayoutFactoryPreserved(t, before, after)
-}
-
-// TestFactoryDefinitionsServiceRootFlattensAndExpandsLayout exercises the
-// public Factory Definitions service-root operations behind the same authored
-// layout represented by the customer-facing Process.Execute scenario above.
-func TestFactoryDefinitionsServiceRootFlattensAndExpandsLayout(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
-	if err := os.WriteFile(factoryPath, authoredLayoutFactoryJSON(), 0o644); err != nil {
-		t.Fatalf("write authored Factory: %v", err)
-	}
-
-	service := newFunctionalDefinitionsService(t)
-	flattened, err := service.FlattenFactoryLayout(
-		t.Context(),
-		factorydefinitions.FlattenFactoryLayoutRequest{Path: dir},
-	)
-	if err != nil {
-		t.Fatalf("Definitions.FlattenFactoryLayout: %v", err)
-	}
-	if len(strings.TrimSpace(string(flattened.Canonical))) == 0 {
-		t.Fatal("Definitions.FlattenFactoryLayout returned empty canonical source")
-	}
-	if err := os.WriteFile(factoryPath, flattened.Canonical, 0o644); err != nil {
-		t.Fatalf("write flattened Factory source: %v", err)
-	}
-
-	expanded, err := service.ExpandFactoryLayout(
-		t.Context(),
-		factorydefinitions.ExpandFactoryLayoutRequest{Path: factoryPath},
-	)
-	if err != nil {
-		t.Fatalf("Definitions.ExpandFactoryLayout: %v", err)
-	}
-	if expanded.FactoryDir != dir {
-		t.Fatalf("expanded FactoryDir = %q, want %q", expanded.FactoryDir, dir)
-	}
-	assertAuthoredLayoutFilesMaterialized(t, dir)
 }
 
 func assertAuthoredLayoutFilesMaterialized(t *testing.T, dir string) {

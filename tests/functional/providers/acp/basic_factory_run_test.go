@@ -32,6 +32,7 @@ import (
 // Isolation: isolated-with-reason - restart and session continuation; the two
 // real ACP process identities and exact opaque session load are the witness.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
+	t.Parallel()
 	const sessionID = "acp-session-retry-resume"
 	const providerID = "retry-acp"
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -106,6 +107,7 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 // Isolation: isolated-with-reason - pre-start provider selection; the unknown
 // provider must fail before either ACP or fallback process/effect starts.
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unknown ACP provider"}`))
 	writeLegacyACPWorker(t, dir, "missing-acp")

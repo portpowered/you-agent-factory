@@ -42,15 +42,14 @@ import (
 // the root-built customer CLI and compares terminal response and primary
 // result. Retained command-failure and separate functionallong rows keep their
 // original isolated resource ownership. Existing assertions are
-// characterization and must remain intact. Story 004 owns the direct
-// process/session/runtime census.
+// customer-observable assertions remain intact.
 
 // TestPackagedReviewSharedProcess proves compatible public-outcome scenarios
 // share one root-built process while retaining explicit unique Factory Sessions,
 // workspace selectors, and public Work/Event/replay evidence for each run.
 func TestPackagedReviewSharedProcess(t *testing.T) {
-	fixture := sharedPackagedReviewFixture(t)
-	fixture.census.resetForRun()
+	t.Parallel()
+	sharedPackagedReviewFixture(t)
 	t.Run("ApprovalCompletes", testPackagedReviewApprovalCompletes)
 	t.Run("RejectionCarriesFeedback", testPackagedReviewRejectionCarriesFeedback)
 	t.Run("ThreeCleanRejectionsDoNotTripFailureBreaker", testPackagedReviewThreeCleanRejections)
@@ -58,11 +57,6 @@ func TestPackagedReviewSharedProcess(t *testing.T) {
 	t.Run("DecisionEnvelopeValidatesRecordedOutputWork", testPackagedReviewRecordedOutputWork)
 	t.Run("RejectionHonorsMaterializedAndFlaggedProviderSettings", testPackagedReviewProviderSettings)
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedReviewCLIResponseParity)
-	t.Run("CleanupPathCensus", testPackagedReviewCleanupPathCensus)
-	t.Cleanup(func() {
-		assertPackagedReviewResourceCensus(t, fixture)
-	})
-	failPackagedReviewForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedReviewApprovalCompletes(t *testing.T) {
@@ -270,6 +264,7 @@ func testPackagedReviewCLIResponseParity(t *testing.T) {
 // successful provider result. Its t.TempDir home and working directory own
 // cleanup.
 func TestPackagedReviewRetryExhaustionFails(t *testing.T) {
+	t.Parallel()
 	submitted := "customer request"
 	runner := packagedReviewFailingCommandRunner{}
 

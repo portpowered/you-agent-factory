@@ -2,7 +2,6 @@ package inference_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -11,7 +10,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type inferenceCommandRoute struct {
@@ -170,7 +168,7 @@ func (router *inferenceWorkerRecordingRouter) routeRecord(
 		router.byWorker[record.WorkerSessionID] = route
 		return route.writer
 	}
-	sessionID := inferenceRecordingFactorySessionID(record.Record.Payload)
+	sessionID := record.FactorySessionID
 	writer := router.bySession[sessionID]
 	if writer == nil {
 		if router.delegate != nil {
@@ -203,18 +201,6 @@ func (router *inferenceWorkerRecordingRouter) routeIdentity(
 		return router.delegate
 	}
 	return router.fallback
-}
-
-func inferenceRecordingFactorySessionID(payload json.RawMessage) string {
-	var draft workers.Draft
-	if json.Unmarshal(payload, &draft) != nil || draft.Kind != workers.KindSession {
-		return ""
-	}
-	var session workers.SessionPayload
-	if json.Unmarshal(draft.Payload, &session) != nil {
-		return ""
-	}
-	return session.FactorySessionID
 }
 
 func (router *inferenceWorkerRecordingRouter) PersistWorkerRecord(

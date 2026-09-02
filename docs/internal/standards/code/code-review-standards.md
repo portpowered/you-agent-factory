@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, july, 30
+last modified: 2026, september, 1
 doc-id: STD-015
 ---
 
@@ -36,8 +36,19 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Request changes when functional tests replace external effects outside `edges.Edges` or prefer custom in-process provider fakes over `ProviderCommandRunner` and other command-runner edge mocks.
 - Request changes when functional tests use `--with-mock-workers` / `MockWorkers` outside `tests/functional/workers/mock/...` cells that own the workers/mock feature.
 - Request changes when functional tests add sleeps or timeout-padded wait helpers as the default synchronization strategy without in-code justification for why deterministic observation or edge mocking cannot substitute.
-
-- Request changes
+- Request changes when a functional test invokes the Go test executable or any
+  helper executable to prove OS process, pipe, signal, or termination behavior;
+  build tags and long-test labels do not move executable behavior out of the
+  integration lane.
+- Request changes when a test optimization removes a distinct customer-visible
+  persistence, replay, reuse, identity, or recovery guarantee without retaining
+  one focused proof through the correct public boundary.
+- Request changes when a performance audit headlines best-case samples while
+  omitting a materially slower valid observed range.
+- Request changes when broad functional verification uses unbounded package
+  fan-out instead of the canonical lane budget, when a parent `defer` tears
+  down a fixture before parallel children run, or when one child's cleanup
+  treats peer-owned live routes, sessions, streams, or calls as leaks.
 
 ## Review Checklist
 
@@ -53,6 +64,24 @@ Before approval, reviewers **SHOULD** confirm:
 - Review comments are clearly marked as blocking or non-blocking.
 - AI-generated code, if present, has been checked against real APIs, real behavior, and project conventions.
 - For PRs that change functional tests under `tests/functional/...`, the five construction preferences from [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) are satisfied: `root.BuildProcess` + `Process.Execute` with no built CLI, CLI-over-API for ordinary flows, external effects replaced only through `edges.Edges` with `ProviderCommandRunner`/command-runner edge mocks preferred, mocked Codex over MockWorkers except in workers/mock feature cells, and RC-fix over sleeps or timeout-padded wait helpers unless justified in-code.
+- Optimized tests retain every distinct customer-visible guarantee, persisted
+  behavior is observed through a public read/replay surface, and timing claims
+  include all valid samples or an honest representative range.
+- Functional parallelism is real rather than only declared: no package-wide
+  lock spans an independent invocation, parent fixtures outlive parallel
+  children, scenario cleanup is ownership-scoped, and the full lane uses the
+  repository's bounded job budget.
+- Mixed packages isolate their smallest local Current Factory/`~default`
+  cohort and still parallelize independent hosted explicit-session behavior;
+  one local ownership constraint does not serialize the whole package.
+- Concurrent functional invocations do not share a mutable customer profile
+  during first-run installation or migration; reviewers treat installation
+  lock contention and inflated parallel leaves as failed isolation, even when
+  package wall time happens to fall.
+- Hosted readiness clocks exclude unrelated fixture bootstrap unless first-run
+  initialization is the customer behavior under review; race-only setup
+  contention is phase-separated through the reusable public process rather
+  than hidden with a larger deadline.
 
 ## Regulations
 
@@ -99,3 +128,4 @@ When a PR changes functional tests, a reviewer **MUST** request changes if any o
 3. External effects **MUST** be replaced only through `edges.Edges`. Functional tests **MUST** prefer `ProviderCommandRunner` and other command-runner edge mocks over custom in-process provider fakes.
 4. Functional tests **MUST** prefer mocked Codex or another real inference-provider variant through the command-runner edge and sanitized goldens over `--with-mock-workers` / `MockWorkers`, except for cells under `tests/functional/workers/mock/...` that own the workers/mock feature.
 5. Functional tests **MUST NOT** add sleeps or timeout-padded wait helpers as the default synchronization strategy. Any sleep, polling loop, or timeout-padded wait helper **MUST** include an in-code justification for why deterministic observation or edge mocking cannot substitute.
+6. A claimed session-owned or route-owned functional scenario **MUST** be traced through the emitted public request. If the product endpoint remains fleet-wide or global, the test must use an isolated observation window or a real supported selector; package quiescence is not proof of scoping.

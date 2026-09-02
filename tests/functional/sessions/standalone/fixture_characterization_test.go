@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -432,7 +433,7 @@ func startStandaloneFixtureServer(t *testing.T, fixtureCatalog string) *standalo
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixtureCatalog},
-			Env:              os.Environ(),
+			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir()),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Context:          ctx,

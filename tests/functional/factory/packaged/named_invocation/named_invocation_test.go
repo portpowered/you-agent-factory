@@ -4,19 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -31,87 +25,6 @@ const (
 	customizedNamedGoalFactoryName      = "@test/goal"
 	wantHermeticInvocationPrimaryResult = "mock worker accepted"
 )
-
-type listenerStartObservation struct {
-	calls atomic.Int32
-}
-
-func (observation *listenerStartObservation) Start(
-	context.Context,
-	platformhttpserver.StartRequest,
-) error {
-	observation.calls.Add(1)
-	return errors.New("one-shot named invocation attempted to start an HTTP listener")
-}
-
-type canonicalSubmissionObservation struct {
-	mu      sync.Mutex
-	records []work.FactorySubmissionRecord
-}
-
-func (observation *canonicalSubmissionObservation) observe(record work.FactorySubmissionRecord) {
-	observation.mu.Lock()
-	defer observation.mu.Unlock()
-	record.Request.InvocationArguments = work.CloneInvocationArguments(record.Request.InvocationArguments)
-	observation.records = append(observation.records, record)
-}
-
-func (observation *canonicalSubmissionObservation) snapshot() []work.FactorySubmissionRecord {
-	observation.mu.Lock()
-	defer observation.mu.Unlock()
-	return append([]work.FactorySubmissionRecord(nil), observation.records...)
-}
-
-func assertEffectiveSignatureSubmission(t *testing.T, arguments *work.InvocationArguments, documentPath string) {
-	t.Helper()
-	if arguments == nil {
-		t.Fatal("submitted invocation arguments = nil")
-	}
-	want := map[string]work.InvocationArgument{
-		"input": {
-			Values:    []string{"equivalent canonical prompt"},
-			ValueMode: work.InvocationParameterValueModeExact,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindPositional), Name: "1"}},
-		},
-		"files": {
-			Values:    []string{"one.md", "two.md"},
-			ValueMode: work.InvocationParameterValueModeVariadic,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindPositional), Name: "2+"}},
-		},
-		"tags": {
-			Values:    []string{"alpha", "beta"},
-			ValueMode: work.InvocationParameterValueModeRepeated,
-			Sensitive: true,
-			Sources: []work.InvocationArgumentSource{
-				{Kind: string(work.ArgumentSourceKindNamed), Name: "t", Redact: true},
-				{Kind: string(work.ArgumentSourceKindNamed), Name: "tag", Redact: true},
-			},
-		},
-		"format": {
-			Values:    []string{"json"},
-			ValueMode: work.InvocationParameterValueModeExact,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindDefault), Name: "default"}},
-		},
-		"count": {
-			Values:    []string{"2"},
-			ValueMode: work.InvocationParameterValueModeExact,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindNamed), Name: "count"}},
-		},
-		"document": {
-			Values:    []string{documentPath},
-			ValueMode: work.InvocationParameterValueModeFileContents,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindNamed), Name: "file"}},
-		},
-		"body": {
-			Values:    []string{"canonical stdin body"},
-			ValueMode: work.InvocationParameterValueModeExact,
-			Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindStdin), Name: "stdin"}},
-		},
-	}
-	if !reflect.DeepEqual(arguments.Arguments, want) {
-		t.Fatalf("submitted canonical arguments = %#v, want %#v", arguments.Arguments, want)
-	}
-}
 
 func addEffectiveSignatureFixture(t *testing.T, factoryPath string) {
 	t.Helper()

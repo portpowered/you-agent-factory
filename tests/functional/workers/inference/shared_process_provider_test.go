@@ -145,6 +145,22 @@ func (router *inferenceIntegrationRouter) set(delegate sharedInferenceProviderIn
 	router.mu.Unlock()
 }
 
+func (router *inferenceIntegrationRouter) bind(delegate sharedInferenceProviderIntegration) error {
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	if router.delegate != nil {
+		return fmt.Errorf("shared inference provider %q is already bound", router.identity)
+	}
+	router.delegate = delegate
+	return nil
+}
+
+func (router *inferenceIntegrationRouter) unbind() {
+	router.mu.Lock()
+	router.delegate = nil
+	router.mu.Unlock()
+}
+
 func (router *inferenceIntegrationRouter) current() sharedInferenceProviderIntegration {
 	router.mu.RLock()
 	defer router.mu.RUnlock()
@@ -192,6 +208,33 @@ func (group *inferenceProcessGroup) setExternalRegistrations(registrations []sha
 			router.set(registration.Integration)
 		}
 	}
+}
+
+func (group *inferenceProcessGroup) bindExternalRegistrations(
+	registrations []sharedInferenceProviderRegistration,
+) (func(), error) {
+	bound := make([]*inferenceIntegrationRouter, 0, len(registrations))
+	for _, registration := range registrations {
+		router := group.externals[registration.Manifest.ID]
+		if router == nil {
+			for _, candidate := range bound {
+				candidate.unbind()
+			}
+			return nil, fmt.Errorf("shared inference provider %q is not registered", registration.Manifest.ID)
+		}
+		if err := router.bind(registration.Integration); err != nil {
+			for _, candidate := range bound {
+				candidate.unbind()
+			}
+			return nil, err
+		}
+		bound = append(bound, router)
+	}
+	return func() {
+		for _, router := range bound {
+			router.unbind()
+		}
+	}, nil
 }
 
 func sharedInferenceExternalManifest(id, alias string) sharedInferenceProviderManifest {

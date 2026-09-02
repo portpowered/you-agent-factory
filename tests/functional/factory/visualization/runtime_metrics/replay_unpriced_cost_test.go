@@ -23,6 +23,7 @@ const (
 
 // TestReplayOperatorPriceTableIsReversibleInPublicCosts proves operator price-table changes are reversible in public replayed costs.
 func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
+	t.Parallel()
 	repoRoot := testutil.MustRepoRoot(t)
 	fixturePath := filepath.Join(
 		repoRoot,
@@ -48,11 +49,7 @@ func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 		t.Fatalf("replayed Factory Session categories = %#v, want one terminal Work and no failures", status.Categories)
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	support.CleanupProcess(t, process)
+	process := runtimeMetricsCLIProcess
 
 	beforeHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
 	t.Logf("before operator price row — human you metrics costs:\n%s", beforeHuman)

@@ -27,6 +27,7 @@ const remoteWorkerSessionProviderID = "session_fixture_codex_success"
 // continuation remains an explicit source/successor lineage with the exact
 // Provider Session through durable public history and portable replay.
 func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 

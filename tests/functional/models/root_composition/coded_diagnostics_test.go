@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -87,8 +86,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
 	})
@@ -175,8 +173,7 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
 	})
@@ -210,8 +207,7 @@ func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedIn
 	)
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	return inputs, process.Execute(inputs.Input)
 }
 
@@ -224,8 +220,7 @@ func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedIn
 	inputs.Input.Env = functionalHomeEnvironment(functionalTempDir(t))
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := functionalBuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := functionalSharedDefaultProcess(t)
 	return inputs, process.Execute(inputs.Input)
 }
 

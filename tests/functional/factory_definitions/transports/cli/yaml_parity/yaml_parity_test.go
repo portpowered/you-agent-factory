@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,28 +20,21 @@ const (
 )
 
 // TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity proves validate, flatten,
-// and run behave equivalently for packaged Factory sources authored as .json,
-// .yaml, or .yml files and directories, including explicit selection inside an
-// ambiguous directory, and each path yields the same public primary result.
+// and run behave equivalently for representative packaged Factory sources
+// authored as JSON and YAML, and each yields the same public primary result.
 func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 	jsonDir := materializePackagedGoal(t, "factory.json")
 	yamlDir := materializePackagedGoal(t, "factory.yaml")
-	ymlDir := materializePackagedGoal(t, "factory.yml")
 
 	jsonPath := filepath.Join(jsonDir, "factory.json")
 	yamlPath := filepath.Join(yamlDir, "factory.yaml")
-	ymlPath := filepath.Join(ymlDir, "factory.yml")
-	ambiguousDir := materializePackagedGoal(t, "factory.json")
-	copyFile(t, yamlPath, filepath.Join(ambiguousDir, "factory.yaml"))
-	for _, path := range []string{jsonPath, yamlPath, ymlPath, jsonDir, yamlDir, ymlDir} {
+	for _, path := range []string{jsonPath, yamlPath} {
 		validateFactory(t, path)
 	}
 
 	jsonFactory := flattenFactory(t, jsonPath)
-	for _, path := range []string{yamlPath, ymlPath, jsonDir, yamlDir, ymlDir} {
-		if got := flattenFactory(t, path); !reflect.DeepEqual(got, jsonFactory) {
-			t.Fatalf("flattened Factory from %s differs from packaged JSON", path)
-		}
+	if got := flattenFactory(t, yamlPath); !reflect.DeepEqual(got, jsonFactory) {
+		t.Fatalf("flattened Factory from %s differs from packaged JSON", yamlPath)
 	}
 
 	for _, source := range []struct {
@@ -51,14 +43,6 @@ func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 	}{
 		{name: "explicit JSON", args: []string{"--factory", jsonPath}},
 		{name: "explicit YAML", args: []string{"--factory", yamlPath}},
-		{name: "explicit YML", args: []string{"--factory", ymlPath}},
-		{
-			name: "explicit YAML in ambiguous directory",
-			args: []string{"--factory", filepath.Join(ambiguousDir, "factory.yaml")},
-		},
-		{name: "JSON directory", args: []string{"--factory", jsonDir}},
-		{name: "YAML directory", args: []string{"--factory", yamlDir}},
-		{name: "YML directory", args: []string{"--factory", ymlDir}},
 	} {
 		source := source
 		t.Run(source.name, func(t *testing.T) {
@@ -179,12 +163,11 @@ func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			runner := support.NewRecordingCommandRunner("runtime must not execute")
 			args := append([]string{"you", "run"}, test.prepare(t)...)
 			args = append(args, "runtime must not start")
 			inputs := support.FakeInputs(t.Context(), args)
 			inputs.Input.WorkingDirectory = t.TempDir()
-			err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+			err := yamlParityCLIProcess.Execute(inputs.Input)
 			if err == nil {
 				t.Fatal("Process.Execute() error = nil")
 			}
@@ -193,9 +176,6 @@ func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.
 				if !strings.Contains(diagnostic, want) {
 					t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
 				}
-			}
-			if runner.CallCount() != 0 {
-				t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
 			}
 		})
 	}

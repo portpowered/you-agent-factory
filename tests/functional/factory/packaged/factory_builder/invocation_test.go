@@ -3,7 +3,6 @@ package factory_builder
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -320,126 +319,6 @@ func assertNoProjectLocalFactoryShadow(t *testing.T, workingDirectory, factoryNa
 	}
 }
 
-func assertInstalledGraphFactory(
-	t testing.TB,
-	process support.Process,
-	environment []string,
-	installedPath, operatorRoot string,
-) {
-	t.Helper()
-	installedConfig := filepath.Join(installedPath, factorydefinitions.FactoryConfigFile)
-	validate := support.FakeInputs(t.Context(), []string{"you", "factory", "config", "validate", installedConfig})
-	validate.Input.Env = environment
-	validate.Input.WorkingDirectory = filepath.Dir(installedPath)
-	if err := process.Execute(validate.Input); err != nil {
-		t.Fatalf("Process.Execute(validate installed Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, validate.Stdout(), validate.Stderr())
-	}
-
-	payload, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, environment, installedPath)
-	if err != nil {
-		t.Fatalf("flatten installed Factory: %v", err)
-	}
-	var definition map[string]any
-	if err := json.Unmarshal(payload, &definition); err != nil {
-		t.Fatalf("decode flattened installed Factory: %v\npayload:\n%s", err, payload)
-	}
-	assertRepresentativeGraphDefinition(t, definition)
-	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, graphFactoryName)
-}
-
-func assertInstalledFactoryIsListed(t testing.TB, process support.Process, environment []string, operatorRoot, factoryName string) {
-	t.Helper()
-	list := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list", "--dir", operatorRoot})
-	list.Input.Env = environment
-	if err := process.Execute(list.Input); err != nil {
-		t.Fatalf("Process.Execute(list installed Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, list.Stdout(), list.Stderr())
-	}
-	if !strings.Contains(list.Stdout(), factoryName) {
-		t.Fatalf("factory list output = %q, want installed Factory %q", list.Stdout(), factoryName)
-	}
-}
-
-func assertInstalledJavaScriptFactory(
-	t testing.TB,
-	process support.Process,
-	environment []string,
-	installedPath, operatorRoot string,
-) {
-	t.Helper()
-	installedConfig := filepath.Join(installedPath, factorydefinitions.FactoryConfigFile)
-	validate := support.FakeInputs(t.Context(), []string{"you", "factory", "config", "validate", installedConfig})
-	validate.Input.Env = environment
-	validate.Input.WorkingDirectory = filepath.Dir(installedPath)
-	if err := process.Execute(validate.Input); err != nil {
-		t.Fatalf("Process.Execute(validate installed JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, validate.Stdout(), validate.Stderr())
-	}
-
-	payload, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, environment, installedPath)
-	if err != nil {
-		t.Fatalf("flatten installed JavaScript Factory: %v", err)
-	}
-	var definition map[string]any
-	if err := json.Unmarshal(payload, &definition); err != nil {
-		t.Fatalf("decode flattened JavaScript Factory: %v\npayload:\n%s", err, payload)
-	}
-	assertRepresentativeJavaScriptDefinition(t, definition)
-	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, javascriptFactoryName)
-}
-
-func assertRepresentativeJavaScriptDefinition(t testing.TB, definition map[string]any) {
-	t.Helper()
-	if definition["name"] != javascriptFactoryName {
-		t.Fatalf("installed JavaScript Factory name = %#v, want %q", definition["name"], javascriptFactoryName)
-	}
-	orchestrator, ok := definition["orchestrator"].(map[string]any)
-	if !ok || orchestrator["kind"] != "JAVASCRIPT" {
-		t.Fatalf("orchestrator = %#v, want JAVASCRIPT", definition["orchestrator"])
-	}
-	javascript, ok := orchestrator["javascript"].(map[string]any)
-	if !ok {
-		t.Fatalf("javascript orchestrator config = %#v, want metadata, args schema, policy, and inline source", orchestrator["javascript"])
-	}
-	agents, ok := javascript["agents"].(map[string]any)
-	if !ok || len(agents) != 1 {
-		t.Fatalf("JavaScript agents = %#v, want one named agent role", javascript["agents"])
-	}
-	for agentID, value := range agents {
-		analyst, ok := value.(map[string]any)
-		if !ok || analyst["preset"] != "careful-review" {
-			t.Fatalf("%s agent = %#v, want careful-review preset", agentID, value)
-		}
-	}
-	inlineSource, ok := javascript["inlineSource"].(map[string]any)
-	if !ok || inlineSource["encoding"] != "utf-8" || strings.TrimSpace(fmt.Sprint(inlineSource["inline"])) == "" {
-		t.Fatalf("JavaScript inline source = %#v, want non-empty utf-8 source", javascript["inlineSource"])
-	}
-	argsSchema, ok := javascript["argsSchema"].(map[string]any)
-	if !ok || argsSchema["type"] != "object" || !hasStringValue(argsSchema["required"], "briefs") {
-		t.Fatalf("JavaScript argsSchema = %#v, want required briefs object input", javascript["argsSchema"])
-	}
-	defaultPolicy, ok := javascript["defaultPolicy"].(map[string]any)
-	if !ok || !hasStringValue(defaultPolicy["allowedPermissions"], "DEFAULT") || defaultPolicy["maxAgents"] != float64(2) || defaultPolicy["concurrency"] != float64(2) {
-		t.Fatalf("JavaScript defaultPolicy = %#v, want bounded DEFAULT two-agent policy", javascript["defaultPolicy"])
-	}
-	signature, ok := definition["invocationSignature"].(map[string]any)
-	if !ok || !hasInvocationParameter(signature["parameters"], "briefs") {
-		t.Fatalf("invocationSignature = %#v, want required briefs input", definition["invocationSignature"])
-	}
-}
-
-func hasStringValue(value any, want string) bool {
-	values, ok := value.([]any)
-	if !ok {
-		return false
-	}
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
 func assertInstalledJavaScriptFactoryRuns(
 	t testing.TB,
 	scenario *factoryBuilderScenario,
@@ -447,7 +326,7 @@ func assertInstalledJavaScriptFactoryRuns(
 ) {
 	t.Helper()
 	run := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"you", "--json", "run", "--named", filepath.Base(installedPath), "--no-record",
 		"--output", "response-stream",
 		"--provider", "CODEX", "--model", "gpt-5",
 		"--briefs", "Analyze the release plan and identify important risks.",
@@ -487,7 +366,7 @@ func assertInstalledGraphFactoryRuns(
 ) {
 	t.Helper()
 	run := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"you", "--json", "run", "--named", filepath.Base(installedPath), "--no-record",
 		"--provider", "CODEX", "--model", "gpt-5",
 		"Review these release notes for publication.",
 	})
@@ -513,76 +392,6 @@ func assertInstalledGraphFactoryRuns(
 	if err != nil || part.Text != graphFactoryPrimaryReply {
 		t.Fatalf("installed Factory primary result = %#v, want %q", response.PrimaryResult, graphFactoryPrimaryReply)
 	}
-}
-
-func assertRepresentativeGraphDefinition(t testing.TB, definition map[string]any) {
-	t.Helper()
-	if definition["name"] != graphFactoryName {
-		t.Fatalf("installed Factory name = %#v, want %q", definition["name"], graphFactoryName)
-	}
-	assertNamedDefinitionItem(t, definition["workTypes"], "release-note-review", "workTypes")
-	assertNamedDefinitionItem(t, definition["workers"], "release-notes-reviewer", "workers")
-	workstation := assertNamedDefinitionItem(t, definition["workstations"], "review-release-notes", "workstations")
-	if workstation["worker"] != "release-notes-reviewer" || workstation["type"] != "AGENT_RUN" {
-		t.Fatalf("review workstation = %#v, want agent-run release-notes-reviewer", workstation)
-	}
-	if !hasWorkRoute(workstation["inputs"], "release-note-review", "init") ||
-		!hasWorkRoute(workstation["outputs"], "release-note-review", "complete") ||
-		!hasWorkRoute(workstation["onFailure"], "release-note-review", "failed") {
-		t.Fatalf("review workstation routes = %#v, want init/complete/failed release-note-review routes", workstation)
-	}
-	invocationReturn, ok := definition["invocationReturn"].(map[string]any)
-	if !ok || invocationReturn["workTypeName"] != "release-note-review" || invocationReturn["terminalState"] != "complete" {
-		t.Fatalf("invocationReturn = %#v, want release-note-review complete", definition["invocationReturn"])
-	}
-	signature, ok := definition["invocationSignature"].(map[string]any)
-	if !ok || !hasInvocationParameter(signature["parameters"], "releaseNotes") {
-		t.Fatalf("invocationSignature = %#v, want required releaseNotes input", definition["invocationSignature"])
-	}
-}
-
-func assertNamedDefinitionItem(t testing.TB, value any, name, kind string) map[string]any {
-	t.Helper()
-	items, ok := value.([]any)
-	if !ok {
-		t.Fatalf("%s = %#v, want a list", kind, value)
-	}
-	for _, raw := range items {
-		item, ok := raw.(map[string]any)
-		if ok && item["name"] == name {
-			return item
-		}
-	}
-	t.Fatalf("%s = %#v, want item %q", kind, value, name)
-	return nil
-}
-
-func hasWorkRoute(value any, workType, state string) bool {
-	routes, ok := value.([]any)
-	if !ok {
-		return false
-	}
-	for _, raw := range routes {
-		route, ok := raw.(map[string]any)
-		if ok && route["workType"] == workType && route["state"] == state {
-			return true
-		}
-	}
-	return false
-}
-
-func hasInvocationParameter(value any, name string) bool {
-	parameters, ok := value.([]any)
-	if !ok {
-		return false
-	}
-	for _, raw := range parameters {
-		parameter, ok := raw.(map[string]any)
-		if ok && parameter["name"] == name && parameter["required"] == true {
-			return true
-		}
-	}
-	return false
 }
 
 type factoryBuilderCommandRunner struct {

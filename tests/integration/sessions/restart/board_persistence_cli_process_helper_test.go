@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestBoardPersistenceCLIProcessHelper crosses the restart boundary with the
@@ -26,7 +25,9 @@ func TestBoardPersistenceCLIProcessHelper(t *testing.T) {
 func runBoardPersistenceCLIProcess() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{})
+	process, err := root.BuildProcess(ctx, serviceedges.Edges{
+		BrowserOpener: func(context.Context, string) error { return nil },
+	})
 	if err != nil {
 		return 1
 	}
