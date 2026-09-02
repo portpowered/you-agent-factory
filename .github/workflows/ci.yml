@@ -415,9 +415,6 @@ jobs:
           FUNCTIONAL_COVERAGE_ACTION_CACHE_PRIMARY_KEY: ${{ steps.functional-go-build-cache.outputs.cache-primary-key }}
           FUNCTIONAL_COVERAGE_ACTION_CACHE_MATCHED_KEY: ${{ steps.functional-go-build-cache.outputs.cache-matched-key }}
           FUNCTIONAL_COVERAGE_ACTION_CACHE_EXACT_HIT: ${{ steps.functional-go-build-cache.outputs.cache-hit || 'false' }}
-          INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
-          INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
-          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
       - name: Save functional coverage Go build cache
         if: always() && matrix.suite == 'functional' && steps.functional-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -458,19 +455,10 @@ jobs:
             .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
             .artifacts/functional-test-viz/functional-coverage-verdict.txt
             .artifacts/functional-test-viz/coverage-build-diagnostics.json
-            .artifacts/functional-test-viz/real-acpx-evidence.json
             .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
             .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
             .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
           if-no-files-found: ignore
-          retention-days: 14
-      - name: Require pinned real ACP evidence artifact
-        if: always() && matrix.suite == 'functional'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pinned-real-acp-evidence
-          path: .artifacts/functional-test-viz/real-acpx-evidence.json
-          if-no-files-found: error
           retention-days: 14
       # Reporting only. Both steps below are fail-open: a missing or malformed
       # artifact writes an explicit "unavailable" body and exits 0, so a
@@ -620,8 +608,30 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
       - name: Run backend integration tests
         run: make test-integration
+      - name: Build shared CLI artifact for compiled integration evidence
+        run: |
+          mkdir -p .artifacts/integration/bin
+          go build -o .artifacts/integration/bin/you ./cmd/factory
+      - name: Run pinned real ACP integration
+        run: go test ./tests/integration/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=15m
+        env:
+          INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
+          INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
+          INFINITE_YOU_INTEGRATION_BINARY: ${{ github.workspace }}/.artifacts/integration/bin/you
+          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/integration/real-acpx-evidence.json
+      - name: Require pinned real ACP integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinned-real-acp-evidence
+          path: .artifacts/integration/real-acpx-evidence.json
+          if-no-files-found: error
+          retention-days: 14
 
   backend-lint:
     name: Backend Lint

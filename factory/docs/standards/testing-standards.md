@@ -261,6 +261,16 @@ flake fix addresses the race, shared ownership, readiness signal, cleanup, or
 incorrect layer; increasing sleeps, retries, or serial execution is not a
 general fix.
 
+Functional coverage is evidence about retained customer journeys, not a reason
+to preserve internal, inventory, topology, or compiled-executable scenarios in
+the functional lane. Coverage gates **MUST NOT** require a functional test to
+target an internal package directly. When removing or reclassifying an invalid
+functional test intentionally lowers incidental package coverage, reviewers
+**MUST** confirm that its customer guarantee is retained at the correct layer
+and then reconcile the functional coverage floor to the measured behavioral
+suite. A drop in coverage of a public customer surface still requires an
+explicit behavior audit; the floor may not be lowered merely to make CI green.
+
 Optimization **MUST NOT** replace a distinct customer guarantee with an easier
 but weaker assertion. Before deleting or rewriting a cell, compare its actor,
 action, public boundary, persisted identity, and observable result with the
@@ -298,6 +308,12 @@ Integration tests **SHOULD** reuse the compiled artifact, run independent cells
 in parallel when safe, use isolated profiles and temporary directories, and
 avoid real paid or mutating remote dependencies unless the plan declares
 authority, budget, duration, and cleanup.
+
+CI evidence produced by a compiled-artifact scenario—including executable
+selection, signal delivery, process cleanup, and independently packaged client
+compatibility—**MUST** be owned, required, and published by the integration or
+release lane. Functional jobs **MUST NOT** retain environment switches or
+artifact requirements for a scenario after it moves to integration.
 
 Release smoke and end-to-end tests follow the same economy: prove a few critical
 customer journeys through the delivered system, not every branch already

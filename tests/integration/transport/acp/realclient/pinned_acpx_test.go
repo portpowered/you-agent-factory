@@ -33,6 +33,7 @@ const (
 	realClientEvidenceEnv       = "INFINITE_YOU_RUN_ACPX_REAL_CLIENT"
 	realClientRequiredEnv       = "INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT"
 	realClientEvidenceOutputEnv = "INFINITE_YOU_ACPX_EVIDENCE_OUTPUT"
+	realClientBinaryEnv         = "INFINITE_YOU_INTEGRATION_BINARY"
 	deterministicProviderName   = "codex"
 	providerObservationEnv      = "INFINITE_YOU_ACPX_PROVIDER_OBSERVATION"
 )
@@ -51,7 +52,6 @@ func TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt(t *testing.T) {
 	requirePinnedAcpxPrerequisites(t)
 
 	scenario := newPinnedAcpxScenario(t)
-	buildCurrentYouBinary(t, scenario)
 	scenario.writeDeterministicProvider(t)
 	scenario.writeConfig(t)
 	scenario.preparePinnedAcpx(t)
@@ -132,9 +132,12 @@ func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
 	t.Helper()
 
 	root := t.TempDir()
-	serverName := "you"
-	if runtime.GOOS == "windows" {
-		serverName += ".exe"
+	serverPath := strings.TrimSpace(os.Getenv(realClientBinaryEnv))
+	if serverPath == "" {
+		t.Fatal("real ACP evidence prerequisite failed: invoking integration lane did not provide a prebuilt CLI artifact")
+	}
+	if info, err := os.Stat(serverPath); err != nil || info.IsDir() {
+		t.Fatal("real ACP evidence prerequisite failed: prebuilt CLI artifact is unavailable")
 	}
 	scenario := &pinnedAcpxScenario{
 		home:          filepath.Join(root, "home"),
@@ -142,7 +145,7 @@ func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
 		npmCache:      filepath.Join(root, "npm-cache"),
 		temporary:     filepath.Join(root, "temporary"),
 		repoRoot:      repositoryRoot(t),
-		serverPath:    filepath.Join(root, "bin", serverName),
+		serverPath:    serverPath,
 		providerDir:   filepath.Join(root, "provider"),
 		providerProof: filepath.Join(root, "provider", "invocations"),
 	}
@@ -157,19 +160,6 @@ func newPinnedAcpxScenario(t *testing.T) *pinnedAcpxScenario {
 	}
 	scenario.revision = repositoryRevision(t, scenario.repoRoot)
 	return scenario
-}
-
-func buildCurrentYouBinary(t *testing.T, scenario *pinnedAcpxScenario) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(scenario.serverPath), 0o755); err != nil {
-		t.Fatalf("real ACP evidence setup failed: create disposable binary directory")
-	}
-	started := time.Now()
-	if _, err := runBoundedCommand(scenario.repoRoot, nil, "build-current-you", "go", "build", "-o", scenario.serverPath, "./cmd/factory"); err != nil {
-		logAcpxPhaseTiming(t, "go-build", time.Since(started))
-		t.Fatal(err)
-	}
-	logAcpxPhaseTiming(t, "go-build", time.Since(started))
 }
 
 func (scenario *pinnedAcpxScenario) writeConfig(t *testing.T) {
