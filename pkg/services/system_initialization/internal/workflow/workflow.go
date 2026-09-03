@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -23,6 +24,16 @@ type Initializer struct {
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
 	inspectPath       InspectPath
+	// homeGates protect the customer-owned bootstrap files for one home while
+	// allowing unrelated homes and all post-bootstrap session work to proceed
+	// concurrently. Process.Execute itself must never be serialized here.
+	homeGatesMu sync.Mutex
+	homeGates   map[string]*bootstrapHomeGate
+}
+
+type bootstrapHomeGate struct {
+	permit chan struct{}
+	users  int
 }
 
 var _ systeminitialization.Service = (*Initializer)(nil)
@@ -51,6 +62,7 @@ func New(
 		packagedCatalog:   packagedCatalog,
 		packagedInstaller: packagedInstaller,
 		inspectPath:       inspectPath,
+		homeGates:         make(map[string]*bootstrapHomeGate),
 	}, nil
 }
 
@@ -89,6 +101,11 @@ func (initializer *Initializer) Initialize(
 	if initializer.inspectPath == nil {
 		return systeminitialization.Result{}, fmt.Errorf("initialize system: inspect path edge is required")
 	}
+	releaseHome, err := initializer.acquireHome(ctx, filepath.Clean(homeDir))
+	if err != nil {
+		return systeminitialization.Result{}, fmt.Errorf("initialize system: %w: %w", systeminitialization.ErrInitializeCancelled, err)
+	}
+	defer releaseHome()
 	definitions, err := resolvePackagedDefinitions(ctx, initializer.packagedCatalog)
 	if err != nil {
 		return systeminitialization.Result{}, err
@@ -169,6 +186,41 @@ func (initializer *Initializer) Initialize(
 		SystemConfigOutcome: systemConfigOutcome,
 		PackagedFactories:   packagedFactories,
 	}, nil
+}
+
+// acquireHome holds only the bootstrap boundary for one customer home. The
+// reference count lets idle gates be reclaimed without allowing a new caller
+// to bypass an already-waiting caller on a replacement mutex.
+func (initializer *Initializer) acquireHome(ctx context.Context, homeDir string) (func(), error) {
+	initializer.homeGatesMu.Lock()
+	gate := initializer.homeGates[homeDir]
+	if gate == nil {
+		gate = &bootstrapHomeGate{permit: make(chan struct{}, 1)}
+		gate.permit <- struct{}{}
+		initializer.homeGates[homeDir] = gate
+	}
+	gate.users++
+	initializer.homeGatesMu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		initializer.releaseHomeUser(homeDir, gate)
+		return nil, ctx.Err()
+	case <-gate.permit:
+	}
+	return func() {
+		gate.permit <- struct{}{}
+		initializer.releaseHomeUser(homeDir, gate)
+	}, nil
+}
+
+func (initializer *Initializer) releaseHomeUser(homeDir string, gate *bootstrapHomeGate) {
+	initializer.homeGatesMu.Lock()
+	defer initializer.homeGatesMu.Unlock()
+	gate.users--
+	if gate.users == 0 {
+		delete(initializer.homeGates, homeDir)
+	}
 }
 
 func resolvePackagedDefinitions(

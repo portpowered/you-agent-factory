@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -34,9 +33,6 @@ type operation struct {
 	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
 	generateSessionID factorysessions.SessionIDGenerator
 	presentations     factorysessions.OpeningPresentationOwner
-	catalogScopeMu    sync.Mutex
-	catalogScope      models.RuntimeScopeRef
-	catalogScopeClose func(context.Context) error
 }
 
 // NewOperation binds the stable process graph used by all one-shot

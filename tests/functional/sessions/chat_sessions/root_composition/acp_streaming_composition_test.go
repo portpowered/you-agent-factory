@@ -92,8 +92,8 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	cohort := newControlledACPCohort(t, "streaming-composition")
 	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
 
 	const wantPrimaryResultText = "goal genuinely completed through you server acp"
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "streaming-composition")

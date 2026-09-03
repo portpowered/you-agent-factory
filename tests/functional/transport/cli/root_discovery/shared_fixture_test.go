@@ -47,19 +47,17 @@ type rootDiscoverySharedFixture struct {
 	process support.ApplicationProcess
 	router  *rootDiscoveryEdgeRouter
 
-	executeMu  sync.Mutex
 	rootBuilds atomic.Int32
 }
 
 type rootDiscoveryInvocation struct {
 	workingDirectory string
 	effects          *atomic.Int32
-	countSessionID   bool
 }
 
 type rootDiscoveryEdgeRouter struct {
 	mu     sync.Mutex
-	active *rootDiscoveryInvocation
+	routes map[string]*rootDiscoveryInvocation
 
 	lateCalls     atomic.Int32
 	nextSessionID atomic.Uint64
@@ -80,7 +78,7 @@ func rootDiscoverySharedFixtureForTest(t *testing.T) *rootDiscoverySharedFixture
 }
 
 func newRootDiscoverySharedFixture() (*rootDiscoverySharedFixture, error) {
-	router := &rootDiscoveryEdgeRouter{}
+	router := &rootDiscoveryEdgeRouter{routes: make(map[string]*rootDiscoveryInvocation)}
 	fixture := &rootDiscoverySharedFixture{router: router}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
@@ -113,7 +111,7 @@ func (fixture *rootDiscoverySharedFixture) executeArgs(
 	ctx context.Context,
 	effects *atomic.Int32,
 ) (string, string, error) {
-	return fixture.executeArgsWithOptions(t, workingDirectory, args, stdoutIsTTY, ctx, effects, false)
+	return fixture.executeArgsWithOptions(t, workingDirectory, args, stdoutIsTTY, ctx, effects)
 }
 
 func (fixture *rootDiscoverySharedFixture) executeArgsWithSessionID(
@@ -124,7 +122,7 @@ func (fixture *rootDiscoverySharedFixture) executeArgsWithSessionID(
 	ctx context.Context,
 	effects *atomic.Int32,
 ) (string, string, error) {
-	return fixture.executeArgsWithOptions(t, workingDirectory, args, stdoutIsTTY, ctx, effects, true)
+	return fixture.executeArgsWithOptions(t, workingDirectory, args, stdoutIsTTY, ctx, effects)
 }
 
 func (fixture *rootDiscoverySharedFixture) executeArgsWithOptions(
@@ -134,11 +132,8 @@ func (fixture *rootDiscoverySharedFixture) executeArgsWithOptions(
 	stdoutIsTTY bool,
 	ctx context.Context,
 	effects *atomic.Int32,
-	countSessionID bool,
 ) (string, string, error) {
 	t.Helper()
-	fixture.executeMu.Lock()
-	defer fixture.executeMu.Unlock()
 
 	if effects == nil {
 		effects = &atomic.Int32{}
@@ -146,7 +141,6 @@ func (fixture *rootDiscoverySharedFixture) executeArgsWithOptions(
 	invocation := &rootDiscoveryInvocation{
 		workingDirectory: workingDirectory,
 		effects:          effects,
-		countSessionID:   countSessionID,
 	}
 	if err := fixture.router.begin(invocation); err != nil {
 		t.Fatalf("begin shared root-discovery invocation: %v", err)
@@ -156,7 +150,21 @@ func (fixture *rootDiscoverySharedFixture) executeArgsWithOptions(
 			t.Errorf("end shared root-discovery invocation: %v", err)
 		}
 	}()
+	args = appendExplicitRootDiscoverySession(args, fixture.router.sessionID())
 	return executeFactoryArgs(t, fixture.process, workingDirectory, args, stdoutIsTTY, ctx)
+}
+
+func appendExplicitRootDiscoverySession(args []string, sessionID string) []string {
+	if len(args) < 2 || args[0] != "you" || args[1] != "run" {
+		return args
+	}
+	for _, arg := range args[2:] {
+		if arg == "--session" {
+			return args
+		}
+	}
+	result := append([]string(nil), args...)
+	return append(result, "--session", sessionID)
 }
 
 func (fixture *rootDiscoverySharedFixture) executeCommand(
@@ -195,16 +203,12 @@ func (fixture *rootDiscoverySharedFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
-	fixture.executeMu.Lock()
-	defer fixture.executeMu.Unlock()
-
 	var closeErr error
 	if fixture.router != nil {
 		fixture.router.mu.Lock()
-		if fixture.router.active != nil {
+		for workingDirectory := range fixture.router.routes {
 			closeErr = errors.Join(closeErr, fmt.Errorf(
-				"shared root-discovery route %q remained active",
-				fixture.router.active.workingDirectory,
+				"shared root-discovery route %q remained active", workingDirectory,
 			))
 		}
 		fixture.router.mu.Unlock()
@@ -232,61 +236,54 @@ func (fixture *rootDiscoverySharedFixture) close() error {
 func (router *rootDiscoveryEdgeRouter) begin(invocation *rootDiscoveryInvocation) error {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	if router.active != nil {
-		return fmt.Errorf("invocation %q is already active", router.active.workingDirectory)
+	if _, exists := router.routes[invocation.workingDirectory]; exists {
+		return fmt.Errorf("invocation %q is already active", invocation.workingDirectory)
 	}
-	router.active = invocation
+	router.routes[invocation.workingDirectory] = invocation
 	return nil
 }
 
 func (router *rootDiscoveryEdgeRouter) end(invocation *rootDiscoveryInvocation) error {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	if router.active != invocation {
+	if router.routes[invocation.workingDirectory] != invocation {
 		return fmt.Errorf("invocation %q is not the active route", invocation.workingDirectory)
 	}
-	router.active = nil
+	delete(router.routes, invocation.workingDirectory)
 	return nil
 }
 
-func (router *rootDiscoveryEdgeRouter) count() error {
+func (router *rootDiscoveryEdgeRouter) count(workingDirectory string) error {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	if router.active == nil {
+	invocation := router.routes[workingDirectory]
+	if invocation == nil {
 		router.lateCalls.Add(1)
-		return errors.New("no active root-discovery invocation")
+		return fmt.Errorf("no active root-discovery invocation for %q", workingDirectory)
 	}
-	router.active.effects.Add(1)
+	invocation.effects.Add(1)
 	return nil
 }
 
 func (router *rootDiscoveryEdgeRouter) server(
-	context.Context,
-	platformhttpserver.StartRequest,
+	_ context.Context,
+	_ platformhttpserver.StartRequest,
 ) error {
-	return router.count()
+	router.lateCalls.Add(1)
+	return errors.New("shared root-discovery fixture unexpectedly started an API server")
 }
 
 func (router *rootDiscoveryEdgeRouter) browser(context.Context, string) error {
-	return router.count()
+	router.lateCalls.Add(1)
+	return errors.New("shared root-discovery fixture unexpectedly opened a browser")
 }
 
 func (router *rootDiscoveryEdgeRouter) sessionID() string {
-	sessionID := fmt.Sprintf("root-discovery-session-%d", router.nextSessionID.Add(1))
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if router.active == nil {
-		router.lateCalls.Add(1)
-		return sessionID
-	}
-	if router.active.countSessionID {
-		router.active.effects.Add(1)
-	}
-	return sessionID
+	return fmt.Sprintf("root-discovery-session-%d", router.nextSessionID.Add(1))
 }
 
 func (router *rootDiscoveryEdgeRouter) runtimeHost(factorysessions.RuntimeHostBinding) {
-	_ = router.count()
+	router.lateCalls.Add(1)
 }
 
 type rootDiscoveryProviderRouter struct {
@@ -298,7 +295,7 @@ func (router *rootDiscoveryProviderRouter) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	if err := router.edgeRouter.count(); err != nil {
+	if err := router.edgeRouter.count(request.WorkingDirectory); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	return providers.ExecuteResult{}, nil

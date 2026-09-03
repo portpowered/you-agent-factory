@@ -90,12 +90,18 @@ func (s *State) Current(defaultInstance func() RuntimeInstance) RuntimeInstance 
 			return instance
 		}
 	}
+	// A newly opened SessionRuntime owns its startup instance. The process-wide
+	// default may belong to another concurrent invocation and must not replace
+	// that invocation-local startup authority before StartInitial registers it.
+	if instance := s.Startup(); instance != nil {
+		return instance
+	}
 	if defaultInstance != nil {
 		if instance := defaultInstance(); instance != nil {
 			return instance
 		}
 	}
-	return s.Startup()
+	return nil
 }
 
 func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Context {

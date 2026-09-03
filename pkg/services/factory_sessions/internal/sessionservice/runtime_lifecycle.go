@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -11,6 +12,79 @@ import (
 )
 
 type RuntimeStop = factorysessions.RuntimeStop
+
+type ownedSession struct {
+	id    string
+	owner factorysessions.Service
+}
+
+// Close drains every live Factory Session owned by this process root. A
+// command stops only its admitted session; process shutdown owns the rest.
+func (a *Assembly) Close(ctx context.Context) error {
+	if a == nil {
+		return nil
+	}
+	var result error
+	for _, session := range a.ownedSessionsForClose() {
+		result = errors.Join(result, closeOwnedSession(ctx, session))
+	}
+	return result
+}
+
+func (a *Assembly) ownedSessionsForClose() []ownedSession {
+	a.detachedMu.RLock()
+	defer a.detachedMu.RUnlock()
+	if a.state == nil || a.state.Registry() == nil {
+		return a.detachedSessionsInReverseOrder()
+	}
+	ids := a.state.Registry().IDs()
+	owned := make([]ownedSession, 0, len(ids))
+	for index := len(ids) - 1; index >= 0; index-- {
+		id := ids[index]
+		if owner := a.ownerForClose(id); owner != nil {
+			owned = append(owned, ownedSession{id: id, owner: owner})
+		}
+	}
+	return owned
+}
+
+func (a *Assembly) detachedSessionsInReverseOrder() []ownedSession {
+	owned := make([]ownedSession, 0, len(a.detachedGatewayOrder))
+	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
+		id := a.detachedGatewayOrder[index]
+		if owner := a.detachedGateways[id]; owner != nil {
+			owned = append(owned, ownedSession{id: id, owner: owner})
+		}
+	}
+	return owned
+}
+
+func (a *Assembly) ownerForClose(sessionID string) factorysessions.Service {
+	if owner := a.detachedGateways[sessionID]; owner != nil {
+		return owner
+	}
+	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
+		if owner := a.detachedGateways[a.detachedGatewayOrder[index]]; owner != nil {
+			return owner
+		}
+	}
+	return nil
+}
+
+func closeOwnedSession(ctx context.Context, session ownedSession) error {
+	control, ok := session.owner.(factorysessions.LiveControlService)
+	if !ok {
+		return fmt.Errorf("close Factory Session %s: %w: live control capability unavailable", session.id, factorysessions.ErrDetachedServiceUnavailable)
+	}
+	err := control.CloseFactorySession(ctx, session.id)
+	if errors.Is(err, context.Canceled) || errors.Is(err, factorysessions.ErrSessionNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("close Factory Session %s: %w", session.id, err)
+	}
+	return nil
+}
 
 // StartLifecycle starts the runtime phase selected by the Factory
 // Sessions-owned process lifecycle plan. Initializer only executes that

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -30,15 +31,16 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-010-worker-id-history")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-010-worker-id-history.replay.json")
+	sessionID := uuid.NewString()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--record", artifactPath},
+		Args:                      []string{"--session", sessionID, "--record", artifactPath},
 		ProviderOverride:          support.MockInferenceProvider("provider-neutral completion"),
 	})
 
 	workName := "wsr-ft-010-work"
-	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &workName,
 		WorkTypeName: "task",
 		Payload:      json.RawMessage(`{"title":"WSR-FT-010 Worker-ID history"}`),
@@ -47,9 +49,9 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 		t.Fatalf("submit response = %#v, want a Work ID", submitted)
 	}
 	workID := *submitted.WorkId
-	support.WaitForSessionTerminalStatus(t, server.URL(), "~default", 30*time.Second)
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 30*time.Second)
 
-	liveList := support.ListDefaultSessionWorkerSessions(t, server.URL(), workID)
+	liveList := support.ListSessionWorkerSessions(t, server.URL(), sessionID, workID)
 	if len(liveList.Sessions) != 1 {
 		t.Fatalf("live Worker Session list = %#v, want one observation", liveList)
 	}
@@ -58,30 +60,30 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 		t.Fatalf("live Worker Session observation = %#v, want Worker Session ID", liveList.Sessions[0])
 	}
 
-	live := getWSRFT010Observation(t, server.URL(), "~default", workerID)
-	assertWSRFT010Observation(t, live, workerID, workID)
+	live := getWSRFT010Observation(t, server.URL(), sessionID, workerID)
+	assertWSRFT010Observation(t, live, sessionID, workerID, workID)
 	if live.RecordingHealth == nil || *live.RecordingHealth != factoryapi.WorkerSessionObservationRecordingHealthComplete {
 		t.Fatalf("live Worker-ID recording health = %#v, want COMPLETE", live.RecordingHealth)
 	}
-	liveEvents := getWSRFT010Events(t, server.URL(), "~default", workerID)
+	liveEvents := getWSRFT010Events(t, server.URL(), sessionID, workerID)
 	assertWSRFT010Events(t, liveEvents, workerID, workID)
-	assertWSRFT010NoProviderTranscript(t, server.URL(), "~default", workerID)
-	assertWSRFT010IdentityErrors(t, server.URL(), "~default")
+	assertWSRFT010NoProviderTranscript(t, server.URL(), sessionID, workerID)
+	assertWSRFT010IdentityErrors(t, server.URL(), sessionID)
 
 	server.Stop(t)
 	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                t.TempDir(),
 		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--replay", artifactPath, "--no-record"},
+		Args:                      []string{"--session", sessionID, "--replay", artifactPath, "--no-record"},
 	})
-	historical := getWSRFT010Observation(t, replayServer.URL(), "~default", workerID)
-	assertWSRFT010Observation(t, historical, workerID, workID)
+	historical := getWSRFT010Observation(t, replayServer.URL(), sessionID, workerID)
+	assertWSRFT010Observation(t, historical, sessionID, workerID, workID)
 	if historical.ProviderSessionAvailable || historical.ProviderSession != nil {
 		t.Fatalf("historical provider association = %#v/%t, want no Provider Session reference", historical.ProviderSession, historical.ProviderSessionAvailable)
 	}
-	historicalEvents := getWSRFT010Events(t, replayServer.URL(), "~default", workerID)
+	historicalEvents := getWSRFT010Events(t, replayServer.URL(), sessionID, workerID)
 	assertWSRFT010Events(t, historicalEvents, workerID, workID)
-	assertWSRFT010NoProviderTranscript(t, replayServer.URL(), "~default", workerID)
+	assertWSRFT010NoProviderTranscript(t, replayServer.URL(), sessionID, workerID)
 
 	status, response := getWSRFT010Error(t, workerObservationURL(replayServer.URL(), "other-session", workerID))
 	if status != http.StatusNotFound || response.Code != factoryapi.ErrorResponseCodeNOTFOUND {
@@ -164,14 +166,14 @@ func getWSRFT010Observation(
 func assertWSRFT010Observation(
 	t *testing.T,
 	observation factoryapi.WorkerSessionObservation,
-	workerID, workID string,
+	sessionID, workerID, workID string,
 ) {
 	t.Helper()
 	if observation.WorkerSessionId != workerID || observation.State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("Worker-ID observation = %#v, want completed %q", observation, workerID)
 	}
-	if observation.FactorySessionId == nil || *observation.FactorySessionId != "~default" {
-		t.Fatalf("Worker-ID Factory Session scope = %#v, want ~default", observation.FactorySessionId)
+	if observation.FactorySessionId == nil || *observation.FactorySessionId != sessionID {
+		t.Fatalf("Worker-ID Factory Session scope = %#v, want %q", observation.FactorySessionId, sessionID)
 	}
 	if observation.AttemptId == "" || !containsWSRFT010(observation.WorkIds, workID) {
 		t.Fatalf("Worker-ID correlation = attempt %q/Work %#v, want Work %q", observation.AttemptId, observation.WorkIds, workID)

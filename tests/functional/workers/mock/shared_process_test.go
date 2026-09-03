@@ -41,12 +41,10 @@ const (
 )
 
 // TestSharedProcessWorkersMock keeps the Workers mock selection/routing
-// scenarios on one root-built customer host. Each server-backed scenario gets
-// a distinct public Factory Session and a fresh command-edge delegate. The
-// local one-shot rows run last, after the hosted invocation is stopped, so
-// they can reuse the same root without concurrently activating another
-// default runtime. The resource-set CLI evidence belongs to this one
-// package-scoped group because its executable behavior is exercised by the
+// scenarios on one root-built customer host. Every scenario owns a distinct
+// public Factory Session and command-edge route, including local one-shot CLI
+// invocations. The resource-set CLI evidence belongs to this one package-scoped
+// group because its executable behavior is exercised by the
 // LiveCapacityIncrease child row below.
 func TestSharedProcessWorkersMock(t *testing.T) {
 	t.Parallel()
@@ -75,33 +73,10 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "BatchCircuitBreakerHuman", run: testSharedBatchCircuitBreakerHuman},
 		{name: "PlainBatchDrainReportsStrandedWork", run: testPlainBatchDrainReportsStrandedWork},
 	}
-	const sessionScenarioCount = 14
-	t.Run("FactorySessionScenarios", func(t *testing.T) {
-		parallelTests := append(
-			append([]struct {
-				name string
-				run  func(*testing.T, *sharedWorkersMockFixture)
-			}{}, tests[:9]...),
-			tests[10:sessionScenarioCount]...,
-		)
-		for _, test := range parallelTests {
-			test := test
-			t.Run(test.name, func(t *testing.T) {
-				t.Parallel()
-				test.run(t, fixture)
-			})
-		}
-	})
-	// Inline JavaScript execution is customer-visible, but the public async
-	// endpoint deliberately targets the server's current Factory rather than a
-	// caller-selected Factory Session. Its command edge therefore has no stable
-	// per-directory route and must not overlap the explicit-session scenarios.
-	t.Run(tests[9].name, func(t *testing.T) {
-		tests[9].run(t, fixture)
-	})
-	for _, test := range tests[sessionScenarioCount:] {
+	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			test.run(t, fixture)
 		})
 	}
@@ -114,26 +89,18 @@ type sharedWorkersMockFixture struct {
 	scriptEdge    *sharedWorkersMockCommandRunner
 	gate          *support.MockWorkerGate
 	runtimeLogDir string
-	activationMu  sync.Mutex
-	localReady    bool
+	hostDir       string
 }
 
 type sharedWorkersMockCommandRunner struct {
-	mu       sync.RWMutex
-	fallback platformprocess.CommandRunner
-	routes   map[string]platformprocess.CommandRunner
+	mu     sync.RWMutex
+	routes map[string]platformprocess.CommandRunner
 }
 
 func newSharedWorkersMockCommandRunner() *sharedWorkersMockCommandRunner {
 	return &sharedWorkersMockCommandRunner{
 		routes: make(map[string]platformprocess.CommandRunner),
 	}
-}
-
-func (runner *sharedWorkersMockCommandRunner) set(delegate platformprocess.CommandRunner) {
-	runner.mu.Lock()
-	runner.fallback = delegate
-	runner.mu.Unlock()
 }
 
 func (runner *sharedWorkersMockCommandRunner) setFor(
@@ -156,9 +123,6 @@ func (runner *sharedWorkersMockCommandRunner) Run(
 ) (platformprocess.CommandResult, error) {
 	runner.mu.RLock()
 	delegate := runner.delegateForLocked(req.WorkDir)
-	if delegate == nil {
-		delegate = runner.fallback
-	}
 	runner.mu.RUnlock()
 	if delegate == nil {
 		return platformprocess.CommandResult{}, errors.New("shared workers mock command runner delegate is not configured")
@@ -245,15 +209,8 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 		scriptEdge:    scriptEdge,
 		gate:          gate,
 		runtimeLogDir: runtimeLogDir,
+		hostDir:       hostDir,
 	}
-}
-
-func (fixture *sharedWorkersMockFixture) useCommandRunners(
-	provider platformprocess.CommandRunner,
-	script platformprocess.CommandRunner,
-) {
-	fixture.providerEdge.set(provider)
-	fixture.scriptEdge.set(script)
 }
 
 func (fixture *sharedWorkersMockFixture) useCommandRunnersFor(
@@ -271,37 +228,11 @@ func (fixture *sharedWorkersMockFixture) useCommandRunnersFor(
 	})
 }
 
-// prepareLocalActivation closes the one continuous host before a documented
-// no-server exception row is admitted. The root process itself remains alive
-// and reusable; only its active default runtime is stopped. Keeping this
-// transition serialized prevents a second invocation from racing the host
-// teardown and fails closed if a future caller forgets to prepare the local
-// lane.
-func (fixture *sharedWorkersMockFixture) prepareLocalActivation(t *testing.T) {
-	t.Helper()
-	fixture.activationMu.Lock()
-	defer fixture.activationMu.Unlock()
-	if fixture.localReady {
-		return
-	}
-	fixture.server.Stop(t)
-	select {
-	case <-fixture.server.Done():
-		fixture.localReady = true
-	default:
-		t.Errorf("shared workers mock host did not stop before local activation")
-	}
-}
-
 func (fixture *sharedWorkersMockFixture) executeLocal(
 	t testing.TB,
 	input root.Input,
 ) error {
 	t.Helper()
-	// The local CLI has no public Factory Session selector. These calls are
-	// therefore limited to the package's documented one-shot exception rows,
-	// whose own input/HOME/runtime identities and Process.Execute completion
-	// provide the isolation and cleanup boundary.
 	return (&sharedWorkersMockLocalProcess{fixture: fixture, tb: t}).Execute(input)
 }
 
@@ -313,11 +244,6 @@ type sharedWorkersMockLocalProcess struct {
 func (process *sharedWorkersMockLocalProcess) Execute(input root.Input) error {
 	if process == nil || process.fixture == nil || process.fixture.server == nil {
 		return errors.New("shared workers mock local process is unavailable")
-	}
-	process.fixture.activationMu.Lock()
-	defer process.fixture.activationMu.Unlock()
-	if !process.fixture.localReady {
-		return errors.New("shared workers mock local activation was not prepared")
 	}
 	return process.fixture.server.Execute(process.tb, input)
 }

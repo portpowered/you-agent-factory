@@ -33,16 +33,13 @@ import (
 // Current migration identity/resource ownership: eligible rows share one
 // root-built continuous host, but each scenario owns a copied Factory,
 // explicit Factory Session, selector, request, and temporary home/workspace.
-// The eligible API invocation is a narrowly scoped CLI-plus-API parity
-// exception: the packaged Petri Factory must run in its already-open session
-// so the tests can inspect canonical Work/Event/dispatch/replay history, while
-// public run has no session-target flag and its remote durable source only
-// resolves JavaScript workflow factories. The shared-process
-// CLIResponseMatchesExplicitSession cell still executes the same success via
-// the root-built customer CLI and compares terminal response and primary
-// result. Retained command-failure and separate functionallong rows keep their
-// original isolated resource ownership. Existing assertions are
-// customer-observable assertions remain intact.
+// The public session invocation API targets each already-open session with its
+// authored structured arguments so the tests can inspect canonical
+// Work/Event/dispatch/replay history. The shared-process CLI parity cell also
+// executes the same success through the root-built customer CLI and compares
+// terminal response and primary result. Retained command-failure and separate
+// functionallong rows keep their original isolated resource ownership.
+// Existing customer-observable assertions remain intact.
 
 // TestPackagedReviewSharedProcess proves compatible public-outcome scenarios
 // share one root-built process while retaining explicit unique Factory Sessions,

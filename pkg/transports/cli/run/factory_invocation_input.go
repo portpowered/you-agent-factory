@@ -434,27 +434,6 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	return outcome, errors.Join(invokeErr, postResultErr)
 }
 
-func hostedFactoryUsesJavaScriptOrchestrator(
-	ctx context.Context,
-	hosted HostedInvocationOperation,
-	sessionID string,
-) (bool, error) {
-	projectionReader, ok := hosted.(interface {
-		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	})
-	if !ok {
-		return false, nil
-	}
-	projection, projectionErr := projectionReader.GetFactorySession(ctx, sessionID)
-	if projectionErr != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return false, ctxErr
-		}
-		return false, nil
-	}
-	return interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg), nil
-}
-
 func factoryInvocationResultFromSessionInvocation(
 	result factorysessions.InvocationResult,
 ) interfaces.FactoryInvocationResult {

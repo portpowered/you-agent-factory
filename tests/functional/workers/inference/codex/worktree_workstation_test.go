@@ -73,6 +73,7 @@ type codexWorktreeCase struct {
 // Session so process wiring is shared while runtime and checkout state remain
 // isolated.
 func TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag(t *testing.T) {
+	t.Parallel()
 	fixture := newCodexWorktreeFixture(t)
 	t.Cleanup(func() {
 		fixture.assertSharedIdentityLedger(t)

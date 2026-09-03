@@ -18,6 +18,7 @@ import (
 
 const (
 	factoryShowPortInputID           = "you.factory.show.flag.port"
+	factoryShowSessionInputID        = "you.factory.show.flag.session"
 	factoryListDirInputID            = "you.factory.list.flag.dir"
 	factoryCreateNameInputID         = "you.factory.create.arg.0"
 	factoryCreateDirInputID          = "you.factory.create.flag.dir"
@@ -147,8 +148,12 @@ func (h *FactoryConfigInitCommandHandler) FactoryQuery(
 	if err != nil {
 		return fmt.Errorf("resolve factory show inputs: %w", err)
 	}
+	sessionID, err := inputs.String(factoryShowSessionInputID)
+	if err != nil {
+		return fmt.Errorf("resolve factory show inputs: %w", err)
+	}
 	return h.services.QueryFactory(factorycli.QueryConfig{
-		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
+		Context: cmd.Context(), Server: globals.server, SessionID: sessionID, JSON: globals.json,
 		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
 		Verbose: globals.verbose, Debug: globals.debug,
 	})

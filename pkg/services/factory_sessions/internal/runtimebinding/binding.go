@@ -53,30 +53,6 @@ func SyncActiveDirectory(mu *sync.RWMutex, configured *string, factoryRoot strin
 	*configured = bundle.Directory()
 }
 
-// StartDefault starts and registers the default Factory Session before waiting
-// for readiness so service-mode clients may close it during startup.
-func StartDefault(
-	readinessContext context.Context,
-	runContext context.Context,
-	state *sessionruntime.Service,
-	runtimeState *State,
-	factoryRootDir string,
-	bundle RuntimeInstance,
-	target factorysessions.Target,
-	serviceMode bool,
-	runtimeMode interfaces.RuntimeMode,
-	lifecycle RuntimeLifecycle,
-	startSidecars func(context.Context, RuntimeHandle) error,
-	stop func(RuntimeHandle) error,
-	onSessionRemoved func(string),
-) (RuntimeHandle, error) {
-	return StartInitial(
-		readinessContext, runContext, state, runtimeState,
-		factorysessions.DefaultSessionID, factoryRootDir, bundle, target,
-		serviceMode, runtimeMode, lifecycle, startSidecars, stop, onSessionRemoved,
-	)
-}
-
 // StartInitial starts and registers the invocation's admitted Factory Session.
 // The compatibility default is only one possible public selector; explicit
 // local sessions must retain their own selector through startup and cleanup.
@@ -133,19 +109,34 @@ func StartInitial(
 			sessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
 	}
-	if serviceMode && startSidecars != nil {
-		if err := startSidecars(runContext, handle); err != nil {
-			if SessionClosedDuringStartup(state, sessionID, runtimeMode) {
-				unregisterSession(state, sessionID, onSessionRemoved)
-				return nil, nil
-			}
-			runtimeState.ClearActive()
+	if !serviceMode || startSidecars == nil {
+		return handle, nil
+	}
+	return finishInitialStart(runContext, state, runtimeState, sessionID, handle, runtimeMode, startSidecars, stop, onSessionRemoved)
+}
+
+func finishInitialStart(
+	runContext context.Context,
+	state *sessionruntime.Service,
+	runtimeState *State,
+	sessionID string,
+	handle RuntimeHandle,
+	runtimeMode interfaces.RuntimeMode,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+	onSessionRemoved func(string),
+) (RuntimeHandle, error) {
+	if err := startSidecars(runContext, handle); err != nil {
+		if SessionClosedDuringStartup(state, sessionID, runtimeMode) {
 			unregisterSession(state, sessionID, onSessionRemoved)
-			if stop != nil {
-				_ = stop(handle)
-			}
-			return nil, err
+			return nil, nil
 		}
+		runtimeState.ClearActive()
+		unregisterSession(state, sessionID, onSessionRemoved)
+		if stop != nil {
+			_ = stop(handle)
+		}
+		return nil, err
 	}
 	return handle, nil
 }
@@ -484,8 +475,9 @@ func BundleFromSession(session *livesession.LiveSession) RuntimeInstance {
 	return state.Instance
 }
 
-// CurrentBundle resolves the process-selected active runtime, the default
-// Factory Session runtime, then the pre-start bundle.
+// CurrentBundle resolves the invocation-selected active runtime, its pre-start
+// bundle, then the process compatibility default. Startup must precede the
+// process default so concurrent explicit sessions retain their own runtime.
 func CurrentBundle(
 	state *sessionruntime.Service,
 	runtimeState *State,
@@ -727,15 +719,6 @@ func FailStartup(
 		return errors.Join(startupErr, stopErr)
 	}
 	return startupErr
-}
-
-// DefaultSessionClosedDuringStartup reports the expected service-mode race in
-// which a client closes the default session while startup is still waiting.
-func DefaultSessionClosedDuringStartup(
-	state *sessionruntime.Service,
-	mode interfaces.RuntimeMode,
-) bool {
-	return SessionClosedDuringStartup(state, factorysessions.DefaultSessionID, mode)
 }
 
 // SessionClosedDuringStartup reports the expected service-mode race in which

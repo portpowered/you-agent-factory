@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,14 +100,10 @@ func TestStartFactoryEventBridgeRequiresPresentationForScopedEvents(t *testing.T
 	}
 }
 
-func TestOpenModelsCatalogScopeReusesAndClosesInjectedScope(t *testing.T) {
+func TestOpenModelsCatalogScopeOwnsAnIndependentScopePerCaller(t *testing.T) {
 	t.Parallel()
 
-	scope, err := (models.RuntimeScopeRef{}).Parse("catalog:1")
-	if err != nil {
-		t.Fatalf("parse scope: %v", err)
-	}
-	root := &catalogScopeModelsStub{scope: scope}
+	root := &catalogScopeModelsStub{}
 	op := &operation{openRuntime: &runtimeopening.Factory{}, modelsRoot: root}
 	first, err := op.OpenModelsCatalogScope(context.Background())
 	if err != nil {
@@ -116,24 +113,17 @@ func TestOpenModelsCatalogScopeReusesAndClosesInjectedScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second OpenModelsCatalogScope: %v", err)
 	}
-	if first.Scope != second.Scope || root.opens != 1 {
-		t.Fatalf("catalog scope reuse = (%v, %d), want same scope and one open", first.Scope, root.opens)
+	if first.Scope == second.Scope || root.opens != 2 {
+		t.Fatalf("catalog scopes = (%v, %v), opens = %d; want distinct caller-owned scopes", first.Scope, second.Scope, root.opens)
 	}
 	if err := first.Close(context.Background()); err != nil {
 		t.Fatalf("close first catalog scope: %v", err)
 	}
-	if root.closes != 1 {
-		t.Fatalf("catalog scope closes = %d, want one", root.closes)
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatalf("close second catalog scope: %v", err)
 	}
-	third, err := op.OpenModelsCatalogScope(context.Background())
-	if err != nil {
-		t.Fatalf("third OpenModelsCatalogScope: %v", err)
-	}
-	if third.Scope != scope || root.opens != 2 {
-		t.Fatalf("catalog scope reopen = (%v, %d), want injected scope and second open", third.Scope, root.opens)
-	}
-	if err := third.Close(context.Background()); err != nil {
-		t.Fatalf("close reopened catalog scope: %v", err)
+	if root.closes != 2 {
+		t.Fatalf("catalog scope closes = %d, want one per caller", root.closes)
 	}
 }
 
@@ -414,14 +404,14 @@ type coverageLifecycleStub struct {
 
 type catalogScopeModelsStub struct {
 	models.Service
-	scope  models.RuntimeScopeRef
 	opens  int
 	closes int
 }
 
 func (stub *catalogScopeModelsStub) OpenRuntimeScope(context.Context, models.OpenRuntimeScopeRequest) (models.OpenRuntimeScopeResult, error) {
 	stub.opens++
-	return models.OpenRuntimeScopeResult{Scope: stub.scope}, nil
+	scope, err := (models.RuntimeScopeRef{}).Parse(fmt.Sprintf("catalog:%d", stub.opens))
+	return models.OpenRuntimeScopeResult{Scope: scope}, err
 }
 
 func (stub *catalogScopeModelsStub) CloseRuntimeScope(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {

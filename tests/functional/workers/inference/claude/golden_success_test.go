@@ -24,6 +24,7 @@ import (
 // golden: tests/functional/internal/support/testdata/provider-sessions/claude/full-stream-text-success/manifest.json
 func TestClaudeGoldenFullStreamTextSuccess(t *testing.T) {
 	support.SkipLongFunctional(t, "slow Claude golden full-stream replay")
+	t.Parallel()
 
 	loaded := loadClaudeGoldenCase(t, "full-stream-text-success")
 	observed := replayClaudeGoldenCase(t, loaded)
@@ -39,6 +40,7 @@ func TestClaudeGoldenFullStreamTextSuccess(t *testing.T) {
 // golden: tests/functional/internal/support/testdata/provider-sessions/claude/tool-lifecycle-session-identity/manifest.json
 func TestClaudeGoldenToolLifecycleAndSessionIdentity(t *testing.T) {
 	support.SkipLongFunctional(t, "slow Claude golden tool lifecycle replay")
+	t.Parallel()
 
 	loaded := loadClaudeGoldenCase(t, "tool-lifecycle-session-identity")
 	observed := replayClaudeGoldenCase(t, loaded)

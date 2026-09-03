@@ -155,9 +155,16 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 	server.url = baseURL
 	if cfg.WaitForServiceModeRuntime {
-		WaitForStatus(t, server.url, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
+		statusURL := strings.TrimSuffix(server.url, "/") + "/status"
+		if sessionID := functionalArgumentValue(cfg.Args, "--session"); sessionID != "" {
+			statusURL = strings.TrimSuffix(server.url, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+		}
+		_, err := waitForStatusAt(statusURL, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
 			return status.RuntimeStatus != ""
 		})
+		if err != nil {
+			t.Fatalf("timed out waiting for service-mode runtime at %s: %v", statusURL, err)
+		}
 	}
 	return server
 }
@@ -232,6 +239,18 @@ func containsFunctionalArgument(args []string, name string) bool {
 		}
 	}
 	return false
+}
+
+func functionalArgumentValue(args []string, name string) string {
+	for index, arg := range args {
+		if arg == name && index+1 < len(args) {
+			return strings.TrimSpace(args[index+1])
+		}
+		if strings.HasPrefix(arg, name+"=") {
+			return strings.TrimSpace(strings.TrimPrefix(arg, name+"="))
+		}
+	}
+	return ""
 }
 
 func (fs *FunctionalAPIServer) URL() string {

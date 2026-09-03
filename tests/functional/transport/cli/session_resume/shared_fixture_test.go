@@ -60,11 +60,6 @@ type cliResumePackageFixture struct {
 	api      *support.ProcessAPIServer
 	provider *cliResumeProviderRouter
 
-	// Process.Execute creates fresh command trees, but the shared process is
-	// deliberately driven one CLI invocation at a time. HTTP session work can
-	// still overlap because its provider state is keyed by session identity.
-	executeMu sync.Mutex
-
 	rootBuilds   atomic.Int32
 	serverStarts atomic.Int32
 	nextRequest  atomic.Uint64

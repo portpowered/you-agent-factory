@@ -59,6 +59,7 @@ type inferenceProcessGroup struct {
 	rootDir          string
 	hostDir          string
 	homeDir          string
+	environment      map[string]string
 	baseURL          string
 	daemon           *inferenceDaemon
 	commands         *inferenceCommandRouter
@@ -167,6 +168,9 @@ func (group *inferenceProcessGroup) startDaemon() error {
 		"--quiet",
 	})
 	inputs.Input.Env = sharedInferenceProcessEnvironment(group.homeDir)
+	for name, value := range group.environment {
+		inputs.Input.Env = setSharedInferenceEnvironment(inputs.Input.Env, name, value)
+	}
 	inputs.Input.WorkingDirectory = group.hostDir
 	daemon := &inferenceDaemon{cancel: cancel, done: make(chan error, 1)}
 	group.daemon = daemon
@@ -308,7 +312,17 @@ func runSharedInferenceFactory(
 	timeout time.Duration,
 ) sharedInferenceFactoryResult {
 	t.Helper()
-	group := sharedInferenceGroup
+	return runSharedInferenceFactoryInGroup(t, sharedInferenceGroup, dir, scenario, timeout)
+}
+
+func runSharedInferenceFactoryInGroup(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	dir string,
+	scenario sharedInferenceScenario,
+	timeout time.Duration,
+) sharedInferenceFactoryResult {
+	t.Helper()
 	group.ensure(t)
 	releaseOverride, err := group.override.bind(dir, scenario.providerOverride)
 	if err != nil {

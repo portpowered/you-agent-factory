@@ -370,7 +370,7 @@ func assembleRuntimeBundle(
 	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
-		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
+		dir, folderPath, runtimeInstanceID, sessionID, strings.TrimSpace(backendScopeID),
 		clock.Now().UTC(), eventHistory, net, loadedFactoryCfg,
 		logger, logSink, metricsSink, recording, recordPath, dispatchCompleted,
 	)

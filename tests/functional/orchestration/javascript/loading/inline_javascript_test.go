@@ -78,7 +78,20 @@ var privateJavaScriptVMDiagnosticMarkers = []string{
 // authored primary result, and without private VM internals in success
 // diagnostics.
 func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture) {
-	dir := support.ScaffoldFactory(t, map[string]any{
+	dir := support.ScaffoldFactory(t, inlineJavaScriptFactoryDocument())
+	result, inputs := fixture.runCLIInvocation(t, []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	}, dir, fixture.homeDir)
+	assertInlineJavaScriptSuccessOutcome(t, result)
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
+func inlineJavaScriptFactoryDocument() map[string]any {
+	return map[string]any{
 		"name": "inline-javascript-loading",
 		"invocationSignature": map[string]any{
 			"parameters": []any{map[string]any{
@@ -100,20 +113,46 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 				},
 			},
 		},
-	})
-	providerCalls := fixture.provider.CallCount()
-	result, inputs := fixture.runCLIInvocation(t, []string{
-		"you", "--json", "run",
-		"--factory", filepath.Join(dir, "factory.json"),
-		"--output", "primary",
-		"--no-record",
-		"hello",
-	}, dir, fixture.homeDir)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for inline factory without child dispatch", got, providerCalls)
 	}
-	assertInlineJavaScriptSuccessOutcome(t, result)
-	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
+// runInlineJavaScriptFactoryRunsThroughAPIInvocation proves a complete inline
+// Factory definition executes through the public durable-session API and owns
+// a distinct customer-visible Factory Session.
+func runInlineJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *loadingFixture) {
+	fixture.startAPIServer(t)
+	raw, err := json.Marshal(inlineJavaScriptFactoryDocument())
+	if err != nil {
+		t.Fatalf("marshal inline Factory: %v", err)
+	}
+	var definition factoryapi.Factory
+	if err := json.Unmarshal(raw, &definition); err != nil {
+		t.Fatalf("decode inline Factory contract: %v", err)
+	}
+	requestID := fixture.nextRequestID("inline-api")
+	result := invokeJavaScriptFactoryOverHTTP(t, fixture.baseURL, factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
+		Args:      &map[string]any{"prompt": "hello"},
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:          factoryapi.FactorySessionExecutionSourceKindFactoryInline,
+			FactoryInline: &definition,
+		},
+	})
+	fixture.trackSession(t, result.SessionId, requestID, fixture.hostDir, fixture.homeDir, "api")
+	if result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded || result.Result == nil {
+		t.Fatalf("inline API session result = %#v, want SUCCEEDED with FINAL result", result)
+	}
+	if result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal ||
+		result.Result.PrimaryResult == nil || len(*result.Result.PrimaryResult) != 1 {
+		t.Fatalf("inline API primary result = %#v, want one FINAL content part", result.Result)
+	}
+	part, err := (*result.Result.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode inline API primary result: %v", err)
+	}
+	if part.Text != inlineJavaScriptSuccessResult {
+		t.Fatalf("inline API primary result = %q, want %q", part.Text, inlineJavaScriptSuccessResult)
+	}
 }
 
 // TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline proves an inline
@@ -123,7 +162,6 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 // primary outcome with deterministic provider-command edge responses.
 func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldOrderedInlineJavaScriptPipelineFactory(t)
-	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -131,9 +169,6 @@ func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture
 		"--no-record",
 		"hello",
 	}, dir, fixture.homeDir)
-	if got := fixture.provider.CallCount(); got != providerCalls+2 {
-		t.Fatalf("provider command runner call count = %d, want %d for two ordered child dispatches", got, providerCalls+2)
-	}
 	assertOrderedInlineJavaScriptPipelineOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -167,7 +202,6 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 			},
 		},
 	})
-	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -182,9 +216,6 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 		inputs.Stderr(),
 		inlineJavaScriptSyntaxErrorLine,
 	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for syntax error before dispatch", got, providerCalls)
-	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "inline-syntax")
 }

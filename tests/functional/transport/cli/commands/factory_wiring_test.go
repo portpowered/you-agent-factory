@@ -30,7 +30,7 @@ const (
 
 // TestCLIFactoryInitValidateAndShow proves you factory create authors a named
 // Factory, you factory config validate reports validation success, and the
-// default-session-only factory show command prints observable Factory identity
+// explicitly selected Factory Session's factory show command prints observable Factory identity
 // markers without asserting definitions-domain validation internals.
 func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 	sourceDir := support.ScaffoldFactory(t, factoryWiringFactoryConfig())
@@ -79,9 +79,8 @@ func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 		t.Fatalf("factory validate output missing success marker:\n%s", validateOut)
 	}
 
-	// factory show is intentionally characterized against the server's named
-	// default session: its public CLI contract has no --session selector.
-	queryOut, err := remote.run(ctx, remote.hostFactoryDir, "", "factory", "show")
+	sessionID := remote.openSession(t, remote.hostFactoryDir)
+	queryOut, err := remote.run(ctx, remote.hostFactoryDir, sessionID, "factory", "show")
 	if err != nil {
 		t.Fatalf("you factory show: %v\noutput:\n%s", err, queryOut)
 	}
@@ -150,7 +149,7 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 }
 
 // TestCLIFactoryReplaceCurrentChangesSessionFactory proves you factory
-// replace-current re-persists the named default-session Factory with the
+// replace-current re-persists an explicitly selected Factory Session's Factory with the
 // documented success marker and you factory show reports the same Factory
 // identity with an advanced version after persistence without asserting
 // definitions save orchestration internals.
@@ -158,8 +157,11 @@ func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sha
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	factoryDir := remote.hostFactoryDir
-	preReplace := queryFactoryViaCLIJSON(t, ctx, remote.process, remote.baseURL, factoryDir)
+	config := factoryWiringFactoryConfig()
+	config["id"] = factoryWiringName
+	factoryDir := support.ScaffoldFactory(t, config)
+	sessionID := remote.openSession(t, factoryDir)
+	preReplace := queryFactoryViaCLIJSON(t, ctx, remote, factoryDir, sessionID)
 	if preReplace.Id == nil || *preReplace.Id != factoryWiringName {
 		t.Fatalf("pre-replace factory id = %#v, want %q", preReplace.Id, factoryWiringName)
 	}
@@ -168,7 +170,7 @@ func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sha
 	}
 	preReplaceLogical := preReplace.Version.Logical.Int64()
 
-	replaceOut, err := remote.run(ctx, factoryDir, "", "factory", "replace-current")
+	replaceOut, err := remote.run(ctx, factoryDir, sessionID, "factory", "replace-current")
 	if err != nil {
 		t.Fatalf("you factory replace-current: %v\noutput:\n%s", err, replaceOut)
 	}
@@ -177,7 +179,7 @@ func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sha
 		t.Fatalf("replace-current output missing success marker %q:\n%s", factoryReplaceSuccessMarker, replaceOutput)
 	}
 
-	postReplace := queryFactoryViaCLIJSON(t, ctx, remote.process, remote.baseURL, factoryDir)
+	postReplace := queryFactoryViaCLIJSON(t, ctx, remote, factoryDir, sessionID)
 	if postReplace.Id == nil || *postReplace.Id != factoryWiringName {
 		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryWiringName)
 	}
@@ -196,18 +198,12 @@ func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sha
 func queryFactoryViaCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
-	serverURL, workDir string,
+	remote *sharedRemoteCLI,
+	workDir, sessionID string,
 ) factoryapi.Factory {
 	t.Helper()
 
-	queryCmd := processHarness.CommandContext(ctx,
-		"--json",
-		"--server", serverURL,
-		"factory", "show",
-	)
-	queryCmd.Dir = workDir
-	queryOut, err := queryCmd.Output()
+	queryOut, err := remote.run(ctx, workDir, sessionID, "--json", "factory", "show")
 	if err != nil {
 		t.Fatalf("you factory show --json: %v", err)
 	}

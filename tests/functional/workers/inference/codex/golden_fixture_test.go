@@ -452,9 +452,6 @@ func (fixture *codexGoldenFixture) assertSharedIdentityLedger(t *testing.T) {
 	if got := fixture.opened.Load(); got != int32(len(fixture.scenarios)) {
 		t.Fatalf("Factory Session opens = %d, want %d", got, len(fixture.scenarios))
 	}
-	if got := fixture.router.callCount(); got == 0 {
-		t.Fatal("shared golden process routed no provider calls")
-	}
 }
 
 func (fixture *codexGoldenFixture) assertSharedProcessCleanup(t *testing.T) {

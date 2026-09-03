@@ -2,9 +2,10 @@ package routing
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,26 +81,12 @@ func TestSharedProcessWorkRouting(t *testing.T) {
 
 func runWorkRoutingScenarioCases(t *testing.T, cases []workRoutingScenarioCase) {
 	t.Helper()
-	jobs := make(chan workRoutingScenarioCase)
-	var workers sync.WaitGroup
-	workerCount := routingScenarioConcurrency
-	if len(cases) < workerCount {
-		workerCount = len(cases)
-	}
-	workers.Add(workerCount)
-	for range workerCount {
-		go func() {
-			defer workers.Done()
-			for scenario := range jobs {
-				t.Run(scenario.name, scenario.run)
-			}
-		}()
-	}
 	for _, scenario := range cases {
-		jobs <- scenario
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			scenario.run(t)
+		})
 	}
-	close(jobs)
-	workers.Wait()
 }
 
 // runLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into
@@ -332,9 +319,25 @@ func assertWorkCustomerStates(
 	t.Helper()
 	for location, want := range wants {
 		if got := support.CountWorkAtCustomerState(listed, location); got != want {
-			t.Fatalf("%s work count = %d, want %d; listed=%#v", location, got, want, listed)
+			t.Fatalf("%s work count = %d, want %d; work=%s", location, got, want, summarizeWorkCustomerStates(listed))
 		}
 	}
+}
+
+func summarizeWorkCustomerStates(listed factoryapi.ListWorkResponse) string {
+	summary := make([]string, 0, len(listed.Results))
+	for _, item := range listed.Results {
+		state := "<none>"
+		if item.State != nil {
+			state = item.State.Name
+		}
+		failure := ""
+		if item.FailureDetail != nil {
+			failure = fmt.Sprintf(" failure=%s:%q", item.FailureDetail.Reason, item.FailureDetail.Message)
+		}
+		summary = append(summary, fmt.Sprintf("%s state=%s%s", item.Name, state, failure))
+	}
+	return strings.Join(summary, "; ")
 }
 
 func assertNoInferenceResponses(t *testing.T, events []factoryapi.FactoryEvent) {

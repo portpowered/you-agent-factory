@@ -319,7 +319,7 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 // omit prompt bodies, environment values, and credential material while still
 // exposing a stable public failure signal.
 func TestProviderFailureRedactsPromptEnvironmentAndCredentials(t *testing.T) {
-	t.Setenv(failureRedactionCredentialEnvKey, failureRedactionCredentialNeedle)
+	t.Parallel()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(

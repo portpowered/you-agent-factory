@@ -120,6 +120,7 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 // registered, a worker-authored modelProvider dispatches through the worker
 // provider edge and leaves the global default provider edge inert for that work.
 func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
+	t.Parallel()
 	const (
 		defaultProviderID    = "global.default.provider"
 		defaultProviderAlias = "global-default"
@@ -128,9 +129,6 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 		workerModel          = "worker-override-model"
 		globalDefaultModel   = "global-default-model"
 	)
-
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, defaultProviderAlias)
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, globalDefaultModel)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	writeExplicitSelectionWorker(t, dir, workerProviderAlias, workerModel)
@@ -148,17 +146,29 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 	defaultManifest := externalProviderManifest(t, defaultProviderID, defaultProviderAlias)
 	workerManifest := externalProviderManifest(t, workerProviderID, workerProviderAlias)
 
-	_, listed, _ := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+	// Operator defaults belong to the customer profile captured by the hosted
+	// process. Give this customer behavior its own profile-scoped shared group
+	// so it can overlap the ordinary group without mutating process-global env.
+	profileGroup := &inferenceProcessGroup{environment: map[string]string{
+		operatorsettings.EnvDefaultWorkerModelProvider: defaultProviderAlias,
+		operatorsettings.EnvDefaultWorkerModel:         globalDefaultModel,
+	}}
+	t.Cleanup(func() {
+		if err := profileGroup.close(); err != nil {
+			t.Errorf("close profile-scoped inference process: %v", err)
+		}
+	})
+	result := runSharedInferenceFactoryInGroup(t, profileGroup, dir, sharedInferenceScenario{
 		providerRegistrations: []inference.Registration{
 			{Manifest: defaultManifest, Integration: defaultIntegration},
 			{Manifest: workerManifest, Integration: workerIntegration},
 		},
 	}, 20*time.Second)
 
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+	if got := support.CountWorkAtCustomerState(result.work, "task:done"); got != 1 {
 		t.Fatalf("terminal place tokens = %d, want 1 completed work item", got)
 	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+	if got := support.CountWorkAtCustomerState(result.work, "task:failed"); got != 0 {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 

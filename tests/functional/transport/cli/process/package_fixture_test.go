@@ -1,7 +1,6 @@
 package process_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -47,7 +47,7 @@ const packageResourceCloseTimeout = 5 * time.Second
 
 type workerOutcomeCommandRouter struct {
 	mu     sync.Mutex
-	routes []workerOutcomeRoute
+	routes map[string]*workerOutcomeRoute
 }
 
 type workerOutcomeRoute struct {
@@ -58,21 +58,7 @@ type workerOutcomeRoute struct {
 }
 
 func newWorkerOutcomeCommandRouter() *workerOutcomeCommandRouter {
-	return &workerOutcomeCommandRouter{routes: []workerOutcomeRoute{
-		{
-			selector: workerFailurePrompt,
-			runner: support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-				ExitCode: 1,
-				Stderr:   []byte("provider process failed with private detail"),
-			}),
-		},
-		{
-			selector: workerSuccessPrompt,
-			runner: support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-				Stdout: []byte(workerSuccessPrimaryResult),
-			}),
-		},
-	}}
+	return &workerOutcomeCommandRouter{routes: make(map[string]*workerOutcomeRoute)}
 }
 
 func (router *workerOutcomeCommandRouter) Run(
@@ -80,18 +66,13 @@ func (router *workerOutcomeCommandRouter) Run(
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	router.mu.Lock()
-	for index := range router.routes {
-		route := &router.routes[index]
-		if route.workingDirectory == "" && !bytes.Contains(request.Stdin, []byte(route.selector)) {
-			continue
+	for _, route := range router.routes {
+		if sameWorkerOutcomeDirectory(route.workingDirectory, request.WorkDir) {
+			route.calls++
+			runner := route.runner
+			router.mu.Unlock()
+			return runner.Run(ctx, request)
 		}
-		if route.workingDirectory != "" && !sameWorkerOutcomeDirectory(route.workingDirectory, request.WorkDir) {
-			continue
-		}
-		route.calls++
-		runner := route.runner
-		router.mu.Unlock()
-		return runner.Run(ctx, request)
 	}
 	router.mu.Unlock()
 	return platformprocess.CommandResult{}, fmt.Errorf(
@@ -100,15 +81,33 @@ func (router *workerOutcomeCommandRouter) Run(
 	)
 }
 
-func (router *workerOutcomeCommandRouter) bind(selector, workingDirectory string) {
+func (router *workerOutcomeCommandRouter) bind(selector, workingDirectory string) error {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	for index := range router.routes {
-		if router.routes[index].selector == selector {
-			router.routes[index].workingDirectory = workingDirectory
-			return
-		}
+	key := filepath.Clean(workingDirectory)
+	if _, exists := router.routes[key]; exists {
+		return fmt.Errorf("worker outcome route already registered for %q", workingDirectory)
 	}
+	var result platformprocess.CommandResult
+	switch selector {
+	case workerFailurePrompt:
+		result = platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("provider process failed with private detail")}
+	case workerSuccessPrompt:
+		result = platformprocess.CommandResult{Stdout: []byte(workerSuccessPrimaryResult)}
+	default:
+		return fmt.Errorf("unknown worker outcome selector %q", selector)
+	}
+	router.routes[key] = &workerOutcomeRoute{
+		selector: selector, workingDirectory: workingDirectory,
+		runner: support.NewShapedProviderCommandRunner(result),
+	}
+	return nil
+}
+
+func (router *workerOutcomeCommandRouter) unbind(workingDirectory string) {
+	router.mu.Lock()
+	delete(router.routes, filepath.Clean(workingDirectory))
+	router.mu.Unlock()
 }
 
 func sameWorkerOutcomeDirectory(left, right string) bool {
@@ -143,19 +142,15 @@ func sharedWorkerOutcomeProcess(t testing.TB) *sharedWorkerOutcomeProcessFixture
 	return &sharedWorkerOutcomeProcessFixture{
 		process: sharedWorkerOutcome.process,
 		router:  sharedWorkerOutcome.router,
-		mu:      &sharedWorkerOutcome.mu,
 	}
 }
 
 type sharedWorkerOutcomeProcessFixture struct {
 	process support.ApplicationProcess
 	router  *workerOutcomeCommandRouter
-	mu      *sync.Mutex
 }
 
 func (fixture *sharedWorkerOutcomeProcessFixture) execute(input root.Input) error {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
 	return fixture.process.Execute(input)
 }
 
@@ -165,32 +160,10 @@ func (fixture *sharedWorkerOutcomeProcessFixture) bind(
 	workingDirectory string,
 ) {
 	t.Helper()
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-
-	// go test -count=N repeats the test list in one test process, so TestMain
-	// does not recreate package fixtures between repetitions. A reusable root
-	// is intentionally shared by the failure/success pair in one repetition,
-	// but the runtime graph must be closed before the next repetition starts so
-	// its durable runtime state cannot bleed into a fresh Factory fixture.
-	if fixture.router.callCount(selector) > 0 {
-		closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
-		closeErr := fixture.process.Close(closeContext)
-		cancel()
-		if closeErr != nil {
-			t.Fatalf("close shared worker-outcome process before repeat: %v", closeErr)
-		}
-		fixture.router = newWorkerOutcomeCommandRouter()
-		fixture.process, sharedWorkerOutcome.err = support.BuildProcessWithContext(
-			context.Background(),
-			serviceedges.Edges{ProviderCommandRunner: fixture.router},
-		)
-		sharedWorkerOutcome.process = fixture.process
-		if sharedWorkerOutcome.err != nil {
-			t.Fatalf("BuildProcess() for repeated shared worker outcomes: %v", sharedWorkerOutcome.err)
-		}
+	if err := fixture.router.bind(selector, workingDirectory); err != nil {
+		t.Fatalf("bind worker outcome route: %v", err)
 	}
-	fixture.router.bind(selector, workingDirectory)
+	t.Cleanup(func() { fixture.router.unbind(workingDirectory) })
 }
 
 func newCLIExitCodeInputs(
@@ -202,7 +175,7 @@ func newCLIExitCodeInputs(
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--factory", factoryPath,
-		"--provider", "codex", "--no-record", "--quiet",
+		"--provider", "codex", "--session", uuid.NewString(), "--no-record", "--quiet",
 		prompt,
 	})
 	inputs.Input.Env = builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir())

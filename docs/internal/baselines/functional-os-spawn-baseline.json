@@ -68,10 +68,8 @@
     },
     {
       "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
-      "count": 4,
+      "count": 2,
       "siteIds": [
-        "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-01",
-        "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-02",
         "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01",
         "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-02"
       ]

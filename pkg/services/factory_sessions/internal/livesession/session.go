@@ -41,9 +41,15 @@ type LiveSession struct {
 	// Factory Sessions metrics-scope projection and is never serialized as a
 	// public session field.
 	RetainedRuntimeMetricsSessionIDs []string
-	ResponseEvents                   *responseeventstore.SessionResponseEventStore
-	JavaScriptCheckpoints            factoryruntime.JavaScriptCheckpointStore
-	LiveChangeMu                     sync.Mutex
+	// InvocationMetricsRecorder is captured at admission and follows this
+	// session when Work resolves its runtime. It must never be selected from a
+	// mutable process-wide "current invocation" slot.
+	InvocationMetricsRecorder interface {
+		RecordInvocationMetric(factorysessions.InvocationMetric)
+	}
+	ResponseEvents        *responseeventstore.SessionResponseEventStore
+	JavaScriptCheckpoints factoryruntime.JavaScriptCheckpointStore
+	LiveChangeMu          sync.Mutex
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication

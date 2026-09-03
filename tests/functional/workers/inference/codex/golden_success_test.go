@@ -15,6 +15,7 @@ import (
 // anchors share one explicit session because they assert different views of
 // the same transcript and must not duplicate its Provider Session identity.
 func TestCodexGoldenSharedProcess(t *testing.T) {
+	t.Parallel()
 	fixture := newCodexGoldenFixture(t)
 	t.Cleanup(func() {
 		fixture.assertSharedIdentityLedger(t)

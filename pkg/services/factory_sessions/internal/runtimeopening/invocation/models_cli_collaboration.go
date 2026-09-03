@@ -15,14 +15,6 @@ func (o *operation) OpenModelsCatalogScope(
 	if o == nil || o.openRuntime == nil {
 		return models.PresentationScope{}, errors.New("invocation operation is required")
 	}
-	o.catalogScopeMu.Lock()
-	defer o.catalogScopeMu.Unlock()
-	if !o.catalogScope.IsZero() {
-		return models.PresentationScope{
-			Scope: o.catalogScope,
-			Close: o.catalogScopeClose,
-		}, nil
-	}
 	root := o.modelsRoot
 	if root == nil {
 		return models.PresentationScope{}, errors.New("models presentation root is unavailable")
@@ -42,16 +34,8 @@ func (o *operation) OpenModelsCatalogScope(
 		if !closed.Closed {
 			return errors.New("close Models catalog scope: scope was not closed")
 		}
-		o.catalogScopeMu.Lock()
-		defer o.catalogScopeMu.Unlock()
-		if o.catalogScope == scope {
-			o.catalogScope = models.RuntimeScopeRef{}
-			o.catalogScopeClose = nil
-		}
 		return nil
 	}
-	o.catalogScope = scope
-	o.catalogScopeClose = closeFn
 	return models.PresentationScope{Scope: scope, Close: closeFn}, nil
 }
 

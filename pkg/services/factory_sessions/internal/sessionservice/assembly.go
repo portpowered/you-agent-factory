@@ -60,7 +60,6 @@ type Assembly struct {
 	// scheduler-dependent capture/registration gap deterministic without
 	// changing the production dependency graph.
 	beforeWorkAdmissionProjectionRegistration func()
-	workReadMetricsRecorder                   roles.InvocationMetricsRecorder
 	detachedGatewayOrder                      []string
 }
 
@@ -169,7 +168,7 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 				ingress:     ingress,
 				admissions:  projection,
 				ledger:      ledger,
-				readMetrics: a.workReadMetricsRecorder,
+				readMetrics: session.InvocationMetricsRecorder,
 			}, nil
 		}
 		a.discardWorkAdmissionProjection(sessionID, projection)
@@ -365,7 +364,6 @@ func (a *Assembly) Complete(
 	if a == nil || a.state == nil || a.registry == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
-	a.workReadMetricsRecorder = invocationMetricsRecorder
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
@@ -396,6 +394,7 @@ func (a *Assembly) Complete(
 		livesession.CanonicalID(session),
 		startupSpec.ResumeSourceCanonicalSessionID,
 	)
+	session.InvocationMetricsRecorder = invocationMetricsRecorder
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)

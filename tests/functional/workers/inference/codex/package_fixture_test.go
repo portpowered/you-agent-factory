@@ -35,6 +35,7 @@ type codexPackageFixture struct {
 	goldenScenarios    []codexGoldenScenario
 	worktreeScenarios  []codexWorktreeScenario
 	runners            []*codexScenarioCommandRunner
+	groupsMu           sync.Mutex
 	groupsSeen         map[string]bool
 }
 
@@ -46,11 +47,8 @@ type codexPackageProcess struct {
 	baseURL    string
 }
 
-// The test runner invokes top-level tests serially. The mutex protects the
-// package fixture from future parallel test registration and lets TestMain
-// close the fixture after m.Run without relying on a test's t.Cleanup order.
 var codexPackageFixtureState struct {
-	sync.Mutex
+	sync.Once
 	fixture *codexPackageFixture
 }
 
@@ -111,25 +109,13 @@ func (command *codexPackageProcessCommand) stop() error {
 func ensureCodexPackageFixture(t *testing.T) *codexPackageFixture {
 	t.Helper()
 
-	codexPackageFixtureState.Lock()
-	fixture := codexPackageFixtureState.fixture
-	codexPackageFixtureState.Unlock()
-	if fixture != nil {
-		return fixture
-	}
-
-	// Top-level Go tests are sequential, so the first eligible group can create
-	// the package fixture. The state is published only after all routes and the
-	// continuous process are ready.
-	fixture = newCodexPackageFixture(t)
-	codexPackageFixtureState.Lock()
+	codexPackageFixtureState.Do(func() {
+		codexPackageFixtureState.fixture = newCodexPackageFixture(t)
+	})
 	if codexPackageFixtureState.fixture == nil {
-		codexPackageFixtureState.fixture = fixture
-	} else {
-		fixture = codexPackageFixtureState.fixture
+		t.Fatal("shared Codex package fixture is unavailable")
 	}
-	codexPackageFixtureState.Unlock()
-	return fixture
+	return codexPackageFixtureState.fixture
 }
 
 func newCodexPackageFixture(t *testing.T) *codexPackageFixture {
@@ -277,34 +263,44 @@ func newCodexPackageProcess(
 
 func (fixture *codexPackageFixture) beginGroup(t *testing.T, group string) {
 	t.Helper()
+	fixture.groupsMu.Lock()
+	defer fixture.groupsMu.Unlock()
 	if fixture.groupsSeen[group] {
-		fixture.resetScenarioState(t)
-		fixture.groupsSeen = make(map[string]bool, 3)
+		fixture.resetScenarioGroup(t, group)
 	}
 	fixture.groupsSeen[group] = true
 }
 
-func (fixture *codexPackageFixture) resetScenarioState(t *testing.T) {
+func (fixture *codexPackageFixture) resetScenarioGroup(t *testing.T, group string) {
 	t.Helper()
-	fixture.router.resetCalls()
-	for _, runner := range fixture.runners {
-		runner.Reset()
+	var selectors []string
+	switch group {
+	case "conductor":
+		for _, scenario := range fixture.conductorScenarios {
+			scenario.runner.Reset()
+			resetCodexConductorScenario(t, scenario)
+			selectors = append(selectors, scenario.factoryDir)
+		}
+	case "golden":
+		for _, scenario := range fixture.goldenScenarios {
+			scenario.runner.Reset()
+			resetCodexGoldenScenario(t, scenario)
+			selectors = append(selectors, scenario.factoryDir)
+		}
+	case "worktree":
+		for _, scenario := range fixture.worktreeScenarios {
+			scenario.runner.Reset()
+			resetCodexWorktreeScenario(t, scenario)
+			selectors = append(selectors, scenario.checkoutPath)
+		}
+	default:
+		t.Fatalf("unknown Codex scenario group %q", group)
 	}
-	for _, scenario := range fixture.conductorScenarios {
-		resetCodexConductorScenario(t, scenario)
-	}
-	for _, scenario := range fixture.goldenScenarios {
-		resetCodexGoldenScenario(t, scenario)
-	}
-	for _, scenario := range fixture.worktreeScenarios {
-		resetCodexWorktreeScenario(t, scenario)
-	}
+	fixture.router.resetCallsFor(selectors)
 }
 
 func closeCodexPackageFixture() error {
-	codexPackageFixtureState.Lock()
 	fixture := codexPackageFixtureState.fixture
-	codexPackageFixtureState.Unlock()
 	if fixture == nil {
 		return nil
 	}

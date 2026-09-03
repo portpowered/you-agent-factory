@@ -32,11 +32,13 @@ const (
 // provider is replaced only at edges.Edges; the protocol, session, Factory
 // target, and stream remain production behavior. Each turn owns its prompt,
 // output marker, and provider-call accounting while the application process
-// and ACP connection are shared serially. The second independent session is
-// started only after the first session's active turn is canceled and closed:
-// the production on-demand target has one retained default runtime at a time,
-// and the public session/close contract requires an active turn.
+// and ACP connection are shared. The turns are intentionally ordered because
+// this customer scenario proves that closing one ACP session allows a second
+// session on the same connection; the test itself is isolated from and runs in
+// parallel with the rest of the functional suite.
 func TestReusableACPServerTurnsThroughOneProcess(t *testing.T) {
+	t.Parallel()
+
 	fixture := newReusableACPFixture(t)
 	connection := fixture.startServer(t)
 	connection.initialize(t)
@@ -104,12 +106,6 @@ func newReusableACPFixture(t *testing.T) *reusableACPFixture {
 	if err := os.MkdirAll(baseHome, 0o755); err != nil {
 		t.Fatalf("create reusable ACP build home: %v", err)
 	}
-	// ACP target resolution retains the production resolver's process-global
-	// home lookup while a server invocation is active. The process is built once
-	// here, while each serialized case gets its own home and resolver state.
-	t.Setenv("HOME", baseHome)
-	t.Setenv("USERPROFILE", baseHome)
-	t.Setenv("YOU_DEFAULT_WORKER_MODEL_PROVIDER", deterministicProviderName)
 	provider := &reusableACPProviderRunner{}
 	fixture := &reusableACPFixture{home: baseHome, provider: provider}
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -144,11 +140,6 @@ func reusableACPEnvironment(home string) []string {
 
 func (fixture *reusableACPFixture) startServer(t *testing.T) *reusableACPConnection {
 	t.Helper()
-	// The production ACP resolver reads the process-global home while the
-	// command is serving. The one server owns the one fixture home for the
-	// complete serialized turn sequence.
-	t.Setenv("HOME", fixture.home)
-	t.Setenv("USERPROFILE", fixture.home)
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("create reusable ACP stdin pipe: %v", err)

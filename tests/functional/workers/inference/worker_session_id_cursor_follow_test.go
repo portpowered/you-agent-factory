@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -35,6 +36,7 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-011-worker-id-cursor")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-011-worker-id-cursor.replay.json")
+	sessionID := uuid.NewString()
 	homeDir := t.TempDir()
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -42,20 +44,20 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 		WaitForServiceModeRuntime: true,
 		ServerReadyTimeout:        60 * time.Second,
 		Env:                       env,
-		Args:                      []string{"--record", artifactPath},
+		Args:                      []string{"--session", sessionID, "--record", artifactPath},
 		ProviderOverride:          support.MockInferenceProvider("first completion", "second completion"),
 	})
 
-	firstWork := submitWSRFT011Work(t, server.URL(), "first")
-	secondWork := submitWSRFT011Work(t, server.URL(), "second")
-	support.WaitForSessionTerminalStatus(t, server.URL(), "~default", 30*time.Second)
-	firstWorkerID := workerIDForWSRFT011Work(t, server.URL(), firstWork)
-	secondWorkerID := workerIDForWSRFT011Work(t, server.URL(), secondWork)
+	firstWork := submitWSRFT011Work(t, server.URL(), sessionID, "first")
+	secondWork := submitWSRFT011Work(t, server.URL(), sessionID, "second")
+	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 30*time.Second)
+	firstWorkerID := workerIDForWSRFT011Work(t, server.URL(), sessionID, firstWork)
+	secondWorkerID := workerIDForWSRFT011Work(t, server.URL(), sessionID, secondWork)
 	if firstWorkerID == secondWorkerID {
 		t.Fatalf("Worker Session IDs = %q and %q, want distinct attempts", firstWorkerID, secondWorkerID)
 	}
 
-	firstHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), "~default", firstWorkerID, url.Values{
+	firstHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), sessionID, firstWorkerID, url.Values{
 		"replayOnly": []string{"true"},
 	}))
 	firstRecords := assertWSRFT011Replay(t, firstHistory, firstWorkerID)
@@ -70,13 +72,13 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 		WaitForServiceModeRuntime: true,
 		ServerReadyTimeout:        60 * time.Second,
 		Env:                       env,
-		Args:                      []string{"--replay", artifactPath, "--no-record"},
+		Args:                      []string{"--session", sessionID, "--replay", artifactPath, "--no-record"},
 	})
-	resumedHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
+	resumedHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"replayOnly":     []string{"true"},
 		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
 	}))
-	replayRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
+	replayRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"replayOnly": []string{"true"},
 	})), firstWorkerID)
 	assertWSRFT011SameRecords(t, firstRecords, replayRecords)
@@ -91,16 +93,16 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 	}
 	assertWSRFT011SameRecords(t, resumedRecords, firstRecords[1:])
 
-	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
+	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"after_position": []string{"0"},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORINVALID))
-	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
+	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"after_position": []string{"9223372036854775807"},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE))
-	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", secondWorkerID, url.Values{
+	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, secondWorkerID, url.Values{
 		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFOREIGN))
-	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), "~default", firstWorkerID, url.Values{
+	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"after_position":       []string{strconv.FormatInt(acknowledged, 10)},
 		"stream_generation_id": []string{"missing-generation"},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORUNAVAILABLE))
@@ -120,20 +122,22 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-worker-id-follow")
+	sessionID := uuid.NewString()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--session", sessionID},
 		ProviderOverride:          support.BlockingInferenceProvider(release),
 	})
-	workID := submitWSRFT011Work(t, server.URL(), "live-follow")
-	workerID := waitForWSRFT012WorkerID(t, server.URL(), workID)
+	workID := submitWSRFT011Work(t, server.URL(), sessionID, "live-follow")
+	workerID := waitForWSRFT012WorkerID(t, server.URL(), sessionID, workID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	started := make(chan error, 1)
 	streamDone := make(chan wsrft012StreamResult, 1)
 	go func() {
-		events, err := readWSRFT012LiveStream(ctx, workerEventsWSRFT011URL(server.URL(), "~default", workerID, nil), started)
+		events, err := readWSRFT012LiveStream(ctx, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, nil), started)
 		streamDone <- wsrft012StreamResult{events: events, err: err}
 	}()
 	if err := <-started; err != nil {
@@ -145,40 +149,40 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 		t.Fatalf("read live Worker-ID follow: %v", stream.err)
 	}
 	liveRecords := assertWSRFT012Live(t, stream.events, workerID)
-	replayedRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), "~default", workerID, url.Values{
+	replayedRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, url.Values{
 		"replayOnly": []string{"true"},
 	})), workerID)
 	assertWSRFT011SameRecords(t, liveRecords, replayedRecords)
 	server.Stop(t)
 
-	providerServer, providerWorkerID, providerSession := startWSRFT012ProviderServer(t)
-	directObservation := getWSRFT010Observation(t, providerServer.URL(), "~default", providerWorkerID)
-	providerObservation := getWSRFT012ProviderObservation(t, providerServer.URL(), providerSession)
+	providerServer, providerFactorySession, providerWorkerID, providerSession := startWSRFT012ProviderServer(t)
+	directObservation := getWSRFT010Observation(t, providerServer.URL(), providerFactorySession, providerWorkerID)
+	providerObservation := getWSRFT012ProviderObservation(t, providerServer.URL(), providerFactorySession, providerSession)
 	if !reflect.DeepEqual(directObservation, providerObservation) {
 		t.Fatalf("Worker-ID/provider observations differ:\ndirect=%#v\nprovider=%#v", directObservation, providerObservation)
 	}
 
-	directEvents := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(providerServer.URL(), "~default", providerWorkerID, url.Values{
+	directEvents := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(providerServer.URL(), providerFactorySession, providerWorkerID, url.Values{
 		"replayOnly": []string{"true"},
 	})), providerWorkerID)
-	providerEvents := assertWSRFT011Replay(t, readWSRFT011Events(t, providerEventsWSRFT012URL(providerServer.URL(), "~default", providerSession, url.Values{
+	providerEvents := assertWSRFT011Replay(t, readWSRFT011Events(t, providerEventsWSRFT012URL(providerServer.URL(), providerFactorySession, providerSession, url.Values{
 		"replayOnly": []string{"true"},
 	})), providerWorkerID)
 	assertWSRFT011SameRecords(t, directEvents, providerEvents)
 
 	acknowledged := directEvents[0].Event.Position
-	directResume := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(providerServer.URL(), "~default", providerWorkerID, url.Values{
+	directResume := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(providerServer.URL(), providerFactorySession, providerWorkerID, url.Values{
 		"replayOnly":     []string{"true"},
 		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
 	})), providerWorkerID)
-	providerResume := assertWSRFT011Replay(t, readWSRFT011Events(t, providerEventsWSRFT012URL(providerServer.URL(), "~default", providerSession, url.Values{
+	providerResume := assertWSRFT011Replay(t, readWSRFT011Events(t, providerEventsWSRFT012URL(providerServer.URL(), providerFactorySession, providerSession, url.Values{
 		"replayOnly":     []string{"true"},
 		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
 	})), providerWorkerID)
 	assertWSRFT011SameRecords(t, directResume, providerResume)
 
-	directTranscript := getWSRFT012Transcript(t, workerObservationURL(providerServer.URL(), "~default", providerWorkerID)+"/transcript")
-	providerTranscript := getWSRFT012Transcript(t, providerTranscriptWSRFT012URL(providerServer.URL(), "~default", providerSession))
+	directTranscript := getWSRFT012Transcript(t, workerObservationURL(providerServer.URL(), providerFactorySession, providerWorkerID)+"/transcript")
+	providerTranscript := getWSRFT012Transcript(t, providerTranscriptWSRFT012URL(providerServer.URL(), providerFactorySession, providerSession))
 	if directTranscript.status != providerTranscript.status || directTranscript.code != providerTranscript.code ||
 		!reflect.DeepEqual(directTranscript.transcript, providerTranscript.transcript) {
 		t.Fatalf("Worker-ID/provider transcripts differ:\ndirect=%#v\nprovider=%#v", directTranscript, providerTranscript)
@@ -198,10 +202,10 @@ type wsrft012StreamResult struct {
 	err    error
 }
 
-func submitWSRFT011Work(t *testing.T, baseURL, suffix string) string {
+func submitWSRFT011Work(t *testing.T, baseURL, sessionID, suffix string) string {
 	t.Helper()
 	name := "wsr-ft-011-" + suffix
-	response := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	response := support.SubmitSessionWorkAt(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload:      json.RawMessage(fmt.Sprintf(`{"title":"%s"}`, name)),
@@ -212,16 +216,16 @@ func submitWSRFT011Work(t *testing.T, baseURL, suffix string) string {
 	return *response.WorkId
 }
 
-func workerIDForWSRFT011Work(t *testing.T, baseURL, workID string) string {
+func workerIDForWSRFT011Work(t *testing.T, baseURL, sessionID, workID string) string {
 	t.Helper()
-	list := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+	list := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID)
 	if len(list.Sessions) != 1 || strings.TrimSpace(list.Sessions[0].WorkerSessionId) == "" {
 		t.Fatalf("Worker Session list for Work %q = %#v, want one identified attempt", workID, list)
 	}
 	return list.Sessions[0].WorkerSessionId
 }
 
-func waitForWSRFT012WorkerID(t *testing.T, baseURL, workID string) string {
+func waitForWSRFT012WorkerID(t *testing.T, baseURL, sessionID, workID string) string {
 	t.Helper()
 	deadline := time.NewTimer(15 * time.Second)
 	defer deadline.Stop()
@@ -231,7 +235,7 @@ func waitForWSRFT012WorkerID(t *testing.T, baseURL, workID string) string {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		list := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+		list := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID)
 		if len(list.Sessions) > 0 && strings.TrimSpace(list.Sessions[0].WorkerSessionId) != "" {
 			return list.Sessions[0].WorkerSessionId
 		}
@@ -553,11 +557,12 @@ func requestWSRFT011Error(endpoint string) (int, factoryapi.ErrorResponse, error
 	return response.StatusCode, payload, nil
 }
 
-func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, string, string) {
+func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, string, string, string) {
 	t.Helper()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-provider-reference")
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
 	providerSession := "session_fixture_codex_success"
+	factorySession := uuid.NewString()
 	homeDir := t.TempDir()
 	writeWSRFT012CodexRollout(t, homeDir, providerSession)
 	providerOutput := readWSRFT012ProviderFixture(t, "stdout.jsonl")
@@ -567,7 +572,7 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--record", filepath.Join(t.TempDir(), "wsr-ft-012-provider.replay.json")},
+		Args:                      []string{"--session", factorySession, "--record", filepath.Join(t.TempDir(), "wsr-ft-012-provider.replay.json")},
 		Env:                       env,
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
@@ -576,14 +581,14 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 			},
 		},
 	})
-	workID := submitWSRFT011Work(t, server.URL(), "provider-reference")
-	support.WaitForSessionTerminalStatus(t, server.URL(), "~default", 30*time.Second)
-	workerID := workerIDForWSRFT011Work(t, server.URL(), workID)
-	observation := getWSRFT010Observation(t, server.URL(), "~default", workerID)
+	workID := submitWSRFT011Work(t, server.URL(), factorySession, "provider-reference")
+	support.WaitForSessionTerminalStatus(t, server.URL(), factorySession, 30*time.Second)
+	workerID := workerIDForWSRFT011Work(t, server.URL(), factorySession, workID)
+	observation := getWSRFT010Observation(t, server.URL(), factorySession, workerID)
 	if observation.ProviderSession == nil || observation.ProviderSession.Provider != string(modelprovider.ProviderCodex) || observation.ProviderSession.Kind != "session_id" || observation.ProviderSession.Id != providerSession {
 		t.Fatalf("Codex Worker Session provider association = %#v, want provider/codex session_id identity", observation.ProviderSession)
 	}
-	return server, workerID, providerSession
+	return server, factorySession, workerID, providerSession
 }
 
 func readWSRFT012ProviderFixture(t *testing.T, fileName string) []byte {
@@ -608,9 +613,9 @@ func writeWSRFT012CodexRollout(t *testing.T, homeDir, sessionID string) {
 	}
 }
 
-func getWSRFT012ProviderObservation(t *testing.T, baseURL, providerSession string) factoryapi.WorkerSessionObservation {
+func getWSRFT012ProviderObservation(t *testing.T, baseURL, factorySession, providerSession string) factoryapi.WorkerSessionObservation {
 	t.Helper()
-	endpoint := providerWorkerSessionWSRFT012URL(baseURL, "~default", "/detail", providerSession, nil)
+	endpoint := providerWorkerSessionWSRFT012URL(baseURL, factorySession, "/detail", providerSession, nil)
 	response, err := http.Get(endpoint)
 	if err != nil {
 		t.Fatalf("GET Provider-reference Worker Session observation: %v", err)

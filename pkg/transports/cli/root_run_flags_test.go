@@ -132,6 +132,33 @@ func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
 	}
 }
 
+func TestRunCommand_LocalBatchSessionSelectsIsolatedSession(t *testing.T) {
+	const sessionID = "session-batch-explicit"
+	var captured runcli.RunConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		startupcli.Functions{
+			InitializeSystemFunc: func(context.Context, string) error { return nil },
+			RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+				captured = testRunConfig(selection)
+				return nil
+			},
+		},
+	)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), t.TempDir()))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--session", sessionID, "--no-record", "--work", "batch.json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute local batch with explicit session: %v", err)
+	}
+	if captured.FactorySessionID != sessionID {
+		t.Fatalf("FactorySessionID = %q, want %q", captured.FactorySessionID, sessionID)
+	}
+}
+
 func TestRunCommand_DebugFlag(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})

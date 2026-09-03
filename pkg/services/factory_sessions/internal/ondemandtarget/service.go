@@ -72,14 +72,11 @@ type RuntimeResolver func(
 // keeps it open so every later call against the returned identity reuses
 // that exact runtime instead of starting a second one.
 //
-// Every opened invocation-mode runtime privately shares the same constant
-// internal session identity (factorysessions.DefaultSessionID) -- calling
-// StartAsync/InvokeFactorySession/Cancel/CloseFactorySession against that
-// raw identity across more than one concurrently-opened runtime would
-// collide, so this service substitutes its own generated identity for the
-// one returned to callers on Start, and translates it back to the correct
-// cached runtime (and the runtime's own DefaultSessionID) on every later
-// call. Callers must treat the returned identity as opaque.
+// Each activation allocates its opaque Factory Session identity before opening
+// the runtime and carries that identity through the complete opening path.
+// Concurrent activations therefore remain disjoint in both the public map and
+// the process-scoped Definition/runtime routers. Callers must treat the
+// returned identity as opaque.
 type Service struct {
 	opening    runtimeopening.InvocationRuntimeOpening
 	resolve    RuntimeResolver
@@ -216,6 +213,15 @@ type activatedRuntime struct {
 	config          factorysessions.RuntimeOpeningRequest
 }
 
+func (a *activatedRuntime) factorySessionID() string {
+	if a != nil {
+		if sessionID := strings.TrimSpace(a.config.FactorySession.FactorySessionID); sessionID != "" {
+			return sessionID
+		}
+	}
+	return factorysessions.DefaultSessionID
+}
+
 // activeInvocation is the one synchronous Factory invocation currently
 // executing in an activated runtime. The Chat Session admission boundary
 // serializes prompts for an episode, but keeping the cancellation handle here
@@ -322,7 +328,7 @@ func (a *activatedRuntime) cleanup(ctx context.Context) error {
 		}
 	}
 	if closeSession != nil && !a.sessionClosed {
-		if err := closeSession(ctx, factorysessions.DefaultSessionID); err != nil &&
+		if err := closeSession(ctx, a.factorySessionID()); err != nil &&
 			!errors.Is(err, factorysessions.ErrSessionNotFound) {
 			result = errors.Join(result, err)
 		} else {
@@ -553,17 +559,22 @@ func (s *Service) startNewActivation(
 	ctx context.Context,
 	request factorysessions.StartRequest,
 ) (factorysessions.AsyncStartResult, error) {
+	wrapperID, err := s.nextActivationID()
+	if err != nil {
+		return factorysessions.AsyncStartResult{}, err
+	}
 	workingRoot, _ := request.Args["workingRoot"].(string)
 	config, err := s.resolve(ctx, request.Source.FactoryID, workingRoot)
 	if err != nil {
 		return factorysessions.AsyncStartResult{}, err
 	}
+	config.FactorySession.FactorySessionID = wrapperID
 	active, err := s.openActivatedRuntime(ctx, request.Source.FactoryID, config)
 	if err != nil {
 		return factorysessions.AsyncStartResult{}, err
 	}
 
-	wrapperID, err := s.publishActivation(request.RequestID, active)
+	err = s.publishActivation(request.RequestID, wrapperID, active)
 	if err != nil {
 		_, _ = active.close(context.WithoutCancel(ctx))
 		return factorysessions.AsyncStartResult{}, err
@@ -574,36 +585,6 @@ func (s *Service) startNewActivation(
 		SessionID: wrapperID,
 		Status:    string(factorysessions.LifecycleStatusRunning),
 	}, nil
-}
-
-// publishActivation validates and reserves a non-blank, non-colliding
-// generated wrapper identity for active, then publishes it into s.runtimes
-// (and, if requestID is non-blank, s.startsByRequestID). A blank identity or
-// one that collides with an already-tracked identity fails without mutating
-// either map, so a bad value from generateID can never overwrite -- and
-// thereby strand -- an existing activation; the caller is responsible for
-// closing active in that case.
-func (s *Service) publishActivation(requestID string, active *activatedRuntime) (string, error) {
-	wrapperID := s.generateID()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if wrapperID == "" {
-		return "", errors.New("on-demand Factory target activation: generated session identity was blank")
-	}
-	if _, exists := s.runtimes[wrapperID]; exists {
-		return "", fmt.Errorf("on-demand Factory target activation: generated session identity %q collided with an existing activation", wrapperID)
-	}
-	if _, exists := s.controls[wrapperID]; exists {
-		return "", fmt.Errorf("on-demand Factory target activation: generated session identity %q collided with an existing lifecycle control", wrapperID)
-	}
-	s.runtimes[wrapperID] = active
-	s.controls[wrapperID] = &activationControl{
-		capturedTurnControls: make(map[capturedTurnControlKey]factoryruntime.TerminateResult),
-	}
-	if requestID != "" {
-		s.startsByRequestID[requestID] = wrapperID
-	}
-	return wrapperID, nil
 }
 
 // lockControl acquires the lifecycle-generation lock for sessionID. A caller
@@ -696,10 +677,8 @@ func (s *Service) InvokeFactorySession(
 	return result, nil
 }
 
-// SubscribeFactoryResponseEvents subscribes to the exact runtime a prior
-// StartAsync call opened for req.SessionID (this wrapper's own caller-facing
-// identity), translating it to the runtime's own constant internal
-// DefaultSessionID the same way InvokeFactorySession and Cancel already do.
+// SubscribeFactoryResponseEvents subscribes to the exact runtime and explicit
+// Factory Session identity a prior StartAsync call opened for req.SessionID.
 func (s *Service) SubscribeFactoryResponseEvents(
 	ctx context.Context,
 	req factorysessions.ResponseEventSubscriptionRequest,
@@ -708,15 +687,14 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	if err != nil {
 		return nil, err
 	}
-	req.SessionID = factorysessions.DefaultSessionID
+	req.SessionID = active.factorySessionID()
 	return active.opened.Sessions.SubscribeFactoryResponseEvents(ctx, req)
 }
 
 // SubscribeFactoryEventsForSession exposes the canonical Factory Event
 // history/live stream for the exact on-demand runtime identified by sessionID.
-// The wrapper identity is translated to the opened runtime's internal default
-// identity exactly as InvokeFactorySession and SubscribeFactoryResponseEvents
-// already do, so no caller can accidentally observe another activated target.
+// The wrapper identity is also the opened runtime's Factory Session identity,
+// so no caller can accidentally observe another activated target.
 func (s *Service) SubscribeFactoryEventsForSession(
 	ctx context.Context,
 	sessionID string,
@@ -726,7 +704,7 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	if err != nil {
 		return nil, err
 	}
-	return active.opened.Sessions.SubscribeFactoryEventsForSession(ctx, factorysessions.DefaultSessionID, reconnect)
+	return active.opened.Sessions.SubscribeFactoryEventsForSession(ctx, active.factorySessionID(), reconnect)
 }
 
 // Cancel cancels the exact runtime a prior StartAsync call opened for

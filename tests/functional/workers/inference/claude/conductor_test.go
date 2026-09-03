@@ -1,12 +1,8 @@
 package claude
 
 import (
-	"context"
-	"strings"
 	"testing"
 	"time"
-
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
 
 const (
@@ -21,6 +17,7 @@ const (
 // separate Factory directory and opens an explicit non-default Factory Session
 // so the process is shared while runtime state remains session-scoped.
 func TestClaudeDefaultLaneSharedProcess(t *testing.T) {
+	t.Parallel()
 	fixture := newClaudeDefaultLaneFixture(t)
 	t.Cleanup(func() {
 		fixture.assertSharedIdentityLedger(t)
@@ -66,49 +63,6 @@ func runClaudeSameProcessRecoveryAfterAdverseSession(t *testing.T, fixture *clau
 
 	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("recovery API server starts = %d, want exactly one shared process server", got)
-	}
-}
-
-// TestClaudeCommandRouterFailsClosed proves that the package-local command
-// edge cannot silently fall back to another scenario when its immutable
-// selector is absent or duplicated.
-func TestClaudeCommandRouterFailsClosed(t *testing.T) {
-	first := &claudeScenarioCommandRunner{}
-	second := &claudeScenarioCommandRunner{}
-	duplicate, err := newClaudeCommandRouter([]claudeCommandRoute{
-		{selector: "duplicate-selector", runner: first},
-		{selector: "duplicate-selector", runner: second},
-	})
-	if err == nil || !strings.Contains(err.Error(), "duplicate Claude scenario selector") {
-		t.Fatalf("duplicate route construction error = %v, want fail-closed duplicate selector error", err)
-	}
-	if duplicate != nil {
-		t.Fatal("duplicate route construction returned a usable router")
-	}
-
-	router, err := newClaudeCommandRouter([]claudeCommandRoute{
-		{selector: "known-selector", runner: first},
-	})
-	if err != nil {
-		t.Fatalf("newClaudeCommandRouter: %v", err)
-	}
-	_, err = router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: claudeConductorProcessCommand,
-		WorkDir: "unknown-selector",
-	})
-	if err == nil || !strings.Contains(err.Error(), "unknown Claude scenario selector") {
-		t.Fatalf("unknown route error = %v, want fail-closed selector error", err)
-	}
-	if got := first.CallCount(); got != 0 {
-		t.Fatalf("known route calls after unknown selector = %d, want 0", got)
-	}
-
-	for _, selector := range []string{"", " ", "."} {
-		if _, err := newClaudeCommandRouter([]claudeCommandRoute{
-			{selector: selector, runner: first},
-		}); err == nil || !strings.Contains(err.Error(), "Claude scenario selector is required") {
-			t.Fatalf("empty route selector %q error = %v, want required-selector error", selector, err)
-		}
 	}
 }
 

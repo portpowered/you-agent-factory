@@ -2751,6 +2751,38 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.show.flag.session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.factory.show.binding.session",
+          "id": "you.factory.show.flag.session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.show.flag.session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "target one live factory session; omit to use the default compatibility session",
+          "valueType": "string",
+          "visibility": "visible"
+        },
         "you.factory.show.flag.server": {
           "aliases": [],
           "binding": "",
@@ -2804,6 +2836,10 @@
         "you.factory.show.binding.port": {
           "id": "you.factory.show.binding.port",
           "inputId": "you.factory.show.flag.port"
+        },
+        "you.factory.show.binding.session": {
+          "id": "you.factory.show.binding.session",
+          "inputId": "you.factory.show.flag.session"
         }
       },
       "handler": {

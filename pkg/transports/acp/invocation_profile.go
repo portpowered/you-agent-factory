@@ -16,9 +16,6 @@ type invocationProfileContextKey struct{}
 
 // WithInvocationProfile binds one connection-owned profile to ctx.
 func WithInvocationProfile(ctx context.Context, profile InvocationProfile) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	return context.WithValue(ctx, invocationProfileContextKey{}, profile)
 }
 

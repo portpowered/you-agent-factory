@@ -32,6 +32,7 @@ type Bundle struct {
 	Dir                  string
 	FolderPath           string
 	RuntimeInstanceID    string
+	FactorySessionID     string
 	BackendScopeID       string
 	StartedAtUTC         time.Time
 	EventHistory         recordings.RuntimeLedger
@@ -59,6 +60,7 @@ func NewBundle(
 	dir string,
 	folderPath string,
 	runtimeInstanceID string,
+	factorySessionID string,
 	backendScopeID string,
 	startedAtUTC time.Time,
 	eventHistory recordings.RuntimeLedger,
@@ -73,7 +75,8 @@ func NewBundle(
 ) *Bundle {
 	return &Bundle{
 		Dir: dir, FolderPath: folderPath, RuntimeInstanceID: runtimeInstanceID,
-		BackendScopeID: backendScopeID, StartedAtUTC: startedAtUTC,
+		FactorySessionID: factorySessionID,
+		BackendScopeID:   backendScopeID, StartedAtUTC: startedAtUTC,
 		EventHistory: eventHistory, Net: net, RuntimeCfg: runtimeCfg,
 		Logger: logger, LogSink: logSink, MetricsSink: metricsSink,
 		Recording: recording, RecordPath: recordPath, dispatchCompleted: dispatchCompleted,

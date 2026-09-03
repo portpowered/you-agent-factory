@@ -25,10 +25,6 @@ import (
 const (
 	routingSharedFixtureReadyTimeout = 15 * time.Second
 	routingProcessStopTimeout        = 10 * time.Second
-	// Shared runtime requests contend on the same service-mode process. Four
-	// fixed workers preserve package throughput while making scenario scheduling
-	// deterministic for uncached elapsed-time samples.
-	routingScenarioConcurrency = 4
 )
 
 // workRoutingPackageFixture owns the one root-built process and service-mode

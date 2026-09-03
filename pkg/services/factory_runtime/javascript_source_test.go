@@ -270,8 +270,14 @@ func TestResolve_FactoryInline_PreservesDeclaredFactoryName(t *testing.T) {
 		t.Fatalf("mkdir factory root: %v", err)
 	}
 	resolution := factoryWorkflowDefinitions.ResolveSource(factory.WorkflowSourceRequest{
-		Kind:  factory.WorkflowSourceKindFactoryInline,
-		Value: javascriptFactoryPayload("named-factory", "workflows/review.js"),
+		Kind: factory.WorkflowSourceKindFactoryInline,
+		Value: `{
+			"name":"named-factory",
+			"orchestrator":{"kind":"JAVASCRIPT","javascript":{
+				"inlineSource":{"encoding":"utf-8","inline":"return args.topic;"},
+				"argsSchema":{"type":"object","properties":{"topic":{"type":"string"}}}
+			}}
+		}`,
 	}, testContext(t, projectRoot))
 
 	if !resolution.Found {
@@ -279,6 +285,9 @@ func TestResolve_FactoryInline_PreservesDeclaredFactoryName(t *testing.T) {
 	}
 	if resolution.FactoryName != "named-factory" {
 		t.Fatalf("factory name = %q, want named-factory", resolution.FactoryName)
+	}
+	if resolution.Content != "return args.topic;" || resolution.SourceRef != "factory:named-factory:inline" {
+		t.Fatalf("inline Factory resolution = %#v, want declared workflow content and source identity", resolution)
 	}
 }
 

@@ -402,6 +402,13 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	if strings.TrimSpace(startupSpec.SessionID) != sessionID {
+		return runtimeProducts{}, fmt.Errorf(
+			"construct runtime scope: built Factory Session ID %q does not match requested ID %q",
+			startupSpec.SessionID,
+			sessionID,
+		)
+	}
 	startupSpec.CanonicalSessionIDGenerated = canonicalSessionIDGenerated &&
 		sessionID == factorysessions.DefaultSessionID &&
 		metricsSessionID != factorysessions.DefaultSessionID

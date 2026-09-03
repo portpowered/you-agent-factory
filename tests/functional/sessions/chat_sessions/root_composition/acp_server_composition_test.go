@@ -140,10 +140,10 @@ func closeSharedACPActivationHome() error {
 
 // seedACPActivationCommandHomeForTest gives each activation-owning command
 // its own initialization home. The shared home above is only the immutable
-// catalog/profile seed; the real you.server.acp startup and its process-global
-// resolver run under this separately seeded home. That keeps the complete
-// initialization/opening lifetime independent across parallel scenarios
-// without sharing mutable runtime artifacts or changing production code.
+// catalog/profile seed; the real you.server.acp admission captures this
+// separately seeded home as invocation-owned input.
+// That keeps the complete initialization/opening lifetime independent across
+// parallel scenarios without sharing mutable runtime artifacts.
 func seedACPActivationCommandHomeForTest(t testing.TB, owner, prefix string) string {
 	t.Helper()
 	seedHome := sharedACPActivationHomeForTest(t)

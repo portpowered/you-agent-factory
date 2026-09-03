@@ -21,9 +21,8 @@ import (
 
 // TestInvokeFactorySessionReusesTheCachedRuntime proves InvokeFactorySession
 // calls against a previously started identity dispatch against the exact
-// cached runtime's DefaultSessionID without opening a second runtime, and
-// substitute the result's SessionID with the caller-facing generated
-// identity rather than leaking the runtime's own shared internal constant.
+// cached runtime's explicit Factory Session without opening a second runtime,
+// and returns that same caller-facing generated identity.
 func TestInvokeFactorySessionReusesTheCachedRuntime(t *testing.T) {
 	sessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
 	opener := &fakeOpener{opened: roles.OpenedInvocationRuntime{Sessions: sessions, Lifecycle: &fakeLifecycle{}}}
@@ -51,12 +50,15 @@ func TestInvokeFactorySessionReusesTheCachedRuntime(t *testing.T) {
 	if len(opener.calls) != 1 {
 		t.Fatalf("OpenInvocationRuntime call count = %d, want exactly 1 (no second open)", len(opener.calls))
 	}
+	if got := opener.calls[0].FactorySession.FactorySessionID; got != started.SessionID {
+		t.Fatalf("OpenInvocationRuntime FactorySessionID = %q, want preallocated session %q", got, started.SessionID)
+	}
 	if len(sessions.invokeCalls) != 2 {
 		t.Fatalf("InvokeFactorySession call count = %d, want exactly 2", len(sessions.invokeCalls))
 	}
 	for _, sessionID := range sessions.invokeCalls {
-		if sessionID != factorysessions.DefaultSessionID {
-			t.Fatalf("InvokeFactorySession sessionID = %q, want the runtime's own DefaultSessionID", sessionID)
+		if sessionID != started.SessionID {
+			t.Fatalf("InvokeFactorySession sessionID = %q, want explicit session %q", sessionID, started.SessionID)
 		}
 	}
 }

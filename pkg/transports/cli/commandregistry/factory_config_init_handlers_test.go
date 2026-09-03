@@ -526,6 +526,30 @@ func TestFactoryConfigInitCommandHandlerRejectsChangedDeprecatedPort(t *testing.
 	}
 }
 
+func TestFactoryConfigInitCommandHandlerMapsExplicitShowSession(t *testing.T) {
+	const sessionID = "session-alpha"
+	var got factorycli.QueryConfig
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(
+		commandregistry.FactoryConfigInitServices{
+			QueryFactory: func(cfg factorycli.QueryConfig) error {
+				got = cfg
+				return nil
+			},
+		},
+	)
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.show.flag.session", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue(sessionID)},
+	)
+	cmd := &cobra.Command{}
+	if err := handler.FactoryQuery(cmd, inputs, resolvedFactoryGlobals(t, true, true, true)); err != nil {
+		t.Fatalf("FactoryQuery() error = %v", err)
+	}
+	if got.Context != cmd.Context() || got.Server != "http://localhost:7437" || got.SessionID != sessionID ||
+		!got.JSON || !got.Verbose || !got.Debug || got.Output != cmd.OutOrStdout() {
+		t.Fatalf("query config = %#v, want explicit session and inherited globals", got)
+	}
+}
+
 func TestFactoryConfigInitCommandHandlerReportsMissingStableInput(t *testing.T) {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
 		commandregistry.FactoryConfigInitServices{

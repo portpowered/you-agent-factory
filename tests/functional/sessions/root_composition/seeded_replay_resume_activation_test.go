@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -40,18 +44,22 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 			finished: true,
 		}} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			artifactPayload := seededReplayResumeArtifactPayload(t, test.finished)
 			factoryDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
 			artifactPath := filepath.Join(factoryDir, "seeded-replay-resume.json")
 			if err := os.WriteFile(artifactPath, artifactPayload, 0o644); err != nil {
 				t.Fatalf("write replay artifact: %v", err)
 			}
-			reusable.payload.Store(append([]byte(nil), artifactPayload...))
 			running := reusable.run(t, factoryDir, artifactPath)
 
-			stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(running.url))
+			stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(running.url, running.sessionID))
 			waitForSeededReplayRuntimeStart(t, stream)
-			status := support.GetJSON[factoryapi.StatusResponse](t, strings.TrimSuffix(running.url, "/")+"/status")
+			status := support.GetJSON[factoryapi.StatusResponse](
+				t,
+				strings.TrimSuffix(running.url, "/")+"/factory-sessions/"+running.sessionID+"/status",
+			)
 
 			if status.TotalTokens != 1 {
 				t.Fatalf("replayed status totalTokens = %d, want one Work token", status.TotalTokens)
@@ -64,7 +72,10 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 				t.Fatalf("in-flight replay initial count = %d, want 1", status.Categories.Initial)
 			}
 
-			listed := support.ListDefaultSessionWork(t, running.url)
+			listed := support.GetJSON[factoryapi.ListWorkResponse](
+				t,
+				support.SessionWorkURL(running.url, running.sessionID, "/work"),
+			)
 			if len(listed.Results) != 1 {
 				t.Fatalf("replayed Work listing length = %d, want one Work: %#v", len(listed.Results), listed.Results)
 			}
@@ -76,7 +87,7 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 				t.Fatalf("replayed Work is not at %s: %#v", wantLocation, listed.Results)
 			}
 
-			for _, event := range support.GetFactoryEventsAt(t, running.url) {
+			for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, running.sessionID) {
 				if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
 					t.Fatalf("replayed Work unexpectedly produced a dispatch request: %#v", event)
 				}
@@ -88,27 +99,28 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 
 type seededReplayResumeProcess struct {
 	process support.Process
-	router  *reusableRootAPIServerStarter
-	payload atomic.Value
+
+	mu             sync.RWMutex
+	serversByPort  map[int]*support.ProcessAPIServer
+	payloadsByPath map[string][]byte
+	nextPort       atomic.Int32
 }
 
 type seededReplayResumeRun struct {
-	url    string
-	daemon *support.ProcessCommand
+	url       string
+	sessionID string
+	daemon    *support.ProcessCommand
 }
 
 func newSeededReplayResumeProcess(t *testing.T) *seededReplayResumeProcess {
 	t.Helper()
-	reusable := &seededReplayResumeProcess{router: &reusableRootAPIServerStarter{}}
+	reusable := &seededReplayResumeProcess{
+		serversByPort:  make(map[int]*support.ProcessAPIServer),
+		payloadsByPath: make(map[string][]byte),
+	}
 	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter: reusable.router.start,
-		FactorySessionReplayRecordingReader: func(string) ([]byte, error) {
-			payload, ok := reusable.payload.Load().([]byte)
-			if !ok || len(payload) == 0 {
-				return nil, errors.New("seeded replay payload was not selected")
-			}
-			return append([]byte(nil), payload...), nil
-		},
+		APIServerStarter:                    reusable.startAPIServer,
+		FactorySessionReplayRecordingReader: reusable.readReplayRecording,
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 			Stdout: support.CodexSuccessStdout("unexpected replay dispatch COMPLETE"),
 		}),
@@ -125,10 +137,23 @@ func (reusable *seededReplayResumeProcess) run(
 ) seededReplayResumeRun {
 	t.Helper()
 	api := support.NewProcessAPIServer()
-	reusable.router.setCurrent(api)
+	port := 22000 + int(reusable.nextPort.Add(1))
+	reusable.mu.Lock()
+	reusable.serversByPort[port] = api
+	reusable.payloadsByPath[filepath.Clean(artifactPath)] = append([]byte(nil), mustReadSeededReplayArtifact(t, artifactPath)...)
+	reusable.mu.Unlock()
+	t.Cleanup(func() {
+		reusable.mu.Lock()
+		delete(reusable.serversByPort, port)
+		delete(reusable.payloadsByPath, filepath.Clean(artifactPath))
+		reusable.mu.Unlock()
+	})
+	sessionID := uuid.NewString()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
+		"--session", sessionID,
 		"--continuously", "--with-server", "--quiet",
+		"--listen", fmt.Sprintf("127.0.0.1:%d", port),
 		"--dir", factoryDir,
 		"--provider", "CODEX", "--model", "gpt-5-codex",
 		"--replay", artifactPath, "--no-record",
@@ -145,7 +170,39 @@ func (reusable *seededReplayResumeProcess) run(
 		}
 	})
 	daemon := support.StartProcessCommand(t, reusable.process, inputs.Input)
-	return seededReplayResumeRun{url: api.WaitForURL(t), daemon: daemon}
+	return seededReplayResumeRun{url: api.WaitForURL(t), sessionID: sessionID, daemon: daemon}
+}
+
+func mustReadSeededReplayArtifact(t testing.TB, path string) []byte {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read replay artifact: %v", err)
+	}
+	return payload
+}
+
+func (reusable *seededReplayResumeProcess) readReplayRecording(path string) ([]byte, error) {
+	reusable.mu.RLock()
+	payload := reusable.payloadsByPath[filepath.Clean(path)]
+	reusable.mu.RUnlock()
+	if len(payload) == 0 {
+		return nil, errors.New("seeded replay payload was not registered for this invocation")
+	}
+	return append([]byte(nil), payload...), nil
+}
+
+func (reusable *seededReplayResumeProcess) startAPIServer(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	reusable.mu.RLock()
+	server := reusable.serversByPort[request.Port]
+	reusable.mu.RUnlock()
+	if server == nil {
+		return fmt.Errorf("seeded replay API server is not registered for requested port %d", request.Port)
+	}
+	return server.Start(ctx, request)
 }
 
 func waitForSeededReplayRuntimeStart(t *testing.T, stream *support.FactoryEventStream) {

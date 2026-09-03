@@ -32,9 +32,10 @@ func (s *Service) invokeOnActivatedRuntime(
 	active *activatedRuntime,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
-	projection, err := active.opened.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+	sessionID := active.factorySessionID()
+	projection, err := active.opened.Sessions.GetFactorySession(ctx, sessionID)
 	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
+		return active.opened.Sessions.InvokeFactorySession(ctx, sessionID, request)
 	}
 	// On-demand activation callers observe a running invocation through
 	// SubscribeFactoryResponseEvents against the runtime's own response stream,
@@ -52,6 +53,7 @@ func (s *Service) invokeOnActivatedRuntime(
 // executor.
 func (a *activatedRuntime) invocationTarget() roles.InvocationTarget {
 	return roles.InvocationTarget{
+		FactorySessionID:  a.factorySessionID(),
 		FactoryDir:        a.config.FactoryDefinition.Directory,
 		FactorySourcePath: a.config.FactoryDefinition.SourcePath,
 		ExecutionBaseDir:  a.config.FactoryDefinition.ExecutionBaseDir,

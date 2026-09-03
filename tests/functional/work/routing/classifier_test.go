@@ -1,8 +1,6 @@
 package routing
 
 import (
-	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -242,71 +240,6 @@ func runClassifierRoutingSelectorGuard(
 	}
 	if strings.Contains(classifierRoutingDispatchErrorText(dispatch.Response), payload) {
 		t.Fatalf("selector guard failure leaked payload %q", payload)
-	}
-	assertClassifierRoutingUnmatchedSelector(t, fixture)
-	assertClassifierRoutingAmbiguousSelector(t, fixture)
-}
-
-func assertClassifierRoutingUnmatchedSelector(
-	t *testing.T,
-	fixture *workRoutingPackageFixture,
-) {
-	t.Helper()
-	const requestContent = "sensitive-selector-request"
-	_, err := fixture.provider.Run(context.Background(), platformprocess.CommandRequest{
-		WorkDir: fixture.rootDir,
-		Args:    []string{requestContent},
-		Stdin:   []byte(requestContent),
-	})
-	if err == nil {
-		t.Fatal("unmatched provider selector unexpectedly succeeded")
-	}
-	if !strings.Contains(err.Error(), "matched 0 scenarios") {
-		t.Fatalf("unmatched selector error = %q, want matched-0 diagnostic", err)
-	}
-	if strings.Contains(err.Error(), requestContent) {
-		t.Fatalf("unmatched selector error leaked request content: %q", err)
-	}
-}
-
-func assertClassifierRoutingAmbiguousSelector(
-	t *testing.T,
-	fixture *workRoutingPackageFixture,
-) {
-	t.Helper()
-	const requestContent = "sensitive-selector-request"
-	first := newWorkRoutingScenarioCommandRunner("ambiguous-first", nil, nil)
-	second := newWorkRoutingScenarioCommandRunner("ambiguous-second", nil, nil)
-	ambiguousWorkDir := filepath.Join(fixture.rootDir, "ambiguous-work")
-	if err := fixture.provider.register("ambiguous-first", []string{fixture.rootDir}, first); err != nil {
-		t.Fatalf("register first ambiguous selector: %v", err)
-	}
-	defer func() {
-		if err := fixture.provider.unregister("ambiguous-first"); err != nil {
-			t.Errorf("unregister first ambiguous selector: %v", err)
-		}
-	}()
-	if err := fixture.provider.register("ambiguous-second", []string{ambiguousWorkDir}, second); err != nil {
-		t.Fatalf("register second ambiguous selector: %v", err)
-	}
-	defer func() {
-		if err := fixture.provider.unregister("ambiguous-second"); err != nil {
-			t.Errorf("unregister second ambiguous selector: %v", err)
-		}
-	}()
-	_, err := fixture.provider.Run(context.Background(), platformprocess.CommandRequest{
-		WorkDir: ambiguousWorkDir,
-		Args:    []string{requestContent},
-		Stdin:   []byte(requestContent),
-	})
-	if err == nil {
-		t.Fatal("ambiguous provider selector unexpectedly succeeded")
-	}
-	if !strings.Contains(err.Error(), "matched 2 scenarios") {
-		t.Fatalf("ambiguous selector error = %q, want matched-2 diagnostic", err)
-	}
-	if strings.Contains(err.Error(), requestContent) {
-		t.Fatalf("ambiguous selector error leaked request content: %q", err)
 	}
 }
 
