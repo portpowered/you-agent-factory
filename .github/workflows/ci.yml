@@ -207,11 +207,10 @@ jobs:
     needs: classify
     if: always() && needs.classify.outputs.run_backend != 'false'
     runs-on: ubuntu-latest
-    # The functional runner enforces the 75m merge-full budget for both pull
-    # requests and pushes to main. Keep five minutes of job-level grace so
-    # always-run summary and artifact-upload steps can preserve partial
-    # diagnostics after a timeout.
-    timeout-minutes: 80
+    # The functional runner enforces the 75m merge-full budget. The unit lane
+    # has a five-minute ceiling so a cache regression cannot quietly turn the
+    # required coverage check back into the longest pull-request job.
+    timeout-minutes: ${{ matrix.suite == 'unit' && 5 || 80 }}
     # Both lanes upsert their own reporting comment on the pull request,
     # mirroring Backend Lint. Each uses a distinct HTML-comment marker, so the
     # two reports never find, overwrite, or delete each other's comment. Every
@@ -241,6 +240,12 @@ jobs:
             label: Functional
     steps:
       - uses: actions/checkout@v4
+        if: matrix.suite == 'unit'
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        if: matrix.suite == 'functional'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
@@ -248,7 +253,7 @@ jobs:
         if: matrix.suite == 'unit'
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache: false
       - uses: actions/setup-go@v5
         if: matrix.suite == 'functional'
         with:
@@ -263,13 +268,25 @@ jobs:
           functional_jobs=12
           echo "Functional CI runner: logical_cpus=${runner_cpus:-unknown} jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
-      - name: Restore functional Go module cache
-        if: matrix.suite == 'functional'
-        id: functional-go-module-cache
+      - name: Restore Go module cache
+        id: go-module-cache
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: functional-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          key: go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+            functional-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+      - name: Restore unit coverage Go build and test cache
+        if: matrix.suite == 'unit'
+        id: unit-go-build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum', 'cmd/**/*.go', 'internal/**/*.go', 'pkg/**/*.go') }}
+          restore-keys: |
+            unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
+            functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-12-
       - name: Restore functional coverage Go build cache
         if: matrix.suite == 'functional'
         id: functional-go-build-cache
@@ -287,9 +304,16 @@ jobs:
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
         env:
+          GO_UNIT_COVERAGE_JOBS: "4"
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+      - name: Save unit coverage Go build and test cache
+        if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.unit-go-build-cache.outputs.cache-primary-key }}
       # This existing coverage tier intentionally selects backend packages
       # under pkg/... through make test-unit-coverage. It does not claim to
       # exercise ./internal/...; that tree has separate repository-maintenance
@@ -518,62 +542,6 @@ jobs:
               issue_number: context.issue.number,
               body: publication.body,
             });
-
-  backend-unit-latency:
-    name: Backend Unit Latency
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      YOU_LOGICAL_CPUS: "4"
-      YOU_EXPECTED_CONCURRENT_LANES: "4"
-      UNIT_DEFAULT_JOBS: "2"
-      UNIT_TIMING_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-      UNIT_RUNNER_PROVIDER: github-actions
-      UNIT_RUNNER_IMAGE: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Prewarm Go dependencies and unit-lane compile cache
-        shell: bash
-        run: |
-          go mod download
-          go build ./cmd/unitlane ./cmd/unitlanebudget
-          go test -short -vet=off -run '^$' -p=2 ./pkg/...
-      - name: Run three consecutive uncached unit samples
-        shell: bash
-        run: |
-          mkdir -p .artifacts/unit-latency
-          sample_failure=0
-          run_sample() {
-            ordinal="$1"
-            if node scripts/ci/run-unit-latency-sample.mjs "$ordinal" ".artifacts/unit-latency" \
-              make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=".artifacts/unit-latency/run-${ordinal}.v2.json"; then
-              :
-            else
-              sample_failure=1
-            fi
-          }
-          run_sample 1
-          run_sample 2
-          run_sample 3
-          exit "$sample_failure"
-      - name: Enforce unit-lane latency budget
-        run: make test-unit-latency-budget
-      - name: Retain unit-latency evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-unit-latency-evidence
-          path: .artifacts/unit-latency
-          if-no-files-found: error
-          retention-days: 14
 
   backend-conformance:
     name: Backend Conformance
@@ -860,7 +828,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-conformance, backend-integration, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-conformance, backend-integration, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -904,9 +872,6 @@ jobs:
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result == 'success' && needs.backend-integration.result || needs.backend-coverage.result }}
-          RUN_BACKEND_UNIT_LATENCY: "true"
-          BACKEND_UNIT_LATENCY_REASON: "The canonical three-sample uncached unit-lane latency budget is required on every pull request and push to main."
-          BACKEND_UNIT_LATENCY_RESULT: ${{ needs.backend-unit-latency.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."

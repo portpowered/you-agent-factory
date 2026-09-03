@@ -615,7 +615,9 @@ func TestStartLinearPoller_BackoffProgressesAfterRepeatedFailures(t *testing.T) 
 			t.Fatalf("restart backoff[%d] = %s, want %s", attempt, gotBackoff, wantBackoff)
 		}
 		waitForFakeClockWaiters(t, fakeClock, 1)
-		fakeClock.Advance(wantBackoff)
+		if attempt+1 < len(wantBackoffs) {
+			fakeClock.Advance(wantBackoff)
+		}
 	}
 	if got := requestCount.Load(); got != int32(len(wantBackoffs)) {
 		t.Fatalf("provider request count = %d, want %d poll cycles across backoff progression", got, len(wantBackoffs))

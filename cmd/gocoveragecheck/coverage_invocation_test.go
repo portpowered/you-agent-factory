@@ -276,6 +276,64 @@ func TestBuildCoverageInvocationPlanRejectsSingleOversizedWindowsPackage(t *test
 	}
 }
 
+func TestDefaultLinuxUnitCoverageUsesBinaryCovdata(t *testing.T) {
+	profilePath := filepath.Join(t.TempDir(), "coverage.out")
+	plan, err := planGoTestCoverageLane(
+		[]string{"test", "-coverpkg=" + modulePath + "/pkg/...", "-p=4", "-covermode=set"},
+		[]string{modulePath + "/pkg/platform/clock"},
+		profilePath,
+		config{suite: unitCoverageSuite, timingOutput: "timing.json"},
+		"linux",
+	)
+	if err != nil {
+		t.Fatalf("planGoTestCoverageLane() error = %v", err)
+	}
+	covdataDir := plan.covdataDir
+	t.Cleanup(func() {
+		if cleanupErr := plan.cleanup(); cleanupErr != nil {
+			t.Errorf("cleanup unit covdata plan: %v", cleanupErr)
+		}
+	})
+	if covdataDir == "" {
+		t.Fatal("unit coverage plan has no binary covdata directory")
+	}
+	args := plan.invocations[0].args
+	if !slicesContains(args, "-cover") {
+		t.Fatalf("unit coverage args = %v, want -cover", args)
+	}
+	if !slicesContains(args, "-test.gocoverdir="+covdataDir) {
+		t.Fatalf("unit coverage args = %v, want covdata destination", args)
+	}
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-coverprofile=") {
+			t.Fatalf("unit coverage args retained text profile: %v", args)
+		}
+	}
+}
+
+func TestUnitCovdataIsLimitedToDefaultNonWindowsUnitCoverage(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      config
+		targetOS string
+		want     bool
+	}{
+		{name: "default Linux unit", cfg: config{suite: unitCoverageSuite}, targetOS: "linux", want: true},
+		{name: "implicit Linux unit", cfg: config{}, targetOS: "linux", want: true},
+		{name: "Windows unit", cfg: config{suite: unitCoverageSuite}, targetOS: "windows"},
+		{name: "functional", cfg: config{suite: functionalCoverageSuite}, targetOS: "linux"},
+		{name: "custom packages", cfg: config{suite: unitCoverageSuite, packages: "example/pkg"}, targetOS: "linux"},
+		{name: "custom cover packages", cfg: config{suite: unitCoverageSuite, coverpkg: "example/pkg"}, targetOS: "linux"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := useUnitCovdataProfile(test.cfg, test.targetOS); got != test.want {
+				t.Fatalf("useUnitCovdataProfile() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestRunForOSBatchesAndMergesCoverageProfiles(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter

@@ -226,12 +226,6 @@ function policyInputFromEnvironment() {
 			},
 			directLane("Backend", "RUN_BACKEND", "BACKEND_REASON", "BACKEND_RESULT"),
 			directLane(
-				"Backend Unit Latency",
-				"RUN_BACKEND_UNIT_LATENCY",
-				"BACKEND_UNIT_LATENCY_REASON",
-				"BACKEND_UNIT_LATENCY_RESULT",
-			),
-			directLane(
 				"Backend Conformance",
 				"RUN_BACKEND_CONFORMANCE",
 				"BACKEND_CONFORMANCE_REASON",

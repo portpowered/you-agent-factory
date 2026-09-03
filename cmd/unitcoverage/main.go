@@ -21,6 +21,7 @@ type config struct {
 	packageManifest    string
 	packageFloorPolicy string
 	testTimeout        string
+	jobs               int
 	profilePath        string
 	coveragePath       string
 	timingPath         string
@@ -73,6 +74,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "docs/internal/baselines/go-unit-coverage-package-minimums.json", "unit package-floor manifest")
 	flag.StringVar(&cfg.packageFloorPolicy, "package-floor-policy", "blocking", "unit package-floor policy")
 	flag.StringVar(&cfg.testTimeout, "test-timeout", "10m", "gocoveragecheck test timeout")
+	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent Go test packages; use gocoveragecheck's platform default when unset")
 	flag.StringVar(&cfg.profilePath, "profile", "", "coverage profile path")
 	flag.StringVar(&cfg.coveragePath, "coverage-summary", "", "coverage summary JSON path")
 	flag.StringVar(&cfg.timingPath, "timing-summary", "", "unit timing summary JSON path")
@@ -109,6 +111,9 @@ func run(cfg config, stdout io.Writer) error {
 		"-profile", cfg.profilePath,
 		"-json-output", cfg.coveragePath,
 		"-timing-output", cfg.timingPath,
+	}
+	if cfg.jobs > 0 {
+		args = append(args, "-jobs", strconv.Itoa(cfg.jobs))
 	}
 	cmd := exec.Command(cfg.goBinary, args...)
 	cmd.Dir = cfg.repositoryRoot

@@ -1,11 +1,10 @@
 name: Regenerate Shared CI Baselines
 
-# CI's Backend Unit Latency job is the source of the three real hosted samples.
-# Waiting for its completed workflow_run keeps regeneration tied to delivered
-# checks instead of racing an in-progress main push or inventing local samples.
-# The source run may fail because a baseline is stale; only success/failure
-# conclusions reach the artifact and generator gates. All other conclusions
-# stop before checkout, generation, or publication.
+# Waiting for completed main CI keeps shared-baseline regeneration tied to
+# delivered checks instead of racing an in-progress push. Unit-latency samples
+# are no longer regenerated here because Backend Unit Coverage is the single
+# required unit execution; the remaining snapshots use their own delivered
+# evidence or deterministic repository inputs.
 on:
   workflow_run:
     workflows: [CI]
@@ -39,7 +38,6 @@ jobs:
       DEFAULT_BRANCH: main
       BOT_BRANCH: automation/shared-ci-baselines
       SHARED_BASELINE_PR_TITLE: "chore(ci): reconcile shared CI baselines"
-      UNIT_BUDGET_BASELINE: docs/internal/baselines/go-unit-lane-latency-budget.v1.json
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
       SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
@@ -114,24 +112,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Download the exact unit-latency evidence from source CI
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf -- .artifacts/unit-latency
-          mkdir -p .artifacts/unit-latency
-          gh run download "$SOURCE_RUN_ID" \
-            --repo "$REPOSITORY" \
-            --name backend-unit-latency-evidence \
-            --dir .artifacts/unit-latency
-          for ordinal in 1 2 3; do
-            sample=".artifacts/unit-latency/run-${ordinal}.v2.json"
-            if [[ ! -s "$sample" ]]; then
-              echo "::error title=Missing unit-latency evidence::Expected non-empty $sample from source CI run $SOURCE_RUN_ID" >&2
-              exit 1
-            fi
-          done
-
       - name: Download the delivered normalized deadcode evidence
         shell: bash
         run: |
@@ -191,8 +171,6 @@ jobs:
           set -euo pipefail
           make regenerate-shared-ci-baselines \
             BASELINE_REGEN_ROOT=. \
-            UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" \
-            UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" \
             BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"
 
       - name: Validate generated working-tree scope

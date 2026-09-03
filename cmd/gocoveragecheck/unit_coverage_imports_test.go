@@ -37,7 +37,7 @@ func TestPrepareUnitCoverageImportFilePreservesTestFreeCoveragePackages(t *testi
 	if err != nil {
 		t.Fatalf("prepareUnitCoverageImportFile() error = %v", err)
 	}
-	files, err := filepath.Glob(filepath.Join(packageDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	files, err := filepath.Glob(filepath.Join(packageDir, unitCoverageImportFilename))
 	if err != nil {
 		t.Fatalf("find temporary coverage import file: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestPrepareUnitCoverageImportFileSkipsSelectedTestDependencies(t *testing.T
 	if err := cleanup(); err != nil {
 		t.Fatalf("temporary coverage import cleanup: %v", err)
 	}
-	files, err := filepath.Glob(filepath.Join(packageDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	files, err := filepath.Glob(filepath.Join(packageDir, unitCoverageImportFilename))
 	if err != nil {
 		t.Fatalf("find temporary coverage import file: %v", err)
 	}
@@ -151,11 +151,11 @@ func TestPrepareUnitCoverageImportFileRespectsInternalVisibility(t *testing.T) {
 		}
 	})
 
-	generalFiles, err := filepath.Glob(filepath.Join(generalDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	generalFiles, err := filepath.Glob(filepath.Join(generalDir, unitCoverageImportFilename))
 	if err != nil {
 		t.Fatalf("find general carrier file: %v", err)
 	}
-	internalFiles, err := filepath.Glob(filepath.Join(internalDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	internalFiles, err := filepath.Glob(filepath.Join(internalDir, unitCoverageImportFilename))
 	if err != nil {
 		t.Fatalf("find internal carrier file: %v", err)
 	}

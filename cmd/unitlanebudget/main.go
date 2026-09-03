@@ -8,11 +8,12 @@ import (
 )
 
 type budgetConfig struct {
-	budgetPath     string
-	samples        string
-	mode           string
-	root           string
-	deadcodeReport string
+	budgetPath      string
+	samples         string
+	mode            string
+	root            string
+	deadcodeReport  string
+	skipUnitLatency bool
 }
 
 var stdoutWriter io.Writer = os.Stdout
@@ -68,6 +69,7 @@ func parseConfig() budgetConfig {
 	flag.StringVar(&cfg.mode, "mode", "final", "validation mode: final, baseline, or regenerate")
 	flag.StringVar(&cfg.root, "root", ".", "repository root for regeneration inputs and outputs")
 	flag.StringVar(&cfg.deadcodeReport, "deadcode-report", "", "normalized deadcode report to use; runs the pinned analyzer when omitted")
+	flag.BoolVar(&cfg.skipUnitLatency, "skip-unit-latency", false, "leave the unit-latency budget unchanged during shared baseline regeneration")
 	flag.Parse()
 	return cfg
 }

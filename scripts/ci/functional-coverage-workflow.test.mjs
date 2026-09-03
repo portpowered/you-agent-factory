@@ -25,12 +25,12 @@ test("functional coverage separates module and source-sensitive build caches", (
 	const job = jobSection(workflow, "backend-coverage");
 	const unitSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'unit'", "      - uses: actions/setup-go@v5");
 	const functionalSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'functional'", "      - name: Select functional runner parallelism");
-	const functionalParallelism = stepSection(job, "      - name: Select functional runner parallelism", "      - name: Restore functional Go module cache");
-	const moduleCache = stepSection(job, "      - name: Restore functional Go module cache", "      - name: Restore functional coverage Go build cache");
+	const functionalParallelism = stepSection(job, "      - name: Select functional runner parallelism", "      - name: Restore Go module cache");
+	const moduleCache = stepSection(job, "      - name: Restore Go module cache", "      - name: Restore unit coverage Go build and test cache");
 	const buildCache = stepSection(job, "      - name: Restore functional coverage Go build cache", "      - uses: actions/setup-node@v4");
 
 	assert.match(unitSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
-	assert.match(unitSetup, /cache: true/);
+	assert.match(unitSetup, /cache: false/);
 	assert.doesNotMatch(unitSetup, /functional-coverage-|actions\/cache@v4/);
 
 	assert.match(functionalSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
@@ -38,14 +38,13 @@ test("functional coverage separates module and source-sensitive build caches", (
 	assert.match(functionalParallelism, /functional_jobs=12/);
 	assert.match(functionalParallelism, /jobs=\$functional_jobs/);
 
-	assert.match(moduleCache, /if: matrix\.suite == 'functional'/);
-	assert.match(moduleCache, /id: functional-go-module-cache/);
+	assert.match(moduleCache, /id: go-module-cache/);
 	assert.match(moduleCache, /uses: actions\/cache@v4/);
 	assert.match(moduleCache, /path: ~\/go\/pkg\/mod/);
 	assert.doesNotMatch(moduleCache, /~\/\.cache\/go-build/);
 	assert.match(
 		moduleCache,
-		/key: functional-modules-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
+		/key: go-modules-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
 	);
 
 	assert.match(buildCache, /if: matrix\.suite == 'functional'/);
@@ -64,8 +63,8 @@ test("functional coverage separates module and source-sensitive build caches", (
 		"functional build cache restore key must retain jobs and the functional build namespace",
 	);
 	assert.equal((job.match(/uses: actions\/cache@v4/g) ?? []).length, 1);
-	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 1);
-	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 1);
+	assert.equal((job.match(/uses: actions\/cache\/restore@v4/g) ?? []).length, 2);
+	assert.equal((job.match(/uses: actions\/cache\/save@v4/g) ?? []).length, 2);
 	assert.doesNotMatch(job, /functional-coverage-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/);
 });
 
