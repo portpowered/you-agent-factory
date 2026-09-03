@@ -107,7 +107,7 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 		}
 	}
 	// Initializer owns sidecar activation as the next lifecycle phase.
-	_, err := runtime.StartDefaultRuntime(ctx, runCtx, false)
+	_, err := runtime.StartDefaultRuntime(ctx, runCtx)
 	return err
 }
 

@@ -65,10 +65,8 @@ func StartInitial(
 	factoryRootDir string,
 	bundle RuntimeInstance,
 	target factorysessions.Target,
-	serviceMode bool,
 	runtimeMode interfaces.RuntimeMode,
 	lifecycle RuntimeLifecycle,
-	startSidecars func(context.Context, RuntimeHandle) error,
 	stop func(RuntimeHandle) error,
 	onSessionRemoved func(string),
 ) (RuntimeHandle, error) {
@@ -108,35 +106,6 @@ func StartInitial(
 			readinessContext, state, runtimeState,
 			sessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
-	}
-	if !serviceMode || startSidecars == nil {
-		return handle, nil
-	}
-	return finishInitialStart(runContext, state, runtimeState, sessionID, handle, runtimeMode, startSidecars, stop, onSessionRemoved)
-}
-
-func finishInitialStart(
-	runContext context.Context,
-	state *sessionruntime.Service,
-	runtimeState *State,
-	sessionID string,
-	handle RuntimeHandle,
-	runtimeMode interfaces.RuntimeMode,
-	startSidecars func(context.Context, RuntimeHandle) error,
-	stop func(RuntimeHandle) error,
-	onSessionRemoved func(string),
-) (RuntimeHandle, error) {
-	if err := startSidecars(runContext, handle); err != nil {
-		if SessionClosedDuringStartup(state, sessionID, runtimeMode) {
-			unregisterSession(state, sessionID, onSessionRemoved)
-			return nil, nil
-		}
-		runtimeState.ClearActive()
-		unregisterSession(state, sessionID, onSessionRemoved)
-		if stop != nil {
-			_ = stop(handle)
-		}
-		return nil, err
 	}
 	return handle, nil
 }

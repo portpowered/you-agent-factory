@@ -163,7 +163,6 @@ func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInst
 func (fs *SessionRuntime) StartDefaultRuntime(
 	ctx context.Context,
 	runCtx context.Context,
-	serviceMode bool,
 ) (liveRuntimeHandle, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory session service is required")
@@ -189,10 +188,8 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		fs.factoryRootDir,
 		runtimeBundle,
 		target,
-		serviceMode,
 		fs.runtimeMode,
 		fs.runtimeLifecycle,
-		fs.StartLiveRuntimeSidecars,
 		fs.StopLiveRuntime,
 		fs.releaseWorkAdmissionProjection,
 	)

@@ -14,3 +14,12 @@ func TestInvocationProfileRoundTripsThroughContext(t *testing.T) {
 		t.Fatalf("InvocationProfileFromContext() = (%+v, %t), want (%+v, true)", got, ok, want)
 	}
 }
+
+func TestInvocationProfileFromNilContextIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	got, ok := InvocationProfileFromContext(nil)
+	if ok || got != (InvocationProfile{}) {
+		t.Fatalf("InvocationProfileFromContext(nil) = (%+v, %t), want zero profile and false", got, ok)
+	}
+}

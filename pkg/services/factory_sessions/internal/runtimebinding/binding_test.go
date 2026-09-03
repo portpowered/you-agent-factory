@@ -3,7 +3,6 @@ package runtimebinding_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -440,10 +439,8 @@ func TestStartInitialRegistersAndSelectsCanonicalDefaultSession(t *testing.T) {
 		factorysessions.Target{
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 		},
-		false,
 		interfaces.RuntimeModeBatch,
 		lifecycleFake{},
-		nil,
 		nil,
 		nil,
 	)
@@ -481,8 +478,8 @@ func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
 
 	handle, err := runtimebinding.StartInitial(
 		context.Background(), context.Background(), sessions, &runtimeState,
-		sessionID, "/factory", bundle, target, false, interfaces.RuntimeModeBatch,
-		lifecycleFake{}, nil, nil, nil,
+		sessionID, "/factory", bundle, target, interfaces.RuntimeModeBatch,
+		lifecycleFake{}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("StartInitial: %v", err)
@@ -505,31 +502,6 @@ func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
 	}
 	if active := runtimeState.Active(); active == nil || active.SessionID != sessionID || active.Handle != handle {
 		t.Fatalf("active runtime = %#v, want explicit session %q", active, sessionID)
-	}
-}
-
-func TestStartInitialDefaultSidecarFailureInvokesSessionRemovalCleanup(t *testing.T) {
-	sessions := newRuntimeBindingState()
-	var runtimeState runtimebinding.State
-	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
-	var removed []string
-
-	_, err := runtimebinding.StartInitial(
-		context.Background(), context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID, "/factory", bundle,
-		factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}},
-		true, interfaces.RuntimeModeService, lifecycleFake{},
-		func(context.Context, factory.RuntimeRun) error { return errors.New("sidecars unavailable") },
-		func(factory.RuntimeRun) error { return nil },
-		func(sessionID string) { removed = append(removed, sessionID) },
-	)
-	if err == nil || !strings.Contains(err.Error(), "sidecars unavailable") {
-		t.Fatalf("StartInitial error = %v, want sidecar failure", err)
-	}
-	if len(removed) != 1 || removed[0] != factorysessions.DefaultSessionID {
-		t.Fatalf("removed sessions = %#v, want default session cleanup", removed)
-	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
-		t.Fatal("sidecar failure retained the default session or active runtime")
 	}
 }
 

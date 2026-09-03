@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -59,8 +60,9 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	invocationContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	inputs := support.FakeInputs(invocationContext, []string{
-		"you", "run", "--dir", dir, "--quiet", "--record", filepath.Join(t.TempDir(), "wsr-ft-009.json"),
+		"you", "run", "--dir", dir, "--session", uuid.NewString(), "--quiet", "--record", filepath.Join(t.TempDir(), "wsr-ft-009.json"),
 	})
+	inputs.Input.Env = sharedInferenceProcessEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = dir
 	done := make(chan error, 1)
 	go func() { done <- process.Execute(inputs.Input) }()
