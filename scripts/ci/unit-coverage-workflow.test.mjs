@@ -34,7 +34,7 @@ test("unit coverage owns the only required backend unit execution", () => {
 
 test("unit coverage uses a shallow checkout and an explicit reusable Go cache", () => {
 	const job = backendCoverageJob(read(".github/workflows/ci.yml"));
-	assert.match(job, /timeout-minutes: \$\{\{ matrix\.suite == 'unit' && 10 \|\| 80 \}\}/);
+	assert.match(job, /timeout-minutes: \$\{\{ matrix\.suite == 'unit' && 5 \|\| 80 \}\}/);
 
 	const unitCheckout = stepSection(
 		job,

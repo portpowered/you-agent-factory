@@ -210,7 +210,7 @@ jobs:
     # The functional runner enforces the 75m merge-full budget. The unit lane
     # has a five-minute ceiling so a cache regression cannot quietly turn the
     # required coverage check back into the longest pull-request job.
-    timeout-minutes: ${{ matrix.suite == 'unit' && 10 || 80 }}
+    timeout-minutes: ${{ matrix.suite == 'unit' && 5 || 80 }}
     # Both lanes upsert their own reporting comment on the pull request,
     # mirroring Backend Lint. Each uses a distinct HTML-comment marker, so the
     # two reports never find, overwrite, or delete each other's comment. Every
