@@ -107,6 +107,12 @@ Customers and API clients can start concurrent invocations on one hosted process
   `Process.Execute`, no process-global environment mutation in the changed
   functional tests, and no remaining accidental default-session use in the
   migrated scenarios.
+- The functional coverage floors for the internal `processlifecycle` and
+  `runtimebinding` packages were reconciled to 131/174 (75.28%) and 293/508
+  (57.67%). The former floors depended on timing-sensitive cancellation during
+  startup and an accidental default-session collision. Those internal branches
+  remain unit-tested; the functional lane now measures only the retained
+  customer journeys, as required by the testing standard.
 
 ## Acceptance criteria
 

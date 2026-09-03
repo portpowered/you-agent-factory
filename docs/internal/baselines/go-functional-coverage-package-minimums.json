@@ -938,7 +938,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
-      "minimum": 75.86
+      "minimum": 75.28
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation",
@@ -966,7 +966,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
-      "minimum": 60.10
+      "minimum": 57.67
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
