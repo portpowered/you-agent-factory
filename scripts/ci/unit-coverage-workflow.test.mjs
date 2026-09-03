@@ -74,7 +74,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 test("unit coverage pins hosted package concurrency while local callers retain platform defaults", () => {
 	const workflow = backendCoverageJob(read(".github/workflows/ci.yml"));
 	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Save unit coverage Go build and test cache");
-	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "12"/);
+	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "4"/);
 
 	const makefile = read("Makefile");
 	assert.match(makefile, /GO_UNIT_COVERAGE_JOBS \?=/);

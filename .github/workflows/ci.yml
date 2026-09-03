@@ -304,7 +304,7 @@ jobs:
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
         env:
-          GO_UNIT_COVERAGE_JOBS: "12"
+          GO_UNIT_COVERAGE_JOBS: "4"
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json

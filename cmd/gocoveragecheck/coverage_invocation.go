@@ -26,6 +26,7 @@ const windowsCoverageCommandLineLimit = 24_000
 type coverageInvocationPlan struct {
 	invocations  []commandInvocation
 	profilePaths []string
+	covdataDir   string
 	cleanup      func() error
 }
 
@@ -310,7 +311,45 @@ func windowsCommandLineArgLength(arg string) int {
 // lines, or in deterministic test-package batches when Windows needs it.
 func planGoTestCoverageLane(commonArgs []string, testPackages []string, profilePath string, cfg config, targetOS string, compactPackageArgs ...[]string) (coverageInvocationPlan, error) {
 	jsonEventsEnabled := strings.TrimSpace(cfg.timingOutput) != "" || cfg.stream
-	return buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, jsonEventsEnabled, targetOS, compactPackageArgs...)
+	plan, err := buildCoverageInvocationPlan(commonArgs, testPackages, profilePath, jsonEventsEnabled, targetOS, compactPackageArgs...)
+	if err != nil || !useUnitCovdataProfile(cfg, targetOS) {
+		return plan, err
+	}
+	return convertPlanToUnitCovdata(plan)
+}
+
+func useUnitCovdataProfile(cfg config, targetOS string) bool {
+	return targetOS != "windows" &&
+		(cfg.suite == "" || cfg.suite == unitCoverageSuite) &&
+		strings.TrimSpace(cfg.packages) == "" &&
+		strings.TrimSpace(cfg.coverpkg) == ""
+}
+
+func convertPlanToUnitCovdata(plan coverageInvocationPlan) (coverageInvocationPlan, error) {
+	covdataDir, err := os.MkdirTemp("", "gocoveragecheck-unit-covdata-*")
+	if err != nil {
+		return coverageInvocationPlan{}, errors.Join(fmt.Errorf("create unit coverage data directory: %w", err), plan.cleanup())
+	}
+	previousCleanup := plan.cleanup
+	plan.cleanup = func() error {
+		return errors.Join(previousCleanup(), os.RemoveAll(covdataDir))
+	}
+	plan.covdataDir = covdataDir
+	for index := range plan.invocations {
+		args := make([]string, 0, len(plan.invocations[index].args)+2)
+		for argIndex, arg := range plan.invocations[index].args {
+			if strings.HasPrefix(arg, "-coverprofile=") {
+				continue
+			}
+			args = append(args, arg)
+			if argIndex == 0 && arg == "test" {
+				args = append(args, "-cover")
+			}
+		}
+		args = append(args, "-args", "-test.gocoverdir="+covdataDir)
+		plan.invocations[index].args = args
+	}
+	return plan, nil
 }
 
 func planGoTestCoverageLaneWithSelection(commonArgs []string, profilePath string, cfg config, targetOS string, selection functionalCoverageSelection) (coverageInvocationPlan, error) {
@@ -382,6 +421,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		}
 	}
 	wallSeconds := time.Since(started).Seconds()
+	covdataErr := materializeUnitCovdataProfile(plan, profilePath, repoRoot)
 
 	var buildDiagnosticErr error
 	if buildDiagnosticRun != nil {
@@ -397,6 +437,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr, expectedFunctionalInventory)
 
 	var mergeErr error
+	mergeErr = errors.Join(mergeErr, covdataErr)
 	if len(plan.profilePaths) > 1 {
 		availableProfiles, availabilityErr := availableBatchCoverageProfiles(plan.profilePaths, succeeded)
 		mergeErr = availabilityErr
@@ -415,6 +456,29 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 		failedTestCount:      failedTestCount,
 		failedTestCountKnown: failedTestCountKnown && failedTestCount > 0,
 	}
+}
+
+func materializeUnitCovdataProfile(plan coverageInvocationPlan, profilePath string, repoRoot string) error {
+	if strings.TrimSpace(plan.covdataDir) == "" {
+		return nil
+	}
+	stdout, stderr, err := runCommand(commandInvocation{
+		name: "go",
+		args: []string{"tool", "covdata", "textfmt", "-i=" + plan.covdataDir, "-o=" + profilePath},
+		dir:  repoRoot,
+		env:  os.Environ(),
+	})
+	if err == nil {
+		return nil
+	}
+	detail := strings.TrimSpace(stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(stdout)
+	}
+	if detail != "" {
+		return fmt.Errorf("materialize unit coverage profile: %w\n%s", err, detail)
+	}
+	return fmt.Errorf("materialize unit coverage profile: %w", err)
 }
 
 func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config, testPackages []string, started time.Time, profilePath string, repoRoot string, coverPackages []string) *functionalTimingSnapshotter {
