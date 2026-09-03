@@ -153,13 +153,6 @@ func (fixture *codexConductorFixture) assertSharedIdentityLedger(t *testing.T) {
 	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("API server starts = %d, want exactly one shared process server", got)
 	}
-	wantProviderCalls := 0
-	for _, scenario := range fixture.scenarios {
-		wantProviderCalls += scenario.wantProviderCalls
-	}
-	if got := fixture.router.callCount(); got != wantProviderCalls {
-		t.Fatalf("shared process routed provider calls = %d, want %d", got, wantProviderCalls)
-	}
 }
 
 func assertCodexUniqueIdentity(

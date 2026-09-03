@@ -347,6 +347,46 @@ func resolveFactoryID(ctx Context, factoryID string) (Resolution, bool) {
 	return res, true
 }
 
+func resolveFactoryInline(value string) (Resolution, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return notFoundResolution(KindFactoryInline, value, "inline Factory definition is empty"), true
+	}
+	var cfg interfaces.FactoryConfig
+	if err := json.Unmarshal([]byte(trimmed), &cfg); err != nil {
+		return notFoundResolution(
+			KindFactoryInline,
+			value,
+			fmt.Sprintf("inline Factory definition is invalid JSON: %v", err),
+		), true
+	}
+	if !interfaces.IsJavaScriptOrchestratorFactory(&cfg) || cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
+		return notFoundResolution(
+			KindFactoryInline,
+			value,
+			"inline Factory definition is not a JavaScript workflow Factory",
+		), true
+	}
+	js := cfg.Orchestrator.JavaScript
+	if js.InlineSource == nil || strings.TrimSpace(js.InlineSource.Inline) == "" {
+		return notFoundResolution(
+			KindFactoryInline,
+			value,
+			"inline Factory definition must carry JavaScript inlineSource",
+		), true
+	}
+	factoryName := strings.TrimSpace(cfg.Name)
+	return resolutionFromCandidate(nil, KindFactoryInline, value, lookupCandidate{
+		stage:         LookupStageExplicitSourceKind,
+		factoryName:   factoryName,
+		sourceRef:     fmt.Sprintf("factory:%s:inline", factoryName),
+		content:       js.InlineSource.Inline,
+		agents:        js.Agents,
+		argsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
+		defaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
+	}), true
+}
+
 func resolveInlineSource(kind Kind, value, inline string) (Resolution, bool) {
 	content := strings.TrimSpace(inline)
 	if content == "" {

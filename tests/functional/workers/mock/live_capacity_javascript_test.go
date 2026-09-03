@@ -28,7 +28,7 @@ func testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(
 ) {
 	provider := newLiveCapacityJavaScriptProviderRunner()
 	dir := scaffoldLiveCapacityJavaScriptFactory(t)
-	fixture.useCommandRunners(provider, nil)
+	fixture.useCommandRunnersFor(t, fixture.hostDir, provider, nil)
 
 	started := startLiveCapacityJavaScriptWorkflow(t, fixture.server.URL(), liveCapacityJavaScriptWorkflow)
 	if started.SessionId == "" {

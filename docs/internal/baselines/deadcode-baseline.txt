@@ -2615,11 +2615,13 @@ tests/functional/internal/support/api_server.go: unreachable func: GetFactoryEve
 tests/functional/internal/support/api_server.go: unreachable func: GetFactoryEventsInvalidCursorErrorAt
 tests/functional/internal/support/api_server.go: unreachable func: GetFactoryResponseEventsAt
 tests/functional/internal/support/api_server.go: unreachable func: GetWorkerSessionEventsByIDAt
+tests/functional/internal/support/api_server.go: unreachable func: GetWorkerSessionEventsForSessionByIDAt
 tests/functional/internal/support/api_server.go: unreachable func: ProbeFactoryEventStreamRecoveryAt
 tests/functional/internal/support/api_server.go: unreachable func: ReconnectSequenceForFactoryEvent
 tests/functional/internal/support/api_server.go: unreachable func: StartFunctionalAPIServer
 tests/functional/internal/support/api_server.go: unreachable func: containsFunctionalArgument
 tests/functional/internal/support/api_server.go: unreachable func: factoryEventsURLWithCursor
+tests/functional/internal/support/api_server.go: unreachable func: functionalArgumentValue
 tests/functional/internal/support/api_server.go: unreachable func: functionalRunArgs
 tests/functional/internal/support/api_server.go: unreachable func: readFactoryEventStreamRecoveryFromURL
 tests/functional/internal/support/api_server.go: unreachable func: readFactoryEventsFromURL
@@ -2738,6 +2740,7 @@ tests/functional/internal/support/http_observation.go: unreachable func: GetDefa
 tests/functional/internal/support/http_observation.go: unreachable func: GetJSON
 tests/functional/internal/support/http_observation.go: unreachable func: ListDefaultSessionWork
 tests/functional/internal/support/http_observation.go: unreachable func: ListDefaultSessionWorkerSessions
+tests/functional/internal/support/http_observation.go: unreachable func: ListSessionWorkerSessions
 tests/functional/internal/support/http_observation.go: unreachable func: OpenFactorySessionAt
 tests/functional/internal/support/http_observation.go: unreachable func: SubmitDefaultSessionWork
 tests/functional/internal/support/http_observation.go: unreachable func: SubmitSessionWorkAt
@@ -2961,6 +2964,8 @@ tests/functional/internal/support/work_session_paths.go: unreachable func: Sessi
 tests/functional/internal/support/work_session_paths.go: unreachable func: SessionEventsURLWithCursor
 tests/functional/internal/support/work_session_paths.go: unreachable func: SessionResponseEventsURL
 tests/functional/internal/support/work_session_paths.go: unreachable func: SessionResponseEventsURLWithAfterSequence
+tests/functional/internal/support/work_session_paths.go: unreachable func: SessionWorkPath
+tests/functional/internal/support/work_session_paths.go: unreachable func: SessionWorkURL
 tests/functional/internal/support/workdir.go: unreachable func: ResolvedRuntimePath
 tests/functional/internal/support/workdir.go: unreachable func: SetWorkingDirectory
 tests/functional/sessionparity/compare.go: unreachable func: Compare

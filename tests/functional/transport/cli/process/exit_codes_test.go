@@ -14,6 +14,7 @@ import (
 // reusable customer Process.Execute boundary through the injected command
 // runner edge.
 func TestCLIWorkerFailureExitCode(t *testing.T) {
+	t.Parallel()
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerFailurePrompt)
 	fixture := sharedWorkerOutcomeProcess(t)
@@ -48,6 +49,7 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 // reusable customer Process.Execute boundary through an injected provider
 // command runner.
 func TestCLISuccessExitCode(t *testing.T) {
+	t.Parallel()
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerSuccessPrompt)
 	fixture := sharedWorkerOutcomeProcess(t)

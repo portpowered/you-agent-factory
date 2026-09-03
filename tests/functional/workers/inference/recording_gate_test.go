@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -253,8 +254,9 @@ func runWSRFT004FactoryWithProcess(
 	support.CleanupProcess(t, process)
 	recordPath := filepath.Join(t.TempDir(), "wsr-ft-004.json")
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
+		"you", "run", "--dir", dir, "--session", uuid.NewString(), "--quiet", "--record", recordPath,
 	})
+	inputs.Input.Env = sharedInferenceProcessEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = dir
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())

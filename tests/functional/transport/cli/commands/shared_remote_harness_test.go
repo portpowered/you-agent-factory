@@ -27,9 +27,8 @@ type sharedRemoteCLI struct {
 }
 
 // TestCLISharedRemoteScenarios keeps the eligible remote command witnesses on
-// one production service-mode host. Scenarios that select invocation-owned or
-// explicit-session state overlap on one concurrent root process; cases that
-// characterize or mutate the named default session remain serialized.
+// one production service-mode host. Every scenario selects invocation-owned or
+// explicit-session state and overlaps on one concurrent root process.
 func TestCLISharedRemoteScenarios(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow shared remote CLI wiring")
@@ -55,24 +54,13 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 		hostFactoryDir: hostFactoryDir,
 	}
 
-	serialized := []struct {
+	parallel := []struct {
 		name string
 		run  func(*testing.T, *sharedRemoteCLI)
 	}{
 		{name: "TestCLIFactoryInitValidateAndShow", run: testCLIFactoryInitValidateAndShow},
 		{name: "TestCLIFactoryReplaceCurrentChangesSessionFactory", run: testCLIFactoryReplaceCurrentChangesSessionFactory},
 		{name: "TestCLISessionListUsesIsolatedRecordingHome", run: testCLISessionListUsesIsolatedRecordingHome},
-	}
-	for _, test := range serialized {
-		t.Run(test.name, func(t *testing.T) {
-			test.run(t, remote)
-		})
-	}
-
-	parallel := []struct {
-		name string
-		run  func(*testing.T, *sharedRemoteCLI)
-	}{
 		{name: "TestCLISubmitBatchInlineJSON", run: testCLISubmitBatchInlineJSON},
 		{name: "TestCLISubmitBatchFile", run: testCLISubmitBatchFile},
 		{name: "TestCLISubmitUnavailableServer", run: testCLISubmitUnavailableServer},

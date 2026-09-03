@@ -178,11 +178,6 @@ func testCLISessionListUsesIsolatedRecordingHome(t *testing.T, remote *sharedRem
 	if err := os.WriteFile(artifactPath, []byte(malformedArtifact), 0o600); err != nil {
 		t.Fatalf("write malformed external recording artifact: %v", err)
 	}
-	// Keep the CLI process on the same path a real operator invocation uses,
-	// while t.Setenv restores both variables after this serialized scenario.
-	t.Setenv("HOME", externalHome)
-	t.Setenv("USERPROFILE", externalHome)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	characterizationFactoryDir := support.ScaffoldFactory(t, sessionHistoryOnlyFactoryConfig())
@@ -202,6 +197,7 @@ func testCLISessionListUsesIsolatedRecordingHome(t *testing.T, remote *sharedRem
 		"--json", "session", "list", "--history-only",
 	)
 	command.Dir = characterizationFactoryDir
+	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(externalHome)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you session list consulted malformed external-home recording artifact: %v\n%s", err, output)

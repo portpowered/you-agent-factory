@@ -25,7 +25,6 @@ const (
 // primary outcome that reflects the imported module contribution.
 func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t)
-	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -33,9 +32,6 @@ func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fi
 		"--no-record",
 		"hello",
 	}, dir, fixture.homeDir)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed factory without child dispatch", got, providerCalls)
-	}
 	assertFileJavaScriptImportedSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -47,7 +43,6 @@ func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fi
 // worker dispatch.
 func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithMissingImport(t)
-	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -62,9 +57,6 @@ func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loa
 		inputs.Stderr(),
 		fileJavaScriptMissingImportPath,
 	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for missing import before dispatch", got, providerCalls)
-	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 

@@ -114,6 +114,33 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	}
 }
 
+func TestQuery_TargetsExplicitFactorySession(t *testing.T) {
+	const sessionID = "session-alpha"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/"+sessionID+"/factory" {
+			t.Fatalf("path = %q, want explicit Factory Session path", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.Factory{Name: "alpha"}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out strings.Builder
+	if err := NewQuery(testHTTPProtocol(t))(QueryConfig{
+		Context:   context.Background(),
+		Server:    serverBase(t, srv),
+		SessionID: sessionID,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if !strings.Contains(out.String(), "alpha") {
+		t.Fatalf("output = %q, want explicit session Factory", out.String())
+	}
+}
+
 func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
 	factoryID := "customer-factory"
 	srv := currentFactoryServer(t, factoryapi.Factory{

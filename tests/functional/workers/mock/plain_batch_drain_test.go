@@ -16,10 +16,8 @@ import (
 const plainBatchDrainTestTimeout = 15 * time.Second
 
 // plainBatchScenario is the isolation scope for one no-server invocation.
-// These rows intentionally retain the local CLI's invocation-scoped default
-// Factory Session because the public no-server command has no session selector.
-// The scope still gives every row a unique Factory, selector, request/trace,
-// cancellation gate, runtime identity, HOME, and input/config path.
+// Every row gets a unique Factory Session, Factory, request/trace, cancellation
+// gate, runtime identity, HOME, and input/config path.
 type plainBatchScenario struct {
 	factoryDir      string
 	homeDir         string
@@ -49,14 +47,11 @@ func newPlainBatchScenario(t *testing.T) *plainBatchScenario {
 
 // testPlainBatchDrainReportsStrandedWork proves the no-server customer path
 // returns the canonical incomplete-drain diagnostic after a deterministic mock
-// worker completes its dispatch but leaves Work in PROCESSING. It runs after
-// the shared host has been stopped so this one-shot activation reuses the same
-// root without overlapping the host runtime.
+// worker completes its dispatch but leaves Work in PROCESSING.
 func testPlainBatchDrainReportsStrandedWork(
 	t *testing.T,
 	fixture *sharedWorkersMockFixture,
 ) {
-	fixture.prepareLocalActivation(t)
 	scenario := newPlainBatchScenario(t)
 	workFile := writePlainBatchDrainWork(t, scenario)
 	mockWorkersFile := writePlainBatchDrainMockWorkers(t, scenario)
@@ -97,7 +92,7 @@ func plainBatchInputs(
 	continuous bool,
 ) *support.CapturedInputs {
 	t.Helper()
-	args := []string{"you", "run", "--dir", scenario.factoryDir, "--no-record", "--quiet"}
+	args := []string{"you", "run", "--session=" + uuid.NewString(), "--dir", scenario.factoryDir, "--no-record", "--quiet"}
 	if continuous {
 		args = append(args, "--continuously")
 	}

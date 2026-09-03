@@ -236,14 +236,16 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 }
 
 func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource {
+	if bundle := fs.currentRuntimeBundle(); bundle != nil {
+		loaded, _ := bundle.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
+		if loaded != nil {
+			return loaded
+		}
+	}
 	if fs != nil && fs.sessionState != nil {
 		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil && runtime.RuntimeConfig != nil {
 			return runtime.RuntimeConfig
 		}
-	}
-	if bundle := fs.currentRuntimeBundle(); bundle != nil {
-		loaded, _ := bundle.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
-		return loaded
 	}
 	if fs == nil || fs.sessionState == nil {
 		return nil
@@ -263,15 +265,20 @@ func (fs *SessionRuntime) CurrentRuntimeConfig() interfaces.LoadedFactorySource 
 }
 
 func (fs *SessionRuntime) currentRuntimeService() factory.Service {
+	// The SessionRuntime is invocation-owned. Its active/startup bundle must win
+	// over the process-wide selected session, which can belong to a concurrent
+	// command using the same root-built process.
+	if instance := fs.currentRuntimeBundle(); instance != nil {
+		if service := instance.RuntimeService(); service != nil {
+			return service
+		}
+	}
 	if fs != nil && fs.sessionState != nil {
 		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil {
 			if service := runtimebinding.ServiceForLiveRuntime(runtime); service != nil {
 				return service
 			}
 		}
-	}
-	if instance := fs.currentRuntimeBundle(); instance != nil {
-		return instance.RuntimeService()
 	}
 	return nil
 }

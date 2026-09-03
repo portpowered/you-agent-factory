@@ -60,10 +60,9 @@ func (runner *greetingCommandRunner) snapshot() (routing int, help, build []stri
 func TestFactoryBuilder(t *testing.T) {
 	fixture := newFactoryBuilderSharedFixture(t)
 	// The shared host keeps the production application alive while each child
-	// uses its own explicit session. The public CLI has no selector for an
-	// already-open live session, so session invocations use the API-owned
-	// invocation contract below while Builder-issued customer commands still
-	// use Process.Execute.
+	// uses its own explicit session. Session invocations use the public API's
+	// structured-argument contract while Builder-issued customer commands use
+	// the reusable Process.Execute boundary.
 	fixture.prepareExistingInvalidScenario(t)
 	fixture.startServer(t)
 	t.Run("customer scenarios", func(t *testing.T) {

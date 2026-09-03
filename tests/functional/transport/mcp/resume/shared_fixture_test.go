@@ -33,9 +33,8 @@ var mcpResumePackageState struct {
 }
 
 // TestMain owns the one root-built MCP stdio server for this package. The
-// client and server are deliberately serialized because the current stdio
-// client owns one request/response stream and does not correlate concurrent
-// responses.
+// client correlates concurrent responses by JSON-RPC request ID so independent
+// customer sessions can share the connection without serializing scenarios.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if mcpResumePackageState.fixture != nil {
@@ -91,7 +90,6 @@ func mcpResumePackageFixtureForTest(t *testing.T) *mcpResumePackageFixture {
 		t.Fatal("shared MCP resume fixture is unavailable")
 	}
 	fixture := mcpResumePackageState.fixture
-	fixture.clientForTest(t)
 	fixture.initialize(t)
 	return fixture
 }
@@ -204,12 +202,6 @@ func (fixture *mcpResumePackageFixture) initialize(t *testing.T) {
 	})
 }
 
-func (fixture *mcpResumePackageFixture) clientForTest(t *testing.T) *stdioMCPClient {
-	t.Helper()
-	fixture.client.t = t
-	return fixture.client
-}
-
 func (fixture *mcpResumePackageFixture) nextRequestID(purpose string) string {
 	number := fixture.nextRequest.Add(1)
 	return fmt.Sprintf("req-mcp-resume-%s-%d", purpose, number)
@@ -241,7 +233,7 @@ func (fixture *mcpResumePackageFixture) cleanupSession(
 	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolControl, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolControl, map[string]any{
 			"sessionId": sessionID,
 			"operation": factoryapi.FactorySessionLifecycleControlKindTerminate,
 			"reason":    "shared MCP resume fixture cleanup",

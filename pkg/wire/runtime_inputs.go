@@ -318,6 +318,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 				},
 			},
 			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+				FactorySessionID:   cfg.FactorySessionID,
 				CanonicalSessionID: cfg.CanonicalSessionID,
 				// Public run and service openings use the existing durable
 				// snapshot path explicitly. Empty and disabled remain

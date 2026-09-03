@@ -95,7 +95,12 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeR
 	}
 	if lifecycle, ok := s.automation.(runtimeAutomationLifecycle); ok {
 		if _, err := lifecycle.ActivateRuntime(ctx, runtimeActivationRequest(bundle, s.enabled)); err != nil {
-			return fmt.Errorf("activate automation runtime: %w", err)
+			return fmt.Errorf(
+				"activate automation runtime for Factory Session %q (Runtime %q): %w",
+				bundle.FactorySessionID,
+				bundle.RuntimeInstanceID,
+				err,
+			)
 		}
 		return nil
 	}
@@ -120,7 +125,7 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 	var runtimeStarter runtimeAutomationStarter
 	if lifecycleActive {
 		if _, err := lifecycle.ActivateRuntime(sidecarCtx, runtimeActivationRequest(handle.Bundle, s.enabled)); err != nil {
-			return s.failStart(handle, cancel, fmt.Errorf("activate automation runtime: %w", err))
+			return s.failStart(handle, cancel, fmt.Errorf("activate automation runtime for Factory Session %q (Runtime %q): %w", handle.Bundle.FactorySessionID, handle.Bundle.RuntimeInstanceID, err))
 		}
 		starter, ok := s.automation.(runtimeAutomationStarter)
 		if !ok {
@@ -228,7 +233,9 @@ func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) 
 	}
 	cfg := bundle.RuntimeCfg.FactoryConfig()
 	if cfg == nil {
-		return automations.RuntimeActivationRequest{RuntimeID: bundle.RuntimeInstanceID}
+		return automations.RuntimeActivationRequest{
+			RuntimeID: bundle.RuntimeInstanceID, FactorySessionID: bundle.FactorySessionID,
+		}
 	}
 	snapshot := interfaces.RuntimeSnapshot{
 		// The runtime host directory is the active session scope. A replayed
@@ -241,8 +248,8 @@ func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) 
 		Workstations:     append([]interfaces.FactoryWorkstationConfig(nil), cfg.Workstations...),
 	}
 	request := automations.RuntimeActivationRequest{
-		RuntimeID: bundle.RuntimeInstanceID,
-		Snapshot:  snapshot,
+		RuntimeID: bundle.RuntimeInstanceID, FactorySessionID: bundle.FactorySessionID,
+		Snapshot: snapshot,
 		Inputs: automations.RuntimeActivationInputs{
 			StartSchedulers: startSchedulers,
 			Submitter: automations.WorkRequestSubmitter(func(ctx context.Context, request work.WorkRequest) error {

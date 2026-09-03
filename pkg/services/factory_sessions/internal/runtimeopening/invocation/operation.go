@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -34,9 +33,6 @@ type operation struct {
 	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
 	generateSessionID factorysessions.SessionIDGenerator
 	presentations     factorysessions.OpeningPresentationOwner
-	catalogScopeMu    sync.Mutex
-	catalogScope      models.RuntimeScopeRef
-	catalogScopeClose func(context.Context) error
 }
 
 // NewOperation binds the stable process graph used by all one-shot
@@ -227,11 +223,12 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	if hosted == nil {
 		return outcome, errors.New("hosted live invocation runtime is incomplete")
 	}
+	sessionID := invocationTargetSessionID(target)
 	if projectionReader, ok := hosted.(interface {
 		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
 	}); ok {
 		projection, projectionErr := projectionReader.GetFactorySession(
-			ctx, factorysessions.DefaultSessionID,
+			ctx, sessionID,
 		)
 		if projectionErr != nil && ctx.Err() != nil {
 			return outcome, ctx.Err()
@@ -245,7 +242,7 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		return outcome, err
 	}
 	invocationResult, err := hosted.InvokeFactorySession(
-		ctx, factorysessions.DefaultSessionID, request,
+		ctx, sessionID, request,
 	)
 	outcome.Result = factoryInvocationResultFromSessionInvocation(invocationResult)
 	resultErr = err
@@ -291,12 +288,13 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
+	sessionID := invocationTargetSessionID(target)
 	bridge, err := o.startFactoryEventBridge(runContext, opened.Sessions, target)
 	if err != nil {
 		return outcome, err
 	}
 	projection, projectionErr := opened.Sessions.GetFactorySession(
-		runContext, factorysessions.DefaultSessionID,
+		runContext, sessionID,
 	)
 	if projectionErr != nil && runContext.Err() != nil {
 		return outcome, runContext.Err()
@@ -315,7 +313,7 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 	}
 
 	outcome.Result, resultErr = opened.Invoker.InvokeFactorySession(
-		runContext, factorysessions.DefaultSessionID, request,
+		runContext, sessionID, request,
 	)
 	if bridge != nil {
 		resultErr = joinTeardownErrorUnlessResultDetermined(
@@ -650,6 +648,7 @@ type lifecycle struct {
 	runContext context.Context
 	cancel     context.CancelFunc
 	stopWorker factorysessions.RuntimeStop
+	sessionID  string
 }
 
 func (o *operation) open(
@@ -665,7 +664,11 @@ func (o *operation) open(
 		return roles.OpenedInvocationRuntime{}, nil, fmt.Errorf("open invocation runtime: %w", err)
 	}
 	runContext, cancel := context.WithCancel(ctx)
-	active := &lifecycle{runContext: runContext, cancel: cancel}
+	active := &lifecycle{
+		runContext: runContext,
+		cancel:     cancel,
+		sessionID:  invocationTargetSessionID(target),
+	}
 	err = opened.Lifecycle.StartLifecycle(ctx, runContext)
 	if err == nil {
 		active.stopWorker, err = opened.Lifecycle.StartWorkerLifecycle(ctx)
@@ -700,6 +703,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	}
 	config.FactoryRuntime.MetricsConfig = target.RuntimeMetricsConfig
 	config.FactorySession.SystemConfigHome = target.HomeDir
+	config.FactorySession.FactorySessionID = invocationTargetSessionID(target)
 	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
 	config.FactorySession.WorkFile = ""
 	config.FactorySession.Host.Port = 0
@@ -735,7 +739,7 @@ func (l *lifecycle) close(ctx context.Context, opened roles.OpenedInvocationRunt
 		}
 	}
 	if closeSession != nil {
-		if err := closeSession(cleanupContext, factorysessions.DefaultSessionID); err != nil {
+		if err := closeSession(cleanupContext, l.sessionID); err != nil {
 			if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 				result = errors.Join(result, err)
 			}
@@ -751,6 +755,13 @@ func (l *lifecycle) close(ctx context.Context, opened roles.OpenedInvocationRunt
 	}
 	result = errors.Join(result, closeArtifacts(opened))
 	return result
+}
+
+func invocationTargetSessionID(target roles.InvocationTarget) string {
+	if sessionID := strings.TrimSpace(target.FactorySessionID); sessionID != "" {
+		return sessionID
+	}
+	return factorysessions.DefaultSessionID
 }
 
 func closeArtifacts(opened roles.OpenedInvocationRuntime) error {

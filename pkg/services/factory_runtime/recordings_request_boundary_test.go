@@ -31,6 +31,7 @@ func testRuntimeHostingExposesRecordingsRootCapabilities(t *testing.T) {
 		"/runtime",
 		"/factory",
 		"runtime-1",
+		"session-1",
 		"backend-1",
 		time.Date(2026, 7, 28, 14, 0, 0, 0, time.UTC),
 		ledger,

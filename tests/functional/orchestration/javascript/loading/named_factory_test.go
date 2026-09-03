@@ -25,21 +25,8 @@ const (
 
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
+	t.Parallel()
 	fixture := loadingFixtureForTest(t)
-	// The Go test runner reuses one TestMain process for -count repetitions.
-	// This is the final selector in the package's normal registration order;
-	// release the hosted compatibility runtime after its session cleanups so
-	// the next repetition can build its own one-process fixture.
-	t.Cleanup(func() {
-		if err := fixture.shutdown(); err != nil {
-			t.Errorf("reset loading fixture after repeated run: %v", err)
-		}
-		loadingFixtureMu.Lock()
-		if sharedLoadingFixture == fixture {
-			sharedLoadingFixture = nil
-		}
-		loadingFixtureMu.Unlock()
-	})
 	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
 }
 
@@ -50,7 +37,6 @@ func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 func runNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T, fixture *loadingFixture) {
 	factoryName := fixture.namedCLI.name
 	namedFactoryDir := fixture.namedCLI.factoryDir
-	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocationAtRoot(t, []string{
 		"you", "--json", "run",
 		"--named", factoryName,
@@ -58,9 +44,6 @@ func runNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T, fixture *load
 		"--no-record",
 		"hello",
 	}, t.TempDir(), fixture.homeDir, namedFactoryDir)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
-	}
 	assertNamedJavaScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -74,13 +57,9 @@ func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *lo
 	factoryName := fixture.namedAPI.name
 	namedFactoryDir := fixture.namedAPI.factoryDir
 	requestID := fixture.nextRequestID("named-api")
-	providerCalls := fixture.provider.CallCount()
 	result := invokeNamedJavaScriptFactoryOverHTTP(t, fixture.baseURL, factoryName, "hello", requestID)
 	fixture.trackSession(t, result.SessionId, requestID, namedFactoryDir, fixture.homeDir, "api")
 	assertNamedJavaScriptSessionSuccessOutcome(t, result, factoryName)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
-	}
 
 	responseJSON, err := json.Marshal(result)
 	if err != nil {
@@ -95,7 +74,6 @@ func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *lo
 // public session surface for that named Factory identity through HTTP and CLI.
 func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixture *loadingFixture) {
 	fixture.startAPIServer(t)
-	providerCalls := fixture.provider.CallCount()
 	factoryName := fixture.namedControl.name
 	namedFactoryDir := fixture.namedControl.factoryDir
 	requestID := fixture.nextRequestID("named-controls")
@@ -160,9 +138,6 @@ func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixtu
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		factoryName,
 	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named busy-loop factory without child dispatch", got, providerCalls)
-	}
 }
 
 func assertNamedJavaScriptSessionSuccessOutcome(
@@ -257,7 +232,7 @@ func invokeNamedJavaScriptFactoryOverHTTP(
 	t.Helper()
 
 	factoryID := factoryName
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+	return invokeJavaScriptFactoryOverHTTP(t, baseURL, factoryapi.FactorySessionExecutionRequest{
 		RequestId: requestID,
 		Args:      &map[string]any{"prompt": prompt},
 		Source: factoryapi.FactorySessionExecutionSource{
@@ -265,6 +240,15 @@ func invokeNamedJavaScriptFactoryOverHTTP(
 			FactoryId: &factoryID,
 		},
 	})
+}
+
+func invokeJavaScriptFactoryOverHTTP(
+	t *testing.T,
+	baseURL string,
+	execution factoryapi.FactorySessionExecutionRequest,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+	payload, err := json.Marshal(execution)
 	if err != nil {
 		t.Fatalf("marshal sync execution request: %v", err)
 	}

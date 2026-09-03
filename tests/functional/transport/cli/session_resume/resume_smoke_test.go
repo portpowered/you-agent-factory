@@ -325,8 +325,6 @@ func assertDispatchSummaryParity(
 
 func (h *cliResumeSmokeHarness) executeCLI(t *testing.T, args ...string) (bytes.Buffer, error) {
 	t.Helper()
-	h.fixture.executeMu.Lock()
-	defer h.fixture.executeMu.Unlock()
 	var stdout, stderr bytes.Buffer
 	inputArgs := []string{"you", "--json"}
 	if len(args) >= 2 && args[0] == "session" {

@@ -757,6 +757,10 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 	if cfg.RecordingsCLI == nil {
 		return resolvedRunRecordPath{}, fmt.Errorf("Recordings CLI adapter is required")
 	}
+	reportedSessionID := strings.TrimSpace(cfg.FactorySessionID)
+	if reportedSessionID == "" {
+		reportedSessionID = defaultFactorySessionID
+	}
 	resolved, err := cfg.RecordingsCLI.ResolveRecordPath(recordingscli.InvocationRequest{
 		RecordPath:              cfg.RecordPath,
 		ReplayPath:              cfg.ReplayPath,
@@ -765,7 +769,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 		HomeDir:                 cfg.HomeDir,
 		RecordingTargetPlanner:  cfg.RecordingTargetPlanner,
 		CanonicalSessionID:      cfg.CanonicalSessionID,
-		ReportedSessionID:       defaultFactorySessionID,
+		ReportedSessionID:       reportedSessionID,
 	})
 	if err != nil {
 		return resolvedRunRecordPath{}, err

@@ -92,10 +92,20 @@ func (router *codexCommandRouter) callCount() int {
 	return len(router.calls)
 }
 
-func (router *codexCommandRouter) resetCalls() {
+func (router *codexCommandRouter) resetCallsFor(selectors []string) {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	router.calls = nil
+	reset := make(map[string]struct{}, len(selectors))
+	for _, selector := range selectors {
+		reset[filepath.Clean(strings.TrimSpace(selector))] = struct{}{}
+	}
+	kept := router.calls[:0]
+	for _, call := range router.calls {
+		if _, remove := reset[call.selector]; !remove {
+			kept = append(kept, call)
+		}
+	}
+	router.calls = kept
 }
 
 // codexScenarioCommandRunner holds each scenario's controlled result queue

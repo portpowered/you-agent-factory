@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -176,11 +179,37 @@ func buildLifecycleProcess(t *testing.T, edges serviceedges.Edges) *lifecycleCoo
 
 func (coordinator *lifecycleCoordinator) Inputs(args []string, workingDirectory string) *support.CapturedInputs {
 	coordinator.t.Helper()
+	args, _ = ensureLifecycleSessionArg(args)
 	inputs := support.FakeInputs(coordinator.t.Context(), args)
 	inputs.Input.WorkingDirectory = workingDirectory
 	inputs.Input.Env = isolatedLifecycleEnvironment(inputs.Input.Env, coordinator.homeDir)
 	coordinator.recordPhase(lifecyclePhaseInputs, "invocation inputs prepared with an isolated operator home", false)
 	return inputs
+}
+
+func ensureLifecycleSessionArg(args []string) ([]string, string) {
+	result := append([]string(nil), args...)
+	for index, arg := range result {
+		if arg == "--session" && index+1 < len(result) {
+			return result, result[index+1]
+		}
+		if strings.HasPrefix(arg, "--session=") {
+			return result, strings.TrimPrefix(arg, "--session=")
+		}
+	}
+	sessionID := uuid.NewString()
+	for index, arg := range result {
+		if arg == "run" {
+			result = append(result[:index+1], append([]string{"--session", sessionID}, result[index+1:]...)...)
+			return result, sessionID
+		}
+	}
+	return result, factorysessions.DefaultSessionID
+}
+
+func lifecycleSessionID(args []string) string {
+	_, sessionID := ensureLifecycleSessionArg(args)
+	return sessionID
 }
 
 func isolatedLifecycleEnvironment(environment []string, home string) []string {
@@ -471,12 +500,13 @@ func (coordinator *lifecycleCoordinator) diagnostics() string {
 // public HTTP projections; readiness and completion are signal-driven, and a
 // deadline turns a missing phase into diagnostics instead of a hang.
 func (coordinator *lifecycleCoordinator) ObserveHostedServerAttached(
-	baseURL, wantWorkText string,
+	baseURL, sessionID, wantWorkText string,
 	releaseWorker func(),
 	done <-chan struct{},
 ) (factoryapi.FactorySession, string, bool, error) {
 	return coordinator.ObserveHostedServerAttachedWithin(
 		baseURL,
+		sessionID,
 		wantWorkText,
 		releaseWorker,
 		done,
@@ -485,7 +515,7 @@ func (coordinator *lifecycleCoordinator) ObserveHostedServerAttached(
 }
 
 func (coordinator *lifecycleCoordinator) ObserveHostedServerAttachedWithin(
-	baseURL, wantWorkText string,
+	baseURL, sessionID, wantWorkText string,
 	releaseWorker func(),
 	done <-chan struct{},
 	timeout time.Duration,
@@ -512,7 +542,7 @@ func (coordinator *lifecycleCoordinator) ObserveHostedServerAttachedWithin(
 	)
 	for {
 		if !sessionRead {
-			if session, ok, diagnostic := tryReadDefaultFactorySession(baseURL); ok {
+			if session, ok, diagnostic := tryReadFactorySession(baseURL, sessionID); ok {
 				sessionDuring = session
 				sessionRead = true
 				coordinator.publicObservation(lifecyclePhaseActive, fmt.Sprintf("Factory Session %q readable", session.Id))
@@ -524,7 +554,7 @@ func (coordinator *lifecycleCoordinator) ObserveHostedServerAttachedWithin(
 			}
 		}
 		if !workVisible {
-			if workID, ok, diagnostic := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
+			if workID, ok, diagnostic := tryReadTerminalWorkPrimaryText(baseURL, sessionID, wantWorkText); ok {
 				terminalWorkID = workID
 				workVisible = true
 				coordinator.publicObservation(lifecyclePhaseTerminal, fmt.Sprintf("terminal Work %q readable", workID))

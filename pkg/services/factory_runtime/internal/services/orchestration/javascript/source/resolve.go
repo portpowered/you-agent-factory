@@ -39,8 +39,10 @@ func resolveSource(req Request, ctx Context) (Resolution, bool) {
 		return resolveWorkflowFile(ctx, req.Value)
 	case KindFactoryID:
 		return resolveFactoryID(ctx, req.Value)
-	case KindInlineWorkflow, KindFactoryInline:
+	case KindInlineWorkflow:
 		return resolveInlineSource(req.Kind, req.Value, req.InlineSource)
+	case KindFactoryInline:
+		return resolveFactoryInline(req.Value)
 	default:
 		return Resolution{}, false
 	}

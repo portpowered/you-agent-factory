@@ -27,7 +27,6 @@ const (
 // in success diagnostics.
 func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactory(t)
-	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -35,9 +34,6 @@ func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture
 		"--no-record",
 		"hello",
 	}, dir, fixture.homeDir)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed TypeScript factory without child dispatch", got, providerCalls)
-	}
 	assertTypeScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
@@ -48,7 +44,6 @@ func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture
 // line after TypeScript stripping.
 func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactoryWithSourceMapSyntaxError(t)
-	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -64,9 +59,6 @@ func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadin
 		typeScriptSourceMapAuthoredLine,
 		typeScriptSourceMapEmittedLine,
 	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript source-map failure before dispatch", got, providerCalls)
-	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 

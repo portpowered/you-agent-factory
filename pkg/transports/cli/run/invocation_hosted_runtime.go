@@ -35,6 +35,27 @@ type HostedInvocationOperation interface {
 	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
 }
 
+func hostedFactoryUsesJavaScriptOrchestrator(
+	ctx context.Context,
+	hosted HostedInvocationOperation,
+	sessionID string,
+) (bool, error) {
+	projectionReader, ok := hosted.(interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	projection, projectionErr := projectionReader.GetFactorySession(ctx, sessionID)
+	if projectionErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, ctxErr
+		}
+		return false, nil
+	}
+	return interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg), nil
+}
+
 // factoryEventReader aliases the anonymous presentation-bridge reader shape
 // required by OpeningPresentationOwner without publishing a root interface.
 type factoryEventReader = interface {

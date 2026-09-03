@@ -27,7 +27,7 @@ runtime-metrics-max-age-days		30	maximum days to retain rotated runtime metrics 
 runtime-metrics-max-backups		20	maximum rotated runtime metrics files to retain
 runtime-metrics-max-size-mb		100	rotate each runtime metrics file after this many megabytes
 server		http://localhost:7437	factory API base URI (http:// or https://) for HTTP client commands and remote placement; listener-owning commands use --listen host:port for explicit local binds, while local --server binding remains a warned compatibility path
-session			invoke one already-open Factory Session when --remote selects a running server; omit to start a new durable Factory Session
+session			select the Factory Session identity for this invocation; local runs open that isolated session, while --remote invokes the already-open session on the selected server
 skip-permissions		false	request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
 to-file			read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin
 verbose	v	false	emit concise command diagnostics to stderr

@@ -6,94 +6,97 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// inferenceProviderOverride routes the optional Providers root edge to one
-// serialized scenario. The shared application process keeps the canonical
-// Providers service for ordinary named executor paths; only a scenario that
-// explicitly supplies this edge can exercise the provider-result normalization
-// path with structured diagnostics.
+// inferenceProviderOverride routes an optional Providers edge by the immutable
+// Factory directory captured on each execution request. Selection behavior is
+// stable across every scenario; only the final provider call varies. This lets
+// independent customer sessions overlap without changing a process-wide
+// delegate while either session is live.
 type inferenceProviderOverride struct {
-	mu       sync.RWMutex
-	delegate providers.Service
+	catalog providers.Service
+	mu      sync.RWMutex
+	byDir   map[string]providers.Service
 }
 
-func (router *inferenceProviderOverride) set(delegate providers.Service) {
+func newInferenceProviderOverride() *inferenceProviderOverride {
+	return &inferenceProviderOverride{
+		catalog: testutil.NativeProvider{},
+		byDir:   make(map[string]providers.Service),
+	}
+}
+
+func (router *inferenceProviderOverride) bind(dir string, delegate providers.Service) (func(), error) {
+	if delegate == nil {
+		return func() {}, nil
+	}
+	key := cleanInferencePath(dir)
 	router.mu.Lock()
-	router.delegate = delegate
-	router.mu.Unlock()
+	defer router.mu.Unlock()
+	if _, exists := router.byDir[key]; exists {
+		return nil, fmt.Errorf("shared inference provider override route %q is already bound", key)
+	}
+	router.byDir[key] = delegate
+	return func() {
+		router.mu.Lock()
+		delete(router.byDir, key)
+		router.mu.Unlock()
+	}, nil
 }
 
-func (router *inferenceProviderOverride) current() (providers.Service, error) {
+func (router *inferenceProviderOverride) executionDelegate(request providers.ExecuteRequest) (providers.Service, error) {
 	router.mu.RLock()
 	defer router.mu.RUnlock()
-	if router.delegate == nil {
-		return nil, errors.New("shared inference provider override is not configured")
+	for _, candidate := range []string{request.FactoryDirectory, request.WorkingDirectory} {
+		if delegate := router.byDir[cleanInferencePath(candidate)]; delegate != nil {
+			return delegate, nil
+		}
 	}
-	return router.delegate, nil
+	return nil, errors.New("shared inference provider override has no route for the invocation")
 }
 
 func (router *inferenceProviderOverride) ListProviders(
 	ctx context.Context,
 	request providers.ListProvidersRequest,
 ) (providers.ListProvidersResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ListProvidersResult{}, err
-	}
-	return delegate.ListProviders(ctx, request)
+	return router.catalog.ListProviders(ctx, request)
 }
 
 func (router *inferenceProviderOverride) GetProvider(
 	ctx context.Context,
 	request providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.GetProviderResult{}, err
-	}
-	return delegate.GetProvider(ctx, request)
+	return router.catalog.GetProvider(ctx, request)
 }
 
 func (router *inferenceProviderOverride) ResolveIdentity(
 	ctx context.Context,
 	request providers.ResolveIdentityRequest,
 ) (providers.ResolveIdentityResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ResolveIdentityResult{}, err
-	}
-	return delegate.ResolveIdentity(ctx, request)
+	return router.catalog.ResolveIdentity(ctx, request)
 }
 
 func (router *inferenceProviderOverride) ResolveSelection(
 	ctx context.Context,
 	request providers.ResolveSelectionRequest,
 ) (providers.ResolveSelectionResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ResolveSelectionResult{}, err
-	}
-	return delegate.ResolveSelection(ctx, request)
+	return router.catalog.ResolveSelection(ctx, request)
 }
 
 func (router *inferenceProviderOverride) ValidatePrerequisites(
 	ctx context.Context,
 	request providers.ValidatePrerequisitesRequest,
 ) error {
-	delegate, err := router.current()
-	if err != nil {
-		return err
-	}
-	return delegate.ValidatePrerequisites(ctx, request)
+	return router.catalog.ValidatePrerequisites(ctx, request)
 }
 
 func (router *inferenceProviderOverride) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
-	delegate, err := router.current()
+	delegate, err := router.executionDelegate(request)
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
@@ -104,45 +107,27 @@ func (router *inferenceProviderOverride) ControlAttempt(
 	ctx context.Context,
 	request providers.ControlAttemptRequest,
 ) (providers.ControlAttemptResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ControlAttemptResult{}, err
-	}
-	return delegate.ControlAttempt(ctx, request)
+	return router.catalog.ControlAttempt(ctx, request)
 }
 
 func (router *inferenceProviderOverride) Continue(
 	ctx context.Context,
 	request providers.ContinueRequest,
 ) (providers.ContinueResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ContinueResult{}, err
-	}
-	return delegate.Continue(ctx, request)
+	return router.catalog.Continue(ctx, request)
 }
 
 func (router *inferenceProviderOverride) ContinueReference(
 	ctx context.Context,
 	request providers.ContinueReferenceRequest,
 ) (providers.ContinueReferenceResult, error) {
-	delegate, err := router.current()
-	if err != nil {
-		return providers.ContinueReferenceResult{}, err
-	}
-	return delegate.ContinueReference(ctx, request)
+	return router.catalog.ContinueReference(ctx, request)
 }
 
 type inferenceIntegrationRouter struct {
 	identity string
 	mu       sync.RWMutex
 	delegate sharedInferenceProviderIntegration
-}
-
-func (router *inferenceIntegrationRouter) set(delegate sharedInferenceProviderIntegration) {
-	router.mu.Lock()
-	router.delegate = delegate
-	router.mu.Unlock()
 }
 
 func (router *inferenceIntegrationRouter) bind(delegate sharedInferenceProviderIntegration) error {
@@ -197,17 +182,6 @@ func (router *inferenceIntegrationRouter) Invoke(ctx context.Context, request sh
 		return delegate.Invoke(ctx, request, writer)
 	}
 	return fmt.Errorf("shared inference provider %q is not configured", router.identity)
-}
-
-func (group *inferenceProcessGroup) setExternalRegistrations(registrations []sharedInferenceProviderRegistration) {
-	for _, router := range group.externals {
-		router.set(nil)
-	}
-	for _, registration := range registrations {
-		if router := group.externals[registration.Manifest.ID]; router != nil {
-			router.set(registration.Integration)
-		}
-	}
 }
 
 func (group *inferenceProcessGroup) bindExternalRegistrations(

@@ -83,31 +83,17 @@ import (
 // producer should be authoritative for a decision-envelope workstation's
 // final customer-facing text.
 //
-// Zero agent_thought_chunk/usage_update/session_info_update notifications
-// remain accurate for this fixture: @you/goal's single provider call
-// produces no REASONING/USAGE/SESSION response events, so this cell alone
-// cannot prove any of that half of AC3's "ordered message, thought, usage,
-// and session-info updates".
-//
-// A sibling cell, acp_streaming_usage_composition_test.go's
-// TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess, now closes
-// part of that gap: it uses a different fixture (an ACP-EXECUTION worker,
-// not @you/goal's decision-envelope AGENT_RUN shape) to prove a genuine
-// usage_update notification delivered through this exact production graph.
-// The remaining gap -- agent_thought_chunk and session_info_update -- is not
-// a fixture limitation; that sibling cell's own doc comment documents two
-// real, already-confirmed, pre-existing defects in a different, out-of-scope
-// service (pkg/services/factory_sessions) that make both currently
-// unobservable through this production graph regardless of what any fixture
-// publishes, with precise file/function citations for whichever future
-// iteration picks up Factory Sessions work.
+// Zero agent_thought_chunk/usage_update/session_info_update notifications are
+// accurate for this fixture: @you/goal's provider call emits none. The ACP
+// mapping package proves those individual representation rules in isolation;
+// this functional cell stays focused on the customer message journey.
 func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	cohort := newControlledACPCohort(t, "streaming-composition")
 	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
 
 	const wantPrimaryResultText = "goal genuinely completed through you server acp"
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "streaming-composition")
@@ -171,16 +157,12 @@ func startServeACPProcess(
 	home, cwd string,
 ) (*os.File, *bufio.Reader) {
 	t.Helper()
-	lease := beginChatACPHomeEnvironment(t, home)
-
 	stdinReadFile, stdinWriteFile, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
 	stdinRead := newChatPipeEndpoint(stdinReadFile, "ACP stdin reader")
 	stdinWrite := newChatPipeEndpoint(stdinWriteFile, "ACP stdin writer")
-	chatACPHomeLeases.Store(stdinWrite.file, lease)
-	t.Cleanup(func() { chatACPHomeLeases.Delete(stdinWrite.file) })
 	stdoutReadFile, stdoutWriteFile, err := os.Pipe()
 	if err != nil {
 		_ = stdinRead.Close()
@@ -203,7 +185,12 @@ func startServeACPProcess(
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	env := append(os.Environ(),
+		"HOME="+home,
+		"USERPROFILE="+home,
+		"YOU_DEFAULT_WORKER_MODEL_PROVIDER=codex",
+		"YOU_DEFAULT_WORKER_MODEL=gpt-5",
+	)
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
@@ -370,8 +357,6 @@ func driveServeACPFactoryTarget(
 // updates, then the terminal prompt result).
 func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID, text string) (serveACPLine, []acpsdk.SessionNotification) {
 	t.Helper()
-	defer releaseChatACPHomeForInput(stdin)
-
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,
 		"prompt":    []map[string]any{{"type": "text", "text": text}},

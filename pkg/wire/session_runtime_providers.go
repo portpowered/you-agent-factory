@@ -78,12 +78,13 @@ func (c compositeProcessLifecycle) Close(ctx context.Context) error {
 }
 
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
-// Process.Close reaches: the Models host supervisor, Providers lifecycle
-// (executable/session teardown), the singular Events root
-// (pkg/wire/events_providers.go), and the on-demand Factory Sessions
-// activation the production ACP prompt-delegation consumer lazily opens
-// runtimes through (see provideACPServerFactoryTarget) -- so every runtime
-// retained by the application has a deterministic close on process shutdown.
+// Process.Close reaches: the singular Factory Sessions root, the Models host
+// supervisor, Providers lifecycle (executable/session teardown), the singular
+// Events root (pkg/wire/events_providers.go), and the on-demand Factory
+// Sessions activation the production ACP prompt-delegation consumer lazily
+// opens runtimes through (see provideACPServerFactoryTarget) -- so every
+// runtime retained by the application has a deterministic close on process
+// shutdown.
 // The process-scoped direct Worker Sessions pool closes first so an admitted
 // local invocation can publish its terminal observation before shared roots
 // are closed.
@@ -91,6 +92,7 @@ func provideApplicationProcessLifecycle(
 	service providers.Service,
 	modelsService models.Service,
 	eventsService events.Service,
+	factorySessions factorysessions.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
 	metricsOwner factoryruntime.RuntimeMetricsOwner,
@@ -114,6 +116,12 @@ func provideApplicationProcessLifecycle(
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
 	}
+	factorySessionsLifecycle, ok := factorySessions.(interface {
+		Close(context.Context) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("construct application process: Factory Sessions lifecycle is required")
+	}
 	var closeMetrics func(context.Context) error
 	if metricsOwner != nil {
 		metricsLifecycle, lifecycleOK := metricsOwner.(interface {
@@ -131,15 +139,16 @@ func provideApplicationProcessLifecycle(
 			// assembled when that boundary cannot be built.
 			return localWorkerSessions.Close(ctx)
 		},
-		modelsLifecycle.Close,
-		lifecycle.Close,
-		eventsLifecycleValue.Close,
 		func(context.Context) error {
 			if factoryTarget == nil {
 				return nil
 			}
 			return factoryTarget.Close()
 		},
+		factorySessionsLifecycle.Close,
+		modelsLifecycle.Close,
+		lifecycle.Close,
+		eventsLifecycleValue.Close,
 		closeMetrics,
 	}}, nil
 }

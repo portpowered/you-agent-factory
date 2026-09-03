@@ -149,6 +149,12 @@ Functional tests **MUST** run in parallel by default. Top-level independent
 scenarios **MUST** call the language's parallel-test facility, and subtests
 **SHOULD** do the same when their fixtures are independent.
 
+The test framework **MUST** own subtest scheduling. In Go, register subtests
+with `t.Run` from their parent and call `t.Parallel` inside each independent
+subtest; do not call `t.Run` concurrently from a hand-built goroutine pool.
+Manual scheduling can race the test runner itself and bypass its concurrency,
+cleanup, and reporting guarantees.
+
 Parallelism **MUST** remain bounded by the canonical functional-lane job
 budget. "Run in parallel" means overlapping independently owned scenarios and
 packages within that budget; it does not authorize unbounded application
@@ -177,6 +183,12 @@ directories, streams, and fake-edge state. Shared test support **MUST** be safe
 under the race detector. Package setup may be shared, but mutable scenario
 state may not leak through it.
 
+A scenario **MUST NOT** test its shared fake, router, ledger, or selector table
+by temporarily installing broad or ambiguous fixture state while customer
+scenarios are active. Such fixture self-tests belong in focused unit tests for
+the support boundary. Retain only the customer-visible failure or recovery
+behavior in the functional suite, using scenario-owned fault injection.
+
 A reusable application process does not make its invocation state reusable.
 Concurrent `Process.Execute` calls **MUST NOT** share a customer home/profile
 while either call can initialize, install, migrate, select, or clean resources
@@ -185,6 +197,12 @@ when the command under test appears read-only. Either complete and verify that
 bootstrap before parallel work, or give each concurrent scenario a distinct
 home/profile. Active installation-lock contention is an isolation defect, not
 useful parallelism and not a reason to increase a timeout.
+
+The scenario's explicit Factory Session identity **MUST** be allocated before
+runtime construction and carried unchanged through runtime opening, routing,
+events, external effects, and cleanup. Assigning a unique wrapper or response
+identity after an internal runtime has already opened `~default` is not
+isolation: concurrent scenarios have already shared authority at that point.
 
 Functional commands **MUST** run with a test-owned home/profile environment.
 Inheriting the developer or CI worker's real `HOME`, `USERPROFILE`,

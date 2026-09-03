@@ -474,6 +474,78 @@ func TestStartAsyncBlankRequestIDOpensASeparateRuntimeEveryCall(t *testing.T) {
 	}
 }
 
+// TestStartAsyncDistinctRequestsOpenConcurrently proves the service protects
+// only identity allocation and publication. Runtime construction for two
+// independent customer sessions must overlap instead of waiting behind a
+// service-wide activation lock.
+func TestStartAsyncDistinctRequestsOpenConcurrently(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	var callsMu sync.Mutex
+	var openedSessionIDs []string
+	opener := &funcOpener{open: func(
+		_ context.Context,
+		request *factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedInvocationRuntime, error) {
+		sessionID := request.FactorySession.FactorySessionID
+		callsMu.Lock()
+		openedSessionIDs = append(openedSessionIDs, sessionID)
+		callsMu.Unlock()
+		started <- sessionID
+		<-release
+		return roles.OpenedInvocationRuntime{Sessions: &fakeSessions{}, Lifecycle: &fakeLifecycle{}}, nil
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	results := make(chan factorysessions.AsyncStartResult, 2)
+	errs := make(chan error, 2)
+	for _, requestID := range []string{"request-a", "request-b"} {
+		go func(requestID string) {
+			result, err := svc.StartAsync(context.Background(), factorysessions.StartRequest{RequestID: requestID})
+			results <- result
+			errs <- err
+		}(requestID)
+	}
+
+	opened := map[string]struct{}{}
+	for range 2 {
+		select {
+		case sessionID := <-started:
+			if sessionID == "" {
+				t.Fatal("OpenInvocationRuntime received a blank preallocated Factory Session ID")
+			}
+			opened[sessionID] = struct{}{}
+		case <-time.After(5 * time.Second):
+			t.Fatal("independent runtime openings did not overlap")
+		}
+	}
+	close(release)
+
+	returned := map[string]struct{}{}
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatalf("StartAsync() error = %v", err)
+		}
+		result := <-results
+		returned[result.SessionID] = struct{}{}
+	}
+	if len(opened) != 2 || len(returned) != 2 {
+		t.Fatalf("opened sessions = %v, returned sessions = %v; want two distinct identities", opened, returned)
+	}
+	for sessionID := range returned {
+		if _, ok := opened[sessionID]; !ok {
+			t.Fatalf("returned session %q was not the identity used to open its runtime", sessionID)
+		}
+	}
+	callsMu.Lock()
+	defer callsMu.Unlock()
+	if len(openedSessionIDs) != 2 {
+		t.Fatalf("OpenInvocationRuntime calls = %v, want two overlapping calls", openedSessionIDs)
+	}
+}
+
 // TestStartAsyncPropagatesResolveFailure proves a resolver failure opens no
 // runtime.
 func TestStartAsyncPropagatesResolveFailure(t *testing.T) {
@@ -566,8 +638,8 @@ func TestStartAsyncConcurrentSameRequestIDOpensExactlyOneRuntime(t *testing.T) {
 }
 
 // TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing proves that a
-// blank value from generateID fails StartAsync, closes the runtime it had
-// already opened, and leaves an unrelated prior activation addressable under
+// blank value from generateID fails StartAsync before opening a runtime and
+// leaves an unrelated prior activation addressable under
 // its own identity -- rather than publishing an empty map key that a later
 // caller could never look up.
 func TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing(t *testing.T) {
@@ -608,8 +680,11 @@ func TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing(t *testing.T) {
 	if err == nil {
 		t.Fatalf("StartAsync() with a blank generated identity error = nil, want an error")
 	}
-	if failingLifecycle.stopCalls != 1 {
-		t.Fatalf("failing activation StopLifecycle calls = %d, want exactly 1 (closed once)", failingLifecycle.stopCalls)
+	if failingLifecycle.stopCalls != 0 {
+		t.Fatalf("failing activation StopLifecycle calls = %d, want 0 because identity admission precedes opening", failingLifecycle.stopCalls)
+	}
+	if len(opener.calls) != 1 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want only the prior activation", len(opener.calls))
 	}
 	if priorLifecycle.stopCalls != 0 {
 		t.Fatalf("prior activation StopLifecycle calls = %d, want 0 -- it must remain open", priorLifecycle.stopCalls)
@@ -628,7 +703,7 @@ func TestStartAsyncBlankGeneratedIdentityFailsWithoutPublishing(t *testing.T) {
 // TestStartAsyncCollidingGeneratedIdentityFailsWithoutOverwriting proves that
 // a generated wrapper identity colliding with an already-tracked one --
 // across two entirely distinct requests, not a retry of the same one --
-// fails StartAsync, closes the newly opened runtime, and leaves the original
+// fails StartAsync before opening another runtime and leaves the original
 // activation's map entry (and therefore ownership) untouched rather than
 // letting the second request silently redirect callers of the first
 // request's SessionID to the second request's runtime.
@@ -667,8 +742,11 @@ func TestStartAsyncCollidingGeneratedIdentityFailsWithoutOverwriting(t *testing.
 	if err == nil {
 		t.Fatalf("second StartAsync() with a colliding generated identity error = nil, want an error")
 	}
-	if secondLifecycle.stopCalls != 1 {
-		t.Fatalf("colliding activation StopLifecycle calls = %d, want exactly 1 (closed once)", secondLifecycle.stopCalls)
+	if secondLifecycle.stopCalls != 0 {
+		t.Fatalf("colliding activation StopLifecycle calls = %d, want 0 because collision admission precedes opening", secondLifecycle.stopCalls)
+	}
+	if len(opener.calls) != 1 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want only the original activation", len(opener.calls))
 	}
 	if firstLifecycle.stopCalls != 0 {
 		t.Fatalf("original activation StopLifecycle calls = %d, want 0 -- it must remain open", firstLifecycle.stopCalls)

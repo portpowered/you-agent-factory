@@ -20,6 +20,7 @@ return {
 `
 
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
+	t.Parallel()
 	fixture := mcpResumePackageFixtureForTest(t)
 	client := fixture.client
 
@@ -62,7 +63,7 @@ func assertRuntimeSmokeAsyncStart(
 	t.Helper()
 	asyncStart := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest(requestID)),
+		client.callTool(t, mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest(requestID)),
 	)
 	if asyncStart.Error != nil || asyncStart.Result == nil {
 		t.Fatalf("start_async = %#v, want success", asyncStart)
@@ -124,7 +125,7 @@ func runtimeSmokeSessionStatus(t *testing.T, client *stdioMCPClient, sessionID s
 	t.Helper()
 	statusResponse := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
 		t,
-		client.callTool(mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
+		client.callTool(t, mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
 	)
 	if statusResponse.Error != nil || statusResponse.Result == nil {
 		t.Fatalf("get = %#v, want success", statusResponse)
@@ -141,7 +142,7 @@ func runtimeSmokeResultIsFinal(
 	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionResult](
 		t,
-		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
 			"sessionId": sessionID,
 			"mode":      mode,
 		}),
@@ -160,7 +161,7 @@ func assertRuntimeSmokeRunningNotReady(
 	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionResult](
 		t,
-		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
 			"sessionId": sessionID,
 			"mode":      mode,
 		}),
@@ -194,7 +195,7 @@ func assertRuntimeSmokeTerminalResult(
 	t.Helper()
 	completedResult := decodeToolResponse[factoryapi.FactorySessionResult](
 		t,
-		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
 			"sessionId": sessionID,
 			"mode":      mode,
 		}),

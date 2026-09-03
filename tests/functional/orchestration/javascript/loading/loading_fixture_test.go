@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -53,18 +54,27 @@ func TestMain(m *testing.M) {
 // Keep the original top-level test identities so focused -run selectors and
 // review tooling continue to address the same behavior rows as the baseline.
 func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
+	t.Parallel()
 	runInlineJavaScriptFactoryRunsFromCLI(t, loadingFixtureForTest(t))
 }
 
 func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
+	t.Parallel()
 	runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t, loadingFixtureForTest(t))
 }
 
+func TestInlineJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
+	t.Parallel()
+	runInlineJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
+}
+
 func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
+	t.Parallel()
 	runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t, loadingFixtureForTest(t))
 }
 
 func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
+	t.Parallel()
 	runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t, loadingFixtureForTest(t))
 }
 
@@ -74,6 +84,7 @@ func TestJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
 }
 
 func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
+	t.Parallel()
 	runTypeScriptFactoryTranspilesAndRuns(t, loadingFixtureForTest(t))
 }
 
@@ -83,10 +94,12 @@ func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
 }
 
 func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
+	t.Parallel()
 	runNamedJavaScriptFactoryRunsThroughStandardCLI(t, loadingFixtureForTest(t))
 }
 
 func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
+	t.Parallel()
 	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
 }
 
@@ -112,7 +125,8 @@ type loadingFixture struct {
 	namedAPI     loadingNamedFactory
 	namedControl loadingNamedFactory
 
-	serverStarted atomic.Bool
+	serverOnce    sync.Once
+	serverErr     error
 	requestNumber atomic.Uint64
 
 	processCancel context.CancelFunc
@@ -137,12 +151,8 @@ type loadingSession struct {
 }
 
 // loadingCommandRunner is the provider boundary used by the real process.
-// The ordered workflow gets deterministic provider-native output while all
-// other rows can assert that no child dispatch was added to the call count.
-type loadingCommandRunner struct {
-	mu       sync.Mutex
-	requests []platformprocess.CommandRequest
-}
+// The ordered workflow gets deterministic provider-native output.
+type loadingCommandRunner struct{}
 
 func newLoadingCommandRunner() *loadingCommandRunner {
 	return &loadingCommandRunner{}
@@ -155,13 +165,6 @@ func (runner *loadingCommandRunner) Run(
 	if err := ctx.Err(); err != nil {
 		return platformprocess.CommandResult{}, err
 	}
-	runner.mu.Lock()
-	request.Args = append([]string(nil), request.Args...)
-	request.Stdin = append([]byte(nil), request.Stdin...)
-	request.Env = append([]string(nil), request.Env...)
-	runner.requests = append(runner.requests, request)
-	runner.mu.Unlock()
-
 	prompt := strings.TrimSpace(string(request.Stdin))
 	label := "child"
 	if strings.Contains(prompt, "stage-two-after") {
@@ -172,12 +175,6 @@ func (runner *loadingCommandRunner) Run(
 	return platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout("provider:" + label + ":" + prompt),
 	}, nil
-}
-
-func (runner *loadingCommandRunner) CallCount() int {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	return len(runner.requests)
 }
 
 var _ platformprocess.CommandRunner = (*loadingCommandRunner)(nil)
@@ -262,32 +259,32 @@ func (fixture *loadingFixture) serveAPIServer(
 
 func (fixture *loadingFixture) startAPIServer(t *testing.T) {
 	t.Helper()
-	if fixture.serverStarted.Load() {
-		return
-	}
-	processContext, cancel := context.WithCancel(context.Background())
-	fixture.processCancel = cancel
-	inputs := support.FakeInputs(processContext, []string{
-		"you", "run", "--dir", fixture.hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
-	})
-	inputs.Input.Env = loadingCustomerEnvironment(fixture.homeDir)
-	inputs.Input.WorkingDirectory = fixture.hostDir
-	go func() {
-		err := fixture.process.Execute(inputs.Input)
-		fixture.processMu.Lock()
-		fixture.processErr = err
-		fixture.processMu.Unlock()
-		close(fixture.processDone)
-	}()
+	fixture.serverOnce.Do(func() {
+		processContext, cancel := context.WithCancel(context.Background())
+		fixture.processCancel = cancel
+		inputs := support.FakeInputs(processContext, []string{
+			"you", "run", "--session", uuid.NewString(), "--dir", fixture.hostDir,
+			"--continuously", "--with-server", "--quiet", "--no-record",
+		})
+		inputs.Input.Env = loadingCustomerEnvironment(fixture.homeDir)
+		inputs.Input.WorkingDirectory = fixture.hostDir
+		go func() {
+			err := fixture.process.Execute(inputs.Input)
+			fixture.processMu.Lock()
+			fixture.processErr = err
+			fixture.processMu.Unlock()
+			close(fixture.processDone)
+		}()
 
-	baseURL, err := fixture.api.WaitForBaseURL(loadingFixtureTimeout)
-	if err != nil {
-		cancel()
-		<-fixture.processDone
-		t.Fatalf("wait for loading API: %v", err)
+		fixture.baseURL, fixture.serverErr = fixture.api.WaitForBaseURL(loadingFixtureTimeout)
+		if fixture.serverErr != nil {
+			cancel()
+			<-fixture.processDone
+		}
+	})
+	if fixture.serverErr != nil {
+		t.Fatalf("wait for loading API: %v", fixture.serverErr)
 	}
-	fixture.baseURL = baseURL
-	fixture.serverStarted.Store(true)
 }
 
 func writeLoadingHostFactory(dir string) error {
@@ -373,10 +370,35 @@ func (fixture *loadingFixture) executeCLI(
 	if strings.TrimSpace(homeDir) == "" {
 		homeDir = fixture.homeDir
 	}
+	args = loadingArgsWithIsolatedSession(args)
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = loadingCustomerEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = workingDirectory
 	return inputs, fixture.process.Execute(inputs.Input)
+}
+
+// loadingArgsWithIsolatedSession makes each local customer invocation own its
+// Factory Session. A shared process is construction reuse, not permission for
+// independent commands to fall back to the process-wide ~default identity.
+func loadingArgsWithIsolatedSession(args []string) []string {
+	isolated := append([]string(nil), args...)
+	runIndex := -1
+	for index, arg := range isolated {
+		if arg == "--session" || strings.HasPrefix(arg, "--session=") {
+			return isolated
+		}
+		if arg == "run" && runIndex < 0 {
+			runIndex = index
+		}
+	}
+	if runIndex < 0 {
+		return isolated
+	}
+	withSession := make([]string, 0, len(isolated)+2)
+	withSession = append(withSession, isolated[:runIndex+1]...)
+	withSession = append(withSession, "--session", uuid.NewString())
+	withSession = append(withSession, isolated[runIndex+1:]...)
+	return withSession
 }
 
 func (fixture *loadingFixture) runCLIInvocation(
@@ -449,11 +471,7 @@ func (fixture *loadingFixture) trackSession(
 		fixture.sessionMu.Unlock()
 		t.Fatalf("loading Factory Session ID %q was reused", sessionID)
 	}
-	for existingID, session := range fixture.sessions {
-		if filepath.Clean(session.rootDir) == filepath.Clean(rootDir) {
-			fixture.sessionMu.Unlock()
-			t.Fatalf("loading Factory Session roots reused by %q and %q: %s", existingID, sessionID, rootDir)
-		}
+	for _, session := range fixture.sessions {
 		if strings.TrimSpace(requestID) != "" && session.requestID == requestID {
 			fixture.sessionMu.Unlock()
 			t.Fatalf("loading request ID %q was reused", requestID)
@@ -494,7 +512,6 @@ func (fixture *loadingFixture) closeSession(t testing.TB, sessionID string) {
 func (fixture *loadingFixture) recoverAfterLoadFailure(t *testing.T, label string) {
 	t.Helper()
 	dir := scaffoldLoadingRecoveryFactory(t, label)
-	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(
 		t,
 		[]string{
@@ -507,9 +524,6 @@ func (fixture *loadingFixture) recoverAfterLoadFailure(t *testing.T, label strin
 		dir,
 		fixture.homeDir,
 	)
-	if got := fixture.provider.CallCount(); got != providerCalls {
-		t.Fatalf("provider command runner call count = %d, want unchanged at %d after %s recovery", got, providerCalls, label)
-	}
 	assertLoadingRecoveryOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }

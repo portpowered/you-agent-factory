@@ -237,6 +237,7 @@ func sharedLifecycleServerURL(t *testing.T) string {
 // an open session participating in the owned runtime lifecycle.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionCreateListShowDelete(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 	client := sharedLifecycleClient(t)
 
@@ -362,6 +363,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 // boundary lists every open session as a distinct entry and preserves a sibling
 // after one session is terminated and deleted.
 func TestFactorySessionListMultipleSessions(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 	client := sharedLifecycleClient(t)
 
@@ -430,6 +432,7 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 // customer-visible not-found outcome, without removing or corrupting any still-open
 // session created for isolation proof.
 func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 	client := sharedLifecycleClient(t)
 
@@ -497,6 +500,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 // DELETE /factory-sessions/{session_id} closes it so subsequent get/list no longer
 // treat it as an open live session.
 func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory")
 	if err := os.Mkdir(newFactoryDir, 0o755); err != nil {
@@ -561,6 +565,7 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 // when get or close targets a missing session ID, without silently resolving to the
 // default or another live session.
 func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 	openFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-isolation-factory")
 	if err := os.Mkdir(openFactoryDir, 0o755); err != nil {
@@ -622,6 +627,7 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 // lists both as distinct entries, and stopping then deleting one session leaves the other
 // gettable and listable with its original public identity without adopting stopped state.
 func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
+	t.Parallel()
 	baseURL := sharedLifecycleServerURL(t)
 
 	firstFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory-a")

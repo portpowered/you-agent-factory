@@ -34,6 +34,7 @@ type QueryCurrentConfig struct {
 type QueryConfig struct {
 	Context     context.Context
 	Server      string
+	SessionID   string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
@@ -62,6 +63,7 @@ func Query(cfg QueryConfig) error {
 	current, err := queryCurrent(queryCurrentOptions{
 		Context:     cfg.Context,
 		Server:      cfg.Server,
+		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
 		HTTP:        cfg.HTTP,

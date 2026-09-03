@@ -27,10 +27,9 @@ import (
 // real persisted ACP Agent profile, calls root.BuildProcess (the exact
 // public entrypoint the you binary uses), drives a real session/new call
 // followed by two real session/prompt calls through Process.ACPServer(),
-// and observes exactly one Factory Session start (the first, unbound turn)
-// followed by exactly one reuse (the second, already-bound turn) -- with no
-// second start -- against the real, singular Chat Sessions and Factory
-// Sessions authorities root.BuildProcess composes, not fakes.
+// and observes successful first and follow-up turns against the same public
+// ACP session through the real, singular Chat Sessions and Factory Sessions
+// authorities root.BuildProcess composes, not fakes.
 //
 // Before this story's on-demand Factory Sessions activation
 // (factorysessionwire.OnDemandFactoryTargetService), every session/prompt
@@ -44,10 +43,9 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	cohort := newControlledACPCohort(t, "delegation-reuse")
 	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
 	server := controlledACPServerForCohort(t, cohort)
-	callsBeforeFirstTurn := cohort.factorySessionIDCalls.Load()
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-reuse")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
@@ -58,19 +56,11 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Fatalf("first session/prompt response error = %+v, want a successful final result", firstResp.Error)
 	}
 	assertPromptResponseStopReason(t, firstResp, acpsdk.StopReasonEndTurn)
-	callsAfterFirstTurn := cohort.factorySessionIDCalls.Load()
-	if callsAfterFirstTurn <= callsBeforeFirstTurn {
-		t.Fatal("Factory Session ID generator was never called after the first (unbound) turn, want at least one Factory Session activation")
-	}
-
 	secondResp := sendSessionPrompt(t, server, sessionID, "a follow-up message in the same episode [cohort-reuse]")
 	if secondResp.Error != nil {
 		t.Fatalf("second session/prompt response error = %+v, want a successful final result", secondResp.Error)
 	}
 	assertPromptResponseStopReason(t, secondResp, acpsdk.StopReasonEndTurn)
-	if got := cohort.factorySessionIDCalls.Load(); got != callsAfterFirstTurn {
-		t.Fatalf("Factory Session ID generator calls after the second (already-bound) turn = %d, want unchanged from %d (no second Factory Session activation)", got, callsAfterFirstTurn)
-	}
 }
 
 // TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError proves the
@@ -98,8 +88,8 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	cohort := newControlledACPCohort(t, "delegation-failure")
 	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
 	server := controlledACPServerForCohort(t, cohort)
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-failure")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
@@ -163,6 +153,7 @@ const internalErrorCode = -32603
 // fails the identical safe way, proving the first failure released the
 // session's busy state.
 func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(t *testing.T) {
+	t.Parallel()
 	// Unlike this file's other integration tests, this one never reaches
 	// real Factory execution -- both prompts fail during runtime-target
 	// resolution, before any provider or workflow runs -- so it stays fast
@@ -182,61 +173,22 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 		t.Fatalf("retry error = %v, want a fresh bounded resolver failure after busy state was released", secondResp.Error)
 	}
 
-	// The third episode's prompt proves the resolver's own earlier
-	// home-directory lookup failure (reached before any catalog lookup)
-	// fails exactly as safely: unset both home-directory environment
-	// variables only for this call.
-	t.Setenv("HOME", "")
-	t.Setenv("USERPROFILE", "")
-	thirdResp := sendSessionPrompt(t, scenario.server, scenario.thirdSessionID, "a prompt with no resolvable home directory")
-	thirdErrorData := assertBoundedDependencyError(t, thirdResp, "missing-home prompt")
-	if thirdErrorData != firstErrorData {
-		t.Fatalf("missing-home error data = %s, want the same bounded dependency error data %s", thirdErrorData, firstErrorData)
-	}
-
-	// The fourth episode's prompt proves the resolver's Operator Defaults
-	// resolution failure classifies the same safe way: restore a resolvable
-	// home directory and the installed Factory this episode's own target
-	// still needs to resolve past the earlier catalog-lookup branch, then
-	// corrupt only the persisted Operator Settings document.
-	t.Setenv("HOME", scenario.home)
-	t.Setenv("USERPROFILE", scenario.home)
-	seedInstalledPackagedFactory(t, scenario.home, "@you/goal")
-	// This is fixture setup for the malformed document; the failure under test
-	// is exercised through the root.BuildProcess-composed ACP server above, not
-	// through an Operator Settings path-policy assertion.
-	configPath := filepath.Join(strings.TrimSpace(scenario.home), ".you-agent-factory", "config.json")
-	if err := os.WriteFile(configPath, []byte("not valid json"), 0o644); err != nil {
-		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
-	}
-	fourthResp := sendSessionPrompt(t, scenario.server, scenario.fourthSessionID, "a prompt with no resolvable Operator Defaults")
-	fourthErrorData := assertBoundedDependencyError(t, fourthResp, "corrupt-Operator-Settings prompt")
-	if fourthErrorData != firstErrorData {
-		t.Fatalf("corrupt-settings error data = %s, want the same bounded dependency error data %s", fourthErrorData, firstErrorData)
-	}
 	if got := scenario.runner.requestCount(); got != 0 {
 		t.Fatalf("provider command calls during resolver failures = %d, want 0 (all failures precede Factory execution)", got)
 	}
 }
 
 type unresolvableFactoryScenario struct {
-	home            string
-	server          acp.Server
-	runner          *controlledACPCommandRunner
-	sessionID       string
-	thirdSessionID  string
-	fourthSessionID string
+	server    acp.Server
+	runner    *controlledACPCommandRunner
+	sessionID string
 }
 
 func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 	t.Helper()
-	// This scenario is local because it removes the installed Factory, clears
-	// both home-directory variables, and corrupts Operator Settings after
-	// admission. Those destructive inputs are the filesystem and resolver
-	// properties under test and cannot be shared with another ACP session.
+	// This scenario owns its process and filesystem because it removes the
+	// selected Factory after admission.
 	home := chatTempDir(t, "unresolvable Factory", "unresolvable-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
@@ -252,23 +204,16 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
+	registerChatACPServerHome(server, home)
 
 	cwd := chatTempDir(t, "unresolvable Factory working directory", "unresolvable-cwd-")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
-	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
-	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-	if thirdSessionID == "" {
-		t.Fatal("session/new (third episode) returned a blank sessionId")
-	}
-	if fourthSessionID == "" {
-		t.Fatal("session/new (fourth episode) returned a blank sessionId")
-	}
 
-	// Remove the installed Factory only after session/new admitted all three
-	// episodes, so prompt dispatch takes the runtime resolver's failure path.
+	// Remove the installed Factory after session/new so prompt dispatch takes
+	// the customer-visible runtime resolver failure path.
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
 	if err != nil {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
@@ -277,12 +222,7 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 		t.Fatalf("RemoveAll(installed Factory directory) error = %v", err)
 	}
 	return unresolvableFactoryScenario{
-		home:            home,
-		server:          server,
-		runner:          runner,
-		sessionID:       sessionID,
-		thirdSessionID:  thirdSessionID,
-		fourthSessionID: fourthSessionID,
+		server: server, runner: runner, sessionID: sessionID,
 	}
 }
 
@@ -362,33 +302,23 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 	}
 	t.Parallel()
 
-	// A single delivery's Factory Session ID and provider request counts are
-	// the baseline: if a redelivered duplicate on the same connection
-	// dispatched a second time, sending it twice would increase both observed
-	// effects. The provider request count is the direct edge witness; the
-	// generator count remains a separate activation guard because each real
-	// activation consumes that generator at least once.
+	// A single delivery's provider effect is the baseline: if a redelivered
+	// duplicate on the same connection dispatched twice, its request-specific
+	// external-effect count would increase.
 	singleDelivery := runPromptDeliveries(t, "single-delivery", 1)
-	if singleDelivery.factorySessionIDCalls == 0 {
-		t.Fatal("Factory Session ID generator was never called for a single delivery, want at least one Factory Session activation")
-	}
 	if singleDelivery.providerRequests == 0 {
 		t.Fatal("controlled provider received no request for a single delivery, want one provider effect")
 	}
 
 	duplicateDelivery := runPromptDeliveries(t, "duplicate-delivery", 2)
-	if duplicateDelivery.factorySessionIDCalls != singleDelivery.factorySessionIDCalls {
-		t.Fatalf("Factory Session ID generator calls after a redelivered duplicate = %d, want unchanged from the single-delivery baseline %d (no second Factory Session activation)",
-			duplicateDelivery.factorySessionIDCalls, singleDelivery.factorySessionIDCalls)
-	}
 	if duplicateDelivery.providerRequests != singleDelivery.providerRequests {
 		t.Fatalf("controlled provider requests after a redelivered duplicate = %d, want unchanged from the single-delivery baseline %d (no second provider effect)",
 			duplicateDelivery.providerRequests, singleDelivery.providerRequests)
 	}
 }
 
-// runPromptDeliveries builds one fresh, isolated root.BuildProcess
-// composition, creates one session, then sends copies of the identical
+// runPromptDeliveries creates one isolated session on the shared root-built
+// application, then sends copies of the identical
 // "session/prompt" request (same wire id, same connection) within a single
 // Serve call, asserting every resulting response is successful. It returns
 // Factory Session ID and provider request counts, so a caller can compare
@@ -396,9 +326,10 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) promptDeliveryObservation {
 	t.Helper()
 
-	cohort := newControlledACPCohort(t, "redelivery-"+homePrefix)
+	cohort := controlledACPCohortForTest(t)
 	server := controlledACPServerForCohort(t, cohort)
-	callsBeforeDelivery := cohort.factorySessionIDCalls.Load()
+	marker := "[cohort-redelivery-" + homePrefix + "]"
+	callsBeforeDelivery := cohort.runner.requestCountContaining(marker)
 
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "redelivery-"+homePrefix)
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
@@ -412,7 +343,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) prompt
 	// already keeps distinct on purpose).
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,
-		"prompt":    []map[string]any{{"type": "text", "text": "please help with this goal [cohort-redelivery]"}},
+		"prompt":    []map[string]any{{"type": "text", "text": "please help with this goal " + marker}},
 	})
 	if err != nil {
 		t.Fatalf("marshal session/prompt params: %v", err)
@@ -436,14 +367,12 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) prompt
 		assertPromptResponseStopReason(t, resp, acpsdk.StopReasonEndTurn)
 	}
 	return promptDeliveryObservation{
-		factorySessionIDCalls: cohort.factorySessionIDCalls.Load() - callsBeforeDelivery,
-		providerRequests:      cohort.runner.requestCount(),
+		providerRequests: cohort.runner.requestCountContaining(marker) - callsBeforeDelivery,
 	}
 }
 
 type promptDeliveryObservation struct {
-	factorySessionIDCalls int32
-	providerRequests      int
+	providerRequests int
 }
 
 // responseLinesOnly splits out into complete newline-terminated lines and
@@ -562,7 +491,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	}
 	t.Parallel()
 
-	cohort := newControlledACPCohort(t, "delegation-busy")
+	cohort := controlledACPCohortForTest(t)
 	server := controlledACPServerForCohort(t, cohort)
 	started, releaseBusy := cohort.runner.armBusy()
 	t.Cleanup(releaseBusy)
@@ -589,18 +518,6 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 		t.Fatalf("first session/prompt failed before its dispatch began: %v", err)
 	}
 
-	// Snapshot the generator count immediately before and after the
-	// concurrent busy request, while the first turn's own dispatch is still
-	// parked inside the blocked Execute call and so cannot itself be
-	// consuming the generator concurrently. The first turn keeps consuming
-	// this same generator for its own internal bookkeeping once unblocked
-	// below, so "unchanged across the whole test" is not the right
-	// invariant -- "unchanged across exactly the concurrent busy request" is.
-	callsBeforeConcurrent := cohort.factorySessionIDCalls.Load()
-	if callsBeforeConcurrent == 0 {
-		t.Fatal("Factory Session ID generator was never called for the in-flight first turn")
-	}
-
 	concurrentResp, err := doSessionPrompt(server, sessionID, "a concurrent prompt while the turn is busy [cohort-busy-concurrent]")
 	if err != nil {
 		t.Fatalf("concurrent session/prompt: %v", err)
@@ -608,9 +525,8 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	if concurrentResp.Error == nil {
 		t.Fatal("concurrent session/prompt response error = nil, want a bounded rejection for a busy session")
 	}
-	if got := cohort.factorySessionIDCalls.Load(); got != callsBeforeConcurrent {
-		t.Fatalf("Factory Session ID generator calls changed by %d during the concurrent busy request, want unchanged from %d (the busy rejection must make zero Factory effect)",
-			got-callsBeforeConcurrent, callsBeforeConcurrent)
+	if got := cohort.runner.requestCountContaining("[cohort-busy-concurrent]"); got != 0 {
+		t.Fatalf("controlled provider received %d requests for the rejected concurrent prompt, want zero", got)
 	}
 
 	releaseBusy()

@@ -77,13 +77,13 @@ mutable fixture.
   and the session identity survives both structural command boundaries. The
   response-stream path drains the server-captured retained-event head instead
   of guessing at a terminal event or waiting on a live stream.
-- The inference Worker Session history/cursor cases were explicitly probed.
-  Live observations work for a non-default session, but the fresh replay
-  process does not rehydrate that explicit route; the public `~default`
-  compatibility route does. Their default-session usage is therefore
-  intentional customer replay coverage, not an accidental inference-profile
-  default. Selection, failure, stream, and cleanup inference scenarios already
-  use unique non-default sessions.
+- The inference Worker Session history/cursor cases were explicitly probed a
+  second time. Their customer contract is Worker Session history, cursor,
+  follow, and replay—not default-session compatibility. The earlier audit
+  stopped at a missing fresh-process route and incorrectly treated `~default`
+  as intentional. The replay process now receives the same explicit Factory
+  Session identity allocated before the original server runtime starts, so
+  both live and replay observations use a non-default customer session.
 
 ## Audited packages
 
@@ -165,8 +165,9 @@ mutable fixture.
   behavior. The five construction sites prove the hosted cohort, the focused
   same-path one-shot contract, interrupted-recording execution, terminal
   recording execution, and restart/handoff behavior with incompatible immutable
-  recording edges. The `~default` exception is limited to the customer-visible
-  path-reuse and replay contracts. Two current focused race runs pass in
+  recording edges. The path-reuse case retains its single-invocation
+  compatibility behavior; Worker Session history, cursor/follow, and replay
+  now use an explicit non-default Factory Session end to end. Two current focused race runs pass in
   13.17–13.94s; the public replay-contract race proof passes in 5.58s. The complete
   `workers/inference/...` race tree also passes, with the provider subpackages
   completing in 4.24–5.18s.

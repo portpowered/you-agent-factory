@@ -317,7 +317,14 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		},
 	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersService, modelsService, eventsService, factoryTarget, &localWorkerSessionsBoundary{}, metricsOwner)
+	sessionsClosed := false
+	sessionsService := &closingFactorySessionsService{
+		onClose: func() error {
+			sessionsClosed = true
+			return nil
+		},
+	}
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, modelsService, eventsService, sessionsService, factoryTarget, &localWorkerSessionsBoundary{}, metricsOwner)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -339,13 +346,16 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 	if !modelsClosed {
 		t.Fatal("composed ProcessLifecycle.Close() did not close the Models lifecycle")
 	}
+	if !sessionsClosed {
+		t.Fatal("composed ProcessLifecycle.Close() did not close the Factory Sessions lifecycle")
+	}
 
 	secondEventsService, err := eventswire.NewService()
 	if err != nil {
 		t.Fatalf("construct second events service: %v", err)
 	}
 
-	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, &closingModelsService{}, secondEventsService, nil, &localWorkerSessionsBoundary{}, nil)
+	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, &closingModelsService{}, secondEventsService, &closingFactorySessionsService{}, nil, &localWorkerSessionsBoundary{}, nil)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle(nil factoryTarget) error = %v", err)
 	}
@@ -415,8 +425,11 @@ func TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceA
 	eventsStub := &closingEventsService{
 		onClose: func() error { closed = append(closed, "events"); return eventsCloseErr },
 	}
+	sessionsStub := &closingFactorySessionsService{
+		onClose: func() error { closed = append(closed, "factory-sessions"); return nil },
+	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersStub, &closingModelsService{}, eventsStub, nil, &localWorkerSessionsBoundary{}, nil)
+	lifecycle, err := provideApplicationProcessLifecycle(providersStub, &closingModelsService{}, eventsStub, sessionsStub, nil, &localWorkerSessionsBoundary{}, nil)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -427,9 +440,9 @@ func TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceA
 			t.Fatalf("composed ProcessLifecycle.Close() error = %v, want it to retain %v", closeErr, expected)
 		}
 	}
-	if !slices.Equal(closed, []string{"providers", "events"}) {
+	if !slices.Equal(closed, []string{"factory-sessions", "providers", "events"}) {
 		t.Fatalf(
-			"composed ProcessLifecycle.Close() closer calls = %v, want Providers then Events exactly once each",
+			"composed ProcessLifecycle.Close() closer calls = %v, want Factory Sessions then Providers then Events exactly once each",
 			closed,
 		)
 	}
@@ -480,6 +493,22 @@ type closingRuntimeMetricsOwner struct {
 
 func (owner *closingRuntimeMetricsOwner) Close(context.Context) error { return owner.onClose() }
 
+type closingFactorySessionsService struct {
+	factorysessions.Service
+	onClose func() error
+}
+
+type factorySessionsServiceWithoutLifecycle struct {
+	factorysessions.Service
+}
+
+func (service *closingFactorySessionsService) Close(context.Context) error {
+	if service.onClose == nil {
+		return nil
+	}
+	return service.onClose()
+}
+
 // TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle proves a
 // providers.Service that does not implement providers.Lifecycle is rejected
 // at construction rather than silently producing a ProcessLifecycle whose
@@ -487,9 +516,27 @@ func (owner *closingRuntimeMetricsOwner) Close(context.Context) error { return o
 func TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, &closingModelsService{}, nil, nil, &localWorkerSessionsBoundary{}, nil)
+	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, &closingModelsService{}, nil, &closingFactorySessionsService{}, nil, &localWorkerSessionsBoundary{}, nil)
 	if err == nil {
 		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a construction error for a non-Lifecycle providers.Service")
+	}
+}
+
+func TestProvideApplicationProcessLifecycle_RequiresFactorySessionsLifecycle(t *testing.T) {
+	t.Parallel()
+
+	providersService := &closingProvidersService{}
+	_, err := provideApplicationProcessLifecycle(
+		providersService,
+		&closingModelsService{},
+		&closingEventsService{},
+		factorySessionsServiceWithoutLifecycle{},
+		nil,
+		&localWorkerSessionsBoundary{},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "Factory Sessions lifecycle is required") {
+		t.Fatalf("provideApplicationProcessLifecycle() error = %v, want Factory Sessions lifecycle diagnostic", err)
 	}
 }
 

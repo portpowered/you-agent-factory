@@ -17,8 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// lifecycleSharedProcessFixture owns a package-local sequential cohort. Its
-// mutex makes process reuse explicit: every invocation still owns a fresh
+// lifecycleSharedProcessFixture owns a package-local concurrent cohort. Every
+// invocation owns a fresh
 // working directory, HOME, streams, route, provider runner, and (when used)
 // API server, while immutable root wiring is built once for the cohort.
 type lifecycleSharedProcessFixture struct {
@@ -31,7 +31,6 @@ type lifecycleSharedProcessFixture struct {
 	active     atomic.Int32
 	closes     atomic.Int32
 
-	mu       sync.Mutex
 	closeErr error
 }
 
@@ -122,7 +121,8 @@ func executeSharedLifecycleInvocation(
 
 func newSharedLifecycleInputs(t testing.TB, args []string) *support.CapturedInputs {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), append([]string(nil), args...))
+	args, _ = ensureLifecycleSessionArg(args)
+	inputs := support.FakeInputs(t.Context(), args)
 	// The factory path in these candidates is absolute. A fresh working
 	// directory therefore preserves the customer-facing invocation contract
 	// while proving that route selection and cwd state cannot leak between runs.
@@ -230,19 +230,19 @@ func (fixture *lifecycleSharedProcessFixture) executeInput(
 		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", input.WorkingDirectory)
 	}
 
-	// Process.Execute is reusable, but each package-local cohort is deliberately
-	// serialized so mutable invocation-owned runtime state never overlaps. The
-	// route and its effects remain installed only for this one Execute call.
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	if err := fixture.router.bind(workingDirectory, runner, apiStarter); err != nil {
+	apiPort := 0
+	if apiStarter != nil {
+		apiPort = fixture.router.nextPort()
+		input.Args = insertLifecycleListenArg(input.Args, apiPort)
+	}
+	if err := fixture.router.bind(workingDirectory, runner, apiStarter, apiPort); err != nil {
 		return err
 	}
 	fixture.active.Add(1)
 	fixture.executions.Add(1)
 	defer func() {
 		fixture.active.Add(-1)
-		fixture.router.unbind(workingDirectory)
+		fixture.router.unbind(workingDirectory, apiPort)
 	}()
 	return fixture.process.Execute(input)
 }
@@ -265,14 +265,14 @@ func (fixture *lifecycleSharedProcessFixture) executeInputWithoutRuntimeLease(
 	if workingDirectory == "." || workingDirectory == "" {
 		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", input.WorkingDirectory)
 	}
-	if err := fixture.router.bind(workingDirectory, runner, nil); err != nil {
+	if err := fixture.router.bind(workingDirectory, runner, nil, 0); err != nil {
 		return err
 	}
 	fixture.active.Add(1)
 	fixture.executions.Add(1)
 	defer func() {
 		fixture.active.Add(-1)
-		fixture.router.unbind(workingDirectory)
+		fixture.router.unbind(workingDirectory, 0)
 	}()
 	return fixture.process.Execute(input)
 }
@@ -281,8 +281,6 @@ func (fixture *lifecycleSharedProcessFixture) close(ctx context.Context) error {
 	if fixture == nil {
 		return nil
 	}
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
 	if fixture.closeErr != nil {
 		return fixture.closeErr
 	}
@@ -317,14 +315,15 @@ func (fixture *lifecycleSharedProcessFixture) close(ctx context.Context) error {
 }
 
 type lifecycleCommandRoute struct {
-	runner     platformprocess.CommandRunner
-	apiStarter platformhttpserver.Starter
+	runner platformprocess.CommandRunner
 }
 
 type lifecycleCommandRouter struct {
 	mu sync.Mutex
 
 	routes    map[string]lifecycleCommandRoute
+	apiRoutes map[int]platformhttpserver.Starter
+	apiPort   atomic.Int32
 	binds     int
 	unbinds   int
 	calls     int
@@ -332,13 +331,17 @@ type lifecycleCommandRouter struct {
 }
 
 func newLifecycleCommandRouter() *lifecycleCommandRouter {
-	return &lifecycleCommandRouter{routes: make(map[string]lifecycleCommandRoute)}
+	return &lifecycleCommandRouter{
+		routes:    make(map[string]lifecycleCommandRoute),
+		apiRoutes: make(map[int]platformhttpserver.Starter),
+	}
 }
 
 func (router *lifecycleCommandRouter) bind(
 	workingDirectory string,
 	runner platformprocess.CommandRunner,
 	apiStarter platformhttpserver.Starter,
+	apiPort int,
 ) error {
 	key := filepath.Clean(workingDirectory)
 	router.mu.Lock()
@@ -346,7 +349,16 @@ func (router *lifecycleCommandRouter) bind(
 	if _, exists := router.routes[key]; exists {
 		return fmt.Errorf("shared lifecycle provider route %q is already bound", key)
 	}
-	router.routes[key] = lifecycleCommandRoute{runner: runner, apiStarter: apiStarter}
+	if apiStarter != nil {
+		if apiPort == 0 {
+			return errors.New("shared lifecycle API route requires a listen port")
+		}
+		if _, exists := router.apiRoutes[apiPort]; exists {
+			return fmt.Errorf("shared lifecycle API route for port %d is already bound", apiPort)
+		}
+		router.apiRoutes[apiPort] = apiStarter
+	}
+	router.routes[key] = lifecycleCommandRoute{runner: runner}
 	router.binds++
 	return nil
 }
@@ -356,30 +368,44 @@ func (router *lifecycleCommandRouter) Start(
 	request platformhttpserver.StartRequest,
 ) error {
 	router.mu.Lock()
-	var route lifecycleCommandRoute
-	if len(router.routes) == 1 {
-		for _, candidate := range router.routes {
-			route = candidate
-		}
-	}
-	if route.apiStarter != nil {
+	starter, ok := router.apiRoutes[request.Port]
+	if ok {
 		router.apiStarts++
 	}
 	router.mu.Unlock()
-	if route.apiStarter == nil {
-		return errors.New("shared lifecycle API server route is not bound")
+	if !ok {
+		return fmt.Errorf("shared lifecycle API server route is not bound for port %d", request.Port)
 	}
-	return route.apiStarter(ctx, request)
+	return starter(ctx, request)
 }
 
-func (router *lifecycleCommandRouter) unbind(workingDirectory string) {
+func (router *lifecycleCommandRouter) unbind(workingDirectory string, apiPort int) {
 	key := filepath.Clean(workingDirectory)
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	if _, exists := router.routes[key]; exists {
 		delete(router.routes, key)
+		if apiPort != 0 {
+			delete(router.apiRoutes, apiPort)
+		}
 		router.unbinds++
 	}
+}
+
+func (router *lifecycleCommandRouter) nextPort() int {
+	return 24000 + int(router.apiPort.Add(1))
+}
+
+func insertLifecycleListenArg(args []string, port int) []string {
+	result := append([]string(nil), args...)
+	for index, arg := range result {
+		if arg != "run" {
+			continue
+		}
+		listen := []string{"--listen", fmt.Sprintf("127.0.0.1:%d", port)}
+		return append(result[:index+1], append(listen, result[index+1:]...)...)
+	}
+	return result
 }
 
 func (router *lifecycleCommandRouter) Run(

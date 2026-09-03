@@ -107,7 +107,7 @@ func (s *Server) changeTarget(ctx context.Context, sessionID string, requestedVa
 		return acpsdk.SessionConfigOption{}, classifyDependencyFailure(errSessionWorkingRootUnknown)
 	}
 
-	homeDir, err := s.resolveHomeDir()
+	homeDir, err := s.resolveInvocationHomeDir(ctx)
 	if err != nil {
 		return acpsdk.SessionConfigOption{}, classifyDependencyFailure(err)
 	}

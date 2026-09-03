@@ -9,7 +9,6 @@ import (
 
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -90,6 +89,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
 	})
+	remoteInputs.Input.Env = functionalSharedDefaultEnvironment()
 	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelCacheNotFound) {
@@ -177,6 +177,7 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
 	})
+	remoteInputs.Input.Env = functionalSharedDefaultEnvironment()
 	remoteInputs.Input.WorkingDirectory = functionalTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelNotFound) {
@@ -197,14 +198,10 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
 	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := functionalTempDir(t)
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "remove", codedDiagnosticModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = append(
-		functionalHomeEnvironment(functionalTempDir(t)),
-		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
-	)
+	inputs.Input.Env = functionalSharedDefaultEnvironment()
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := functionalSharedDefaultProcess(t)
@@ -217,7 +214,7 @@ func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedIn
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "inspect", codedDiagnosticUnknownModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = functionalHomeEnvironment(functionalTempDir(t))
+	inputs.Input.Env = functionalSharedDefaultEnvironment()
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := functionalSharedDefaultProcess(t)

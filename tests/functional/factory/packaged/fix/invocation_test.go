@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -376,14 +377,11 @@ func invokePackagedFixSession(
 	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
-	// The packaged Petri Factory must run inside this already-open explicit
-	// session so the assertions below can observe its canonical Work, Event,
-	// dispatch, and replay history. The public run CLI has no session-target
-	// flag, and its remote durable source only resolves JavaScript workflow
-	// factories, so this is the narrowly scoped CLI-plus-API parity exception.
-	// TestPackagedFixSharedProcess/CLIResponseMatchesExplicitSession still
-	// executes the same invocation through the root-built customer CLI and
-	// compares its terminal response with this explicit-session API path.
+	// Invoke through the public session-scoped API so the customer can address
+	// the already-open Factory Session with its authored structured arguments
+	// and then inspect the same Work, Event, dispatch, and replay history.
+	// CLIResponseMatchesExplicitSession independently proves CLI/API outcome
+	// parity for the same packaged Factory behavior.
 	statusCode, body := invokePackagedFixSessionRaw(t, scenario, args)
 	if statusCode != http.StatusOK {
 		t.Fatalf("invoke packaged Fix session status = %d: %s", statusCode, strings.TrimSpace(string(body)))
@@ -647,7 +645,8 @@ func runPackagedFixCLIWithFactorySetup(
 		factoryName = configuredPackagedFixFactoryName
 	}
 	inputArgs := []string{
-		"you", "--json", "run", "--named", factoryName, "--no-record",
+		"you", "--json", "run", "--named", factoryName,
+		"--session", uuid.NewString(), "--no-record",
 	}
 	inputArgs = append(inputArgs, args...)
 	inputs := support.FakeInputs(t.Context(), inputArgs)

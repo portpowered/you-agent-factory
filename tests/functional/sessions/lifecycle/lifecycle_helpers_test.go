@@ -19,12 +19,12 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// lifecycleClientProcess owns one reusable root-built client process for all
-// sequential public CLI invocations of one lifecycle cell.
+// lifecycleClientProcess owns one reusable root-built client process. Every
+// invocation owns its streams and selected Factory Session.
 type lifecycleClientProcess struct {
-	mu      sync.Mutex
-	process support.ApplicationProcess
-	env     []string
+	initializeOnce sync.Once
+	process        support.ApplicationProcess
+	env            []string
 }
 
 func sharedLifecycleClient(t *testing.T) *lifecycleClientProcess {
@@ -113,8 +113,6 @@ func (client *lifecycleClientProcess) executeCLI(
 	serverURL string,
 	args ...string,
 ) ([]byte, error) {
-	client.mu.Lock()
-	defer client.mu.Unlock()
 	if client.process == nil {
 		return nil, errors.New("shared lifecycle client process is unavailable")
 	}

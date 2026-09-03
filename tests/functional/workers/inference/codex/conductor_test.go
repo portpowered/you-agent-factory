@@ -21,6 +21,7 @@ const (
 // directory and opens an explicit non-default Factory Session so process
 // wiring is shared while runtime state remains session-scoped.
 func TestCodexDefaultLaneSharedProcess(t *testing.T) {
+	t.Parallel()
 	fixture := newCodexConductorFixture(t)
 	t.Cleanup(func() {
 		fixture.assertSharedIdentityLedger(t)
@@ -42,6 +43,7 @@ func TestCodexDefaultLaneSharedProcess(t *testing.T) {
 // cannot silently fall back to another scenario when its immutable selector is
 // absent or duplicated.
 func TestCodexCommandRouterFailsClosed(t *testing.T) {
+	t.Parallel()
 	first := &codexScenarioCommandRunner{}
 	second := &codexScenarioCommandRunner{}
 	duplicate, err := newCodexCommandRouter([]codexCommandRoute{

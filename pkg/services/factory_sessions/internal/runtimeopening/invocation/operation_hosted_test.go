@@ -15,9 +15,11 @@ import (
 
 type hostedLiveSessionsFake struct {
 	executionMethodsStub
-	sessions     map[string]factorysessions.SessionProjection
-	invokeResult factorysessions.InvocationResult
-	invokeErr    error
+	sessions         map[string]factorysessions.SessionProjection
+	readSessionID    string
+	invokedSessionID string
+	invokeResult     factorysessions.InvocationResult
+	invokeErr        error
 }
 
 func newHostedLiveSessionsFake(projection factorysessions.SessionProjection) *hostedLiveSessionsFake {
@@ -34,7 +36,8 @@ func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string
 	return factorysessions.ErrSessionNotFound
 }
 
-func (fake *hostedLiveSessionsFake) InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+func (fake *hostedLiveSessionsFake) InvokeFactorySession(_ context.Context, sessionID string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	fake.invokedSessionID = sessionID
 	return fake.invokeResult, fake.invokeErr
 }
 
@@ -51,6 +54,7 @@ func (fake *hostedLiveSessionsFake) ListFactorySessions(context.Context) ([]fact
 }
 
 func (fake *hostedLiveSessionsFake) GetFactorySession(_ context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+	fake.readSessionID = sessionID
 	if projection, ok := fake.sessions[sessionID]; ok {
 		return projection, nil
 	}
@@ -274,6 +278,44 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 		outcome.Result.WorkID != wantResult.WorkID ||
 		len(outcome.Result.PrimaryResult) != 1 || outcome.Result.PrimaryResult[0].Text != "completed response" {
 		t.Fatalf("result = %#v, want converted owner-published invocation outcome %#v", outcome.Result, wantResult)
+	}
+}
+
+func TestInvokeFactoryUsesExplicitHostedSessionForProbeAndInvocation(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-explicit"
+	petriProjection := factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{
+			FactoryCfg: &factorydefinitions.FactoryConfig{
+				Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+					Kind: factorydefinitions.OrchestratorKindPetri,
+				},
+			},
+		},
+	}
+	sessions := &hostedLiveSessionsFake{
+		sessions: map[string]factorysessions.SessionProjection{sessionID: petriProjection},
+		invokeResult: factorysessions.InvocationResult{
+			SessionID: sessionID,
+			Status:    factorysessions.InvocationTerminalStatusCompleted,
+		},
+	}
+
+	op := &operation{}
+	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
+		context.Background(), sessions,
+		roles.InvocationTarget{FactorySessionID: sessionID},
+		factorysessions.InvocationRequest{},
+	)
+	if err != nil {
+		t.Fatalf("InvokeFactory() error = %v", err)
+	}
+	if sessions.readSessionID != sessionID || sessions.invokedSessionID != sessionID {
+		t.Fatalf("probe/invocation sessions = %q/%q, want %q", sessions.readSessionID, sessions.invokedSessionID, sessionID)
+	}
+	if outcome.Result.SessionID != sessionID {
+		t.Fatalf("result session = %q, want %q", outcome.Result.SessionID, sessionID)
 	}
 }
 

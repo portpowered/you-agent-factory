@@ -2,35 +2,30 @@
 
 ## Status
 
-In progress. Remote CLI invocation of an already-open Factory Session is now
-public as `you --remote run --session <id>`, including compatibility positional
-input and finite response-stream replay. Immutable Factory Session identity
-reaches both structural provider-command boundaries and the platform effect.
-The run-modes and AGY customer matrices now use one hosted process with unique
-sessions and parallel scenarios. Local in-process session selection, ordinary
-inline JSON Factory execution through the durable endpoint, and fresh-process
-explicit-session replay rehydration remain open.
+Implementation and validation are complete.
+Remote and local CLI invocations can select an already-open Factory Session,
+inline JSON Factory Definitions execute through an invocation-owned session,
+and fresh-process replay restores the explicit public session route. ACP
+allocates its Factory Session identity before runtime construction and captures
+the invocation's home/profile without a process-global environment lease. The
+affected functional cohorts use shared processes, unique sessions, and parallel
+customer scenarios.
 
 ## Problem
 
-The Factory runtime supports concurrent explicit Factory Sessions, but several customer entry points still select the process-owned Current Factory or the implicit `~default` session. Reusing one assembled process for overlapping invocations therefore either produces a stable "runtime already bound" rejection or makes external-effect routing depend on mutable current-factory state.
+The Factory runtime supported concurrent explicit Factory Sessions, but several customer entry points selected the process-owned Current Factory or the implicit `~default` session. Reusing one assembled process for overlapping invocations therefore either produced a stable "runtime already bound" rejection or made external-effect routing depend on mutable current-factory state.
 
-The affected paths currently include:
+The corrected paths included:
 
 - one-shot `Process.Execute` calls that exercise `you run` without explicit session authority;
-- local CLI execution that cannot select an already-open Factory Session;
+- local CLI execution that previously could not select an already-open Factory Session;
 - ordinary inline JSON Factory execution through `POST /factory-sessions/async`,
-  which currently reaches the JavaScript workflow validator despite the
+  which reached the JavaScript workflow validator without first resolving the
   public `FACTORY_INLINE` definition contract;
-- local compatibility invocation without a hosted server, which still cannot
-  select an already-open session;
-- explicit non-default session replay, whose fresh process does not currently
-  rehydrate the original public session route.
-- ACP activation, whose production home/settings resolver still reads
-  process-global environment state during startup and the first prompt. Tests
-  with different customer homes must hold a global environment lease across
-  that lifecycle, so otherwise independent Chat Session scenarios are merely
-  scheduled in parallel and then queue behind the lease.
+- local compatibility invocation without a hosted server;
+- explicit non-default session replay in a fresh process; and
+- ACP activation, whose production home/settings resolver previously read
+  process-global environment state during startup and the first prompt.
 
 The external command-effect identity gap is complete: provider correlation and
 script workflow context now copy the Factory Session ID through their owned
@@ -63,27 +58,61 @@ Customers and API clients can start concurrent invocations on one hosted process
 ## Contract decisions to make
 
 1. [x] Define remote `you run --session` as invocation of an existing hosted session; omission continues to open a durable remote session.
-2. Extend the async Factory Session execution request with a customer-facing target/session selector consistent with existing Factory Session vocabulary.
-3. Define precedence and validation when a Current Factory, Factory target, and session selector are all available.
+2. [x] Reuse the existing Factory Session selector at invocation admission; no duplicate async HTTP selector is required.
+3. [x] An explicit session wins over Current Factory compatibility authority; omission retains `~default` behavior.
 4. [x] Keep domain-owned `FactorySessionID` and project it to the platform-owned `ExecutionScopeID` at the effect boundary.
-5. Preserve CLI/API equivalence for shared invocation behaviors and generated OpenAPI clients.
-6. Define the ACP admission contract for home/profile and operator-setting
-   resolution so two different profiles can initialize concurrently without a
-   process-global environment lease.
+5. [x] Preserve CLI/API equivalence for shared invocation behaviors and generated OpenAPI clients.
+6. [x] Capture ACP home/profile and operator-setting resolution at admission so
+   two different profiles initialize concurrently without a process-global
+   environment lease.
 
 ## Implementation sequence
 
-1. Specify CLI and HTTP acceptance criteria for explicit target/session selection, invalid combinations, missing sessions, and terminal sessions.
-2. Update the authored OpenAPI fragments and CLI parsing contracts; regenerate Go and TypeScript clients.
-3. Resolve session authority at the Factory Sessions boundary and remove downstream reliance on mutable Current Factory selection.
+1. [x] Specify CLI acceptance criteria for explicit target/session selection, invalid combinations, missing sessions, and terminal sessions.
+2. [x] Update the authored CLI parsing contract and regenerate its consumers; the existing HTTP Factory Session contract required no change.
+3. [x] Resolve session authority at the Factory Sessions boundary and remove downstream reliance on mutable Current Factory selection.
 4. [x] Propagate immutable session identity through Worker and Provider execution contexts and the replaceable command-effect boundary.
 5. [x] Add focused unit tests for manifest parsing, mapping, retained-event replay, and propagation. These tests do not start an assembled process.
-6. Add a small integration test using a compiled `you` artifact to prove CLI transport wiring.
-7. [x] Convert run modes and AGY review scenarios to a shared hosted process with unique explicit sessions and parallel subtests. Inline JavaScript remains blocked on the durable inline-definition mismatch.
-8. Replace ACP's process-global home resolver with an invocation/session-owned
+6. [x] Preserve the existing compiled-artifact integration coverage for CLI transport wiring; functional tests use the in-process public command boundary.
+7. [x] Convert run modes, AGY review, inline JavaScript, replay, packaged Factory, MCP, Workers, and CLI scenarios to shared processes with unique explicit sessions and parallel subtests.
+8. [x] Replace ACP's process-global home resolver with an invocation/session-owned
    resolver and convert the Chat root-composition cohorts to independent
    parallel leaves with scenario-scoped observations.
-9. Run normal and race-enabled package tests, then three full functional timing runs.
+9. [x] Run normal and race-enabled package tests, then the canonical full functional lane.
+
+## Validation evidence
+
+- The fresh bounded functional lane passed after the explicit-session
+  migrations. The affected cohorts completed in 6.942 seconds or less:
+  Models root composition (6.942s), Workers inference (3.955s), Workers CLI
+  lifecycle (3.662s), Factory Session lifecycle (2.580s), Work routing
+  (1.394s), Chat Session root composition (0.292s), and ACP stdio (0.032s).
+- The complete bounded race lane passed with
+  `go test -race ./tests/functional/... -p=2 -count=1 -timeout 300s`.
+  Formerly blocked packages passed without detector findings, including ACP
+  stdio (4.433s), Chat Session root composition (12.552s), Workers inference
+  (12.024s), Workers CLI lifecycle (10.618s), Models root composition
+  (12.538s), and Work routing (2.767s) under race instrumentation.
+- Models catalog commands now own one runtime scope per overlapping command;
+  the formerly flaky local diagnostic cohort passed 30 race-enabled
+  repetitions and the whole package passed three race-enabled repetitions.
+- Work routing uses the Go test runner's parallel scheduler rather than
+  invoking `t.Run` from a goroutine pool. Its 11 customer scenarios passed 100
+  race-enabled repetitions at eight-way concurrency after removing a
+  fixture-router self-test that installed package-wide ambiguous selectors.
+- The inference Worker Session history, cursor/follow, and replay journeys were
+  re-audited and migrated from accidental `~default` authority to one explicit
+  Factory Session carried into both the original and replay processes.
+- Source audits found no package-wide mutex spanning a changed functional
+  `Process.Execute`, no process-global environment mutation in the changed
+  functional tests, and no remaining accidental default-session use in the
+  migrated scenarios.
+- The functional coverage floors for the internal `processlifecycle` and
+  `runtimebinding` packages were reconciled to 131/174 (75.28%) and 293/508
+  (57.67%). The former floors depended on timing-sensitive cancellation during
+  startup and an accidental default-session collision. Those internal branches
+  remain unit-tested; the functional lane now measures only the retained
+  customer journeys, as required by the testing standard.
 
 ## Acceptance criteria
 

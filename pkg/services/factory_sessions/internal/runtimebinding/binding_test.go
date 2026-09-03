@@ -3,7 +3,6 @@ package runtimebinding_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -423,31 +422,30 @@ func assertActiveReplacement(
 	}
 }
 
-func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
+func TestStartInitialRegistersAndSelectsCanonicalDefaultSession(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	var runtimeState runtimebinding.State
 	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
 	runtimeState.SetStartup(bundle)
 
-	handle, err := runtimebinding.StartDefault(
+	handle, err := runtimebinding.StartInitial(
 		context.Background(),
 		context.Background(),
 		sessions,
 		&runtimeState,
+		factorysessions.DefaultSessionID,
 		"/factory",
 		bundle,
 		factorysessions.Target{
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 		},
-		false,
 		interfaces.RuntimeModeBatch,
 		lifecycleFake{},
 		nil,
 		nil,
-		nil,
 	)
 	if err != nil {
-		t.Fatalf("StartDefault: %v", err)
+		t.Fatalf("StartInitial: %v", err)
 	}
 	session := sessions.Resolve(factorysessions.DefaultSessionID)
 	if session == nil || runtimebinding.HandleFromSession(session) != handle {
@@ -463,28 +461,47 @@ func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
 	<-handle.RunDoneCh()
 }
 
-func TestStartDefaultSidecarFailureInvokesSessionRemovalCleanup(t *testing.T) {
+func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-explicit"
 	sessions := newRuntimeBindingState()
 	var runtimeState runtimebinding.State
 	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
-	var removed []string
+	runtimeState.SetStartup(bundle)
+	target := factorysessions.Target{
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "factory-a"},
+		FactoryDir: "/factory",
+		FolderPath: "/workspace",
+		Project:    "project-a",
+	}
 
-	_, err := runtimebinding.StartDefault(
-		context.Background(), context.Background(), sessions, &runtimeState, "/factory", bundle,
-		factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}},
-		true, interfaces.RuntimeModeService, lifecycleFake{},
-		func(context.Context, factory.RuntimeRun) error { return errors.New("sidecars unavailable") },
-		func(factory.RuntimeRun) error { return nil },
-		func(sessionID string) { removed = append(removed, sessionID) },
+	handle, err := runtimebinding.StartInitial(
+		context.Background(), context.Background(), sessions, &runtimeState,
+		sessionID, "/factory", bundle, target, interfaces.RuntimeModeBatch,
+		lifecycleFake{}, nil, nil,
 	)
-	if err == nil || !strings.Contains(err.Error(), "sidecars unavailable") {
-		t.Fatalf("StartDefault error = %v, want sidecar failure", err)
+	if err != nil {
+		t.Fatalf("StartInitial: %v", err)
 	}
-	if len(removed) != 1 || removed[0] != factorysessions.DefaultSessionID {
-		t.Fatalf("removed sessions = %#v, want default session cleanup", removed)
+	t.Cleanup(func() {
+		handle.CancelRun()
+		<-handle.RunDoneCh()
+	})
+
+	session := sessions.Resolve(sessionID)
+	if session == nil || runtimebinding.HandleFromSession(session) != handle {
+		t.Fatalf("explicit session = %#v, want started handle", session)
 	}
-	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
-		t.Fatal("sidecar failure retained the default session or active runtime")
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil {
+		t.Fatal("explicit startup also registered the compatibility default session")
+	}
+	if session.Target != target.Ref || session.FactoryDir != target.FactoryDir ||
+		session.FolderPath != target.FolderPath || session.Project != target.Project {
+		t.Fatalf("explicit session target = %#v, want %#v", session, target)
+	}
+	if active := runtimeState.Active(); active == nil || active.SessionID != sessionID || active.Handle != handle {
+		t.Fatalf("active runtime = %#v, want explicit session %q", active, sessionID)
 	}
 }
 
@@ -503,6 +520,31 @@ func TestCurrentBundleIgnoresPreparedDefaultWithoutLiveHandle(t *testing.T) {
 
 	if got := runtimebinding.CurrentBundle(sessions, &runtimeState); got != startup {
 		t.Fatalf("CurrentBundle = %p, want startup replacement %p", got, startup)
+	}
+}
+
+func TestCurrentBundlePrefersInvocationStartupOverLiveProcessDefault(t *testing.T) {
+	t.Parallel()
+
+	sessions := newRuntimeBindingState()
+	processDefault := &hostedInstanceFake{dir: "/process-default"}
+	defaultHandle := newHostedHandleFake(processDefault)
+	t.Cleanup(func() {
+		defaultHandle.CancelRun()
+		<-defaultHandle.RunDoneCh()
+	})
+	sessions.Register(sessionruntime.Registration{
+		SessionID: factorysessions.DefaultSessionID,
+		Handle:    &runtimebinding.SessionState{Instance: processDefault, Handle: defaultHandle},
+		Default:   true,
+		Select:    true,
+	})
+	startup := &hostedInstanceFake{dir: "/explicit-startup"}
+	var runtimeState runtimebinding.State
+	runtimeState.SetStartup(startup)
+
+	if got := runtimebinding.CurrentBundle(sessions, &runtimeState); got != startup {
+		t.Fatalf("CurrentBundle = %p, want invocation startup %p instead of process default", got, startup)
 	}
 }
 

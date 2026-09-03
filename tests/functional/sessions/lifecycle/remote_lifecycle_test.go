@@ -37,6 +37,7 @@ const (
 // proves request-id replay and conflict behavior without a fabricated HTTP
 // responder.
 func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
+	t.Parallel()
 	if lifecycleFixture == nil || lifecycleFixture.client == nil {
 		t.Fatal("shared lifecycle fixture is unavailable")
 	}
@@ -56,6 +57,7 @@ func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
 // Process.Execute boundary. The JavaScript Factory has no provider dependency,
 // so both placements exercise the same domain outcome and public JSON envelope.
 func TestCLILocalAndRemoteRunSuccessParityThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	fixture := requireSharedPlacementFixture(t)
 	local := executePlacementRun(
 		t,
@@ -80,6 +82,7 @@ func TestCLILocalAndRemoteRunSuccessParityThroughRootProcess(t *testing.T) {
 // same Factory-domain failure stays a failed invocation at both placements,
 // with terminal output on stdout and diagnostics on stderr.
 func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	fixture := requireSharedPlacementFixture(t)
 	local := executePlacementRun(
 		t,
@@ -104,6 +107,7 @@ func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T)
 // caller cancellation reaches both local and selected-server placements and
 // neither path reports a fabricated successful primary result.
 func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	fixture := requireSharedPlacementFixture(t)
 	fixture.client.initializeCustomerHome(t, fixture.clientWorkingDir)
 	local := executePlacementRunWithContext(
@@ -131,6 +135,7 @@ func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) 
 // selected-server transport failure does not leak a success payload onto
 // stdout and remains a non-nil Process.Execute failure with a diagnostic.
 func TestCLIRemoteRunTransportFailureKeepsStreamsAndExitObservable(t *testing.T) {
+	t.Parallel()
 	fixture := requireSharedPlacementFixture(t)
 	observation := executePlacementRun(
 		t,
@@ -172,6 +177,9 @@ func executePlacementRun(
 		args = append(args, "--remote")
 	}
 	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
+	if !remote {
+		args = append(args, "--session", uuid.NewString())
+	}
 	inputs, command := client.startCLI(t, t.Context(), workingDirectory, serverURL, nil, args...)
 	<-command.Done()
 	if command.Err() != nil {
@@ -221,7 +229,7 @@ func executeLocalPlacementRunWithReadiness(
 		workingDirectory,
 		"",
 		readinessOutput,
-		"--json", "run", "--named", factoryName, "--output", "response-stream", "--no-record", "placement parity",
+		"--json", "run", "--named", factoryName, "--session", uuid.NewString(), "--output", "response-stream", "--no-record", "placement parity",
 	)
 	select {
 	case <-readinessOutput.started:
@@ -604,9 +612,8 @@ func assertRemoteRequestIDBehavior(t *testing.T, serverURL, requestID string) {
 	}
 }
 
-// startCLI serializes one asynchronous invocation on the shared root-built
-// client. The lock remains held until Process.Execute joins so another test
-// cannot reuse invocation-owned streams while this command is disconnecting.
+// startCLI starts one asynchronous invocation on the shared root-built client.
+// Process input streams and explicit session authority are invocation-owned.
 func (client *lifecycleClientProcess) startCLI(
 	t *testing.T,
 	ctx context.Context,
@@ -616,9 +623,7 @@ func (client *lifecycleClientProcess) startCLI(
 	args ...string,
 ) (*support.CapturedInputs, *support.ProcessCommand) {
 	t.Helper()
-	client.mu.Lock()
 	if client.process == nil {
-		client.mu.Unlock()
 		t.Fatal("shared lifecycle client process is unavailable")
 	}
 	cmdArgs := []string{"you"}
@@ -634,10 +639,6 @@ func (client *lifecycleClientProcess) startCLI(
 		inputs.Input.Stderr = output
 	}
 	command := support.StartProcessCommand(t, client.process, inputs.Input)
-	go func() {
-		<-command.Done()
-		client.mu.Unlock()
-	}()
 	return inputs, command
 }
 
@@ -646,12 +647,12 @@ func (client *lifecycleClientProcess) initializeCustomerHome(
 	workingDir string,
 ) {
 	t.Helper()
-	client.mu.Lock()
-	defer client.mu.Unlock()
 	if client.process == nil {
 		t.Fatal("shared lifecycle client process is unavailable")
 	}
-	support.InitializeCustomerHomeWithProcess(t, client.process, client.env, workingDir)
+	client.initializeOnce.Do(func() {
+		support.InitializeCustomerHomeWithProcess(t, client.process, client.env, workingDir)
+	})
 }
 
 type remoteAdmissionOutput struct {

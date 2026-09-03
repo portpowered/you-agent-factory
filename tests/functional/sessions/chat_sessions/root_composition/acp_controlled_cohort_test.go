@@ -3,26 +3,20 @@ package root_composition_test
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const controlledACPFactory = "@you/goal"
 
-// controlledACPCohort is an immutable-profile process fixture. The shared
-// package cohort is used for ACP witnesses that do not activate a Factory
-// runtime; activation-owning witnesses use newControlledACPCohort so their
-// retained ~default Factory Definitions binding cannot leak into another
-// scenario. Both paths use the same root.BuildProcess composition and the
-// same request-keyed command-runner edge.
+// controlledACPCohort is the package's immutable-profile process fixture.
+// Every customer scenario owns a distinct Chat Session, Factory Session, and
+// working root while reusing this one root-built application graph.
 type controlledACPCohort struct {
 	home                  string
 	process               support.ApplicationProcess
@@ -35,56 +29,6 @@ var controlledCohortState struct {
 	sync.Mutex
 	cohort *controlledACPCohort
 	err    error
-}
-
-// newControlledACPCohort builds one root process for a scenario whose real
-// Factory activation remains retained by the on-demand ACP target. The
-// immutable catalog/profile seed is shared, but the command home, process, and
-// working root stay scenario-local: the production runtime currently binds Factory
-// Definitions under the fixed ~default session scope and the public ACP close
-// path cannot close a terminalized session, so sharing that retained
-// activation would make later tests fail with dependency_unavailable.
-func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
-	t.Helper()
-	home := seedACPActivationCommandHomeForTest(
-		t,
-		"controlled ACP "+name+" initialization home",
-		"you-chat-sessions-"+name+"-home-",
-	)
-	workingDirectoryRoot := chatMkdirTemp(
-		t,
-		"controlled ACP "+name+" working roots",
-		"",
-		"you-chat-sessions-"+name+"-",
-	)
-	if err := os.MkdirAll(workingDirectoryRoot, 0o755); err != nil {
-		t.Fatalf("create controlled ACP %s working roots: %v", name, err)
-	}
-
-	runner := &controlledACPCommandRunner{}
-
-	cohort := &controlledACPCohort{
-		home:                 home,
-		runner:               runner,
-		workingDirectoryRoot: workingDirectoryRoot,
-	}
-	process, err := buildChatProcess(t, "controlled ACP "+name, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		FactorySessionIDGenerator: func() string {
-			n := cohort.factorySessionIDCalls.Add(1)
-			return fmt.Sprintf("acp-%s-factory-session-%d", name, n)
-		},
-	})
-	if err != nil {
-		t.Fatalf("build controlled ACP %s process: %v", name, err)
-	}
-	cohort.process = process
-	t.Cleanup(func() {
-		if err := closeChatProcess(cohort.process); err != nil {
-			t.Errorf("close controlled ACP %s process: %v", name, err)
-		}
-	})
-	return cohort
 }
 
 func controlledACPHome(t *testing.T) string {
@@ -180,6 +124,18 @@ func (runner *controlledACPCommandRunner) requestCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return len(runner.requests)
+}
+
+func (runner *controlledACPCommandRunner) requestCountContaining(marker string) int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	count := 0
+	for _, request := range runner.requests {
+		if strings.Contains(string(request.Stdin), marker) {
+			count++
+		}
+	}
+	return count
 }
 
 func controlledACPResult(output string) process.CommandResult {

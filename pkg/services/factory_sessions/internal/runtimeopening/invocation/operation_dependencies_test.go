@@ -233,7 +233,8 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 		t.Fatalf("NewOperation returned %T, want *operation", invocation)
 	}
 	opened, active, err := concrete.open(t.Context(), roles.InvocationTarget{
-		FactoryDir: "factory", HomeDir: "home", RunnerID: "runner",
+		FactorySessionID: "session-explicit",
+		FactoryDir:       "factory", HomeDir: "home", RunnerID: "runner",
 		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 	})
 	if err != nil {
@@ -248,10 +249,14 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 	}
 	if opening.request == nil || opening.request.FactoryDefinition.Directory != "factory" ||
 		opening.request.Workers.RunnerID != "runner" ||
+		opening.request.FactorySession.FactorySessionID != "session-explicit" ||
 		opening.request.FactorySession.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" ||
 		opening.request.FactoryRuntime.LogDirectory != "logs" ||
 		opening.request.FactoryRuntime.MetricsDirectory != "metrics" {
 		t.Fatalf("invocation runtime request = %#v", opening.request)
+	}
+	if active.sessionID != "session-explicit" {
+		t.Fatalf("lifecycle session = %q, want explicit selector", active.sessionID)
 	}
 }
 

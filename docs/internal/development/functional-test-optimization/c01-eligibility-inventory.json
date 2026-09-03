@@ -7080,40 +7080,6 @@
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
     },
     {
-      "siteId": "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-01",
-      "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
-      "sourcePath": "tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go",
-      "sourceLine": 351,
-      "enclosingIdentity": "acpStreamUsageCommandFactory",
-      "launcherKind": "test-helper-process",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go:351 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F025-top-level-test-TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess",
-        "C07-F025-top-level-test-TestACPStreamUsagePeerProcess"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-streaming-usage-composition-test-acpStreamUsageCommandFactory-02",
-      "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
-      "sourcePath": "tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go",
-      "sourceLine": 353,
-      "enclosingIdentity": "acpStreamUsageCommandFactory",
-      "launcherKind": "external-process-harness",
-      "occurrence": 2,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/sessions/chat_sessions/root_composition/acp_streaming_usage_composition_test.go:353 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F025-top-level-test-TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess",
-        "C07-F025-top-level-test-TestACPStreamUsagePeerProcess"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-sessions-chat-sessions-root-composition-acp-worker-child-events-test-acpWorkerChildCommandFactory-01",
       "packagePath": "tests/functional/sessions/chat_sessions/root_composition",
       "sourcePath": "tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go",

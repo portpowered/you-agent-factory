@@ -48,7 +48,7 @@ func (s *Server) handleSessionNew(ctx context.Context, env envelope.Envelope) (j
 		return nil, protocol.SafeReject(err)
 	}
 
-	homeDir, err := s.resolveHomeDir()
+	homeDir, err := s.resolveInvocationHomeDir(ctx)
 	if err != nil {
 		return nil, classifyDependencyFailure(err)
 	}

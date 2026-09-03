@@ -100,9 +100,8 @@ var (
 )
 
 // packagedFixCLIProcessFixture owns the reusable non-hosted customer CLI
-// process. Calls are serialized because support.Process documents reusable
-// process execution for sequential public invocations; each call still gets a
-// fresh home, config scope, Factory copy, workspace, and provider selector.
+// process. Each call gets a fresh session, home, config scope, Factory copy,
+// workspace, and provider selector.
 type packagedFixCLIProcessFixture struct {
 	rootDir        string
 	factorySeedDir string
@@ -252,8 +251,8 @@ func (fixture *packagedFixCLIProcessFixture) execute(
 ) error {
 	t.Helper()
 	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
 	fixture.executions++
+	fixture.mu.Unlock()
 	return fixture.process.Execute(inputs.Input)
 }
 

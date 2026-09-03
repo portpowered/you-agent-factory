@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -348,6 +348,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		"prove workers-owned server-attached lifecycle",
 	}
 	inputs := hostedProcess.Inputs(args, factoryDir)
+	sessionID := lifecycleSessionID(inputs.Input.Args)
 	command := hostedProcess.StartCommand(inputs)
 	releaseWorker := func() {
 		hostedProcess.ReleaseGate(sessionObservedGate, lifecyclePhaseProviderRelease, "Factory Session observation")
@@ -370,6 +371,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		}
 		session, workID, workVisible, pollErr := hostedProcess.ObserveHostedServerAttached(
 			baseURL,
+			sessionID,
 			wantServerAttachedInvocationPrimaryResult,
 			releaseWorker,
 			command.Done(),
@@ -393,7 +395,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	assertHostedServerAttachedPublicCorrelation(
 		t,
 		observation.baseURL,
-		factorysessions.DefaultSessionID,
+		sessionID,
 		observation.workID,
 	)
 	hostedProcess.ReleaseGate(correlationDone, lifecyclePhaseTerminal, "public Factory Session, Worker Session, Work, and Event correlation")
@@ -527,16 +529,16 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 	}
 }
 
-func tryReadDefaultFactorySession(baseURL string) (factoryapi.FactorySession, bool, string) {
-	session, err := readDefaultFactorySession(baseURL)
+func tryReadFactorySession(baseURL, sessionID string) (factoryapi.FactorySession, bool, string) {
+	session, err := readFactorySession(baseURL, sessionID)
 	if err != nil {
 		return factoryapi.FactorySession{}, false, err.Error()
 	}
 	return session, true, ""
 }
 
-func readDefaultFactorySession(baseURL string) (factoryapi.FactorySession, error) {
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default"
+func readFactorySession(baseURL, sessionID string) (factoryapi.FactorySession, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
 	response, err := lifecycleHTTPClient.Get(endpoint)
 	if err != nil {
 		return factoryapi.FactorySession{}, err
@@ -568,7 +570,7 @@ func assertHostedServerAttachedPublicCorrelation(
 ) {
 	t.Helper()
 
-	workerSessions := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+	workerSessions := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID)
 	if len(workerSessions.Sessions) != 1 {
 		t.Fatalf("public Worker Sessions for Work %q = %#v, want exactly one", workID, workerSessions.Sessions)
 	}
@@ -664,8 +666,8 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (string, bool, string) {
-	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
+func tryReadTerminalWorkPrimaryText(serverURL, sessionID, wantText string) (string, bool, string) {
+	endpoint := support.SessionWorkURL(serverURL, sessionID, "/work")
 	response, err := lifecycleHTTPClient.Get(endpoint)
 	if err != nil {
 		return "", false, fmt.Sprintf("GET %s: %v", endpoint, err)

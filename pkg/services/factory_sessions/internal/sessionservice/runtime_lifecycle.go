@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -11,6 +12,79 @@ import (
 )
 
 type RuntimeStop = factorysessions.RuntimeStop
+
+type ownedSession struct {
+	id    string
+	owner factorysessions.Service
+}
+
+// Close drains every live Factory Session owned by this process root. A
+// command stops only its admitted session; process shutdown owns the rest.
+func (a *Assembly) Close(ctx context.Context) error {
+	if a == nil {
+		return nil
+	}
+	var result error
+	for _, session := range a.ownedSessionsForClose() {
+		result = errors.Join(result, closeOwnedSession(ctx, session))
+	}
+	return result
+}
+
+func (a *Assembly) ownedSessionsForClose() []ownedSession {
+	a.detachedMu.RLock()
+	defer a.detachedMu.RUnlock()
+	if a.state == nil || a.state.Registry() == nil {
+		return a.detachedSessionsInReverseOrder()
+	}
+	ids := a.state.Registry().IDs()
+	owned := make([]ownedSession, 0, len(ids))
+	for index := len(ids) - 1; index >= 0; index-- {
+		id := ids[index]
+		if owner := a.ownerForClose(id); owner != nil {
+			owned = append(owned, ownedSession{id: id, owner: owner})
+		}
+	}
+	return owned
+}
+
+func (a *Assembly) detachedSessionsInReverseOrder() []ownedSession {
+	owned := make([]ownedSession, 0, len(a.detachedGatewayOrder))
+	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
+		id := a.detachedGatewayOrder[index]
+		if owner := a.detachedGateways[id]; owner != nil {
+			owned = append(owned, ownedSession{id: id, owner: owner})
+		}
+	}
+	return owned
+}
+
+func (a *Assembly) ownerForClose(sessionID string) factorysessions.Service {
+	if owner := a.detachedGateways[sessionID]; owner != nil {
+		return owner
+	}
+	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
+		if owner := a.detachedGateways[a.detachedGatewayOrder[index]]; owner != nil {
+			return owner
+		}
+	}
+	return nil
+}
+
+func closeOwnedSession(ctx context.Context, session ownedSession) error {
+	control, ok := session.owner.(factorysessions.LiveControlService)
+	if !ok {
+		return fmt.Errorf("close Factory Session %s: %w: live control capability unavailable", session.id, factorysessions.ErrDetachedServiceUnavailable)
+	}
+	err := control.CloseFactorySession(ctx, session.id)
+	if errors.Is(err, context.Canceled) || errors.Is(err, factorysessions.ErrSessionNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("close Factory Session %s: %w", session.id, err)
+	}
+	return nil
+}
 
 // StartLifecycle starts the runtime phase selected by the Factory
 // Sessions-owned process lifecycle plan. Initializer only executes that
@@ -33,7 +107,7 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 		}
 	}
 	// Initializer owns sidecar activation as the next lifecycle phase.
-	_, err := runtime.StartDefaultRuntime(ctx, runCtx, false)
+	_, err := runtime.StartDefaultRuntime(ctx, runCtx)
 	return err
 }
 
@@ -71,12 +145,13 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
 		if err := runtime.submitWorkFile(ctx); err != nil {
+			sessionID := runtime.runSessionID()
 			failure := runtimebinding.FailStartup(
-				runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
+				runtime.sessionState, &runtime.runtimeState, sessionID,
 				current, runtime.StopLiveRuntime, err,
 			)
 			if runtime.releaseWorkAdmissionProjection != nil {
-				runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+				runtime.releaseWorkAdmissionProjection(sessionID)
 			}
 			return failure
 		}
@@ -108,25 +183,34 @@ func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
 		if runtime.runtimeState.ActiveHandle() != current {
 			continue
 		}
-		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService && runtime.sessionState.Registry() != nil && runtime.sessionState.Registry().Count() == 0 {
+		active := runtime.runtimeState.Active()
+		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService &&
+			active != nil && runtime.sessionState.Resolve(active.SessionID) != nil {
 			continue
 		}
 		return current.Result()
 	}
 }
 
-// StopLifecycle stops the active runtime and any other live session runtimes.
+// StopLifecycle stops only the runtime admitted by this lifecycle. Other live
+// sessions can belong to concurrent invocations in the same process graph and
+// must not be treated as children of this invocation.
 func (runtime *SessionRuntime) StopLifecycle(_ context.Context) error {
 	if runtime == nil {
 		return nil
 	}
-	current := runtime.runtimeState.ActiveHandle()
-	var result error
-	if err := runtime.StopLiveRuntime(current); err != nil && !errors.Is(err, context.Canceled) {
-		result = err
+	sessionID := runtime.startupSessionID
+	if sessionID == "" {
+		sessionID = DefaultFactorySessionID
 	}
-	if err := runtime.ShutdownOtherLiveSessions(current); err != nil {
-		result = errors.Join(result, err)
+	var result error
+	if runtime.sessionState.Resolve(sessionID) != nil {
+		if err := runtime.StopLiveRuntime(runtime.runtimeState.ActiveHandle()); err != nil &&
+			!errors.Is(err, context.Canceled) &&
+			!errors.Is(err, factorysessions.ErrSessionNotFound) &&
+			!errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+			result = err
+		}
 	}
 	runtime.runtimeState.ClearActive()
 	return result
@@ -138,12 +222,13 @@ func (runtime *SessionRuntime) FailStartup(err error) error {
 		return err
 	}
 	current := runtime.runtimeState.ActiveHandle()
+	sessionID := runtime.runSessionID()
 	failure := runtimebinding.FailStartup(
-		runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
+		runtime.sessionState, &runtime.runtimeState, sessionID,
 		current, runtime.StopLiveRuntime, err,
 	)
 	if runtime.releaseWorkAdmissionProjection != nil {
-		runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+		runtime.releaseWorkAdmissionProjection(sessionID)
 	}
 	return failure
 }

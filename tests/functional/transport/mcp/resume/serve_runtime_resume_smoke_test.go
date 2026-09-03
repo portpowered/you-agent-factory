@@ -10,6 +10,7 @@ import (
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
+	t.Parallel()
 	harness := newMCPRuntimeResumeSmokeHarness(t)
 	client := harness.client
 	assertRuntimeResumeSmokeDiscovery(t, client)
@@ -64,6 +65,7 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 }
 
 func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	t.Parallel()
 	harness := newMCPRuntimeResumeSmokeHarness(t)
 	client := harness.client
 
@@ -132,6 +134,7 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 }
 
 func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
 	harness := newMCPRuntimeResumeSmokeSucceededHarness(t)
 	client := harness.client
 
@@ -178,6 +181,7 @@ func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionA
 }
 
 func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
 	harness := newMCPRuntimeResumeSmokeRunningHarness(t)
 	client := harness.client
 
@@ -272,7 +276,7 @@ func startMCPRuntimeResumeSmokeSucceededSession(
 	args := map[string]any{"subject": "workflows", "count": 2, "prefix": "you"}
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+		client.callTool(t, mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
 			RequestId: fixture.nextRequestID("succeeded"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
@@ -310,7 +314,7 @@ func startMCPRuntimeResumeSmokeRunningSession(
 	workflowNamePtr := workflowName
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+		client.callTool(t, mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
 			RequestId: fixture.nextRequestID("running"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
@@ -338,7 +342,7 @@ func startMCPRuntimeResumeSmokeRunningSession(
 
 func assertRuntimeResumeSmokeDiscovery(t *testing.T, client *stdioMCPClient) {
 	t.Helper()
-	toolsResult := client.call("tools/list", map[string]any{})
+	toolsResult := client.call(t, "tools/list", map[string]any{})
 	toolNames := toolNamesFromListResult(t, toolsResult.Result)
 	for _, want := range []string{
 		mcpfactorysession.ToolStartAsync,
@@ -365,7 +369,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	args := map[string]any{"subject": "workflows"}
 	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+		client.callTool(t, mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
 			RequestId: harness.fixture.nextRequestID("interrupted"),
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
@@ -404,7 +408,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	harness.provider.waitForExecuteBlocked(t, sessionID, 5*time.Second)
 	interrupted := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolControl, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolControl, map[string]any{
 			"sessionId":  sessionID,
 			"operation":  factoryapi.FactorySessionLifecycleControlKindInterruptDispatch,
 			"dispatchId": "dispatch-2",
@@ -437,7 +441,7 @@ func readMCPSessionDurableReadModel(
 	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
 		t,
-		client.callTool(mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
+		client.callTool(t, mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
 	)
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("get = %#v, want success", response)
@@ -471,7 +475,7 @@ func mcpControlResumeWhenInterrupted(
 	for time.Now().Before(deadline) {
 		response := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 			t,
-			client.callTool(mcpfactorysession.ToolControl, map[string]any{
+			client.callTool(t, mcpfactorysession.ToolControl, map[string]any{
 				"sessionId": sessionID,
 				"operation": factoryapi.FactorySessionLifecycleControlKindResume,
 			}),
@@ -501,7 +505,7 @@ func mcpControlResumeExpectingOutcome(
 	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolControl, map[string]any{
+		client.callTool(t, mcpfactorysession.ToolControl, map[string]any{
 			"sessionId": sessionID,
 			"operation": factoryapi.FactorySessionLifecycleControlKindResume,
 		}),
@@ -523,7 +527,7 @@ func listMCPDispatches(
 	t.Helper()
 	listed := decodeToolResponse[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		client.callTool(mcpfactorysession.ToolListDispatches, map[string]any{"sessionId": sessionID}),
+		client.callTool(t, mcpfactorysession.ToolListDispatches, map[string]any{"sessionId": sessionID}),
 	)
 	if listed.Error != nil || listed.Result == nil {
 		t.Fatalf("list_dispatches = %#v, want success", listed)
@@ -658,7 +662,7 @@ func waitForMCPDispatchStatus(
 	for time.Now().Before(deadline) {
 		listed := decodeToolResponse[factoryapi.ListFactorySessionDispatchesResponse](
 			t,
-			client.callTool(mcpfactorysession.ToolListDispatches, map[string]any{"sessionId": sessionID}),
+			client.callTool(t, mcpfactorysession.ToolListDispatches, map[string]any{"sessionId": sessionID}),
 		)
 		if listed.Error != nil || listed.Result == nil {
 			t.Fatalf("list_dispatches = %#v, want success", listed)

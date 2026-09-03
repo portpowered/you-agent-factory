@@ -170,6 +170,8 @@ type detachedRouterOwnerFake struct {
 	name             string
 	invokedSessionID string
 	pausedSessionID  string
+	closedSessionIDs []string
+	closeErr         error
 }
 
 func (fake *detachedRouterOwnerFake) InvokeFactorySession(_ context.Context, sessionID string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
@@ -203,8 +205,9 @@ func (fake *detachedRouterOwnerFake) ResumeLiveFactorySession(context.Context, s
 	return factorysessions.LiveControlResult{}, errors.New("not implemented")
 }
 
-func (fake *detachedRouterOwnerFake) CloseFactorySession(context.Context, string) error {
-	return errors.New("not implemented")
+func (fake *detachedRouterOwnerFake) CloseFactorySession(_ context.Context, sessionID string) error {
+	fake.closedSessionIDs = append(fake.closedSessionIDs, sessionID)
+	return fake.closeErr
 }
 
 func (fake *detachedRouterOwnerFake) GetFactorySessionResult(context.Context, string) (factory.LiveSessionResult, error) {
