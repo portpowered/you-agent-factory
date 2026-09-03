@@ -1149,7 +1149,7 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /echo \"GH_TOKEN=\$BOT_TOKEN\" >> \"\$GITHUB_ENV\"/);
 	assert.match(workflow, /SHARED_BASELINE_PR_TITLE: [\"]?chore\(ci\): reconcile shared CI baselines[\"]?/);
 	assert.match(workflow, /gh run download \"\$SOURCE_RUN_ID\"/);
-	assert.match(workflow, /backend-unit-latency-evidence/);
+	assert.doesNotMatch(workflow, /backend-unit-latency-evidence/);
 	assert.match(workflow, /backend-deadcode-evidence/);
 	assert.match(workflow, /DEADCODE_REPORT_PATH/);
 	assert.match(workflow, /BASELINE_REGEN_DEADCODE_REPORT=\"\$DEADCODE_REPORT_PATH\"/);
@@ -1165,6 +1165,7 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /if \[\[ -z "\$BOT_TOKEN" \]\]/);
 	assert.match(workflow, /refusing to treat the branch as absent/);
 	assert.match(workflow, /make regenerate-shared-ci-baselines/);
+	assert.match(makefile, /-mode regenerate -skip-unit-latency/);
 	assert.match(workflow, /node scripts\/ci\/shared-baseline-regeneration-workflow\.mjs reconcile/);
 	assert.match(workflow, /CHANGED_PATHS: \$\{\{ steps\.candidate\.outputs\.paths \}\}/);
 	assert.match(

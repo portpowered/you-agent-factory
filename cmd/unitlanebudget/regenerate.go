@@ -40,6 +40,16 @@ func regenerateSharedBaselines(cfg budgetConfig) error {
 	if err != nil {
 		return regenerationError(err)
 	}
+	if cfg.skipUnitLatency {
+		deadcodeReport, err := loadRegenerationDeadcodeReport(cfg.root, cfg.deadcodeReport)
+		if err != nil {
+			return regenerationError(err)
+		}
+		if err := publishRegeneratedDeadcode(paths.deadcode, []byte(deadcodeReport)); err != nil {
+			return regenerationError(err)
+		}
+		return nil
+	}
 	samplePaths, err := splitSamplePaths(cfg.samples)
 	if err != nil {
 		return regenerationError(err)
@@ -331,6 +341,22 @@ func publishRegeneratedBaselines(paths regenerationPaths, deadcodeData, budgetDa
 		}
 	}
 	fmt.Fprintf(stdoutWriter, "[agent-factory:baselines] regenerated %d baseline file(s)\n", len(changed))
+	return nil
+}
+
+func publishRegeneratedDeadcode(path string, data []byte) error {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read deadcode baseline before publish: %w", err)
+	}
+	if bytes.Equal(current, data) {
+		fmt.Fprintln(stdoutWriter, "[agent-factory:baselines] shared baselines already match")
+		return nil
+	}
+	if err := atomicReplaceRegeneratedFile(path, data); err != nil {
+		return fmt.Errorf("publish deadcode baseline: %w", err)
+	}
+	fmt.Fprintln(stdoutWriter, "[agent-factory:baselines] regenerated 1 baseline file(s)")
 	return nil
 }
 

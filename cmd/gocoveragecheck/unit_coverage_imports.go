@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
+
+const unitCoverageImportFilename = "gocoveragecheck_coverage_imports_test.go"
 
 type unitCoverageImportCarrier struct {
 	listing coveragePackageListing
@@ -98,11 +101,11 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 		}
 		source.WriteString(")\n")
 
-		file, err := os.CreateTemp(carrier.listing.directory, "gocoveragecheck_coverage_imports_*_test.go")
+		filename := filepath.Join(carrier.listing.directory, unitCoverageImportFilename)
+		file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err != nil {
 			return cleanup, fmt.Errorf("prepare unit coverage imports: create temporary test file in %q: %w", carrier.listing.directory, err)
 		}
-		filename := file.Name()
 		filenames = append(filenames, filename)
 		if _, err := file.WriteString(source.String()); err != nil {
 			_ = file.Close()

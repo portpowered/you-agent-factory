@@ -357,6 +357,14 @@ because a shared host was busy. Optimize test topology by reducing builds,
 processes, duplicated fixtures, real workers, and repeated setup, then use PR or
 CI package timing as directional evidence.
 
+A required coverage or correctness lane that already executes the complete
+test corpus **SHOULD** own package and wall-time diagnostics for that execution.
+CI **MUST NOT** add another required job that reruns the same corpus solely to
+measure its latency. A separate performance lane is justified only when its
+workload, environment, or customer latency contract is materially different;
+otherwise reuse the existing lane's timing artifact and eliminate the duplicate
+execution.
+
 ## 7. Location and naming
 
 - Unit tests live beside the package they own.

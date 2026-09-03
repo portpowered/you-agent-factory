@@ -16,13 +16,11 @@ objects and test names are sorted before JSON serialization. The output is
 written through a same-directory temporary file and renamed into place so a
 failed write cannot leave a partial evidence document.
 
-The hosted Backend Unit Latency job warms the Go module, command, dependency,
-and test compilation caches before measuring samples. It runs `go mod download`,
-builds the unit-lane and checker commands, and compiles `pkg/...` with
-`go test -run '^$'`; these warm-up commands are outside the three measured
-`make test-unit-fresh` calls. Each measured call still uses `-count=1`, so test
-results remain uncached while dependency and compilation setup cannot make the
-first sample incomparable with the next two.
+The former hosted Backend Unit Latency job was removed because it reran the
+same unit corpus three times beside the required Backend Unit Coverage job.
+Backend Unit Coverage now owns required package timing diagnostics. Use the
+commands below only for an intentional, review-owned performance experiment;
+they are not a second required CI execution.
 
 Use the pure checker for a three-sample comparison:
 
@@ -44,19 +42,15 @@ run more than 10% above its candidate median. Failures include expected and
 actual values plus the rerun command. Invalid captures remain on disk for
 review; they are never silently replaced.
 
-The checked-in `go-unit-lane-latency-budget.v1.json` is the frozen policy and
-reference instance. Its accepted timing distribution remains 239.612 seconds
-over 444 packages and 18,122 historical tests. Its exact final-mode inventory
-is the reviewed current-head inventory of 18,142 tests: the integration base
-added twenty runtime/projection test entries after the historical capture.
-This is the declared `exact-with-reviewed-diff` reconciliation; all candidate
-samples must still match that reviewed inventory exactly, and the checker
-never rewrites either the budget or schema.
+The checked-in `go-unit-lane-latency-budget.v1.json` is retained as historical,
+opt-in comparison data. Shared baseline regeneration deliberately leaves it
+unchanged, and required CI no longer consumes or updates it. A maintainer may
+still use the pure checker with an explicitly captured three-sample experiment.
 
 The retained baseline ledger records all three complete uncached captures and
 the first incomplete attempt. The incomplete attempt remains separate from the
 accepted replacement and is documented rather than silently discarded. The
 accepted evidence is historical reference data. This implementation does
 not create a new baseline, run a manual final three-sample gate, make a local
-25% improvement claim, or run a final candidate comparison; hosted final
-enforcement remains review-owned.
+25% improvement claim, or run a final candidate comparison. Any new experiment
+and baseline decision remains review-owned rather than an automatic CI gate.

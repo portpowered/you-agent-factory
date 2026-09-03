@@ -81,6 +81,41 @@ func TestRegenerateSharedBaselinesUpdatesOwnedFilesAndIsIdempotent(t *testing.T)
 	}
 }
 
+func TestRegenerateSharedBaselinesCanLeaveUnitLatencyFrozen(t *testing.T) {
+	fixture, _ := newRegenerationFixture(t)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	withRegenerationWriters(t, stdout, stderr)
+	originalRunner := runRegenerationDeadcode
+	runRegenerationDeadcode = func(string) (string, error) {
+		return "pkg\\new.go:12:4: New finding\n", nil
+	}
+	t.Cleanup(func() { runRegenerationDeadcode = originalRunner })
+
+	cfg := regenerationConfig(fixture)
+	cfg.skipUnitLatency = true
+	if err := regenerateSharedBaselines(cfg); err != nil {
+		t.Fatalf("deadcode-only regeneration: %v", err)
+	}
+	budget, err := os.ReadFile(fixture.budgetPath)
+	if err != nil {
+		t.Fatalf("read retained unit budget: %v", err)
+	}
+	if !bytes.Equal(budget, fixture.originalBudgetData) {
+		t.Fatal("deadcode-only regeneration changed the frozen unit-latency budget")
+	}
+	deadcode, err := os.ReadFile(fixture.deadcodePath)
+	if err != nil {
+		t.Fatalf("read regenerated deadcode baseline: %v", err)
+	}
+	if got := string(deadcode); got != "pkg/new.go: New finding\n" {
+		t.Fatalf("deadcode baseline = %q, want normalized delivered report", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("regeneration stderr = %q, want empty", stderr.String())
+	}
+}
+
 func TestRegenerateSharedBaselinesRejectsInvalidSamplesBeforePublishing(t *testing.T) {
 	cases := []struct {
 		name   string
