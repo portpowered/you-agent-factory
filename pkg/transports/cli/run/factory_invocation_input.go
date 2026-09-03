@@ -390,7 +390,11 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	if hosted == nil {
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is incomplete")
 	}
-	if isJavaScriptHostedFactory, probeErr := hostedFactoryUsesJavaScriptOrchestrator(ctx, hosted); probeErr != nil {
+	sessionID := strings.TrimSpace(target.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	if isJavaScriptHostedFactory, probeErr := hostedFactoryUsesJavaScriptOrchestrator(ctx, hosted, sessionID); probeErr != nil {
 		return factorysessions.FactoryInvocationOutcome{}, probeErr
 	} else if isJavaScriptHostedFactory {
 		return operation.delegate.InvokeFactory(ctx, target, request)
@@ -409,7 +413,7 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 		}
 	}
 	invocationResult, invokeErr := hosted.InvokeFactorySession(
-		ctx, factorysessions.DefaultSessionID, request,
+		ctx, sessionID, request,
 	)
 	outcome := factorysessions.FactoryInvocationOutcome{
 		Result: factoryInvocationResultFromSessionInvocation(invocationResult),
@@ -433,6 +437,7 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 func hostedFactoryUsesJavaScriptOrchestrator(
 	ctx context.Context,
 	hosted HostedInvocationOperation,
+	sessionID string,
 ) (bool, error) {
 	projectionReader, ok := hosted.(interface {
 		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
@@ -440,7 +445,7 @@ func hostedFactoryUsesJavaScriptOrchestrator(
 	if !ok {
 		return false, nil
 	}
-	projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+	projection, projectionErr := projectionReader.GetFactorySession(ctx, sessionID)
 	if projectionErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return false, ctxErr
@@ -512,7 +517,8 @@ func runFactoryInvocationWithResult(
 	}
 	if streamRenderer != nil && presentations != nil {
 		scopeID, registerErr := presentations.RegisterInvocationEvents(factorysessions.InvocationEventScope{
-			Consume: streamRenderer.PresentFactoryEvents,
+			FactorySessionID: cfg.FactorySessionID,
+			Consume:          streamRenderer.PresentFactoryEvents,
 		})
 		if registerErr != nil {
 			return apisurface.FactoryInvocationResult{}, fmt.Errorf("register invocation event presentation: %w", registerErr)
@@ -622,6 +628,7 @@ func invocationTarget(
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) factorysessions.InvocationTarget {
 	return factorysessions.InvocationTarget{
+		FactorySessionID:      cfg.FactorySessionID,
 		FactoryDir:            cfg.Dir,
 		FactorySourcePath:     cfg.FactoryConfigPath,
 		RunnerID:              cfg.RunnerID,

@@ -70,6 +70,32 @@ func StartDefault(
 	stop func(RuntimeHandle) error,
 	onSessionRemoved func(string),
 ) (RuntimeHandle, error) {
+	return StartInitial(
+		readinessContext, runContext, state, runtimeState,
+		factorysessions.DefaultSessionID, factoryRootDir, bundle, target,
+		serviceMode, runtimeMode, lifecycle, startSidecars, stop, onSessionRemoved,
+	)
+}
+
+// StartInitial starts and registers the invocation's admitted Factory Session.
+// The compatibility default is only one possible public selector; explicit
+// local sessions must retain their own selector through startup and cleanup.
+func StartInitial(
+	readinessContext context.Context,
+	runContext context.Context,
+	state *sessionruntime.Service,
+	runtimeState *State,
+	sessionID string,
+	factoryRootDir string,
+	bundle RuntimeInstance,
+	target factorysessions.Target,
+	serviceMode bool,
+	runtimeMode interfaces.RuntimeMode,
+	lifecycle RuntimeLifecycle,
+	startSidecars func(context.Context, RuntimeHandle) error,
+	stop func(RuntimeHandle) error,
+	onSessionRemoved func(string),
+) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
 	}
@@ -79,17 +105,21 @@ func StartDefault(
 	if lifecycle == nil {
 		return nil, fmt.Errorf("factory runtime lifecycle service is required")
 	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
 	handle, err := lifecycle.Start(runContext, bundle)
 	if err != nil {
 		return nil, err
 	}
 	registeredSessionID := Register(state, Registration{
-		SessionID: factorysessions.DefaultSessionID, FactoryRootDir: factoryRootDir,
+		SessionID: sessionID, FactoryRootDir: factoryRootDir,
 		Handle: handle, Target: target, Select: true,
 	})
 	if strings.TrimSpace(registeredSessionID) == "" ||
-		state.Resolve(factorysessions.DefaultSessionID) == nil {
-		unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
+		state.Resolve(sessionID) == nil {
+		unregisterSession(state, sessionID, onSessionRemoved)
 		if stop != nil {
 			_ = stop(handle)
 		}
@@ -100,17 +130,17 @@ func StartDefault(
 	if err := lifecycle.WaitForStart(readinessContext, handle); err != nil {
 		return nil, HandleStartFailure(
 			readinessContext, state, runtimeState,
-			factorysessions.DefaultSessionID, handle, stop, err, runtimeMode, onSessionRemoved,
+			sessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
 	}
 	if serviceMode && startSidecars != nil {
 		if err := startSidecars(runContext, handle); err != nil {
-			if DefaultSessionClosedDuringStartup(state, runtimeMode) {
-				unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
+			if SessionClosedDuringStartup(state, sessionID, runtimeMode) {
+				unregisterSession(state, sessionID, onSessionRemoved)
 				return nil, nil
 			}
 			runtimeState.ClearActive()
-			unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
+			unregisterSession(state, sessionID, onSessionRemoved)
 			if stop != nil {
 				_ = stop(handle)
 			}
@@ -705,10 +735,20 @@ func DefaultSessionClosedDuringStartup(
 	state *sessionruntime.Service,
 	mode interfaces.RuntimeMode,
 ) bool {
+	return SessionClosedDuringStartup(state, factorysessions.DefaultSessionID, mode)
+}
+
+// SessionClosedDuringStartup reports the expected service-mode race in which
+// a client closes the admitted session while startup is still waiting.
+func SessionClosedDuringStartup(
+	state *sessionruntime.Service,
+	sessionID string,
+	mode interfaces.RuntimeMode,
+) bool {
 	if mode != interfaces.RuntimeModeService {
 		return false
 	}
-	return state == nil || state.Resolve(factorysessions.DefaultSessionID) == nil
+	return state == nil || state.Resolve(sessionID) == nil
 }
 
 // HandleStartFailure clears a failed default runtime, preserving the expected
@@ -724,7 +764,7 @@ func HandleStartFailure(
 	mode interfaces.RuntimeMode,
 	onSessionRemoved func(string),
 ) error {
-	if DefaultSessionClosedDuringStartup(state, mode) {
+	if SessionClosedDuringStartup(state, sessionID, mode) {
 		runtimeState.ClearActive()
 		unregisterSession(state, sessionID, onSessionRemoved)
 		if stop != nil {

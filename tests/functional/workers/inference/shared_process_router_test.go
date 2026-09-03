@@ -80,14 +80,13 @@ type inferenceCommandRouter struct {
 }
 
 // inferenceWorkerRecordingRouter keeps the root-built process's durable
-// recording port stable while allowing one serialized scenario to observe the
+// recording port stable while allowing each explicit session to observe the
 // exact Worker records it produced. The fallback is a package-local durable
 // value store; production file persistence remains covered by the recording
 // service's own composition tests.
 type inferenceWorkerRecordingRouter struct {
 	mu          sync.RWMutex
 	fallback    recordings.WorkerRecordingWriter
-	delegate    recordings.WorkerRecordingWriter
 	bySession   map[string]recordings.WorkerRecordingWriter
 	byWorker    map[string]inferenceWorkerRecordingRoute
 	byRecording map[string]inferenceWorkerRecordingRoute
@@ -96,15 +95,6 @@ type inferenceWorkerRecordingRouter struct {
 type inferenceWorkerRecordingRoute struct {
 	sessionID string
 	writer    recordings.WorkerRecordingWriter
-}
-
-func (router *inferenceWorkerRecordingRouter) set(delegate recordings.WorkerRecordingWriter) {
-	if router == nil {
-		return
-	}
-	router.mu.Lock()
-	router.delegate = delegate
-	router.mu.Unlock()
 }
 
 func (router *inferenceWorkerRecordingRouter) setSession(
@@ -141,18 +131,6 @@ func (router *inferenceWorkerRecordingRouter) clearSession(sessionID string) {
 	router.mu.Unlock()
 }
 
-func (router *inferenceWorkerRecordingRouter) current() recordings.WorkerRecordingWriter {
-	if router == nil {
-		return nil
-	}
-	router.mu.RLock()
-	defer router.mu.RUnlock()
-	if router.delegate != nil {
-		return router.delegate
-	}
-	return router.fallback
-}
-
 func (router *inferenceWorkerRecordingRouter) routeRecord(
 	record recordings.WorkerRecordingRecord,
 ) recordings.WorkerRecordingWriter {
@@ -171,9 +149,6 @@ func (router *inferenceWorkerRecordingRouter) routeRecord(
 	sessionID := record.FactorySessionID
 	writer := router.bySession[sessionID]
 	if writer == nil {
-		if router.delegate != nil {
-			return router.delegate
-		}
 		return router.fallback
 	}
 	route := inferenceWorkerRecordingRoute{sessionID: sessionID, writer: writer}
@@ -196,9 +171,6 @@ func (router *inferenceWorkerRecordingRouter) routeIdentity(
 	}
 	if route := router.byRecording[recordingID]; route.writer != nil {
 		return route.writer
-	}
-	if router.delegate != nil {
-		return router.delegate
 	}
 	return router.fallback
 }

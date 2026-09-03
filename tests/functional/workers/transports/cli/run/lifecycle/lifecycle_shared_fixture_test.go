@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -17,8 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// lifecycleSharedProcessFixture owns a package-local sequential cohort. Its
-// mutex makes process reuse explicit: every invocation still owns a fresh
+// lifecycleSharedProcessFixture owns a package-local concurrent cohort. Every
+// invocation owns a fresh
 // working directory, HOME, streams, route, provider runner, and (when used)
 // API server, while immutable root wiring is built once for the cohort.
 type lifecycleSharedProcessFixture struct {
@@ -31,7 +32,6 @@ type lifecycleSharedProcessFixture struct {
 	active     atomic.Int32
 	closes     atomic.Int32
 
-	mu       sync.Mutex
 	closeErr error
 }
 
@@ -122,7 +122,8 @@ func executeSharedLifecycleInvocation(
 
 func newSharedLifecycleInputs(t testing.TB, args []string) *support.CapturedInputs {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), append([]string(nil), args...))
+	args, _ = ensureLifecycleSessionArg(args)
+	inputs := support.FakeInputs(t.Context(), args)
 	// The factory path in these candidates is absolute. A fresh working
 	// directory therefore preserves the customer-facing invocation contract
 	// while proving that route selection and cwd state cannot leak between runs.
@@ -230,11 +231,6 @@ func (fixture *lifecycleSharedProcessFixture) executeInput(
 		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", input.WorkingDirectory)
 	}
 
-	// Process.Execute is reusable, but each package-local cohort is deliberately
-	// serialized so mutable invocation-owned runtime state never overlaps. The
-	// route and its effects remain installed only for this one Execute call.
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
 	if err := fixture.router.bind(workingDirectory, runner, apiStarter); err != nil {
 		return err
 	}
@@ -281,8 +277,6 @@ func (fixture *lifecycleSharedProcessFixture) close(ctx context.Context) error {
 	if fixture == nil {
 		return nil
 	}
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
 	if fixture.closeErr != nil {
 		return fixture.closeErr
 	}
@@ -355,19 +349,15 @@ func (router *lifecycleCommandRouter) Start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
 ) error {
+	key := filepath.Clean(startupcli.WorkingDirectory(ctx))
 	router.mu.Lock()
-	var route lifecycleCommandRoute
-	if len(router.routes) == 1 {
-		for _, candidate := range router.routes {
-			route = candidate
-		}
-	}
+	route, ok := router.routes[key]
 	if route.apiStarter != nil {
 		router.apiStarts++
 	}
 	router.mu.Unlock()
-	if route.apiStarter == nil {
-		return errors.New("shared lifecycle API server route is not bound")
+	if !ok || route.apiStarter == nil {
+		return fmt.Errorf("shared lifecycle API server route is not bound for working directory %q", key)
 	}
 	return route.apiStarter(ctx, request)
 }

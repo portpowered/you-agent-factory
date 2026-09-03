@@ -14963,7 +14963,7 @@
         "you.run.flag.session": {
           "id": "you.run.flag.session",
           "long": "session",
-          "usage": "invoke one already-open Factory Session when --remote selects a running server; omit to start a new durable Factory Session",
+          "usage": "select the Factory Session identity for this invocation; local runs open that isolated session, while --remote invokes the already-open session on the selected server",
           "shorthand": "",
           "aliases": [],
           "scope": "local",

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,6 +68,7 @@ type SessionRuntime struct {
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
 	// startupBundle holds the built default runtime before Run registers ~default.
+	startupSessionID               string
 	dir                            string
 	executionBaseDir               string
 	runtimeMode                    interfaces.RuntimeMode
@@ -167,14 +169,26 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		return nil, fmt.Errorf("factory session service is required")
 	}
 	runtimeBundle := fs.currentRuntimeBundle()
-	return runtimebinding.StartDefault(
+	sessionID := strings.TrimSpace(fs.startupSessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	target := sessionruntime.DefaultTarget(runtimeBundle.Directory(), runtimeBundle.FolderDirectory(), fs.factoryRootDir)
+	if session := fs.sessionState.Resolve(sessionID); session != nil {
+		target.Ref = session.Target
+		target.FactoryDir = session.FactoryDir
+		target.FolderPath = session.FolderPath
+		target.Project = session.Project
+	}
+	return runtimebinding.StartInitial(
 		ctx,
 		runCtx,
 		fs.sessionState,
 		&fs.runtimeState,
+		sessionID,
 		fs.factoryRootDir,
 		runtimeBundle,
-		sessionruntime.DefaultTarget(runtimeBundle.Directory(), runtimeBundle.FolderDirectory(), fs.factoryRootDir),
+		target,
 		serviceMode,
 		fs.runtimeMode,
 		fs.runtimeLifecycle,

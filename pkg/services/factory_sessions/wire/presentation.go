@@ -75,13 +75,21 @@ func (o *openingPresentationOwner) RegisterInvocationEvents(scope factorysession
 }
 
 func (o *openingPresentationOwner) InvocationEvents(id factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	scope, ok := o.invocationEventScope(id)
+	if !ok {
+		return nil, false
+	}
+	return scope.Consume, true
+}
+
+func (o *openingPresentationOwner) invocationEventScope(id factorysessions.OpeningScopeID) (factorysessions.InvocationEventScope, bool) {
 	o.mu.RLock()
 	scope, ok := o.scopes[id]
 	o.mu.RUnlock()
 	if !ok || scope.invocationEvents == nil || scope.invocationEvents.Consume == nil {
-		return nil, false
+		return factorysessions.InvocationEventScope{}, false
 	}
-	return scope.invocationEvents.Consume, true
+	return *scope.invocationEvents, true
 }
 
 func (o *openingPresentationOwner) StartFactoryEventBridge(
@@ -97,13 +105,17 @@ func (o *openingPresentationOwner) StartFactoryEventBridge(
 	if reader == nil {
 		return nil, errors.New("Factory Event bridge service is required")
 	}
-	consume, ok := o.InvocationEvents(id)
+	scope, ok := o.invocationEventScope(id)
 	if !ok {
 		return nil, fmt.Errorf("Factory Event scope %q is not registered", id)
 	}
+	sessionID := strings.TrimSpace(scope.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	stream, err := reader.SubscribeFactoryEventsForSession(
-		streamCtx, factorysessions.DefaultSessionID, nil,
+		streamCtx, sessionID, nil,
 	)
 	if err != nil {
 		cancel()
@@ -114,7 +126,11 @@ func (o *openingPresentationOwner) StartFactoryEventBridge(
 		return nil, errors.New("subscribe invocation Factory Events: stream is unavailable")
 	}
 	bridge := &factoryEventBridge{
-		consume: consume, cancel: cancel, done: make(chan struct{}), seen: make(map[string]struct{}),
+		sessionID: sessionID,
+		consume:   scope.Consume,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		seen:      make(map[string]struct{}),
 	}
 	bridge.presentUnseen(stream.History)
 	go func() {
@@ -136,11 +152,12 @@ func (o *openingPresentationOwner) Close(id factorysessions.OpeningScopeID) {
 }
 
 type factoryEventBridge struct {
-	mu      sync.Mutex
-	consume factorysessions.FactoryEventConsumer
-	cancel  context.CancelFunc
-	done    chan struct{}
-	seen    map[string]struct{}
+	mu        sync.Mutex
+	sessionID string
+	consume   factorysessions.FactoryEventConsumer
+	cancel    context.CancelFunc
+	done      chan struct{}
+	seen      map[string]struct{}
 }
 
 func (bridge *factoryEventBridge) Finish(
@@ -157,7 +174,10 @@ func (bridge *factoryEventBridge) Finish(
 	if bridge.done != nil {
 		<-bridge.done
 	}
-	events, err := readFactoryEventHistory(ctx, reader, outcome.Result.SessionID)
+	// Read the same session the bridge subscribed to. A canceled invocation may
+	// not have produced a public result carrying a session ID yet, and using the
+	// result here would silently fall back to ~default.
+	events, err := readFactoryEventHistory(ctx, reader, bridge.sessionID)
 	if err != nil {
 		return err
 	}

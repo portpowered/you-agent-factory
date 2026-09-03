@@ -65,6 +65,7 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 			owner := NewOpeningPresentationOwner()
 			presented := make(chan string, 8)
 			scopeID, err := owner.RegisterInvocationEvents(factorysessions.InvocationEventScope{
+				FactorySessionID: testCase.sessionID,
 				Consume: func(events []factorydefinitions.FactoryEvent) {
 					for _, event := range events {
 						presented <- event.Id
@@ -91,9 +92,9 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 			assertPresentedID(t, presented, "history")
 			liveEvents <- presentationEvent("live")
 			close(liveEvents)
-			if err := bridge.Finish(t.Context(), service, factorysessions.FactoryInvocationOutcome{
-				Result: factorydefinitions.FactoryInvocationResult{SessionID: testCase.sessionID},
-			}); err != nil {
+			// Cancellation can leave the public result without a session ID. The
+			// bridge must retain the session selected when it started.
+			if err := bridge.Finish(t.Context(), service, factorysessions.FactoryInvocationOutcome{}); err != nil {
 				t.Fatalf("Finish: %v", err)
 			}
 			for _, want := range testCase.finalIDs[1:] {

@@ -52,7 +52,6 @@ type inferenceProcessGroup struct {
 	once     sync.Once
 	setupErr error
 
-	mu       sync.RWMutex
 	process  support.ApplicationProcess
 	serverMu sync.RWMutex
 	server   *support.ProcessAPIServer
@@ -105,7 +104,7 @@ func (group *inferenceProcessGroup) setup() {
 
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
-	group.override = &inferenceProviderOverride{}
+	group.override = newInferenceProviderOverride()
 	group.workerRecordings = &inferenceWorkerRecordingRouter{
 		fallback:    newWSRFT004RecordingStore(),
 		bySession:   make(map[string]recordings.WorkerRecordingWriter),
@@ -311,26 +310,20 @@ func runSharedInferenceFactory(
 	t.Helper()
 	group := sharedInferenceGroup
 	group.ensure(t)
-	exclusive := sharedInferenceScenarioRequiresExclusiveProcess(scenario)
-	if exclusive {
-		group.mu.Lock()
-		defer group.mu.Unlock()
-	} else {
-		group.mu.RLock()
-		defer group.mu.RUnlock()
+	releaseOverride, err := group.override.bind(dir, scenario.providerOverride)
+	if err != nil {
+		t.Fatalf("bind shared inference provider override: %v", err)
 	}
-	group.override.set(scenario.providerOverride)
 	releaseExternalProviders, err := group.bindExternalRegistrations(scenario.providerRegistrations)
 	if err != nil {
 		t.Fatalf("bind shared inference provider routes: %v", err)
 	}
 	releaseProvider := prepareSharedInferenceScenario(t, group, dir, scenario)
 	defer func() {
-		group.override.set(nil)
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
-		group.workerRecordings.set(nil)
 		releaseExternalProviders()
+		releaseOverride()
 		releaseProvider()
 	}()
 
@@ -378,11 +371,6 @@ func runSharedInferenceFactory(
 	return result
 }
 
-func sharedInferenceScenarioRequiresExclusiveProcess(scenario sharedInferenceScenario) bool {
-	return scenario.providerOverride != nil ||
-		(scenario.workerRecordingWriter != nil && !sharedInferenceScenarioSubmitsWork(scenario))
-}
-
 func prepareSharedInferenceScenario(
 	t *testing.T,
 	group *inferenceProcessGroup,
@@ -402,9 +390,6 @@ func prepareSharedInferenceScenario(
 			delegate: scenario.commandRunner,
 			release:  providerRelease,
 		}
-	}
-	if !sharedInferenceScenarioSubmitsWork(scenario) {
-		group.workerRecordings.set(scenario.workerRecordingWriter)
 	}
 	// Register the exact WorkDir selector before opening the session. Opening a
 	// session starts its hosted runtime, so the seed Work can reach the command
@@ -446,8 +431,8 @@ func openSharedInferenceSession(
 }
 
 // closeSharedInferenceSession records the public deletion only after the
-// existing termination-and-delete helper has completed successfully. The
-// caller owns group.mu, which serializes scenario cleanup and the final census.
+// existing termination-and-delete helper has completed successfully. Its
+// census lock protects only the package ledger while peer sessions remain live.
 func closeSharedInferenceSession(t *testing.T, group *inferenceProcessGroup, sessionID string) {
 	t.Helper()
 	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
@@ -612,18 +597,11 @@ func withSharedInferenceProcess(
 	t.Helper()
 	group := sharedInferenceGroup
 	group.ensure(t)
-	group.mu.Lock()
-	defer group.mu.Unlock()
-	group.override.set(scenario.providerOverride)
-	group.workerRecordings.set(scenario.workerRecordingWriter)
-	group.setExternalRegistrations(scenario.providerRegistrations)
-	defer func() {
-		group.override.set(nil)
-		if scenario.submittedWork == nil {
-			group.workerRecordings.set(nil)
-		}
-		group.setExternalRegistrations(nil)
-	}()
+	releaseExternalProviders, err := group.bindExternalRegistrations(scenario.providerRegistrations)
+	if err != nil {
+		t.Fatalf("bind shared inference provider routes: %v", err)
+	}
+	defer releaseExternalProviders()
 	fn(group.process)
 }
 

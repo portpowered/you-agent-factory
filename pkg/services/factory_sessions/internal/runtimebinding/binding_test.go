@@ -463,6 +463,50 @@ func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
 	<-handle.RunDoneCh()
 }
 
+func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-explicit"
+	sessions := newRuntimeBindingState()
+	var runtimeState runtimebinding.State
+	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
+	runtimeState.SetStartup(bundle)
+	target := factorysessions.Target{
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "factory-a"},
+		FactoryDir: "/factory",
+		FolderPath: "/workspace",
+		Project:    "project-a",
+	}
+
+	handle, err := runtimebinding.StartInitial(
+		context.Background(), context.Background(), sessions, &runtimeState,
+		sessionID, "/factory", bundle, target, false, interfaces.RuntimeModeBatch,
+		lifecycleFake{}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("StartInitial: %v", err)
+	}
+	t.Cleanup(func() {
+		handle.CancelRun()
+		<-handle.RunDoneCh()
+	})
+
+	session := sessions.Resolve(sessionID)
+	if session == nil || runtimebinding.HandleFromSession(session) != handle {
+		t.Fatalf("explicit session = %#v, want started handle", session)
+	}
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil {
+		t.Fatal("explicit startup also registered the compatibility default session")
+	}
+	if session.Target != target.Ref || session.FactoryDir != target.FactoryDir ||
+		session.FolderPath != target.FolderPath || session.Project != target.Project {
+		t.Fatalf("explicit session target = %#v, want %#v", session, target)
+	}
+	if active := runtimeState.Active(); active == nil || active.SessionID != sessionID || active.Handle != handle {
+		t.Fatalf("active runtime = %#v, want explicit session %q", active, sessionID)
+	}
+}
+
 func TestStartDefaultSidecarFailureInvokesSessionRemovalCleanup(t *testing.T) {
 	sessions := newRuntimeBindingState()
 	var runtimeState runtimebinding.State

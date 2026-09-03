@@ -71,12 +71,13 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
 		if err := runtime.submitWorkFile(ctx); err != nil {
+			sessionID := runtime.runSessionID()
 			failure := runtimebinding.FailStartup(
-				runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
+				runtime.sessionState, &runtime.runtimeState, sessionID,
 				current, runtime.StopLiveRuntime, err,
 			)
 			if runtime.releaseWorkAdmissionProjection != nil {
-				runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+				runtime.releaseWorkAdmissionProjection(sessionID)
 			}
 			return failure
 		}
@@ -108,25 +109,34 @@ func (runtime *SessionRuntime) WaitForRuntime(ctx context.Context) error {
 		if runtime.runtimeState.ActiveHandle() != current {
 			continue
 		}
-		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService && runtime.sessionState.Registry() != nil && runtime.sessionState.Registry().Count() == 0 {
+		active := runtime.runtimeState.Active()
+		if runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService &&
+			active != nil && runtime.sessionState.Resolve(active.SessionID) != nil {
 			continue
 		}
 		return current.Result()
 	}
 }
 
-// StopLifecycle stops the active runtime and any other live session runtimes.
+// StopLifecycle stops only the runtime admitted by this lifecycle. Other live
+// sessions can belong to concurrent invocations in the same process graph and
+// must not be treated as children of this invocation.
 func (runtime *SessionRuntime) StopLifecycle(_ context.Context) error {
 	if runtime == nil {
 		return nil
 	}
-	current := runtime.runtimeState.ActiveHandle()
-	var result error
-	if err := runtime.StopLiveRuntime(current); err != nil && !errors.Is(err, context.Canceled) {
-		result = err
+	sessionID := runtime.startupSessionID
+	if sessionID == "" {
+		sessionID = DefaultFactorySessionID
 	}
-	if err := runtime.ShutdownOtherLiveSessions(current); err != nil {
-		result = errors.Join(result, err)
+	var result error
+	if runtime.sessionState.Resolve(sessionID) != nil {
+		if err := runtime.StopLiveRuntime(runtime.runtimeState.ActiveHandle()); err != nil &&
+			!errors.Is(err, context.Canceled) &&
+			!errors.Is(err, factorysessions.ErrSessionNotFound) &&
+			!errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+			result = err
+		}
 	}
 	runtime.runtimeState.ClearActive()
 	return result
@@ -138,12 +148,13 @@ func (runtime *SessionRuntime) FailStartup(err error) error {
 		return err
 	}
 	current := runtime.runtimeState.ActiveHandle()
+	sessionID := runtime.runSessionID()
 	failure := runtimebinding.FailStartup(
-		runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
+		runtime.sessionState, &runtime.runtimeState, sessionID,
 		current, runtime.StopLiveRuntime, err,
 	)
 	if runtime.releaseWorkAdmissionProjection != nil {
-		runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+		runtime.releaseWorkAdmissionProjection(sessionID)
 	}
 	return failure
 }

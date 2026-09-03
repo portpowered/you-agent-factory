@@ -388,6 +388,17 @@ func GetFactoryEventsForSessionAt(t testing.TB, baseURL, sessionID string) []fac
 // comes from the public list projection, so this path remains usable when no
 // Provider Session reference was emitted.
 func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string) []factoryapi.WorkerSessionEvent {
+	return GetWorkerSessionEventsForSessionByIDAt(
+		t, baseURL, factorysessions.DefaultSessionID, workerSessionID,
+	)
+}
+
+// GetWorkerSessionEventsForSessionByIDAt drains one explicitly selected
+// Factory Session's provider-neutral Worker Session stream.
+func GetWorkerSessionEventsForSessionByIDAt(
+	t testing.TB,
+	baseURL, sessionID, workerSessionID string,
+) []factoryapi.WorkerSessionEvent {
 	t.Helper()
 	if strings.TrimSpace(workerSessionID) == "" {
 		t.Fatal("worker session id is empty")
@@ -395,7 +406,7 @@ func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string)
 	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID +
+		"/factory-sessions/" + url.PathEscape(sessionID) +
 		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events?replayOnly=true"
 	events, err := waitForCompleteWorkerSessionReplay(ctx, endpoint)
 	if err != nil {

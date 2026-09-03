@@ -16,13 +16,19 @@ const DefaultSessionEventsAPIPath = DefaultSessionWorkAPIPrefix + "/events"
 
 // DefaultSessionWorkPath scopes legacy work-relative paths to the default factory session.
 func DefaultSessionWorkPath(path string) string {
+	return SessionWorkPath(factorysessions.DefaultSessionID, path)
+}
+
+// SessionWorkPath scopes work-relative paths to one Factory Session.
+func SessionWorkPath(sessionID, path string) string {
+	prefix := "/factory-sessions/" + url.PathEscape(sessionID)
 	switch {
 	case path == "/work" || strings.HasPrefix(path, "/work?"):
-		return DefaultSessionWorkAPIPrefix + path
+		return prefix + path
 	case strings.HasPrefix(path, "/work/"):
-		return DefaultSessionWorkAPIPrefix + path
+		return prefix + path
 	case strings.HasPrefix(path, "/work-requests/"):
-		return DefaultSessionWorkAPIPrefix + path
+		return prefix + path
 	default:
 		return path
 	}
@@ -30,7 +36,12 @@ func DefaultSessionWorkPath(path string) string {
 
 // DefaultSessionWorkURL joins baseURL with a default-session-scoped work path.
 func DefaultSessionWorkURL(baseURL, path string) string {
-	return strings.TrimSuffix(baseURL, "/") + DefaultSessionWorkPath(path)
+	return SessionWorkURL(baseURL, factorysessions.DefaultSessionID, path)
+}
+
+// SessionWorkURL joins baseURL with a work path scoped to one Factory Session.
+func SessionWorkURL(baseURL, sessionID, path string) string {
+	return strings.TrimSuffix(baseURL, "/") + SessionWorkPath(sessionID, path)
 }
 
 // DefaultSessionEventsURL joins baseURL with the canonical default-session event stream.

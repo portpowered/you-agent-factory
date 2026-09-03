@@ -457,6 +457,7 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection

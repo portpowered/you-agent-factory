@@ -76,10 +76,11 @@ func TestOpenHostedRuntimePreparesHomeBeforeRuntimeOpening(t *testing.T) {
 func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
+	const sessionID = "session-explicit"
 
 	operation, err := openHostedRuntime(
 		t.Context(),
-		RunConfig{Output: io.Discard, WithServer: true},
+		RunConfig{Output: io.Discard, WithServer: true, FactorySessionID: sessionID},
 		zap.NewNop(),
 		request,
 		resolvedRunRecordPath{},
@@ -111,6 +112,9 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	}
 	if !sessions.invoked {
 		t.Fatal("hosted Factory Sessions invocation was not used")
+	}
+	if sessions.invokedSessionID != sessionID {
+		t.Fatalf("invoked session = %q, want %q", sessions.invokedSessionID, sessionID)
 	}
 }
 
@@ -167,15 +171,17 @@ func (hostedInvocationCompletionRunner) RunWithCompletion(
 }
 
 type hostedInvocationCapabilityFake struct {
-	invoked bool
+	invoked          bool
+	invokedSessionID string
 }
 
 func (fake *hostedInvocationCapabilityFake) InvokeFactorySession(
-	context.Context,
-	string,
-	factorysessions.InvocationRequest,
+	_ context.Context,
+	sessionID string,
+	_ factorysessions.InvocationRequest,
 ) (factorysessions.InvocationResult, error) {
 	fake.invoked = true
+	fake.invokedSessionID = sessionID
 	return factorysessions.InvocationResult{
 		Status: factorysessions.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{

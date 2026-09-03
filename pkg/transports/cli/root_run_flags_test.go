@@ -109,6 +109,29 @@ func TestRootCommand_NoArgsDoesNotChangeExplicitRun(t *testing.T) {
 	}
 }
 
+func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	const sessionID = "session-explicit"
+	var captured runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--session", sessionID, "--no-record", "customer request"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute local run with explicit session: %v", err)
+	}
+	if captured.FactorySessionID != sessionID {
+		t.Fatalf("FactorySessionID = %q, want %q", captured.FactorySessionID, sessionID)
+	}
+}
+
 func TestRunCommand_DebugFlag(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})

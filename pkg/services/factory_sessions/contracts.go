@@ -51,6 +51,9 @@ type (
 // InvocationTarget contains the detached configuration selected for one
 // invocation. Operations remain consumer-owned interfaces.
 type InvocationTarget struct {
+	// FactorySessionID is the immutable public identity selected at admission.
+	// Empty values retain the compatibility default session.
+	FactorySessionID      string
 	FactoryDir            string
 	FactorySourcePath     string
 	RunnerID              string
@@ -121,7 +124,8 @@ type StdioOpeningScope struct {
 // InvocationEventScope retains one transport's canonical Factory Event
 // presentation callback behind the process-scoped owner.
 type InvocationEventScope struct {
-	Consume FactoryEventConsumer
+	FactorySessionID string
+	Consume          FactoryEventConsumer
 }
 
 // OpeningPresentationOwner owns only transport-local stream and event state

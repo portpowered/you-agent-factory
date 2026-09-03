@@ -40,6 +40,7 @@ type hostedLifecycleInvocation struct {
 	command       *support.ProcessCommand
 	inputs        *support.CapturedInputs
 	baseURL       string
+	sessionID     string
 	listenerClose <-chan struct{}
 }
 
@@ -50,6 +51,7 @@ type hostedCancelableLifecycleInvocation struct {
 	command       *lifecycleCancelableCommand
 	inputs        *support.CapturedInputs
 	baseURL       string
+	sessionID     string
 	listenerClose <-chan struct{}
 }
 
@@ -140,6 +142,7 @@ func startHostedLifecycleInvocationWithReuse(
 		command:       command,
 		inputs:        inputs,
 		baseURL:       baseURL,
+		sessionID:     lifecycleSessionID(inputs.Input.Args),
 		listenerClose: api.closed,
 	}
 }
@@ -180,6 +183,7 @@ func startHostedCancelableLifecycleInvocation(
 		command:       command,
 		inputs:        inputs,
 		baseURL:       baseURL,
+		sessionID:     lifecycleSessionID(inputs.Input.Args),
 		listenerClose: api.closed,
 	}
 }
@@ -198,6 +202,7 @@ func runLifecyclePartialProviderOutput(t *testing.T) {
 	workID, workerSessionID := assertHostedAdverseProjection(
 		t,
 		invocation.baseURL,
+		invocation.sessionID,
 		[]factoryapi.WorkOutcome{factoryapi.WorkOutcomeFailed, factoryapi.WorkOutcomeRejected},
 		[]factoryapi.WorkerSessionObservationState{factoryapi.WorkerSessionObservationStateFailed},
 	)
@@ -236,6 +241,7 @@ func runLifecycleServerAttachedProviderFailure(t *testing.T) {
 	workID, workerSessionID := assertHostedAdverseProjection(
 		t,
 		invocation.baseURL,
+		invocation.sessionID,
 		[]factoryapi.WorkOutcome{factoryapi.WorkOutcomeFailed},
 		[]factoryapi.WorkerSessionObservationState{factoryapi.WorkerSessionObservationStateFailed},
 	)
@@ -266,18 +272,18 @@ func runLifecycleCancellationAndRecovery(t *testing.T) {
 		"hold active dispatch until the lifecycle caller cancels",
 	)
 	waitLifecycleSignal(t, runner.started, "blocking provider start")
-	activeWork, _ := waitForLifecycleWorkState(t, invocation.baseURL, func(work factoryapi.Work) bool {
+	activeWork, _ := waitForLifecycleWorkState(t, invocation.baseURL, invocation.sessionID, func(work factoryapi.Work) bool {
 		return work.State != nil && work.State.Type == factoryapi.WorkStateTypePROCESSING
 	})
 	if activeWork.WorkId == nil || strings.TrimSpace(*activeWork.WorkId) == "" {
 		t.Fatal("cancellation active Work has no identity")
 	}
 
-	activeWorker := waitForLifecycleWorkerSession(t, invocation.baseURL, *activeWork.WorkId, func(worker factoryapi.WorkerSessionObservation) bool {
+	activeWorker := waitForLifecycleWorkerSession(t, invocation.baseURL, invocation.sessionID, *activeWork.WorkId, func(worker factoryapi.WorkerSessionObservation) bool {
 		return worker.State == factoryapi.WorkerSessionObservationStateRunning
 	})
-	cancelResult := postLifecycleFactorySessionControl(t, invocation.baseURL, "~default", "cancel", "lifecycle-cancel-control")
-	if cancelResult.SessionId != "~default" ||
+	cancelResult := postLifecycleFactorySessionControl(t, invocation.baseURL, invocation.sessionID, "cancel", "lifecycle-cancel-control")
+	if cancelResult.SessionId != invocation.sessionID ||
 		cancelResult.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
 		(cancelResult.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted &&
 			cancelResult.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp) {
@@ -290,6 +296,7 @@ func runLifecycleCancellationAndRecovery(t *testing.T) {
 	workID, workerSessionID := assertHostedCancellationStop(
 		t,
 		invocation.baseURL,
+		invocation.sessionID,
 		*activeWork.WorkId,
 	)
 	if invocation.inputs.Stdout() != "" {
@@ -365,6 +372,7 @@ func runLifecycleObservationTimeout(t *testing.T) {
 	waitLifecycleSignal(t, runner.started, "observation-timeout provider start")
 	_, _, _, err = coordinator.ObserveHostedServerAttachedWithin(
 		baseURL,
+		lifecycleSessionID(inputs.Input.Args),
 		"this terminal output is intentionally absent",
 		nil,
 		command.Done(),
@@ -391,12 +399,12 @@ func runLifecycleObservationTimeout(t *testing.T) {
 
 func assertHostedAdverseProjection(
 	t *testing.T,
-	baseURL string,
+	baseURL, sessionID string,
 	wantedOutcomes []factoryapi.WorkOutcome,
 	wantedWorkerStates []factoryapi.WorkerSessionObservationState,
 ) (string, string) {
 	t.Helper()
-	work, status := waitForLifecycleWorkState(t, baseURL, func(work factoryapi.Work) bool {
+	work, status := waitForLifecycleWorkState(t, baseURL, sessionID, func(work factoryapi.Work) bool {
 		return work.State != nil && (work.State.Type == factoryapi.WorkStateTypeFAILED || work.State.Type == factoryapi.WorkStateTypeTERMINAL)
 	})
 	if work.State == nil || work.State.Type != factoryapi.WorkStateTypeFAILED {
@@ -409,7 +417,7 @@ func assertHostedAdverseProjection(
 		t.Fatalf("adverse Work = %#v, want non-empty identity", work)
 	}
 	workID := *work.WorkId
-	workerSessions := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+	workerSessions := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID)
 	if len(workerSessions.Sessions) != 1 {
 		t.Fatalf("adverse Worker Sessions for Work %q = %#v, want exactly one", workID, workerSessions.Sessions)
 	}
@@ -425,11 +433,11 @@ func assertHostedAdverseProjection(
 	}
 	// The replay endpoint's completion summary proves the response stream and
 	// its HTTP body were closed after the terminal Worker Session observation.
-	if events := support.GetWorkerSessionEventsByIDAt(t, baseURL, worker.WorkerSessionId); len(events) == 0 {
+	if events := support.GetWorkerSessionEventsForSessionByIDAt(t, baseURL, sessionID, worker.WorkerSessionId); len(events) == 0 {
 		t.Fatalf("adverse Worker Session %q replay = empty, want terminal history", worker.WorkerSessionId)
 	}
 
-	events := support.GetFactoryEventsForSessionAt(t, baseURL, "~default")
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	matching := make([]support.DispatchEventObservation, 0, 1)
 	for _, dispatch := range dispatches {
@@ -457,13 +465,13 @@ func assertHostedAdverseProjection(
 	return workID, worker.WorkerSessionId
 }
 
-func assertHostedCancellationStop(t *testing.T, baseURL, workID string) (string, string) {
+func assertHostedCancellationStop(t *testing.T, baseURL, sessionID, workID string) (string, string) {
 	t.Helper()
 	workerSessions, err := support.WaitForObservation(
 		lifecycleObservationTimeoutForTest,
 		func() (factoryapi.ListWorkerSessionsResponse, error) {
 			return readLifecycleHTTPJSON[factoryapi.ListWorkerSessionsResponse](
-				strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default/worker-sessions?workId=" + workID,
+				strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(workID),
 			)
 		},
 		func(observation factoryapi.ListWorkerSessionsResponse) bool {
@@ -478,7 +486,7 @@ func assertHostedCancellationStop(t *testing.T, baseURL, workID string) (string,
 	if worker.WorkId == nil || *worker.WorkId != workID || !containsString(worker.WorkIds, workID) {
 		t.Fatalf("canceled Worker Session %q Work correlation = workId:%#v workIds:%#v, want %q", worker.WorkerSessionId, worker.WorkId, worker.WorkIds, workID)
 	}
-	work, status := waitForLifecycleWorkState(t, baseURL, func(candidate factoryapi.Work) bool {
+	work, status := waitForLifecycleWorkState(t, baseURL, sessionID, func(candidate factoryapi.Work) bool {
 		return candidate.WorkId != nil && *candidate.WorkId == workID
 	})
 	if work.State == nil || work.State.Type == factoryapi.WorkStateTypeTERMINAL {
@@ -490,7 +498,7 @@ func assertHostedCancellationStop(t *testing.T, baseURL, workID string) (string,
 	session, err := support.WaitForObservation(
 		lifecycleObservationTimeoutForTest,
 		func() (factoryapi.FactorySession, error) {
-			observed, ok, diagnostic := tryReadDefaultFactorySession(baseURL)
+			observed, ok, diagnostic := tryReadFactorySession(baseURL, sessionID)
 			if !ok {
 				return factoryapi.FactorySession{}, errors.New(diagnostic)
 			}
@@ -504,7 +512,7 @@ func assertHostedCancellationStop(t *testing.T, baseURL, workID string) (string,
 	if err != nil {
 		t.Fatalf("wait for canceled Factory Session terminal status: %v", err)
 	}
-	events := support.GetFactoryEventsForSessionAt(t, baseURL, "~default")
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	matching := make([]support.DispatchEventObservation, 0, 1)
 	for _, dispatch := range dispatches {
@@ -524,7 +532,7 @@ func assertHostedCancellationStop(t *testing.T, baseURL, workID string) (string,
 
 func waitForLifecycleWorkerSession(
 	t *testing.T,
-	baseURL, workID string,
+	baseURL, sessionID, workID string,
 	accept func(factoryapi.WorkerSessionObservation) bool,
 ) factoryapi.WorkerSessionObservation {
 	t.Helper()
@@ -532,7 +540,7 @@ func waitForLifecycleWorkerSession(
 		lifecycleObservationTimeoutForTest,
 		func() (factoryapi.ListWorkerSessionsResponse, error) {
 			return readLifecycleHTTPJSON[factoryapi.ListWorkerSessionsResponse](
-				strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default/worker-sessions?workId=" + url.QueryEscape(workID),
+				strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(workID),
 			)
 		},
 		func(observation factoryapi.ListWorkerSessionsResponse) bool {
@@ -594,12 +602,13 @@ func runHostedLifecycleRecovery(t *testing.T, factoryDir string) (string, string
 	)
 	workID, _, diagnostic := waitForLifecycleTerminalWorkText(
 		invocation.baseURL,
+		invocation.sessionID,
 		"recovery invocation COMPLETE",
 	)
 	if diagnostic != "" {
 		t.Fatal(diagnostic)
 	}
-	workerSessions := support.ListDefaultSessionWorkerSessions(t, invocation.baseURL, workID)
+	workerSessions := support.ListSessionWorkerSessions(t, invocation.baseURL, invocation.sessionID, workID)
 	if len(workerSessions.Sessions) != 1 {
 		t.Fatalf("recovery Worker Sessions for Work %q = %#v, want one", workID, workerSessions.Sessions)
 	}
@@ -607,12 +616,12 @@ func runHostedLifecycleRecovery(t *testing.T, factoryDir string) (string, string
 	if worker.State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("recovery Worker Session %q state = %q, want COMPLETED", worker.WorkerSessionId, worker.State)
 	}
-	events := support.GetFactoryEventsForSessionAt(t, invocation.baseURL, "~default")
+	events := support.GetFactoryEventsForSessionAt(t, invocation.baseURL, invocation.sessionID)
 	if dispatchID := assertHostedServerAttachedFactoryEvents(
 		t,
 		events,
 		support.ObserveDispatchEvents(t, events),
-		"~default",
+		invocation.sessionID,
 		workID,
 		worker.WorkerSessionId,
 	); strings.TrimSpace(dispatchID) == "" {
@@ -641,7 +650,7 @@ func runHostedLifecycleRecovery(t *testing.T, factoryDir string) (string, string
 
 func waitForLifecycleWorkState(
 	t *testing.T,
-	baseURL string,
+	baseURL, sessionID string,
 	accept func(factoryapi.Work) bool,
 ) (factoryapi.Work, factoryapi.StatusResponse) {
 	t.Helper()
@@ -649,13 +658,13 @@ func waitForLifecycleWorkState(
 		lifecycleObservationTimeoutForTest,
 		func() (lifecycleWorkStatusObservation, error) {
 			work, err := readLifecycleHTTPJSON[factoryapi.ListWorkResponse](
-				support.DefaultSessionWorkURL(baseURL, "/work"),
+				support.SessionWorkURL(baseURL, sessionID, "/work"),
 			)
 			if err != nil {
 				return lifecycleWorkStatusObservation{}, err
 			}
 			status, err := readLifecycleHTTPJSON[factoryapi.StatusResponse](
-				strings.TrimSuffix(baseURL, "/") + "/status",
+				strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status",
 			)
 			if err != nil {
 				return lifecycleWorkStatusObservation{}, err
@@ -690,11 +699,11 @@ func waitForLifecycleWorkState(
 	return factoryapi.Work{}, factoryapi.StatusResponse{}
 }
 
-func waitForLifecycleTerminalWorkText(baseURL, wantText string) (string, bool, string) {
+func waitForLifecycleTerminalWorkText(baseURL, sessionID, wantText string) (string, bool, string) {
 	workID, err := support.WaitForObservation(
 		lifecycleObservationTimeoutForTest,
 		func() (string, error) {
-			workID, ok, diagnostic := tryReadTerminalWorkPrimaryText(baseURL, wantText)
+			workID, ok, diagnostic := tryReadTerminalWorkPrimaryText(baseURL, sessionID, wantText)
 			if !ok {
 				return "", errors.New(diagnostic)
 			}
