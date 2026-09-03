@@ -61,7 +61,8 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 	assert.match(buildCache, /uses: actions\/cache\/restore@v4/);
 	assert.match(buildCache, /path: ~\/\.cache\/go-build/);
 	assert.match(buildCache, /key: unit-coverage-build-/);
-	assert.match(buildCache, /hashFiles\('\.github\/workflows\/ci\.yml', 'Makefile', 'go\.mod', 'go\.sum', 'cmd\/\*\*\/\*\.go', 'internal\/\*\*\/\*\.go', 'pkg\/\*\*\/\*\.go', 'docs\/internal\/baselines\/go-unit-coverage-package-minimums\.json'\)/);
+	assert.match(buildCache, /hashFiles\('go\.mod', 'go\.sum', 'cmd\/\*\*\/\*\.go', 'internal\/\*\*\/\*\.go', 'pkg\/\*\*\/\*\.go'\)/);
+	assert.doesNotMatch(buildCache, /jobs-4/);
 	assert.match(buildCache, /functional-coverage-build-/);
 
 	const save = stepSection(job, "      - name: Save unit coverage Go build and test cache", "      # This existing coverage tier");
@@ -73,7 +74,7 @@ test("unit coverage uses a shallow checkout and an explicit reusable Go cache", 
 test("unit coverage pins hosted package concurrency while local callers retain platform defaults", () => {
 	const workflow = backendCoverageJob(read(".github/workflows/ci.yml"));
 	const run = stepSection(workflow, "      - name: Run backend coverage", "      - name: Save unit coverage Go build and test cache");
-	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "4"/);
+	assert.match(run, /GO_UNIT_COVERAGE_JOBS: "12"/);
 
 	const makefile = read("Makefile");
 	assert.match(makefile, /GO_UNIT_COVERAGE_JOBS \?=/);

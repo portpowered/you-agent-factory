@@ -283,9 +283,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
-          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-4-${{ hashFiles('.github/workflows/ci.yml', 'Makefile', 'go.mod', 'go.sum', 'cmd/**/*.go', 'internal/**/*.go', 'pkg/**/*.go', 'docs/internal/baselines/go-unit-coverage-package-minimums.json') }}
+          key: unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.mod', 'go.sum', 'cmd/**/*.go', 'internal/**/*.go', 'pkg/**/*.go') }}
           restore-keys: |
-            unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-4-
+            unit-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
             functional-coverage-build-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-jobs-12-
       - name: Restore functional coverage Go build cache
         if: matrix.suite == 'functional'
@@ -304,7 +304,7 @@ jobs:
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
         env:
-          GO_UNIT_COVERAGE_JOBS: "4"
+          GO_UNIT_COVERAGE_JOBS: "12"
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
