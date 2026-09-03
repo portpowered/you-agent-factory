@@ -17,6 +17,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -67,9 +68,9 @@ func serveChatRequest(server support.ACPServer, ctx context.Context, in io.Reade
 	if home == "" {
 		return server.Serve(ctx, in, out)
 	}
-	return withChatACPHomeEnvironment(home, func() error {
-		return server.Serve(ctx, in, out)
-	})
+	return server.Serve(acp.WithInvocationProfile(ctx, acp.InvocationProfile{
+		HomeDir: home, WorkerModelProvider: "codex", WorkerModel: "gpt-5",
+	}), in, out)
 }
 
 type chatPipeEndpoint struct {

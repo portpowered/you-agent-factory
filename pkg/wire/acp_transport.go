@@ -58,9 +58,14 @@ func provideACPServerFactoryTargetRuntimeResolver(
 		if err := ctx.Err(); err != nil {
 			return factorysessions.RuntimeOpeningRequest{}, err
 		}
-		homeDir, err := resolveHomeDir()
-		if err != nil {
-			return factorysessions.RuntimeOpeningRequest{}, err
+		profile, hasProfile := acp.InvocationProfileFromContext(ctx)
+		homeDir := strings.TrimSpace(profile.HomeDir)
+		if homeDir == "" {
+			var err error
+			homeDir, err = resolveHomeDir()
+			if err != nil {
+				return factorysessions.RuntimeOpeningRequest{}, err
+			}
 		}
 		roots, err := factorydefinitions.ResolveNamedFactoryRoots(homeDir, workingRoot)
 		if err != nil {
@@ -74,7 +79,14 @@ func provideACPServerFactoryTargetRuntimeResolver(
 		if resolved == nil {
 			return factorysessions.RuntimeOpeningRequest{}, factorydefinitions.ErrNamedFactoryNotFound
 		}
-		defaults, err := resolveOperatorDefaults(homeDir, acpOperatorDefaultsEnvironment(), operatorsettings.FlagOverrides{})
+		environment := acpOperatorDefaultsEnvironment()
+		if hasProfile {
+			environment = operatorsettings.Defaults{
+				WorkerModelProvider: strings.TrimSpace(profile.WorkerModelProvider),
+				WorkerModel:         strings.TrimSpace(profile.WorkerModel),
+			}
+		}
+		defaults, err := resolveOperatorDefaults(homeDir, environment, operatorsettings.FlagOverrides{})
 		if err != nil {
 			return factorysessions.RuntimeOpeningRequest{}, err
 		}

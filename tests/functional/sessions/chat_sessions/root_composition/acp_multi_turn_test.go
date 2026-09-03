@@ -114,7 +114,6 @@ func driveIdentifiedSessionPrompt(
 	requestID, sessionID, text string,
 ) (serveACPLine, []acpsdk.SessionNotification) {
 	t.Helper()
-	defer releaseChatACPHomeForInput(stdin)
 
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,

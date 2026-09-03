@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -91,6 +92,15 @@ type Server struct {
 	resolveHomeDir func() (string, error)
 	responseBridge acp.ResponseBridge
 	wireRecorder   acp.WireRecorder
+}
+
+func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
+	if profile, ok := acp.InvocationProfileFromContext(ctx); ok {
+		if homeDir := strings.TrimSpace(profile.HomeDir); homeDir != "" {
+			return homeDir, nil
+		}
+	}
+	return s.resolveHomeDir()
 }
 
 // promptFlightRegistry coalesces duplicate session/prompt requests for the

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/spf13/cobra"
@@ -315,6 +317,36 @@ func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext
 	}
 	if fake.gotCtx == nil || fake.gotCtx.Value(ctxKey{}) != "marker" {
 		t.Fatal("Serve did not receive the invocation's process context")
+	}
+}
+
+func TestServeACPCommandCapturesInvocationOwnedProfile(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeACPServer{}
+	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI})
+	factory.acpServer = fake
+	lookup := func(name string) (string, bool) {
+		values := map[string]string{
+			operatorsettings.EnvDefaultWorkerModelProvider: "codex",
+			operatorsettings.EnvDefaultWorkerModel:         "gpt-5",
+		}
+		value, ok := values[name]
+		return value, ok
+	}
+	root := factory.NewCommand(func() (string, error) { return "isolated-home", nil }, lookup, noOpServeSystemInitializer())
+	root.SetIn(strings.NewReader(""))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"server", "acp"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	profile, ok := acp.InvocationProfileFromContext(fake.gotCtx)
+	want := acp.InvocationProfile{HomeDir: "isolated-home", WorkerModelProvider: "codex", WorkerModel: "gpt-5"}
+	if !ok || profile != want {
+		t.Fatalf("ACP invocation profile = (%+v, %t), want (%+v, true)", profile, ok, want)
 	}
 }
 

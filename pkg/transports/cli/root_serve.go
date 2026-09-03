@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -95,8 +97,28 @@ func rejectServeACPUnrelatedFlags(cmd *cobra.Command, _ []string) error {
 // no local inputs, so both resolved-input snapshots are unused.
 func resolvedServeACPHandler(options CommandFactory) climanifestcobra.ResolvedCobraHandler {
 	return func(cmd *cobra.Command, _ resolvedinput.Inputs, _ resolvedinput.Inputs) error {
+		profile, err := resolveACPInvocationProfile(cmd, options)
+		if err != nil {
+			return err
+		}
+		cmd.SetContext(acp.WithInvocationProfile(cmd.Context(), profile))
 		return runServeACP(cmd, options.acpServer)
 	}
+}
+
+func resolveACPInvocationProfile(cmd *cobra.Command, options CommandFactory) (acp.InvocationProfile, error) {
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, options)
+	if err != nil {
+		return acp.InvocationProfile{}, err
+	}
+	var provider, model string
+	if options.lookupEnv != nil {
+		provider, _ = options.lookupEnv(operatorsettings.EnvDefaultWorkerModelProvider)
+		model, _ = options.lookupEnv(operatorsettings.EnvDefaultWorkerModel)
+	}
+	return acp.InvocationProfile{
+		HomeDir: strings.TrimSpace(homeDir), WorkerModelProvider: strings.TrimSpace(provider), WorkerModel: strings.TrimSpace(model),
+	}, nil
 }
 
 // runServeACP invokes Serve on the exact acp.Server instance Wire composed
