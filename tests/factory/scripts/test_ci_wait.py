@@ -4,7 +4,12 @@
 import importlib.util
 import io
 import json
+import os
+import shutil
+import stat
 import subprocess
+import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -25,6 +30,95 @@ def load_ci_wait_module():
 class CIWaitPRLookupTest(unittest.TestCase):
     def setUp(self):
         self.module = load_ci_wait_module()
+
+    def invoke_actual_script_with_fake_gh(self, check):
+        """Run the real script entrypoint against a scratch-owned fake gh."""
+        with tempfile.TemporaryDirectory(prefix="ci-wait-fake-gh-") as scratch:
+            scratch_path = Path(scratch)
+            ledger_path = scratch_path / "gh-calls.json"
+            fake_gh_path = scratch_path / "fake_gh.py"
+            fake_gh_source = """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+raw_args = sys.argv[1:]
+args = raw_args if raw_args[:1] == ["pr"] else ["pr", *raw_args]
+
+ledger_path = os.environ["CI_WAIT_FAKE_GH_LEDGER"]
+try:
+    with open(ledger_path, encoding="utf-8") as ledger:
+        calls = json.load(ledger)
+except FileNotFoundError:
+    calls = []
+calls.append(args)
+with open(ledger_path, "w", encoding="utf-8") as ledger:
+    json.dump(calls, ledger)
+
+if args[:2] == ["pr", "list"]:
+    print(json.dumps([{"number": 100, "state": "OPEN"}]))
+elif args[:2] == ["pr", "checks"]:
+    print(os.environ["CI_WAIT_FAKE_GH_CHECKS"])
+else:
+    print(f"unsupported fake gh command: {args!r}", file=sys.stderr)
+    sys.exit(2)
+"""
+            fake_gh_path.write_text(fake_gh_source, encoding="utf-8")
+
+            if os.name == "nt":
+                # Windows CreateProcess resolves native executables for a
+                # shell=False child. A copied Python runtime, named gh.exe,
+                # runs the extensionless `pr` fixture as its script.
+                launcher_path = scratch_path / "gh.exe"
+                shutil.copy2(sys.executable, launcher_path)
+                for runtime_name in (
+                    f"python{sys.version_info.major}{sys.version_info.minor}.dll",
+                    "vcruntime140.dll",
+                    "vcruntime140_1.dll",
+                ):
+                    runtime_path = Path(sys.executable).with_name(runtime_name)
+                    if runtime_path.exists():
+                        shutil.copy2(runtime_path, scratch_path / runtime_name)
+                (scratch_path / "pr").write_text(
+                    fake_gh_source,
+                    encoding="utf-8",
+                )
+            else:
+                launcher_path = scratch_path / "gh"
+                launcher_path.write_text(
+                    f"#!{sys.executable}\n"
+                    "exec(open(__file__.replace('gh', 'fake_gh.py')).read())\n",
+                    encoding="utf-8",
+                )
+                launcher_path.chmod(
+                    launcher_path.stat().st_mode
+                    | stat.S_IXUSR
+                    | stat.S_IXGRP
+                    | stat.S_IXOTH
+                )
+
+            environment = os.environ.copy()
+            environment["PATH"] = os.pathsep.join(
+                [str(scratch_path), environment.get("PATH", "")]
+            )
+            environment["CI_WAIT_FAKE_GH_LEDGER"] = str(ledger_path)
+            environment["CI_WAIT_FAKE_GH_CHECKS"] = json.dumps([check])
+            # On Windows, CreateProcess resolves the executable using the
+            # launching process environment rather than the child's replaced
+            # environment. The suite is serial and this scope is restored
+            # immediately after the one boundary invocation.
+            with patch.dict(os.environ, {"PATH": environment["PATH"]}):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT_PATH), "ciwait-black-box-boundary"],
+                    cwd=scratch_path,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=15,
+                )
+            calls = json.loads(ledger_path.read_text(encoding="utf-8"))
+            return result, calls
 
     def invoke_main(self, branch, run_gh):
         """Run the script entrypoint while keeping process outcomes observable."""
@@ -360,6 +454,33 @@ class CIWaitPRLookupTest(unittest.TestCase):
         self.assertEqual(json.loads(stdout)["checks"], 1)
         self.assertEqual(sleeps, [])
         self.assertIn("terminal", stderr)
+
+    def test_actual_entrypoint_preserves_terminal_green_and_red_boundary(self):
+        for check in (
+            {"name": "Verification", "state": "SUCCESS", "bucket": "pass"},
+            {"name": "Verification", "state": "FAILURE", "bucket": "fail"},
+        ):
+            with self.subTest(state=check["state"]):
+                result, calls = self.invoke_actual_script_with_fake_gh(check)
+
+                self.assertEqual(result.returncode, 0)
+                payload = json.loads(result.stdout)
+                self.assertEqual(
+                    payload,
+                    {
+                        "status": "ready",
+                        "pr": 100,
+                        "prState": "OPEN",
+                        "reason": "checks-terminal",
+                        "checks": 1,
+                    },
+                )
+                self.assertNotIn("passed", result.stdout)
+                self.assertNotIn("mergeAuthorized", result.stdout)
+                self.assertEqual(calls[0][:2], ["pr", "list"])
+                self.assertEqual(calls[1][:2], ["pr", "checks"])
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(result.stderr.count("terminal"), 1)
 
     def test_main_pending_checks_wait_then_keep_terminal_policy(self):
         checks = iter(
