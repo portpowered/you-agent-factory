@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -80,6 +81,13 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 		t.Fatalf("HTTP and CLI replay cost reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
 	}
 
+	sessionOutput := executeReplaySessionMetricsCLI(t, process, environment, server.URL(), factorysessions.DefaultSessionID)
+	var sessionReport replaySessionMetricsDocument
+	if err := json.Unmarshal([]byte(sessionOutput), &sessionReport); err != nil {
+		t.Fatalf("decode replay metrics session JSON: %v\nstdout=%s", err, sessionOutput)
+	}
+	assertReplaySessionMetricsDocument(t, sessionReport)
+
 	cachedRate, reasoningRate := "0.5", "30"
 	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
 		Provider:                        "codex",
@@ -106,6 +114,86 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 
 	if providerRunner.CallCount() != 0 || scriptRunner.CallCount() != 0 {
 		t.Fatalf("replay external execution calls = provider:%d script:%d, want zero", providerRunner.CallCount(), scriptRunner.CallCount())
+	}
+}
+
+type replaySessionMetricsDocument struct {
+	FactorySessionID string                  `json:"factory_session_id"`
+	Status           string                  `json:"status"`
+	DispatchAttempts int                     `json:"dispatch_attempts"`
+	Attempts         []replaySessionAttempt  `json:"attempts"`
+	Cost             replaySessionCost       `json:"cost"`
+	ByWorker         []replaySessionWorker   `json:"by_worker"`
+	ByDispatch       []replaySessionDispatch `json:"by_dispatch"`
+}
+
+type replaySessionAttempt struct {
+	DispatchID      string `json:"dispatch_id"`
+	WorkID          string `json:"work_id"`
+	WorkerSessionID string `json:"worker_session_id"`
+	Outcome         string `json:"outcome"`
+}
+
+type replaySessionCost struct {
+	Status    string  `json:"status"`
+	Currency  string  `json:"currency"`
+	KnownCost *string `json:"known_cost"`
+	LineItems []struct {
+		DispatchID string `json:"dispatch_id"`
+	} `json:"line_items"`
+}
+
+type replaySessionWorker struct {
+	Worker          string `json:"worker"`
+	WorkerSessionID string `json:"worker_session_id"`
+	Attempts        int    `json:"attempts"`
+}
+
+type replaySessionDispatch struct {
+	DispatchID string `json:"dispatch_id"`
+}
+
+func executeReplaySessionMetricsCLI(
+	t *testing.T,
+	process support.Process,
+	environment []string,
+	serverURL string,
+	sessionID string,
+) string {
+	t.Helper()
+	args := []string{
+		"you", "--json", "--server", serverURL, "metrics", "session", sessionID,
+		"--lens", "cost", "--by-worker", "--by-dispatch",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append([]string(nil), environment...)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("execute replay metrics session CLI: %v\nstderr=%s", err, inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
+func assertReplaySessionMetricsDocument(t *testing.T, report replaySessionMetricsDocument) {
+	t.Helper()
+	wantCost := expectedPricedReplayCost()
+	if report.FactorySessionID != factorysessions.DefaultSessionID || report.Status == "" || report.DispatchAttempts != 1 || len(report.Attempts) != 1 {
+		t.Fatalf("replay session summary = %#v, want selected session with one attempt", report)
+	}
+	if report.Cost.Status != "PRICED" || report.Cost.Currency != "USD" || report.Cost.KnownCost == nil || *report.Cost.KnownCost != wantCost || len(report.Cost.LineItems) != 1 {
+		t.Fatalf("replay session cost = %#v, want one PRICED USD line at %s", report.Cost, wantCost)
+	}
+	attempt := report.Attempts[0]
+	if attempt.DispatchID != "cost-replay-priced-dispatch" || attempt.WorkID != "cost-replay-priced-work" ||
+		attempt.WorkerSessionID != "cost-replay-priced-worker-session" || attempt.Outcome != "ACCEPTED" {
+		t.Fatalf("replay session attempt = %#v, want recorded dispatch/work/Worker Session identity", attempt)
+	}
+	if len(report.ByWorker) != 1 || report.ByWorker[0].Worker != "priced-worker" ||
+		report.ByWorker[0].WorkerSessionID != "cost-replay-priced-worker-session" || report.ByWorker[0].Attempts != 1 {
+		t.Fatalf("replay session worker breakdown = %#v, want one canonical worker identity", report.ByWorker)
+	}
+	if len(report.ByDispatch) != 1 || report.ByDispatch[0].DispatchID != "cost-replay-priced-dispatch" {
+		t.Fatalf("replay session dispatch breakdown = %#v, want one canonical dispatch identity", report.ByDispatch)
 	}
 }
 
