@@ -29,7 +29,7 @@ Factory graph contract is introduced here.
 | `58b36b94bde` remote inference completion | CLI remote transport selection | defer | Task 006 | Long-running remote inference is explicitly outside this story. |
 | `e2cf0069d66` remote protocol coverage | CLI HTTP test relocation | defer | Task 006 | It proves the deferred remote transport behavior. |
 | `fef41c443ec` host teardown through scopes | Runtime host shutdown and cleanup | defer | Tasks 002/006 | Host/lease/process teardown is a later lifecycle outcome. |
-| `dd926dfdc68` scoped host cleanup | Host cleanup and broad echo-runtime deletion | replace | `pkg/services/models/wire/fallback_runtime.go`, focused wire tests | Preserve the fail-closed behavior, but retain `InputEchoInvocationRuntime` as an explicit controlled fixture so current direct TTS characterization remains available. Host cleanup remains deferred. |
+| `dd926dfdc68` scoped host cleanup | Host cleanup and broad echo-runtime deletion | replace | `pkg/services/models/wire/fallback_runtime.go`, focused wire tests, `pkg/services/models/internal/services/runtime_host/` | Remove the obsolete `InputEchoInvocationRuntime` and its direct echo characterization; retain explicit injected/controlled backend fixtures and fail-closed production behavior. Host cleanup is delivered through the current runtime-scope cancellation/join and late-publication guards. |
 | `646d1b2e45be` CI coverage reconciliation | CI tests and package/latency baselines | drop | Current-main quality/baseline owners | Baseline and CI inventory edits are explicitly excluded from this product story and are not copied onto the branch. |
 
 Explicit exclusions: PR #2292 pull-progress/input-validation work, OmniVoice
