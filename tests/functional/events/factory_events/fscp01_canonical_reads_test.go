@@ -47,30 +47,48 @@ func TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents(t *
 		t.Fatal("durable session id is empty")
 	}
 
-	fullRead := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	fullRead, cursorEvent := assertFSCP01CanonicalEventReads(t, server.URL(), started.SessionId)
+	artifactCount := assertFSCP01CanonicalArtifactReads(t, server.URL(), started.SessionId, dir)
+	unknownSessionRecovery := probeFSCP01CanonicalRecovery(t, support.SessionEventsURL(server.URL(), "fscp01-foreign-session"))
+	if unknownSessionRecovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION {
+		t.Fatalf("unknown session recovery outcome = %q, want UNKNOWN_SESSION", unknownSessionRecovery.Outcome)
+	}
+
+	finalRead := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	assertFactoryEventsSameRelativeOrder(t, fullRead, finalRead)
+	t.Logf("FSCP-01 canonical evidence: session=%s events=%d cursor=%s artifacts=%d", started.SessionId, len(fullRead), cursorEvent.Id, artifactCount)
+}
+
+func assertFSCP01CanonicalEventReads(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) ([]factoryapi.FactoryEvent, factoryapi.FactoryEvent) {
+	t.Helper()
+	fullRead := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	if len(fullRead) < 3 {
 		t.Fatalf("canonical event count = %d, want at least session start/result/completed", len(fullRead))
 	}
-	assertFSCP01CanonicalEventIdentityAndTerminalBoundary(t, fullRead, started.SessionId)
-	secondRead := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
+	assertFSCP01CanonicalEventIdentityAndTerminalBoundary(t, fullRead, sessionID)
+	secondRead := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	assertFactoryEventsSameRelativeOrder(t, fullRead, secondRead)
 
-	cursorIndex, cursorEvent := pickSessionScopedCursorEvent(t, fullRead, started.SessionId)
+	cursorIndex, cursorEvent := pickSessionScopedCursorEvent(t, fullRead, sessionID)
 	wantAfter := append([]factoryapi.FactoryEvent(nil), fullRead[cursorIndex+1:]...)
-	afterEventIDRead := support.GetFactoryEventsAfterForSessionAt(t, server.URL(), started.SessionId, support.FactoryEventReadCursor{
+	afterEventIDRead := support.GetFactoryEventsAfterForSessionAt(t, baseURL, sessionID, support.FactoryEventReadCursor{
 		AfterEventID: cursorEvent.Id,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterEventIDRead)
 
 	afterSequence := support.ReconnectSequenceForFactoryEvent(cursorEvent)
-	afterSequenceRead := support.GetFactoryEventsAfterForSessionAt(t, server.URL(), started.SessionId, support.FactoryEventReadCursor{
+	afterSequenceRead := support.GetFactoryEventsAfterForSessionAt(t, baseURL, sessionID, support.FactoryEventReadCursor{
 		AfterSequence: &afterSequence,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterSequenceRead)
 
 	unknownCursor := readFSCP01CanonicalError(t, support.SessionEventsURLWithCursor(
-		server.URL(),
-		started.SessionId,
+		baseURL,
+		sessionID,
 		support.FactoryEventReadCursor{AfterEventID: "fscp01-unknown-canonical-event"},
 	))
 	if unknownCursor.Status != http.StatusBadRequest || unknownCursor.Response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
@@ -79,11 +97,15 @@ func TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents(t *
 	if strings.Contains(unknownCursor.ContentType, "text/event-stream") || strings.Contains(unknownCursor.Body, "data: ") {
 		t.Fatalf("unknown canonical cursor returned an event stream: %#v", unknownCursor)
 	}
+	return fullRead, cursorEvent
+}
 
-	artifactListEndpoint := fscp01SessionArtifactsEndpoint(server.URL(), started.SessionId)
+func assertFSCP01CanonicalArtifactReads(t *testing.T, baseURL, sessionID, dir string) int {
+	t.Helper()
+	artifactListEndpoint := fscp01SessionArtifactsEndpoint(baseURL, sessionID)
 	artifactList := support.GetJSON[factoryapi.ListFactorySessionArtifactsResponse](t, artifactListEndpoint)
-	if artifactList.SessionId != started.SessionId {
-		t.Fatalf("artifact list sessionId = %q, want %q", artifactList.SessionId, started.SessionId)
+	if artifactList.SessionId != sessionID {
+		t.Fatalf("artifact list sessionId = %q, want %q", artifactList.SessionId, sessionID)
 	}
 	if len(artifactList.Artifacts) == 0 {
 		t.Fatal("artifact list is empty, want the completed workflow artifact")
@@ -109,8 +131,8 @@ func TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents(t *
 
 	artifactEndpoint := artifactListEndpoint + "/" + artifact.Id
 	detail := support.GetJSON[factoryapi.FactorySessionArtifactDetail](t, artifactEndpoint)
-	if detail.SessionId != started.SessionId || detail.Id != artifact.Id {
-		t.Fatalf("artifact detail identity = session:%q id:%q, want session:%q id:%q", detail.SessionId, detail.Id, started.SessionId, artifact.Id)
+	if detail.SessionId != sessionID || detail.Id != artifact.Id {
+		t.Fatalf("artifact detail identity = session:%q id:%q, want session:%q id:%q", detail.SessionId, detail.Id, sessionID, artifact.Id)
 	}
 	if detail.ContentHash == nil || strings.TrimSpace(*detail.ContentHash) == "" {
 		t.Fatalf("artifact detail contentHash = %#v, want a stable content hash", detail.ContentHash)
@@ -139,17 +161,9 @@ func TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents(t *
 	assertFSCP01NotFoundArtifact(t, missingArtifact, "missing artifact")
 	corruptArtifact := readFSCP01CanonicalError(t, artifactListEndpoint+"/fscp01-corrupt-artifact-id")
 	assertFSCP01NotFoundArtifact(t, corruptArtifact, "corrupt artifact id")
-	foreignArtifact := readFSCP01CanonicalError(t, fscp01SessionArtifactsEndpoint(server.URL(), "fscp01-foreign-session")+"/"+artifact.Id)
+	foreignArtifact := readFSCP01CanonicalError(t, fscp01SessionArtifactsEndpoint(baseURL, "fscp01-foreign-session")+"/"+artifact.Id)
 	assertFSCP01NotFoundArtifact(t, foreignArtifact, "foreign session artifact")
-
-	unknownSessionRecovery := probeFSCP01CanonicalRecovery(t, support.SessionEventsURL(server.URL(), "fscp01-foreign-session"))
-	if unknownSessionRecovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION {
-		t.Fatalf("unknown session recovery outcome = %q, want UNKNOWN_SESSION", unknownSessionRecovery.Outcome)
-	}
-
-	finalRead := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
-	assertFactoryEventsSameRelativeOrder(t, fullRead, finalRead)
-	t.Logf("FSCP-01 canonical evidence: session=%s events=%d cursor=%s artifacts=%d", started.SessionId, len(fullRead), cursorEvent.Id, len(artifactList.Artifacts))
+	return len(artifactList.Artifacts)
 }
 
 func startFSCP01CanonicalExecution(t *testing.T, serverURL string) factoryapi.FactorySessionSyncExecutionResponse {
