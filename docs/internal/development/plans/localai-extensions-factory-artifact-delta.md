@@ -385,4 +385,3 @@ continue. After that authority check, story 002 may render the exact private
 Current/Proposed handoff and unchanged public/OpenAPI shapes. It must not add a
 public field, generated artifact, protobuf field, CLI grammar, Factory graph,
 artifact store, or implementation without a new approved contract revision.
-
