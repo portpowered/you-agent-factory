@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -262,23 +264,26 @@ func formatMetricValue(value float64) string {
 }
 
 type metricsSessionDocument struct {
-	FactorySessionID          string                          `json:"factory_session_id"`
-	AsOf                      *time.Time                      `json:"as_of"`
-	Status                    string                          `json:"status"`
-	Units                     metricsSessionUnits             `json:"units"`
-	ElapsedWallTimeMillis     *int64                          `json:"elapsed_wall_time_ms"`
-	DistinctWorkItems         int                             `json:"distinct_work_items"`
-	DispatchAttempts          int                             `json:"dispatch_attempts"`
-	WorkerSessions            int                             `json:"worker_sessions"`
-	MaxConcurrentExecutions   int                             `json:"max_concurrent_executions"`
-	SummedExecutionTimeMillis *int64                          `json:"summed_execution_time_ms"`
-	SummedQueueTimeMillis     *int64                          `json:"summed_queue_time_ms"`
-	Retries                   int                             `json:"retries"`
-	AttemptOutcomes           metricsSessionOutcomeCounts     `json:"attempt_outcomes"`
-	Incomplete                metricsSessionIncomplete        `json:"incomplete"`
-	QueueDuration             metricsSessionDuration          `json:"queue_duration"`
-	ExecutionDuration         metricsSessionDuration          `json:"execution_duration"`
-	Attempts                  []metricsSessionAttemptDocument `json:"attempts"`
+	FactorySessionID          string                           `json:"factory_session_id"`
+	AsOf                      *time.Time                       `json:"as_of"`
+	Status                    string                           `json:"status"`
+	Units                     metricsSessionUnits              `json:"units"`
+	ElapsedWallTimeMillis     *int64                           `json:"elapsed_wall_time_ms"`
+	DistinctWorkItems         int                              `json:"distinct_work_items"`
+	DispatchAttempts          int                              `json:"dispatch_attempts"`
+	WorkerSessions            int                              `json:"worker_sessions"`
+	MaxConcurrentExecutions   int                              `json:"max_concurrent_executions"`
+	SummedExecutionTimeMillis *int64                           `json:"summed_execution_time_ms"`
+	SummedQueueTimeMillis     *int64                           `json:"summed_queue_time_ms"`
+	Retries                   int                              `json:"retries"`
+	AttemptOutcomes           metricsSessionOutcomeCounts      `json:"attempt_outcomes"`
+	Incomplete                metricsSessionIncomplete         `json:"incomplete"`
+	QueueDuration             metricsSessionDuration           `json:"queue_duration"`
+	ExecutionDuration         metricsSessionDuration           `json:"execution_duration"`
+	Attempts                  []metricsSessionAttemptDocument  `json:"attempts"`
+	Cost                      *generatedclient.CostsReport     `json:"cost"`
+	ByWorker                  []metricsSessionWorkerDocument   `json:"by_worker"`
+	ByDispatch                []metricsSessionDispatchDocument `json:"by_dispatch"`
 }
 
 type metricsSessionUnits struct {
@@ -315,157 +320,16 @@ type metricsSessionAttemptDocument struct {
 	WorkID                  *string  `json:"work_id"`
 	WorkIDs                 []string `json:"work_ids"`
 	WorkerSessionID         *string  `json:"worker_session_id"`
+	Worker                  *string  `json:"worker"`
+	Provider                *string  `json:"provider"`
+	Model                   *string  `json:"model"`
+	Workstation             *string  `json:"workstation"`
 	Attempt                 int      `json:"attempt"`
 	RetryOfDispatchID       *string  `json:"retry_of_dispatch_id"`
 	Status                  string   `json:"status"`
 	Outcome                 *string  `json:"outcome"`
 	QueueDurationMillis     *int64   `json:"queue_duration_ms"`
 	ExecutionDurationMillis *int64   `json:"execution_duration_ms"`
-}
-
-type metricsSessionAttemptState struct {
-	key               string
-	dispatchID        string
-	retryOfDispatchID string
-	workIDs           map[string]struct{}
-	workerSessionIDs  map[string]struct{}
-	queuedAt          *time.Time
-	startedAt         *time.Time
-	terminalAt        *time.Time
-	executionDuration *int64
-	outcome           string
-	status            string
-	terminal          bool
-	firstEventIndex   int
-	attempt           int
-}
-
-type metricsSessionReducer struct {
-	sessionID      string
-	workIDs        map[string]struct{}
-	workerSessions map[string]struct{}
-	attempts       map[string]*metricsSessionAttemptState
-	startedAt      *time.Time
-	completedAt    *time.Time
-	asOf           *time.Time
-	status         string
-	eventIndex     int
-}
-
-func reduceMetricsSession(sessionID string, events []factoryapi.FactoryEvent) (metricsSessionDocument, error) {
-	reducer := newMetricsSessionReducer(sessionID)
-	for _, event := range deduplicateMetricsSessionEvents(events) {
-		if err := reducer.consume(event); err != nil {
-			return metricsSessionDocument{}, err
-		}
-		reducer.eventIndex++
-	}
-	return reducer.document(), nil
-}
-
-func newMetricsSessionReducer(sessionID string) *metricsSessionReducer {
-	return &metricsSessionReducer{
-		sessionID:      strings.TrimSpace(sessionID),
-		workIDs:        make(map[string]struct{}),
-		workerSessions: make(map[string]struct{}),
-		attempts:       make(map[string]*metricsSessionAttemptState),
-	}
-}
-
-func deduplicateMetricsSessionEvents(events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {
-	seen := make(map[string]struct{}, len(events))
-	result := make([]factoryapi.FactoryEvent, 0, len(events))
-	for _, event := range events {
-		key := metricsSessionEventKey(event)
-		if key != "" {
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-		}
-		result = append(result, event)
-	}
-	return result
-}
-
-func metricsSessionEventKey(event factoryapi.FactoryEvent) string {
-	if id := strings.TrimSpace(event.Id); id != "" {
-		return "id:" + id
-	}
-	if event.Context.SessionSequence != nil {
-		return fmt.Sprintf("session-sequence:%d", *event.Context.SessionSequence)
-	}
-	if event.Context.Sequence != 0 {
-		return fmt.Sprintf("sequence:%d", event.Context.Sequence)
-	}
-	return ""
-}
-
-func (reducer *metricsSessionReducer) consume(event factoryapi.FactoryEvent) error {
-	reducer.observeTime(event.Context.EventTime)
-	reducer.addWorkIDs(event.Context.WorkIds)
-	switch event.Type {
-	case factoryapi.FactoryEventTypeSessionStarted:
-		return reducer.consumeSessionStarted(event)
-	case factoryapi.FactoryEventTypeSessionCompleted:
-		return reducer.consumeSessionCompleted(event)
-	case factoryapi.FactoryEventTypeSessionLifecycleControl:
-		return reducer.consumeSessionLifecycleControl(event)
-	case factoryapi.FactoryEventTypeSessionPaused:
-		return reducer.consumeSessionPaused(event)
-	case factoryapi.FactoryEventTypeSessionResumed:
-		return reducer.consumeSessionResumed(event)
-	case factoryapi.FactoryEventTypeWorkRequest:
-		return reducer.consumeWorkRequest(event)
-	case factoryapi.FactoryEventTypeWorkStateChange:
-		return reducer.consumeWorkStateChange(event)
-	case factoryapi.FactoryEventTypeDispatchQueued:
-		return reducer.consumeDispatchQueued(event)
-	case factoryapi.FactoryEventTypeDispatchRequest:
-		return reducer.consumeDispatchRequest(event)
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		return reducer.consumeDispatchResponse(event)
-	case factoryapi.FactoryEventTypeDispatchReconciled:
-		return reducer.consumeDispatchReconciled(event)
-	case factoryapi.FactoryEventTypeDispatchInterrupted:
-		return reducer.consumeDispatchInterrupted(event)
-	case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
-		return reducer.consumeWorkerSessionAssociation(event)
-	default:
-		return nil
-	}
-}
-
-func (reducer *metricsSessionReducer) consumeSessionStarted(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionStartedEventPayload()
-	if err != nil {
-		return fmt.Errorf("decode session started payload: %w", err)
-	}
-	startedAt := payload.StartedAt
-	if startedAt.IsZero() {
-		startedAt = event.Context.EventTime
-	}
-	reducer.setEarliest(&reducer.startedAt, startedAt)
-	reducer.status = "RUNNING"
-	reducer.observeTime(startedAt)
-	return nil
-}
-
-func (reducer *metricsSessionReducer) consumeSessionCompleted(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionCompletedEventPayload()
-	if err != nil {
-		return fmt.Errorf("decode session completed payload: %w", err)
-	}
-	completedAt := payload.CompletedAt
-	if completedAt.IsZero() {
-		completedAt = event.Context.EventTime
-	}
-	reducer.setLatest(&reducer.completedAt, completedAt)
-	reducer.observeTime(completedAt)
-	if status := strings.TrimSpace(string(payload.FinalStatus)); status != "" {
-		reducer.status = status
-	}
-	return nil
 }
 
 func (reducer *metricsSessionReducer) consumeSessionLifecycleControl(event factoryapi.FactoryEvent) error {
@@ -527,6 +391,39 @@ func (reducer *metricsSessionReducer) consumeWorkStateChange(event factoryapi.Fa
 	return nil
 }
 
+func (reducer *metricsSessionReducer) consumeInitialStructure(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode initial structure payload: %w", err)
+	}
+	if payload.Factory.Workstations == nil {
+		return nil
+	}
+	for _, workstation := range *payload.Factory.Workstations {
+		name := strings.TrimSpace(workstation.Name)
+		if name == "" {
+			continue
+		}
+		reducer.workstationNames[name] = name
+		if workstation.Id != nil {
+			if id := strings.TrimSpace(*workstation.Id); id != "" {
+				reducer.workstationNames[id] = name
+			}
+		}
+		worker := normalizedMetricsSessionPointer(workstation.Worker)
+		if worker == nil {
+			continue
+		}
+		reducer.workstationWorkers[name] = *worker
+		if workstation.Id != nil {
+			if id := strings.TrimSpace(*workstation.Id); id != "" {
+				reducer.workstationWorkers[id] = *worker
+			}
+		}
+	}
+	return nil
+}
+
 func (reducer *metricsSessionReducer) consumeDispatchQueued(event factoryapi.FactoryEvent) error {
 	payload, err := event.Payload.AsDispatchQueuedEventPayload()
 	if err != nil {
@@ -544,6 +441,8 @@ func (reducer *metricsSessionReducer) consumeDispatchQueued(event factoryapi.Fac
 		}
 	}
 	state.retryOfDispatchID = pointerString(payload.RetryOfDispatchId)
+	state.observeProvider(payload.Provider)
+	state.observeModel(payload.Model)
 	return nil
 }
 
@@ -557,11 +456,77 @@ func (reducer *metricsSessionReducer) consumeDispatchRequest(event factoryapi.Fa
 		state.status = "RUNNING"
 	}
 	reducer.setEarliest(&state.startedAt, event.Context.EventTime)
+	reducer.observeDispatchTopology(state, payload.TransitionId)
 	for _, input := range payload.Inputs {
 		state.addWorkID(input.WorkId)
 		reducer.addWorkID(input.WorkId)
 	}
 	return nil
+}
+
+func (reducer *metricsSessionReducer) observeDispatchTopology(state *metricsSessionAttemptState, transitionID string) {
+	transitionID = strings.TrimSpace(transitionID)
+	if transitionID == "" {
+		return
+	}
+	if workstation, ok := reducer.workstationNames[transitionID]; ok {
+		state.observeWorkstation(&workstation)
+		if worker, workerOK := reducer.workstationWorkers[transitionID]; workerOK {
+			state.observeWorker(&worker)
+		}
+		return
+	}
+	state.observeWorkstation(&transitionID)
+}
+
+func (reducer *metricsSessionReducer) consumeModelRequest(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsModelRequestEventPayload()
+	if err != nil {
+		return fmt.Errorf("decode model request payload: %w", err)
+	}
+	state := reducer.attemptFor(event)
+	state.observeWorker(&payload.Worker)
+	state.observeModel(&payload.Model)
+	return nil
+}
+
+func (state *metricsSessionAttemptState) observeProvider(value *string) {
+	value = normalizedMetricsSessionPointer(value)
+	if value == nil {
+		return
+	}
+	if state.provider == "" {
+		state.provider = *value
+		return
+	}
+	if state.provider != *value {
+		state.providerConflict = true
+	}
+}
+
+func (state *metricsSessionAttemptState) observeModel(value *string) {
+	value = normalizedMetricsSessionPointer(value)
+	if value == nil {
+		return
+	}
+	if state.model == "" {
+		state.model = *value
+		return
+	}
+	if state.model != *value {
+		state.modelConflict = true
+	}
+}
+
+func normalizedMetricsSessionPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	normalized := strings.TrimSpace(*value)
+	if normalized == "" {
+		return nil
+	}
+	return &normalized
 }
 
 func (reducer *metricsSessionReducer) consumeDispatchResponse(event factoryapi.FactoryEvent) error {
@@ -923,6 +888,37 @@ func renderHumanMetricsSession(document metricsSessionDocument) string {
 			workID := metricsSessionDisplayPointer(attempt.WorkID)
 			outcome := metricsSessionDisplayPointer(attempt.Outcome)
 			fmt.Fprintf(&output, "%-24s %-24s %7d  %s\n", dispatchID, workID, attempt.Attempt, outcome)
+		}
+	}
+	if document.Cost != nil {
+		fmt.Fprintln(&output)
+		fmt.Fprintln(&output, "COST")
+		output.WriteString(costscli.RenderHumanReport(*document.Cost))
+	}
+	if len(document.ByWorker) > 0 {
+		fmt.Fprintln(&output)
+		fmt.Fprintln(&output, "WORKER DETAILS")
+		fmt.Fprintln(&output, "WORKER                 WORKER SESSION            ATTEMPTS  PROVIDER/MODEL")
+		for _, worker := range document.ByWorker {
+			provider := metricsSessionDisplayPointer(worker.Provider)
+			model := metricsSessionDisplayPointer(worker.Model)
+			fmt.Fprintf(&output, "%-22s %-25s %8d  %s/%s\n",
+				worker.Worker, metricsSessionDisplayPointer(worker.WorkerSessionID), worker.Attempts, provider, model)
+		}
+	}
+	if len(document.ByDispatch) > 0 {
+		fmt.Fprintln(&output)
+		fmt.Fprintln(&output, "DISPATCH DETAILS")
+		fmt.Fprintln(&output, "DISPATCH                 WORK                     WORKER SESSION            ATTEMPT  OUTCOME")
+		for _, dispatch := range document.ByDispatch {
+			workID := "<unavailable>"
+			if len(dispatch.WorkIDs) > 0 {
+				workID = dispatch.WorkIDs[0]
+			}
+			fmt.Fprintf(&output, "%-24s %-24s %-25s %7d  %s\n",
+				metricsSessionDisplayPointer(dispatch.DispatchID), workID,
+				metricsSessionDisplayPointer(dispatch.WorkerSessionID), dispatch.Attempt,
+				metricsSessionDisplayPointer(dispatch.Outcome))
 		}
 	}
 	return output.String()

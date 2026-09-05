@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -15,6 +16,18 @@ import (
 // Operation is the injected HTTP-backed operation for one base metrics report.
 // The CLI does not read metrics artifacts when this operation is configured.
 type Operation func(context.Context, MetricsConfig) error
+
+// MetricsCostReportRequest is the server-scoped input for one Costs read.
+// The metrics command deliberately passes only the selected server and
+// Factory Session; Costs remains responsible for HTTP mapping and valuation.
+type MetricsCostReportRequest struct {
+	Server    string
+	SessionID string
+}
+
+// CostReportOperation reads the existing Costs API report without changing its
+// schema or rendering policy.
+type CostReportOperation func(context.Context, MetricsCostReportRequest) (generatedclient.CostsReport, error)
 
 // Client is the narrow generated response-aware capability used by the base
 // metrics command. Wire owns client construction and server selection.
@@ -121,12 +134,50 @@ func runMetricsSessionOperation(
 			err,
 		)
 	}
+	var costReport *generatedclient.CostsReport
+	if strings.EqualFold(strings.TrimSpace(config.SessionLens), "cost") {
+		if config.CostReport == nil {
+			return newMetricsError(
+				MetricsQueryFailedCode,
+				"read Factory Session costs: Costs report operation is required",
+				nil,
+			)
+		}
+		report, costErr := config.CostReport(ctx, MetricsCostReportRequest{
+			Server:    strings.TrimSpace(config.Server),
+			SessionID: strings.TrimSpace(config.SessionID),
+		})
+		if costErr != nil {
+			return costErr
+		}
+		if err := validateMetricsCostScope(report, config.SessionID); err != nil {
+			return err
+		}
+		costReport = &report
+	}
+	if config.SessionByWorker || config.SessionByDispatch {
+		addMetricsSessionDetails(&document, report.UsageRows, costReport, config.SessionByWorker, config.SessionByDispatch)
+	}
+	document.Cost = costReport
 	output, err := renderMetricsSessionOutput(document, config.JSON)
 	if err != nil {
 		return err
 	}
 	if _, err := io.WriteString(config.Output, output); err != nil {
 		return fmt.Errorf("write metrics session output: %w", err)
+	}
+	return nil
+}
+
+func validateMetricsCostScope(report generatedclient.CostsReport, sessionID string) error {
+	want := strings.TrimSpace(sessionID)
+	got := metricStringFromAPI(report.Scope.FactorySessionId)
+	if strings.ToUpper(strings.TrimSpace(string(report.Scope.Kind))) != "FACTORY_SESSION" || got != want {
+		return newMetricsError(
+			MetricsScopeUnavailableCode,
+			"the selected Factory Session cost scope was not returned by the server",
+			nil,
+		)
 	}
 	return nil
 }
@@ -140,18 +191,13 @@ func validateMetricsSessionConfig(config MetricsConfig) error {
 		)
 	}
 	if lens := strings.TrimSpace(config.SessionLens); lens != "" {
-		return newMetricsError(
-			MetricsUnsupportedSessionOptionCode,
-			fmt.Sprintf("unsupported metrics session lens %q: only the default lens is available", lens),
-			nil,
-		)
-	}
-	if config.SessionByWorker || config.SessionByDispatch {
-		return newMetricsError(
-			MetricsUnsupportedSessionOptionCode,
-			"metrics session detail flags are not available in the default report",
-			nil,
-		)
+		if !strings.EqualFold(lens, "cost") {
+			return newMetricsError(
+				MetricsUnsupportedSessionOptionCode,
+				fmt.Sprintf("unsupported metrics session lens %q: choose cost", lens),
+				nil,
+			)
+		}
 	}
 	if config.SessionEvents == nil {
 		return newMetricsError(
@@ -396,4 +442,111 @@ func metricStringFromAPI(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func sortedMetricsSessionDetailKeys(values map[string]*metricsSessionDetailAccumulator) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedMetricsSessionSet(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func metricsSessionIdentityLabel(available bool) string {
+	if available {
+		return "canonical"
+	}
+	return "unavailable"
+}
+
+func metricsSessionDisplayIdentity(value *string) string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return "unavailable"
+	}
+	return *value
+}
+
+func metricsSessionCostItemsForDispatch(index *metricsSessionCostIndex, key string) []generatedclient.CostsLineItem {
+	if index == nil {
+		return nil
+	}
+	if key == "unavailable" {
+		return index.unknownDispatch
+	}
+	return index.byDispatch[key]
+}
+
+func metricsSessionItemsIdentity(items []generatedclient.CostsLineItem, provider bool) *string {
+	value, complete, conflict := metricsSessionItemsIdentityState(items, provider)
+	if !complete || conflict {
+		return nil
+	}
+	return value
+}
+
+func metricsSessionIdentityWithItems(
+	candidate *string,
+	items []generatedclient.CostsLineItem,
+	provider bool,
+) *string {
+	if len(items) == 0 {
+		return candidate
+	}
+	value, complete, conflict := metricsSessionItemsIdentityState(items, provider)
+	if !complete || conflict {
+		return nil
+	}
+	if candidate == nil {
+		return value
+	}
+	if value == nil || *candidate != *value {
+		return nil
+	}
+	return candidate
+}
+
+func metricsSessionItemsIdentityState(
+	items []generatedclient.CostsLineItem,
+	provider bool,
+) (*string, bool, bool) {
+	var value string
+	conflict := false
+	complete := true
+	for _, item := range items {
+		candidate := ""
+		if provider {
+			candidate = metricStringFromAPI(item.Provider)
+		} else {
+			candidate = metricStringFromAPI(item.Model)
+		}
+		if candidate == "" {
+			complete = false
+		}
+		mergeMetricsSessionIdentity(&value, &conflict, candidate)
+	}
+	return optionalMetricsSessionString(value), complete, conflict
+}
+
+func metricsSessionItemsWorkIDsSet(items []generatedclient.CostsLineItem) map[string]struct{} {
+	values := make(map[string]struct{})
+	for _, item := range items {
+		if workID := metricStringFromAPI(item.WorkId); workID != "" {
+			values[workID] = struct{}{}
+		}
+	}
+	return values
+}
+
+func metricsSessionItemsWorkIDs(items []generatedclient.CostsLineItem) []string {
+	return sortedMetricsSessionSet(metricsSessionItemsWorkIDsSet(items))
 }

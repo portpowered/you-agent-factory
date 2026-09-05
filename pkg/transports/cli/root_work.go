@@ -122,6 +122,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
 		Operation:     options.metricsCLI,
 		SessionEvents: newMetricsSessionEventOperation(options.remoteInvocation),
+		CostReport:    options.metricsCostReportCLI,
 		Server:        func() string { return globals.server },
 		Query:         options.runtimeMetricsQuery, HomeDir: options.homeDir,
 		JSON:    func() bool { return globals != nil && globals.json },

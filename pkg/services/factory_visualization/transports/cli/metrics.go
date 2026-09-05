@@ -34,6 +34,7 @@ type MetricsCommandConfig struct {
 	JSON          func() bool
 	Verbose       func() bool
 	Costs         *cobra.Command
+	CostReport    CostReportOperation
 }
 
 // MetricsConfig contains the resolved inputs for one metrics query and output
@@ -48,6 +49,7 @@ type MetricsConfig struct {
 	HomeDir     func() (string, error)
 	Diagnostics io.Writer
 	Verbose     bool
+	CostReport  CostReportOperation
 
 	// SessionReport selects the remote, event-backed one-session report. The
 	// field is internal to the CLI composition boundary; callers should use
@@ -118,6 +120,7 @@ func NewMetricsCommand(config MetricsCommandConfig) *cobra.Command {
 				Verbose:           config.Verbose != nil && config.Verbose(),
 				SessionReport:     true,
 				SessionEvents:     config.SessionEvents,
+				CostReport:        config.CostReport,
 				SessionLens:       sessionLens,
 				SessionByWorker:   sessionByWorker,
 				SessionByDispatch: sessionByDispatch,
@@ -368,6 +371,10 @@ func metricsSessionAttemptDocumentFor(
 		WorkID:                  optionalMetricsSessionSingle(workIDs),
 		WorkIDs:                 workIDs,
 		WorkerSessionID:         optionalMetricsSessionWorkerID(state.workerSessionIDs),
+		Worker:                  state.identityValue(state.worker, state.workerConflict),
+		Provider:                state.identityValue(state.provider, state.providerConflict),
+		Model:                   state.identityValue(state.model, state.modelConflict),
+		Workstation:             state.identityValue(state.workstation, state.workstationConflict),
 		Attempt:                 state.attempt,
 		RetryOfDispatchID:       optionalMetricsSessionString(state.retryOfDispatchID),
 		Status:                  metricsSessionAttemptStatus(state),

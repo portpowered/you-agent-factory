@@ -194,6 +194,7 @@ type CommandOperations struct {
 	ACPServer                         acp.Server
 	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
 	MetricsCLI                        factoryvisualizationcli.Operation
+	MetricsCostReportCLI              factoryvisualizationcli.CostReportOperation
 	CostsCLI                          costscli.Operation
 	ServerStopCLI                     serverstopcli.Operation
 }
@@ -273,6 +274,7 @@ type CommandFactory struct {
 	cancellation               initializer.InvocationCancellation
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
 	metricsCLI                 factoryvisualizationcli.Operation
+	metricsCostReportCLI       factoryvisualizationcli.CostReportOperation
 	costsCLI                   costscli.Operation
 	serverStopCLI              serverstopcli.Operation
 }
@@ -347,6 +349,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		acpServer:                         operations.ACPServer,
 		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
 		metricsCLI:                        operations.MetricsCLI,
+		metricsCostReportCLI:              operations.MetricsCostReportCLI,
 		costsCLI:                          operations.CostsCLI,
 		serverStopCLI:                     operations.ServerStopCLI,
 	}

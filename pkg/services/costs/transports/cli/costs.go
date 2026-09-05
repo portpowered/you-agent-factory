@@ -34,6 +34,12 @@ type ClientFactory func(string) (Client, error)
 // Operation is the injected command operation for one cost report request.
 type Operation func(context.Context, CostsConfig) error
 
+// ReportOperation reads one Costs report without choosing an output format.
+// The metrics session command uses this narrow result-valued seam so Costs
+// remains the owner of HTTP response mapping, request bounds, and monetary
+// semantics.
+type ReportOperation func(context.Context, CostsConfig) (generatedclient.CostsReport, error)
+
 // CostsCommandConfig contains invocation-scoped callbacks from the root CLI.
 type CostsCommandConfig struct {
 	Operation      Operation
@@ -54,44 +60,16 @@ type CostsConfig struct {
 // NewOperation binds the generated HTTP client factory to the Costs command
 // operation. No monetary calculation is performed in this adapter.
 func NewOperation(factory ClientFactory) Operation {
+	readReport := NewReportOperation(factory)
 	return func(ctx context.Context, config CostsConfig) error {
 		if err := validateCostsRequest(ctx, config); err != nil {
 			return err
 		}
-		if factory == nil {
-			return fmt.Errorf("build metrics costs client: factory is required")
-		}
-		client, err := factory(strings.TrimSpace(config.Server))
+		report, err := readReport(ctx, config)
 		if err != nil {
-			return newCostsError(
-				CostsNetworkFailureCode,
-				internalErrorFamily,
-				fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
-				err,
-			)
+			return err
 		}
-		if client == nil {
-			return newCostsError(
-				CostsNetworkFailureCode,
-				internalErrorFamily,
-				fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
-				nil,
-			)
-		}
-		requestTimeout := normalizeRequestTimeout(config.RequestTimeout)
-		requestContext, cancel := context.WithTimeout(ctx, requestTimeout)
-		defer cancel()
-		response, err := client.GetMetricsCostsWithResponse(
-			requestContext,
-			costsRequestParams(config.SessionID),
-		)
-		if err != nil {
-			return newCostsTransportError(config.Server, requestTimeout, err)
-		}
-		if response == nil || response.JSON200 == nil {
-			return costsResponseError(response, config.Server)
-		}
-		output, err := renderCostsOutput(*response.JSON200, config.JSON)
+		output, err := renderCostsOutput(report, config.JSON)
 		if err != nil {
 			return err
 		}
@@ -100,6 +78,55 @@ func NewOperation(factory ClientFactory) Operation {
 		}
 		return nil
 	}
+}
+
+// NewReportOperation binds the generated HTTP client factory to a result-valued
+// Costs read. It shares the exact request timeout and typed response handling
+// used by the standalone `you metrics costs` command.
+func NewReportOperation(factory ClientFactory) ReportOperation {
+	return func(ctx context.Context, config CostsConfig) (generatedclient.CostsReport, error) {
+		return readReport(factory, ctx, config)
+	}
+}
+
+func readReport(factory ClientFactory, ctx context.Context, config CostsConfig) (generatedclient.CostsReport, error) {
+	if err := validateCostsReportRequest(ctx, config); err != nil {
+		return generatedclient.CostsReport{}, err
+	}
+	if factory == nil {
+		return generatedclient.CostsReport{}, fmt.Errorf("build metrics costs client: factory is required")
+	}
+	client, err := factory(strings.TrimSpace(config.Server))
+	if err != nil {
+		return generatedclient.CostsReport{}, newCostsError(
+			CostsNetworkFailureCode,
+			internalErrorFamily,
+			fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
+			err,
+		)
+	}
+	if client == nil {
+		return generatedclient.CostsReport{}, newCostsError(
+			CostsNetworkFailureCode,
+			internalErrorFamily,
+			fmt.Sprintf("build GET %s client for %s failed; check --server and confirm the Factory API endpoint is valid", metricsCostsEndpoint, safeServerEndpoint(config.Server)),
+			nil,
+		)
+	}
+	requestTimeout := normalizeRequestTimeout(config.RequestTimeout)
+	requestContext, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	response, err := client.GetMetricsCostsWithResponse(
+		requestContext,
+		costsRequestParams(config.SessionID),
+	)
+	if err != nil {
+		return generatedclient.CostsReport{}, newCostsTransportError(config.Server, requestTimeout, err)
+	}
+	if response == nil || response.JSON200 == nil {
+		return generatedclient.CostsReport{}, costsResponseError(response, config.Server)
+	}
+	return *response.JSON200, nil
 }
 
 // NewCostsCommand builds the `costs` child of `you metrics`.
@@ -151,6 +178,16 @@ func validateCostsRequest(ctx context.Context, config CostsConfig) error {
 	}
 	if config.Output == nil {
 		return fmt.Errorf("render metrics costs: output writer is required")
+	}
+	if strings.TrimSpace(config.Server) == "" {
+		return fmt.Errorf("query metrics costs: server is required")
+	}
+	return nil
+}
+
+func validateCostsReportRequest(ctx context.Context, config CostsConfig) error {
+	if ctx == nil {
+		return fmt.Errorf("query metrics costs: context is required")
 	}
 	if strings.TrimSpace(config.Server) == "" {
 		return fmt.Errorf("query metrics costs: server is required")

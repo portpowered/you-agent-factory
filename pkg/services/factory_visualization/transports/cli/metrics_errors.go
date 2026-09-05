@@ -30,8 +30,8 @@ const (
 	// MetricsSessionEventsFailedCode identifies a failure reading the bounded
 	// canonical Factory Event replay required by the session report.
 	MetricsSessionEventsFailedCode = "METRICS_SESSION_EVENTS_FAILED"
-	// MetricsUnsupportedSessionOptionCode identifies a session flag owned by a
-	// later metrics lens/detail slice and not implemented by this report spine.
+	// MetricsUnsupportedSessionOptionCode identifies a session lens that is not
+	// part of the currently supported cost/detail report.
 	MetricsUnsupportedSessionOptionCode = "METRICS_UNSUPPORTED_SESSION_OPTION"
 )
 

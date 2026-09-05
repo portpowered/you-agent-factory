@@ -11,6 +11,7 @@ import (
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -177,6 +178,116 @@ func TestMetricsSessionThroughRootProcessReadsOnlyTheSelectedRemoteReplay(t *tes
 	}
 }
 
+// TestMetricsSessionCostLensThroughRootProcessComposesCostsAndDetail proves
+// the additive cost/detail journey through the reusable root process and a
+// local real HTTP server. The response keeps the existing Costs JSON as the
+// nested cost document and labels the authored worker as unavailable because
+// the retained canonical facts do not prove that name.
+func TestMetricsSessionCostLensThroughRootProcessComposesCostsAndDetail(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 9, 5, 21, 0, 0, 0, time.UTC)
+	workID := "functional-cost-work"
+	provider := "codex"
+	model := "gpt-5-codex"
+	workerSessionID := "functional-worker-session"
+	events := []factoryapi.FactoryEvent{
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeSessionStarted, "cost-session-start", "", "session-cost", 1, base,
+			factoryapi.SessionStartedEventPayload{StartedAt: base}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeWorkRequest, "cost-work-request", "", "session-cost", 2, base.Add(time.Millisecond),
+			factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{WorkId: &workID}}}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchQueued, "cost-queued", "cost-dispatch", "session-cost", 3, base.Add(10*time.Millisecond),
+			factoryapi.DispatchQueuedEventPayload{InputWorkIds: &[]string{workID}, Provider: &provider, Model: &model}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "cost-request", "cost-dispatch", "session-cost", 4, base.Add(20*time.Millisecond),
+			factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{{WorkId: workID}}}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation, "cost-association", "cost-dispatch", "session-cost", 5, base.Add(21*time.Millisecond),
+			factoryapi.DispatchWorkerSessionAssociationEventPayload{WorkerSessionId: workerSessionID}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "cost-response", "cost-dispatch", "session-cost", 6, base.Add(120*time.Millisecond),
+			factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeAccepted, DurationMillis: int64Pointer(100)}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeSessionCompleted, "cost-session-complete", "", "session-cost", 7, base.Add(200*time.Millisecond),
+			factoryapi.SessionCompletedEventPayload{CompletedAt: base.Add(200 * time.Millisecond), FinalStatus: factoryapi.FactorySessionDurableLifecycleStatusSucceeded}),
+	}
+	var metricsRequests, costRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/metrics":
+			metricsRequests++
+			if request.URL.Query().Get("session_id") != "session-cost" {
+				t.Errorf("metrics session_id = %q, want session-cost", request.URL.Query().Get("session_id"))
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"cost":{"availability":"UNAVAILABLE"},"providers":[],"scope":{"kind":"FACTORY_SESSION","factory_session_id":"session-cost"},"totals":{"completed_dispatches":1,"dispatch_latency":{"unit":"milliseconds","samples":0,"p50":null,"p95":null},"failures_by_reason":{},"input_tokens":10,"output_tokens":5,"provider_latency":{"unit":"milliseconds","samples":0,"p50":null,"p95":null}},"usage_rows":[{"dispatch_id":"cost-dispatch","factory_session_id":"session-cost","model":"gpt-5-codex","provider":"codex","work_id":"functional-cost-work","worker_session_id":"functional-worker-session"}],"worker_types":[],"workstations":[]}`))
+		case "/metrics/costs":
+			costRequests++
+			if request.URL.Query().Get("session_id") != "session-cost" {
+				t.Errorf("costs session_id = %q, want session-cost", request.URL.Query().Get("session_id"))
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"coverage":{"encountered_provider_models":1,"encountered_rows":1,"priced_provider_models":1,"priced_rows":1,"unpriced_provider_models":0,"unpriced_rows":0},"currency":"USD","factory_sessions":[],"known_cost":"0.0042","line_items":[{"cached_input_tokens":3,"dispatch_id":"cost-dispatch","factory_session_id":"session-cost","input_tokens":10,"model":"gpt-5-codex","output_tokens":5,"priced_amount":"0.0042","price_source":"BUILT_IN","provider":"codex","reasoning_output_tokens":2,"status":"PRICED","work_id":"functional-cost-work","worker_session_id":"functional-worker-session"}],"provider_models":[],"scope":{"factory_session_id":"session-cost","kind":"FACTORY_SESSION"},"status":"PRICED","token_totals":{"cached_input_tokens":3,"input_tokens":10,"output_tokens":5,"reasoning_output_tokens":2,"total_tokens":15},"unpriced_dispatch_count":0,"unpriced_pairs":[],"work_items":[],"worker_sessions":[]}`))
+		case "/factory-sessions/session-cost/events":
+			writer.Header().Set("Content-Type", "text/event-stream")
+			writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, strconv.Itoa(len(events)))
+			for _, event := range events {
+				encoded, err := json.Marshal(event)
+				if err != nil {
+					t.Errorf("marshal event: %v", err)
+					return
+				}
+				_, _ = writer.Write([]byte("data: " + string(encoded) + "\n\n"))
+			}
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "--server", server.URL, "metrics", "session", "session-cost",
+		"--lens", "cost", "--by-worker", "--by-dispatch",
+	})
+	inputs.Input.Env = []string{"HOME=" + t.TempDir(), "USERPROFILE=" + t.TempDir()}
+	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(metrics session cost) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var document struct {
+		Cost     generatedclient.CostsReport `json:"cost"`
+		ByWorker []struct {
+			Worker          string  `json:"worker"`
+			WorkerSessionID *string `json:"worker_session_id"`
+			Provider        *string `json:"provider"`
+			Model           *string `json:"model"`
+		} `json:"by_worker"`
+		ByDispatch []struct {
+			DispatchID       *string `json:"dispatch_id"`
+			DispatchIdentity string  `json:"dispatch_identity"`
+			Workstation      *string `json:"workstation"`
+			Provider         *string `json:"provider"`
+			Model            *string `json:"model"`
+			WorkerIdentity   string  `json:"worker_identity"`
+		} `json:"by_dispatch"`
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &document); err != nil {
+		t.Fatalf("decode metrics session cost JSON: %v\n%s", err, inputs.Stdout())
+	}
+	if document.Cost.KnownCost == nil || *document.Cost.KnownCost != "0.0042" || document.Cost.Status != "PRICED" || document.Cost.Currency != "USD" {
+		t.Fatalf("cost = %#v, want exact priced Costs response", document.Cost)
+	}
+	if document.Cost.TokenTotals.CachedInputTokens == nil || *document.Cost.TokenTotals.CachedInputTokens != 3 || document.Cost.TokenTotals.ReasoningOutputTokens == nil || *document.Cost.TokenTotals.ReasoningOutputTokens != 2 || document.Cost.Coverage.PricedRows != 1 {
+		t.Fatalf("cost token/coverage facts = %#v, want cached/reasoning/provenance coverage", document.Cost)
+	}
+	if len(document.Cost.LineItems) != 1 || document.Cost.LineItems[0].PriceSource == nil || *document.Cost.LineItems[0].PriceSource != generatedclient.CostsLineItemPriceSource("BUILT_IN") {
+		t.Fatalf("cost provenance = %#v, want BUILT_IN line-item provenance", document.Cost.LineItems)
+	}
+	if len(document.ByWorker) != 1 || document.ByWorker[0].Worker != "unavailable" || document.ByWorker[0].WorkerSessionID == nil || *document.ByWorker[0].WorkerSessionID != workerSessionID || document.ByWorker[0].Provider == nil || *document.ByWorker[0].Provider != provider || document.ByWorker[0].Model == nil || *document.ByWorker[0].Model != model {
+		t.Fatalf("worker detail = %#v, want canonical Worker Session/provider/model and unavailable Worker", document.ByWorker)
+	}
+	if len(document.ByDispatch) != 1 || document.ByDispatch[0].DispatchID == nil || *document.ByDispatch[0].DispatchID != "cost-dispatch" || document.ByDispatch[0].DispatchIdentity != "canonical" || document.ByDispatch[0].Workstation == nil || *document.ByDispatch[0].Workstation != "review" || document.ByDispatch[0].WorkerIdentity != "unavailable" {
+		t.Fatalf("dispatch detail = %#v, want canonical dispatch/workstation and unavailable Worker", document.ByDispatch)
+	}
+	if metricsRequests != 1 || costRequests != 1 || inputs.Stderr() != "" {
+		t.Fatalf("requests=(metrics:%d costs:%d) stderr=%q, want one selected request each and no diagnostics", metricsRequests, costRequests, inputs.Stderr())
+	}
+}
+
 func functionalMetricsSessionEvent(
 	t *testing.T,
 	eventType factoryapi.FactoryEventType,
@@ -199,6 +310,8 @@ func functionalMetricsSessionEvent(
 		err = eventPayload.FromDispatchQueuedEventPayload(typed)
 	case factoryapi.DispatchRequestEventPayload:
 		err = eventPayload.FromDispatchRequestEventPayload(typed)
+	case factoryapi.DispatchWorkerSessionAssociationEventPayload:
+		err = eventPayload.FromDispatchWorkerSessionAssociationEventPayload(typed)
 	case factoryapi.DispatchResponseEventPayload:
 		err = eventPayload.FromDispatchResponseEventPayload(typed)
 	default:
@@ -220,3 +333,5 @@ func functionalMetricsSessionEvent(
 }
 
 func stringPointer(value string) *string { return &value }
+
+func int64Pointer(value int64) *int64 { return &value }
