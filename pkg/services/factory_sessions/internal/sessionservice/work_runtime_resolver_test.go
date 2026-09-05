@@ -218,17 +218,12 @@ func (fake *detachedRouterOwnerFake) GetFactorySessionPartialResult(context.Cont
 	return factory.PartialSessionResult{}, errors.New("not implemented")
 }
 
-func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
+func TestAssemblyLegacyRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
 	first := &detachedRouterOwnerFake{name: "first"}
 	second := &detachedRouterOwnerFake{name: "second"}
 	assembly := &Assembly{}
 	assembly.registerDetachedGateway("session-first", first)
 	assembly.registerDetachedGateway("session-second", second)
-
-	operations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
-	if err != nil {
-		t.Fatalf("bind detached operations: %v", err)
-	}
 
 	for _, test := range []struct {
 		name    string
@@ -240,21 +235,16 @@ func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
 		{name: "second", session: "session-second", owner: second, other: first},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := operations.Get(context.Background(), factorysessions.SessionGetRequest{
-				SessionID: test.session,
-				Mode:      factorysessions.SessionOperationModeLive,
-			})
+			got, err := assembly.GetFactorySession(context.Background(), test.session)
 			if err != nil {
 				t.Fatalf("get session: %v", err)
 			}
-			if got.Session.SessionID != test.session {
-				t.Fatalf("session id = %q, want %q", got.Session.SessionID, test.session)
+			if got.Context.FactorySessionID != test.session {
+				t.Fatalf("session id = %q, want %q", got.Context.FactorySessionID, test.session)
 			}
 
 			otherInvokedBefore := test.other.invokedSessionID
-			if _, err := operations.Invoke(context.Background(), factorysessions.SessionInvokeRequest{
-				SessionID: test.session,
-			}); err != nil {
+			if _, err := assembly.InvokeFactorySession(context.Background(), test.session, factorysessions.InvocationRequest{}); err != nil {
 				t.Fatalf("invoke session: %v", err)
 			}
 			if test.owner.invokedSessionID != test.session || test.other.invokedSessionID != otherInvokedBefore {
@@ -262,11 +252,7 @@ func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
 			}
 
 			otherPausedBefore := test.other.pausedSessionID
-			if _, err := operations.Control(context.Background(), factorysessions.SessionControlRequest{
-				SessionID: test.session,
-				Mode:      factorysessions.SessionOperationModeLive,
-				Operation: factorysessions.SessionControlPause,
-			}); err != nil {
+			if _, err := assembly.PauseLiveFactorySession(context.Background(), test.session, factorysessions.ControlRequest{}); err != nil {
 				t.Fatalf("pause session: %v", err)
 			}
 			if test.owner.pausedSessionID != test.session || test.other.pausedSessionID != otherPausedBefore {
@@ -275,25 +261,17 @@ func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
 		})
 	}
 
-	if _, err := operations.Get(context.Background(), factorysessions.SessionGetRequest{
-		SessionID: "missing",
-		Mode:      factorysessions.SessionOperationModeLive,
-	}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+	if _, err := assembly.GetFactorySession(context.Background(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
 	}
 }
 
-func TestDetachedRouterKeepsConcurrentSessionsIsolated(t *testing.T) {
+func TestAssemblyLegacyRouterKeepsConcurrentSessionsIsolated(t *testing.T) {
 	first := &detachedRouterOwnerFake{}
 	second := &detachedRouterOwnerFake{}
 	assembly := &Assembly{}
 	assembly.registerDetachedGateway("session-first", first)
 	assembly.registerDetachedGateway("session-second", second)
-	operations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
-	if err != nil {
-		t.Fatalf("bind detached operations: %v", err)
-	}
-
 	var wait sync.WaitGroup
 	errorsCh := make(chan error, 2)
 	for _, sessionID := range []string{"session-first", "session-second"} {
@@ -301,7 +279,7 @@ func TestDetachedRouterKeepsConcurrentSessionsIsolated(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			_, err := operations.Invoke(context.Background(), factorysessions.SessionInvokeRequest{SessionID: sessionID})
+			_, err := assembly.InvokeFactorySession(context.Background(), sessionID, factorysessions.InvocationRequest{})
 			errorsCh <- err
 		}()
 	}

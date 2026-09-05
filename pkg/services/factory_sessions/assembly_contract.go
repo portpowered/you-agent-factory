@@ -3,11 +3,11 @@ package factorysessions
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"strings"
 )
 
 // RuntimeSidecars owns runtime-scoped background services without exposing
@@ -114,134 +114,61 @@ func (err *InvocationValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", err.Field, err.Message)
 }
 
-// DetachedOperations is the canonical detached view over an existing Factory
-// Sessions operation owner. It owns no registry and constructs no child
-// service; each method translates a value-only request to the existing live
-// or durable owner operation and returns a detached projection. Transport
-// compatibility capabilities remain explicit on the owner and are not folded
-// back into the aggregate Service.
+// DetachedOperations is a one-way compatibility view over an already-composed
+// Factory Sessions Service. It retains only the singular owner: it does not
+// construct a service, registry, lifecycle, or mode-specific sidecar.
 type DetachedOperations struct {
-	owner       Service
-	liveControl LiveControlService
-	liveResults LiveResultService
+	owner Service
 }
 
-// Bind attaches the P4-A operation view to the already-composed Sessions root.
-// Binding is inert: it retains the owner and constructs no child service.
+// Bind attaches the detached view to the already-composed Sessions root.
+// Binding is inert and performs no capability discovery or child construction.
 func (operations *DetachedOperations) Bind(owner Service) (DetachedService, error) {
 	if owner == nil {
 		return nil, ErrDetachedServiceUnavailable
-	}
-	liveControl, ok := owner.(LiveControlService)
-	if !ok {
-		return nil, fmt.Errorf("%w: live control capability is required", ErrDetachedServiceUnavailable)
-	}
-	liveResults, ok := owner.(LiveResultService)
-	if !ok {
-		return nil, fmt.Errorf("%w: live result capability is required", ErrDetachedServiceUnavailable)
 	}
 	if operations == nil {
 		operations = &DetachedOperations{}
 	}
 	operations.owner = owner
-	operations.liveControl = liveControl
-	operations.liveResults = liveResults
 	return operations, nil
 }
 
+func (operations *DetachedOperations) service() (Service, error) {
+	if operations == nil || operations.owner == nil {
+		return nil, ErrDetachedServiceUnavailable
+	}
+	return operations.owner, nil
+}
+
+// Start forwards directly to the canonical Service operation. Validation and
+// mode selection remain owned by the singular Service.
 func (operations *DetachedOperations) Start(
 	ctx context.Context,
 	request SessionStartRequest,
 ) (SessionStartResult, error) {
-	if err := validateDetachedStartRequest(request); err != nil {
+	owner, err := operations.service()
+	if err != nil {
 		return SessionStartResult{}, err
 	}
-	if operations == nil || operations.owner == nil {
-		return SessionStartResult{}, ErrDetachedServiceUnavailable
-	}
-
-	switch request.Mode {
-	case SessionOperationModeLive:
-		opened, err := operations.owner.OpenFactorySession(ctx, OpenRequest{
-			FolderPath:     strings.TrimSpace(request.FolderPath),
-			Target:         cloneTargetRef(request.Target),
-			ValidateOnly:   request.ValidateOnly,
-			InitNewFactory: request.InitNewFactory,
-		})
-		if err != nil {
-			return SessionStartResult{}, err
-		}
-		if opened == nil {
-			return SessionStartResult{}, fmt.Errorf("open Factory Session returned no result")
-		}
-		live := detachedOpenResult(*opened)
-		return SessionStartResult{
-			SessionID: opened.SessionID,
-			Mode:      SessionOperationModeLive,
-			Status:    "OPENED",
-			Live:      &live,
-		}, nil
-	case SessionOperationModeDurable:
-		legacyRequest := legacyStartRequest(request)
-		if request.Synchronous {
-			started, err := operations.owner.StartSync(ctx, legacyRequest)
-			if err != nil {
-				return SessionStartResult{}, err
-			}
-			return SessionStartResult{
-				SessionID: started.SessionID,
-				Mode:      SessionOperationModeDurable,
-				Status:    startedStatus(started.AsyncStartResult.Status, string(started.SyncOutcome)),
-				Sync:      cloneSyncStartResult(&started),
-			}, nil
-		}
-		started, err := operations.owner.StartAsync(ctx, legacyRequest)
-		if err != nil {
-			return SessionStartResult{}, err
-		}
-		return SessionStartResult{
-			SessionID: started.SessionID,
-			Mode:      SessionOperationModeDurable,
-			Status:    started.Status,
-			Async:     cloneAsyncStartResult(&started),
-		}, nil
-	default:
-		return SessionStartResult{}, detachedRequestError("mode", "mode must be live or durable")
-	}
+	return owner.Start(ctx, request)
 }
 
+// Invoke forwards directly to the canonical Service operation.
 func (operations *DetachedOperations) Invoke(
 	ctx context.Context,
 	request SessionInvokeRequest,
 ) (InvocationResult, error) {
-	if err := validateSessionID(request.SessionID); err != nil {
+	owner, err := operations.service()
+	if err != nil {
 		return InvocationResult{}, err
 	}
-	if request.Wait.TimeoutMillis < 0 {
-		return InvocationResult{}, detachedRequestError("wait.timeoutMillis", "timeout must not be negative")
-	}
-	if operations == nil || operations.owner == nil {
-		return InvocationResult{}, ErrDetachedServiceUnavailable
-	}
-
-	legacyRequest := InvocationRequest{}
-	if request.Input != nil {
-		legacyRequest.PreparedInvocationInput = request.Input.Clone()
-		legacyRequest.ContentProvided = true
-		sourceKind := InvocationInputSourceKind(request.Input.Source)
-		legacyRequest.SourceKind = &sourceKind
-	}
-	if request.Correlation.RequestID != "" {
-		requestID := strings.TrimSpace(request.Correlation.RequestID)
-		legacyRequest.RequestID = &requestID
-	}
-	if request.Wait.TimeoutMillis > 0 {
-		timeoutMillis := request.Wait.TimeoutMillis
-		legacyRequest.TimeoutMillis = &timeoutMillis
-	}
-	return operations.owner.InvokeFactorySession(ctx, request.SessionID, legacyRequest)
+	return owner.Invoke(ctx, request)
 }
 
+// Activate remains a temporary named-activation compatibility exception. The
+// target canonical vocabulary intentionally excludes named activation; FSCP-08
+// owns its eventual migration.
 func (operations *DetachedOperations) Activate(
 	ctx context.Context,
 	request SessionActivateRequest,
@@ -249,8 +176,9 @@ func (operations *DetachedOperations) Activate(
 	if err := validateSessionID(request.SessionID); err != nil {
 		return SessionActivateResult{}, err
 	}
-	if operations == nil || operations.owner == nil {
-		return SessionActivateResult{}, ErrDetachedServiceUnavailable
+	owner, err := operations.service()
+	if err != nil {
+		return SessionActivateResult{}, err
 	}
 	name := strings.TrimSpace(request.FactoryName)
 	if name == "" {
@@ -259,7 +187,7 @@ func (operations *DetachedOperations) Activate(
 	if name == "" {
 		return SessionActivateResult{}, detachedRequestError("factoryName", "factory name is required")
 	}
-	if err := operations.owner.ActivateNamedFactory(ctx, name); err != nil {
+	if err := owner.ActivateNamedFactory(ctx, name); err != nil {
 		return SessionActivateResult{}, err
 	}
 	return SessionActivateResult{
@@ -269,180 +197,56 @@ func (operations *DetachedOperations) Activate(
 	}, nil
 }
 
+// Get forwards directly to the canonical Service operation.
 func (operations *DetachedOperations) Get(
 	ctx context.Context,
 	request SessionGetRequest,
 ) (SessionGetResult, error) {
-	if err := validateSessionID(request.SessionID); err != nil {
+	owner, err := operations.service()
+	if err != nil {
 		return SessionGetResult{}, err
 	}
-	if operations == nil || operations.owner == nil {
-		return SessionGetResult{}, ErrDetachedServiceUnavailable
-	}
-
-	switch request.Mode {
-	case SessionOperationModeLive:
-		projection, err := operations.owner.GetFactorySession(ctx, request.SessionID)
-		if err != nil {
-			return SessionGetResult{}, err
-		}
-		return SessionGetResult{Session: detachedLiveSessionView(projection)}, nil
-	case SessionOperationModeDurable:
-		projection, err := operations.owner.GetSession(ctx, request.SessionID)
-		if err != nil {
-			return SessionGetResult{}, err
-		}
-		return SessionGetResult{Session: detachedDurableView(projection)}, nil
-	default:
-		return SessionGetResult{}, detachedRequestError("mode", "mode must be live or durable")
-	}
+	return owner.Get(ctx, request)
 }
 
+// List forwards directly to the canonical Service operation.
 func (operations *DetachedOperations) List(
 	ctx context.Context,
 	request SessionListRequest,
 ) (SessionListResult, error) {
-	if operations == nil || operations.owner == nil {
-		return SessionListResult{}, ErrDetachedServiceUnavailable
+	owner, err := operations.service()
+	if err != nil {
+		return SessionListResult{}, err
 	}
-
-	result := SessionListResult{Mode: request.Mode}
-	switch request.Mode {
-	case SessionOperationModeLive:
-		live, err := operations.owner.ListFactorySessions(ctx)
-		if err != nil {
-			return SessionListResult{}, err
-		}
-		result.Sessions = make([]SessionView, 0, len(live))
-		for _, projection := range live {
-			result.Sessions = append(result.Sessions, detachedLiveReadView(projection))
-		}
-		return result, nil
-	case SessionOperationModeDurable:
-		durable, err := operations.owner.ListSessions(ctx, ListSessionsRequest{
-			Scope:   SessionListScopePersisted,
-			Filters: cloneSessionListFilters(request.Filters),
-		})
-		if err != nil {
-			return SessionListResult{}, err
-		}
-		result.Sessions = durableSessionViews(durable.DurableSessions)
-		return result, nil
-	case SessionOperationModeAll:
-		live, err := operations.owner.ListFactorySessions(ctx)
-		if err != nil {
-			return SessionListResult{}, err
-		}
-		durable, err := operations.owner.ListSessions(ctx, ListSessionsRequest{
-			Scope:   SessionListScopePersisted,
-			Filters: cloneSessionListFilters(request.Filters),
-		})
-		if err != nil {
-			return SessionListResult{}, err
-		}
-		result.Sessions = make([]SessionView, 0, len(live)+len(durable.DurableSessions))
-		for _, projection := range live {
-			result.Sessions = append(result.Sessions, detachedLiveReadView(projection))
-		}
-		result.Sessions = append(result.Sessions, durableSessionViews(durable.DurableSessions)...)
-		return result, nil
-	default:
-		return SessionListResult{}, detachedRequestError("mode", "mode must be live, durable, or all")
-	}
+	return owner.List(ctx, request)
 }
 
+// Control forwards directly to the canonical Service operation.
 func (operations *DetachedOperations) Control(
 	ctx context.Context,
 	request SessionControlRequest,
 ) (SessionControlResult, error) {
-	if err := validateSessionID(request.SessionID); err != nil {
+	owner, err := operations.service()
+	if err != nil {
 		return SessionControlResult{}, err
 	}
-	if operations == nil || operations.owner == nil {
-		return SessionControlResult{}, ErrDetachedServiceUnavailable
-	}
-	control := request.Control
-	if control.RequestID == "" {
-		control.RequestID = strings.TrimSpace(request.Correlation.RequestID)
-	}
-	if control.TurnID == "" {
-		control.TurnID = strings.TrimSpace(request.Correlation.TurnID)
-	}
-
-	switch request.Mode {
-	case SessionOperationModeLive:
-		return operations.controlLive(ctx, request, control)
-	case SessionOperationModeDurable:
-		return operations.controlDurable(ctx, request, control)
-	default:
-		return SessionControlResult{}, detachedRequestError("mode", "mode must be live or durable")
-	}
+	return owner.Control(ctx, request)
 }
 
+// ReadResult forwards directly to the canonical Service operation.
 func (operations *DetachedOperations) ReadResult(
 	ctx context.Context,
 	request SessionResultReadRequest,
 ) (SessionResultReadResult, error) {
-	if err := validateSessionID(request.SessionID); err != nil {
+	owner, err := operations.service()
+	if err != nil {
 		return SessionResultReadResult{}, err
 	}
-	if operations == nil || operations.owner == nil {
-		return SessionResultReadResult{}, ErrDetachedServiceUnavailable
-	}
-
-	switch request.Mode {
-	case SessionOperationModeDurable:
-		result, err := operations.owner.GetResult(ctx, request.SessionID, request.Request)
-		if err != nil {
-			return SessionResultReadResult{}, err
-		}
-		return SessionResultReadResult{
-			SessionID: request.SessionID,
-			Mode:      SessionOperationModeDurable,
-			Status:    string(result.ResultStatus),
-			Durable:   cloneDurableResult(result),
-		}, nil
-	case SessionOperationModeLive:
-		if operations.liveResults == nil {
-			return SessionResultReadResult{}, ErrDetachedServiceUnavailable
-		}
-		if request.Request.Mode == ResultModePartial {
-			result, err := operations.liveResults.GetFactorySessionPartialResult(ctx, request.SessionID)
-			if err != nil {
-				return SessionResultReadResult{}, err
-			}
-			return SessionResultReadResult{
-				SessionID: request.SessionID,
-				Mode:      SessionOperationModeLive,
-				Status:    "PARTIAL",
-				Live: &SessionLiveResult{
-					SessionID:         result.SessionID,
-					Status:            "PARTIAL",
-					CheckpointRefs:    cloneCheckpointRefs(result.CheckpointRefs),
-					ResultArtifactRef: cloneArtifactRef(result.PartialResultArtifactRef),
-				},
-			}, nil
-		}
-		result, err := operations.liveResults.GetFactorySessionResult(ctx, request.SessionID)
-		if err != nil {
-			return SessionResultReadResult{}, err
-		}
-		return SessionResultReadResult{
-			SessionID: request.SessionID,
-			Mode:      SessionOperationModeLive,
-			Status:    fmt.Sprint(result.Status),
-			Live: &SessionLiveResult{
-				SessionID:         result.SessionID,
-				Status:            fmt.Sprint(result.Status),
-				CheckpointRefs:    cloneCheckpointRefs(result.CheckpointRefs),
-				ResultArtifactRef: cloneArtifactRef(result.ResultArtifactRef),
-			},
-		}, nil
-	default:
-		return SessionResultReadResult{}, detachedRequestError("mode", "mode must be live or durable")
-	}
+	return owner.ReadResult(ctx, request)
 }
 
+// PrepareSync is intentionally pure. It selects the synchronous wait values
+// and clones caller-owned input without constructing or invoking a service.
 func (operations *DetachedOperations) PrepareSync(
 	_ context.Context,
 	request SessionSyncPreparationRequest,
@@ -464,240 +268,16 @@ func (operations *DetachedOperations) PrepareSync(
 	return SessionPreparedSyncStart{Request: start, Wait: start.Wait}, nil
 }
 
+// Subscribe forwards directly to the canonical response-subscription operation.
 func (operations *DetachedOperations) Subscribe(
 	ctx context.Context,
 	request SessionResponseSubscriptionRequest,
 ) (SessionResponseSubscriptionResult, error) {
-	if err := validateSessionID(request.SessionID); err != nil {
-		return SessionResponseSubscriptionResult{}, err
-	}
-	if request.AfterSequence < 0 {
-		return SessionResponseSubscriptionResult{}, detachedRequestError("afterSequence", "sequence must not be negative")
-	}
-	if operations == nil || operations.owner == nil {
-		return SessionResponseSubscriptionResult{}, ErrDetachedServiceUnavailable
-	}
-	cursor, err := operations.owner.SubscribeFactoryResponseEvents(ctx, ResponseEventSubscriptionRequest{
-		SessionID:     request.SessionID,
-		AfterSequence: request.AfterSequence,
-		DispatchID:    request.DispatchID,
-		Kinds:         append([]ResponseEventKind(nil), request.Kinds...),
-	})
+	owner, err := operations.service()
 	if err != nil {
 		return SessionResponseSubscriptionResult{}, err
 	}
-	return SessionResponseSubscriptionResult{Cursor: cursor}, nil
-}
-
-func (operations *DetachedOperations) controlLive(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	if request.Operation == SessionControlClose || request.Operation == SessionControlCancel || request.Operation == SessionControlTerminate {
-		if err := operations.liveControl.CloseFactorySession(ctx, request.SessionID); err != nil {
-			return SessionControlResult{}, err
-		}
-		return SessionControlResult{
-			SessionID: request.SessionID,
-			Mode:      SessionOperationModeLive,
-			Operation: request.Operation,
-			Closed:    true,
-		}, nil
-	}
-	var (
-		result LifecycleControlResult
-		err    error
-	)
-	switch request.Operation {
-	case SessionControlPause:
-		result, err = operations.liveControl.PauseLiveFactorySession(ctx, request.SessionID, control)
-	case SessionControlResume:
-		result, err = operations.liveControl.ResumeLiveFactorySession(ctx, request.SessionID, control)
-	default:
-		return SessionControlResult{}, detachedRequestError("operation", "unsupported live control operation")
-	}
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return detachedControlResult(request, result), nil
-}
-
-func (operations *DetachedOperations) controlDurable(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	switch request.Operation {
-	case SessionControlPause:
-		return operations.forwardDurableControl(ctx, request, control, operations.owner.Pause)
-	case SessionControlResume:
-		return operations.forwardDurableControl(ctx, request, control, operations.owner.Resume)
-	case SessionControlCancel:
-		return operations.forwardDurableControl(ctx, request, control, operations.owner.Cancel)
-	case SessionControlTerminate:
-		return operations.forwardDurableControl(ctx, request, control, operations.owner.Terminate)
-	case SessionControlRecover:
-		return operations.controlRecover(ctx, request, control)
-	case SessionControlApprove:
-		return operations.controlApprove(ctx, request, control)
-	case SessionControlRetryDispatch:
-		return operations.controlRetryDispatch(ctx, request, control)
-	case SessionControlInterruptDispatch:
-		return operations.controlInterruptDispatch(ctx, request, control)
-	default:
-		return SessionControlResult{}, detachedRequestError("operation", "unsupported durable control operation")
-	}
-}
-
-func (operations *DetachedOperations) forwardDurableControl(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-	operation func(context.Context, string, ControlRequest) (LifecycleControlResult, error),
-) (SessionControlResult, error) {
-	result, err := operation(ctx, request.SessionID, control)
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return detachedControlResult(request, result), nil
-}
-
-func (operations *DetachedOperations) controlRecover(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	recovery := ResumeSessionRequest{RequestID: control.RequestID}
-	if request.Recover != nil {
-		recovery = *request.Recover
-		if recovery.RequestID == "" {
-			recovery.RequestID = control.RequestID
-		}
-	}
-	started, err := operations.owner.ResumeInterruptedSession(ctx, request.SessionID, recovery)
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return SessionControlResult{
-		SessionID: request.SessionID,
-		Mode:      SessionOperationModeDurable,
-		Operation: request.Operation,
-		Status:    LifecycleStatus(started.Status),
-		Recovery:  cloneAsyncStartResult(&started),
-	}, nil
-}
-
-func (operations *DetachedOperations) controlApprove(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	approve := ApproveRequest{ControlRequest: control}
-	if request.Approve != nil {
-		approve = cloneApproveRequest(*request.Approve)
-		if approve.RequestID == "" {
-			approve.RequestID = control.RequestID
-		}
-	}
-	result, err := operations.owner.Approve(ctx, request.SessionID, approve)
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return detachedControlResult(request, result), nil
-}
-
-func (operations *DetachedOperations) controlRetryDispatch(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	retry := RetryDispatchRequest{ControlRequest: control}
-	if request.Retry != nil {
-		retry = cloneRetryRequest(*request.Retry)
-		if retry.RequestID == "" {
-			retry.RequestID = control.RequestID
-		}
-	}
-	result, err := operations.owner.RetryDispatch(ctx, request.SessionID, retry)
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return detachedControlResult(request, result), nil
-}
-
-func (operations *DetachedOperations) controlInterruptDispatch(
-	ctx context.Context,
-	request SessionControlRequest,
-	control ControlRequest,
-) (SessionControlResult, error) {
-	interrupt := InterruptDispatchRequest{ControlRequest: control}
-	if request.Interrupt != nil {
-		interrupt = cloneInterruptRequest(*request.Interrupt)
-		if interrupt.RequestID == "" {
-			interrupt.RequestID = control.RequestID
-		}
-	}
-	result, err := operations.owner.InterruptDispatch(ctx, request.SessionID, interrupt)
-	if err != nil {
-		return SessionControlResult{}, err
-	}
-	return detachedControlResult(request, result), nil
-}
-func detachedControlResult(request SessionControlRequest, result LifecycleControlResult) SessionControlResult {
-	return SessionControlResult{
-		SessionID:         request.SessionID,
-		Mode:              request.Mode,
-		Operation:         request.Operation,
-		Outcome:           result.Outcome,
-		Status:            result.Status,
-		Detail:            result.Detail,
-		ApprovalPreviewID: result.ApprovalPreviewID,
-		DispatchID:        result.DispatchID,
-		RetryDispatchID:   result.RetryDispatchID,
-		Links:             result.Links,
-	}
-}
-
-func legacyStartRequest(request SessionStartRequest) StartRequest {
-	source := cloneSource(request.Source)
-	if source.Kind == "" && strings.TrimSpace(request.Definition.FactoryID) != "" {
-		source.Kind = factoryruntime.WorkflowSourceKindFactoryID
-		source.FactoryID = strings.TrimSpace(request.Definition.FactoryID)
-	}
-	legacy := StartRequest{
-		RequestID:       strings.TrimSpace(request.Correlation.RequestID),
-		Source:          source,
-		Args:            cloneAnyMap(request.Args),
-		RequestedPolicy: cloneAnyMap(request.Policy),
-		Orchestrator:    cloneOrchestratorOverride(request.Orchestrator),
-		Runtime:         cloneRuntimeOptions(request.RuntimeOptions),
-	}
-	if len(legacy.Args) == 0 && request.Input != nil && request.Input.NormalizedArguments != nil {
-		legacy.Args = normalizedArgumentsToValues(request.Input.NormalizedArguments)
-	}
-	if request.Wait.TimeoutMillis > 0 || request.Wait.CancelOnTimeout {
-		timeout := request.Wait.TimeoutMillis
-		legacy.Wait = &WaitOptions{TimeoutMillis: &timeout, CancelOnTimeout: request.Wait.CancelOnTimeout}
-	}
-	return legacy
-}
-
-func validateDetachedStartRequest(request SessionStartRequest) error {
-	if request.Wait.TimeoutMillis < 0 {
-		return detachedRequestError("wait.timeoutMillis", "timeout must not be negative")
-	}
-	switch request.Mode {
-	case SessionOperationModeLive:
-		return nil
-	case SessionOperationModeDurable:
-		if strings.TrimSpace(request.Correlation.RequestID) == "" {
-			return detachedRequestError("correlation.requestId", "request id is required")
-		}
-		return nil
-	default:
-		return detachedRequestError("mode", "mode must be live or durable")
-	}
+	return owner.SubscribeResponses(ctx, request)
 }
 
 func validateSessionID(sessionID string) error {
@@ -711,108 +291,9 @@ func detachedRequestError(field, message string) error {
 	return &DetachedRequestError{Field: field, Message: message}
 }
 
-func startedStatus(status, fallback string) string {
-	if strings.TrimSpace(status) != "" {
-		return status
-	}
-	return fallback
-}
-
-func detachedLiveReadView(projection ReadProjection) SessionView {
-	return detachedLiveView(projection.Context, projection.Runtime, projection.RuntimeAvailable)
-}
-
-func detachedLiveSessionView(projection SessionProjection) SessionView {
-	runtimeAvailable := projection.Context.Session != nil && projection.Context.Session.Runtime != nil
-	return detachedLiveView(projection.Context, projection.Runtime, runtimeAvailable)
-}
-
-func detachedOpenResult(opened OpenResult) SessionOpenResult {
-	result := SessionOpenResult{
-		SessionID:             opened.SessionID,
-		Targets:               append([]Target(nil), opened.Targets...),
-		InitializedNewFactory: opened.InitsNewFactory,
-		FolderPath:            opened.FolderPath,
-	}
-	if opened.Session == nil {
-		return result
-	}
-	status := "OPENED"
-	runtimeAvailable := opened.Session.Runtime != nil
-	if opened.Session.Runtime != nil && opened.Session.Runtime.Status != "" {
-		status = opened.Session.Runtime.Status
-	}
-	view := detachedLiveView(
-		ProjectionContext{Session: opened.Session, FactorySessionID: opened.Session.ID},
-		RuntimeProjection{},
-		runtimeAvailable,
-	)
-	view.Status = status
-	result.Session = &view
-	return result
-}
-
-func detachedLiveView(
-	context ProjectionContext,
-	runtime RuntimeProjection,
-	runtimeAvailable bool,
-) SessionView {
-	view := SessionView{
-		Mode:             SessionOperationModeLive,
-		RuntimeAvailable: runtimeAvailable,
-		Status:           runtime.Status,
-	}
-	if context.Session != nil {
-		session := context.Session
-		view.SessionID = session.ID
-		view.FactoryDir = session.FactoryDir
-		view.FolderPath = session.FolderPath
-		view.Project = session.Project
-		view.IsDefault = session.IsDefault
-		view.Target = session.Target
-	}
-	if view.SessionID == "" {
-		view.SessionID = context.FactorySessionID
-	}
-	return view
-}
-
-func detachedDurableView(projection SessionReadResult) SessionView {
-	view := SessionView{
-		SessionID:        projection.SessionID,
-		Mode:             SessionOperationModeDurable,
-		Status:           string(projection.Status),
-		OrchestratorKind: projection.OrchestratorKind,
-		SourceRef:        projection.ResolvedSource.SourceRef,
-		SourceHash:       projection.SourceHash,
-	}
-	if projection.ResultSummary != nil {
-		view.ResultStatus = projection.ResultSummary.ResultStatus
-	}
-	return view
-}
-
-func durableSessionViews(summaries []DurableSessionListSummary) []SessionView {
-	views := make([]SessionView, 0, len(summaries))
-	for _, summary := range summaries {
-		views = append(views, SessionView{
-			SessionID:        summary.SessionID,
-			Mode:             SessionOperationModeDurable,
-			Status:           string(summary.Status),
-			OrchestratorKind: summary.OrchestratorKind,
-			SourceRef:        summary.ResolvedSource.SourceRef,
-			SourceHash:       summary.SourceHash,
-		})
-	}
-	return views
-}
-
-func cloneSessionListFilters(filters SessionListFilters) SessionListFilters {
-	filters.Statuses = append([]LifecycleStatus(nil), filters.Statuses...)
-	filters.OrchestratorKinds = append([]string(nil), filters.OrchestratorKinds...)
-	return filters
-}
-
+// These cloning helpers are shared by the value-owned Session* request
+// preparation code in types.go. Canonical operation forwarding itself does not
+// translate or clone requests; the Service owner owns that boundary.
 func clonePreparedInput(input *work.PreparedInvocationInput) *work.PreparedInvocationInput {
 	if input == nil {
 		return nil
@@ -857,131 +338,4 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
-}
-
-func normalizedArgumentsToValues(arguments *work.NormalizedArguments) map[string]any {
-	if arguments == nil || len(arguments.Arguments) == 0 {
-		return nil
-	}
-	values := make(map[string]any, len(arguments.Arguments))
-	for name, argument := range arguments.Arguments {
-		if len(argument.Values) == 1 {
-			values[name] = argument.Values[0]
-			continue
-		}
-		values[name] = append([]string(nil), argument.Values...)
-	}
-	return values
-}
-
-func cloneArtifactRef(ref *factorydefinitions.FactoryArtifactRef) *factorydefinitions.FactoryArtifactRef {
-	if ref == nil {
-		return nil
-	}
-	cloned := *ref
-	if ref.ContentHash != nil {
-		contentHash := *ref.ContentHash
-		cloned.ContentHash = &contentHash
-	}
-	if ref.SizeBytes != nil {
-		sizeBytes := *ref.SizeBytes
-		cloned.SizeBytes = &sizeBytes
-	}
-	return &cloned
-}
-
-func cloneCheckpointRefs(refs []factorydefinitions.FactorySessionJavaScriptCheckpointEventRef) []factorydefinitions.FactorySessionJavaScriptCheckpointEventRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	cloned := make([]factorydefinitions.FactorySessionJavaScriptCheckpointEventRef, len(refs))
-	for index, ref := range refs {
-		cloned[index] = ref
-		cloned[index].ArtifactRef = cloneArtifactRef(ref.ArtifactRef)
-		if ref.Label != nil {
-			label := *ref.Label
-			cloned[index].Label = &label
-		}
-		if ref.Summary != nil {
-			summary := *ref.Summary
-			cloned[index].Summary = &summary
-		}
-		if ref.Timestamp != nil {
-			timestamp := *ref.Timestamp
-			cloned[index].Timestamp = &timestamp
-		}
-	}
-	return cloned
-}
-
-func cloneAsyncStartResult(result *AsyncStartResult) *AsyncStartResult {
-	if result == nil {
-		return nil
-	}
-	cloned := *result
-	cloned.Policy.Requested = cloneAnyMap(result.Policy.Requested)
-	cloned.Policy.Effective = cloneAnyMap(result.Policy.Effective)
-	cloned.ResolvedSource = cloneResolvedSource(result.ResolvedSource)
-	return &cloned
-}
-
-func cloneSyncStartResult(result *SyncStartResult) *SyncStartResult {
-	if result == nil {
-		return nil
-	}
-	cloned := *result
-	if async := cloneAsyncStartResult(&result.AsyncStartResult); async != nil {
-		cloned.AsyncStartResult = *async
-	}
-	cloned.Result = append([]byte(nil), result.Result...)
-	return &cloned
-}
-
-func cloneResolvedSource(source ResolvedSource) ResolvedSource {
-	cloned := source
-	cloned.ResolutionOrder = append([]string(nil), source.ResolutionOrder...)
-	cloned.Metadata = cloneStringMap(source.Metadata)
-	cloned.Agents = make(map[string]factorydefinitions.FactoryOrchestratorJavaScriptAgent, len(source.Agents))
-	for name, agent := range source.Agents {
-		cloned.Agents[name] = agent
-	}
-	cloned.ArgsSchema = append([]byte(nil), source.ArgsSchema...)
-	cloned.DefaultPolicy = append([]byte(nil), source.DefaultPolicy...)
-	return cloned
-}
-
-func cloneDurableResult(result ResultReadResult) *SessionDurableResult {
-	cloned := &SessionDurableResult{
-		SessionID:        result.SessionID,
-		Status:           result.ResultStatus,
-		SessionStatus:    result.SessionStatus,
-		Mode:             result.Mode,
-		IncludeArtifacts: result.IncludeArtifacts,
-		PrimaryResult:    append([]byte(nil), result.PrimaryResult...),
-		ArtifactIDs:      append([]string(nil), result.ArtifactIDs...),
-		ArtifactRefs:     append([]ArtifactRefSummary(nil), result.ArtifactRefs...),
-	}
-	if result.Failure != nil {
-		failure := *result.Failure
-		cloned.Failure = &failure
-	}
-	if result.Availability != nil {
-		availability := *result.Availability
-		cloned.Availability = &availability
-	}
-	return cloned
-}
-
-func cloneApproveRequest(request ApproveRequest) ApproveRequest {
-	cloned := request
-	cloned.ApprovedPolicy = cloneAnyMap(request.ApprovedPolicy)
-	return cloned
-}
-
-func cloneRetryRequest(request RetryDispatchRequest) RetryDispatchRequest {
-	return request
-}
-
-func cloneInterruptRequest(request InterruptDispatchRequest) InterruptDispatchRequest {
-	return request
 }
