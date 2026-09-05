@@ -131,12 +131,12 @@ func TestOmniCodecForwardsOrderedMediaAndDetectedTypes(t *testing.T) {
 			{Name: "video", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: "clip.mp4"},
 		},
 	}
-	outputs, err := codec.Invoke(context.Background(), request)
+	result, err := codec.Invoke(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if len(outputs) != 1 || outputs[0].Content != "LOCALAI_FIXTURE_OMNI" {
-		t.Fatalf("outputs = %#v, want fixture text", outputs)
+	if len(result.Content) != 1 || result.Content[0].Content != "LOCALAI_FIXTURE_OMNI" {
+		t.Fatalf("content = %#v, want fixture text", result.Content)
 	}
 	want := PredictRequest{
 		Prompt: "compare",
@@ -150,6 +150,169 @@ func TestOmniCodecForwardsOrderedMediaAndDetectedTypes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(fixture.request, want) {
 		t.Fatalf("protocol request = %#v, want %#v", fixture.request, want)
+	}
+}
+
+func TestOmniCodecReturnsSemanticTextAndUsage(t *testing.T) {
+	t.Parallel()
+
+	const wantText = "Résumé — 世界 🌍"
+	const wantUsage = `{"tokens":3}`
+	fixture := &protocolFixture{response: PredictResponse{Text: wantText, Usage: wantUsage}}
+	codec, err := NewOmniCodec(fixture, PinnedOmniCapability())
+	if err != nil {
+		t.Fatalf("NewOmniCodec: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:semantic-text")
+	if err != nil {
+		t.Fatalf("scope.Parse: %v", err)
+	}
+	operation, ok := (models.GenericOperationCatalog{}).GenericOperationContract(models.OperationOMNI)
+	if !ok {
+		t.Fatal("GenericOperationContract(OMNI) = false")
+	}
+	result, err := codec.Invoke(context.Background(), models.InvokeModelRequest{
+		Scope: scope, Holder: "semantic-text-test", Model: models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs:    []models.InferenceInput{{Name: "prompt", Modality: models.ModalityText, Content: "describe"}},
+	}, operation)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if fixture.calls != 1 {
+		t.Fatalf("protocol calls = %d, want exactly one", fixture.calls)
+	}
+	if len(result.Content) != 2 {
+		t.Fatalf("content = %#v, want text and usage", result.Content)
+	}
+	textOutput := result.Content[0]
+	if textOutput.Name != "text" || textOutput.Modality != models.ModalityText ||
+		textOutput.ContentType != "text/plain" || textOutput.MediaType != "text/plain" ||
+		textOutput.Content != wantText {
+		t.Fatalf("text output = %#v, want exact semantic text metadata", textOutput)
+	}
+	usageOutput := result.Content[1]
+	if usageOutput.Name != "usage" || usageOutput.Modality != models.ModalityJSON ||
+		usageOutput.ContentType != "application/json" || usageOutput.MediaType != "application/json" ||
+		usageOutput.Content != wantUsage {
+		t.Fatalf("usage output = %#v, want separate JSON usage", usageOutput)
+	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want one detached text descriptor", result.Artifacts)
+	}
+}
+
+func TestOmniCodecBuildsUTF8TextArtifactDescriptor(t *testing.T) {
+	t.Parallel()
+
+	const wantText = "é界🙂"
+	fixture := &protocolFixture{response: PredictResponse{Text: wantText, Usage: `{"tokens":4}`}}
+	codec, err := NewOmniCodec(fixture, PinnedOmniCapability())
+	if err != nil {
+		t.Fatalf("NewOmniCodec: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:utf8-artifact")
+	if err != nil {
+		t.Fatalf("scope.Parse: %v", err)
+	}
+	result, err := codec.Invoke(context.Background(), models.InvokeModelRequest{
+		Scope: scope, Holder: "utf8-artifact-test", Model: models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs:    []models.InferenceInput{{Name: "prompt", Modality: models.ModalityText, Content: "describe"}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want exactly one descriptor", result.Artifacts)
+	}
+	descriptor := result.Artifacts[0]
+	if descriptor.Name != "text" || descriptor.MediaType != "text/plain" ||
+		descriptor.SizeBytes != int64(len([]byte(wantText))) {
+		t.Fatalf("descriptor = %#v, want text/plain UTF-8 byte size", descriptor)
+	}
+	if !descriptor.Artifact.IsZero() {
+		t.Fatalf("descriptor identity = %q, want zero before registration", descriptor.Artifact.String())
+	}
+	if descriptor.Properties != nil {
+		t.Fatalf("descriptor properties = %#v, want no unsafe metadata", descriptor.Properties)
+	}
+}
+
+func TestOmniCodecReturnsZeroResultOnFailure(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:atomic-result")
+	if err != nil {
+		t.Fatalf("scope.Parse: %v", err)
+	}
+	baseRequest := models.InvokeModelRequest{
+		Scope: scope, Holder: "atomic-result-test", Model: models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs:    []models.InferenceInput{{Name: "prompt", Modality: models.ModalityText, Content: "describe"}},
+	}
+	canceledContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	protocolErr := errors.New("fixture protocol failure")
+	invalidRequest := baseRequest
+	invalidRequest.Inputs = []models.InferenceInput{{Name: "unknown", Modality: models.ModalityText, Content: "invalid"}}
+	tests := []struct {
+		name      string
+		ctx       context.Context
+		request   models.InvokeModelRequest
+		fixture   protocolFixture
+		wantClass models.InvocationFailureClass
+		wantCalls int
+		wantCause error
+	}{
+		{
+			name: "canceled context", ctx: canceledContext, request: baseRequest,
+			fixture: protocolFixture{response: PredictResponse{Text: "late output"}}, wantCalls: 0,
+			wantCause: context.Canceled,
+		},
+		{
+			name: "encode failure", ctx: context.Background(), request: invalidRequest,
+			fixture: protocolFixture{response: PredictResponse{Text: "must not be used"}}, wantCalls: 0,
+		},
+		{
+			name: "protocol failure", ctx: context.Background(), request: baseRequest,
+			fixture: protocolFixture{err: protocolErr}, wantCalls: 1, wantCause: protocolErr,
+		},
+		{
+			name: "blank response", ctx: context.Background(), request: baseRequest,
+			fixture: protocolFixture{response: PredictResponse{}}, wantCalls: 1,
+			wantClass: models.InvocationFailureClassMalformedResponse,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			fixture := test.fixture
+			codec, err := NewOmniCodec(&fixture, PinnedOmniCapability())
+			if err != nil {
+				t.Fatalf("NewOmniCodec: %v", err)
+			}
+			result, err := codec.Invoke(test.ctx, test.request)
+			if err == nil {
+				t.Fatal("Invoke error = nil, want failure")
+			}
+			if !reflect.DeepEqual(result, OmniInvocationResult{}) {
+				t.Fatalf("Invoke result = %#v, want zero result", result)
+			}
+			if fixture.calls != test.wantCalls {
+				t.Fatalf("protocol calls = %d, want %d", fixture.calls, test.wantCalls)
+			}
+			if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+				t.Fatalf("Invoke error = %v, want cause %v", err, test.wantCause)
+			}
+			if test.wantClass != "" {
+				var failure *models.InvocationFailure
+				if !errors.As(err, &failure) || failure.Class != test.wantClass {
+					t.Fatalf("Invoke error = %v, failure = %#v, want class %q", err, failure, test.wantClass)
+				}
+			}
+		})
 	}
 }
 
@@ -240,6 +403,7 @@ func hasOperationSlot(operation models.Operation, name string) bool {
 type protocolFixture struct {
 	request  PredictRequest
 	response PredictResponse
+	err      error
 	calls    int
 }
 
@@ -256,5 +420,5 @@ func (probe *recordingConformanceProbe) Accepts(request OmniConformanceRequest) 
 func (fixture *protocolFixture) Predict(_ context.Context, request PredictRequest) (PredictResponse, error) {
 	fixture.calls++
 	fixture.request = request
-	return fixture.response, nil
+	return fixture.response, fixture.err
 }

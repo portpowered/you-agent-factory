@@ -601,11 +601,14 @@ func (runtime omniInvocationRuntime) Invoke(
 		return inference.InvocationRuntimeResult{}, models.ErrUnavailable
 	}
 	ctx = localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint)
-	content, err := runtime.codec.Invoke(ctx, request.Request, request.Operation)
+	omniResult, err := runtime.codec.Invoke(ctx, request.Request, request.Operation)
 	if err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
-	return inference.InvocationRuntimeResult{Content: content}, nil
+	return inference.InvocationRuntimeResult{
+		Content:   omniResult.Content,
+		Artifacts: invocationArtifactSources(omniResult.Artifacts),
+	}, nil
 }
 
 type invocationProtocolAdapter struct {

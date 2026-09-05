@@ -93,6 +93,14 @@ func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {
 	if len(result.Content) != 2 || result.Content[0].Name != "text" || result.Content[0].Content != "fixture answer" || result.Content[1].Name != "usage" {
 		t.Fatalf("Invoke content = %#v, want text and declared usage", result.Content)
 	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("Invoke artifacts = %#v, want one forwarded descriptor", result.Artifacts)
+	}
+	artifact := result.Artifacts[0]
+	if artifact.RefValue != "" || artifact.SourcePath != "" || artifact.Name != "text" ||
+		artifact.MediaType != "text/plain" || artifact.SizeBytes != int64(len([]byte("fixture answer"))) {
+		t.Fatalf("Invoke artifact = %#v, want detached zero-reference text metadata", artifact)
+	}
 	if client.request.Operation != models.OperationOMNI || client.request.Prompt != "compare these" {
 		t.Fatalf("protocol request = %#v, want OMNI prompt", client.request)
 	}

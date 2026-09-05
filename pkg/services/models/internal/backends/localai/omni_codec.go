@@ -35,6 +35,14 @@ type PredictResponse struct {
 	Usage string
 }
 
+// OmniInvocationResult is private LocalAI/Models output. Artifact identity is
+// intentionally zero here; the Models Inference registrar owns opaque
+// identity assignment.
+type OmniInvocationResult struct {
+	Content   []models.InferenceContent
+	Artifacts []models.InferenceArtifact
+}
+
 // ProtocolClient is the only execution dependency needed by the codec. A
 // production adapter or a deterministic fixture may implement it; neither
 // leaks LocalAI protocol types through the Models public boundary.
@@ -112,23 +120,24 @@ func (codec *OmniCodec) Encode(request models.InvokeModelRequest) (PredictReques
 }
 
 // Invoke performs one protocol call after Encode has completed all local
-// capability and slot validation, then returns provider-neutral content. An
-// optional effective operation lets response metadata be retained only when
-// the caller's declared output contract includes that slot.
+// capability and slot validation, then returns provider-neutral content and
+// detached artifact metadata. An optional effective operation lets response
+// metadata be retained only when the caller's declared output contract
+// includes that slot.
 func (codec *OmniCodec) Invoke(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 	operations ...models.Operation,
-) ([]models.InferenceContent, error) {
+) (OmniInvocationResult, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return OmniInvocationResult{}, err
 	}
 	predict, err := codec.Encode(request)
 	if err != nil {
-		return nil, err
+		return OmniInvocationResult{}, err
 	}
 	if codec == nil || codec.client == nil {
-		return nil, &models.InvocationFailure{
+		return OmniInvocationResult{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassBackendProtocol,
 			Model:     request.Model,
 			Operation: models.OperationOMNI,
@@ -138,10 +147,10 @@ func (codec *OmniCodec) Invoke(
 	}
 	response, err := codec.client.Predict(ctx, predict)
 	if err != nil {
-		return nil, err
+		return OmniInvocationResult{}, err
 	}
 	if strings.TrimSpace(response.Text) == "" {
-		return nil, &models.InvocationFailure{
+		return OmniInvocationResult{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassMalformedResponse,
 			Model:     request.Model,
 			Operation: models.OperationOMNI,
@@ -163,7 +172,14 @@ func (codec *OmniCodec) Invoke(
 			Content: response.Usage,
 		})
 	}
-	return content, nil
+	return OmniInvocationResult{
+		Content: content,
+		Artifacts: []models.InferenceArtifact{{
+			Name:      "text",
+			MediaType: "text/plain",
+			SizeBytes: int64(len([]byte(response.Text))),
+		}},
+	}, nil
 }
 
 func declaresOutputSlot(operations []models.Operation, name string) bool {
