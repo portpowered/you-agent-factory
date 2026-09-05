@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -80,7 +79,7 @@ func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.DetachedS
 
 func assertProcessComposedDurableOwner(
 	t *testing.T,
-	openingCapability processcontract.ExecutionRuntimeOpeningCapability,
+	openingCapability executionRuntimeOpeningCapability,
 	factoryDir, home string,
 ) {
 	t.Helper()
@@ -180,6 +179,10 @@ type canonicalSessionsOperations interface {
 	ReadResult(context.Context, factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error)
 	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
 	SubscribeResponses(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error)
+}
+
+type executionRuntimeOpeningCapability interface {
+	ExecutionRuntimeOpening() any
 }
 
 func isolatedEnvironment(home string) []string {
