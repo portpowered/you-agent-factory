@@ -2135,6 +2135,21 @@ def worktree_is_valid(worktree_path):
     return len(entries) > 0
 
 
+def add_worktree_or_reuse(repo_root, worktree_path, *git_args):
+    """Converge when another admission wins the same destination race."""
+    try:
+        run_git("worktree", "add", *git_args, cwd=repo_root)
+    except RuntimeError:
+        if worktree_path.exists() and worktree_is_valid(worktree_path):
+            print(
+                "Worktree preparation: reused destination admitted concurrently",
+                file=sys.stderr,
+            )
+            return True
+        raise
+    return False
+
+
 def branch_exists_locally(repo_root, branch):
     """Check if a branch exists as a local ref."""
     result = run_git(
@@ -2254,24 +2269,28 @@ def create_or_reuse_worktree(
     worktree_path.parent.mkdir(parents=True, exist_ok=True)
 
     if branch_exists_locally(repo_root, branch):
-        run_git(
-            "worktree", "add", str(worktree_path), branch,
-            cwd=repo_root,
+        return add_worktree_or_reuse(
+            repo_root, worktree_path, str(worktree_path), branch,
         )
     elif branch_exists_on_remote(repo_root, branch):
-        run_git(
-            "worktree", "add", "--track", "-b", branch,
-            str(worktree_path), f"origin/{branch}",
-            cwd=repo_root,
+        return add_worktree_or_reuse(
+            repo_root,
+            worktree_path,
+            "--track",
+            "-b",
+            branch,
+            str(worktree_path),
+            f"origin/{branch}",
         )
     else:
-        run_git(
-            "worktree", "add", "-b", branch, str(worktree_path),
+        return add_worktree_or_reuse(
+            repo_root,
+            worktree_path,
+            "-b",
+            branch,
+            str(worktree_path),
             resolve_worktree_start_point(fresh_origin_main_sha),
-            cwd=repo_root,
         )
-
-    return False
 
 
 def copy_prd_files(prd_json_path, prd_md_path, worktree_path):
