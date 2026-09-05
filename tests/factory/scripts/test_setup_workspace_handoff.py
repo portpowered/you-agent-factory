@@ -13,6 +13,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from preflight_test_support import write_packet as write_v1_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -87,13 +89,23 @@ def create_nested_worktree(repo_path, prd_name, seed=True, branch=None):
 
 
 def write_packet(worktree_path, prd_name, payload=None, markdown=None):
-    packet_dir = worktree_path / "tasks" / "todo"
-    packet_dir.mkdir(parents=True, exist_ok=True)
-    packet = payload if payload is not None else {"branchName": prd_name}
-    packet_path = packet_dir / f"{prd_name}.json"
-    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+    if not (worktree_path / ".git").exists():
+        packet_dir = worktree_path / "tasks" / "todo"
+        packet_dir.mkdir(parents=True, exist_ok=True)
+        packet = payload if payload is not None else {"branchName": prd_name}
+        packet_path = packet_dir / f"{prd_name}.json"
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        if markdown is not None:
+            packet_path.with_suffix(".md").write_text(markdown, encoding="utf-8")
+        return packet_path
+    packet_path, _ = write_v1_packet(
+        worktree_path,
+        prd_name,
+        payload,
+        include_md=markdown is not None,
+    )
     if markdown is not None:
-        (packet_dir / f"{prd_name}.md").write_text(markdown, encoding="utf-8")
+        packet_path.with_suffix(".md").write_text(markdown, encoding="utf-8")
     return packet_path
 
 

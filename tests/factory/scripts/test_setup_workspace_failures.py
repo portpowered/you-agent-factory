@@ -13,6 +13,8 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
+from preflight_test_support import write_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -44,38 +46,7 @@ def init_local_repo(repo_path):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
-    exclude_path = repo_path / ".git" / "info" / "exclude"
-    existing_excludes = (
-        exclude_path.read_text(encoding="utf-8")
-        if exclude_path.exists()
-        else ""
-    )
-    missing_excludes = [
-        entry
-        for entry in ("tasks/todo/", ".claude/")
-        if entry not in existing_excludes.splitlines()
-    ]
-    if missing_excludes:
-        exclude_path.write_text(
-            existing_excludes.rstrip("\n")
-            + "\n"
-            + "\n".join(missing_excludes)
-            + "\n",
-            encoding="utf-8",
-        )
-
-    tasks_dir = repo_path / "tasks" / "todo"
-    tasks_dir.mkdir(parents=True)
-    prd_json = tasks_dir / f"{prd_name}.json"
-    prd_json.write_text(
-        json.dumps({"branchName": prd_name}),
-        encoding="utf-8",
-    )
-    prd_md = None
-    if include_md:
-        prd_md = tasks_dir / f"{prd_name}.md"
-        prd_md.write_text(f"# {prd_name}\n", encoding="utf-8")
-    return prd_json, prd_md
+    return write_packet(repo_path, prd_name, include_md=include_md)
 
 
 def run_setup_workspace(repo_path, prd_name):
@@ -349,6 +320,26 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
             check=True,
         )
         subprocess.run(
+            [
+                "git", "config", "user.email",
+                "setup-workspace-test@example.com",
+            ],
+            cwd=local_repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Setup Workspace Test"],
+            cwd=local_repo,
+            check=True,
+        )
+        (local_repo / "README.md").write_text("feature base\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md"], cwd=local_repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "feature base"],
+            cwd=local_repo,
+            check=True,
+        )
+        subprocess.run(
             ["git", "update-ref", "-d", "refs/heads/main"],
             cwd=local_repo,
             check=True,
@@ -464,10 +455,9 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         dest_json = worktree_path / "prd.json"
         dest_json.chmod(0o444)
 
-        prd_json.write_text(
-            json.dumps({"branchName": prd_name, "updated": True}),
-            encoding="utf-8",
-        )
+        packet = json.loads(prd_json.read_text(encoding="utf-8"))
+        packet["updated"] = True
+        prd_json.write_text(json.dumps(packet), encoding="utf-8")
 
         try:
             second = run_setup_workspace(self.repo_path, prd_name)

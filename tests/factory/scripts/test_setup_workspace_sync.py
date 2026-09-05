@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from preflight_test_support import write_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -366,17 +368,12 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         )
         stack_before = stash_list(local_repo)
 
-        tasks_dir = local_repo / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
         (local_repo / ".git" / "info" / "exclude").write_text(
             "tasks/\n",
             encoding="utf-8",
         )
         prd_name = "missing-snapshot-prd"
-        (tasks_dir / f"{prd_name}.json").write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(local_repo, prd_name)
 
         (local_repo / "README.md").write_text("owned unstaged\n", encoding="utf-8")
         staged_file = local_repo / "owned-staged.txt"
@@ -622,13 +619,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         ).stdout.strip()
 
         prd_name = "dirty-tree-prd"
-        tasks_dir = local_repo / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
-        prd_json = tasks_dir / f"{prd_name}.json"
-        prd_json.write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(local_repo, prd_name)
 
         result = subprocess.run(
             ["python3", str(SCRIPT_PATH), prd_name],
@@ -656,13 +647,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
     def test_setup_workspace_continues_after_sync_skip(self):
         init_local_repo(self.repo_path)
         prd_name = "test-workspace-prd"
-        tasks_dir = self.repo_path / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
-        prd_json = tasks_dir / f"{prd_name}.json"
-        prd_json.write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(self.repo_path, prd_name)
 
         result = subprocess.run(
             ["python3", str(SCRIPT_PATH), prd_name],
@@ -689,13 +674,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         git(["add", "staged.txt"], local_repo)
 
         prd_name = "staged-root-prd"
-        tasks_dir = local_repo / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
-        prd_json = tasks_dir / f"{prd_name}.json"
-        prd_json.write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(local_repo, prd_name)
 
         result = subprocess.run(
             ["python3", str(SCRIPT_PATH), prd_name],
@@ -726,13 +705,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         dirty_file.write_text("dirty on main\n", encoding="utf-8")
 
         prd_name = "dirty-main-prd"
-        tasks_dir = local_repo / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
-        prd_json = tasks_dir / f"{prd_name}.json"
-        prd_json.write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(local_repo, prd_name)
 
         result = subprocess.run(
             ["python3", str(SCRIPT_PATH), prd_name],

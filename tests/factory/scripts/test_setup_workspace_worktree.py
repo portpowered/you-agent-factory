@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from preflight_test_support import write_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -20,6 +22,7 @@ EXPECTED_RESULT_KEYS = {
     "prd_md_path",
     "standing_rules_path",
     "reused",
+    "preflight",
 }
 
 
@@ -59,38 +62,7 @@ def git(args, cwd, check=True):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
-    exclude_path = repo_path / ".git" / "info" / "exclude"
-    existing_excludes = (
-        exclude_path.read_text(encoding="utf-8")
-        if exclude_path.exists()
-        else ""
-    )
-    missing_excludes = [
-        entry
-        for entry in ("tasks/todo/", ".claude/")
-        if entry not in existing_excludes.splitlines()
-    ]
-    if missing_excludes:
-        exclude_path.write_text(
-            existing_excludes.rstrip("\n")
-            + "\n"
-            + "\n".join(missing_excludes)
-            + "\n",
-            encoding="utf-8",
-        )
-
-    tasks_dir = repo_path / "tasks" / "todo"
-    tasks_dir.mkdir(parents=True)
-    prd_json = tasks_dir / f"{prd_name}.json"
-    prd_json.write_text(
-        json.dumps({"branchName": prd_name}),
-        encoding="utf-8",
-    )
-    prd_md = None
-    if include_md:
-        prd_md = tasks_dir / f"{prd_name}.md"
-        prd_md.write_text(f"# {prd_name}\n", encoding="utf-8")
-    return prd_json, prd_md
+    return write_packet(repo_path, prd_name, include_md=include_md)
 
 
 def setup_repo_with_origin_main_ahead(local_repo, repo_root):

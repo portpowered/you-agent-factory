@@ -14,6 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from preflight_test_support import write_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -57,13 +59,7 @@ def init_repository(repo_path):
 
 
 def write_prd(repo_path, prd_name):
-    tasks_dir = repo_path / "tasks" / "todo"
-    tasks_dir.mkdir(parents=True)
-    prd_path = tasks_dir / f"{prd_name}.json"
-    prd_path.write_text(
-        json.dumps({"branchName": prd_name}),
-        encoding="utf-8",
-    )
+    write_packet(repo_path, prd_name)
 
 
 def create_remote_operator(base_path):

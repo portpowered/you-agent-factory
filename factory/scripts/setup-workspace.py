@@ -39,6 +39,20 @@ MAX_STATUS_FAILURE_DETAILS = 512
 MAX_FAILURE_DETAILS = 1024
 MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
 FILE_DIGEST_CHUNK_SIZE = 1024 * 1024
+PREFLIGHT_VERSION = "factory-preflight.v1"
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+PREFLIGHT_KEYS = frozenset(
+    {
+        "version",
+        "projectRoot",
+        "projectIdentity",
+        "contractRevision",
+        "authority",
+        "intendedMainline",
+    }
+)
+AUTHORITY_FIELDS = ("sourcePlan", "request", "acceptance")
+FILE_DESCRIPTOR_KEYS = frozenset({"path", "identity", "sha256"})
 WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
     r"(?<![a-z0-9])(?:nul|con|prn|aux|com[1-9]|lpt[1-9])"
     r"(?:\.[^\\/:*?\"<>|\r\n]*)?(?![a-z0-9])",
@@ -48,6 +62,77 @@ _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
 _MISSING_PATH = object()
 _UNAVAILABLE_PATH = object()
+
+
+class FileReadFailure(RuntimeError):
+    """A bounded file-read failure with the last safe byte position."""
+
+    def __init__(self, position):
+        super().__init__("declared input could not be read")
+        self.position = position
+
+
+class PacketPreflightError(RuntimeError):
+    """A stable, bounded diagnostic for a rejected v1 task packet."""
+
+    def __init__(
+        self,
+        category,
+        code,
+        field,
+        *,
+        path=None,
+        identity=None,
+        expected=None,
+        observed=None,
+        required_commit=None,
+        resolved_head=None,
+        next_condition,
+    ):
+        super().__init__(code)
+        self.category = category
+        self.code = code
+        self.field = field
+        self.path = path
+        self.identity = identity
+        self.expected = expected
+        self.observed = observed
+        self.required_commit = required_commit
+        self.resolved_head = resolved_head
+        self.next_condition = next_condition
+
+    def __str__(self):
+        parts = [
+            "input-preflight",
+            f"category={self.category}",
+            f"code={self.code}",
+            f"field={self.field}",
+        ]
+        if self.path is not None:
+            parts.append(f"path={safe_diagnostic_value(self.path)}")
+        if self.identity is not None:
+            parts.append(
+                f"identity={safe_digest_identity(self.identity)}"
+            )
+        renderer = (
+            safe_contract_value
+            if self.code == "contract-mismatch"
+            else safe_digest_value
+        )
+        if self.expected is not None:
+            parts.append(f"expected={renderer(self.expected)}")
+        if self.observed is not None:
+            parts.append(f"observed={renderer(self.observed)}")
+        if self.required_commit is not None:
+            parts.append(
+                f"requiredCommit={safe_commit_value(self.required_commit)}"
+            )
+        if self.resolved_head is not None:
+            parts.append(
+                f"resolvedCheckoutHead={safe_commit_value(self.resolved_head)}"
+            )
+        parts.append(f"next={safe_diagnostic_value(self.next_condition)}")
+        return bounded_failure_details(" ".join(parts))
 
 
 class DirtyRootError(RuntimeError):
@@ -109,6 +194,66 @@ def bounded_failure_details(value, limit=MAX_FAILURE_DETAILS):
     omitted = len(result) - limit
     suffix = f"... ({omitted} more characters)"
     return f"{result[: max(0, limit - len(suffix))]}{suffix}"
+
+
+def safe_diagnostic_value(value):
+    """Render one bounded diagnostic value without exposing raw newlines."""
+    return bounded_failure_details(
+        json.dumps(str(value), ensure_ascii=True),
+        MAX_CANDIDATE_DIAGNOSTIC_PATH_LENGTH,
+    )
+
+
+def safe_digest_value(value):
+    """Render only bounded digest/status values in packet diagnostics."""
+    if isinstance(value, str) and (
+        value
+        in {
+            "missing",
+            "unreadable",
+            "invalid",
+            "partial",
+            "relative",
+            "symlink",
+            "non-regular",
+            "unavailable",
+        }
+        or bool(SHA256_HEX.fullmatch(value))
+    ):
+        return safe_diagnostic_value(value)
+    return safe_diagnostic_value("invalid")
+
+
+def safe_contract_value(value):
+    """Render bounded project/revision evidence without arbitrary packet text."""
+    if (
+        isinstance(value, str)
+        and value
+        and len(value) <= 120
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", value)
+    ):
+        return safe_diagnostic_value(value)
+    return safe_diagnostic_value("invalid")
+
+
+def safe_digest_identity(value):
+    """Render a declared identity only when it has the expected safe shape."""
+    if (
+        isinstance(value, str)
+        and value.startswith("sha256:")
+        and bool(SHA256_HEX.fullmatch(value[len("sha256:") :]))
+    ):
+        return safe_diagnostic_value(value)
+    return safe_diagnostic_value("invalid")
+
+
+def safe_commit_value(value):
+    """Render only complete immutable commit identities."""
+    if value == "missing":
+        return safe_diagnostic_value(value)
+    if isinstance(value, str) and immutable_object_id(value):
+        return safe_diagnostic_value(value)
+    return safe_diagnostic_value("invalid")
 
 
 def is_platform_invalid_path_failure(details):
@@ -860,6 +1005,473 @@ def read_prd(prd_path):
     """Read and parse a PRD JSON file. Returns the parsed dict."""
     with open(prd_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def stream_file_sha256(path):
+    """Hash a declared input in fixed-size chunks and report read position."""
+    digest = hashlib.sha256()
+    position = 0
+    try:
+        with Path(path).open("rb") as stream:
+            while True:
+                chunk = stream.read(FILE_DIGEST_CHUNK_SIZE)
+                if not chunk:
+                    return digest.hexdigest()
+                digest.update(chunk)
+                position += len(chunk)
+    except (OSError, ValueError, UnicodeError) as error:
+        raise FileReadFailure(position) from error
+
+
+def preflight_next_condition(code):
+    """Return the stable operator action for one preflight failure code."""
+    conditions = {
+        "missing-input": "supply the declared immutable input",
+        "malformed-digest": "issue a packet with a valid sha256 digest",
+        "malformed-identity": "issue a packet with a sha256 identity",
+        "identity-mismatch": "align identity with the declared sha256",
+        "digest-mismatch": "restore the declared source bytes or issue a new packet",
+        "input-path": "declare an absolute regular file without a symlink",
+        "input-read": "restore readable source bytes and retry with a fresh packet",
+        "contract-mismatch": "align the project identity and contract revision",
+        "unknown-field": "remove the unknown v1 field and issue a fresh packet",
+        "malformed-commit": "issue a packet with a complete immutable mainline commit",
+        "missing-mainline": "prepare an isolated checkout containing the required commit",
+        "non-ancestor": "prepare the implementation checkout from the required mainline",
+        "mainline-check": "prepare a readable implementation checkout and retry",
+    }
+    return conditions.get(code, "correct the packet and retry with a fresh identity")
+
+
+def packet_preflight_error(category, code, field, **details):
+    """Construct one bounded packet diagnostic with a stable next condition."""
+    return PacketPreflightError(
+        category,
+        code,
+        field,
+        next_condition=preflight_next_condition(code),
+        **details,
+    )
+
+
+def require_preflight_string(value, field, category="contract"):
+    """Require a non-empty string in the packet envelope."""
+    if not isinstance(value, str) or not value.strip():
+        raise packet_preflight_error(category, "missing-input", field)
+    return value
+
+
+def reject_unknown_keys(value, allowed, field, category="contract"):
+    """Reject unknown keys without rendering their values or packet contents."""
+    if not isinstance(value, dict):
+        raise packet_preflight_error(category, "missing-input", field)
+    unknown = sorted(set(value) - set(allowed))
+    if unknown:
+        raise packet_preflight_error(
+            category,
+            "unknown-field",
+            f"{field}.{unknown[0]}",
+        )
+
+
+def validate_digest_identity(descriptor, field, category):
+    """Validate the bounded digest and identity pair for one file."""
+    identity = descriptor.get("identity")
+    sha256 = descriptor.get("sha256")
+    if not isinstance(identity, str):
+        raise packet_preflight_error(
+            category,
+            "missing-input",
+            f"{field}.identity",
+        )
+    if not isinstance(sha256, str):
+        raise packet_preflight_error(
+            category,
+            "missing-input",
+            f"{field}.sha256",
+            identity=identity,
+        )
+    if not identity.startswith("sha256:"):
+        raise packet_preflight_error(
+            category,
+            "malformed-identity",
+            f"{field}.identity",
+            identity=identity,
+        )
+    if not SHA256_HEX.fullmatch(sha256):
+        raise packet_preflight_error(
+            category,
+            "malformed-digest",
+            f"{field}.sha256",
+            identity=identity,
+        )
+    identity_digest = identity[len("sha256:") :]
+    if not SHA256_HEX.fullmatch(identity_digest):
+        raise packet_preflight_error(
+            category,
+            "malformed-identity",
+            f"{field}.identity",
+            identity=identity,
+            expected=sha256,
+        )
+    if identity_digest != sha256:
+        raise packet_preflight_error(
+            category,
+            "identity-mismatch",
+            field,
+            identity=identity,
+            expected=sha256,
+            observed=identity_digest,
+        )
+    return identity, sha256
+
+
+def validate_declared_file_descriptor(descriptor, field, category):
+    """Validate and hash one immutable regular-file descriptor."""
+    reject_unknown_keys(descriptor, FILE_DESCRIPTOR_KEYS, field, category)
+    if not isinstance(descriptor, dict):
+        raise packet_preflight_error(category, "missing-input", field)
+
+    raw_path = descriptor.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        raise packet_preflight_error(category, "missing-input", f"{field}.path")
+    identity, expected_digest = validate_digest_identity(
+        descriptor, field, category,
+    )
+    if not os.path.isabs(raw_path):
+        raise packet_preflight_error(
+            category,
+            "input-path",
+            f"{field}.path",
+            path=raw_path,
+            identity=identity,
+            expected=expected_digest,
+            observed="relative",
+        )
+
+    path = Path(raw_path)
+    try:
+        if any(parent.is_symlink() for parent in (path, *path.parents)):
+            raise packet_preflight_error(
+                category,
+                "input-path",
+                field,
+                path=raw_path,
+                identity=identity,
+                expected=expected_digest,
+                observed="symlink",
+            )
+        if not path.exists():
+            raise packet_preflight_error(
+                category,
+                "missing-input",
+                field,
+                path=raw_path,
+                identity=identity,
+                expected=expected_digest,
+                observed="missing",
+            )
+        if not stat.S_ISREG(path.stat().st_mode):
+            raise packet_preflight_error(
+                category,
+                "input-path",
+                field,
+                path=raw_path,
+                identity=identity,
+                expected=expected_digest,
+                observed="non-regular",
+            )
+    except PacketPreflightError:
+        raise
+    except (OSError, ValueError, UnicodeError) as error:
+        raise packet_preflight_error(
+            category,
+            "input-path",
+            field,
+            path=raw_path,
+            identity=identity,
+            expected=expected_digest,
+            observed="unavailable",
+        ) from error
+
+    try:
+        observed_digest = stream_file_sha256(path)
+    except FileReadFailure as error:
+        raise packet_preflight_error(
+            category,
+            "input-read",
+            field,
+            path=raw_path,
+            identity=identity,
+            expected=expected_digest,
+            observed="partial" if error.position else "unreadable",
+        ) from error
+
+    if observed_digest != expected_digest:
+        raise packet_preflight_error(
+            category,
+            "digest-mismatch",
+            field,
+            path=raw_path,
+            identity=identity,
+            expected=expected_digest,
+            observed=observed_digest,
+        )
+    return {
+        "field": field,
+        "path": raw_path,
+        "identity": identity,
+        "expectedSha256": expected_digest,
+        "observedSha256": observed_digest,
+    }
+
+
+def validate_preflight_contract(prd):
+    """Validate the strict packet envelope before reading declared files."""
+    if not isinstance(prd, dict):
+        raise packet_preflight_error("contract", "missing-input", "packet")
+
+    project = require_preflight_string(prd.get("project"), "project")
+    preflight = prd.get("preflight")
+    reject_unknown_keys(preflight, PREFLIGHT_KEYS, "preflight")
+    if preflight.get("version") != PREFLIGHT_VERSION:
+        raise packet_preflight_error("contract", "contract-mismatch", "preflight.version")
+
+    project_root = require_preflight_string(
+        preflight.get("projectRoot"), "preflight.projectRoot",
+    )
+    if not os.path.isabs(project_root):
+        raise packet_preflight_error(
+            "contract",
+            "input-path",
+            "preflight.projectRoot",
+            path=project_root,
+            observed="relative",
+        )
+
+    project_identity = require_preflight_string(
+        preflight.get("projectIdentity"), "preflight.projectIdentity",
+    )
+    if project != project_identity:
+        raise packet_preflight_error(
+            "contract",
+            "contract-mismatch",
+            "project",
+            expected=project_identity,
+            observed=project,
+        )
+
+    contract_revision = require_preflight_string(
+        preflight.get("contractRevision"), "preflight.contractRevision",
+    )
+    supplied_revision = prd.get("contractRevision")
+    if supplied_revision is not None and supplied_revision != contract_revision:
+        raise packet_preflight_error(
+            "contract",
+            "contract-mismatch",
+            "contractRevision",
+            expected=contract_revision,
+            observed=supplied_revision,
+        )
+
+    authority = preflight.get("authority")
+    reject_unknown_keys(authority, AUTHORITY_FIELDS, "preflight.authority", "authority-input")
+    for field in AUTHORITY_FIELDS:
+        if field not in authority:
+            raise packet_preflight_error(
+                "authority-input",
+                "missing-input",
+                f"preflight.authority.{field}",
+            )
+
+    intended_mainline = preflight.get("intendedMainline")
+    reject_unknown_keys(
+        intended_mainline,
+        {"commit"},
+        "preflight.intendedMainline",
+        "contract",
+    )
+    required_commit = intended_mainline.get("commit")
+    if not isinstance(required_commit, str):
+        raise packet_preflight_error(
+            "contract",
+            "missing-input",
+            "preflight.intendedMainline.commit",
+        )
+    if not immutable_object_id(required_commit):
+        raise packet_preflight_error(
+            "contract",
+            "malformed-commit",
+            "preflight.intendedMainline.commit",
+            required_commit=required_commit,
+        )
+
+    for field in ("build", "fixtures", "publicDocs"):
+        if field not in prd:
+            raise packet_preflight_error("contract", "missing-input", field)
+    build = prd.get("build")
+    fixtures = prd.get("fixtures")
+    public_docs = prd.get("publicDocs")
+    if build is not None and not isinstance(build, dict):
+        raise packet_preflight_error("artifact-input", "missing-input", "build")
+    if not isinstance(fixtures, list):
+        raise packet_preflight_error("artifact-input", "missing-input", "fixtures")
+    if not isinstance(public_docs, list):
+        raise packet_preflight_error(
+            "artifact-input", "missing-input", "publicDocs",
+        )
+
+    return {
+        "projectIdentity": project_identity,
+        "contractRevision": contract_revision,
+        "projectRoot": project_root,
+        "authority": authority,
+        "intendedMainline": intended_mainline,
+        "build": build,
+        "fixtures": fixtures,
+        "publicDocs": public_docs,
+    }
+
+
+def validate_preflight_files(envelope):
+    """Stream every authority and declared artifact input in stable order."""
+    verified_files = []
+    for field in AUTHORITY_FIELDS:
+        verified_files.append(
+            validate_declared_file_descriptor(
+                envelope["authority"][field],
+                f"preflight.authority.{field}",
+                "authority-input",
+            )
+        )
+
+    if envelope["build"] is not None:
+        verified_files.append(
+            validate_declared_file_descriptor(
+                envelope["build"], "build", "artifact-input",
+            )
+        )
+    for collection_name in ("fixtures", "publicDocs"):
+        for index, descriptor in enumerate(envelope[collection_name]):
+            verified_files.append(
+                validate_declared_file_descriptor(
+                    descriptor,
+                    f"{collection_name}[{index}]",
+                    "artifact-input",
+                )
+            )
+    return verified_files
+
+
+def resolve_checkout_head(reference_path):
+    """Resolve a checkout head without updating any refs or worktree state."""
+    result = run_git("rev-parse", "HEAD", cwd=reference_path, check=False)
+    head = result.stdout.strip()
+    if result.returncode != 0 or not immutable_object_id(head):
+        return None
+    return head
+
+
+def validate_intended_mainline(reference_path, intended_mainline):
+    """Require the immutable mainline commit to be present and ancestral."""
+    required_commit = intended_mainline["commit"]
+    resolved_head = resolve_checkout_head(reference_path)
+    object_result = run_git(
+        "cat-file", "-e", f"{required_commit}^{{commit}}",
+        cwd=reference_path,
+        check=False,
+    )
+    if object_result.returncode != 0:
+        raise packet_preflight_error(
+            "mainline",
+            "missing-mainline",
+            "preflight.intendedMainline.commit",
+            required_commit=required_commit,
+            resolved_head=resolved_head or "missing",
+        )
+    if resolved_head is None:
+        raise packet_preflight_error(
+            "mainline",
+            "mainline-check",
+            "preflight.intendedMainline.commit",
+            required_commit=required_commit,
+            resolved_head="missing",
+        )
+
+    ancestor_result = run_git(
+        "merge-base", "--is-ancestor", required_commit, resolved_head,
+        cwd=reference_path,
+        check=False,
+    )
+    if ancestor_result.returncode == 1:
+        raise packet_preflight_error(
+            "mainline",
+            "non-ancestor",
+            "preflight.intendedMainline.commit",
+            required_commit=required_commit,
+            resolved_head=resolved_head,
+        )
+    if ancestor_result.returncode != 0:
+        raise packet_preflight_error(
+            "mainline",
+            "mainline-check",
+            "preflight.intendedMainline.commit",
+            required_commit=required_commit,
+            resolved_head=resolved_head,
+        )
+    return {
+        "requiredCommit": required_commit,
+        "resolvedCheckoutHead": resolved_head,
+    }
+
+
+def validate_packet_preflight(repo_root, candidate, prd_name):
+    """Admit one packet without mutating Git, the root, or a destination."""
+    packet_path = candidate["prd_json_path"]
+    prd = read_prd(packet_path)
+    if not isinstance(prd, dict):
+        raise packet_preflight_error("contract", "missing-input", "packet")
+    if prd.get("branchName") != prd_name:
+        raise ValueError(
+            "PRD branchName mismatch: expected "
+            f"{safe_identity_display(prd_name)}, observed "
+            f"{safe_identity_display(prd.get('branchName'))}"
+        )
+
+    try:
+        packet_sha256 = stream_file_sha256(packet_path)
+    except FileReadFailure as error:
+        raise packet_preflight_error(
+            "authority-input",
+            "input-read",
+            "packet",
+            path=packet_path,
+            observed="partial" if error.position else "unreadable",
+        ) from error
+
+    envelope = validate_preflight_contract(prd)
+    verified_files = validate_preflight_files(envelope)
+    reference_path = (
+        candidate["worktree_path"]
+        if not candidate["is_root"]
+        else repo_root
+    )
+    intended_mainline = validate_intended_mainline(
+        reference_path, envelope["intendedMainline"],
+    )
+    return {
+        "version": PREFLIGHT_VERSION,
+        "status": "verified",
+        "packet": {
+            "path": str(packet_path),
+            "identity": f"sha256:{packet_sha256}",
+            "sha256": packet_sha256,
+        },
+        "projectIdentity": envelope["projectIdentity"],
+        "contractRevision": envelope["contractRevision"],
+        "verifiedFiles": verified_files,
+        "intendedMainline": intended_mainline,
+    }
 
 
 def normalized_absolute_path(path):
@@ -1732,6 +2344,14 @@ def main():
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)
 
+    try:
+        preflight_result = validate_packet_preflight(
+            repo_root, selected_candidate, prd_name,
+        )
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
+        sys.exit(1)
+
     branch = f"{prd_name}"
     prd_json_path = selected_candidate["prd_json_path"]
     prd_md_path = selected_candidate["prd_md_path"]
@@ -1744,11 +2364,28 @@ def main():
             sync_result, "fresh_origin_main_sha", None,
         )
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
-        prune_worktrees(repo_root)
     except (DirtyRootError, RootStatusError) as e:
         print(f"Root cleanliness check failed: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Root sync failed", e), file=sys.stderr)
+        sys.exit(1)
+
+    # Root synchronization is coordinated separately from packet discovery.
+    # Re-read all declared inputs and the reference head before pruning or
+    # creating/reusing a destination so concurrent admissions converge on the
+    # same verified packet rather than trusting a stale first read.
+    try:
+        preflight_result = validate_packet_preflight(
+            repo_root, selected_candidate, prd_name,
+        )
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        prune_worktrees(repo_root)
+    except Exception as e:  # noqa: BLE001 - preserve the existing stage boundary
         print(format_stage_failure("Root sync failed", e), file=sys.stderr)
         sys.exit(1)
 
@@ -1790,6 +2427,7 @@ def main():
         "prd_md_path": str(dest_md) if dest_md else None,
         "standing_rules_path": str(dest_rules) if dest_rules else None,
         "reused": reused,
+        "preflight": preflight_result,
     }
     print(json.dumps(result, indent=2))
 
