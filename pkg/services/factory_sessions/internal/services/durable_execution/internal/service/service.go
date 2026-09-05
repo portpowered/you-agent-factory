@@ -22,6 +22,33 @@ type Service struct {
 	durableexecution.Service
 }
 
+var _ durableexecution.CanonicalService = (*Service)(nil)
+
+// StartCanonical selects the durable execution wait policy behind the private
+// owner seam. The public Factory Sessions canonical operation supplies the
+// request value and receives a value-only mode-specific projection.
+func (s *Service) StartCanonical(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+	synchronous bool,
+) (durableexecution.CanonicalStartResult, error) {
+	if s == nil || s.Service == nil {
+		return durableexecution.CanonicalStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	if synchronous {
+		started, err := s.Service.StartSync(ctx, request)
+		if err != nil {
+			return durableexecution.CanonicalStartResult{}, err
+		}
+		return durableexecution.CanonicalStartResult{Sync: &started}, nil
+	}
+	started, err := s.Service.StartAsync(ctx, request)
+	if err != nil {
+		return durableexecution.CanonicalStartResult{}, err
+	}
+	return durableexecution.CanonicalStartResult{Async: &started}, nil
+}
+
 // SetPersistenceWarningLogger forwards the session-scoped safe diagnostic
 // logger to the concrete durable execution owner when it supports persistence
 // size warnings.

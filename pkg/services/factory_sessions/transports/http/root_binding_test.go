@@ -162,6 +162,14 @@ type httpSessionsRootFake struct {
 
 var _ factorysessions.Service = (*httpSessionsRootFake)(nil)
 
+func (fake *httpSessionsRootFake) Start(_ context.Context, _ factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return factorysessions.SessionStartResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) Invoke(_ context.Context, _ factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
+	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
+}
+
 func (fake *httpSessionsRootFake) ActivateNamedFactory(context.Context, string) error {
 	return factorysessions.ErrSessionNotFound
 }

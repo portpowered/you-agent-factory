@@ -288,6 +288,14 @@ type SessionInvoker interface {
 	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
 }
 
+// CanonicalSessionInvoker is the owner-private invocation seam used by the
+// canonical Factory Sessions root. The compatibility-shaped SessionInvoker
+// remains available for existing callers, but canonical code must not call it
+// in reverse.
+type CanonicalSessionInvoker interface {
+	Invoke(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
+}
+
 type InvocationInputResolver interface {
 	ResolveInvocationInput(*factorydefinitions.FactoryConfig, factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error)
 }

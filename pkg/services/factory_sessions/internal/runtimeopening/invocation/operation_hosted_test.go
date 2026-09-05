@@ -143,6 +143,14 @@ func (fake *hostedLiveSessionsFake) InterruptDurableFactorySessionDispatch(conte
 
 type executionMethodsStub struct{}
 
+func (executionMethodsStub) Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return factorysessions.SessionStartResult{}, factorysessions.ErrDurableSessionNotFound
+}
+
+func (executionMethodsStub) Invoke(context.Context, factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
+	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
+}
+
 func (executionMethodsStub) StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
 	return factorysessions.AsyncStartResult{}, factorysessions.ErrDurableSessionNotFound
 }

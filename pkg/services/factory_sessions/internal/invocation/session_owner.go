@@ -109,10 +109,10 @@ func NewSessionOwner(
 	}
 }
 
-// InvokeFactorySession resolves and validates one request, submits exactly one
-// Work item, then delegates event-derived result waiting to the injected waiter.
+// Invoke resolves and validates one request, submits exactly one Work item,
+// then delegates event-derived result waiting to the injected waiter.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func (o *SessionOwner) InvokeFactorySession(
+func (o *SessionOwner) Invoke(
 	ctx context.Context,
 	sessionID string,
 	request InvocationRequest,
@@ -192,6 +192,16 @@ func (o *SessionOwner) InvokeFactorySession(
 		FactoryConfig:    factoryCfg,
 		TimeoutMillis:    request.TimeoutMillis,
 	})
+}
+
+// InvokeFactorySession preserves the compatibility-shaped private capability
+// while keeping the canonical owner operation as the one-way implementation.
+func (o *SessionOwner) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request InvocationRequest,
+) (FactoryInvocationResult, error) {
+	return o.Invoke(ctx, sessionID, request)
 }
 
 func contextError(ctx context.Context) error {

@@ -16,6 +16,7 @@ import (
 // invocation telemetry for one bound Factory Sessions runtime.
 type Service interface {
 	roles.SessionInvoker
+	roles.CanonicalSessionInvoker
 	roles.InvocationInputResolver
 }
 

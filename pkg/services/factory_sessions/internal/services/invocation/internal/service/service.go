@@ -60,14 +60,24 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	)}, nil
 }
 
-// InvokeFactorySession delegates the complete invocation lifecycle to the
+// Invoke delegates the complete canonical invocation lifecycle to the
 // capability-owned engine.
+func (s *Service) Invoke(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorydefinitions.FactoryInvocationResult, error) {
+	return s.owner.Invoke(ctx, sessionID, request)
+}
+
+// InvokeFactorySession preserves the compatibility-shaped capability while
+// forwarding one-way into the canonical invocation owner.
 func (s *Service) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
 ) (factorydefinitions.FactoryInvocationResult, error) {
-	return s.owner.InvokeFactorySession(ctx, sessionID, request)
+	return s.Invoke(ctx, sessionID, request)
 }
 
 // ResolveInvocationInput applies the same normalization policy used by live

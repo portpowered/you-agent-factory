@@ -29,3 +29,18 @@ type Service interface {
 	ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
 	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 }
+
+// CanonicalStartResult is the private durable projection returned by the
+// mode-neutral Factory Sessions start seam. It keeps durable implementation
+// choice behind the owner without adding a second public result vocabulary.
+type CanonicalStartResult struct {
+	Async *factorysessions.AsyncStartResult
+	Sync  *factorysessions.SyncStartResult
+}
+
+// CanonicalService is the private durable start seam used by canonical
+// Factory Sessions operations. Compatibility StartAsync/StartSync methods are
+// intentionally not selected by the canonical owner.
+type CanonicalService interface {
+	StartCanonical(context.Context, factorysessions.StartRequest, bool) (CanonicalStartResult, error)
+}
