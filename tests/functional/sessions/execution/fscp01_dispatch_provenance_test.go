@@ -13,7 +13,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -33,12 +32,13 @@ type fscp01DispatchFieldSource struct {
 }
 
 // This is deliberately a field-level disposition table rather than an
-// ownership assertion. PASS is used only when an executing Recordings fact is
-// matched to the public value. All other observed values retain a stable,
-// typed blocker so a public value is never promoted to a source claim by
-// inference.
+// ownership assertion. The current JavaScript fixture has no
+// source-distinguishing fact for ID or Model at an allowed functional
+// boundary, so those values remain INCONCLUSIVE rather than promoting
+// same-value equality to a provenance claim. All other observed values retain
+// a stable, typed blocker as well.
 var fscp01DispatchFieldSources = map[string]fscp01DispatchFieldSource{
-	"id":                    fscp01DispatchSourceFacts("dispatch identity is matched to the Recordings association context"),
+	"id":                    fscp01InconclusiveDispatchFieldSource("DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE"),
 	"status":                fscp01InconclusiveDispatchFieldSource(fscp01DispatchLifecycleNotRecorded),
 	"confirmationState":     fscp01InconclusiveDispatchFieldSource("READ_BOUNDARY_CONFIRMATION_IS_TRANSIENT"),
 	"dispatchKind":          fscp01InconclusiveDispatchFieldSource("DISPATCH_KIND_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
@@ -51,7 +51,7 @@ var fscp01DispatchFieldSources = map[string]fscp01DispatchFieldSource{
 	"runnerId":              fscp01InconclusiveDispatchFieldSource("RUNNER_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
 	"presetId":              fscp01InconclusiveDispatchFieldSource("PRESET_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
 	"modelProvider":         fscp01InconclusiveDispatchFieldSource("MODEL_PROVIDER_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
-	"model":                 fscp01DispatchSourceFacts("resolved model is matched to private Recordings association metadata"),
+	"model":                 fscp01InconclusiveDispatchFieldSource("DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE"),
 	"reasoningEffort":       fscp01InconclusiveDispatchFieldSource("REASONING_EFFORT_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
 	"provider":              fscp01InconclusiveDispatchFieldSource("PROVIDER_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
 	"providerSessionRefs":   fscp01InconclusiveDispatchFieldSource("PROVIDER_SESSION_REFERENCE_NOT_EMITTED_BY_FIXTURE"),
@@ -64,14 +64,6 @@ var fscp01DispatchFieldSources = map[string]fscp01DispatchFieldSource{
 	"sessionId":             fscp01InconclusiveDispatchFieldSource("CANONICAL_ASSOCIATION_SCOPE_IS_DEFAULT_ALIAS"),
 	"orchestratorKind":      fscp01InconclusiveDispatchFieldSource("ORCHESTRATOR_KIND_NOT_RETAINED_BY_ASSOCIATION_EVENT"),
 	"statusTransitions":     fscp01InconclusiveDispatchFieldSource(fscp01DispatchLifecycleNotRecorded),
-}
-
-func fscp01DispatchSourceFacts(evidence string) fscp01DispatchFieldSource {
-	return fscp01DispatchFieldSource{
-		Active:   fscp01DispatchSourcePass,
-		Terminal: fscp01DispatchSourcePass,
-		Evidence: evidence,
-	}
 }
 
 func fscp01InconclusiveDispatchFieldSource(blocker string) fscp01DispatchFieldSource {
@@ -107,16 +99,18 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		var release sync.Once
 		releaseGate := func() { release.Do(func() { close(gate) }) }
 		runner := support.NewGatedSuccessCommandRunner("fscp01 active provider output", gate)
-		recordingWitness := &fscp01DispatchRecordingWitness{}
+		locations := newFSCP01RunLocations(t)
+		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"})
+		logFSCP01RunDeclaration(t, locations, dir, "", "single root; provider-gated active observation")
 		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"}),
+			FactoryDir:                dir,
 			WaitForServiceModeRuntime: true,
+			Env:                       locations.Env,
 			Edges: serviceedges.Edges{
-				ProviderCommandRunner:  runner,
-				RecordingsRootObserver: recordingWitness.observeRoot,
-				DispatchRecorder:       recordingWitness.observeRuntimeDispatch,
+				ProviderCommandRunner: runner,
 			},
 		})
+		logFSCP01BoundPort(t, server.URL())
 		t.Cleanup(func() { server.Stop(t) })
 		t.Cleanup(releaseGate)
 
@@ -137,8 +131,7 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
 		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
-		sourceFacts := observeFSCP01RecordingDispatch(t, recordingWitness, started.SessionId, summary.Id, detail)
-		recordFSCP01DispatchFieldSources(t, "active", summary, detail, sourceFacts)
+		recordFSCP01DispatchFieldSources(t, "active", summary, detail)
 		releaseGate()
 		waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusSucceeded, 5*time.Second)
 	})
@@ -146,20 +139,21 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 	t.Run("terminal", func(t *testing.T) {
 		t.Parallel()
 		acquireExecutionFixtureSlot(t)
+		locations := newFSCP01RunLocations(t)
 		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-terminal"})
+		logFSCP01RunDeclaration(t, locations, dir, "", "single root; terminal provider observation")
 		runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 			Stdout: []byte("fscp01 terminal provider output"),
 		})
-		recordingWitness := &fscp01DispatchRecordingWitness{}
 		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 			FactoryDir:                dir,
 			WaitForServiceModeRuntime: true,
+			Env:                       locations.Env,
 			Edges: serviceedges.Edges{
-				ProviderCommandRunner:  runner,
-				RecordingsRootObserver: recordingWitness.observeRoot,
-				DispatchRecorder:       recordingWitness.observeRuntimeDispatch,
+				ProviderCommandRunner: runner,
 			},
 		})
+		logFSCP01BoundPort(t, server.URL())
 		t.Cleanup(func() { server.Stop(t) })
 
 		started := startFSCP01DispatchWorkflowSync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
@@ -184,19 +178,23 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
 		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
-		sourceFacts := observeFSCP01RecordingDispatch(t, recordingWitness, started.SessionId, summary.Id, detail)
-		recordFSCP01DispatchFieldSources(t, "terminal", summary, detail, sourceFacts)
+		recordFSCP01DispatchFieldSources(t, "terminal", summary, detail)
 		// A second terminal list/detail read is the public stability check for the
 		// fields with explicit dispositions in the current matrix.
 		secondSummary := requireFSCP01DispatchSummary(t, listFactorySessionDispatches(t, server.URL(), started.SessionId), summary.Id)
 		secondDetail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchListDetail(t, started.SessionId, secondSummary, secondDetail)
 
-		missing := readFSCP01DispatchError(t, strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches/fscp01-missing-dispatch")
-		assertFSCP01DispatchNotFound(t, missing, "missing dispatch")
-		foreign := readFSCP01DispatchError(t, strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/fscp01-foreign-session/dispatches/"+summary.Id)
-		assertFSCP01DispatchNotFound(t, foreign, "foreign session dispatch")
+		assertFSCP01DispatchNegativeReads(t, server.URL(), started.SessionId, summary.Id)
 	})
+}
+
+func assertFSCP01DispatchNegativeReads(t *testing.T, serverURL, sessionID, dispatchID string) {
+	t.Helper()
+	missing := readFSCP01DispatchError(t, strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches/fscp01-missing-dispatch")
+	assertFSCP01DispatchNotFound(t, missing, "missing dispatch")
+	foreign := readFSCP01DispatchError(t, strings.TrimSuffix(serverURL, "/")+"/factory-sessions/fscp01-foreign-session/dispatches/"+dispatchID)
+	assertFSCP01DispatchNotFound(t, foreign, "foreign session dispatch")
 }
 
 func startFSCP01DispatchWorkflowAsync(
@@ -303,134 +301,6 @@ type fscp01CanonicalDispatchFacts struct {
 	HasAssociation   bool
 	WorkerSessionID  string
 	Attempts         map[int]struct{}
-}
-
-// fscp01DispatchRecordingWitness retains only detached observations from the
-// construction-time Recordings root and dispatch recorder. The latter is a
-// private runtime edge: JavaScript child dispatches currently do not invoke it,
-// which is recorded as a typed fixture limitation rather than inferred source
-// evidence.
-type fscp01DispatchRecordingWitness struct {
-	mu                 sync.Mutex
-	root               recordings.Service
-	runtimeDispatchIDs []string
-}
-
-func (w *fscp01DispatchRecordingWitness) observeRoot(root recordings.Service) {
-	w.mu.Lock()
-	w.root = root
-	w.mu.Unlock()
-}
-
-func (w *fscp01DispatchRecordingWitness) observeRuntimeDispatch(record recordings.FactoryDispatchRecord) {
-	w.mu.Lock()
-	w.runtimeDispatchIDs = append(w.runtimeDispatchIDs, record.DispatchID)
-	w.mu.Unlock()
-}
-
-func (w *fscp01DispatchRecordingWitness) snapshot(t *testing.T) (recordings.Service, []string) {
-	t.Helper()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.root, append([]string(nil), w.runtimeDispatchIDs...)
-}
-
-type fscp01RecordingDispatchFacts struct {
-	DispatchID           string
-	SessionID            string
-	AssociationSessionID string
-	WorkerSessionID      string
-	AssociationEventID   string
-	AssociationSequence  int
-	Model                string
-}
-
-// observeFSCP01RecordingDispatch proves the fields for which this fixture has
-// a source-distinguishing fact. The association is read from the live
-// Recordings ledger, and its private model metadata is matched to the public
-// dispatch projection. No source claim is made for fields not present in this
-// canonical fact.
-func observeFSCP01RecordingDispatch(
-	t *testing.T,
-	witness *fscp01DispatchRecordingWitness,
-	sessionID, dispatchID string,
-	detail factoryapi.FactoryDispatch,
-) fscp01RecordingDispatchFacts {
-	t.Helper()
-	root, runtimeDispatchIDs := witness.snapshot(t)
-	if root == nil {
-		t.Fatal("FSCP-01 Recordings root observer did not receive a root")
-	}
-	ledger, ok := root.(recordings.Ledger)
-	if !ok {
-		t.Fatalf("FSCP-01 Recordings root %T does not expose the canonical ledger", root)
-	}
-
-	facts := fscp01RecordingDispatchFacts{DispatchID: dispatchID, SessionID: sessionID}
-	associationCount := 0
-	for _, event := range ledger.CanonicalEvents() {
-		if event.Type != recordings.FactoryEventTypeDispatchWorkerSessionAssoc ||
-			event.Context.DispatchID == nil ||
-			!fscp01CanonicalDispatchIDMatches(*event.Context.DispatchID, sessionID, dispatchID) {
-			continue
-		}
-		associationCount++
-		if event.Context.SessionID == nil ||
-			(*event.Context.SessionID != sessionID && *event.Context.SessionID != "~default") {
-			t.Fatalf("Recordings association %q sessionId = %#v, want %q or ~default", event.Id, event.Context.SessionID, sessionID)
-		}
-		var payload struct {
-			Model           string `json:"model"`
-			WorkerSessionID string `json:"workerSessionId"`
-		}
-		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			t.Fatalf("decode Recordings association %q: %v", event.Id, err)
-		}
-		if strings.TrimSpace(payload.WorkerSessionID) == "" {
-			t.Fatalf("Recordings association %q has empty workerSessionId", event.Id)
-		}
-		if facts.WorkerSessionID != "" && facts.WorkerSessionID != payload.WorkerSessionID {
-			t.Fatalf("dispatch %q changed Recordings Worker Session identity from %q to %q", dispatchID, facts.WorkerSessionID, payload.WorkerSessionID)
-		}
-		facts.WorkerSessionID = payload.WorkerSessionID
-		facts.AssociationEventID = event.Id
-		facts.AssociationSequence = event.Context.Sequence
-		facts.AssociationSessionID = *event.Context.SessionID
-		facts.Model = payload.Model
-	}
-	if associationCount != 1 {
-		t.Fatalf("Recordings association count for dispatch %q = %d, want exactly one", dispatchID, associationCount)
-	}
-	if facts.AssociationSequence <= 0 {
-		t.Fatalf("Recordings association sequence for dispatch %q = %d, want positive canonical cursor", dispatchID, facts.AssociationSequence)
-	}
-	if facts.Model == "" {
-		t.Fatalf("Recordings association %q retained no private model fact", facts.AssociationEventID)
-	}
-	if detail.Id != facts.DispatchID {
-		t.Fatalf("public dispatch id = %q, Recordings association dispatch id = %q", detail.Id, facts.DispatchID)
-	}
-	if detail.Model == nil || *detail.Model != facts.Model {
-		t.Fatalf("public dispatch model = %#v, Recordings private association model = %q", detail.Model, facts.Model)
-	}
-	if len(runtimeDispatchIDs) == 0 {
-		t.Logf("FSCP-01 runtime dispatch recorder disposition=INCONCLUSIVE blocker=JAVASCRIPT_DISPATCH_NOT_SENT_TO_DISPATCH_RECORDER dispatch=%s", dispatchID)
-	} else if !containsFSCP01String(runtimeDispatchIDs, dispatchID) {
-		t.Fatalf("runtime dispatch recorder ids = %v, want dispatch %q", runtimeDispatchIDs, dispatchID)
-	} else {
-		t.Logf("FSCP-01 runtime dispatch recorder disposition=PASS dispatch=%s ids=%v", dispatchID, runtimeDispatchIDs)
-	}
-	t.Logf("FSCP-01 Recordings source fact: dispatch=%s session=%s workerSession=%s associationEvent=%s canonicalSequence=%d model=%s", facts.DispatchID, facts.SessionID, facts.WorkerSessionID, facts.AssociationEventID, facts.AssociationSequence, facts.Model)
-	return facts
-}
-
-func containsFSCP01String(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func observeFSCP01CanonicalDispatch(
@@ -574,7 +444,6 @@ func recordFSCP01DispatchFieldSources(
 	phase string,
 	summary factoryapi.FactorySessionDispatchSummary,
 	detail factoryapi.FactoryDispatch,
-	sourceFacts fscp01RecordingDispatchFacts,
 ) {
 	t.Helper()
 	observedFields := make(map[string][]string)
@@ -613,20 +482,7 @@ func recordFSCP01DispatchFieldSources(
 			t.Fatalf("dispatch %q field %q source = %q, want PASS or INCONCLUSIVE", detail.Id, field, source)
 		}
 		if source == fscp01DispatchSourcePass {
-			switch field {
-			case "id":
-				if detail.Id != sourceFacts.DispatchID {
-					t.Fatalf("dispatch %q PASS id source mismatch: Recordings=%q", detail.Id, sourceFacts.DispatchID)
-				}
-			case "model":
-				if detail.Model == nil || *detail.Model != sourceFacts.Model {
-					t.Fatalf("dispatch %q PASS model source mismatch: public=%#v Recordings=%q", detail.Id, detail.Model, sourceFacts.Model)
-				}
-			case "sessionId":
-				if detail.SessionId != sourceFacts.SessionID {
-					t.Fatalf("dispatch %q PASS session source mismatch: public=%q Recordings=%q", detail.Id, detail.SessionId, sourceFacts.SessionID)
-				}
-			}
+			t.Fatalf("dispatch %q field %q has PASS without a current source-distinguishing witness", detail.Id, field)
 		}
 		t.Logf("FSCP-01 dispatch provenance phase=%s dispatch=%s field=%s source=%s observed=%s evidence=%s", phase, detail.Id, field, source, strings.Join(observedFields[field], "+"), entry.Evidence)
 	}

@@ -22,13 +22,19 @@ const fscp01ResponseTeardownWorkflow = `return (async function () {
     label: "fscp01-response-teardown-artifact",
     content: { message: "canonical reads follow response teardown" },
   });
+  const prefix = await agent.run({
+    prompt: "fscp01 response teardown prefix COMPLETE",
+    label: "fscp01-response-teardown-prefix",
+    modelProvider: "codex",
+    model: "fscp01-response-prefix-model",
+  });
   const child = await agent.run({
     prompt: "fscp01 response teardown child COMPLETE",
     label: "fscp01-response-teardown-child",
     modelProvider: "codex",
     model: "fscp01-response-model",
   });
-  return { artifactRef, child };
+  return { artifactRef, prefix, child };
 })();`
 
 // TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads opens a
@@ -43,18 +49,19 @@ func TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads(t *testing
 	gate := make(chan struct{})
 	var release sync.Once
 	releaseGate := func() { release.Do(func() { close(gate) }) }
-	runner := support.NewGatedSuccessCommandRunner(
-		"fscp01 response teardown provider COMPLETE",
-		gate,
-	)
+	runner := newFSCP01FirstThenGatedRunner(gate)
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "fscp01-response-teardown",
 	})
+	locations := newFSCP01ResponseRunLocations(t)
+	logFSCP01ResponseRunDeclaration(t, locations, dir, "one root; gated invocation survives response teardown")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Env:                       locations.Env,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 	})
+	logFSCP01ResponseBoundPort(t, server.URL())
 	t.Cleanup(func() { server.Stop(t) })
 	t.Cleanup(releaseGate)
 
@@ -62,26 +69,40 @@ func TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads(t *testing
 	if strings.TrimSpace(started.SessionId) == "" {
 		t.Fatal("response teardown durable session id is empty")
 	}
+	waitFSCP01DurableStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning)
 
 	stream := support.OpenFactoryResponseEventStreamAt(
 		t,
 		support.SessionResponseEventsURL(server.URL(), started.SessionId),
 	)
-	// The controlled provider publishes its first response fragments only after
-	// this signal. Opening the subscription first proves the client owns a live
-	// cursor before any provider output is delivered.
-	releaseGate()
-	frames := []support.FactoryResponseEventFrame{
+	runner.WaitForSecondCall(t)
+	// The first child supplies a retained response prefix. The second provider
+	// command remains gated while the stream observes that prefix, so the status
+	// assertion below proves an in-flight teardown rather than cancellation after
+	// the durable invocation reached its terminal boundary.
+	framesBeforeTeardown := []support.FactoryResponseEventFrame{
 		stream.NextFrame(5 * time.Second),
 		stream.NextFrame(5 * time.Second),
 	}
-	assertFSCP01ResponseTeardownFrames(t, started.SessionId, frames)
+	assertFSCP01ResponseTeardownFrames(t, started.SessionId, framesBeforeTeardown)
+	if runner.CallCount() != 2 {
+		t.Fatalf("controlled provider command calls before teardown = %d, want 2", runner.CallCount())
+	}
+	preTeardown, err := readFSCP01DurableSession(t, server.URL(), started.SessionId)
+	if err != nil {
+		t.Fatalf("read pre-teardown durable session %q: %v", started.SessionId, err)
+	}
+	if preTeardown.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("pre-teardown durable status = %q, want RUNNING while provider gate is closed", preTeardown.Status)
+	}
 
 	// Close is a deliberate client teardown, not the terminal session boundary:
 	// the provider command remains gated and the durable invocation is still
-	// expected to finish after the response subscription has gone away.
+	// active while the subscription is torn down. Release the provider only
+	// after the canceled stream outcome has been observed.
 	stream.Close()
 	stream.WaitClosed(5 * time.Second)
+	frames := append([]support.FactoryResponseEventFrame(nil), framesBeforeTeardown...)
 	for {
 		result := stream.TryNextFrameResult(5 * time.Second)
 		if result.Outcome == support.FactoryResponseEventStreamOutcomeFrame {
@@ -94,6 +115,7 @@ func TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads(t *testing
 		break
 	}
 	assertFSCP01ResponseTeardownFrames(t, started.SessionId, frames)
+	releaseGate()
 
 	status := waitFSCP01DurableTerminal(t, server.URL(), started.SessionId)
 	if status.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
@@ -104,7 +126,7 @@ func TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads(t *testing
 	artifactCount := assertFSCP01CanonicalArtifactReads(t, server.URL(), started.SessionId, dir)
 	finalRead := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
 	assertFactoryEventsSameRelativeOrder(t, fullRead, finalRead)
-	t.Logf("FSCP-01 response handoff evidence: session=%s responseFrames=%d firstCursor=%s responseOutcome=CANCELED canonicalEvents=%d artifacts=%d", started.SessionId, len(frames), cursorEvent.Id, len(fullRead), artifactCount)
+	t.Logf("FSCP-01 response handoff evidence: session=%s responseFramesBeforeTeardown=%d responseFramesTotal=%d firstCursor=%s responseOutcome=CANCELED canonicalEvents=%d artifacts=%d", started.SessionId, len(framesBeforeTeardown), len(frames), cursorEvent.Id, len(fullRead), artifactCount)
 }
 
 func waitFSCP01DurableTerminal(
@@ -115,24 +137,7 @@ func waitFSCP01DurableTerminal(
 	last, err := support.WaitForObservation(
 		15*time.Second,
 		func() (factoryapi.FactorySessionDurableReadModel, error) {
-			endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
-			response, err := http.Get(endpoint)
-			if err != nil {
-				return factoryapi.FactorySessionDurableReadModel{}, err
-			}
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				return factoryapi.FactorySessionDurableReadModel{}, err
-			}
-			if response.StatusCode != http.StatusOK {
-				return factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
-			}
-			var envelope factoryapi.FactorySessionGetResponse
-			if err := json.Unmarshal(body, &envelope); err != nil {
-				return factoryapi.FactorySessionDurableReadModel{}, err
-			}
-			return envelope.AsFactorySessionDurableReadModel()
+			return readFSCP01DurableSession(t, baseURL, sessionID)
 		},
 		func(model factoryapi.FactorySessionDurableReadModel) bool {
 			switch model.Status {
@@ -149,6 +154,49 @@ func waitFSCP01DurableTerminal(
 		t.Fatalf("timed out waiting for durable session %q after response teardown: %v", sessionID, err)
 	}
 	return last
+}
+
+func waitFSCP01DurableStatus(
+	t *testing.T,
+	baseURL, sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+	last, err := support.WaitForObservation(
+		15*time.Second,
+		func() (factoryapi.FactorySessionDurableReadModel, error) {
+			return readFSCP01DurableSession(t, baseURL, sessionID)
+		},
+		func(model factoryapi.FactorySessionDurableReadModel) bool { return model.Status == want },
+	)
+	if err != nil {
+		t.Fatalf("durable session %q status = %q, want %q: %v", sessionID, last.Status, want, err)
+	}
+}
+
+func readFSCP01DurableSession(
+	t *testing.T,
+	baseURL, sessionID string,
+) (factoryapi.FactorySessionDurableReadModel, error) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var envelope factoryapi.FactorySessionGetResponse
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	return envelope.AsFactorySessionDurableReadModel()
 }
 
 func startFSCP01ResponseTeardownExecution(

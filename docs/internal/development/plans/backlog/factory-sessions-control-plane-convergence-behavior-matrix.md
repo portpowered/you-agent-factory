@@ -3,10 +3,12 @@
 ## Status and evidence boundary
 
 This is the checked-in characterization artifact for
-`system-convergence-fscp-01-characterize-legacy-behavior`. It records the
-current Factory Sessions entrypoints, their customer-visible behavior cells,
-and the exact executable witness or explicit gap that must be used before
-convergence. It does not change a Go contract, runtime, transport, persisted
+`system-convergence-fscp-01-provenance-gap-closure`. It carries the prior
+Factory Sessions characterization plus the current story's dispatch
+provenance, replay, and response-teardown evidence. The exact commit for each
+current run is emitted by its pre-run declaration and must match the reviewed
+PR head; this packet does not retain a stale historical HEAD as the current
+identity. It does not change a Go contract, runtime, transport, persisted
 format, or dependency graph.
 
 `PASS` in this document means that the current tree contains an exact named
@@ -17,8 +19,9 @@ still own their declared semantic edges.
 | Item | Identity |
 | --- | --- |
 | Packet | `FSCP-01` |
-| Current branch | `system-convergence-fscp-01-characterize-legacy-behavior` |
-| Review-fix code HEAD audited before documentation freeze | `853fa3beb18dfa702f2c76904366961d6af51978` |
+| Historical characterization branch | `system-convergence-fscp-01-characterize-legacy-behavior` |
+| Historical characterization HEAD | `853fa3beb18dfa702f2c76904366961d6af51978` (prior packet only) |
+| Current task/head identity | `system-convergence-fscp-01-provenance-gap-closure` — reviewed PR head; exact SHA is recorded by every current witness declaration |
 | Governing source plan | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/source-plan.md` — `FSCP-01 — Characterize behavior across legacy entrypoints` |
 | Source-plan SHA-256 | `058BF1A1E74CBC64DFEDB89BB83F0CBC3B805F941D489BB24BD207E00371794A` |
 | Reconciliation dependency | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/state.md` — `SC-01` current reconciliation |
@@ -202,11 +205,11 @@ from a label, constructor, or source inventory.
 
 | Field/group returned by `DispatchSummary` / `DispatchDetail` | Active source disposition | Terminal/replay source disposition | Witness and current limit |
 | --- | --- | --- | --- |
-| `ID` | `PASS` | `PASS` | `TestFSCP01DispatchReadFieldProvenanceMatrix` matches public list/detail `id` to the executing Recordings association context. `TestFSCP01DispatchReplayParityAndSourceWitness` matches the same identity in the finalized artifact and requires exact non-transient list/detail parity after the second root-built replay process. |
+| `ID` | `INCONCLUSIVE` (`DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE`) | The selected JavaScript fixture exposes no allowed executing dispatch-source recorder fact, and same-value association equality cannot distinguish Runtime, durable state, or Recording projection. The current internal ledger is not used as functional evidence. FSCP-06 must provide the current-versus-proposed source fact before this cell can advance. |
 | `Status`, `Phase`, `Label`, `Retryable`, `FailureClassification`, `FailureDetail` | `INCONCLUSIVE` (`DISPATCH_LIFECYCLE_EVENTS_NOT_RECORDED_BY_FIXTURE`, `DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`, or field-specific blocker) | `INCONCLUSIVE` (same typed blockers) | Active/terminal list/detail values, typed missing/foreign reads, repeated reads, and replay equality are observed, but this JavaScript fixture emits no canonical dispatch lifecycle/reconciliation fact that distinguishes their producer. |
 | `Attempt` | `INCONCLUSIVE` (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`) | The public attempt is `1`, but the canonical stream emitted no inference request/response event for the selected dispatch. The witness records the absence explicitly and does not turn it into lineage PASS. |
 | `RunnerID`, `PresetID`, `ModelProvider`, `ReasoningEffort`, `Provider` | `INCONCLUSIVE` (`RUNNER_NOT_RETAINED_BY_ASSOCIATION_EVENT`, `PRESET_NOT_RETAINED_BY_ASSOCIATION_EVENT`, or field-specific blocker) | `INCONCLUSIVE` (same typed blockers) | The controlled provider-command edge is exercised, but those values are not retained by the fixture's canonical association fact. |
-| `Model` | `PASS` | `PASS` | The live Recordings association event retains private `model` metadata; the witness matches that value to public list/detail. The finalized replay artifact retains the same association payload and the second process returns the same value. |
+| `Model` | `INCONCLUSIVE` (`DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE`) | The selected fixture exposes a public model value, but no allowed executing source fact makes that value distinguishable from a Runtime, durable-state, or Recording producer. This packet removes the internal-ledger assertion; FSCP-06 owns the current-versus-proposed source fact needed for a PASS. |
 | `ProviderSessionRefs` | `INCONCLUSIVE` (`PROVIDER_SESSION_REFERENCE_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`PROVIDER_SESSION_REFERENCE_NOT_EMITTED_BY_FIXTURE`) | No provider-session reference is emitted by this fixture, so the public shape is not assigned a producer source. |
 | `OutputArtifactIDs` and `ArtifactIDs` | `INCONCLUSIVE` (`DISPATCH_ARTIFACT_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_ARTIFACT_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | Public artifact values and independent artifact reads are stable, but this fixture emits no dispatch artifact reconciliation event tying those fields to a canonical producer. |
 | `Usage`, `Warnings` | `INCONCLUSIVE` (`DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | No dispatch reconciliation fact is emitted for the JavaScript child in this witness. |
@@ -228,17 +231,17 @@ facts are promoted by this packet:
 2. The active fixture uses the exact injected provider-command edge and holds
    the command until the `RUNNING` dispatch read is observed; the terminal
    fixture uses the same edge and observes the completed read.
-3. The Recordings root retains one association event at canonical sequence 4
-   with the selected dispatch identity, session-qualified Worker Session ID,
-   and private model metadata. Those exact facts are matched to public `ID`
-   and `Model` in both active and terminal reads. The association scope remains
-   `~default`, so the public durable `SessionID` remains typed
-   `INCONCLUSIVE` rather than inferred.
-4. The fixture's `DispatchRecorder` is not invoked for JavaScript child
-   dispatches (`JAVASCRIPT_DISPATCH_NOT_SENT_TO_DISPATCH_RECORDER`), and no
-   inference request/response is emitted (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`).
-   Both absences are recorded as blockers; attempt/Worker Session lineage is
-   never optionalized into a pass.
+3. The public canonical history retains one Worker Session association for the
+   selected dispatch, but this JavaScript fixture does not provide an allowed
+   source-distinguishing fact for public `ID` or `Model`. Same-value equality
+   is therefore retained as an exact `INCONCLUSIVE` blocker rather than
+   promoted to PASS; FSCP-06 owns the current-versus-proposed source shape.
+4. The fixture provides no source-distinguishing dispatch recorder fact for
+   JavaScript child dispatches (`DISPATCH_SOURCE_NOT_DISTINGUISHABLE_BY_CURRENT_FIXTURE`),
+   and no inference request/response is emitted
+   (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`). Both limitations are recorded
+   as blockers; attempt/Worker Session lineage is never optionalized into a
+   pass.
 5. `TestFSCP01DispatchReplayParityAndSourceWitness` writes a finalized
    recording, stops and closes the first root, opens a second `--replay`
    root, and compares every non-transient returned list/detail field. It also
@@ -399,31 +402,36 @@ deliberately opens no `response-events` subscription, and reads only the
 canonical session event and artifact authorities. The dispatch witness is
 `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`.
 It uses controlled root-built active and terminal sessions, compares public
-list/detail fields, joins each selected dispatch to its Recordings association,
-and logs `PASS` only for the matched dispatch ID and private model fact. All
-other returned fields carry the exact `INCONCLUSIVE` blockers in the dispatch
-table. The fixtures use the injected provider-command edge rather than mock
-workers. The canonical stream observation records dispatch start and Worker
-Session association; this fixture emits no inference request/response event,
-so attempt-to-event lineage is explicitly `INCONCLUSIVE` with
+list/detail fields, and joins each selected dispatch to its public canonical
+Worker Session association. No source-distinguishing dispatch recorder fact is
+available for the JavaScript child, so ID and Model remain explicitly
+`INCONCLUSIVE`; all other returned fields carry the exact blockers in the
+dispatch table. The fixtures use the injected provider-command edge rather
+than mock workers. The canonical stream observation records dispatch start and
+Worker Session association; this fixture emits no inference request/response
+event, so attempt-to-event lineage is explicitly `INCONCLUSIVE` with
 `INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`.
 
 The restart/replay witness is
 `tests/functional/sessions/execution/fscp01_dispatch_replay_test.go:TestFSCP01DispatchReplayParityAndSourceWitness`.
-It records a terminal JavaScript child, captures the live Recordings
-association and private model metadata, stops and closes the first root, loads
-the finalized artifact, then opens a second root with the existing replay
-path. It compares every non-transient list/detail JSON field, exact public
-canonical event order/content, and persisted Worker Session association. The
-only parity exclusion is `ConfirmationState`, named as a process-local
-read-boundary watermark and logged with its reason.
+It records a terminal JavaScript child, captures the public canonical
+dispatch/Worker Session association and durable session read, stops and closes
+the first root, loads the finalized artifact, then opens a second root with the
+existing replay path. It compares the public session identity/status/mode
+observations, every non-transient list/detail JSON field, exact public
+canonical event order/content, and persisted Worker Session association. No
+private recording payload is used as a source witness. The only parity
+exclusion is `ConfirmationState`, named as a process-local read-boundary
+watermark and logged with its reason.
 
 The response handoff witness is
 `tests/functional/events/factory_events/fscp01_response_teardown_test.go:TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads`.
-It opens a session-scoped SSE subscription before the gated provider returns,
-observes ordered session-owned frames, deliberately cancels the subscription
-and requires the `CANCELED` reader outcome, then completes the invocation and
-reads canonical reconnect cursors plus artifact list/detail/retrieval. The
+It opens a session-scoped SSE subscription while the second provider command
+remains gated, observes at least two ordered session-owned frames before
+teardown, confirms the public session is still
+`RUNNING`, deliberately cancels the subscription and requires the `CANCELED`
+reader outcome, then releases the provider and completes the invocation before
+reading canonical reconnect cursors plus artifact list/detail/retrieval. The
 existing no-subscription witness remains the independence control.
 
 Exact verification commands and observed results:
@@ -447,20 +455,25 @@ make test && make lint
   missing/corrupt/foreign artifact, and unknown-session probes returned typed
   outcomes. No response stream is opened, so this remains the independence
   control for the explicit teardown witness.
-- The response teardown witness opens a live session-scoped subscription before
-  releasing the controlled provider gate, observes three ordered frames owned
-  by the selected durable session, closes the client subscription, and observes
-  `CANCELED`. The session then reaches `SUCCEEDED`; canonical reads return five
-  ordered events and two artifacts, including stable list/detail/retrieval and
-  typed missing/corrupt/foreign artifact outcomes.
+- The response teardown witness opens a live session-scoped subscription while
+  the controlled provider gate remains closed, observes at least two ordered
+  frames owned by the selected durable session before teardown (this run
+  observed four total, including two buffered frames), confirms the public
+  session is still `RUNNING`, closes the client subscription, and observes
+  `CANCELED`. It then releases the provider; the session reaches `SUCCEEDED`,
+  and canonical reads return seven ordered events and three artifacts,
+  including stable list/detail/retrieval and typed missing/corrupt/foreign
+  artifact outcomes.
 - The dispatch root-built witness passed for active `dispatch-1` (`RUNNING`)
   and terminal `dispatch-1` (`COMPLETED`). Both had attempt `1`, a
-  session-qualified Worker Session association, public list/detail common-field
-  equality, and executing `PASS` source matches for `ID` and `Model`; every
-  other observed field was logged with its stable `INCONCLUSIVE` blocker. The
-  runtime dispatch recorder was not invoked for this JavaScript child, and no
-  inference request/response event was emitted, both recorded as typed
-  limitations. Unknown and wrong-session dispatch reads returned typed `404
+  session-qualified Worker Session association, and public list/detail
+  common-field equality. ID and Model remain explicitly `INCONCLUSIVE`
+  because the JavaScript child has no distinguishable current source fact;
+  every other observed field was logged with its stable blocker. No
+  source-distinguishing dispatch recorder fact was available for this
+  JavaScript child, and no inference request/response event was emitted, both
+  recorded as typed limitations. Unknown and wrong-session dispatch reads
+  returned typed `404
   NOT_FOUND` outcomes.
 - The dispatch replay witness finalized a nine-event artifact, preserved the
   association and `SESSION_COMPLETED` boundary, matched every non-transient

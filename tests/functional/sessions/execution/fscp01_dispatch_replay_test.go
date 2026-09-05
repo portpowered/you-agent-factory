@@ -3,10 +3,7 @@ package execution_test
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -23,33 +20,32 @@ var fscp01ReplayTransientFields = map[string]string{
 }
 
 // TestFSCP01DispatchReplayParityAndSourceWitness closes the dispatch gap with
-// a two-process root-built record/replay handoff. The live Recordings ledger
-// supplies the executing association fact (including its private model
-// metadata), while the public dispatch list/detail and canonical event reads
-// are compared before and after the handoff. Fields that the current
-// JavaScript fixture does not emit as canonical dispatch events remain
-// INCONCLUSIVE with their stable blockers in the matrix.
+// a two-process root-built record/replay handoff. Public dispatch/session
+// reads and canonical event/association observations are compared before and
+// after the handoff. Fields that the current JavaScript fixture does not emit
+// as distinguishable canonical dispatch facts remain INCONCLUSIVE with their
+// stable blockers in the matrix.
 func TestFSCP01DispatchReplayParityAndSourceWitness(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
+	locations := newFSCP01RunLocations(t)
 	dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-replay"})
 	recordPath := filepath.Join(t.TempDir(), "fscp01-dispatch-replay.json")
-	logFSCP01RecordingDeclaration(t, dir, recordPath)
+	logFSCP01RunDeclaration(t, locations, dir, recordPath, "first root finalize; second root replay-only")
 
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("fscp01 replay provider output"),
 	})
-	liveWitness := &fscp01DispatchRecordingWitness{}
 	first := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Env:                       locations.Env,
 		Args:                      []string{"--record", recordPath},
 		Edges: serviceedges.Edges{
-			ProviderCommandRunner:  runner,
-			RecordingsRootObserver: liveWitness.observeRoot,
-			DispatchRecorder:       liveWitness.observeRuntimeDispatch,
+			ProviderCommandRunner: runner,
 		},
 	})
+	logFSCP01BoundPort(t, first.URL())
 	firstClosed := false
 	t.Cleanup(func() {
 		if !firstClosed {
@@ -75,8 +71,9 @@ func TestFSCP01DispatchReplayParityAndSourceWitness(t *testing.T) {
 	}
 	publicFacts := observeFSCP01CanonicalDispatch(t, first.URL(), started.SessionId, summary.Id)
 	assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, publicFacts)
-	sourceFacts := observeFSCP01RecordingDispatch(t, liveWitness, started.SessionId, summary.Id, detail)
-	recordFSCP01DispatchFieldSources(t, "terminal", summary, detail, sourceFacts)
+	recordFSCP01DispatchFieldSources(t, "terminal", summary, detail)
+	sessionBefore := readDurableSession(t, first.URL(), started.SessionId)
+	assertFSCP01SessionReadMatchesStart(t, started, sessionBefore)
 
 	// Closing the first root is the recording finalization boundary. The replay
 	// root is not started until this process has been stopped and joined.
@@ -84,13 +81,15 @@ func TestFSCP01DispatchReplayParityAndSourceWitness(t *testing.T) {
 	first.Close(t)
 	firstClosed = true
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertFSCP01ReplayArtifactAssociation(t, artifact.Events, sourceFacts)
+	assertFSCP01ReplayArtifactAssociation(t, artifact.Events, started.SessionId, summary.Id)
 
 	second := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Env:                       locations.Env,
 		Args:                      []string{"--replay", recordPath, "--no-record"},
 	})
+	logFSCP01BoundPort(t, second.URL())
 	t.Cleanup(func() {
 		second.Stop(t)
 		second.Close(t)
@@ -100,105 +99,20 @@ func TestFSCP01DispatchReplayParityAndSourceWitness(t *testing.T) {
 	replayedSummary := requireFSCP01DispatchSummary(t, replayed, summary.Id)
 	replayedDetail := getFactorySessionDispatch(t, second.URL(), started.SessionId, summary.Id)
 	assertFSCP01DispatchListDetail(t, started.SessionId, replayedSummary, replayedDetail)
+	sessionAfter := readDurableSession(t, second.URL(), started.SessionId)
+	assertFSCP01ReplaySessionParity(t, sessionBefore, sessionAfter)
 	assertFSCP01ReplayFieldParity(t, "summary", summary, replayedSummary)
 	assertFSCP01ReplayFieldParity(t, "detail", detail, replayedDetail)
 
 	canonicalAfter := support.GetFactoryEventsForSessionAt(t, second.URL(), started.SessionId)
 	assertFSCP01CanonicalReplayParity(t, canonicalBefore, canonicalAfter)
-	t.Logf("FSCP-01 replay evidence: session=%s dispatch=%s canonicalEvents=%d artifactEvents=%d workerSession=%s status=%s", started.SessionId, summary.Id, len(canonicalBefore), len(artifact.Events), sourceFacts.WorkerSessionID, detail.Status)
-}
-
-func logFSCP01RecordingDeclaration(t *testing.T, factoryDir, recordPath string) {
-	t.Helper()
-	commit := fscp01CurrentCommit()
-	t.Logf("FSCP-01 declaration: platform=%s commit=%s sourcePlanSHA256=%s isolatedFactoryDir=%s isolatedRecordingPath=%s timeout=15m firstProcess=stop-and-close-before-replay secondProcess=replay-only network=none retries=0 providerCallBudget=1", runtime.GOOS, commit, fscp01SourcePlanSHA256, factoryDir, recordPath)
-}
-
-func fscp01CurrentCommit() string {
-	for _, key := range []string{"UNIT_TIMING_COMMIT", "GITHUB_SHA"} {
-		if commit := strings.TrimSpace(os.Getenv(key)); commit != "" {
-			return commit
-		}
-	}
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		for _, setting := range buildInfo.Settings {
-			if setting.Key == "vcs.revision" {
-				if commit := strings.TrimSpace(setting.Value); commit != "" {
-					return commit
-				}
-			}
-		}
-	}
-	if workingDir, err := os.Getwd(); err == nil {
-		if gitDir := fscp01FindGitDir(workingDir); gitDir != "" {
-			if head, err := os.ReadFile(filepath.Join(gitDir, "HEAD")); err == nil {
-				ref := strings.TrimSpace(string(head))
-				if strings.HasPrefix(ref, "ref: ") {
-					refName := strings.TrimSpace(strings.TrimPrefix(ref, "ref: "))
-					if commit := fscp01ReadGitRef(gitDir, refName); commit != "" {
-						return commit
-					}
-				} else if ref != "" {
-					return ref
-				}
-			}
-		}
-	}
-	return "UNAVAILABLE"
-}
-
-func fscp01FindGitDir(start string) string {
-	for current := filepath.Clean(start); ; current = filepath.Dir(current) {
-		gitPath := filepath.Join(current, ".git")
-		info, err := os.Stat(gitPath)
-		if err == nil {
-			if info.IsDir() {
-				return gitPath
-			}
-			data, readErr := os.ReadFile(gitPath)
-			line := strings.TrimSpace(string(data))
-			if strings.HasPrefix(line, "gitdir: ") {
-				resolved := strings.TrimSpace(strings.TrimPrefix(line, "gitdir: "))
-				if !filepath.IsAbs(resolved) {
-					resolved = filepath.Join(current, resolved)
-				}
-				return filepath.Clean(resolved)
-			}
-			if readErr != nil {
-				return ""
-			}
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return ""
-		}
-	}
-}
-
-func fscp01ReadGitRef(gitDir, refName string) string {
-	refPath := filepath.Join(gitDir, filepath.FromSlash(refName))
-	if resolved, err := os.ReadFile(refPath); err == nil {
-		return strings.TrimSpace(string(resolved))
-	}
-	commonDirData, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
-	if err != nil {
-		return ""
-	}
-	commonDir := strings.TrimSpace(string(commonDirData))
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(gitDir, commonDir)
-	}
-	resolved, err := os.ReadFile(filepath.Join(commonDir, filepath.FromSlash(refName)))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(resolved))
+	t.Logf("FSCP-01 replay evidence: session=%s dispatch=%s canonicalEvents=%d artifactEvents=%d workerSession=%s status=%s", started.SessionId, summary.Id, len(canonicalBefore), len(artifact.Events), publicFacts.WorkerSessionID, detail.Status)
 }
 
 func assertFSCP01ReplayArtifactAssociation(
 	t *testing.T,
 	events []recordings.FactoryEvent,
-	want fscp01RecordingDispatchFacts,
+	sessionID, dispatchID string,
 ) {
 	t.Helper()
 	associationCount := 0
@@ -209,26 +123,13 @@ func assertFSCP01ReplayArtifactAssociation(
 		}
 		if event.Type != recordings.FactoryEventTypeDispatchWorkerSessionAssoc ||
 			event.Context.DispatchID == nil ||
-			!fscp01CanonicalDispatchIDMatches(*event.Context.DispatchID, want.SessionID, want.DispatchID) {
+			!fscp01CanonicalDispatchIDMatches(*event.Context.DispatchID, sessionID, dispatchID) {
 			continue
 		}
 		associationCount++
 		if event.Context.SessionID == nil ||
-			(*event.Context.SessionID != want.SessionID && *event.Context.SessionID != "~default") {
-			t.Fatalf("replay artifact association sessionId = %#v, want %q or ~default", event.Context.SessionID, want.SessionID)
-		}
-		var privatePayload struct {
-			Model           string `json:"model"`
-			WorkerSessionID string `json:"workerSessionId"`
-		}
-		if err := json.Unmarshal(event.Payload, &privatePayload); err != nil {
-			t.Fatalf("decode replay artifact private association %q: %v", event.Id, err)
-		}
-		if privatePayload.WorkerSessionID != want.WorkerSessionID {
-			t.Fatalf("replay artifact Worker Session identity = %q, want %q", privatePayload.WorkerSessionID, want.WorkerSessionID)
-		}
-		if privatePayload.Model != want.Model {
-			t.Fatalf("replay artifact private model = %q, want %q", privatePayload.Model, want.Model)
+			(*event.Context.SessionID != sessionID && *event.Context.SessionID != "~default") {
+			t.Fatalf("replay artifact association sessionId = %#v, want %q or ~default", event.Context.SessionID, sessionID)
 		}
 	}
 	if associationCount != 1 {
@@ -237,6 +138,64 @@ func assertFSCP01ReplayArtifactAssociation(
 	if terminalCount != 1 {
 		t.Fatalf("replay artifact SESSION_COMPLETED count = %d, want exactly one", terminalCount)
 	}
+}
+
+type fscp01ReplaySessionFields struct {
+	SessionID        string                                          `json:"sessionId"`
+	Status           factoryapi.FactorySessionDurableLifecycleStatus `json:"status"`
+	OrchestratorKind factoryapi.FactoryOrchestratorKind              `json:"orchestratorKind"`
+	Dialect          *string                                         `json:"dialect,omitempty"`
+	ResolvedSource   factoryapi.FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+	SourceHash       *string                                         `json:"sourceHash,omitempty"`
+}
+
+func projectFSCP01ReplaySessionFields(
+	session factoryapi.FactorySessionDurableReadModel,
+) fscp01ReplaySessionFields {
+	return fscp01ReplaySessionFields{
+		SessionID:        session.SessionId,
+		Status:           session.Status,
+		OrchestratorKind: session.OrchestratorKind,
+		Dialect:          session.Dialect,
+		ResolvedSource:   session.ResolvedSource,
+		SourceHash:       session.SourceHash,
+	}
+}
+
+func assertFSCP01SessionReadMatchesStart(
+	t *testing.T,
+	started factoryapi.FactorySessionSyncExecutionResponse,
+	session factoryapi.FactorySessionDurableReadModel,
+) {
+	t.Helper()
+	if started.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
+		t.Fatalf("sync start outcome = %q, want COMPLETED", started.SyncOutcome)
+	}
+	if session.SessionId != started.SessionId || session.Status != started.Status {
+		t.Fatalf("public session read identity/status = %q/%q, want %q/%q from sync start", session.SessionId, session.Status, started.SessionId, started.Status)
+	}
+	if session.OrchestratorKind != started.OrchestratorKind {
+		t.Fatalf("public session read orchestratorKind = %q, want %q from sync start", session.OrchestratorKind, started.OrchestratorKind)
+	}
+}
+
+func assertFSCP01ReplaySessionParity(
+	t *testing.T,
+	before, after factoryapi.FactorySessionDurableReadModel,
+) {
+	t.Helper()
+	beforePayload, err := json.Marshal(projectFSCP01ReplaySessionFields(before))
+	if err != nil {
+		t.Fatalf("marshal public session fields before replay: %v", err)
+	}
+	afterPayload, err := json.Marshal(projectFSCP01ReplaySessionFields(after))
+	if err != nil {
+		t.Fatalf("marshal public session fields after replay: %v", err)
+	}
+	if !bytes.Equal(beforePayload, afterPayload) {
+		t.Fatalf("public session fields changed across replay: before=%s after=%s", beforePayload, afterPayload)
+	}
+	t.Logf("FSCP-01 replay session parity: mode=sync sessionId=%s status=%s orchestratorKind=%s source=%s", before.SessionId, before.Status, before.OrchestratorKind, before.ResolvedSource.Kind)
 }
 
 func assertFSCP01ReplayFieldParity(
