@@ -133,6 +133,87 @@ func TestStopModelHostRejectsLoadingRuntime(t *testing.T) {
 	}
 }
 
+func TestCloseRuntimeScopeCancelsAndJoinsInFlightHostLoad(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "close-in-flight-load")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := newBlockedProcessLauncher()
+	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+	closer, ok := service.(interface {
+		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
+	})
+	if !ok {
+		t.Fatal("runtime host does not expose CloseRuntimeScope")
+	}
+
+	ensureErrCh := make(chan error, 1)
+	go func() {
+		_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+			Scope: ref,
+			Name:  "OMNIVOICE_Q4_K_M",
+		})
+		ensureErrCh <- err
+	}()
+	select {
+	case <-launcher.started:
+	case <-time.After(5 * time.Second):
+		launcher.releaseLoad()
+		t.Fatal("managed process launcher did not enter the in-flight load")
+	}
+
+	closeErrCh := make(chan error, 1)
+	go func() {
+		closeErrCh <- closer.CloseRuntimeScope(context.Background(), ref)
+	}()
+	select {
+	case <-launcher.cancelObserved:
+	case <-time.After(5 * time.Second):
+		launcher.releaseLoad()
+		select {
+		case <-ensureErrCh:
+		case <-time.After(5 * time.Second):
+		}
+		select {
+		case <-closeErrCh:
+		case <-time.After(5 * time.Second):
+		}
+		t.Fatal("runtime-scope close did not cancel the in-flight load")
+	}
+	launcher.releaseLoad()
+
+	var ensureErr error
+	select {
+	case ensureErr = <-ensureErrCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("in-flight EnsureModelHost did not return after scope close")
+	}
+	if !errors.Is(ensureErr, models.ErrHostCancelled) || !errors.Is(ensureErr, context.Canceled) {
+		t.Fatalf("EnsureModelHost error = %v, want host cancellation with context.Canceled", ensureErr)
+	}
+
+	select {
+	case err := <-closeErrCh:
+		if err != nil {
+			t.Fatalf("CloseRuntimeScope: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("CloseRuntimeScope did not join the in-flight load")
+	}
+
+	process := launcher.loadedProcess()
+	if process == nil {
+		t.Fatal("launcher did not return the late-created managed process")
+	}
+	select {
+	case <-process.stopCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("late-created managed process survived scope close")
+	}
+}
+
 func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
 	t.Parallel()
 
@@ -683,6 +764,50 @@ func newRuntimeHostWithPolicy(
 		internalservice.SupervisorTestConfig{},
 		policy,
 	)
+}
+
+type blockedProcessLauncher struct {
+	started        chan struct{}
+	cancelObserved chan struct{}
+	release        chan struct{}
+	startedOnce    sync.Once
+	cancelOnce     sync.Once
+	releaseOnce    sync.Once
+	mu             sync.Mutex
+	process        *fakeManagedProcess
+}
+
+func newBlockedProcessLauncher() *blockedProcessLauncher {
+	return &blockedProcessLauncher{
+		started:        make(chan struct{}),
+		cancelObserved: make(chan struct{}),
+		release:        make(chan struct{}),
+	}
+}
+
+func (launcher *blockedProcessLauncher) Start(
+	ctx context.Context,
+	spec modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
+	launcher.startedOnce.Do(func() { close(launcher.started) })
+	<-ctx.Done()
+	launcher.cancelOnce.Do(func() { close(launcher.cancelObserved) })
+	<-launcher.release
+	process := newFakeManagedProcess(spec.HealthEndpoint, nil)
+	launcher.mu.Lock()
+	launcher.process = process
+	launcher.mu.Unlock()
+	return process, nil
+}
+
+func (launcher *blockedProcessLauncher) releaseLoad() {
+	launcher.releaseOnce.Do(func() { close(launcher.release) })
+}
+
+func (launcher *blockedProcessLauncher) loadedProcess() *fakeManagedProcess {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.process
 }
 
 type blockingHealthChecker struct {

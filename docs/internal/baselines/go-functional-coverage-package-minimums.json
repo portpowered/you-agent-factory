@@ -1157,6 +1157,10 @@
       "minimum": 54.54
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service",
       "minimum": 37.41
     },
@@ -1677,6 +1681,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
       "minimum": 80.06
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend",
+      "minimum": 0.00
     }
   ]
 }

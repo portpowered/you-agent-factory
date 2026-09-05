@@ -35,6 +35,15 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 	}
 }
 
+type constructionInvocationRuntime struct{}
+
+func (constructionInvocationRuntime) Invoke(
+	context.Context,
+	inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	return inference.InvocationRuntimeResult{}, nil
+}
+
 type inferenceDependencyCase struct {
 	name              string
 	scopes            runtimescopes.Service
@@ -57,30 +66,30 @@ func inferenceDependencyCases(
 	return []inferenceDependencyCase{
 		{
 			name: "valid", scopes: scopes, assets: assets, catalog: catalog,
-			runtimeHost: runtimeHost, invocationRuntime: inference.InputEchoInvocationRuntime{},
+			runtimeHost: runtimeHost, invocationRuntime: constructionInvocationRuntime{},
 			fileSystem: inference.InertArtifactFileSystem{}, includeClock: true,
 		},
 		{
 			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			invocationRuntime: constructionInvocationRuntime{},
 			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
 			name: "assets", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			invocationRuntime: constructionInvocationRuntime{},
 			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Assets", wantInvalidDeps: true,
 		},
 		{
 			name: "catalog", scopes: scopes, assets: assets, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			invocationRuntime: constructionInvocationRuntime{},
 			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
 			name: "runtime host", scopes: scopes, assets: assets, catalog: catalog,
-			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			invocationRuntime: constructionInvocationRuntime{},
 			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
@@ -91,12 +100,12 @@ func inferenceDependencyCases(
 		},
 		{
 			name: "filesystem", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, includeClock: true,
+			invocationRuntime: constructionInvocationRuntime{}, includeClock: true,
 			wantContains: "filesystem", wantInvalidDeps: true,
 		},
 		{
 			name: "clock", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{},
+			invocationRuntime: constructionInvocationRuntime{},
 			fileSystem:        inference.InertArtifactFileSystem{},
 			wantContains:      "clock", wantInvalidDeps: true,
 		},
