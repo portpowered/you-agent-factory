@@ -233,9 +233,9 @@ func TestFactorySessionOmniArtifactReleaseIsExactlyOnce(t *testing.T) {
 	})
 	t.Run("timeout", func(t *testing.T) {
 		t.Parallel()
-		fixture := newFactoryFixtureWithConfig(t, "unused timeout", "50ms")
+		fixture := newFactoryFixtureWithConfig(t, "unused timeout", "5s")
 		fixture.protocol.BlockUntil(make(chan struct{}))
-		_, _ = fixture.invokeExpectFailure(t, "Release timeout")
+		_, _ = fixture.invokeExpectFailureAfterCall(t, "Release timeout")
 		fixture.assertRelease(t)
 		fixture.assertNoSuccessfulOutput(t, fixture.recording(t))
 	})
@@ -520,6 +520,19 @@ func (fixture *factoryFixture) invokeExpectFailure(t *testing.T, prompt string) 
 	t.Helper()
 	fixture.startLive(t, prompt)
 	fixture.submit(t, prompt)
+	return fixture.finishExpectedFailure(t)
+}
+
+func (fixture *factoryFixture) invokeExpectFailureAfterCall(t *testing.T, prompt string) (error, string) {
+	t.Helper()
+	fixture.startLive(t, prompt)
+	fixture.submit(t, prompt)
+	fixture.protocol.WaitForCall(t)
+	return fixture.finishExpectedFailure(t)
+}
+
+func (fixture *factoryFixture) finishExpectedFailure(t *testing.T) (error, string) {
+	t.Helper()
 	status := support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
 	command := fixture.command
 	command.AcceptError()
