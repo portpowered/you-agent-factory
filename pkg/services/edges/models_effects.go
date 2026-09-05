@@ -107,6 +107,9 @@ type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
 	WorkDir, HealthEndpoint string
+	Backend                 string
+	ModelPath               string
+	BackendFiles            []string
 }
 
 type RuntimeInspectFile func(string) (os.FileInfo, error)
@@ -122,6 +125,7 @@ type ModelHostProtocolNegotiationRequest struct {
 	ModelName       string
 	Revision        string
 	Platform        models.AssetHostPlatform
+	ModelPath       string
 }
 
 type ModelHostProtocolNegotiationResult struct {
