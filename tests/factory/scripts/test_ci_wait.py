@@ -93,6 +93,30 @@ def observation(view, checks, after_view=None):
     return (view, checks, after_view if after_view is not None else view)
 
 
+def actual_fixture(pr_number, observations):
+    """Serialize ordered observations for the actual fake-gh boundary."""
+    views = []
+    checks = []
+    for before, check_response, after in observations:
+        views.extend(
+            [
+                {"stdout": json.dumps(before)},
+                {"stdout": json.dumps(after)},
+            ]
+        )
+        if isinstance(check_response, str):
+            checks.append({"stdout": check_response})
+        elif isinstance(check_response, dict) and "stdout" in check_response:
+            checks.append(check_response)
+        else:
+            checks.append({"stdout": json.dumps(check_response)})
+    return {
+        "list": [{"stdout": json.dumps([{"number": pr_number, "state": "OPEN"}])}],
+        "view": views,
+        "checks": checks,
+    }
+
+
 def load_ci_wait_module():
     spec = importlib.util.spec_from_file_location("ci_wait", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -683,6 +707,235 @@ time.sleep = lambda _seconds: None
                 )
                 self.assertEqual(len(calls), 7)
                 self.assertEqual(result.stderr.count("terminal"), 2)
+
+    def test_actual_entrypoint_current_head_matrix_stays_within_fixture_budget(self):
+        pending_extra = checks_row(
+            state="IN_PROGRESS", name="Documentation", link=TEST_EXTRA_LINK
+        )
+        first_view = view_payload(number=121, rollup=[rollup_check()])
+        delayed_view = view_payload(
+            number=121,
+            rollup=[
+                rollup_check(),
+                rollup_check(
+                    state="IN_PROGRESS", name="Documentation", link=TEST_EXTRA_LINK
+                ),
+            ],
+        )
+        complete_view = view_payload(
+            number=121,
+            rollup=[
+                rollup_check(),
+                rollup_check(
+                    state="SUCCESS", name="Documentation", link=TEST_EXTRA_LINK
+                ),
+            ],
+        )
+        old_view = view_payload(number=122, head=TEST_HEAD, rollup=[rollup_check()])
+        new_view = view_payload(
+            number=122,
+            head=TEST_HEAD_NEXT,
+            rollup=[rollup_check(link=TEST_EXTRA_LINK)],
+        )
+        rerun_success_view = view_payload(
+            number=123, rollup=[rollup_check(state="SUCCESS")]
+        )
+        rerun_failure_view = view_payload(
+            number=123, rollup=[rollup_check(state="FAILURE")]
+        )
+        unknown_state = checks_row(name="Future Check", link=TEST_EXTRA_LINK)
+        unknown_state["state"] = "MYSTERY"
+        unknown_state["bucket"] = "pass"
+        unavailable = {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "token=must-not-escape",
+        }
+        mismatch_view = view_payload(
+            number=124, rollup=[rollup_check(state="SUCCESS")]
+        )
+
+        scenarios = (
+            (
+                "F01 pending extra",
+                120,
+                [
+                    observation(
+                        view_payload(number=120),
+                        [checks_row(), pending_extra],
+                    )
+                ],
+                "deadline",
+                "deadline-requeue",
+            ),
+            (
+                "F02 delayed registration",
+                121,
+                [
+                    observation(first_view, [checks_row()]),
+                    observation(
+                        delayed_view,
+                        [checks_row(), pending_extra],
+                    ),
+                    observation(
+                        complete_view,
+                        [
+                            checks_row(),
+                            checks_row(
+                                state="SUCCESS",
+                                name="Documentation",
+                                link=TEST_EXTRA_LINK,
+                            ),
+                        ],
+                    ),
+                    observation(
+                        complete_view,
+                        [
+                            checks_row(),
+                            checks_row(
+                                state="SUCCESS",
+                                name="Documentation",
+                                link=TEST_EXTRA_LINK,
+                            ),
+                        ],
+                    ),
+                ],
+                "stable",
+                "checks-terminal",
+            ),
+            (
+                "F03 head read race",
+                122,
+                [observation(old_view, [checks_row()], new_view)],
+                "deadline",
+                "deadline-requeue",
+            ),
+            (
+                "F04 new head",
+                122,
+                [
+                    observation(old_view, [checks_row()]),
+                    observation(new_view, [checks_row(link=TEST_EXTRA_LINK)]),
+                    observation(new_view, [checks_row(link=TEST_EXTRA_LINK)]),
+                ],
+                "stable",
+                "checks-terminal",
+            ),
+            (
+                "F05 rerun",
+                123,
+                [
+                    observation(rerun_success_view, [checks_row(state="SUCCESS")]),
+                    observation(rerun_failure_view, [checks_row(state="FAILURE")]),
+                    observation(rerun_failure_view, [checks_row(state="FAILURE")]),
+                ],
+                "stable",
+                "checks-terminal",
+            ),
+            (
+                "F08 unknown state",
+                125,
+                [observation(view_payload(number=125), [checks_row(), unknown_state])],
+                "deadline",
+                "deadline-requeue",
+            ),
+            (
+                "F09 malformed checks",
+                126,
+                [observation(view_payload(number=126), "not-json")],
+                "deadline",
+                "deadline-requeue",
+            ),
+            (
+                "F10 empty checks",
+                127,
+                [observation(view_payload(number=127, rollup=[]), [])],
+                "deadline",
+                "no-checks-reported",
+            ),
+            (
+                "F11 unavailable checks",
+                128,
+                [observation(view_payload(number=128), unavailable)],
+                "deadline",
+                "deadline-requeue",
+            ),
+            (
+                "F12 source mismatch",
+                124,
+                [observation(mismatch_view, [checks_row(state="FAILURE")])],
+                "deadline",
+                "deadline-requeue",
+            ),
+        )
+
+        total_calls = 0
+        for name, pr_number, observations, clock, expected_reason in scenarios:
+            with self.subTest(case=name):
+                result, calls = self.invoke_actual_script_with_fake_gh(
+                    actual_fixture(pr_number, observations), clock=clock
+                )
+
+                self.assertEqual(result.returncode, 0)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["reason"], expected_reason)
+                self.assertEqual(payload["pr"], pr_number)
+                self.assertNotIn("passed", result.stdout)
+                self.assertNotIn("mergeAuthorized", result.stdout)
+                for call in calls:
+                    if call[1] == "view":
+                        self.assertEqual(
+                            call[3:],
+                            ["--json", self.module.PR_VIEW_JSON_FIELDS],
+                        )
+                    elif call[1] == "checks":
+                        self.assertEqual(
+                            call[3:],
+                            ["--json", self.module.PR_CHECKS_JSON_FIELDS],
+                        )
+                if name == "F01 pending extra":
+                    self.assertEqual(payload["headRefOid"], TEST_HEAD)
+                    self.assertEqual(payload["pendingChecks"][0]["name"], "Documentation")
+                    self.assertIn(
+                        f"CheckRun|Documentation|{TEST_EXTRA_LINK}",
+                        result.stderr,
+                    )
+                elif name == "F02 delayed registration":
+                    self.assertEqual(payload["checks"], 2)
+                    self.assertIn("non-terminal", result.stderr)
+                elif name == "F03 head read race":
+                    self.assertEqual(
+                        payload["uncertainty"]["reason"],
+                        "head-changed-during-observation",
+                    )
+                elif name == "F04 new head":
+                    self.assertEqual(payload["headRefOid"], TEST_HEAD_NEXT)
+                    self.assertEqual(
+                        payload["checkIdentities"][0]["link"], TEST_EXTRA_LINK
+                    )
+                elif name == "F05 rerun":
+                    self.assertEqual(
+                        payload["checkIdentities"][0]["state"], "FAILURE"
+                    )
+                elif name == "F08 unknown state":
+                    self.assertEqual(
+                        payload["uncertainty"]["reason"],
+                        "checks-unknown-check-state",
+                    )
+                elif name == "F09 malformed checks":
+                    self.assertEqual(payload["uncertainty"]["reason"], "checks-malformed")
+                elif name == "F10 empty checks":
+                    self.assertIsNotNone(payload["uncertainty"])
+                elif name == "F11 unavailable checks":
+                    self.assertEqual(payload["uncertainty"]["reason"], "checks-unavailable")
+                    self.assertNotIn("token=must-not-escape", result.stderr)
+                elif name == "F12 source mismatch":
+                    self.assertEqual(
+                        payload["uncertainty"]["reason"], "check-state-mismatch"
+                    )
+                total_calls += len(calls)
+
+        self.assertLessEqual(total_calls, 100)
 
     def test_f01_pending_extra_check_blocks_terminal_and_names_head_and_identity(self):
         pending_extra = checks_row(
