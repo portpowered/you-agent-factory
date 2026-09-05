@@ -2215,3 +2215,138 @@ the story-003 `prd.json` evidence update, and the progress entry. Story 004
 owns independent clean-room validation. This matrix is not an implementation
 authorization and cannot mark `LA-05`, `LA-06`, server parity, real platforms,
 or any runtime gate passed.
+
+## 7. Story 004 — independent clean-room validation report
+
+# Validation report: localai-omni-artifact-contract-delta-authority-retry
+
+## Environment and artifact
+
+- Commit/build identifier: `d68ed63c8f`; proposal/documentation only; no build
+  or runtime artifact was produced.
+- Environment and configuration: Windows PowerShell in the isolated task
+  worktree
+  `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\localai-omni-artifact-contract-delta-authority-retry`;
+  current date `2026-09-05`; no `operatorAmendment` is present. The three
+  immutable authority files were read from their supplied absolute paths and
+  each SHA-256 matched §0 and `prd.json`.
+- Customer entry point: not exercised in this proposal. The future customer
+  witness is the existing Factory Session / `root.BuildProcess` /
+  `Process.Execute` path described in §6.
+- Real and substituted dependencies: no model, LocalAI backend, server,
+  network, paid dependency, generated client, or executable test. Review used
+  only the checked-in proposal, ignored `prd.json`, immutable authority, and
+  read-only source inspection.
+- Cost/call budget used: zero downloads, zero paid calls, and zero runtime
+  calls; read-only inspection stayed within the two-process concurrency limit.
+
+## Project criteria
+
+The statuses below are for this proposal handoff, not Project acceptance.
+`PASS (slice)` means the planning evidence exists; it does not claim runtime
+behavior.
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `LA-01` | PASS (slice) | §0/§4 and story 001 record the authority, checkout, retained commits, current loss point, and next bounded story. | Project-level remeasurement remains review-owned. |
+| `LA-02` | BLOCKED | No source-blind probe is authorized or executed in this retry. | `GATE-BLIND`; all required modalities/platforms. |
+| `LA-03` | PASS (slice) | This independent report checks the plan, JSON, authority, source references, and evidence boundary without self-repair. | Runtime/trace validation remains later loopback. |
+| `LA-04` | BLOCKED | §6 defines the selected matrix, but its Markdown/JSON command and observer representations are not equivalent. | Focused operation execution and `GATE-BLIND`/`GATE-SERVER-PARITY`. |
+| `LA-05` | BLOCKED | The proposal explicitly records the Factory witness as unproven; no direct CLI/TTS substitute was claimed. | Operator approval, `GATE-OMNI-PRIVATE`, and `GATE-FACTORY-LINEAGE`. |
+| `LA-06` | BLOCKED | Semantic artifact and lineage assertions are designed but not executed. | `GATE-FACTORY-LINEAGE`, `GATE-RELEASE-RACE`, and semantic runtime evidence. |
+| `LA-07` | BLOCKED | No configured `--server` parity run was authorized or executed. | `GATE-SERVER-PARITY`. |
+| `LA-08` | PASS (slice) | §6 records the reusable `root.BuildProcess`, Factory Session isolation, controlled edges, and no-binary functional strategy. | Hermetic functional execution. |
+| `LA-09` | BLOCKED | No actual LocalAI/backend platform run was authorized or executed. | `GATE-REAL-C1`; macOS/Linux/Windows conformance. |
+| `LA-10` | PASS (slice) | §6.1 records platform, artifact, state/cache/ports, timeout, process, network, download, and retry/call fields. | Required run records before later execution. |
+| `LA-11` | BLOCKED | The current retry has no completed runtime retrospective closure; this report records the plan-integrity finding and owner/action. | Loopback verification of the correction. |
+| `LA-12` | BLOCKED | The private-only boundary is preserved, but required cross-artifact references and the delivery criterion are missing or inconsistent. | Plan correction and operator/private-contract gate. |
+| `LA-13` | BLOCKED | Story 004 has blocking findings and no implementation-stage delivery head. | `GATE-LOOPBACK` and review-owned delivery. |
+| `GATE-AUTHORITY` | PASS (slice) | Read-only existence/hash checks matched all three recorded absolute paths. | Operator authority disposition. |
+| `GATE-CHAR` | PASS (slice) | Retained characterization and the exact failed witness are present in §§1–3 and were not re-executed. | Runtime behavior. |
+| `GATE-SHAPES` | BLOCKED | Private/public shapes exist, but clean-room equivalence found missing required IDs and a missing verbatim delivery criterion. | Plan-owner correction and repeat review. |
+| `GATE-OPERATOR-APPROVAL` | BLOCKED | The plan correctly requires approval before code; no approval was supplied. | Operator disposition. |
+| `GATE-OMNI-PRIVATE` | BLOCKED | No production or executable-test change or compilation was run. | Models private implementation/lifecycle. |
+| `GATE-FACTORY-LINEAGE` | BLOCKED | No Factory Session, Work, canonical event, replay, or artifact lineage run was executed. | Factory/Models validation lane. |
+| `GATE-BOUNDARY-PROJECTION` | BLOCKED | No mapper/transport behavior run was executed. | Models transport validation. |
+| `GATE-RELEASE-RACE` | BLOCKED | No normal/repeat/race lifecycle run was executed. | Exactly-once release validation. |
+| `GATE-REDACTION` | BLOCKED | Redaction is specified but not runtime-observed. | Models/transport redaction tests. |
+| `GATE-SERVER-PARITY` | BLOCKED | No configured server was started. | Integration parity lane. |
+| `GATE-BLIND` | BLOCKED | No blind customer probe was started. | Independent Luna validator. |
+| `GATE-REAL-C1` | BLOCKED | No real platform/backend conformance was started. | Real-conformance lane. |
+| `GATE-LOOPBACK` | BLOCKED | This report found plan defects requiring correction before a clean pass. | Repeat the same independent review after correction. |
+| `GATE-REVIEW-CI` | BLOCKED | No PR or CI start is appropriate while the story has blocking plan findings. | Review owns CI, conflicts, feedback, and merge after loopback. |
+| `CLEAN-ROOM-VALIDATION` | BLOCKED | Required sections are recorded here; findings prevent a PASS verdict. | Plan-owner correction and independent rerun. |
+| `IMPLEMENTATION-STAGE-DELIVERY` | BLOCKED | The implementation-stage finish line is not reached by this proposal-only story. | Final implementation head, open PR, CI start, and review handoff. |
+
+## Customer journey
+
+1. Read the proposal, `prd.json`, and the immutable request, acceptance, and
+   source-plan files from the supplied absolute paths. All three current
+   hashes matched the recorded values: source plan
+   `0c81aac27358bff4014ee623f13f5255d07ab67798ad6d306fc7e1a7f2af972e`, request
+   `1562b040348625dc1a608011e13458d97cc5b600f4d95dd8bf98cf1dbe2da52c`, and
+   acceptance
+   `83c1368c05d1f84e7c61ca5632ad9422b33d646c7c4166d7fd5812764fd18172`.
+2. Parse `prd.json` and compare the 14 matrix IDs with §6.2. All 14 IDs were
+   present. The comparison then found command/observer drift and malformed
+   JSON command fragments for `RELEASE-01` and `BOUNDARY-01`; no future test
+   command was run.
+3. Search the plan for every story, `LA-01`–`LA-13`, gate, source-plan
+   reference, remaining edge, and the exact `deliveryCriterion`. The private
+   and public shape sections and the unproven `LA-05`/`LA-06` boundary were
+   present, but the missing references and missing verbatim criterion below
+   prevented a clean handoff.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the plan is in the canonical development
+  plan tree and points to the immutable source snapshot; the task packet's
+  stale `tasks/todo/...` verification paths are not the delivered artifact.
+- Permission and error behavior: no implementation was authorized; the report
+  preserves the operator/private-contract gate and does not reinterpret any
+  runtime failure as success.
+- Persistence/reload behavior: future Work, Recordings, and replay behavior is
+  explicitly owned by `GATE-FACTORY-LINEAGE` and remains unproven.
+- Accessibility/keyboard/responsive behavior: not applicable to this
+  backend/documentation-only proposal; no UI surface changed.
+- Operational signals: findings, owner, loopback action, no-silent-repair
+  rule, and review-owned CI/merge boundary are recorded below.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `CL-001` | Blocking | Parse `prd.json`; search the plan for every story, criterion, and gate ID. | A self-contained handoff maps all four stories, `LA-01`–`LA-13`, all gates, clean-room validation, and delivery ownership. | The plan was missing story 004 and the literal IDs `LA-01`, `LA-03`, `LA-08`, `LA-11`, `LA-12`, `LA-13`, `GATE-AUTHORITY`, `GATE-CHAR`, `GATE-REVIEW-CI`, `CLEAN-ROOM-VALIDATION`, and `IMPLEMENTATION-STAGE-DELIVERY` at review time. | Read-only structural scan; plan §0–§6; `prd.json` story/criterion/gate arrays. Owner: proposal plan author/review loopback. |
+| `CL-002` | Blocking | Compare `prd.json.deliveryCriterion` with the plan text. | The exact implementation-stage delivery criterion is verbatim in both artifacts. | The exact string was present in `prd.json` but `plan.Contains(deliveryCriterion)` returned `False`. | `prd.json.deliveryCriterion`; plan search. Owner: proposal plan author/review loopback. |
+| `CL-003` | Blocking | Compare each `verification.behaviorMatrix` row with §6.2 by ID, command, and observer. | Markdown and JSON carry equivalent exact commands and semantic observers. | All 14 IDs were present, but plan commands add unmirrored timeouts/paths and the JSON `RELEASE-01` and `BOUNDARY-01` command/observer strings are truncated/unbalanced; JSON `PARITY-01` names `tests/functional/models/server_parity` while the plan correctly classifies the later row under `tests/integration/models/model_invoke`. | Read-only row comparison output; plan §6.2; `prd.json.verification.behaviorMatrix`. Owner: story-003/plan author, then independent reviewer. |
+| `CL-004` | Blocking | Read plan §0 and the packet verification commands against the current branch/artifact locations. | Current packet name, status, and verification paths identify the retry and its delivered proposal artifact. | The plan header still names story 003 and the packet verification commands target absent `tasks/todo/localai-omni-artifact-contract-delta-authority-retry.*`, while the proposal is under `docs/internal/development/plans/` and the active packet is the retry branch. | Plan lines 1–6; `prd.json.branchName`; `Test-Path` for the packet paths. Owner: proposal plan/packet author. |
+
+No finding was repaired or self-approved in this review. The authority files,
+source-plan snapshot, public/generated shapes, production code, tests, and
+Factory graph were not changed.
+
+## Verdict
+
+BLOCKED
+
+## Delta-plan request [Required for FAIL/BLOCKED]
+
+- Affected behavior and criterion: `BEH-HANDOFF`, story 004, `LA-03`,
+  `LA-04`, `LA-12`, `LA-13`, `GATE-SHAPES`, and `GATE-LOOPBACK`.
+- Root-cause evidence or remaining uncertainty: the authority tuple is valid,
+  but the proposal and ignored JSON were authored with different matrix
+  command/observer strings, the JSON has two malformed command fragments, and
+  the plan lacks the complete criterion/gate map and verbatim delivery
+  criterion. No runtime edge was exercised, so `LA-05` and `LA-06` remain
+  explicitly unproven.
+- Smallest recommended correction/prerequisite: the proposal plan owner must
+  reconcile one canonical 14-row matrix representation, add the complete
+  story/criterion/gate/remaining-edge map and exact delivery criterion, and
+  correct stale packet/status/path references. Preserve the private-only
+  boundary, the authority hashes, and the explicit operator approval gate;
+  do not add production code or claim runtime evidence.
+- Dependencies and retest scope: after the plan owner records the correction,
+  rerun this same clean-room procedure from a fresh context, reverify all three
+  hashes, parse both artifacts, compare every row, and inspect the proposal-
+  only diff. Operator approval remains required before any code; only after a
+  clean loopback may review own the PR/CI/conflict/merge boundary.
