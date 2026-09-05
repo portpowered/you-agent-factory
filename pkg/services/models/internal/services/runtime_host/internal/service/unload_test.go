@@ -416,7 +416,9 @@ func TestCloseRuntimeScopeStopsOnlyThatScopesSupervisedRuntimes(t *testing.T) {
 		}
 	}
 
-	closer, ok := host.(runtimehost.ScopeCloser)
+	closer, ok := host.(interface {
+		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
+	})
 	if !ok {
 		t.Fatal("Runtime Host does not expose optional scope cleanup")
 	}
@@ -500,7 +502,9 @@ func TestCloseRuntimeScopeRevokesLeasesOwnedByStoppedHost(t *testing.T) {
 		t.Fatalf("AcquireModelLease: %v", err)
 	}
 
-	closer, ok := host.(runtimehost.ScopeCloser)
+	closer, ok := host.(interface {
+		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
+	})
 	if !ok {
 		t.Fatal("Runtime Host does not expose optional scope cleanup")
 	}

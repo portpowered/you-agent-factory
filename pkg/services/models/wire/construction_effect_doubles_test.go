@@ -465,6 +465,13 @@ func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T
 	if err != nil {
 		t.Fatalf("embedding runtime Invoke() error = %v", err)
 	}
+	assertPinnedEmbeddingResult(t, result)
+	assertPinnedEmbeddingTransport(t, dialer, connection)
+	assertPinnedEmbeddingRequest(t, connection)
+}
+
+func assertPinnedEmbeddingResult(t *testing.T, result inference.InvocationRuntimeResult) {
+	t.Helper()
 	if len(result.Content) != 1 || result.Content[0].Name != "embedding" {
 		t.Fatalf("embedding runtime content = %#v, want canonical vector output", result.Content)
 	}
@@ -475,9 +482,17 @@ func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T
 	if len(vector) != 3 || vector[0] != float64(float32(0.1)) || vector[1] != float64(float32(-0.2)) {
 		t.Fatalf("embedding runtime vector = %#v, want three pinned values", vector)
 	}
+}
+
+func assertPinnedEmbeddingTransport(t *testing.T, dialer *embeddingRuntimeDialer, connection *embeddingRuntimeConnection) {
+	t.Helper()
 	if dialer.endpoint != "grpc://127.0.0.1:50051" || connection.method != "/backend.Backend/Embedding" || connection.closed != 1 {
 		t.Fatalf("embedding runtime transport = endpoint:%q method:%q closed:%d, want selected endpoint/Embedding/one close", dialer.endpoint, connection.method, connection.closed)
 	}
+}
+
+func assertPinnedEmbeddingRequest(t *testing.T, connection *embeddingRuntimeConnection) {
+	t.Helper()
 	var request localai.PredictOptions
 	if err := proto.Unmarshal(connection.request, &request); err != nil {
 		t.Fatalf("decode embedding request: %v", err)

@@ -347,10 +347,18 @@ func (s *service) CloseRuntimeScope(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx = context.WithoutCancel(ctx)
+	slots, modelNames := s.detachRuntimeScope(scope)
+	for _, modelName := range modelNames {
+		s.revokeHostLeases(scope, modelName)
+	}
+	return stopSupervisedRuntimes(context.WithoutCancel(ctx), slots)
+}
+
+func (s *service) detachRuntimeScope(scope models.RuntimeScopeRef) ([]*supervisedRuntime, []string) {
 	prefix := scope.String() + "|"
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	slots := make([]*supervisedRuntime, 0)
 	modelNames := make([]string, 0)
 	for key, slot := range s.runtimeSlots {
@@ -374,11 +382,10 @@ func (s *service) CloseRuntimeScope(
 			delete(s.capacityHolders, key)
 		}
 	}
-	s.mu.Unlock()
+	return slots, modelNames
+}
 
-	for _, modelName := range modelNames {
-		s.revokeHostLeases(scope, modelName)
-	}
+func stopSupervisedRuntimes(ctx context.Context, slots []*supervisedRuntime) error {
 	var firstErr error
 	for _, slot := range slots {
 		if slot == nil {
