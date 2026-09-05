@@ -18,7 +18,7 @@ still own their declared semantic edges.
 | --- | --- |
 | Packet | `FSCP-01` |
 | Current branch | `system-convergence-fscp-01-characterize-legacy-behavior` |
-| Current code HEAD audited (before documentation freeze) | `f1fc6a7a69a5260cf5059f1efae239e17ae5cbf2` |
+| Review-fix code HEAD audited before documentation freeze | `853fa3beb18dfa702f2c76904366961d6af51978` |
 | Governing source plan | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/source-plan.md` — `FSCP-01 — Characterize behavior across legacy entrypoints` |
 | Source-plan SHA-256 | `058BF1A1E74CBC64DFEDB89BB83F0CBC3B805F941D489BB24BD207E00371794A` |
 | Reconciliation dependency | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/state.md` — `SC-01` current reconciliation |
@@ -33,7 +33,7 @@ still own their declared semantic edges.
 | `FAIL` | A runtime witness was executed and observed a current mismatch with the documented behavior. No row is marked `FAIL` by this non-runtime audit. |
 | `INCONCLUSIVE` | Related witnesses exist, but the current tree does not yet prove the required comparison or complete semantic edge. |
 | `UNSUPPORTED` | The current public contract intentionally rejects the operation or mode; the rejection citation is recorded. This is not a missing test. |
-| `UNPROVEN` | No exact semantic witness was found for the stated edge. Symbol counts, implementation presence, and source inventory do not satisfy this disposition. |
+| `UNPROVEN` | No exact source-distinguishing semantic witness exists for the stated edge. A public value or behavior may still be observable, but symbol counts, implementation presence, and source inventory do not satisfy this disposition; it remains with the owning convergence or validation gate. |
 | `NOT_COMPARABLE` | The paths have different customer intent or input/output semantics, so an identity/status equivalence claim would be invalid. |
 
 The initial documentation audit had no `FAIL` claim. Story 002 now records
@@ -193,47 +193,49 @@ history or artifact retrieval.
 
 ## Dispatch projection and field provenance
 
-The current durable execution implementation takes an active snapshot in
-`pkg/services/factory_sessions/internal/execution/runtime_service.go:556-614`.
-`dispatchesForRead` then annotates lifecycle-event cursors and applies a
-Recording completed-flush watermark in
-`pkg/services/factory_sessions/internal/execution/listing.go:886-945`.
-The restart/replay implementation instead returns `s.projection` until a
-recording session is handed off, as shown by
-`pkg/services/factory_sessions/internal/execution/recordingreplay/service.go:139-295`.
-The table records that branch explicitly; it does not choose the future
-FSCP-06 projection rule.
+The public dispatch list/detail response exposes values but does not identify
+whether each value came from a Runtime snapshot, durable execution state, or a
+Recording projection. Source-code inspection can describe candidate producer
+paths, but it is not semantic evidence for this matrix. Until a recording-only
+or replay witness distinguishes those paths, every returned field remains an
+explicit `UNPROVEN` disposition.
 
-| Field/group returned by `DispatchSummary` / `DispatchDetail` | Active read source now | Terminal/replay read source now | Witness and current limit |
+| Field/group returned by `DispatchSummary` / `DispatchDetail` | Active source disposition | Terminal/replay source disposition | Witness and current limit |
 | --- | --- | --- | --- |
-| `ID`, `Status`, `Phase`, `Label`, `Attempt`, `Retryable`, `FailureClassification`, `FailureDetail` | Runtime session snapshot; JavaScript child-record mapping at `internal/execution/service.go:595-633` | Recording projection for replay-only sessions; handed-off sessions delegate back to runtime owner | `pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go:TestFakeService_PublishedScenarios_ListDispatchesStableSummaries`, `TestFakeService_PublishedScenarios_GetDispatchDetailAndUnknownError`; public active/terminal list/detail and typed missing/foreign dispatch witness `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; replay parity remains unproven |
-| `RunnerID`, `PresetID`, `ModelProvider`, `Model`, `ReasoningEffort`, `Provider` | Runtime child dispatch record (`service.go:595-626`) | Canonical event/projection facts when present; absent fields remain absent rather than being back-filled from an unrelated worker | `pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go:TestFakeService_PublishedScenarios_DispatchListIncludesProviderSessionRefs`; Recording association `pkg/services/recordings/internal/events/event_history_dispatch_worker_session_association_test.go:TestFactoryEventHistory_RecordDispatchWorkerSessionAssociationWithExecution_RetainsReplayFactsWithoutWideningPublicPayload`; public field labels and observed active/terminal values `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix` |
-| `ProviderSessionRefs` | Runtime child record's provider-session reference (`service.go:618-625`) | Recording dispatch association/execution facts if recorded | Exact presence is covered by `TestFakeService_PublishedScenarios_DispatchListIncludesProviderSessionRefs`; public active/terminal field labeling and list/detail parity `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; source parity across all terminal paths remains `UNPROVEN` |
-| `OutputArtifactIDs` and `ArtifactIDs` | Runtime child artifact reference for completed dispatch plus detail copy (`service.go:627-630`, `runtime_service.go:597-599`) | Recording canonical dispatch/result artifact IDs | `pkg/services/factory_sessions/internal/execution/fake_service_lifecycle_inspection_test.go:TestFakeService_ReadProjections_MatchFixtureDispatchesArtifactsEvents`; public terminal artifact field label `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; independent artifact retrieval is K-10 |
-| `Usage`, `Warnings` | Runtime/execution projection when populated | Recording projection when the corresponding canonical facts were retained | `tests/functional/sessions/execution/dispatch_usage_test.go:TestAPIPetriDispatchUsageReachesDispatchList`; public active/terminal field labeling `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; full replay parity is `INCONCLUSIVE` |
-| `ConfirmationState` | Derived at read time from lifecycle event cursor plus Recording completed-flush watermark; defaults `UNCONFIRMED` | Recording-backed read is the durability authority | `pkg/services/factory_sessions/internal/execution/fake_service_dispatch_test.go:TestFakeServiceDispatchListAndDetailDefaultToUnconfirmedTogether`, `TestLiveDispatchListAndDetailConfirmAfterCompletedFlush`; public active/terminal read labels `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; this is a read-boundary fact, not dispatch ownership |
-| `StateSequence`, `StateSequenceKnown`, `StreamGenerationID` | Derived from dispatch lifecycle events by `annotateDispatchStateCursors` (`listing.go:947-980`) | Canonical cursor/projection when the event is retained | `pkg/services/factory_sessions/internal/execution/fake_service_lifecycle_inspection_test.go:TestDispatchReadPreservesLatestLifecycleCursorAndDefaultsUnconfirmed`; field-by-field terminal persistence remains `UNPROVEN` |
-| `StatusTransitions` | Runtime state's `dispatchStatusTransitions` map (`runtime_service.go:600-602`) | Recording replay projection if transitions are retained | `pkg/services/factory_sessions/internal/execution/fake_service_dispatch_test.go:TestReplayDispatchProjection_DerivesInterruptedDispatchMetadata`; public active/terminal field labels `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; cross-owner parity remains FSCP01-DISPATCH-004 |
-| `DispatchDetail.SessionID`, `OrchestratorKind` | Runtime session snapshot (`runtime_service.go:592-596`) | Recording session projection/handoff owner | `tests/functional/sessions/execution/results_dispatches_test.go:TestAPIDispatchListAndDetailExposePublicCorrelation`, `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; the tests prove public correlation, not complete replay source parity |
-| `DispatchDetail.Petri` | Private Runtime Petri projection when populated | No independent canonical public field is established by the current replay contract | No exact field-level public witness found; `UNPROVEN`, owner FSCP01-DISPATCH-004 |
-| `DispatchDetail.JavaScript` / `DispatchSummary.JavaScript` | Runtime child record and runtime dispatch projection (`service.go:615-670`, `runtime_service.go:603-608`) | Recorded JavaScript dispatch metadata when retained | `pkg/services/factory_sessions/internal/execution/fake_service_dispatch_test.go:TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession`; public active/terminal field labels `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; complete restart/replay parity is `INCONCLUSIVE` |
+| `ID`, `Status`, `Phase`, `Label`, `Attempt`, `Retryable`, `FailureClassification`, `FailureDetail` | `UNPROVEN` | `UNPROVEN` | Public active/terminal list/detail values, typed missing/foreign dispatch reads, and repeated terminal reads are observed by `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; producer source and replay parity are not distinguishable at this boundary |
+| `RunnerID`, `PresetID`, `ModelProvider`, `Model`, `ReasoningEffort`, `Provider` | `UNPROVEN` | `UNPROVEN` | Controlled provider-command edge is exercised for the active and terminal root-built sessions; any returned field is logged with its list/detail observation, but no source ownership is inferred |
+| `ProviderSessionRefs` | `UNPROVEN` | `UNPROVEN` | Owner fixtures cover provider-session reference shapes; the public FSCP-01 witness records only fields actually returned by list/detail, so source parity across terminal paths remains unproven |
+| `OutputArtifactIDs` and `ArtifactIDs` | `UNPROVEN` | `UNPROVEN` | Public terminal artifact fields are observed alongside the independent canonical artifact witness; dispatch-field producer source is not distinguishable |
+| `Usage`, `Warnings` | `UNPROVEN` | `UNPROVEN` | Existing usage coverage and the public FSCP-01 field observation do not identify the producing authority |
+| `ConfirmationState` | `UNPROVEN` | `UNPROVEN` | Existing read-boundary tests observe confirmation behavior; this packet does not promote that observation into a source-ownership claim |
+| `StateSequence`, `StateSequenceKnown`, `StreamGenerationID` | `UNPROVEN` | `UNPROVEN` | Existing lifecycle-cursor tests observe the fields where present; field-by-field terminal/replay source persistence remains unproven |
+| `StatusTransitions` | `UNPROVEN` | `UNPROVEN` | Existing interrupted/replay projection tests cover related metadata; the public active/terminal witness does not distinguish its source |
+| `DispatchDetail.SessionID`, `OrchestratorKind` | `UNPROVEN` | `UNPROVEN` | Existing correlation tests and the FSCP-01 witness prove public identity/correlation, not source parity across replay paths |
+| `DispatchDetail.Petri` | `UNPROVEN` | `UNPROVEN` | No exact field-level public witness establishes a source for this private/internal-shaped field |
+| `DispatchDetail.JavaScript` / `DispatchSummary.JavaScript` | `UNPROVEN` | `UNPROVEN` | Existing runtime projection tests and the public FSCP-01 witness observe the shape where present; complete restart/replay source parity remains unproven |
 
 ### Dispatch conclusion
 
-The current read is a deliberate hybrid, not one uniform source:
+The public behavior is characterized, but source ownership is intentionally not
+selected by this packet:
 
-1. Active handed-off reads begin with the durable execution/runtime snapshot.
-2. Lifecycle event cursors and Recording flush watermarks annotate the active
-   result with confirmation metadata.
-3. Replay-only reads begin with Recording projection values; dispatch inventory
-   is empty/not-found before the explicit runtime handoff.
-4. Canonical event facts may enrich or preserve terminal dispatch state, but
-   the current public tests do not prove every returned field has the same
-   value across active, terminal, restart, and replay paths.
+1. Root-built active and terminal sessions expose stable public list/detail
+   values, attempt `1`, and a canonical Worker Session association.
+2. The active fixture uses the exact injected provider-command edge and holds
+   the command until the `RUNNING` dispatch read is observed; the terminal
+   fixture uses the same edge and observes the completed read.
+3. The canonical public streams emit dispatch start and Worker Session
+   association facts for the selected dispatch. They emit no inference
+   request/response event in this fixture, so attempt-to-inference-event
+   association is explicitly `UNPROVEN`; the public attempt and Worker Session
+   facts remain asserted.
+4. No recording-only/replay witness distinguishes Runtime, durable, and
+   Recording producers for returned fields. Every observed field therefore
+   remains `UNPROVEN`, and the functional test fails closed if a returned field
+   has no explicit disposition/evidence entry.
 
-Rows marked `INCONCLUSIVE` or `UNPROVEN` are intentional stop points for
-FSCP01-DISPATCH-004. A convergence change must not silently turn them into a
-new projection rule.
+These are intentional stop points for FSCP01-DISPATCH-004. A convergence
+change must not silently turn them into a new projection rule.
 
 ## Transport witness matrix
 
@@ -381,8 +383,13 @@ canonical session event and artifact authorities. The dispatch witness is
 It uses controlled root-built active and terminal sessions, compares public
 list/detail fields, joins each selected dispatch to its canonical Worker
 Session association, and logs an explicit source label for every returned
-field. The labels are limited to `Recording projection`, `durable execution
-state`, `Runtime (transient) state`, and `UNPROVEN`.
+field. Because the public boundary does not distinguish its producer, every
+observed field is deliberately labeled `UNPROVEN`; the test fails closed when
+a returned field has no explicit disposition/evidence entry. The fixtures use
+the injected provider-command edge rather than mock workers. The canonical
+stream observation records dispatch start and Worker Session association; this
+fixture emits no inference request/response event, so that attempt-to-event
+association is also explicitly `UNPROVEN`.
 
 Exact verification commands and observed results:
 
@@ -404,13 +411,15 @@ go test ./tests/functional/sessions/execution -run '^TestFSCP01DispatchReadField
   typed outcomes. No response stream was opened, so this proves canonical
   reads do not require a retained/live response subscription. It does not
   prove an explicit response-subscription open/close teardown sequence.
-- The dispatch root-built witness passed for active `dispatch-2` (`RUNNING`)
+- The dispatch root-built witness passed for active `dispatch-1` (`RUNNING`)
   and terminal `dispatch-1` (`COMPLETED`). Both had attempt `1`, a
   session-qualified canonical Worker Session association, public list/detail
-  common-field equality, and a logged source label for every returned field;
-  fields not independently exposed by the fixture remain `UNPROVEN`.
-  Unknown and wrong-session dispatch reads returned typed `404 NOT_FOUND`
-  outcomes.
+  common-field equality, and a logged `UNPROVEN` disposition for every field
+  actually returned by the public reads. The active and terminal fixtures
+  exercised the injected provider-command edge; no inference request/response
+  event was emitted, which remains explicitly unproven rather than treated as
+  attempt evidence. Unknown and wrong-session dispatch reads returned typed
+  `404 NOT_FOUND` outcomes.
 
 This advances FSCP01-CANONICAL-003 and FSCP01-DISPATCH-004. It does not prove
 explicit response-stream teardown, restart/replay field parity across every
