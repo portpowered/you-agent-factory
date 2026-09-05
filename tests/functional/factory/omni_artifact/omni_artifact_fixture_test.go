@@ -222,6 +222,13 @@ func (launcher *modelHostLauncher) Counts() (int, int) {
 	return launcher.starts, launcher.stops
 }
 
+func (launcher *modelHostLauncher) CountsFor(endpoint string) (int, int) {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	endpoint = strings.TrimSpace(endpoint)
+	return launcher.startsByTarget[endpoint], launcher.stopsByTarget[endpoint]
+}
+
 type modelHostProcess struct {
 	endpoint string
 	launcher *modelHostLauncher
@@ -368,13 +375,16 @@ func writeBackendCacheAt(home string, selection serviceedges.ModelBackendArtifac
 }
 
 func functionalHomeEnvironment(home string) []string {
-	if runtime.GOOS == "windows" {
-		return append(os.Environ(), "USERPROFILE="+home)
-	}
+	env := append([]string(nil), os.Environ()...)
+	env = append(env,
+		"HOME="+home,
+		"USERPROFILE="+home,
+		"INFINITE_YOU_OMNIVOICE_CACHE_DIR="+filepath.Join(home, ".agent-factory", "models"),
+	)
 	if runtime.GOOS == "plan9" {
-		return append(os.Environ(), "home="+home)
+		env = append(env, "home="+home)
 	}
-	return append(os.Environ(), "HOME="+home)
+	return env
 }
 
 func requiredString(value *string) string {

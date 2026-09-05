@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,13 +34,20 @@ func TestFactorySessionOmniArtifactRedactsUnsafeFailureAcrossBoundaries(t *testi
 	)))
 	fixture.startLive(t, "redact unsafe protocol failure")
 	fixture.submit(t, "redact unsafe protocol failure")
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
+	status := support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
 
 	cliStdout := fixture.inputs.Stdout()
 	cliStderr := fixture.inputs.Stderr()
 	workBody := readPublicHTTPBody(t, support.SessionWorkURL(fixture.baseURL, fixture.sessionID, "/work"))
 	eventsBody := readPublicEventsHTTPBody(t, support.SessionEventsURL(fixture.baseURL, fixture.sessionID))
+	command := fixture.command
+	command.AcceptError()
 	fixture.stopLive(t)
+	if status.Categories.Failed == 0 {
+		t.Fatalf("Factory Session status = %#v, want FAILED", status.Categories)
+	}
+	executeErr := command.Err()
+	runtimeLoggerBody := fixture.runtimeLoggerRecords(t)
 	recordingBody, err := os.ReadFile(fixture.recordingPath)
 	if err != nil {
 		t.Fatalf("read redaction recording: %v", err)
@@ -50,6 +59,8 @@ func TestFactorySessionOmniArtifactRedactsUnsafeFailureAcrossBoundaries(t *testi
 		"CLI stderr":              cliStderr,
 		"public Work HTTP":        workBody,
 		"public events HTTP":      eventsBody,
+		"Process.Execute error":   fmt.Sprint(executeErr),
+		"runtime logger":          runtimeLoggerBody,
 		"recording artifact":      string(recordingBody),
 		"decoded live event JSON": mustMarshalEvents(t, liveEvents),
 	}
@@ -60,6 +71,36 @@ func TestFactorySessionOmniArtifactRedactsUnsafeFailureAcrossBoundaries(t *testi
 	replayed := fixture.replay(t)
 	assertRedaction(t, "replay Work HTTP", replayed.rawWork, unsafeValues)
 	assertRedaction(t, "replay events HTTP", replayed.rawEvents, unsafeValues)
+	assertRedaction(t, "replay runtime logger", fixture.runtimeLoggerRecords(t), unsafeValues)
+}
+
+func (fixture *factoryFixture) runtimeLoggerRecords(t *testing.T) string {
+	t.Helper()
+	var records strings.Builder
+	found := false
+	err := filepath.WalkDir(fixture.runtimeLogDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		found = true
+		records.Write(data)
+		records.WriteByte('\n')
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("read runtime logger records under %q: %v", fixture.runtimeLogDir, err)
+	}
+	if !found {
+		t.Fatalf("runtime logger emitted no records under %q", fixture.runtimeLogDir)
+	}
+	return records.String()
 }
 
 func readPublicHTTPBody(t *testing.T, endpoint string) string {

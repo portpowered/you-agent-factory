@@ -404,6 +404,7 @@ func (group *omniFactoryProcessGroup) close() error {
 
 type factoryFixture struct {
 	home          string
+	runtimeLogDir string
 	sessionID     string
 	dir           string
 	recordingPath string
@@ -427,6 +428,13 @@ func newFactoryFixture(t *testing.T, response string) *factoryFixture {
 func newFactoryFixtureWithConfig(t *testing.T, response, executionLimit string) *factoryFixture {
 	t.Helper()
 	group := sharedOmniFactory(t)
+	home := t.TempDir()
+	if err := writeBuiltinModelCacheAt(home); err != nil {
+		t.Fatalf("seed builtin model cache: %v", err)
+	}
+	if err := writeBackendCacheAt(home, llamaBackendSelection()); err != nil {
+		t.Fatalf("seed backend model cache: %v", err)
+	}
 	protocol := &omniProtocolFixture{
 		response: response, called: make(chan struct{}), canceled: make(chan struct{}),
 	}
@@ -441,7 +449,7 @@ func newFactoryFixtureWithConfig(t *testing.T, response, executionLimit string) 
 	support.WriteWorkstationConfig(t, dir, "execute-llm", workstation)
 	recordingPath := filepath.Join(t.TempDir(), "omni-artifact-recording.json")
 	return &factoryFixture{
-		home: group.home, sessionID: sessionID, dir: dir,
+		home: home, runtimeLogDir: filepath.Join(home, "runtime-logs"), sessionID: sessionID, dir: dir,
 		recordingPath: recordingPath, protocol: protocol, process: group.process,
 		launcher: group.launcher, modelEndpoint: modelEndpoint, group: group,
 	}
@@ -512,10 +520,18 @@ func (fixture *factoryFixture) invokeExpectFailure(t *testing.T, prompt string) 
 	t.Helper()
 	fixture.startLive(t, prompt)
 	fixture.submit(t, prompt)
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
-	stderr := fixture.inputs.Stderr()
+	status := support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
+	command := fixture.command
+	command.AcceptError()
 	fixture.stopLive(t)
-	return errors.New("Factory Session invocation failed"), stderr
+	stderr := fixture.inputs.Stderr()
+	if status.Categories.Failed == 0 {
+		t.Fatalf("Factory Session status = %#v, want FAILED", status.Categories)
+	}
+	if err := command.Err(); err != nil {
+		return err, stderr
+	}
+	return fmt.Errorf("Factory Session reported FAILED status without a Process.Execute error: %#v", status.Categories), stderr
 }
 
 func (fixture *factoryFixture) recording(t *testing.T) []factoryapi.FactoryEvent {
@@ -562,6 +578,7 @@ func (fixture *factoryFixture) startLive(t *testing.T, prompt string) {
 	fixture.inputs = support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
 		"--session", fixture.sessionID, "--record", fixture.recordingPath, "--output", "primary",
+		"--runtime-log-dir", fixture.runtimeLogDir,
 		"--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", fixture.listenPort),
 	})
 	fixture.inputs.Input.Env = functionalHomeEnvironment(fixture.home)
@@ -598,6 +615,7 @@ func (fixture *factoryFixture) replay(t *testing.T) replayProjection {
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--dir", fixture.dir, "--session", replaySessionID,
 		"--replay", fixture.recordingPath, "--no-record", "--output", "primary",
+		"--runtime-log-dir", fixture.runtimeLogDir,
 		"--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port),
 	})
 	inputs.Input.Env = functionalHomeEnvironment(fixture.home)
@@ -723,6 +741,10 @@ func (fixture *factoryFixture) assertRelease(t *testing.T) {
 	fixture.stopLive(t)
 	if got := fixture.protocol.Calls(); got != 1 {
 		t.Fatalf("private OMNI protocol calls = %d, want exactly one attempt", got)
+	}
+	startsForTarget, stopsForTarget := fixture.launcher.CountsFor(fixture.modelEndpoint)
+	if startsForTarget != 1 || stopsForTarget != 1 {
+		t.Fatalf("managed model host lifecycle for %q = starts %d, stops %d; want exactly one start and one stop", fixture.modelEndpoint, startsForTarget, stopsForTarget)
 	}
 	starts, stops := fixture.launcher.Counts()
 	if stops > starts {

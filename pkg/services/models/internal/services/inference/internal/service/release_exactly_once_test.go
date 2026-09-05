@@ -24,6 +24,7 @@ func TestInvocationLeaseReleaseIsExactlyOnce(t *testing.T) {
 }
 
 func runReleaseSuccess(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 	scopes, scope, lease, host := releaseFixture(t, "release-success", models.OperationOMNI)
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, &recordingInvocationRuntime{}, fixedClock(), nil)
@@ -33,6 +34,7 @@ func runReleaseSuccess(t *testing.T) {
 }
 
 func runReleaseBackendError(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 	scopes, scope, lease, host := releaseFixture(t, "release-error", models.OperationOMNI)
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, &recordingInvocationRuntime{invokeErr: models.ErrInferenceFailed}, fixedClock(), nil)
@@ -42,6 +44,7 @@ func runReleaseBackendError(t *testing.T) {
 }
 
 func runReleaseTimeout(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 	scopes, scope, lease, host := releaseFixture(t, "release-timeout", models.OperationOMNI)
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, deadlineInvocationRuntime{}, fixedClock(), nil, func() time.Duration { return time.Millisecond })
@@ -51,6 +54,7 @@ func runReleaseTimeout(t *testing.T) {
 }
 
 func runReleaseContextCancellation(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 	scopes, scope, lease, host := releaseFixture(t, "release-context-cancel", models.OperationOMNI)
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, deadlineInvocationRuntime{}, fixedClock(), nil)
@@ -62,6 +66,7 @@ func runReleaseContextCancellation(t *testing.T) {
 }
 
 func runReleaseExplicitCancellation(t *testing.T) {
+	t.Parallel()
 	t.Helper()
 	scopes, scope, lease, host := releaseFixture(t, "release-explicit-cancel", "hold")
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, holdInvocationRuntime{}, fixedClock(), nil)
