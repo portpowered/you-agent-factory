@@ -157,61 +157,29 @@ func TestCloseRuntimeScopeCancelsAndJoinsInFlightHostLoad(t *testing.T) {
 		})
 		ensureErrCh <- err
 	}()
-	select {
-	case <-launcher.started:
-	case <-time.After(5 * time.Second):
-		launcher.releaseLoad()
-		t.Fatal("managed process launcher did not enter the in-flight load")
-	}
+	awaitSignal(t, launcher.started, "managed process launcher did not enter the in-flight load")
 
 	closeErrCh := make(chan error, 1)
 	go func() {
 		closeErrCh <- closer.CloseRuntimeScope(context.Background(), ref)
 	}()
-	select {
-	case <-launcher.cancelObserved:
-	case <-time.After(5 * time.Second):
-		launcher.releaseLoad()
-		select {
-		case <-ensureErrCh:
-		case <-time.After(5 * time.Second):
-		}
-		select {
-		case <-closeErrCh:
-		case <-time.After(5 * time.Second):
-		}
-		t.Fatal("runtime-scope close did not cancel the in-flight load")
-	}
+	awaitLoadCancellation(t, launcher, ensureErrCh, closeErrCh)
 	launcher.releaseLoad()
 
-	var ensureErr error
-	select {
-	case ensureErr = <-ensureErrCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("in-flight EnsureModelHost did not return after scope close")
-	}
+	ensureErr := awaitError(t, ensureErrCh, "in-flight EnsureModelHost did not return after scope close")
 	if !errors.Is(ensureErr, models.ErrHostCancelled) || !errors.Is(ensureErr, context.Canceled) {
 		t.Fatalf("EnsureModelHost error = %v, want host cancellation with context.Canceled", ensureErr)
 	}
 
-	select {
-	case err := <-closeErrCh:
-		if err != nil {
-			t.Fatalf("CloseRuntimeScope: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("CloseRuntimeScope did not join the in-flight load")
+	if err := awaitError(t, closeErrCh, "CloseRuntimeScope did not join the in-flight load"); err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
 	}
 
 	process := launcher.loadedProcess()
 	if process == nil {
 		t.Fatal("launcher did not return the late-created managed process")
 	}
-	select {
-	case <-process.stopCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("late-created managed process survived scope close")
-	}
+	awaitSignal(t, process.stopCh, "late-created managed process survived scope close")
 }
 
 func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
@@ -782,6 +750,43 @@ func newBlockedProcessLauncher() *blockedProcessLauncher {
 		started:        make(chan struct{}),
 		cancelObserved: make(chan struct{}),
 		release:        make(chan struct{}),
+	}
+}
+
+func awaitSignal(t *testing.T, signal <-chan struct{}, message string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatal(message)
+	}
+}
+
+func awaitError(t *testing.T, result <-chan error, message string) error {
+	t.Helper()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal(message)
+		return nil
+	}
+}
+
+func awaitLoadCancellation(
+	t *testing.T,
+	launcher *blockedProcessLauncher,
+	ensureErrCh <-chan error,
+	closeErrCh <-chan error,
+) {
+	t.Helper()
+	select {
+	case <-launcher.cancelObserved:
+	case <-time.After(5 * time.Second):
+		launcher.releaseLoad()
+		_ = awaitError(t, ensureErrCh, "in-flight EnsureModelHost did not unwind after cancellation")
+		_ = awaitError(t, closeErrCh, "CloseRuntimeScope did not unwind after cancellation")
+		t.Fatal("runtime-scope close did not cancel the in-flight load")
 	}
 }
 
