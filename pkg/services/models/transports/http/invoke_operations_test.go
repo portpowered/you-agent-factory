@@ -439,6 +439,49 @@ func TestGenericInvocationResponseMappingPreservesASROutputsAndFailureIdentity(t
 	assertASRFailureMapping(t, projectedFailure, failure)
 }
 
+func TestHTTPProjectionPreservesArtifactAndFailureContract(t *testing.T) {
+	t.Parallel()
+
+	ref, err := (models.InferenceArtifactRef{}).Parse("models-inference:artifact:1")
+	if err != nil {
+		t.Fatalf("parse artifact ref: %v", err)
+	}
+	text := "héllo 🌍"
+	projected := GenericInvocationResponseToGenerated(models.GenericInvocationResult{
+		Outputs: []models.InferenceOutput{{
+			Name: "text", Modality: models.ModalityText, ContentType: "text/plain",
+			MediaType: "text/plain", Content: text,
+			Artifact: &models.InferenceArtifact{
+				Artifact: ref, Name: "text", MediaType: "text/plain", SizeBytes: int64(len([]byte(text))),
+			},
+		}},
+	})
+	if len(projected.Outputs) != 1 || projected.Outputs[0].Artifact == nil ||
+		projected.Outputs[0].Artifact.ArtifactRef != ref.String() ||
+		projected.Outputs[0].Artifact.MediaType == nil || *projected.Outputs[0].Artifact.MediaType != "text/plain" ||
+		projected.Outputs[0].Artifact.SizeBytes == nil || *projected.Outputs[0].Artifact.SizeBytes != int64(len([]byte(text))) {
+		t.Fatalf("projected output = %#v, want unchanged artifact metadata", projected.Outputs)
+	}
+	emptyRef := GenericInvocationResponseToGenerated(models.GenericInvocationResult{
+		Outputs: []models.InferenceOutput{{
+			Name: "text", Modality: models.ModalityText,
+			Artifact: &models.InferenceArtifact{Name: "unregistered"},
+		}},
+	})
+	if emptyRef.Outputs[0].Artifact != nil {
+		t.Fatalf("empty artifact ref projected as %#v, want omitted", emptyRef.Outputs[0].Artifact)
+	}
+	failure := &models.InvocationFailure{
+		Class: models.InvocationFailureClassArtifact, Message: "OMNI text artifact metadata is invalid",
+		Model: models.ModelReference{NameOrURI: "llm"}, Operation: models.OperationOMNI, Slot: "text",
+	}
+	projectedFailure := GenericInvocationFailureToGenerated(failure)
+	if projectedFailure == nil || projectedFailure.Class != factoryapi.ModelInvocationFailureClassArtifact ||
+		projectedFailure.Message != failure.Message || projectedFailure.Slot == nil || *projectedFailure.Slot != "text" {
+		t.Fatalf("projected failure = %#v, want stable artifact failure", projectedFailure)
+	}
+}
+
 func assertASRResponseMapping(t *testing.T, projected factoryapi.GenericModelInvocationResponse) {
 	t.Helper()
 	if len(projected.Outputs) != 2 || projected.Outputs[0].Name != "transcript" || projected.Outputs[1].Name != "segments" {

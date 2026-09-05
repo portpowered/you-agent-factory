@@ -332,6 +332,7 @@ func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
 		{"init"},
 		{"config", "user.email", "fix-functional@example.com"},
 		{"config", "user.name", "fix functional"},
+		{"config", "maintenance.auto", "false"},
 		{"commit", "--allow-empty", "-m", "initial Fix functional repository"},
 	}
 	runGit := func(workspace string, args ...string) ([]byte, error) {

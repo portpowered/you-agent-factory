@@ -601,11 +601,14 @@ func (runtime omniInvocationRuntime) Invoke(
 		return inference.InvocationRuntimeResult{}, models.ErrUnavailable
 	}
 	ctx = localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint)
-	content, err := runtime.codec.Invoke(ctx, request.Request, request.Operation)
+	omniResult, err := runtime.codec.Invoke(ctx, request.Request, request.Operation)
 	if err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
-	return inference.InvocationRuntimeResult{Content: content}, nil
+	return inference.InvocationRuntimeResult{
+		Content:   omniResult.Content,
+		Artifacts: invocationArtifactSources(omniResult.Artifacts),
+	}, nil
 }
 
 type invocationProtocolAdapter struct {
@@ -681,23 +684,6 @@ func cloneInvocationParameterValue(value any) any {
 	default:
 		return value
 	}
-}
-
-func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
-	if len(artifacts) == 0 {
-		return nil
-	}
-	sources := make([]inference.InvocationArtifactSource, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		sources = append(sources, inference.InvocationArtifactSource{
-			RefValue:   artifact.Artifact.String(),
-			Name:       artifact.Name,
-			MediaType:  artifact.MediaType,
-			SizeBytes:  artifact.SizeBytes,
-			Properties: artifact.Properties,
-		})
-	}
-	return sources
 }
 
 type modelsServiceComponents struct {

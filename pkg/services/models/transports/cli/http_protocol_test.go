@@ -479,6 +479,58 @@ func TestCLIOutputContentProjectionBranches(t *testing.T) {
 	assertCLIInferenceArtifactProjection(t)
 }
 
+func TestCLIProjectionPreservesArtifactAndFailureContract(t *testing.T) {
+	t.Parallel()
+
+	ref, err := (modelinference.InferenceArtifactRef{}).Parse("models-inference:artifact:1")
+	if err != nil {
+		t.Fatalf("parse artifact ref: %v", err)
+	}
+	text := "héllo 🌍"
+	response := genericInvocationResponseFromInferenceResult(modelinference.InvokeModelResult{
+		ModelName: "llm", Operation: modelinference.OperationOMNI,
+		Outputs: []modelinference.InferenceOutput{{
+			Name: "text", Modality: modelinference.ModalityText, ContentType: "text/plain",
+			MediaType: "text/plain", Content: text,
+			Artifact: &modelinference.InferenceArtifact{
+				Artifact: ref, Name: "text", MediaType: "text/plain", SizeBytes: int64(len([]byte(text))),
+			},
+		}},
+	})
+	if len(response.Outputs) != 1 || response.Outputs[0].Artifact == nil ||
+		response.Outputs[0].Artifact.ArtifactRef != ref.String() ||
+		response.Outputs[0].Artifact.MediaType == nil || *response.Outputs[0].Artifact.MediaType != "text/plain" ||
+		response.Outputs[0].Artifact.SizeBytes == nil || *response.Outputs[0].Artifact.SizeBytes != int64(len([]byte(text))) {
+		t.Fatalf("CLI response = %#v, want unchanged artifact metadata", response.Outputs)
+	}
+	emptyRef := genericInvocationResponseFromInferenceResult(modelinference.InvokeModelResult{
+		Outputs: []modelinference.InferenceOutput{{
+			Name: "text", Modality: modelinference.ModalityText,
+			Artifact: &modelinference.InferenceArtifact{Name: "unregistered"},
+		}},
+	})
+	if emptyRef.Outputs[0].Artifact != nil {
+		t.Fatalf("empty artifact ref projected as %#v, want omitted", emptyRef.Outputs[0].Artifact)
+	}
+	failure := &modelinference.InvocationFailure{
+		Class: modelinference.InvocationFailureClassArtifact, Message: "OMNI text artifact metadata is invalid",
+		Operation: modelinference.OperationOMNI, Slot: "text",
+	}
+	mapped, ok := mapModelsInvocationError(failure)
+	if !ok {
+		t.Fatal("mapModelsInvocationError() did not classify artifact failure")
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(mapped, &coded) || coded.CLIErrorCode() != modelsRootBadRequestCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest || coded.CLIErrorMessage() != failure.Message {
+		t.Fatalf("CLI failure = %v, want stable BAD_REQUEST artifact diagnostic", mapped)
+	}
+}
+
 func assertCLIContentParts(t *testing.T) {
 	t.Helper()
 	parts := inferenceContentToWorkParts([]modelinference.InferenceContent{

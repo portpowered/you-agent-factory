@@ -246,10 +246,10 @@ func openRuntime(
 	}
 	runtimeService := factorySessionsRuntimeAssembly
 	currentRuntimeConfig := func() *models.RuntimeConfig {
-		runtime := runtimeService.CurrentRuntime()
-		if runtime != nil {
-			return ProjectModelsRuntimeConfig(runtime.RuntimeConfig)
-		}
+		// The Models scope must snapshot the Factory Definition selected by this
+		// opening. CurrentRuntime is process-global and can belong to another
+		// concurrently opening Factory Session, which would bind this session's
+		// host launcher to the other session's worker endpoint.
 		return ProjectModelsRuntimeConfig(load.LoadedFactoryCfg)
 	}
 	modelsBind, err := bindModelsRuntimeScope(

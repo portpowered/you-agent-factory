@@ -67,6 +67,12 @@ func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {
 			Usage: `{"tokens":3}`,
 		},
 	}
+	result := invokeBoundOmni(t, client)
+	assertBoundOmniResult(t, result, client)
+}
+
+func invokeBoundOmni(t *testing.T, client *recordingInvocationProtocolClient) inference.InvocationRuntimeResult {
+	t.Helper()
 	runtime := newInvocationRuntime(client, nil)
 	scope, err := (models.RuntimeScopeRef{}).Parse("scope:bound-omni")
 	if err != nil {
@@ -90,9 +96,44 @@ func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke error = %v", err)
 	}
+	return result
+}
+
+func assertBoundOmniResult(
+	t *testing.T,
+	result inference.InvocationRuntimeResult,
+	client *recordingInvocationProtocolClient,
+) {
+	t.Helper()
+	assertBoundOmniContent(t, result)
+	assertBoundOmniArtifact(t, result)
+	assertBoundOmniRequest(t, client)
+}
+
+func assertBoundOmniContent(t *testing.T, result inference.InvocationRuntimeResult) {
+	t.Helper()
 	if len(result.Content) != 2 || result.Content[0].Name != "text" || result.Content[0].Content != "fixture answer" || result.Content[1].Name != "usage" {
 		t.Fatalf("Invoke content = %#v, want text and declared usage", result.Content)
 	}
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("Invoke artifacts = %#v, want one forwarded descriptor", result.Artifacts)
+	}
+}
+
+func assertBoundOmniArtifact(t *testing.T, result inference.InvocationRuntimeResult) {
+	t.Helper()
+	if len(result.Artifacts) != 1 {
+		t.Fatalf("Invoke artifacts = %#v, want one forwarded descriptor", result.Artifacts)
+	}
+	artifact := result.Artifacts[0]
+	if artifact.RefValue != "" || artifact.SourcePath != "" || artifact.Name != "text" ||
+		artifact.MediaType != "text/plain" || artifact.SizeBytes != int64(len([]byte("fixture answer"))) {
+		t.Fatalf("Invoke artifact = %#v, want detached zero-reference text metadata", artifact)
+	}
+}
+
+func assertBoundOmniRequest(t *testing.T, client *recordingInvocationProtocolClient) {
+	t.Helper()
 	if client.request.Operation != models.OperationOMNI || client.request.Prompt != "compare these" {
 		t.Fatalf("protocol request = %#v, want OMNI prompt", client.request)
 	}

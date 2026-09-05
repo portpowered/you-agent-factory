@@ -89,6 +89,9 @@ func (s *service) finishFailedInvocation(
 	runtimeErr error,
 ) (models.InvokeModelResult, error) {
 	classified := classifyInvokeRuntimeError(invokeCtx, runtimeErr)
+	if isPrivateOMNIOperation(request.Operation) {
+		classified = classifyPrivateOMNIError(classified)
+	}
 	result := failedInvocationResult(request, invocation)
 	if errors.Is(classified, models.ErrInferenceCancelled) {
 		result = cancelledInvocationResult(request, invocation)
@@ -105,6 +108,11 @@ func (s *service) finishCompletedInvocation(
 	runtimeResult inference.InvocationRuntimeResult,
 	operation models.Operation,
 ) (models.InvokeModelResult, error) {
+	if isPrivateOMNIOperation(request.Operation) {
+		if err := validatePrivateOMNIResult(runtimeResult); err != nil {
+			return s.finishFailedInvocation(ctx, request, invocation, err)
+		}
+	}
 	artifacts, err := s.registerInvocationArtifacts(runtimeResult.Artifacts)
 	if err != nil {
 		return s.finishFailedInvocation(ctx, request, invocation, err)
