@@ -91,11 +91,15 @@ func NewPinnedGRPCHostProtocolNegotiator(
 }
 
 type invocationRuntimeOptions struct {
-	Backend   InvocationBackend
-	ASR       ASRBackend
-	Embedding EmbeddingBackend
-	Client    InvocationProtocolClient
-	Dialer    InvocationProtocolDialer
+	Backend          InvocationBackend
+	ASR              ASRBackend
+	Embedding        EmbeddingBackend
+	Client           InvocationProtocolClient
+	Dialer           InvocationProtocolDialer
+	ASRTempDirectory func() string
+	ASRCreateTemp    localai.TempFileFactory
+	ASRWriteFile     localai.InputFileWriter
+	ASRRemoveFile    localai.InputFileRemover
 }
 
 type invocationRuntime interface {
@@ -397,6 +401,9 @@ func composeModelsService(
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	runtimeOptions = bindASRStaging(
+		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
+	)
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,
 	)
@@ -456,7 +463,9 @@ func (runtime operationInvocationRuntime) Invoke(
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
 	if runtime.asr != nil && isASROperation(request) {
-		return runtime.asr.Invoke(ctx, request)
+		return runtime.asr.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
 	}
 	if runtime.omni != nil && isOMNIOperation(request) {
 		return runtime.omni.Invoke(ctx, request)
@@ -473,8 +482,15 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		generic: generic,
 		omni:    newInvocationRuntime(options.Client, options.Dialer),
 	}
-	if options.ASR != nil {
-		asr, err := newASRInvocationRuntime(options.ASR)
+	asrBackend := options.ASR
+	if asrBackend == nil {
+		asrBackend = localai.NewPinnedASRBackend(
+			options.Dialer, options.ASRTempDirectory, options.ASRCreateTemp,
+			options.ASRWriteFile, options.ASRRemoveFile,
+		)
+	}
+	if asrBackend != nil {
+		asr, err := newASRInvocationRuntime(asrBackend)
 		if err != nil {
 			return nil, err
 		}
