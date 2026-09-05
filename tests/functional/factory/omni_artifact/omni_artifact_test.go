@@ -742,6 +742,7 @@ func (fixture *factoryFixture) assertRelease(t *testing.T) {
 	if got := fixture.protocol.Calls(); got != 1 {
 		t.Fatalf("private OMNI protocol calls = %d, want exactly one attempt", got)
 	}
+	fixture.launcher.WaitForStopped(t, fixture.modelEndpoint)
 	startsForTarget, stopsForTarget := fixture.launcher.CountsFor(fixture.modelEndpoint)
 	if startsForTarget != 1 || stopsForTarget != 1 {
 		t.Fatalf("managed model host lifecycle for %q = starts %d, stops %d; want exactly one start and one stop", fixture.modelEndpoint, startsForTarget, stopsForTarget)

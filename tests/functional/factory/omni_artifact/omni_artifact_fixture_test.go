@@ -195,6 +195,14 @@ type modelHostLauncher struct {
 	stops          int
 	startsByTarget map[string]int
 	stopsByTarget  map[string]int
+	lifecycle      map[string]*modelHostLifecycle
+}
+
+type modelHostLifecycle struct {
+	started   chan struct{}
+	stopped   chan struct{}
+	startOnce sync.Once
+	stopOnce  sync.Once
 }
 
 func (launcher *modelHostLauncher) Start(_ context.Context, spec serviceedges.HostProcessStartSpec) (interface {
@@ -211,9 +219,18 @@ func (launcher *modelHostLauncher) Start(_ context.Context, spec serviceedges.Ho
 	if launcher.startsByTarget == nil {
 		launcher.startsByTarget = make(map[string]int)
 	}
+	if launcher.lifecycle == nil {
+		launcher.lifecycle = make(map[string]*modelHostLifecycle)
+	}
+	lifecycle := launcher.lifecycle[endpoint]
+	if lifecycle == nil {
+		lifecycle = &modelHostLifecycle{started: make(chan struct{}), stopped: make(chan struct{})}
+		launcher.lifecycle[endpoint] = lifecycle
+	}
 	launcher.startsByTarget[endpoint]++
+	lifecycle.startOnce.Do(func() { close(lifecycle.started) })
 	launcher.mu.Unlock()
-	return &modelHostProcess{endpoint: endpoint, launcher: launcher, stopped: make(chan struct{})}, nil
+	return &modelHostProcess{endpoint: endpoint, launcher: launcher, lifecycle: lifecycle}, nil
 }
 
 func (launcher *modelHostLauncher) Counts() (int, int) {
@@ -229,21 +246,43 @@ func (launcher *modelHostLauncher) CountsFor(endpoint string) (int, int) {
 	return launcher.startsByTarget[endpoint], launcher.stopsByTarget[endpoint]
 }
 
+func (launcher *modelHostLauncher) WaitForStopped(t *testing.T, endpoint string) {
+	t.Helper()
+	endpoint = strings.TrimSpace(endpoint)
+	launcher.mu.Lock()
+	lifecycle := launcher.lifecycle[endpoint]
+	starts := launcher.startsByTarget[endpoint]
+	launcher.mu.Unlock()
+	if starts == 0 || lifecycle == nil {
+		t.Fatalf("managed model host lifecycle for %q has no observed start", endpoint)
+	}
+	select {
+	case <-lifecycle.started:
+	case <-time.After(omniFactoryFunctionalTimeout):
+		t.Fatalf("timed out waiting for managed model host %q to start", endpoint)
+	}
+	select {
+	case <-lifecycle.stopped:
+	case <-time.After(omniFactoryFunctionalTimeout):
+		t.Fatalf("timed out waiting for managed model host %q to stop", endpoint)
+	}
+}
+
 type modelHostProcess struct {
-	endpoint string
-	launcher *modelHostLauncher
-	stopped  chan struct{}
-	once     sync.Once
+	endpoint  string
+	launcher  *modelHostLauncher
+	lifecycle *modelHostLifecycle
+	once      sync.Once
 }
 
 func (process *modelHostProcess) HealthEndpoint() string { return process.endpoint }
 func (process *modelHostProcess) Wait() error {
-	<-process.stopped
+	<-process.lifecycle.stopped
 	return nil
 }
 func (process *modelHostProcess) Stop(context.Context) error {
 	process.once.Do(func() {
-		close(process.stopped)
+		process.lifecycle.stopOnce.Do(func() { close(process.lifecycle.stopped) })
 		process.launcher.mu.Lock()
 		process.launcher.stops++
 		if process.launcher.stopsByTarget == nil {
