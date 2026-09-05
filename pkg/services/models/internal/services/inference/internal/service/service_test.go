@@ -607,16 +607,22 @@ func openInferenceScope(
 }
 
 func inferenceWorker(model, operation string) models.RuntimeWorker {
+	operationDefinition := models.RuntimeOperation{
+		Name: operation,
+		Inputs: []models.RuntimeOperationSlot{{
+			Name: "input", ContentTypes: []string{models.RuntimeContentTypeText},
+		}},
+	}
+	if operation == models.OperationOMNI {
+		operationDefinition.Outputs = []models.RuntimeOperationSlot{{
+			Name: "text", ContentTypes: []string{models.RuntimeContentTypeText}, Required: true,
+		}}
+	}
 	return models.RuntimeWorker{
 		Name: "worker", Type: models.RuntimeWorkerTypeInference,
 		Model: model, ModelLocality: models.RuntimeModelLocalityLocal,
-		Operations: []models.RuntimeOperation{{
-			Name: operation,
-			Inputs: []models.RuntimeOperationSlot{{
-				Name: "input", ContentTypes: []string{models.RuntimeContentTypeText},
-			}},
-		}},
-		Resources: []models.RuntimeResource{{Name: "model-cache"}},
+		Operations: []models.RuntimeOperation{operationDefinition},
+		Resources:  []models.RuntimeResource{{Name: "model-cache"}},
 	}
 }
 
@@ -705,6 +711,17 @@ func (runtime *recordingInvocationRuntime) Invoke(
 	if runtime.artifactSources != nil {
 		result.Artifacts = append([]inference.InvocationArtifactSource(nil), runtime.artifactSources...)
 	} else if len(result.Content) == 0 {
+		if request.Request.Operation == models.OperationOMNI {
+			result.Content = []models.InferenceContent{{
+				Name: "text", Modality: models.ModalityText,
+				ContentType: "text/plain", MediaType: "text/plain", Content: "omni fixture result",
+			}}
+			result.Artifacts = []inference.InvocationArtifactSource{{
+				Name: "text", MediaType: "text/plain",
+				SizeBytes: int64(len([]byte("omni fixture result"))),
+			}}
+			return result, nil
+		}
 		result.Content = []models.InferenceContent{{
 			ContentType: request.Request.Input.ContentType,
 			Content:     request.Request.Input.Content,

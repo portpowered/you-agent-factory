@@ -18,43 +18,63 @@ func isPrivateOMNIOperation(operation string) bool {
 // can assign identity or retain a runtime-owned source. Keeping this preflight
 // private prevents malformed OMNI metadata from changing the generic contract.
 func validatePrivateOMNIResult(result inference.InvocationRuntimeResult) error {
-	var text string
-	textSeen := false
+	text, err := privateOMNIText(result.Content)
+	if err != nil {
+		return err
+	}
+	if !validPrivateOMNIArtifact(result.Artifacts, text) {
+		return privateOMNIArtifactFailure()
+	}
+	return nil
+}
+
+func privateOMNIText(contents []models.InferenceContent) (string, error) {
+	text := ""
 	usageSeen := false
-	for _, content := range result.Content {
+	textSeen := false
+	for _, content := range contents {
 		switch content.Name {
 		case "text":
-			if textSeen || content.Modality != models.ModalityText ||
-				content.ContentType != "text/plain" || content.MediaType != "text/plain" ||
-				strings.TrimSpace(content.Content) == "" {
-				return privateOMNIMalformedFailure()
+			if textSeen || !validPrivateOMNITextContent(content) {
+				return "", privateOMNIMalformedFailure()
 			}
 			textSeen = true
 			text = content.Content
 		case "usage":
-			if usageSeen || content.Modality != models.ModalityJSON ||
-				content.ContentType != "application/json" || content.MediaType != "application/json" {
-				return privateOMNIMalformedFailure()
+			if usageSeen || !validPrivateOMNIUsageContent(content) {
+				return "", privateOMNIMalformedFailure()
 			}
 			usageSeen = true
 		default:
-			return privateOMNIMalformedFailure()
+			return "", privateOMNIMalformedFailure()
 		}
 	}
 	if !textSeen {
-		return privateOMNIMalformedFailure()
+		return "", privateOMNIMalformedFailure()
 	}
-	if len(result.Artifacts) != 1 {
-		return privateOMNIArtifactFailure()
+	return text, nil
+}
+
+func validPrivateOMNITextContent(content models.InferenceContent) bool {
+	return content.Modality == models.ModalityText &&
+		content.ContentType == "text/plain" && content.MediaType == "text/plain" &&
+		strings.TrimSpace(content.Content) != ""
+}
+
+func validPrivateOMNIUsageContent(content models.InferenceContent) bool {
+	return content.Modality == models.ModalityJSON &&
+		content.ContentType == "application/json" && content.MediaType == "application/json"
+}
+
+func validPrivateOMNIArtifact(artifacts []inference.InvocationArtifactSource, text string) bool {
+	if len(artifacts) != 1 {
+		return false
 	}
-	source := result.Artifacts[0]
-	if source.RefValue != "" || source.SourcePath != "" || len(source.Properties) != 0 ||
-		source.Name != "text" || source.MediaType != "text/plain" ||
-		source.SizeBytes < 0 || source.SizeBytes > privateOMNIArtifactLimitBytes ||
-		source.SizeBytes != int64(len([]byte(text))) {
-		return privateOMNIArtifactFailure()
-	}
-	return nil
+	source := artifacts[0]
+	return source.RefValue == "" && source.SourcePath == "" && len(source.Properties) == 0 &&
+		source.Name == "text" && source.MediaType == "text/plain" &&
+		source.SizeBytes >= 0 && source.SizeBytes <= privateOMNIArtifactLimitBytes &&
+		source.SizeBytes == int64(len([]byte(text)))
 }
 
 func privateOMNIMalformedFailure() error {

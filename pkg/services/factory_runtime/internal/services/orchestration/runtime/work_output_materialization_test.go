@@ -143,6 +143,87 @@ func assertCanonicalProposal(
 	}
 }
 
+func TestWorkMaterializationRejectionDoesNotPublishOutput(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	planner := dispatchplanningwire.New(func(context.Context, workers.WorkstationDispatchRequest) error {
+		return nil
+	}, nil)
+	workService := &countingMaterializationWorkService{Service: testMaterializationService()}
+	hook := newCanonicalDispatchPlanningResultHook(
+		planner,
+		buildSimpleNet(),
+		buffers.NewTypedBuffer[workers.WorkResult](4),
+		nil,
+		workService,
+		func() string { return "proposal-rejected" },
+		"session-rejected",
+	)
+	dispatch := work.WorkDispatch{
+		DispatchID:      "dispatch-rejected",
+		TransitionID:    "t-process",
+		WorkerType:      "mock",
+		WorkstationName: "workstation-a",
+		Execution: work.ExecutionMetadata{
+			RequestID: "request-rejected",
+			TraceID:   "trace-rejected",
+			ReplayKey: "replay-rejected",
+			WorkIDs:   []string{"source-work"},
+		},
+		InputTokens: workers.InputTokens(workers.Token{
+			Color: workers.Color{
+				WorkID: "source-work", WorkTypeID: "task", DataType: workers.DataTypeWork,
+				TraceID: "trace-rejected",
+			},
+		}),
+	}
+	if err := hook.SubmitDispatch(ctx, dispatch); err != nil {
+		t.Fatalf("SubmitDispatch() error = %v", err)
+	}
+	intent, ok := planner.Intent(dispatch.DispatchID)
+	if !ok {
+		t.Fatalf("planner intent for %q is missing", dispatch.DispatchID)
+	}
+	result := workers.WorkstationDispatchResult{
+		DispatchID:      dispatch.DispatchID,
+		WorkstationName: intent.Action.Request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workers.OutcomeAccepted,
+		},
+		ProposedOutput: &workers.ProposedOutput{
+			Primary: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "rejected output",
+			}},
+			ProposedWork: []workers.ProposedWork{{
+				WorkTypeID: "task",
+				Name:       "invalid-state",
+				State:      "missing",
+			}},
+		},
+	}
+	hook.acceptWorkersResult(ctx, intent.Action.Request, result, nil)
+
+	if calls := workService.calls.Load(); calls != 1 {
+		t.Fatalf("MaterializeWorkerOutput() calls = %d, want exactly one", calls)
+	}
+	canonical, ok := hook.resultBuffer.Read()
+	if !ok {
+		t.Fatal("rejected canonical result is missing")
+	}
+	if canonical.Outcome != workers.OutcomeFailed ||
+		!strings.Contains(canonical.Error, "worker output materialization") ||
+		!strings.Contains(canonical.Error, work.ErrInvalidProposedWork.Error()) {
+		t.Fatalf("canonical rejected result = %#v, want failed materialization result", canonical)
+	}
+	if canonical.Output != "" || len(canonical.OutputContent) != 0 || len(canonical.RecordedOutputWork) != 0 {
+		t.Fatalf("rejected result published output: %#v", canonical)
+	}
+}
+
 func TestCanceledAttemptDoesNotMaterializeCompletedOutput(t *testing.T) {
 	ctx := context.Background()
 	planner := dispatchplanningwire.New(func(context.Context, workers.WorkstationDispatchRequest) error {

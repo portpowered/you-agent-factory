@@ -141,120 +141,91 @@ func TestInvocationArtifactFailuresAreAtomic(t *testing.T) {
 	t.Parallel()
 
 	text := "héllo 🌍"
-	tests := []struct {
-		name      string
-		mutate    func(*inference.InvocationRuntimeResult)
-		wantClass models.InvocationFailureClass
-		wantCause error
-	}{
-		{
-			name:      "missing descriptor",
-			mutate:    func(result *inference.InvocationRuntimeResult) { result.Artifacts = nil },
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "invalid reference",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].RefValue = "private://backend/cache"
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "mismatched name",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].Name = "usage"
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "mismatched media",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].MediaType = "application/json"
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "negative size",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].SizeBytes = -1
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "oversized size",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].SizeBytes = 16<<20 + 1
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "mismatched size",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Artifacts[0].SizeBytes++
-			},
-			wantClass: models.InvocationFailureClassArtifact,
-			wantCause: models.ErrInferenceArtifactInvalid,
-		},
-		{
-			name: "malformed text",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Content[0].Modality = models.ModalityJSON
-			},
-			wantClass: models.InvocationFailureClassMalformedResponse,
-			wantCause: models.ErrInferenceFailed,
-		},
-		{
-			name: "blank text",
-			mutate: func(result *inference.InvocationRuntimeResult) {
-				result.Content[0].Content = "  "
-			},
-			wantClass: models.InvocationFailureClassMalformedResponse,
-			wantCause: models.ErrInferenceFailed,
-		},
-	}
-
-	for _, test := range tests {
+	for _, test := range atomicArtifactFailureCases() {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			scopes, scope := openInferenceScope(t, "omni-atomic-"+strings.ReplaceAll(test.name, " ", "-"), "scoped-model", models.OperationOMNI)
-			lease := mustLeaseRef(t, "omni-lease")
-			host := &recordingInferenceHost{leases: map[string]models.ModelLease{
-				lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
-			}}
-			runtimeResult := inference.InvocationRuntimeResult{
-				Content: []models.InferenceContent{{
-					Name: "text", Modality: models.ModalityText,
-					ContentType: "text/plain", MediaType: "text/plain", Content: text,
-				}},
-				Artifacts: []inference.InvocationArtifactSource{{
-					Name: "text", MediaType: "text/plain", SizeBytes: int64(len([]byte(text))),
-				}},
-			}
-			test.mutate(&runtimeResult)
-			runtime := &recordingInvocationRuntime{content: runtimeResult.Content, artifactSources: runtimeResult.Artifacts}
-			service := newInferenceServiceWithHost(
-				t, scopes, capabilityCatalog{detail: omniDetail()}, host, runtime, fixedClock(), nil,
-			)
-
-			result, err := service.InvokeModelWithLease(context.Background(), omniInvocationRequest(scope, lease))
-			var failure *models.InvocationFailure
-			if err == nil || !errors.As(err, &failure) || failure.Class != test.wantClass || failure.Slot != "text" || !errors.Is(err, test.wantCause) {
-				t.Fatalf("error = %v, failure = %#v, want class %q/cause %v", err, failure, test.wantClass, test.wantCause)
-			}
-			if result.Status != models.ModelInvocationStatusFailed || result.LeaseDisposition != models.InvocationLeaseReleased ||
-				len(result.Content) != 0 || len(result.Outputs) != 0 || len(result.Artifacts) != 0 {
-				t.Fatalf("result = %#v, want atomic failed result without output or artifact", result)
-			}
-			if runtime.invokeCalls != 1 || host.releaseCalls != 1 {
-				t.Fatalf("runtime/release calls = %d/%d, want 1/1", runtime.invokeCalls, host.releaseCalls)
-			}
+			assertAtomicArtifactFailure(t, test, text)
 		})
+	}
+}
+
+type atomicArtifactFailureCase struct {
+	name      string
+	mutate    func(*inference.InvocationRuntimeResult)
+	wantClass models.InvocationFailureClass
+	wantCause error
+}
+
+func atomicArtifactFailureCases() []atomicArtifactFailureCase {
+	artifactFailure := models.InvocationFailureClassArtifact
+	artifactCause := models.ErrInferenceArtifactInvalid
+	malformed := models.InvocationFailureClassMalformedResponse
+	return []atomicArtifactFailureCase{
+		{name: "missing descriptor", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts = nil }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "invalid reference", mutate: func(result *inference.InvocationRuntimeResult) {
+			result.Artifacts[0].RefValue = "private://backend/cache"
+		}, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "mismatched name", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].Name = "usage" }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "mismatched media", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].MediaType = "application/json" }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "negative size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes = -1 }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "oversized size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes = 16<<20 + 1 }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "mismatched size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes++ }, wantClass: artifactFailure, wantCause: artifactCause},
+		{name: "malformed text", mutate: func(result *inference.InvocationRuntimeResult) { result.Content[0].Modality = models.ModalityJSON }, wantClass: malformed, wantCause: models.ErrInferenceFailed},
+		{name: "blank text", mutate: func(result *inference.InvocationRuntimeResult) { result.Content[0].Content = "  " }, wantClass: malformed, wantCause: models.ErrInferenceFailed},
+	}
+}
+
+func assertAtomicArtifactFailure(t *testing.T, test atomicArtifactFailureCase, text string) {
+	t.Helper()
+	scopes, scope := openInferenceScope(t, "omni-atomic-"+strings.ReplaceAll(test.name, " ", "-"), "scoped-model", models.OperationOMNI)
+	lease := mustLeaseRef(t, "omni-lease")
+	host := &recordingInferenceHost{leases: map[string]models.ModelLease{
+		lease.String(): activeLease(scope, lease, "scoped-model", "worker-1"),
+	}}
+	runtimeResult := atomicArtifactRuntimeResult(text)
+	test.mutate(&runtimeResult)
+	runtime := &recordingInvocationRuntime{content: runtimeResult.Content, artifactSources: runtimeResult.Artifacts}
+	service := newInferenceServiceWithHost(t, scopes, capabilityCatalog{detail: omniDetail()}, host, runtime, fixedClock(), nil)
+	result, err := service.InvokeModelWithLease(context.Background(), omniInvocationRequest(scope, lease))
+	assertAtomicArtifactError(t, err, test)
+	assertAtomicArtifactResult(t, result, runtime, host)
+}
+
+func atomicArtifactRuntimeResult(text string) inference.InvocationRuntimeResult {
+	return inference.InvocationRuntimeResult{
+		Content: []models.InferenceContent{{
+			Name: "text", Modality: models.ModalityText,
+			ContentType: "text/plain", MediaType: "text/plain", Content: text,
+		}},
+		Artifacts: []inference.InvocationArtifactSource{{
+			Name: "text", MediaType: "text/plain", SizeBytes: int64(len([]byte(text))),
+		}},
+	}
+}
+
+func assertAtomicArtifactError(t *testing.T, err error, test atomicArtifactFailureCase) {
+	t.Helper()
+	var failure *models.InvocationFailure
+	if err == nil || !errors.As(err, &failure) || failure.Class != test.wantClass || failure.Slot != "text" || !errors.Is(err, test.wantCause) {
+		t.Fatalf("error = %v, failure = %#v, want class %q/cause %v", err, failure, test.wantClass, test.wantCause)
+	}
+}
+
+func assertAtomicArtifactResult(
+	t *testing.T,
+	result models.InvokeModelResult,
+	runtime *recordingInvocationRuntime,
+	host *recordingInferenceHost,
+) {
+	t.Helper()
+	if result.Status != models.ModelInvocationStatusFailed || result.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("result = %#v, want failed/released", result)
+	}
+	if len(result.Content) != 0 || len(result.Outputs) != 0 || len(result.Artifacts) != 0 {
+		t.Fatalf("result = %#v, want atomic failed result without output or artifact", result)
+	}
+	if runtime.invokeCalls != 1 || host.releaseCalls != 1 {
+		t.Fatalf("runtime/release calls = %d/%d, want 1/1", runtime.invokeCalls, host.releaseCalls)
 	}
 }
 

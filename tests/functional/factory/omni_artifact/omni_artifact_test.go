@@ -2,28 +2,47 @@ package omni_artifact_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const omniModelSource = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
+
+const omniFactoryFunctionalTimeout = 60 * time.Second
+
+var sharedOmniFactoryProcess *omniFactoryProcessGroup
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedOmniFactoryProcess != nil {
+		if err := sharedOmniFactoryProcess.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared OMNI Factory process: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
+		}
+	}
+	os.Exit(code)
+}
 
 // TestFactorySessionOmniArtifactJourney keeps the story's executable spine on
 // the public Factory Session boundary: one root-built Process executes an
@@ -48,8 +67,10 @@ func TestFactorySessionOmniArtifactJourney(t *testing.T) {
 	if fixture.protocol.Calls() != 1 {
 		t.Fatalf("protocol calls = %d, want one", fixture.protocol.Calls())
 	}
+	publicWork := fixture.listWork(t)
 	events := fixture.recording(t)
 	journey := assertSuccessfulJourney(t, events, "Return the exact fixture", wantText)
+	assertPublicWorkProjection(t, publicWork, journey, wantText)
 	t.Logf("Factory Session=%s request=%s trace=%s work=%s artifact=%s mime=%s size=%d protocolCalls=%d",
 		fixture.sessionID, response.RequestId, response.TraceId, requiredString(journey.outputWork.WorkId),
 		journey.artifactID, requiredString(journey.outputPart.ContentType), len([]byte(wantText)), fixture.protocol.Calls())
@@ -61,16 +82,20 @@ func TestFactorySessionOmniArtifactReplayPreservesOrderAndLineage(t *testing.T) 
 	const wantText = "Replay exact: café, 東京, and 🌍"
 	fixture := newFactoryFixture(t, wantText)
 	live := fixture.invoke(t, "Replay this exact fixture")
+	liveWork := fixture.listWork(t)
 	liveEvents := fixture.recording(t)
 	liveJourney := assertSuccessfulJourney(t, liveEvents, "Replay this exact fixture", wantText)
-	replayedEvents := fixture.replay(t)
+	replayed := fixture.replay(t)
 	if fixture.protocol.Calls() != 1 {
 		t.Fatalf("protocol calls after replay = %d, want one live call and no replay call", fixture.protocol.Calls())
 	}
-	if !jsonEqual(t, replayedEvents, liveEvents) {
+	liveProjection := replayEventProjection(t, liveEvents)
+	replayProjection := replayEventProjection(t, replayed.events)
+	if !jsonEqual(t, liveProjection, replayProjection) {
 		t.Fatalf("replayed canonical events differ from live recording")
 	}
-	replayedJourney := assertSuccessfulJourney(t, replayedEvents, "Replay this exact fixture", wantText)
+	replayedJourney := assertReplayJourney(t, replayed.events, "Replay this exact fixture", wantText)
+	assertPublicWorkEquivalent(t, liveWork, replayed.work, "live and replay public Work")
 	if replayedJourney.artifactID != liveJourney.artifactID || requiredString(replayedJourney.outputWork.WorkId) != requiredString(liveJourney.outputWork.WorkId) {
 		t.Fatalf("replayed Work/artifact identity = (%q,%q), want live (%q,%q)", requiredString(replayedJourney.outputWork.WorkId), replayedJourney.artifactID, requiredString(liveJourney.outputWork.WorkId), liveJourney.artifactID)
 	}
@@ -86,7 +111,9 @@ func TestFactorySessionOmniArtifactMetadataIsSemantic(t *testing.T) {
 	const wantText = "Semantic Unicode: café, 東京, and 🌍"
 	fixture := newFactoryFixture(t, wantText)
 	response := fixture.invoke(t, "Return semantic metadata")
+	publicWork := fixture.listWork(t)
 	journey := assertSuccessfulJourney(t, fixture.recording(t), "Return semantic metadata", wantText)
+	assertPublicWorkProjection(t, publicWork, journey, wantText)
 	resultPart := workTextPart(t, response.PrimaryResult, "primary result")
 	if resultPart.Type != factoryapi.WorkContentPartTypeText || resultPart.Text != wantText {
 		t.Fatalf("primary result part = %#v, want exact semantic text", resultPart)
@@ -118,8 +145,10 @@ func TestFactorySessionOmniArtifactLineageIsPreserved(t *testing.T) {
 	const wantText = "Lineage exact: café, 東京, and 🌍"
 	fixture := newFactoryFixture(t, wantText)
 	response := fixture.invoke(t, "Preserve this lineage")
+	publicWork := fixture.listWork(t)
 	events := fixture.recording(t)
 	journey := assertSuccessfulJourney(t, events, "Preserve this lineage", wantText)
+	assertPublicWorkProjection(t, publicWork, journey, wantText)
 	if response.RequestId != requiredString(journey.workRequest.Context.RequestId) || response.TraceId != firstTraceID(t, journey.workRequest) {
 		t.Fatalf("response identity request=%q trace=%q, want event request=%q trace=%q", response.RequestId, response.TraceId, requiredString(journey.workRequest.Context.RequestId), firstTraceID(t, journey.workRequest))
 	}
@@ -129,14 +158,14 @@ func TestFactorySessionOmniArtifactLineageIsPreserved(t *testing.T) {
 	}
 }
 
-func TestFactorySessionOmniArtifactMaterializationFailureIsAtomic(t *testing.T) {
+func TestFactorySessionOmniArtifactBackendFailureIsAtomic(t *testing.T) {
 	t.Parallel()
 
 	fixture := newFactoryFixture(t, "unused after rejection")
-	fixture.protocol.SetError(errors.New("fixture materialization rejection"))
-	err, stderr := fixture.invokeExpectFailure(t, "Reject this materialization")
+	fixture.protocol.SetError(errors.New("fixture backend rejection"))
+	err, stderr := fixture.invokeExpectFailure(t, "Reject this backend attempt")
 	if err == nil {
-		t.Fatal("materialization rejection error = nil, want failed Factory attempt")
+		t.Fatal("backend rejection error = nil, want failed Factory attempt")
 	}
 	events := fixture.recording(t)
 	if fixture.protocol.Calls() != 1 {
@@ -182,58 +211,111 @@ func TestFactorySessionOmniArtifactMaterializationFailureIsAtomic(t *testing.T) 
 			}
 		}
 	}
-	if strings.Contains(stderr, "fixture materialization rejection") {
+	if strings.Contains(stderr, "fixture backend rejection") {
 		t.Fatalf("raw fixture failure leaked through CLI diagnostics: %q", stderr)
 	}
 }
 
 func TestFactorySessionOmniArtifactReleaseIsExactlyOnce(t *testing.T) {
 	t.Parallel()
-
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		fixture := newFactoryFixture(t, "release success")
 		fixture.invoke(t, "Release success")
 		fixture.assertRelease(t)
 	})
 	t.Run("backend error", func(t *testing.T) {
+		t.Parallel()
 		fixture := newFactoryFixture(t, "unused backend error")
 		fixture.protocol.SetError(errors.New("fixture backend error"))
 		_, _ = fixture.invokeExpectFailure(t, "Release backend error")
 		fixture.assertRelease(t)
 	})
+	t.Run("timeout", func(t *testing.T) {
+		t.Parallel()
+		fixture := newFactoryFixtureWithConfig(t, "unused timeout", "50ms")
+		fixture.protocol.BlockUntil(make(chan struct{}))
+		_, _ = fixture.invokeExpectFailure(t, "Release timeout")
+		fixture.assertRelease(t)
+		fixture.assertNoSuccessfulOutput(t, fixture.recording(t))
+	})
+	t.Run("cancellation has no late completion", func(t *testing.T) {
+		t.Parallel()
+		fixture := newFactoryFixture(t, "unused cancellation")
+		fixture.protocol.BlockUntil(make(chan struct{}))
+		fixture.startLive(t, "Release cancellation")
+		fixture.submit(t, "Release cancellation")
+		fixture.protocol.WaitForCall(t)
+		fixture.cancel(t)
+		fixture.protocol.WaitForCancellation(t)
+		fixture.stopLive(t)
+		fixture.assertRelease(t)
+		fixture.assertNoSuccessfulOutput(t, fixture.recording(t))
+	})
 }
 
-type factoryFixture struct {
-	home          string
-	sessionID     string
-	dir           string
-	recordingPath string
-	protocol      *omniProtocolFixture
-	process       support.Process
-	launcher      *modelHostLauncher
+var (
+	sharedOmniFactoryProcessOnce sync.Once
+	sharedOmniFactoryProcessErr  error
+)
+
+type omniFactoryProcessGroup struct {
+	rootDir     string
+	home        string
+	process     support.ApplicationProcess
+	modelServer *httptest.Server
+	protocol    *omniProtocolRouter
+	launcher    *modelHostLauncher
+
+	serversMu sync.Mutex
+	servers   map[int]*support.ProcessAPIServer
+	nextPort  atomic.Int64
 }
 
-func newFactoryFixture(t *testing.T, response string) *factoryFixture {
+func sharedOmniFactory(t *testing.T) *omniFactoryProcessGroup {
 	t.Helper()
+	sharedOmniFactoryProcessOnce.Do(func() {
+		sharedOmniFactoryProcess, sharedOmniFactoryProcessErr = newOmniFactoryProcessGroup()
+	})
+	if sharedOmniFactoryProcessErr != nil {
+		t.Fatalf("build shared OMNI Factory process: %v", sharedOmniFactoryProcessErr)
+	}
+	if sharedOmniFactoryProcess == nil {
+		t.Fatal("shared OMNI Factory process is nil")
+	}
+	return sharedOmniFactoryProcess
+}
 
-	home := t.TempDir()
-	writeBuiltinModelCache(t, home)
+func newOmniFactoryProcessGroup() (*omniFactoryProcessGroup, error) {
+	rootDir, err := os.MkdirTemp("", "you-functional-omni-artifact-")
+	if err != nil {
+		return nil, fmt.Errorf("create shared fixture root: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(rootDir) }
+	home := filepath.Join(rootDir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create shared fixture home: %w", err)
+	}
+	if err := writeBuiltinModelCacheAt(home); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("write shared model cache: %w", err)
+	}
 	selection := llamaBackendSelection()
-	writeBackendCache(t, home, selection)
-
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/health" {
-			writer.WriteHeader(http.StatusOK)
-			return
-		}
-		http.NotFound(writer, request)
-	}))
-	t.Cleanup(modelServer.Close)
-
-	protocol := &omniProtocolFixture{response: response}
-	launcher := &modelHostLauncher{endpoint: modelServer.URL}
+	if err := writeBackendCacheAt(home, selection); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("write shared backend cache: %w", err)
+	}
+	modelServer := newOmniModelServer()
+	group := &omniFactoryProcessGroup{
+		rootDir: rootDir, home: home, modelServer: modelServer,
+		protocol: &omniProtocolRouter{routes: make(map[string]*omniProtocolFixture)},
+		launcher: &modelHostLauncher{endpoint: modelServer.URL},
+		servers:  make(map[int]*support.ProcessAPIServer),
+	}
 	assetFiles := modelAssetFileSystem{home: home}
 	edges := serviceedges.Edges{
+		APIServerStarter:               group.startAPIServer,
 		ModelAssetHTTPClient:           rejectingAssetHTTP{},
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -250,50 +332,195 @@ func newFactoryFixture(t *testing.T, response string) *factoryFixture {
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelHostProcessLauncher:      launcher,
+		ModelHostProcessLauncher:      group.launcher,
 		ModelHostProtocolNegotiator:   modelHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: modelHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
 		ModelRuntimeHTTPClient:        modelServer.Client(),
-		ModelInvocationProtocolClient: protocol,
+		ModelInvocationProtocolClient: group.protocol,
 	}
-	dir := support.ScaffoldFactory(t, omniFactoryConfig(modelServer.URL))
-	support.WriteWorkstationConfig(t, dir, "execute-llm", "---\ntype: INFERENCE_RUN\n---\nReturn the model result.\n")
+	group.process, err = support.BuildProcessWithContext(context.Background(), edges)
+	if err != nil {
+		modelServer.Close()
+		cleanup()
+		return nil, fmt.Errorf("build root process: %w", err)
+	}
+	return group, nil
+}
+
+func newOmniModelServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusOK)
+	}))
+}
+
+func (group *omniFactoryProcessGroup) registerAPIServer() (*support.ProcessAPIServer, int) {
+	port := 25000 + int(group.nextPort.Add(1))
+	server := support.NewProcessAPIServer()
+	group.serversMu.Lock()
+	group.servers[port] = server
+	group.serversMu.Unlock()
+	return server, port
+}
+
+func (group *omniFactoryProcessGroup) unregisterAPIServer(port int) {
+	group.serversMu.Lock()
+	delete(group.servers, port)
+	group.serversMu.Unlock()
+}
+
+func (group *omniFactoryProcessGroup) startAPIServer(ctx context.Context, request platformhttpserver.StartRequest) error {
+	group.serversMu.Lock()
+	server := group.servers[request.Port]
+	group.serversMu.Unlock()
+	if server == nil {
+		return fmt.Errorf("OMNI Factory API server route not found for port %d", request.Port)
+	}
+	return server.Start(ctx, request)
+}
+
+func (group *omniFactoryProcessGroup) close() error {
+	if group == nil {
+		return nil
+	}
+	var closeErr error
+	if group.process != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), omniFactoryFunctionalTimeout)
+		closeErr = group.process.Close(ctx)
+		cancel()
+	}
+	starts, stops := group.launcher.Counts()
+	if starts != stops {
+		closeErr = errors.Join(closeErr, fmt.Errorf("managed model host starts=%d stops=%d after shared process close", starts, stops))
+	}
+	if group.modelServer != nil {
+		group.modelServer.Close()
+	}
+	if err := os.RemoveAll(group.rootDir); err != nil {
+		closeErr = errors.Join(closeErr, err)
+	}
+	return closeErr
+}
+
+type factoryFixture struct {
+	home          string
+	sessionID     string
+	dir           string
+	recordingPath string
+	protocol      *omniProtocolFixture
+	process       support.Process
+	launcher      *modelHostLauncher
+	modelEndpoint string
+	group         *omniFactoryProcessGroup
+	command       *support.ProcessCommand
+	inputs        *support.CapturedInputs
+	baseURL       string
+	api           *support.ProcessAPIServer
+	listenPort    int
+}
+
+func newFactoryFixture(t *testing.T, response string) *factoryFixture {
+	t.Helper()
+	return newFactoryFixtureWithConfig(t, response, "")
+}
+
+func newFactoryFixtureWithConfig(t *testing.T, response, executionLimit string) *factoryFixture {
+	t.Helper()
+	group := sharedOmniFactory(t)
+	protocol := &omniProtocolFixture{
+		response: response, called: make(chan struct{}), canceled: make(chan struct{}),
+	}
+	sessionID := uuid.NewString()
+	modelEndpoint := group.modelServer.URL + "/scenario-" + uuid.NewString()
+	dir := support.ScaffoldFactory(t, omniFactoryConfig(modelEndpoint))
+	workstation := "---\ntype: INFERENCE_RUN\n"
+	if executionLimit != "" {
+		workstation += "limits:\n  maxRetries: 1\n  maxExecutionTime: " + executionLimit + "\n"
+	}
+	workstation += "---\nReturn the model result.\n"
+	support.WriteWorkstationConfig(t, dir, "execute-llm", workstation)
 	recordingPath := filepath.Join(t.TempDir(), "omni-artifact-recording.json")
-	process := support.BuildProcess(t, edges)
 	return &factoryFixture{
-		home: home, sessionID: "factory-session-omni-artifact", dir: dir,
-		recordingPath: recordingPath, protocol: protocol, process: process, launcher: launcher,
+		home: group.home, sessionID: sessionID, dir: dir,
+		recordingPath: recordingPath, protocol: protocol, process: group.process,
+		launcher: group.launcher, modelEndpoint: modelEndpoint, group: group,
 	}
 }
 
 func (fixture *factoryFixture) invoke(t *testing.T, prompt string) factoryapi.InvocationResponse {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
-		"--session", fixture.sessionID, "--record", fixture.recordingPath, "--output", "primary", prompt,
-	})
-	inputs.Input.Env = functionalHomeEnvironment(fixture.home)
-	inputs.Input.WorkingDirectory = fixture.dir
-	if err := fixture.process.Execute(inputs.Input); err != nil {
-		t.Fatalf("root Process.Execute(Factory Session) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	fixture.startLive(t, prompt)
+	submitted := fixture.submit(t, prompt)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
+	listed := fixture.listWork(t)
+	if len(listed.Results) != 1 {
+		t.Fatalf("public Work list = %#v, want one completed Work", listed)
 	}
-	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	return factoryapi.InvocationResponse{
+		RequestId: submitted.RequestId, TraceId: submitted.TraceId,
+		SessionId: submitted.SessionId, WorkId: submitted.WorkId,
+		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: listed.Results[0].Content,
+	}
+}
+
+func (fixture *factoryFixture) submit(t *testing.T, prompt string) factoryapi.SubmitWorkResponse {
+	t.Helper()
+	part := factoryapi.WorkContentPart{}
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type:        factoryapi.WorkContentPartTypeText,
+		Text:        prompt,
+		ContentType: stringPointer("text/plain"),
+	}); err != nil {
+		t.Fatalf("build public prompt Work content: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	return support.SubmitSessionWorkAt(t, fixture.baseURL, fixture.sessionID, factoryapi.SubmitWorkRequest{
+		Content:      &content,
+		WorkTypeName: "task",
+	})
+}
+
+func (fixture *factoryFixture) cancel(t *testing.T) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(fixture.baseURL, "/") + "/factory-sessions/" + url.PathEscape(fixture.sessionID) + "/cancel"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("build Factory Session cancel request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	if result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted &&
+		result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("Factory Session cancel response = %#v, want ACCEPTED or NO_OP", result)
+	}
 }
 
 func (fixture *factoryFixture) invokeExpectFailure(t *testing.T, prompt string) (error, string) {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
-		"--session", fixture.sessionID, "--record", fixture.recordingPath, "--output", "primary", prompt,
-	})
-	inputs.Input.Env = functionalHomeEnvironment(fixture.home)
-	inputs.Input.WorkingDirectory = fixture.dir
-	return fixture.process.Execute(inputs.Input), inputs.Stderr()
+	fixture.startLive(t, prompt)
+	fixture.submit(t, prompt)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, omniFactoryFunctionalTimeout)
+	stderr := fixture.inputs.Stderr()
+	fixture.stopLive(t)
+	return errors.New("Factory Session invocation failed"), stderr
 }
 
 func (fixture *factoryFixture) recording(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
+	fixture.stopLive(t)
 	data, err := os.ReadFile(fixture.recordingPath)
 	if err != nil {
 		t.Fatalf("read Factory recording: %v", err)
@@ -314,18 +541,81 @@ func (fixture *factoryFixture) recording(t *testing.T) []factoryapi.FactoryEvent
 	return artifact.Events
 }
 
-func (fixture *factoryFixture) replay(t *testing.T) []factoryapi.FactoryEvent {
+func (fixture *factoryFixture) listWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
+	if fixture.baseURL == "" {
+		t.Fatal("Factory Session API URL is empty")
+	}
+	return support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		support.SessionWorkURL(fixture.baseURL, fixture.sessionID, "/work"),
+	)
+}
+
+func (fixture *factoryFixture) startLive(t *testing.T, prompt string) {
+	t.Helper()
+	if fixture.command != nil {
+		t.Fatal("Factory Session invocation already started")
+	}
+	fixture.group.protocol.Register(prompt, fixture.protocol)
+	fixture.api, fixture.listenPort = fixture.group.registerAPIServer()
+	fixture.inputs = support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
+		"--session", fixture.sessionID, "--record", fixture.recordingPath, "--output", "primary",
+		"--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", fixture.listenPort),
+	})
+	fixture.inputs.Input.Env = functionalHomeEnvironment(fixture.home)
+	fixture.inputs.Input.WorkingDirectory = fixture.dir
+	fixture.command = support.StartProcessCommand(t, fixture.process, fixture.inputs.Input)
+	baseURL, err := fixture.api.WaitForBaseURL(omniFactoryFunctionalTimeout)
+	if err != nil {
+		t.Fatalf("wait for Factory API: %v stdout=%q stderr=%q", err, fixture.inputs.Stdout(), fixture.inputs.Stderr())
+	}
+	fixture.baseURL = baseURL
+}
+
+func (fixture *factoryFixture) stopLive(t *testing.T) {
+	t.Helper()
+	if fixture.command == nil {
+		return
+	}
+	fixture.command.Stop(t)
+	fixture.command = nil
+	fixture.group.unregisterAPIServer(fixture.listenPort)
+}
+
+type replayProjection struct {
+	events    []factoryapi.FactoryEvent
+	work      factoryapi.ListWorkResponse
+	rawEvents string
+	rawWork   string
+}
+
+func (fixture *factoryFixture) replay(t *testing.T) replayProjection {
+	t.Helper()
+	replaySessionID := uuid.NewString()
+	api, port := fixture.group.registerAPIServer()
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--dir", fixture.dir, "--replay", fixture.recordingPath,
-		"--no-record", "--output", "primary",
+		"you", "--json", "run", "--dir", fixture.dir, "--session", replaySessionID,
+		"--replay", fixture.recordingPath, "--no-record", "--output", "primary",
+		"--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port),
 	})
 	inputs.Input.Env = functionalHomeEnvironment(fixture.home)
 	inputs.Input.WorkingDirectory = fixture.dir
-	if err := fixture.process.Execute(inputs.Input); err != nil {
-		t.Fatalf("root Process.Execute(Factory replay) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
+	baseURL := api.WaitForURL(t)
+	support.WaitForSessionTerminalStatus(t, baseURL, replaySessionID, omniFactoryFunctionalTimeout)
+	projection := replayProjection{
+		events: support.GetFactoryEventsForSessionAt(t, baseURL, replaySessionID),
+		work: support.GetJSON[factoryapi.ListWorkResponse](
+			t, support.SessionWorkURL(baseURL, replaySessionID, "/work"),
+		),
+		rawEvents: readPublicEventsHTTPBody(t, support.SessionEventsURL(baseURL, replaySessionID)),
+		rawWork:   readPublicHTTPBody(t, support.SessionWorkURL(baseURL, replaySessionID, "/work")),
 	}
-	return fixture.recording(t)
+	command.Stop(t)
+	fixture.group.unregisterAPIServer(port)
+	return projection
 }
 
 type successfulJourney struct {
@@ -343,7 +633,21 @@ type successfulJourney struct {
 
 func assertSuccessfulJourney(t *testing.T, events []factoryapi.FactoryEvent, prompt, wantText string) successfulJourney {
 	t.Helper()
+	journey := assertJourney(t, events, prompt, wantText, true)
+	return journey
+}
+
+func assertReplayJourney(t *testing.T, events []factoryapi.FactoryEvent, prompt, wantText string) successfulJourney {
+	t.Helper()
+	return assertJourney(t, events, prompt, wantText, false)
+}
+
+func assertJourney(t *testing.T, events []factoryapi.FactoryEvent, prompt, wantText string, requireSessionCompletion bool) successfulJourney {
+	t.Helper()
 	journey := inspectJourney(t, events)
+	if requireSessionCompletion && journey.sessionCompleted.Type != factoryapi.FactoryEventTypeSessionCompleted {
+		t.Fatalf("canonical events have no SESSION_COMPLETED event")
+	}
 	if journey.inputWork.Content == nil || len(*journey.inputWork.Content) != 1 {
 		t.Fatalf("input Work content = %#v, want one text part", journey.inputWork.Content)
 	}
@@ -375,107 +679,6 @@ func assertSuccessfulJourney(t *testing.T, events []factoryapi.FactoryEvent, pro
 		t.Fatalf("output Work part = %#v, want exact model artifact-bearing result %#v", journey.outputPart, modelPart)
 	}
 	journey.artifactID = *modelPart.ArtifactId
-	return journey
-}
-
-func inspectJourney(t *testing.T, events []factoryapi.FactoryEvent) successfulJourney {
-	t.Helper()
-	if len(events) < 7 {
-		t.Fatalf("canonical event count = %d, want at least seven events", len(events))
-	}
-	journey := successfulJourney{
-		workRequest:      requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeWorkRequest),
-		dispatchRequest:  requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchRequest),
-		modelRequest:     requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeModelRequest),
-		modelResponse:    requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeModelResponse),
-		dispatchResponse: requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeDispatchResponse),
-		sessionCompleted: requiredFactoryEvent(t, events, factoryapi.FactoryEventTypeSessionCompleted),
-	}
-	order := []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeDispatchRequest,
-		factoryapi.FactoryEventTypeModelRequest,
-		factoryapi.FactoryEventTypeModelResponse,
-		factoryapi.FactoryEventTypeDispatchResponse,
-		factoryapi.FactoryEventTypeSessionCompleted,
-	}
-	previous := -1
-	for _, eventType := range order {
-		current := eventIndex(events, eventType)
-		if current <= previous {
-			t.Fatalf("canonical event order has %s at index %d after index %d", eventType, current, previous)
-		}
-		previous = current
-	}
-	workPayload, err := journey.workRequest.Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode WORK_REQUEST: %v", err)
-	}
-	if workPayload.Works == nil || len(*workPayload.Works) != 1 {
-		t.Fatalf("WORK_REQUEST works = %#v, want one Work", workPayload.Works)
-	}
-	journey.inputWork = (*workPayload.Works)[0]
-	dispatchPayload, err := journey.dispatchRequest.Payload.AsDispatchRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode DISPATCH_REQUEST: %v", err)
-	}
-	if len(dispatchPayload.Inputs) != 1 {
-		t.Fatalf("DISPATCH_REQUEST inputs = %#v, want one Work reference", dispatchPayload.Inputs)
-	}
-	if journey.inputWork.WorkId == nil || dispatchPayload.Inputs[0].WorkId != *journey.inputWork.WorkId {
-		t.Fatalf("dispatch input = %#v, want Work ID %q", dispatchPayload.Inputs[0], requiredString(journey.inputWork.WorkId))
-	}
-	if association := optionalFactoryEvent(events, factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation); association != nil {
-		payload, decodeErr := association.Payload.AsDispatchWorkerSessionAssociationEventPayload()
-		if decodeErr != nil || payload.WorkerSessionId == "" {
-			t.Fatalf("worker-session association = %#v, decode error=%v", association, decodeErr)
-		}
-	}
-	modelRequest, err := journey.modelRequest.Payload.AsModelRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode MODEL_REQUEST: %v", err)
-	}
-	if modelRequest.Operation != models.OperationOMNI || modelRequest.ModelRequestId == "" || modelRequest.Worker == "" {
-		t.Fatalf("MODEL_REQUEST = %#v, want OMNI request identity", modelRequest)
-	}
-	modelResponse, err := journey.modelResponse.Payload.AsModelResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode MODEL_RESPONSE: %v", err)
-	}
-	if modelResponse.ModelRequestId != modelRequest.ModelRequestId {
-		t.Fatalf("MODEL_RESPONSE model request identity = %q, want %q", modelResponse.ModelRequestId, modelRequest.ModelRequestId)
-	}
-	dispatchResponse, err := journey.dispatchResponse.Payload.AsDispatchResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode DISPATCH_RESPONSE: %v", err)
-	}
-	if dispatchResponse.Outcome != factoryapi.WorkOutcomeAccepted || dispatchResponse.OutputWork == nil || len(*dispatchResponse.OutputWork) != 1 {
-		t.Fatalf("DISPATCH_RESPONSE = %#v, want accepted one-work output", dispatchResponse)
-	}
-	journey.outputWork = (*dispatchResponse.OutputWork)[0]
-	if journey.outputWork.State == nil || journey.outputWork.State.Type != factoryapi.WorkStateTypeTERMINAL {
-		t.Fatalf("output Work state = %#v, want terminal", journey.outputWork.State)
-	}
-	if journey.outputWork.Content == nil || len(*journey.outputWork.Content) != 1 {
-		t.Fatalf("output Work content = %#v, want one materialized part", journey.outputWork.Content)
-	}
-	journey.outputPart = workTextPart(t, journey.outputWork.Content, "output Work")
-	if journey.outputWork.WorkId == nil || requiredString(journey.outputWork.WorkId) != requiredString(journey.inputWork.WorkId) {
-		t.Fatalf("output Work ID = %q, want input %q", requiredString(journey.outputWork.WorkId), requiredString(journey.inputWork.WorkId))
-	}
-	if journey.outputWork.CurrentChainingTraceId == nil || requiredString(journey.outputWork.CurrentChainingTraceId) != firstTraceID(t, journey.workRequest) {
-		t.Fatalf("output Work current trace = %q, want %q", requiredString(journey.outputWork.CurrentChainingTraceId), firstTraceID(t, journey.workRequest))
-	}
-	if journey.outputWork.TraceId == nil || requiredString(journey.outputWork.TraceId) != firstTraceID(t, journey.workRequest) {
-		t.Fatalf("output Work trace = %q, want %q", requiredString(journey.outputWork.TraceId), firstTraceID(t, journey.workRequest))
-	}
-	if !jsonEqual(t, journey.outputWork.PreviousChainingTraceIds, journey.dispatchResponse.Context.PreviousChainingTraceIds) {
-		t.Fatalf("output Work prior chaining trace IDs = %#v, want dispatch context %#v", journey.outputWork.PreviousChainingTraceIds, journey.dispatchResponse.Context.PreviousChainingTraceIds)
-	}
-	if !jsonEqual(t, journey.outputWork.CurrentChainingTraceId, journey.dispatchResponse.Context.CurrentChainingTraceId) {
-		t.Fatalf("output Work current chaining trace = %#v, want dispatch context %#v", journey.outputWork.CurrentChainingTraceId, journey.dispatchResponse.Context.CurrentChainingTraceId)
-	}
-	assertEventLineage(t, events, "canonical journey")
 	return journey
 }
 
@@ -517,11 +720,79 @@ func assertEventLineage(t *testing.T, events []factoryapi.FactoryEvent, label st
 
 func (fixture *factoryFixture) assertRelease(t *testing.T) {
 	t.Helper()
-	if got := fixture.launcher.Starts(); got != 1 {
-		t.Fatalf("managed model host starts = %d, want one", got)
+	fixture.stopLive(t)
+	if got := fixture.protocol.Calls(); got != 1 {
+		t.Fatalf("private OMNI protocol calls = %d, want exactly one attempt", got)
 	}
-	if got := fixture.launcher.Stops(); got != 1 {
-		t.Fatalf("managed model host stops = %d, want exactly one", got)
+	starts, stops := fixture.launcher.Counts()
+	if stops > starts {
+		t.Fatalf("managed model host releases = %d, exceed starts = %d", stops, starts)
+	}
+}
+
+func (fixture *factoryFixture) assertNoSuccessfulOutput(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if response := optionalFactoryEvent(events, factoryapi.FactoryEventTypeModelResponse); response != nil {
+		payload, err := response.Payload.AsModelResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode failure MODEL_RESPONSE: %v", err)
+		}
+		if payload.Outcome == factoryapi.InferenceOutcomeSucceeded || payload.OutputContent != nil {
+			t.Fatalf("failed invocation published model output: %#v", payload)
+		}
+	}
+	if response := optionalFactoryEvent(events, factoryapi.FactoryEventTypeDispatchResponse); response != nil {
+		payload, err := response.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode failure DISPATCH_RESPONSE: %v", err)
+		}
+		if payload.Outcome == factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("failed invocation published accepted Work output: %#v", payload)
+		}
+		if payload.OutputWork != nil {
+			for _, outputWork := range *payload.OutputWork {
+				if outputWork.State != nil && outputWork.State.Type == factoryapi.WorkStateTypeTERMINAL {
+					t.Fatalf("failed invocation published terminal Work output: %#v", outputWork)
+				}
+			}
+		}
+	}
+}
+
+func assertPublicWorkProjection(t *testing.T, listed factoryapi.ListWorkResponse, journey successfulJourney, wantText string) {
+	t.Helper()
+	if len(listed.Results) != 1 {
+		t.Fatalf("public Work list results = %d, want exactly one canonical Work: %#v", len(listed.Results), listed)
+	}
+	work := listed.Results[0]
+	if requiredString(work.WorkId) != requiredString(journey.outputWork.WorkId) {
+		t.Fatalf("public Work ID = %q, want canonical output Work %q", requiredString(work.WorkId), requiredString(journey.outputWork.WorkId))
+	}
+	if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("public Work state = %#v, want TERMINAL", work.State)
+	}
+	part := workTextPart(t, work.Content, "public Work")
+	if part.Text != wantText {
+		t.Fatalf("public Work text = %q, want %q", part.Text, wantText)
+	}
+	if part.ContentType == nil || *part.ContentType != "text/plain" {
+		t.Fatalf("public Work content type = %#v, want text/plain", part.ContentType)
+	}
+	if part.ArtifactId == nil || *part.ArtifactId != journey.artifactID {
+		t.Fatalf("public Work artifact ID = %#v, want %q", part.ArtifactId, journey.artifactID)
+	}
+	if got, want := len([]byte(part.Text)), len([]byte(wantText)); got != want {
+		t.Fatalf("public Work UTF-8 size = %d, want %d bytes", got, want)
+	}
+}
+
+func assertPublicWorkEquivalent(t *testing.T, live, replay factoryapi.ListWorkResponse, label string) {
+	t.Helper()
+	if len(live.Results) != 1 || len(replay.Results) != 1 {
+		t.Fatalf("%s list sizes = live:%d replay:%d, want exactly one each", label, len(live.Results), len(replay.Results))
+	}
+	if !jsonEqual(t, live.Results[0], replay.Results[0]) {
+		t.Fatalf("%s differs: live=%#v replay=%#v", label, live.Results[0], replay.Results[0])
 	}
 }
 
@@ -565,10 +836,24 @@ func firstTraceID(t *testing.T, event factoryapi.FactoryEvent) string {
 	return (*event.Context.TraceIds)[0]
 }
 
+func firstTraceOrEmpty(event factoryapi.FactoryEvent) string {
+	if event.Context.TraceIds == nil || len(*event.Context.TraceIds) == 0 {
+		return ""
+	}
+	return (*event.Context.TraceIds)[0]
+}
+
 func firstWorkID(t *testing.T, event factoryapi.FactoryEvent) string {
 	t.Helper()
 	if event.Context.WorkIds == nil || len(*event.Context.WorkIds) == 0 || (*event.Context.WorkIds)[0] == "" {
 		t.Fatalf("event %s has no Work identity: %#v", event.Type, event.Context)
+	}
+	return (*event.Context.WorkIds)[0]
+}
+
+func firstWorkOrEmpty(event factoryapi.FactoryEvent) string {
+	if event.Context.WorkIds == nil || len(*event.Context.WorkIds) == 0 {
+		return ""
 	}
 	return (*event.Context.WorkIds)[0]
 }
@@ -598,258 +883,40 @@ func jsonEqual(t *testing.T, left, right interface{}) bool {
 	return string(leftJSON) == string(rightJSON)
 }
 
-func omniFactoryConfig(endpoint string) map[string]any {
-	return map[string]any{
-		"name": "omni-artifact-functional",
-		"invocationSignature": map[string]any{
-			"parameters": []map[string]any{{
-				"name": "prompt", "externalName": "prompt", "required": true,
-				"bindings": []map[string]any{{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}, {"kind": "NAMED"}},
-			}},
-		},
-		"workTypes": []map[string]any{{
-			"name":             "task",
-			"handlingBehavior": []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"resources": []map[string]any{{
-			"name": "llm-cache", "type": factorydefinitions.ResourceTypeModel, "capacity": 1,
-			"model": "llm", "backend": "localai-llamacpp", "loadPolicy": "ON_DEMAND",
-		}},
-		"workers": []map[string]any{{
-			"name": "llm-worker", "type": factorydefinitions.WorkerTypeInference, "model": "llm",
-			"modelProvider": "CODEX", "modelLocality": factorydefinitions.ModelLocalityLocal,
-			"command": "llama-cpp", "args": []string{"--grpc-endpoint", endpoint},
-			"resources": []map[string]any{{"name": "llm-cache", "capacity": 1}},
-			"operations": []map[string]any{{
-				"name":    models.OperationOMNI,
-				"inputs":  []map[string]any{{"name": "prompt", "contentTypes": []string{"TEXT"}, "required": true}},
-				"outputs": []map[string]any{{"name": "text", "contentTypes": []string{"TEXT"}, "required": true}},
-			}},
-		}},
-		"workstations": []map[string]any{{
-			"name": "execute-llm", "type": factorydefinitions.WorkstationTypeInference, "operation": models.OperationOMNI,
-			"worker": "llm-worker", "body": "Return the model result.",
-			"operationBindings": []map[string]any{{
-				"slot":     "prompt",
-				"selector": map[string]any{"type": "TEXT"},
-			}},
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	}
+type replayEventView struct {
+	Type       factoryapi.FactoryEventType `json:"type"`
+	ID         string                      `json:"id"`
+	RequestID  string                      `json:"requestId,omitempty"`
+	DispatchID string                      `json:"dispatchId,omitempty"`
+	WorkIDs    []string                    `json:"workIds,omitempty"`
+	TraceIDs   []string                    `json:"traceIds,omitempty"`
 }
 
-type omniProtocolFixture struct {
-	mu       sync.Mutex
-	response string
-	failure  error
-	calls    int
-}
-
-func (fixture *omniProtocolFixture) Predict(ctx context.Context, request models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return models.InvocationProtocolResponse{}, err
-	}
-	fixture.mu.Lock()
-	fixture.calls++
-	response := fixture.response
-	failure := fixture.failure
-	fixture.mu.Unlock()
-	if failure != nil {
-		return models.InvocationProtocolResponse{}, failure
-	}
-	return models.InvocationProtocolResponse{Text: response}, nil
-}
-
-func (fixture *omniProtocolFixture) SetError(err error) {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	fixture.failure = err
-}
-
-func (fixture *omniProtocolFixture) Calls() int {
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	return fixture.calls
-}
-
-type modelHostLauncher struct {
-	mu       sync.Mutex
-	endpoint string
-	starts   int
-	stops    int
-}
-
-func (launcher *modelHostLauncher) Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
-	HealthEndpoint() string
-	Wait() error
-	Stop(context.Context) error
-}, error) {
-	launcher.mu.Lock()
-	launcher.starts++
-	endpoint := launcher.endpoint
-	launcher.mu.Unlock()
-	return &modelHostProcess{endpoint: endpoint, launcher: launcher, stopped: make(chan struct{})}, nil
-}
-
-func (launcher *modelHostLauncher) Starts() int {
-	launcher.mu.Lock()
-	defer launcher.mu.Unlock()
-	return launcher.starts
-}
-
-func (launcher *modelHostLauncher) Stops() int {
-	launcher.mu.Lock()
-	defer launcher.mu.Unlock()
-	return launcher.stops
-}
-
-type modelHostProcess struct {
-	endpoint string
-	launcher *modelHostLauncher
-	stopped  chan struct{}
-	once     sync.Once
-}
-
-func (process *modelHostProcess) HealthEndpoint() string { return process.endpoint }
-func (process *modelHostProcess) Wait() error {
-	<-process.stopped
-	return nil
-}
-func (process *modelHostProcess) Stop(context.Context) error {
-	process.once.Do(func() {
-		close(process.stopped)
-		process.launcher.mu.Lock()
-		process.launcher.stops++
-		process.launcher.mu.Unlock()
-	})
-	return nil
-}
-
-type modelHostProtocolNegotiator struct{}
-
-func (modelHostProtocolNegotiator) Negotiate(_ context.Context, _ string, request serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error) {
-	return serviceedges.ModelHostProtocolNegotiationResult{ProtocolVersion: "localai-backend-v1", Backend: request.Backend, Ready: true}, nil
-}
-
-type modelHostCompatibilityChecker struct{}
-
-func (modelHostCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
-	return nil
-}
-
-type rejectingAssetHTTP struct{}
-
-func (rejectingAssetHTTP) Do(*http.Request) (*http.Response, error) {
-	return nil, fmt.Errorf("unexpected model asset network request")
-}
-
-type modelAssetFileSystem struct{ home string }
-
-func (filesystem modelAssetFileSystem) MkdirAll(path string, mode os.FileMode) error {
-	return os.MkdirAll(path, mode)
-}
-func (filesystem modelAssetFileSystem) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
-func (filesystem modelAssetFileSystem) UserHomeDir() (string, error)          { return filesystem.home, nil }
-func (filesystem modelAssetFileSystem) WriteFile(path string, data []byte, mode os.FileMode) error {
-	return os.WriteFile(path, data, mode)
-}
-func (filesystem modelAssetFileSystem) Rename(oldPath, newPath string) error {
-	return os.Rename(oldPath, newPath)
-}
-func (filesystem modelAssetFileSystem) Remove(path string) error { return os.Remove(path) }
-func (filesystem modelAssetFileSystem) ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-func (filesystem modelAssetFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
-	return os.ReadDir(path)
-}
-func (filesystem modelAssetFileSystem) Create(path string) (io.WriteCloser, error) {
-	return os.Create(path)
-}
-func (filesystem modelAssetFileSystem) Open(path string) (io.ReadCloser, error) { return os.Open(path) }
-
-func writeBuiltinModelCache(t *testing.T, home string) {
+func replayEventProjection(t *testing.T, events []factoryapi.FactoryEvent) []replayEventView {
 	t.Helper()
-	name := "gemma-4-E4B-it-Q4_K_M.gguf"
-	body := []byte("functional model fixture")
-	digest := fmt.Sprintf("%x", sha256.Sum256(body))
-	identity := fmt.Sprintf("model|%s|%s:%d:%s", omniModelSource, name, len(body), digest)
-	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
-	snapshot := filepath.Join(home, ".agent-factory", "models", ".you-content-addressed", "model", identityHash)
-	if err := os.MkdirAll(snapshot, 0o755); err != nil {
-		t.Fatalf("create model snapshot: %v", err)
+	views := make([]replayEventView, 0, len(events))
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest,
+			factoryapi.FactoryEventTypeDispatchRequest,
+			factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation,
+			factoryapi.FactoryEventTypeModelRequest,
+			factoryapi.FactoryEventTypeModelResponse,
+			factoryapi.FactoryEventTypeDispatchResponse:
+		default:
+			continue
+		}
+		view := replayEventView{
+			Type: event.Type, ID: event.Id, RequestID: requiredString(event.Context.RequestId),
+			DispatchID: requiredString(event.Context.DispatchId),
+		}
+		if event.Context.WorkIds != nil {
+			view.WorkIDs = append([]string(nil), (*event.Context.WorkIds)...)
+		}
+		if event.Context.TraceIds != nil {
+			view.TraceIDs = append([]string(nil), (*event.Context.TraceIds)...)
+		}
+		views = append(views, view)
 	}
-	if err := os.WriteFile(filepath.Join(snapshot, name), body, 0o644); err != nil {
-		t.Fatalf("write model snapshot: %v", err)
-	}
-	metadata := map[string]any{
-		"kind": "model", "identity": identity, "source": omniModelSource, "sourceKey": omniModelSource,
-		"artifacts": []map[string]any{{"Name": name, "Bytes": len(body), "SHA256": digest}},
-	}
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal model metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), data, 0o644); err != nil {
-		t.Fatalf("write model metadata: %v", err)
-	}
-}
-
-func llamaBackendSelection() serviceedges.ModelBackendArtifactSelection {
-	return serviceedges.ModelBackendArtifactSelection{
-		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-		Bytes:    28,
-		SHA256:   "9285e7ffc76aaadf4dfcc6b2de5e23c6b01d4e7068e8f2dd65673626cc5de4ed",
-	}
-}
-
-func writeBackendCache(t *testing.T, home string, selection serviceedges.ModelBackendArtifactSelection) {
-	t.Helper()
-	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
-	source := "backend://localai-llamacpp/release://" + urlHash
-	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, selection.SHA256)
-	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
-	snapshot := filepath.Join(home, ".agent-factory", "models", "backend-artifacts", ".you-content-addressed", "backend", identityHash)
-	if err := os.MkdirAll(snapshot, 0o755); err != nil {
-		t.Fatalf("create backend snapshot: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), []byte("localai-llamacpp/linux-amd64"), 0o644); err != nil {
-		t.Fatalf("write backend snapshot: %v", err)
-	}
-	metadata := map[string]any{
-		"kind": "backend", "identity": identity, "source": source, "sourceKey": source,
-		"artifacts": []map[string]any{{"Name": selection.Name, "Bytes": selection.Bytes, "SHA256": selection.SHA256}},
-	}
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal backend metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), data, 0o644); err != nil {
-		t.Fatalf("write backend metadata: %v", err)
-	}
-}
-
-func functionalHomeEnvironment(home string) []string {
-	if runtime.GOOS == "windows" {
-		return append(os.Environ(), "USERPROFILE="+home)
-	}
-	if runtime.GOOS == "plan9" {
-		return append(os.Environ(), "home="+home)
-	}
-	return append(os.Environ(), "HOME="+home)
-}
-
-func requiredString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
+	return views
 }

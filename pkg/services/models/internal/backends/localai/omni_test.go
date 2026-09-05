@@ -159,6 +159,19 @@ func TestOmniCodecReturnsSemanticTextAndUsage(t *testing.T) {
 	const wantText = "Résumé — 世界 🌍"
 	const wantUsage = `{"tokens":3}`
 	fixture := &protocolFixture{response: PredictResponse{Text: wantText, Usage: wantUsage}}
+	result, err := invokeSemanticOmni(t, fixture)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if fixture.calls != 1 {
+		t.Fatalf("protocol calls = %d, want exactly one", fixture.calls)
+	}
+	assertSemanticOmniContent(t, result.Content, wantText, wantUsage)
+	assertSemanticOmniArtifact(t, result.Artifacts)
+}
+
+func invokeSemanticOmni(t *testing.T, fixture *protocolFixture) (OmniInvocationResult, error) {
+	t.Helper()
 	codec, err := NewOmniCodec(fixture, PinnedOmniCapability())
 	if err != nil {
 		t.Fatalf("NewOmniCodec: %v", err)
@@ -171,34 +184,40 @@ func TestOmniCodecReturnsSemanticTextAndUsage(t *testing.T) {
 	if !ok {
 		t.Fatal("GenericOperationContract(OMNI) = false")
 	}
-	result, err := codec.Invoke(context.Background(), models.InvokeModelRequest{
+	return codec.Invoke(context.Background(), models.InvokeModelRequest{
 		Scope: scope, Holder: "semantic-text-test", Model: models.ModelReference{NameOrURI: "llm"},
 		Operation: models.OperationOMNI,
 		Inputs:    []models.InferenceInput{{Name: "prompt", Modality: models.ModalityText, Content: "describe"}},
 	}, operation)
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
+}
+
+func assertSemanticOmniContent(
+	t *testing.T,
+	content []models.InferenceContent,
+	wantText, wantUsage string,
+) {
+	t.Helper()
+	if len(content) != 2 {
+		t.Fatalf("content = %#v, want text and usage", content)
 	}
-	if fixture.calls != 1 {
-		t.Fatalf("protocol calls = %d, want exactly one", fixture.calls)
-	}
-	if len(result.Content) != 2 {
-		t.Fatalf("content = %#v, want text and usage", result.Content)
-	}
-	textOutput := result.Content[0]
+	textOutput := content[0]
 	if textOutput.Name != "text" || textOutput.Modality != models.ModalityText ||
 		textOutput.ContentType != "text/plain" || textOutput.MediaType != "text/plain" ||
 		textOutput.Content != wantText {
 		t.Fatalf("text output = %#v, want exact semantic text metadata", textOutput)
 	}
-	usageOutput := result.Content[1]
+	usageOutput := content[1]
 	if usageOutput.Name != "usage" || usageOutput.Modality != models.ModalityJSON ||
 		usageOutput.ContentType != "application/json" || usageOutput.MediaType != "application/json" ||
 		usageOutput.Content != wantUsage {
 		t.Fatalf("usage output = %#v, want separate JSON usage", usageOutput)
 	}
-	if len(result.Artifacts) != 1 {
-		t.Fatalf("artifacts = %#v, want one detached text descriptor", result.Artifacts)
+}
+
+func assertSemanticOmniArtifact(t *testing.T, artifacts []models.InferenceArtifact) {
+	t.Helper()
+	if len(artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want one detached text descriptor", artifacts)
 	}
 }
 

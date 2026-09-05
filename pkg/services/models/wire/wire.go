@@ -686,23 +686,6 @@ func cloneInvocationParameterValue(value any) any {
 	}
 }
 
-func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
-	if len(artifacts) == 0 {
-		return nil
-	}
-	sources := make([]inference.InvocationArtifactSource, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		sources = append(sources, inference.InvocationArtifactSource{
-			RefValue:   artifact.Artifact.String(),
-			Name:       artifact.Name,
-			MediaType:  artifact.MediaType,
-			SizeBytes:  artifact.SizeBytes,
-			Properties: artifact.Properties,
-		})
-	}
-	return sources
-}
-
 type modelsServiceComponents struct {
 	runtimeScopes runtimescopes.Service
 	assets        scopedassets.Service
