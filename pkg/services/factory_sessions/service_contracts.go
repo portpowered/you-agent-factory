@@ -37,6 +37,7 @@ type InvocationRequest struct {
 	RequestID               *string
 	SourceKind              *InvocationInputSourceKind
 	TimeoutMillis           *int64
+	CancelOnTimeout         bool
 }
 
 // ResolvedInvocationInput is the Factory Session-owned normalized invocation

@@ -10,6 +10,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -878,5 +879,72 @@ func TestCompactPetriTokenHistory_PreservesReachableAndRetiresConsumedTerminalHi
 	retained, summaries := compactPetriTokenHistory(consumed, nil)
 	if len(retained) != 0 || len(summaries) != 1 || !summaries[0].Retired || summaries[0].WorkID != "work-2" || summaries[0].State != "done" {
 		t.Fatalf("consumed terminal history = %d mutations, %#v, want one retired work-2 summary", len(retained), summaries)
+	}
+}
+
+func TestJavaScriptRuntimeService_CanonicalOwnerReadsUseDirectMethods(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	const sessionID = "dur-sess-canonical-owner-reads"
+	seedCanonicalOwnerReadService(t, service, sessionID)
+	assertCanonicalOwnerSessionRead(t, service, sessionID)
+	assertCanonicalOwnerResultRead(t, service, sessionID)
+	assertCanonicalOwnerDispatchRead(t, service, sessionID)
+	assertCanonicalOwnerListRead(t, service, sessionID)
+	assertCanonicalOwnerResponseRead(t, service, sessionID)
+}
+
+func TestJavaScriptRuntimeService_CanonicalControlDispatchesToOwnerBranches(t *testing.T) {
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	for _, sessionID := range []string{"dur-sess-canonical-pause", "dur-sess-canonical-cancel", "dur-sess-canonical-terminate"} {
+		if err := seedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", sessionID); err != nil {
+			t.Fatalf("seed %s: %v", sessionID, err)
+		}
+	}
+	assertCanonicalOwnerControlStatus(t, service, "dur-sess-canonical-pause", factorysessions.SessionControlPause, LifecycleStatusPaused)
+	assertCanonicalOwnerControlStatus(t, service, "dur-sess-canonical-pause", factorysessions.SessionControlResume, LifecycleStatusRunning)
+	assertCanonicalOwnerControlStatus(t, service, "dur-sess-canonical-cancel", factorysessions.SessionControlCancel, LifecycleStatusCanceling)
+	assertCanonicalOwnerControlStatus(t, service, "dur-sess-canonical-terminate", factorysessions.SessionControlTerminate, LifecycleStatusTerminated)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, operation := range []factorysessions.SessionControlOperation{
+		factorysessions.SessionControlRecover, factorysessions.SessionControlApprove,
+		factorysessions.SessionControlRetryDispatch, factorysessions.SessionControlInterruptDispatch,
+	} {
+		assertCanonicalOwnerControlCanceled(t, service, ctx, operation)
+	}
+}
+
+func assertCanonicalOwnerSessionRead(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	read, err := service.GetCanonical(context.Background(), sessionID)
+	if err != nil || read.SessionID != sessionID {
+		t.Fatalf("GetCanonical = %#v, %v", read, err)
+	}
+}
+
+func assertCanonicalOwnerResultRead(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	result, err := service.ReadResultCanonical(context.Background(), sessionID, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal})
+	if err != nil || result.SessionID != sessionID {
+		t.Fatalf("ReadResultCanonical = %#v, %v", result, err)
+	}
+}
+
+func assertCanonicalOwnerDispatchRead(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	dispatches, err := service.QueryDispatchesCanonical(context.Background(), factorysessions.DispatchQueryRequest{SessionID: sessionID})
+	if err != nil || len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].ID != "dispatch-1" {
+		t.Fatalf("QueryDispatchesCanonical = %#v, %v", dispatches, err)
+	}
+}
+
+func assertCanonicalOwnerListRead(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	listed, err := service.ListCanonical(context.Background(), factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeLive})
+	if err != nil || len(listed.LiveSessions) != 1 || listed.LiveSessions[0].ID != sessionID {
+		t.Fatalf("ListCanonical = %#v, %v", listed, err)
 	}
 }

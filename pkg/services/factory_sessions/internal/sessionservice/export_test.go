@@ -11,12 +11,20 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -662,3 +670,296 @@ func TestRelayInvocationWakeEventsCoalescesBurstsWithoutBlocking(t *testing.T) {
 	default:
 	}
 }
+
+type canonicalInspectionLiveRuntimeFake struct {
+	liveruntime.Service
+	mu            sync.Mutex
+	listResult    []factorysessions.ReadProjection
+	getResult     factorysessions.SessionProjection
+	resolved      map[string]*livesession.LiveSession
+	controlResult factorysessions.LifecycleControlResult
+	listCalls     int
+	getCalls      int
+	controlCalls  int
+	closeCalls    int
+	lastSessionID string
+	lastOperation factorysessions.LifecycleControlKind
+	lastControl   factorysessions.ControlRequest
+	controlError  error
+	closeError    error
+}
+
+func (fake *canonicalInspectionLiveRuntimeFake) List(context.Context) ([]factorysessions.ReadProjection, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.listCalls++
+	return append([]factorysessions.ReadProjection(nil), fake.listResult...), nil
+}
+
+func (fake *canonicalInspectionLiveRuntimeFake) Get(context.Context, string) (factorysessions.SessionProjection, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.getCalls++
+	return fake.getResult, nil
+}
+
+func (fake *canonicalInspectionLiveRuntimeFake) Resolve(sessionID string) *livesession.LiveSession {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	return fake.resolved[sessionID]
+}
+
+func (fake *canonicalInspectionLiveRuntimeFake) ApplyControl(
+	_ context.Context,
+	sessionID string,
+	operation factorysessions.LifecycleControlKind,
+	control factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.controlCalls++
+	fake.lastSessionID = sessionID
+	fake.lastOperation = operation
+	fake.lastControl = control
+	if fake.controlError != nil {
+		return factorysessions.LifecycleControlResult{}, fake.controlError
+	}
+	result := fake.controlResult
+	switch operation {
+	case factorysessions.LifecycleControlKind(factorysessions.SessionControlCancel):
+		result.Status = factorysessions.LifecycleStatusCanceled
+	case factorysessions.LifecycleControlKind(factorysessions.SessionControlTerminate):
+		result.Status = factorysessions.LifecycleStatusTerminated
+	}
+	return result, nil
+}
+
+func (fake *canonicalInspectionLiveRuntimeFake) Close(_ context.Context, sessionID string) error {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.closeCalls++
+	fake.lastSessionID = sessionID
+	return fake.closeError
+}
+
+type canonicalInspectionDurableFake struct {
+	durableexecution.Service
+	canonicalDurableOwner
+	mu            sync.Mutex
+	getResult     factorysessions.SessionReadResult
+	listResult    factorysessions.ListSessionsResult
+	result        factorysessions.ResultReadResult
+	dispatches    factorysessions.ListDispatchesResult
+	cursor        *factorysessions.ResponseEventCursor
+	controlResult durableexecution.CanonicalControlResult
+	controlError  error
+	getCalls      int
+	listCalls     int
+	resultCalls   int
+	dispatchCalls int
+	responseCalls int
+	controlCalls  int
+	lastList      factorysessions.ListSessionsRequest
+	lastResultReq factorysessions.ResultRequest
+	lastDispatch  factorysessions.DispatchQueryRequest
+	lastResponse  factorysessions.ResponseEventSubscriptionRequest
+	lastControl   factorysessions.SessionControlRequest
+	legacyCalls   int
+}
+
+func (fake *canonicalInspectionDurableFake) GetCanonical(context.Context, string) (factorysessions.SessionReadResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.getCalls++
+	return fake.getResult, nil
+}
+
+func (fake *canonicalInspectionDurableFake) ListCanonical(
+	_ context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.listCalls++
+	fake.lastList = request
+	return fake.listResult, nil
+}
+
+func (fake *canonicalInspectionDurableFake) ControlCanonical(
+	_ context.Context,
+	request factorysessions.SessionControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.controlCalls++
+	fake.lastControl = request
+	if fake.controlError != nil {
+		return durableexecution.CanonicalControlResult{}, fake.controlError
+	}
+	return fake.controlResult, nil
+}
+
+func (fake *canonicalInspectionDurableFake) ReadResultCanonical(
+	_ context.Context,
+	_ string,
+	request factorysessions.ResultRequest,
+) (factorysessions.ResultReadResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.resultCalls++
+	fake.lastResultReq = request
+	return fake.result, nil
+}
+
+func (fake *canonicalInspectionDurableFake) QueryDispatchesCanonical(
+	_ context.Context,
+	request factorysessions.DispatchQueryRequest,
+) (factorysessions.ListDispatchesResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.dispatchCalls++
+	fake.lastDispatch = request
+	return fake.dispatches, nil
+}
+
+func (fake *canonicalInspectionDurableFake) SubscribeResponsesCanonical(
+	_ context.Context,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.responseCalls++
+	fake.lastResponse = request
+	return fake.cursor, nil
+}
+
+func (fake *canonicalInspectionDurableFake) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.legacyCalls++
+	return factorysessions.SessionReadResult{}, errors.New("legacy GetSession selected")
+}
+
+func (fake *canonicalInspectionDurableFake) ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.legacyCalls++
+	return factorysessions.ListSessionsResult{}, errors.New("legacy ListSessions selected")
+}
+
+func (fake *canonicalInspectionDurableFake) GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.legacyCalls++
+	return factorysessions.ResultReadResult{}, errors.New("legacy GetResult selected")
+}
+
+func (fake *canonicalInspectionDurableFake) QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.legacyCalls++
+	return factorysessions.ListDispatchesResult{}, errors.New("legacy QueryDispatches selected")
+}
+
+type canonicalInspectionResponseStreamFake struct {
+	responsestreamservice.Service
+	mu      sync.Mutex
+	calls   int
+	request responsestreamservice.SubscriptionRequest
+	cursor  *factorysessions.ResponseEventCursor
+	err     error
+}
+
+type canonicalInspectionCheckpointStore struct {
+	records []factorydefinitions.JavaScriptCheckpointRecord
+}
+
+func (store *canonicalInspectionCheckpointStore) Put(record factorydefinitions.JavaScriptCheckpointRecord) {
+	store.records = append(store.records, record)
+}
+
+func (store *canonicalInspectionCheckpointStore) List() []factorydefinitions.JavaScriptCheckpointRecord {
+	return append([]factorydefinitions.JavaScriptCheckpointRecord(nil), store.records...)
+}
+
+func (store *canonicalInspectionCheckpointStore) Get(id string) (factorydefinitions.JavaScriptCheckpointRecord, bool) {
+	for _, record := range store.records {
+		if record.ID == id {
+			return record, true
+		}
+	}
+	return factorydefinitions.JavaScriptCheckpointRecord{}, false
+}
+
+type canonicalInspectionResultProjectionFake struct {
+	result factoryruntime.SessionResultProjection
+}
+
+func (fake *canonicalInspectionResultProjectionFake) ProjectSessionResults(factoryruntime.SessionResultInput) factoryruntime.SessionResultProjection {
+	return fake.result
+}
+
+type canonicalInspectionResultHost struct {
+	Host
+	session *livesession.LiveSession
+	context factorysessions.ProjectionContext
+	store   factoryruntime.JavaScriptCheckpointStore
+}
+
+func (host *canonicalInspectionResultHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
+	if host.session == nil || host.session.ID != sessionID {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	return host.session, nil
+}
+
+func (host *canonicalInspectionResultHost) BuildSessionProjectionContext(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error) {
+	return host.context, nil
+}
+
+func (host *canonicalInspectionResultHost) JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore {
+	return host.store
+}
+
+var _ controlplane.ResultReadHost = (*canonicalInspectionResultHost)(nil)
+
+func (fake *canonicalInspectionResponseStreamFake) Subscribe(
+	_ context.Context,
+	_ *responseeventstore.SessionResponseEventStore,
+	request responsestreamservice.SubscriptionRequest,
+) (*responsestreamservice.Cursor, error) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.calls++
+	fake.request = request
+	if fake.err != nil {
+		return nil, fake.err
+	}
+	return fake.cursor, nil
+}
+
+func assertCanonicalFieldError(t *testing.T, err error, field string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("error = nil, want field-scoped validation error for %s", field)
+	}
+	var detached *factorysessions.DetachedRequestError
+	if errors.As(err, &detached) {
+		if detached.Field != field {
+			t.Fatalf("detached validation field = %q, want %q", detached.Field, field)
+		}
+		return
+	}
+	var validation *factorysessions.ValidationError
+	if errors.As(err, &validation) {
+		if validation.Field != field {
+			t.Fatalf("validation field = %q, want %q", validation.Field, field)
+		}
+		return
+	}
+	t.Fatalf("error = %T %v, want field-scoped validation error for %s", err, err, field)
+}
+
+// TestService_CanonicalReadsUseModeOwnersAndRuntimeFreeViews proves the root
+// maps live and durable owner projections without selecting compatibility
+// methods or exposing runtime implementation state.

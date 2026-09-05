@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -533,23 +534,41 @@ func TestSessionOwnerWait_ExplicitPolicyIgnoresUnrelatedMatchingWork(t *testing.
 
 func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 	tests := []struct {
-		name       string
-		waitErr    error
-		wantStatus interfaces.InvocationTerminalStatus
-		wantCode   string
+		name            string
+		waitErr         error
+		cancelOnTimeout bool
+		wantCancel      bool
+		wantStatus      interfaces.InvocationTerminalStatus
+		wantCode        string
 	}{
-		{name: "timeout", waitErr: context.DeadlineExceeded, wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut)},
-		{name: "cancellation", waitErr: context.Canceled, wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled)},
+		{name: "timeout", waitErr: context.DeadlineExceeded, cancelOnTimeout: true, wantCancel: true, wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut)},
+		{name: "cancellation", waitErr: context.Canceled, cancelOnTimeout: true, wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled)},
+		{name: "timeout without cancel policy", waitErr: context.DeadlineExceeded, wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			cancelCalls := 0
+			var cancelRequest factorysessions.ControlRequest
 			owner := newTestSessionOwner(sessionOwnerFixture{
 				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 					return activeSessionInvocationObservation(), nil
 				},
 				WaitNext: func(context.Context) error { return tt.waitErr },
+				CancelOnTimeout: func(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+					cancelCalls++
+					if ctx.Err() != nil {
+						t.Fatalf("cancel-on-timeout context error = %v, want detached context", ctx.Err())
+					}
+					if sessionID != "session-1" {
+						t.Fatalf("cancel-on-timeout session ID = %q, want session-1", sessionID)
+					}
+					cancelRequest = request
+					return factorysessions.LifecycleControlResult{Status: factorysessions.LifecycleStatusCanceling}, nil
+				},
 			})
-			result, err := owner.waitForResult(context.Background(), "session-1", sessionWaitInput(nil))
+			input := sessionWaitInput(nil)
+			input.CancelOnTimeout = tt.cancelOnTimeout
+			result, err := owner.waitForResult(context.Background(), "session-1", input)
 			if err != nil {
 				t.Fatalf("waitForResult: %v", err)
 			}
@@ -557,6 +576,12 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, tt.wantCode)
 			assertSessionOwnerEqual(t, "request ID", result.RequestID, "request-1")
 			assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
+			if (cancelCalls == 1) != tt.wantCancel {
+				t.Fatalf("cancel-on-timeout calls = %d, want cancel=%t", cancelCalls, tt.wantCancel)
+			}
+			if tt.wantCancel && (cancelRequest.RequestID != "request-1" || cancelRequest.Reason != "invocation wait timed out") {
+				t.Fatalf("cancel-on-timeout request = %#v, want submitted request identity and timeout reason", cancelRequest)
+			}
 		})
 	}
 }

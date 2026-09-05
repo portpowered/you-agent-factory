@@ -9,6 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -72,6 +73,123 @@ func TestServiceDelegatesDurableExecutionContract(t *testing.T) {
 	if stub.calls != 6 {
 		t.Fatalf("delegated calls = %d, want 6", stub.calls)
 	}
+}
+
+func TestServiceCanonicalMethodsUseTheCanonicalOwner(t *testing.T) {
+	t.Parallel()
+
+	owner := &canonicalOwnerStub{}
+	service, err := New(owner)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	assertCanonicalOwnerReadMethods(t, service)
+	assertCanonicalOwnerControlMethods(t, service, owner)
+	assertCanonicalOwnerCallSequence(t, owner)
+}
+
+func assertCanonicalOwnerReadMethods(t *testing.T, service *Service) {
+	t.Helper()
+	if got, err := service.GetCanonical(context.Background(), "session"); err != nil {
+		t.Fatalf("GetCanonical = (%#v, %v)", got, err)
+	} else if got.SessionID != "canonical-get" {
+		t.Fatalf("GetCanonical session ID = %q, want canonical-get", got.SessionID)
+	}
+	if got, err := service.ListCanonical(context.Background(), factorysessions.ListSessionsRequest{}); err != nil {
+		t.Fatalf("ListCanonical = (%#v, %v)", got, err)
+	} else if len(got.DurableSessions) != 1 {
+		t.Fatalf("ListCanonical sessions = %#v, want one row", got.DurableSessions)
+	} else if got.DurableSessions[0].SessionID != "canonical-list" {
+		t.Fatalf("ListCanonical session ID = %q, want canonical-list", got.DurableSessions[0].SessionID)
+	}
+	if got, err := service.ReadResultCanonical(context.Background(), "session", factorysessions.ResultRequest{}); err != nil {
+		t.Fatalf("ReadResultCanonical = (%#v, %v)", got, err)
+	} else if got.SessionID != "canonical-result" {
+		t.Fatalf("ReadResultCanonical session ID = %q, want canonical-result", got.SessionID)
+	}
+	if got, err := service.QueryDispatchesCanonical(context.Background(), factorysessions.DispatchQueryRequest{}); err != nil {
+		t.Fatalf("QueryDispatchesCanonical = (%#v, %v)", got, err)
+	} else if got.SessionID != "canonical-dispatch" {
+		t.Fatalf("QueryDispatchesCanonical session ID = %q, want canonical-dispatch", got.SessionID)
+	}
+}
+
+func assertCanonicalOwnerControlMethods(t *testing.T, service *Service, owner *canonicalOwnerStub) {
+	t.Helper()
+	if _, err := service.StartCanonical(context.Background(), factorysessions.StartRequest{}, false); err != nil {
+		t.Fatalf("StartCanonical: %v", err)
+	}
+	if got, err := service.ControlCanonical(context.Background(), factorysessions.SessionControlRequest{}); err != nil {
+		t.Fatalf("ControlCanonical = (%#v, %v)", got, err)
+	} else if got.Lifecycle == nil {
+		t.Fatalf("ControlCanonical result = %#v, want lifecycle result", got)
+	} else if got.Lifecycle.Detail != "canonical-control" {
+		t.Fatalf("ControlCanonical detail = %q, want canonical-control", got.Lifecycle.Detail)
+	}
+	if got, err := service.SubscribeResponsesCanonical(context.Background(), factorysessions.ResponseEventSubscriptionRequest{}); err != nil {
+		t.Fatalf("SubscribeResponsesCanonical = (%#v, %v)", got, err)
+	} else if got != owner.cursor {
+		t.Fatalf("SubscribeResponsesCanonical cursor = %p, want owner cursor %p", got, owner.cursor)
+	}
+}
+
+func assertCanonicalOwnerCallSequence(t *testing.T, owner *canonicalOwnerStub) {
+	t.Helper()
+	want := []string{"get", "list", "result", "dispatch", "start", "control", "response"}
+	if len(owner.calls) != len(want) {
+		t.Fatalf("canonical owner calls = %#v, want %#v", owner.calls, want)
+	}
+	for index := range want {
+		if owner.calls[index] != want[index] {
+			t.Fatalf("canonical owner call %d = %q, want %q", index, owner.calls[index], want[index])
+		}
+	}
+}
+
+type canonicalOwnerStub struct {
+	durableexecution.Service
+	cursor *factorysessions.ResponseEventCursor
+	calls  []string
+}
+
+var _ canonicaldurable.Service = (*canonicalOwnerStub)(nil)
+
+func (s *canonicalOwnerStub) StartCanonical(context.Context, factorysessions.StartRequest, bool) (durableexecution.CanonicalStartResult, error) {
+	s.calls = append(s.calls, "start")
+	return durableexecution.CanonicalStartResult{Async: &factorysessions.AsyncStartResult{SessionID: "canonical-start"}}, nil
+}
+
+func (s *canonicalOwnerStub) GetCanonical(context.Context, string) (factorysessions.SessionReadResult, error) {
+	s.calls = append(s.calls, "get")
+	return factorysessions.SessionReadResult{SessionID: "canonical-get"}, nil
+}
+
+func (s *canonicalOwnerStub) ListCanonical(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	s.calls = append(s.calls, "list")
+	return factorysessions.ListSessionsResult{DurableSessions: []factorysessions.DurableSessionListSummary{{SessionID: "canonical-list"}}}, nil
+}
+
+func (s *canonicalOwnerStub) ControlCanonical(context.Context, factorysessions.SessionControlRequest) (durableexecution.CanonicalControlResult, error) {
+	s.calls = append(s.calls, "control")
+	return durableexecution.CanonicalControlResult{Lifecycle: &factorysessions.LifecycleControlResult{Detail: "canonical-control"}}, nil
+}
+
+func (s *canonicalOwnerStub) ReadResultCanonical(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+	s.calls = append(s.calls, "result")
+	return factorysessions.ResultReadResult{SessionID: "canonical-result"}, nil
+}
+
+func (s *canonicalOwnerStub) QueryDispatchesCanonical(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	s.calls = append(s.calls, "dispatch")
+	return factorysessions.ListDispatchesResult{SessionID: "canonical-dispatch"}, nil
+}
+
+func (s *canonicalOwnerStub) SubscribeResponsesCanonical(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	s.calls = append(s.calls, "response")
+	if s.cursor == nil {
+		s.cursor = &factorysessions.ResponseEventCursor{}
+	}
+	return s.cursor, nil
 }
 
 func TestServiceForwardsOptionalRestorableStateProbe(t *testing.T) {

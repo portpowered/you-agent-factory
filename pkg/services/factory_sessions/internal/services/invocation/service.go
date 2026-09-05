@@ -6,6 +6,7 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	legacyinvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -24,15 +25,16 @@ type Service interface {
 // They contain no process-wide service bag and are safe to bind independently
 // for each opened Factory Sessions runtime.
 type Dependencies struct {
-	FactoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe       func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
-	WaitNext      func(context.Context) error
-	WaitSession   func(context.Context, string) (legacyinvocation.SessionInvocationWaiter, legacyinvocation.ReleaseSessionInvocationWaiter)
-	Telemetry     legacyinvocation.SessionInvocationTelemetry
-	SpecialCase   legacyinvocation.SessionInvocationSpecialCase
-	Interpolation factorydefinitions.InvocationInterpolationService
-	WorkTypes     factorydefinitions.InvocationWorkTypeService
-	InputFiles    fileeffects.InvocationInputReader
-	Work          work.Service
+	FactoryConfig   func(string) (*factorydefinitions.FactoryConfig, error)
+	SubmitWork      func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Observe         func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error)
+	WaitNext        func(context.Context) error
+	WaitSession     func(context.Context, string) (legacyinvocation.SessionInvocationWaiter, legacyinvocation.ReleaseSessionInvocationWaiter)
+	Telemetry       legacyinvocation.SessionInvocationTelemetry
+	SpecialCase     legacyinvocation.SessionInvocationSpecialCase
+	Interpolation   factorydefinitions.InvocationInterpolationService
+	WorkTypes       factorydefinitions.InvocationWorkTypeService
+	InputFiles      fileeffects.InvocationInputReader
+	Work            work.Service
+	CancelOnTimeout func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }

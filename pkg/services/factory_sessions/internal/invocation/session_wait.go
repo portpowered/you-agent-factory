@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -273,6 +274,15 @@ func (o *SessionOwner) waitErrorResult(
 		failureClass = "cancellation"
 	}
 	o.recordFailure(sessionID, input, result, failureClass)
+	if result.Status == interfaces.InvocationTerminalStatusTimedOut && input.CancelOnTimeout && o.cancelOnTimeout != nil {
+		_, cancelErr := o.cancelOnTimeout(context.WithoutCancel(context.Background()), sessionID, factorysessions.ControlRequest{
+			RequestID: input.RequestID,
+			Reason:    "invocation wait timed out",
+		})
+		if cancelErr != nil {
+			result.Message = "invocation timed out while waiting for primary result; cancel-on-timeout control failed"
+		}
+	}
 	return result, nil
 }
 

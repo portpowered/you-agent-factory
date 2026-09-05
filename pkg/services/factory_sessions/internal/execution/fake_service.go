@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
@@ -74,8 +75,13 @@ func NewFakeServiceFromContractFixtures(
 }
 
 var _ Service = (*FakeService)(nil)
+var _ canonicaldurable.Service = (*FakeService)(nil)
 
 func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
+	return s.startAsync(ctx, req)
+}
+
+func (s *FakeService) startAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AsyncStartResult{}, err
 	}
@@ -117,6 +123,10 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 }
 
 func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+	return s.startSync(ctx, req)
+}
+
+func (s *FakeService) startSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
@@ -162,6 +172,10 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 }
 
 func (s *FakeService) ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error) {
+	return s.resumeInterruptedSession(ctx, sessionID, req)
+}
+
+func (s *FakeService) resumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AsyncStartResult{}, err
 	}
@@ -169,6 +183,10 @@ func (s *FakeService) ResumeInterruptedSession(ctx context.Context, sessionID st
 }
 
 func (s *FakeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
+	return s.getSession(ctx, sessionID)
+}
+
+func (s *FakeService) getSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SessionReadResult{}, err
 	}
@@ -212,6 +230,10 @@ func (s *FakeService) InterruptDispatch(ctx context.Context, sessionID string, r
 }
 
 func (s *FakeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
+	return s.getResult(ctx, sessionID, req)
+}
+
+func (s *FakeService) getResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ResultReadResult{}, err
 	}
@@ -231,6 +253,10 @@ func (s *FakeService) GetResult(ctx context.Context, sessionID string, req Resul
 }
 
 func (s *FakeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
+	return s.listDispatches(ctx, sessionID)
+}
+
+func (s *FakeService) listDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListDispatchesResult{}, err
 	}
@@ -349,6 +375,10 @@ func (s *FakeService) ReadEvents(ctx context.Context, sessionID string, req Even
 }
 
 func (s *FakeService) ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
+	return s.listSessions(ctx, req)
+}
+
+func (s *FakeService) listSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListSessionsResult{}, err
 	}

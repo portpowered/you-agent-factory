@@ -40,6 +40,7 @@ type SessionInvocationWaitInput struct {
 	InvocationReturn *factorydefinitions.InvocationReturnConfig
 	FactoryConfig    *factorydefinitions.FactoryConfig
 	TimeoutMillis    *int64
+	CancelOnTimeout  bool
 }
 
 // SessionInvocationTelemetry owns metric and safe-log emissions coordinated by
@@ -71,17 +72,18 @@ type (
 // SessionOwner coordinates the complete session invocation lifecycle through
 // narrow, explicit collaborators.
 type SessionOwner struct {
-	factoryConfig func(string) (*factorydefinitions.FactoryConfig, error)
-	submitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	waitNextFn    func(context.Context) error
-	waitSessionFn func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
-	telemetry     SessionInvocationTelemetry
-	specialCase   SessionInvocationSpecialCase
-	interpolation factorydefinitions.InvocationInterpolationService
-	workTypes     factorydefinitions.InvocationWorkTypeService
-	inputFiles    fileeffects.InvocationInputReader
-	workService   work.Service
+	factoryConfig   func(string) (*factorydefinitions.FactoryConfig, error)
+	submitWork      func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	observe         func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	waitNextFn      func(context.Context) error
+	waitSessionFn   func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
+	telemetry       SessionInvocationTelemetry
+	specialCase     SessionInvocationSpecialCase
+	interpolation   factorydefinitions.InvocationInterpolationService
+	workTypes       factorydefinitions.InvocationWorkTypeService
+	inputFiles      fileeffects.InvocationInputReader
+	workService     work.Service
+	cancelOnTimeout func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
 
 // NewSessionOwner constructs the canonical Factory Session invocation owner.
@@ -109,9 +111,26 @@ func NewSessionOwner(
 	}
 }
 
+// BindCancelOnTimeout supplies the live-session lifecycle operation used when
+// this owner reaches a configured invocation wait timeout. The callback is
+// optional so isolated owner tests and non-live compatibility owners retain
+// their existing construction contract.
+func (o *SessionOwner) BindCancelOnTimeout(
+	cancel func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error),
+) {
+	if o != nil {
+		o.cancelOnTimeout = cancel
+	}
+}
+
+type invocationPreparation struct {
+	factoryConfig *factorydefinitions.FactoryConfig
+	resolved      ResolvedSessionInvocationInput
+	workTypeName  string
+}
+
 // Invoke resolves and validates one request, submits exactly one Work item,
 // then delegates event-derived result waiting to the injected waiter.
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (o *SessionOwner) Invoke(
 	ctx context.Context,
 	sessionID string,
@@ -120,35 +139,64 @@ func (o *SessionOwner) Invoke(
 	if o == nil || o.factoryConfig == nil || o.submitWork == nil || o.observe == nil || o.workService == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
 	}
-	factoryCfg, err := o.factoryConfig(sessionID)
+	prepared, err := o.prepareInvocation(ctx, sessionID, request)
 	if err != nil {
 		return FactoryInvocationResult{}, err
 	}
-	if factoryCfg == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
+	submitResult, terminal, err := o.submitInvocation(ctx, sessionID, request, prepared)
+	if terminal != nil || err != nil {
+		if terminal != nil {
+			return *terminal, err
+		}
+		return FactoryInvocationResult{}, err
 	}
+	if o.telemetry != nil {
+		o.telemetry.InvocationSubmitted(prepared.factoryConfig, prepared.resolved.Source)
+		o.telemetry.LogInvocationSubmitted(sessionID, prepared.resolved.Source, prepared.factoryConfig, submitResult)
+	}
+	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
+		RequestID:        submitResult.RequestID,
+		TraceID:          submitResult.TraceID,
+		InputSource:      prepared.resolved.Source,
+		InvocationReturn: prepared.factoryConfig.InvocationReturn,
+		FactoryConfig:    prepared.factoryConfig,
+		TimeoutMillis:    request.TimeoutMillis,
+		CancelOnTimeout:  request.CancelOnTimeout,
+	})
+}
 
+func (o *SessionOwner) prepareInvocation(
+	ctx context.Context,
+	sessionID string,
+	request InvocationRequest,
+) (invocationPreparation, error) {
+	factoryCfg, err := o.factoryConfig(sessionID)
+	if err != nil {
+		return invocationPreparation{}, err
+	}
+	if factoryCfg == nil {
+		return invocationPreparation{}, fmt.Errorf("factory session runtime config is unavailable")
+	}
 	sourceHint := SessionInvocationSourceHint(request)
 	o.normalizationAttempt(factoryCfg, sourceHint)
 	resolved, err := o.resolveSessionInvocationInput(ctx, factoryCfg, request)
 	if err != nil {
 		o.normalizationFailure(sessionID, factoryCfg, sourceHint, err)
-		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
+		return invocationPreparation{}, qualifySessionInvocationError(factoryCfg, err)
 	}
 	o.normalizationSuccess(factoryCfg, resolved.Source)
 	if o.interpolation == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("Factory Definition invocation interpolation service is unavailable")
+		return invocationPreparation{}, fmt.Errorf("Factory Definition invocation interpolation service is unavailable")
 	}
 	if o.inputFiles == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation input file reader is unavailable")
+		return invocationPreparation{}, fmt.Errorf("Factory Session invocation input file reader is unavailable")
 	}
 	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitions.FileReader(o.inputFiles)); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
-		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
+		return invocationPreparation{}, qualifySessionInvocationError(factoryCfg, err)
 	}
-
 	if o.workTypes == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("Factory Definition invocation Work Type service is unavailable")
+		return invocationPreparation{}, fmt.Errorf("Factory Definition invocation Work Type service is unavailable")
 	}
 	workTypeName, err := o.workTypes.DefaultWorkType(factoryCfg)
 	if err != nil {
@@ -157,41 +205,41 @@ func (o *SessionOwner) Invoke(
 			o.telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
 			o.telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
 		}
-		return FactoryInvocationResult{}, err
+		return invocationPreparation{}, err
 	}
+	return invocationPreparation{factoryConfig: factoryCfg, resolved: resolved, workTypeName: workTypeName}, nil
+}
+
+func (o *SessionOwner) submitInvocation(
+	ctx context.Context,
+	sessionID string,
+	request InvocationRequest,
+	prepared invocationPreparation,
+) (work.WorkRequestSubmitResult, *FactoryInvocationResult, error) {
 	submissionContextErr := contextError(ctx)
 	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
-		WorkTypeID:          workTypeName,
-		Content:             resolved.Content,
-		InvocationArguments: work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
+		WorkTypeID:          prepared.workTypeName,
+		Content:             prepared.resolved.Content,
+		InvocationArguments: work.RuntimeInvocationArguments(prepared.factoryConfig.InvocationSignature, prepared.resolved.NormalizedArguments),
 	})
 	if submissionContextErr == nil {
 		if contextErr := contextError(ctx); contextErr != nil {
-			return o.waitErrorResult(sessionID, SessionInvocationWaitInput{
-				InputSource: resolved.Source, FactoryConfig: factoryCfg,
+			result, waitErr := o.waitErrorResult(sessionID, SessionInvocationWaitInput{
+				RequestID: trimmedStringValue(request.RequestID), InputSource: prepared.resolved.Source,
+				FactoryConfig: prepared.factoryConfig, CancelOnTimeout: request.CancelOnTimeout,
 			}, contextErr)
+			return work.WorkRequestSubmitResult{}, &result, waitErr
 		}
 	}
 	if err != nil {
 		if o.telemetry != nil {
-			o.telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
-			o.telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
+			o.telemetry.SubmissionFailure(prepared.factoryConfig, prepared.resolved.Source, err)
+			o.telemetry.LogSubmissionFailure(sessionID, prepared.resolved.Source, prepared.factoryConfig, err)
 		}
-		return FactoryInvocationResult{}, err
+		return work.WorkRequestSubmitResult{}, nil, err
 	}
-	if o.telemetry != nil {
-		o.telemetry.InvocationSubmitted(factoryCfg, resolved.Source)
-		o.telemetry.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
-	}
-	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
-		RequestID:        submitResult.RequestID,
-		TraceID:          submitResult.TraceID,
-		InputSource:      resolved.Source,
-		InvocationReturn: factoryCfg.InvocationReturn,
-		FactoryConfig:    factoryCfg,
-		TimeoutMillis:    request.TimeoutMillis,
-	})
+	return submitResult, nil, nil
 }
 
 // InvokeFactorySession preserves the compatibility-shaped private capability

@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -22,12 +23,7 @@ type Service struct {
 	durableexecution.Service
 }
 
-var _ durableexecution.CanonicalService = (*Service)(nil)
-var _ durableexecution.CanonicalReadService = (*Service)(nil)
-var _ durableexecution.CanonicalControlService = (*Service)(nil)
-var _ durableexecution.CanonicalResultService = (*Service)(nil)
-var _ durableexecution.CanonicalDispatchService = (*Service)(nil)
-var _ durableexecution.CanonicalResponseService = (*Service)(nil)
+var _ canonicaldurable.Service = (*Service)(nil)
 
 // StartCanonical selects the durable execution wait policy behind the private
 // owner seam. The public Factory Sessions canonical operation supplies the
@@ -37,21 +33,11 @@ func (s *Service) StartCanonical(
 	request factorysessions.StartRequest,
 	synchronous bool,
 ) (durableexecution.CanonicalStartResult, error) {
-	if s == nil || s.Service == nil {
-		return durableexecution.CanonicalStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
-	}
-	if synchronous {
-		started, err := s.Service.StartSync(ctx, request)
-		if err != nil {
-			return durableexecution.CanonicalStartResult{}, err
-		}
-		return durableexecution.CanonicalStartResult{Sync: &started}, nil
-	}
-	started, err := s.Service.StartAsync(ctx, request)
+	owner, err := s.canonicalOwner()
 	if err != nil {
 		return durableexecution.CanonicalStartResult{}, err
 	}
-	return durableexecution.CanonicalStartResult{Async: &started}, nil
+	return owner.StartCanonical(ctx, request, synchronous)
 }
 
 // GetCanonical forwards one durable session read through the private owner
@@ -60,10 +46,11 @@ func (s *Service) GetCanonical(
 	ctx context.Context,
 	sessionID string,
 ) (factorysessions.SessionReadResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.SessionReadResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.SessionReadResult{}, err
 	}
-	return s.Service.GetSession(ctx, sessionID)
+	return owner.GetCanonical(ctx, sessionID)
 }
 
 // ListCanonical forwards one durable session inventory read through the
@@ -72,10 +59,11 @@ func (s *Service) ListCanonical(
 	ctx context.Context,
 	request factorysessions.ListSessionsRequest,
 ) (factorysessions.ListSessionsResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.ListSessionsResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ListSessionsResult{}, err
 	}
-	return s.Service.ListSessions(ctx, request)
+	return owner.ListCanonical(ctx, request)
 }
 
 // ControlCanonical maps one mode-neutral durable control request to the
@@ -85,137 +73,11 @@ func (s *Service) ControlCanonical(
 	ctx context.Context,
 	request factorysessions.SessionControlRequest,
 ) (durableexecution.CanonicalControlResult, error) {
-	if s == nil || s.Service == nil {
-		return durableexecution.CanonicalControlResult{}, factorysessions.ErrExecutionServiceNotConfigured
-	}
-	control := request.Control
-	if control.RequestID == "" {
-		control.RequestID = request.Correlation.RequestID
-	}
-	if control.TurnID == "" {
-		control.TurnID = request.Correlation.TurnID
-	}
-	switch request.Operation {
-	case factorysessions.SessionControlPause:
-		return s.lifecycleControl(ctx, s.Service.Pause, request.SessionID, control)
-	case factorysessions.SessionControlResume:
-		return s.lifecycleControl(ctx, s.Service.Resume, request.SessionID, control)
-	case factorysessions.SessionControlCancel:
-		return s.lifecycleControl(ctx, s.Service.Cancel, request.SessionID, control)
-	case factorysessions.SessionControlTerminate:
-		return s.lifecycleControl(ctx, s.Service.Terminate, request.SessionID, control)
-	case factorysessions.SessionControlRecover:
-		return s.recoverCanonicalControl(ctx, request.SessionID, request.Recover, control)
-	case factorysessions.SessionControlApprove:
-		return s.approveCanonicalControl(ctx, request.SessionID, request.Approve, control)
-	case factorysessions.SessionControlRetryDispatch:
-		return s.retryCanonicalControl(ctx, request.SessionID, request.Retry, control)
-	case factorysessions.SessionControlInterruptDispatch:
-		return s.interruptCanonicalControl(ctx, request.SessionID, request.Interrupt, control)
-	default:
-		return durableexecution.CanonicalControlResult{}, fmt.Errorf("unsupported canonical durable control operation %q", request.Operation)
-	}
-}
-
-func (s *Service) recoverCanonicalControl(
-	ctx context.Context,
-	sessionID string,
-	request *factorysessions.ResumeSessionRequest,
-	control factorysessions.ControlRequest,
-) (durableexecution.CanonicalControlResult, error) {
-	recovery := factorysessions.ResumeSessionRequest{RequestID: control.RequestID}
-	if request != nil {
-		recovery = *request
-		if recovery.RequestID == "" {
-			recovery.RequestID = control.RequestID
-		}
-	}
-	started, err := s.Service.ResumeInterruptedSession(ctx, sessionID, recovery)
+	owner, err := s.canonicalOwner()
 	if err != nil {
 		return durableexecution.CanonicalControlResult{}, err
 	}
-	return durableexecution.CanonicalControlResult{Recovery: &started}, nil
-}
-
-func (s *Service) approveCanonicalControl(
-	ctx context.Context,
-	sessionID string,
-	request *factorysessions.ApproveRequest,
-	control factorysessions.ControlRequest,
-) (durableexecution.CanonicalControlResult, error) {
-	approve := factorysessions.ApproveRequest{ControlRequest: control}
-	if request != nil {
-		approve = *request
-		if approve.RequestID == "" {
-			approve.RequestID = control.RequestID
-		}
-	}
-	return s.lifecycleControl(ctx, func(
-		ctx context.Context,
-		id string,
-		_ factorysessions.ControlRequest,
-	) (factorysessions.LifecycleControlResult, error) {
-		return s.Service.Approve(ctx, id, approve)
-	}, sessionID, control)
-}
-
-func (s *Service) retryCanonicalControl(
-	ctx context.Context,
-	sessionID string,
-	request *factorysessions.RetryDispatchRequest,
-	control factorysessions.ControlRequest,
-) (durableexecution.CanonicalControlResult, error) {
-	retry := factorysessions.RetryDispatchRequest{ControlRequest: control}
-	if request != nil {
-		retry = *request
-		if retry.RequestID == "" {
-			retry.RequestID = control.RequestID
-		}
-	}
-	return s.lifecycleControl(ctx, func(
-		ctx context.Context,
-		id string,
-		_ factorysessions.ControlRequest,
-	) (factorysessions.LifecycleControlResult, error) {
-		return s.Service.RetryDispatch(ctx, id, retry)
-	}, sessionID, control)
-}
-
-func (s *Service) interruptCanonicalControl(
-	ctx context.Context,
-	sessionID string,
-	request *factorysessions.InterruptDispatchRequest,
-	control factorysessions.ControlRequest,
-) (durableexecution.CanonicalControlResult, error) {
-	interrupt := factorysessions.InterruptDispatchRequest{ControlRequest: control}
-	if request != nil {
-		interrupt = *request
-		if interrupt.RequestID == "" {
-			interrupt.RequestID = control.RequestID
-		}
-	}
-	return s.lifecycleControl(ctx, func(
-		ctx context.Context,
-		id string,
-		_ factorysessions.ControlRequest,
-	) (factorysessions.LifecycleControlResult, error) {
-		return s.Service.InterruptDispatch(ctx, id, interrupt)
-	}, sessionID, control)
-}
-
-type lifecycleControl func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-
-func (s *Service) lifecycleControl(
-	ctx context.Context,
-	operation lifecycleControl,
-	sessionID string,
-	control factorysessions.ControlRequest,
-) (durableexecution.CanonicalControlResult, error) {
-	result, err := operation(ctx, sessionID, control)
-	if err != nil {
-		return durableexecution.CanonicalControlResult{}, err
-	}
-	return durableexecution.CanonicalControlResult{Lifecycle: &result}, nil
+	return owner.ControlCanonical(ctx, request)
 }
 
 // ReadResultCanonical forwards one durable result read through the private
@@ -225,10 +87,11 @@ func (s *Service) ReadResultCanonical(
 	sessionID string,
 	request factorysessions.ResultRequest,
 ) (factorysessions.ResultReadResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.ResultReadResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ResultReadResult{}, err
 	}
-	return s.Service.GetResult(ctx, sessionID, request)
+	return owner.ReadResultCanonical(ctx, sessionID, request)
 }
 
 // QueryDispatchesCanonical forwards one filtered dispatch query through the
@@ -237,10 +100,11 @@ func (s *Service) QueryDispatchesCanonical(
 	ctx context.Context,
 	request factorysessions.DispatchQueryRequest,
 ) (factorysessions.ListDispatchesResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.ListDispatchesResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ListDispatchesResult{}, err
 	}
-	return s.Service.QueryDispatches(ctx, request)
+	return owner.QueryDispatchesCanonical(ctx, request)
 }
 
 // SubscribeResponsesCanonical forwards one durable response subscription
@@ -249,10 +113,22 @@ func (s *Service) SubscribeResponsesCanonical(
 	ctx context.Context,
 	request factorysessions.ResponseEventSubscriptionRequest,
 ) (*factorysessions.ResponseEventCursor, error) {
-	if s == nil || s.Service == nil {
-		return nil, factorysessions.ErrRuntimeNotAvailable
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return nil, err
 	}
-	return s.SubscribeResponseEvents(ctx, request.SessionID, request)
+	return owner.SubscribeResponsesCanonical(ctx, request)
+}
+
+func (s *Service) canonicalOwner() (canonicaldurable.Service, error) {
+	if s == nil || s.Service == nil {
+		return nil, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	owner, ok := s.Service.(canonicaldurable.Service)
+	if !ok || owner == nil {
+		return nil, fmt.Errorf("%w: canonical durable owner is required", factorysessions.ErrExecutionServiceNotConfigured)
+	}
+	return owner, nil
 }
 
 // SetPersistenceWarningLogger forwards the session-scoped safe diagnostic

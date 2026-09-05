@@ -11,6 +11,7 @@ import (
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func EmptySessionUsage() SessionUsage {
@@ -831,4 +832,150 @@ func parseCanonicalEvent(raw json.RawMessage) (parsedCanonicalEvent, error) {
 		Sequence:        envelope.Context.Sequence,
 		SessionSequence: envelope.Context.SessionSequence,
 	}, nil
+}
+
+// ControlCanonical is the direct durable-owner control operation. It keeps
+// canonical dispatch in this owner and does not call compatibility controls.
+func (s *JavaScriptRuntimeService) ControlCanonical(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	control := canonicalControlRequest(request)
+	switch request.Operation {
+	case factorysessions.SessionControlPause:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlPause, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlResume:
+		return s.canonicalResume(ctx, request.SessionID, control)
+	case factorysessions.SessionControlCancel:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlCancel, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlTerminate:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlTerminate, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlRecover:
+		return s.canonicalRecovery(ctx, request)
+	case factorysessions.SessionControlApprove:
+		return s.canonicalApprove(ctx, request, control)
+	case factorysessions.SessionControlRetryDispatch:
+		return s.canonicalRetry(ctx, request, control)
+	case factorysessions.SessionControlInterruptDispatch:
+		return s.canonicalInterrupt(ctx, request, control)
+	default:
+		return durableexecution.CanonicalControlResult{}, fmt.Errorf("unsupported canonical durable control operation %q", request.Operation)
+	}
+}
+
+func canonicalControlRequest(request factorysessions.SessionControlRequest) ControlRequest {
+	control := request.Control
+	if control.RequestID == "" {
+		control.RequestID = request.Correlation.RequestID
+	}
+	if control.TurnID == "" {
+		control.TurnID = request.Correlation.TurnID
+	}
+	return control
+}
+
+func (s *JavaScriptRuntimeService) canonicalLifecycle(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	result, err := s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, operation, control, approve, retry, interrupt)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return durableexecution.CanonicalControlResult{Lifecycle: &result}, nil
+}
+
+func (s *JavaScriptRuntimeService) canonicalResume(
+	ctx context.Context,
+	sessionID string,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	if result, handled, err := s.resumeInterruptedSessionViaLifecycleControl(ctx, sessionID, control); handled {
+		if err != nil {
+			return durableexecution.CanonicalControlResult{}, err
+		}
+		return durableexecution.CanonicalControlResult{Lifecycle: &result}, nil
+	}
+	return s.canonicalLifecycle(ctx, sessionID, LifecycleControlResume, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+}
+
+func (s *JavaScriptRuntimeService) canonicalRecovery(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	control := canonicalControlRequest(request)
+	recovery := factorysessions.ResumeSessionRequest{RequestID: control.RequestID}
+	if request.Recover != nil {
+		recovery = *request.Recover
+		if recovery.RequestID == "" {
+			recovery.RequestID = control.RequestID
+		}
+	}
+	started, err := s.resumeInterruptedSession(ctx, request.SessionID, recovery)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return durableexecution.CanonicalControlResult{Recovery: &started}, nil
+}
+
+func (s *JavaScriptRuntimeService) canonicalApprove(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	approve := factorysessions.ApproveRequest{ControlRequest: control}
+	if request.Approve != nil {
+		approve = *request.Approve
+		if approve.RequestID == "" {
+			approve.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeApproveRequest(approve)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlApprove, normalized.ControlRequest, normalized, RetryDispatchRequest{}, InterruptDispatchRequest{})
+}
+
+func (s *JavaScriptRuntimeService) canonicalRetry(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	retry := factorysessions.RetryDispatchRequest{ControlRequest: control}
+	if request.Retry != nil {
+		retry = *request.Retry
+		if retry.RequestID == "" {
+			retry.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeRetryDispatchRequest(retry)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlRetryDispatch, normalized.ControlRequest, ApproveRequest{}, normalized, InterruptDispatchRequest{})
+}
+
+func (s *JavaScriptRuntimeService) canonicalInterrupt(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	interrupt := factorysessions.InterruptDispatchRequest{ControlRequest: control}
+	if request.Interrupt != nil {
+		interrupt = *request.Interrupt
+		if interrupt.RequestID == "" {
+			interrupt.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeInterruptDispatchRequest(interrupt)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlInterruptDispatch, normalized.ControlRequest, ApproveRequest{}, RetryDispatchRequest{}, normalized)
 }

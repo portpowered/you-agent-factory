@@ -45,7 +45,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.Work == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: Work service is required")
 	}
-	return &Service{owner: legacyinvocation.NewSessionOwner(
+	owner := legacyinvocation.NewSessionOwner(
 		deps.FactoryConfig,
 		deps.SubmitWork,
 		deps.Observe,
@@ -57,7 +57,9 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.WorkTypes,
 		deps.InputFiles,
 		deps.Work,
-	)}, nil
+	)
+	owner.BindCancelOnTimeout(deps.CancelOnTimeout)
+	return &Service{owner: owner}, nil
 }
 
 // Invoke delegates the complete canonical invocation lifecycle to the
