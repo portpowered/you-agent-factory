@@ -17,10 +17,11 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
 
 ### Step 0 — Merged-PR short-circuit (do this FIRST)
 Run `gh pr view <pr> --json state`. If the PR state is MERGED, this work item
-is FINISHED: end your response immediately with `<COMPLETE>`. Do not re-review
+is FINISHED: return the canonical JSON decision envelope immediately with
+`decision` set to `ACCEPTED`. Do not re-review
 the merged head, do not run tests, do not post any comment, and never raise
 blocking findings against a merged PR. If you believe a defect exists in the
-merged code, name it briefly in your final response text (before the marker)
+merged code, name it briefly in the envelope feedback
 so the operator can file a NEW work item — it is never a reason to reject or
 loop this lane.
 
@@ -86,20 +87,20 @@ If the change involves modification to the website, you should use the playwrigh
   and `gh pr checks` and review against them.
 - If you somehow observe required checks that are still `PENDING`, `QUEUED`,
   or `IN_PROGRESS` (a race: a new head was pushed after the gate released the
-  task), do NOT watch them. End with `<CONTINUE>` and post no comment: the
+  task), do NOT watch them. End with `CONTINUE` and post no comment: the
   hold routes this task back through the `ci-wait` gate, which does the
-  waiting for you and costs no review visit. Never end with `<REJECTED>`
+  waiting for you and costs no review visit. Never end with `REJECTED`
   merely because CI is pending — waiting on CI is not executor rework.
 - Known-baseline flake policy: if a required check fails ONLY on a test in a
   package the PR diff does not touch, and that test is a known baseline flake
   (see the deflake lane list in docs/temp/scale-program-rules.md in the root
   repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
-  (`gh run rerun <id> --failed`) and immediately end `<CONTINUE>` — the
+  (`gh run rerun <id> --failed`) and immediately end `CONTINUE` — the
   `ci-wait` gate waits out the rerun and hands the task back to review with
   terminal checks. If on that next pass the rerun greened, proceed. If
   the same untouched-package flake fails twice, post ONE comment naming the
   test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
-  REQUIRED — waiting on baseline deflake", and end `<CONTINUE>`. That is a wait
+  REQUIRED — waiting on baseline deflake", and end `CONTINUE`. That is a wait
   on another lane, not executor rework, so it takes the hold route; post that
   comment at most once and stay silent on later holds for the same flake. Never
   demand code changes for a baseline flake in a package the diff does not touch.
@@ -227,7 +228,7 @@ remains.
 Route a converged repeat review as a HOLD. If the head has not moved since
 your last pass and you have no NEW independent finding — including the case
 where you are only re-confirming a blocker set the executor was already told
-about — end with `<CONTINUE>` and post no new PR comment.
+about — end with `CONTINUE` and post no new PR comment.
 
 Exception — a hold is ONLY for waiting states. If the head is unchanged,
 every required check is terminal and green, and no unfixed previously-flagged
@@ -240,7 +241,7 @@ re-enters through the `ci-wait` gate (task returns to `awaiting-ci`, not
 straight back to review), so the loop pauses on CI state instead of spinning.
 Re-sending an unchanged blocker set is a no-op that hands the processor
 nothing to act on, and taking the rejection route for it counts a
-consecutive-failure strike that can kill a healthy lane. `<REJECTED>` is for
+consecutive-failure strike that can kill a healthy lane. `REJECTED` is for
 delivering concrete executor work the executor does not already have: the
 first time you raise a blocker set, or a new blocker on a head pushed since
 your last pass. Holds are bounded by the review visit cap, so a genuinely
@@ -260,7 +261,7 @@ work the executor has not yet been given by review.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 - If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
 - Do not post a PR comment whose only content is that required CI is still pending or in progress.
-- A hold (`<CONTINUE>`) is silent by definition: when you hold for non-terminal CI or for an unchanged head with no new findings, post no PR comment at all.
+- A hold (`CONTINUE`) is silent by definition: when you hold for non-terminal CI or for an unchanged head with no new findings, post no PR comment at all.
 
 Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or `gh pr review --request-changes`.
 
@@ -298,39 +299,25 @@ through the **REJECTED** route so process receives concrete work:
 
 ### Step 7 - respond back
 
-End your final response with exactly one review routing marker, alone on the
-final line:
+Return exactly one raw JSON decision envelope as defined in the structured
+result section below, with no Markdown fence or surrounding prose. Put the
+review summary and acceptance-criteria checklist in the envelope's `feedback`
+field. Set `decision` to:
 
-- `<COMPLETE>` when the PR is complete, approved, and merged.
-- `<CONTINUE>` to HOLD, because you observed required checks that are somehow
-  still non-terminal, or because this is a repeat pass on an unchanged head
-  with no new independent findings. A hold posts no PR comment, routes the
-  task back through the `ci-wait` gate (which owns all CI waiting), and
-  re-enters review with no failed worker session and no consecutive-failure
-  strike. Holds are bounded by the review visit cap, so holding cannot loop
-  forever.
-- `<REJECTED>` when concrete executor rework remains that the executor has not
-  already been given — a blocker set you are raising for the first time, or a
-  new blocker on a head pushed since your last pass. Rejection routes the work
-  back to the processor, so use it only when the processor has something to do.
-  Never use it as a way to wait.
+- `ACCEPTED` only when the PR is complete, approved, and merged;
+- `CONTINUE` when required checks are still non-terminal or this is a repeat
+  pass on an unchanged head with no new independent findings. A hold posts no
+  PR comment, routes the task back through the `ci-wait` gate, and re-enters
+  review without a failed worker session or consecutive-failure strike;
+- `REJECTED` when concrete executor rework remains that the executor has not
+  already been given, such as a newly raised blocker or a new blocker on a
+  pushed head; or
+- `FAILED` when review execution cannot complete or an authority/plan
+  contradiction prevents a valid decision.
 
-Write the review summary and acceptance-criteria checklist before the marker.
-Do not return a JSON decision envelope.
-
-The runtime scans your whole response for these markers, so emit exactly one of
-them and put it alone on the final line. `<COMPLETE>` takes precedence over
-`<CONTINUE>`, and a response carrying neither marker follows the rejection
-route — which is why `<REJECTED>` is a marker you write for the human reader
-rather than a separate runtime token.
-
-Because the scan is a plain substring match over the entire response, never
-write a routing marker anywhere except that final line. This matters most when
-you are reviewing a PR that is itself about routing markers: when a PRD
-criterion or a quoted diff contains one, paraphrase it by name — "the COMPLETE
-marker", "the CONTINUE marker" — instead of pasting the literal token into your
-summary or acceptance-criteria checklist. A stray literal `<COMPLETE>` in a
-checklist line is read as approval-and-merge even when you meant to hold.
+Never return a bare routing value, a marker-only line, or a Markdown-wrapped
+response. The configured `decision-envelope` parser is the only response
+routing contract for this workstation.
 
 ## addenda
 
@@ -348,3 +335,25 @@ and passing, resolving merge conflicts, and merging the pull request. Process
 does not wait for or re-check terminal CI after its finish line.
 
 Always end your PR review comment with the literal marker string [gate-policy-v3] on its own final line.
+
+## Structured result and escalation (canonical response contract)
+
+Return one raw JSON object, never a bare marker or a Markdown fence:
+
+`{"decision":"ACCEPTED","feedback":"Evidence and handoff summary","output":"Artifact or PR reference"}`
+
+Use the standard decision envelope without classificationRoutes. ACCEPTED means
+this workstation's own delivery gate is satisfied, never that all Project
+criteria are satisfied. CONTINUE means actionable work remains in this slice.
+REJECTED means an invalid plan at planning/execution, or actionable code changes
+at review. FAILED means execution could not complete or a review discovered a
+plan/authority contradiction. Put the failure category (transient,
+implementation_defect, plan_defect, missing_prerequisite, contract_conflict, or
+shared_infrastructure), evidence, attempt history, and smallest next action in
+feedback. Preserve work and do not weaken the governing contract. A repeated
+unchanged blocker requires escalation, not another empty CONTINUE.
+
+Project acceptance belongs to independent validation after contributing slices
+integrate. Preserve criterion IDs and identify the later gate for outcomes this
+slice cannot yet prove. Measured counts are estimates to re-measure, not new
+product requirements. Only the operator may revise the acceptance contract.
