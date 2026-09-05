@@ -7,6 +7,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from preflight_test_support import write_packet
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -20,6 +23,7 @@ EXPECTED_RESULT_KEYS = {
     "prd_md_path",
     "standing_rules_path",
     "reused",
+    "preflight",
 }
 
 
@@ -59,38 +63,7 @@ def git(args, cwd, check=True):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
-    exclude_path = repo_path / ".git" / "info" / "exclude"
-    existing_excludes = (
-        exclude_path.read_text(encoding="utf-8")
-        if exclude_path.exists()
-        else ""
-    )
-    missing_excludes = [
-        entry
-        for entry in ("tasks/todo/", ".claude/")
-        if entry not in existing_excludes.splitlines()
-    ]
-    if missing_excludes:
-        exclude_path.write_text(
-            existing_excludes.rstrip("\n")
-            + "\n"
-            + "\n".join(missing_excludes)
-            + "\n",
-            encoding="utf-8",
-        )
-
-    tasks_dir = repo_path / "tasks" / "todo"
-    tasks_dir.mkdir(parents=True)
-    prd_json = tasks_dir / f"{prd_name}.json"
-    prd_json.write_text(
-        json.dumps({"branchName": prd_name}),
-        encoding="utf-8",
-    )
-    prd_md = None
-    if include_md:
-        prd_md = tasks_dir / f"{prd_name}.md"
-        prd_md.write_text(f"# {prd_name}\n", encoding="utf-8")
-    return prd_json, prd_md
+    return write_packet(repo_path, prd_name, include_md=include_md)
 
 
 def setup_repo_with_origin_main_ahead(local_repo, repo_root):
@@ -202,6 +175,101 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         )
         self.assertLess(prune_index, add_index)
 
+    def test_unrelated_worktree_add_failure_is_not_treated_as_reuse(self):
+        init_local_repo(self.repo_path)
+        branch = "unrelated-worktree-failure"
+        worktree_path = self.repo_path / "destination"
+        worktree_path.mkdir()
+        (worktree_path / ".git").write_text("gitdir: invalid\n", encoding="utf-8")
+        marker = worktree_path / "operator-data.txt"
+        marker.write_text("preserve\n", encoding="utf-8")
+        expected_head = git(["rev-parse", "HEAD"], self.repo_path).stdout.strip()
+
+        original_run_git = self.module.run_git
+
+        def fail_worktree_add(*args, **kwargs):
+            if args[:2] == ("worktree", "add"):
+                raise RuntimeError(
+                    "git worktree add failed (exit 128): permission denied"
+                )
+            return original_run_git(*args, **kwargs)
+
+        with mock.patch.object(self.module, "run_git", side_effect=fail_worktree_add):
+            with self.assertRaisesRegex(RuntimeError, "permission denied"):
+                self.module.add_worktree_or_reuse(
+                    self.repo_path,
+                    worktree_path,
+                    branch,
+                    expected_head,
+                    str(worktree_path),
+                    branch,
+                )
+
+        self.assertEqual(marker.read_text(encoding="utf-8"), "preserve\n")
+
+    def test_collision_reuse_requires_registered_requested_branch(self):
+        init_local_repo(self.repo_path)
+        other_branch = "other-destination-branch"
+        worktree_path = self.repo_path / "destination"
+        git(
+            ["worktree", "add", "-b", other_branch, str(worktree_path), "main"],
+            self.repo_path,
+        )
+        expected_head = git(["rev-parse", "main"], self.repo_path).stdout.strip()
+        requested_branch = "requested-destination-branch"
+
+        original_run_git = self.module.run_git
+
+        def collide_once(*args, **kwargs):
+            if args[:2] == ("worktree", "add"):
+                raise RuntimeError(
+                    f"git worktree add {worktree_path} failed (exit 128): "
+                    f"'{requested_branch}' is already checked out at "
+                    f"'{worktree_path}'"
+                )
+            return original_run_git(*args, **kwargs)
+
+        with mock.patch.object(self.module, "run_git", side_effect=collide_once):
+            with self.assertRaisesRegex(RuntimeError, "expected"):
+                self.module.add_worktree_or_reuse(
+                    self.repo_path,
+                    worktree_path,
+                    requested_branch,
+                    expected_head,
+                    str(worktree_path),
+                    requested_branch,
+                )
+
+    def test_collision_reuse_requires_git_registration(self):
+        init_local_repo(self.repo_path)
+        branch = "unregistered-destination-branch"
+        worktree_path = self.repo_path / "unregistered-destination"
+        worktree_path.mkdir()
+        (worktree_path / ".git").write_text("gitdir: invalid\n", encoding="utf-8")
+        (worktree_path / "marker.txt").write_text("preserve\n", encoding="utf-8")
+        expected_head = git(["rev-parse", "HEAD"], self.repo_path).stdout.strip()
+
+        original_run_git = self.module.run_git
+
+        def collide_once(*args, **kwargs):
+            if args[:2] == ("worktree", "add"):
+                raise RuntimeError(
+                    f"git worktree add '{worktree_path}' failed (exit 128): "
+                    f"'{worktree_path}' already exists"
+                )
+            return original_run_git(*args, **kwargs)
+
+        with mock.patch.object(self.module, "run_git", side_effect=collide_once):
+            with self.assertRaisesRegex(RuntimeError, "not Git-registered"):
+                self.module.add_worktree_or_reuse(
+                    self.repo_path,
+                    worktree_path,
+                    branch,
+                    expected_head,
+                    str(worktree_path),
+                    branch,
+                )
+
     def test_reuses_valid_worktree_with_expected_json_shape(self):
         init_local_repo(self.repo_path)
         prd_name = "reuse-worktree-prd"
@@ -262,7 +330,10 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertNotEqual(local_main_sha, origin_main_sha)
 
         prd_name = "local-main-ahead-prd"
-        write_prd(local_repo, prd_name)
+        packet_path, _ = write_prd(local_repo, prd_name)
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        packet["preflight"]["intendedMainline"]["commit"] = origin_main_sha
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
 
         result = run_setup_workspace(local_repo, prd_name)
         self.assertEqual(result.returncode, 0, result.stderr)

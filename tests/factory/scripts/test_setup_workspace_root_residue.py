@@ -18,6 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from preflight_test_support import write_packet
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "setup-workspace.py"
@@ -521,11 +523,7 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         git(["push", "-u", "origin", lane], upstream)
         git(["fetch", "origin"], local)
 
-        tasks_dir = local / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True, exist_ok=True)
-        (tasks_dir / f"{lane}.json").write_text(
-            json.dumps({"branchName": lane}), encoding="utf-8",
-        )
+        write_packet(local, lane)
 
         first = subprocess.run(
             ["python", str(SCRIPT_PATH), lane],
@@ -737,12 +735,7 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         git(["read-tree", "--reset", "-u", "HEAD^"], local)
 
         prd_name = "ancestor-residue-prd"
-        tasks_dir = local / "tasks" / "todo"
-        tasks_dir.mkdir(parents=True)
-        (tasks_dir / f"{prd_name}.json").write_text(
-            json.dumps({"branchName": prd_name}),
-            encoding="utf-8",
-        )
+        write_packet(local, prd_name)
 
         result = subprocess.run(
             ["python3", str(SCRIPT_PATH), prd_name],
