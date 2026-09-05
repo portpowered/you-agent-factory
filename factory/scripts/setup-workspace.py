@@ -1372,10 +1372,13 @@ def resolve_checkout_head(reference_path):
     return head
 
 
-def validate_intended_mainline(reference_path, intended_mainline):
+def validate_intended_mainline(
+    reference_path, intended_mainline, *, resolved_head=None,
+):
     """Require the immutable mainline commit to be present and ancestral."""
     required_commit = intended_mainline["commit"]
-    resolved_head = resolve_checkout_head(reference_path)
+    if resolved_head is None:
+        resolved_head = resolve_checkout_head(reference_path)
     object_result = run_git(
         "cat-file", "-e", f"{required_commit}^{{commit}}",
         cwd=reference_path,
@@ -1425,7 +1428,14 @@ def validate_intended_mainline(reference_path, intended_mainline):
     }
 
 
-def validate_packet_preflight(repo_root, candidate, prd_name):
+def validate_packet_preflight(
+    repo_root,
+    candidate,
+    prd_name,
+    *,
+    reference_path=None,
+    resolved_head=None,
+):
     """Admit one packet without mutating Git, the root, or a destination."""
     packet_path = candidate["prd_json_path"]
     prd = read_prd(packet_path)
@@ -1451,13 +1461,16 @@ def validate_packet_preflight(repo_root, candidate, prd_name):
 
     envelope = validate_preflight_contract(prd)
     verified_files = validate_preflight_files(envelope)
-    reference_path = (
-        candidate["worktree_path"]
-        if not candidate["is_root"]
-        else repo_root
-    )
+    if reference_path is None:
+        reference_path = (
+            candidate["worktree_path"]
+            if not candidate["is_root"]
+            else repo_root
+        )
     intended_mainline = validate_intended_mainline(
-        reference_path, envelope["intendedMainline"],
+        reference_path,
+        envelope["intendedMainline"],
+        resolved_head=resolved_head,
     )
     return {
         "version": PREFLIGHT_VERSION,
@@ -1472,6 +1485,24 @@ def validate_packet_preflight(repo_root, candidate, prd_name):
         "verifiedFiles": verified_files,
         "intendedMainline": intended_mainline,
     }
+
+
+def resolve_initial_preflight_reference(
+    repo_root, candidate, worktree_path, branch,
+):
+    """Use the packet checkout for the pre-sync, read-only admission check."""
+    if worktree_path.exists() and worktree_is_valid(worktree_path):
+        head = validate_registered_worktree(
+            repo_root,
+            worktree_path,
+            branch,
+        )
+        return worktree_path, head
+
+    reference_path = (
+        candidate["worktree_path"] if not candidate["is_root"] else repo_root
+    )
+    return reference_path, resolve_checkout_head(reference_path)
 
 
 def normalized_absolute_path(path):
@@ -1607,6 +1638,80 @@ def list_registered_worktrees(repo_root):
             f"(exit {result.returncode}): {command_failure_details(result)}"
         )
     return parse_worktree_inventory(result.stdout, repo_root)
+
+
+def resolve_revision_head(repo_path, revision, description):
+    """Resolve one immutable Git revision without changing repository state."""
+    result = run_git("rev-parse", "--verify", revision, cwd=repo_path, check=False)
+    head = result.stdout.strip()
+    if result.returncode != 0 or not immutable_object_id(head):
+        raise RuntimeError(
+            f"{description} could not resolve {safe_identity_display(revision)}: "
+            f"{command_failure_details(result)}"
+        )
+    return head
+
+
+def registered_worktree_record(repo_root, worktree_path):
+    """Return the Git registration for one exact worktree path."""
+    path_key = normalized_absolute_path(worktree_path)
+    for record in list_registered_worktrees(repo_root):
+        if normalized_absolute_path(record["path"]) == path_key:
+            return record
+    raise RuntimeError(
+        "destination worktree "
+        f"{display_path(worktree_path)} is not Git-registered"
+    )
+
+
+def validate_registered_worktree(
+    repo_root, worktree_path, branch, *, expected_head=None,
+):
+    """Require a destination to be attached to the requested branch and head."""
+    record = registered_worktree_record(repo_root, worktree_path)
+    expected_ref = f"refs/heads/{branch}"
+    if record["locked"]:
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} is locked"
+        )
+    if record["prunable"]:
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} is prunable"
+        )
+    if record["detached"] or record["branch_ref"] != expected_ref:
+        observed = "detached" if record["detached"] else record["branch_ref"]
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} has branch "
+            f"{safe_identity_display(observed or 'missing')}; expected "
+            f"{safe_identity_display(expected_ref)}"
+        )
+    if not (Path(worktree_path) / ".git").exists():
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} has no .git file"
+        )
+
+    head = resolve_checkout_head(worktree_path)
+    if head is None:
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} has no readable HEAD"
+        )
+    branch_head = resolve_revision_head(
+        worktree_path,
+        expected_ref,
+        "destination worktree branch",
+    )
+    if branch_head != head:
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} HEAD "
+            f"{safe_commit_value(head)} does not match branch "
+            f"{safe_commit_value(branch_head)}"
+        )
+    if expected_head is not None and head != expected_head:
+        raise RuntimeError(
+            f"destination worktree {display_path(worktree_path)} resolved head "
+            f"{safe_commit_value(head)}; expected {safe_commit_value(expected_head)}"
+        )
+    return head
 
 
 def packet_candidates(repo_root, prd_name, records):
@@ -2115,6 +2220,39 @@ def resolve_worktree_start_point(fresh_origin_main_sha):
     return "main"
 
 
+def resolve_worktree_preflight_reference(
+    repo_root, branch, worktree_path, fresh_origin_main_sha=None,
+):
+    """Resolve the exact checkout or immutable start point used for admission."""
+    if worktree_path.exists() and worktree_is_valid(worktree_path):
+        head = validate_registered_worktree(repo_root, worktree_path, branch)
+        return worktree_path, head
+
+    if branch_exists_locally(repo_root, branch):
+        return repo_root, resolve_revision_head(
+            repo_root,
+            f"refs/heads/{branch}",
+            "local destination branch",
+        )
+    if branch_exists_on_remote(repo_root, branch):
+        return repo_root, resolve_revision_head(
+            repo_root,
+            f"refs/remotes/origin/{branch}",
+            "remote destination branch",
+        )
+
+    start_point = resolve_worktree_start_point(fresh_origin_main_sha)
+    if start_point == "main" and not local_main_ref_exists(repo_root):
+        # Preserve the existing root-sync failure when no valid creation
+        # baseline exists; setup will fail before it can create a destination.
+        return repo_root, resolve_checkout_head(repo_root)
+    return repo_root, resolve_revision_head(
+        repo_root,
+        start_point,
+        "new destination start point",
+    )
+
+
 def prune_worktrees(repo_root):
     """Prune stale worktree entries."""
     run_git("worktree", "prune", cwd=repo_root)
@@ -2135,18 +2273,56 @@ def worktree_is_valid(worktree_path):
     return len(entries) > 0
 
 
-def add_worktree_or_reuse(repo_root, worktree_path, *git_args):
-    """Converge when another admission wins the same destination race."""
+def expected_worktree_collision(error, worktree_path, branch):
+    """Recognize only Git's expected same-destination collision diagnostics."""
+    details = raw_failure_details(error).casefold().replace("\\", "/")
+    path = str(worktree_path).casefold().replace("\\", "/")
+    if "git worktree add" not in details or path not in details:
+        return False
+    branch = str(branch).casefold()
+    quoted_paths = (f"'{path}'", f'"{path}"')
+    quoted_branches = (f"'{branch}'", f'"{branch}"')
+    for quoted_path in quoted_paths:
+        if f"{quoted_path} already exists" in details:
+            return True
+        for quoted_branch in quoted_branches:
+            if any(
+                f"{quoted_branch} {marker} {quoted_path}" in details
+                for marker in (
+                    "is already checked out at",
+                    "is already used by worktree at",
+                )
+            ):
+                return True
+    return False
+
+
+def add_worktree_or_reuse(
+    repo_root, worktree_path, branch, expected_head, *git_args,
+):
+    """Converge only after a verified same-destination Git collision."""
     try:
         run_git("worktree", "add", *git_args, cwd=repo_root)
-    except RuntimeError:
-        if worktree_path.exists() and worktree_is_valid(worktree_path):
-            print(
-                "Worktree preparation: reused destination admitted concurrently",
-                file=sys.stderr,
-            )
-            return True
-        raise
+    except RuntimeError as error:
+        if not expected_worktree_collision(error, worktree_path, branch):
+            raise
+        validate_registered_worktree(
+            repo_root,
+            worktree_path,
+            branch,
+            expected_head=expected_head,
+        )
+        print(
+            "Worktree preparation: reused destination admitted concurrently",
+            file=sys.stderr,
+        )
+        return True
+    validate_registered_worktree(
+        repo_root,
+        worktree_path,
+        branch,
+        expected_head=expected_head,
+    )
     return False
 
 
@@ -2257,8 +2433,10 @@ def create_or_reuse_worktree(
 ):
     """Create a new worktree or reuse an existing one. Returns reused flag."""
     if worktree_path.exists() and worktree_is_valid(worktree_path):
+        validate_registered_worktree(repo_root, worktree_path, branch)
         sync_outcome = sync_reused_worktree_branch(repo_root, worktree_path, branch)
         print(f"Worktree branch sync: {sync_outcome}", file=sys.stderr)
+        validate_registered_worktree(repo_root, worktree_path, branch)
         return True
 
     # Remove stale path if it exists but is invalid.
@@ -2269,13 +2447,30 @@ def create_or_reuse_worktree(
     worktree_path.parent.mkdir(parents=True, exist_ok=True)
 
     if branch_exists_locally(repo_root, branch):
-        return add_worktree_or_reuse(
-            repo_root, worktree_path, str(worktree_path), branch,
+        expected_head = resolve_revision_head(
+            repo_root,
+            f"refs/heads/{branch}",
+            "local destination branch",
         )
-    elif branch_exists_on_remote(repo_root, branch):
         return add_worktree_or_reuse(
             repo_root,
             worktree_path,
+            branch,
+            expected_head,
+            str(worktree_path),
+            branch,
+        )
+    elif branch_exists_on_remote(repo_root, branch):
+        expected_head = resolve_revision_head(
+            repo_root,
+            f"refs/remotes/origin/{branch}",
+            "remote destination branch",
+        )
+        return add_worktree_or_reuse(
+            repo_root,
+            worktree_path,
+            branch,
+            expected_head,
             "--track",
             "-b",
             branch,
@@ -2283,13 +2478,21 @@ def create_or_reuse_worktree(
             f"origin/{branch}",
         )
     else:
+        start_point = resolve_worktree_start_point(fresh_origin_main_sha)
+        expected_head = resolve_revision_head(
+            repo_root,
+            start_point,
+            "new destination start point",
+        )
         return add_worktree_or_reuse(
             repo_root,
             worktree_path,
+            branch,
+            expected_head,
             "-b",
             branch,
             str(worktree_path),
-            resolve_worktree_start_point(fresh_origin_main_sha),
+            start_point,
         )
 
 
@@ -2363,17 +2566,31 @@ def main():
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)
 
+    branch = f"{prd_name}"
+    prd_json_path = selected_candidate["prd_json_path"]
+    prd_md_path = selected_candidate["prd_md_path"]
+    if selected_candidate["is_root"]:
+        worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
+    else:
+        worktree_dir = selected_candidate["worktree_path"]
+
     try:
+        reference_path, resolved_head = resolve_initial_preflight_reference(
+            repo_root,
+            selected_candidate,
+            worktree_dir,
+            branch,
+        )
         preflight_result = validate_packet_preflight(
-            repo_root, selected_candidate, prd_name,
+            repo_root,
+            selected_candidate,
+            prd_name,
+            reference_path=reference_path,
+            resolved_head=resolved_head,
         )
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
         sys.exit(1)
-
-    branch = f"{prd_name}"
-    prd_json_path = selected_candidate["prd_json_path"]
-    prd_md_path = selected_candidate["prd_md_path"]
 
     # Sync main and prune worktrees.
     try:
@@ -2395,8 +2612,18 @@ def main():
     # creating/reusing a destination so concurrent admissions converge on the
     # same verified packet rather than trusting a stale first read.
     try:
+        reference_path, resolved_head = resolve_worktree_preflight_reference(
+            repo_root,
+            branch,
+            worktree_dir,
+            fresh_origin_main_sha,
+        )
         preflight_result = validate_packet_preflight(
-            repo_root, selected_candidate, prd_name,
+            repo_root,
+            selected_candidate,
+            prd_name,
+            reference_path=reference_path,
+            resolved_head=resolved_head,
         )
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Failed to read PRD", e), file=sys.stderr)
@@ -2408,15 +2635,12 @@ def main():
         print(format_stage_failure("Root sync failed", e), file=sys.stderr)
         sys.exit(1)
 
-    # Create or reuse worktree.
-    if selected_candidate["is_root"]:
-        worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
-    else:
-        worktree_dir = selected_candidate["worktree_path"]
+    # Create or reuse worktree, then verify the actual prepared checkout before
+    # copying the packet or reporting readiness. The lock covers both steps so
+    # another admission cannot sync the destination between verification and
+    # handoff.
+    failure_stage = "Worktree preparation failed"
     try:
-        # Git worktree add is not atomic across concurrent admissions. Reuse
-        # the cross-process setup lock so a loser cannot observe the
-        # destination between its directory creation and .git-file write.
         with root_sync_lock(repo_root):
             reused = create_or_reuse_worktree(
                 repo_root,
@@ -2424,22 +2648,28 @@ def main():
                 worktree_dir,
                 fresh_origin_main_sha,
             )
+            final_head = validate_registered_worktree(
+                repo_root, worktree_dir, branch,
+            )
+            preflight_result = validate_packet_preflight(
+                repo_root,
+                selected_candidate,
+                prd_name,
+                reference_path=worktree_dir,
+                resolved_head=final_head,
+            )
+
+            failure_stage = "PRD copy failed"
+            dest_json, dest_md = copy_prd_files(
+                prd_json_path, prd_md_path, worktree_dir,
+            )
+            dest_rules = copy_standing_rules(repo_root, worktree_dir)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(
-            format_stage_failure("Worktree preparation failed", e),
+            format_stage_failure(failure_stage, e),
             file=sys.stderr,
         )
         sys.exit(1)
-
-    # Copy PRD files into worktree.
-    try:
-        dest_json, dest_md = copy_prd_files(prd_json_path, prd_md_path, worktree_dir)
-    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
-        print(format_stage_failure("PRD copy failed", e), file=sys.stderr)
-        sys.exit(1)
-
-    # Copy the operator standing-rules doc referenced by lane payloads.
-    dest_rules = copy_standing_rules(repo_root, worktree_dir)
 
     # Output result.
     result = {

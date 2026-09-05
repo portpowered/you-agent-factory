@@ -217,8 +217,23 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
             capture_output=True,
             check=True,
         ).stdout.decode().strip()
+        base_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
         commit = subprocess.run(
-            ["git", "commit-tree", tree, "-m", "reserved path fixture"],
+            [
+                "git",
+                "commit-tree",
+                tree,
+                "-p",
+                base_head,
+                "-m",
+                "reserved path fixture",
+            ],
             cwd=self.repo_path,
             capture_output=True,
             check=True,
@@ -257,6 +272,14 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
             self.module,
             "create_or_reuse_worktree",
             return_value=False,
+        ), mock.patch.object(
+            self.module,
+            "validate_registered_worktree",
+            return_value="base-head",
+        ), mock.patch.object(
+            self.module,
+            "validate_packet_preflight",
+            return_value={},
         ), mock.patch.object(
             self.module,
             "copy_prd_files",

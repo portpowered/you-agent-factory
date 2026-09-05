@@ -127,6 +127,86 @@ class PreDispatchAuthorityInputPreflightTest(unittest.TestCase):
         )
         self.assertTrue(marker.exists())
 
+    def test_f15_feature_only_mainline_is_rejected_before_new_destination(self):
+        prd_name = "feature-only-mainline"
+        git(["checkout", "-b", "feature-only"], self.repo_path)
+        (self.repo_path / "feature-only.txt").write_text(
+            "feature-only\n", encoding="utf-8",
+        )
+        git(["add", "feature-only.txt"], self.repo_path)
+        git(["commit", "-m", "feature-only"], self.repo_path)
+        required_commit = git(
+            ["rev-parse", "HEAD"], self.repo_path,
+        ).stdout.strip()
+        git(["checkout", "main"], self.repo_path)
+        base_head = git(["rev-parse", "HEAD"], self.repo_path).stdout.strip()
+
+        packet = valid_packet(self.repo_path, prd_name)
+        packet["preflight"]["intendedMainline"]["commit"] = required_commit
+        self.write_valid(prd_name, packet)
+
+        result = self.assert_refusal_preserves_root(prd_name, "code=non-ancestor")
+
+        self.assertIn(
+            f'resolvedCheckoutHead="{base_head}"', result.stderr,
+        )
+        self.assertIn(
+            f'requiredCommit="{required_commit}"', result.stderr,
+        )
+
+    def test_f16_reused_destination_records_head_after_upstream_sync(self):
+        bare_remote = self.temp_dir.name + "\\remote.git"
+        git(["init", "--bare", "-b", "main", bare_remote], self.temp_dir.name)
+        git(["remote", "add", "origin", bare_remote], self.repo_path)
+        git(["push", "-u", "origin", "main"], self.repo_path)
+
+        upstream = Path(self.temp_dir.name) / "upstream"
+        git(["clone", bare_remote, str(upstream)], self.temp_dir.name)
+        git(["config", "user.email", "setup-workspace-test@example.com"], upstream)
+        git(["config", "user.name", "Setup Workspace Test"], upstream)
+        prd_name = "reused-synced-head"
+        git(["checkout", "-b", prd_name], upstream)
+        (upstream / "seed.txt").write_text("seed\n", encoding="utf-8")
+        git(["add", "seed.txt"], upstream)
+        git(["commit", "-m", "seed destination branch"], upstream)
+        git(["push", "-u", "origin", prd_name], upstream)
+        git(["fetch", "origin"], self.repo_path)
+
+        packet = valid_packet(self.repo_path, prd_name)
+        self.write_valid(prd_name, packet)
+        first = run_setup(self.repo_path, prd_name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_payload = json.loads(first.stdout)
+        first_destination = Path(first_payload["worktree"])
+        first_head = git(["rev-parse", "HEAD"], first_destination).stdout.strip()
+        self.assertEqual(
+            first_payload["preflight"]["intendedMainline"]["resolvedCheckoutHead"],
+            first_head,
+        )
+
+        (upstream / "synced.txt").write_text("synced\n", encoding="utf-8")
+        git(["add", "synced.txt"], upstream)
+        git(["commit", "-m", "advance destination branch"], upstream)
+        git(["push", "origin", prd_name], upstream)
+        git(["fetch", "origin"], self.repo_path)
+
+        second = run_setup(self.repo_path, prd_name)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_payload = json.loads(second.stdout)
+        second_destination = Path(second_payload["worktree"])
+        second_head = git(["rev-parse", "HEAD"], second_destination).stdout.strip()
+
+        self.assertEqual(second_destination, first_destination)
+        self.assertNotEqual(second_head, first_head)
+        self.assertEqual(
+            second_head,
+            git(["rev-parse", "origin/" + prd_name], second_destination).stdout.strip(),
+        )
+        self.assertEqual(
+            second_payload["preflight"]["intendedMainline"]["resolvedCheckoutHead"],
+            second_head,
+        )
+
     def test_f03_missing_authority_is_rejected_before_root_sync(self):
         prd_name = "missing-authority"
         packet_path = self.write_valid(prd_name)
