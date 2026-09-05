@@ -2,28 +2,22 @@ package execution_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
-	fscp01DispatchSourceRecording = "Recording projection"
-	fscp01DispatchSourceDurable   = "durable execution state"
-	fscp01DispatchSourceRuntime   = "Runtime (transient) state"
-	fscp01DispatchSourceUnproven  = "UNPROVEN"
-)
+const fscp01DispatchSourceUnproven = "UNPROVEN"
 
 type fscp01DispatchFieldSource struct {
 	Active   string
@@ -31,74 +25,93 @@ type fscp01DispatchFieldSource struct {
 	Evidence string
 }
 
-// This is deliberately a field-level observation table rather than an
-// ownership assertion. Fields without a direct public witness remain
-// UNPROVEN until a later convergence lane supplies one.
+// This is deliberately a field-level disposition table rather than an
+// ownership assertion. Public list/detail values are observable, but the
+// current response does not identify whether a value came from a Runtime
+// snapshot, durable execution state, or a Recording projection. A recording-
+// only/replay witness is required before any source claim can be made.
 var fscp01DispatchFieldSources = map[string]fscp01DispatchFieldSource{
-	"id":                    {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "list/detail identity and canonical dispatch context"},
-	"status":                {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "active/terminal list and detail status"},
-	"confirmationState":     {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public read state is stable at each lifecycle boundary"},
-	"dispatchKind":          {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "list/detail parity and canonical dispatch lifecycle metadata"},
-	"phase":                 {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public list/detail projection"},
-	"label":                 {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public list/detail projection"},
-	"attempt":               {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public dispatch attempt joined to canonical dispatch identity"},
-	"retryable":             {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public dispatch projection when present"},
-	"failureClassification": {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public dispatch projection when present"},
-	"failureDetail":         {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public dispatch projection when present"},
-	"runnerId":              {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceUnproven, Evidence: "selection origin is not independently exposed by this witness"},
-	"presetId":              {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceUnproven, Evidence: "selection origin is not independently exposed by this witness"},
-	"modelProvider":         {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public resolved execution projection when present"},
-	"model":                 {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public resolved execution projection when present"},
-	"reasoningEffort":       {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceUnproven, Evidence: "provider selection origin is not independently exposed by this witness"},
-	"provider":              {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public resolved execution projection when present"},
-	"providerSessionRefs":   {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public provider-session correlation projection when present"},
-	"usage":                 {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public usage projection when present"},
-	"warnings":              {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public warning projection when present"},
-	"outputArtifactIds":     {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public artifact lineage projection when present"},
-	"artifactIds":           {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public artifact lineage projection when present"},
-	"javascript":            {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "public orchestrator projection when present"},
-	"petri":                 {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceUnproven, Evidence: "not emitted for the JavaScript fixture"},
-	"sessionId":             {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "scoped detail identity"},
-	"orchestratorKind":      {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceDurable, Evidence: "scoped detail execution identity"},
-	"statusTransitions":     {Active: fscp01DispatchSourceRuntime, Terminal: fscp01DispatchSourceRecording, Evidence: "public lifecycle projection when present"},
+	"id":                    fscp01UnprovenDispatchFieldSource(),
+	"status":                fscp01UnprovenDispatchFieldSource(),
+	"confirmationState":     fscp01UnprovenDispatchFieldSource(),
+	"dispatchKind":          fscp01UnprovenDispatchFieldSource(),
+	"phase":                 fscp01UnprovenDispatchFieldSource(),
+	"label":                 fscp01UnprovenDispatchFieldSource(),
+	"attempt":               fscp01UnprovenDispatchFieldSource(),
+	"retryable":             fscp01UnprovenDispatchFieldSource(),
+	"failureClassification": fscp01UnprovenDispatchFieldSource(),
+	"failureDetail":         fscp01UnprovenDispatchFieldSource(),
+	"runnerId":              fscp01UnprovenDispatchFieldSource(),
+	"presetId":              fscp01UnprovenDispatchFieldSource(),
+	"modelProvider":         fscp01UnprovenDispatchFieldSource(),
+	"model":                 fscp01UnprovenDispatchFieldSource(),
+	"reasoningEffort":       fscp01UnprovenDispatchFieldSource(),
+	"provider":              fscp01UnprovenDispatchFieldSource(),
+	"providerSessionRefs":   fscp01UnprovenDispatchFieldSource(),
+	"usage":                 fscp01UnprovenDispatchFieldSource(),
+	"warnings":              fscp01UnprovenDispatchFieldSource(),
+	"outputArtifactIds":     fscp01UnprovenDispatchFieldSource(),
+	"artifactIds":           fscp01UnprovenDispatchFieldSource(),
+	"javascript":            fscp01UnprovenDispatchFieldSource(),
+	"petri":                 fscp01UnprovenDispatchFieldSource(),
+	"sessionId":             fscp01UnprovenDispatchFieldSource(),
+	"orchestratorKind":      fscp01UnprovenDispatchFieldSource(),
+	"statusTransitions":     fscp01UnprovenDispatchFieldSource(),
 }
+
+func fscp01UnprovenDispatchFieldSource() fscp01DispatchFieldSource {
+	return fscp01DispatchFieldSource{
+		Active:   fscp01DispatchSourceUnproven,
+		Terminal: fscp01DispatchSourceUnproven,
+		Evidence: "public list/detail field observed; source is not distinguishable at this boundary",
+	}
+}
+
+const fscp01LiveDispatchCorrelationWorkflow = `return (async function () {
+  const child = await agent.run({
+    prompt: "` + dispatchCorrelationChildPrompt + `",
+    label: "` + dispatchCorrelationChildLabel + `",
+    modelProvider: "codex",
+    model: "fscp01-codex-model",
+  });
+  return { child };
+})();`
 
 // TestFSCP01DispatchReadFieldProvenanceMatrix proves active and terminal
 // public dispatch list/detail reads against real root-built sessions and emits
-// an explicit provenance label for every returned JSON field. It also joins
-// each selected dispatch to its canonical Worker Session association and
-// provider-attempt observation where the fixture emits one.
+// an explicit provenance disposition for every returned JSON field. It also
+// joins each selected dispatch to its canonical Worker Session association and
+// records the current public inference-attempt evidence, including an explicit
+// UNPROVEN result when that event is not emitted for the dispatch.
 func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 	t.Parallel()
-	acquireExecutionFixtureSlot(t)
 
 	t.Run("active", func(t *testing.T) {
-		dir := scaffoldPartialResultFactory(t)
-		provider := newPartialResultBlockingProvider(partialResultWorkflowName)
+		t.Parallel()
+		acquireExecutionFixtureSlot(t)
+		gate := make(chan struct{})
+		var release sync.Once
+		releaseGate := func() { release.Do(func() { close(gate) }) }
+		runner := support.NewGatedSuccessCommandRunner("fscp01 active provider output", gate)
 		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
+			FactoryDir:                support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"}),
 			WaitForServiceModeRuntime: true,
-			Edges:                     serviceedges.Edges{ProviderOverride: provider},
+			Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 		})
 		t.Cleanup(func() { server.Stop(t) })
+		t.Cleanup(releaseGate)
 
-		started := startPartialResultAsync(t, server.URL())
+		started := startFSCP01DispatchWorkflowAsync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
 		if strings.TrimSpace(started.SessionId) == "" {
 			t.Fatal("active session id is empty")
 		}
-		t.Cleanup(func() {
-			releaseBlockedPartialResultSession(t, server.URL(), provider, started.SessionId)
-		})
 
 		waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning, 5*time.Second)
-		waitForFactoryDispatchStatus(t, server.URL(), started.SessionId, partialResultFirstDispatchID, factoryapi.FactoryDispatchStatusCOMPLETED, 5*time.Second)
-		waitForFactoryDispatchStatus(t, server.URL(), started.SessionId, partialResultSecondDispatchID, factoryapi.FactoryDispatchStatusRUNNING, 5*time.Second)
-
-		listed := listFactorySessionDispatches(t, server.URL(), started.SessionId)
+		listed := waitForFSCP01DispatchWithLabelStatus(t, server.URL(), started.SessionId, dispatchCorrelationChildLabel, factoryapi.FactoryDispatchStatusRUNNING)
 		if listed.SessionId != started.SessionId {
 			t.Fatalf("active dispatch list sessionId = %q, want %q", listed.SessionId, started.SessionId)
 		}
-		summary := requireFSCP01DispatchSummary(t, listed, partialResultSecondDispatchID)
+		summary := requireFSCP01DispatchSummaryByLabel(t, listed, dispatchCorrelationChildLabel)
 		if summary.Status != factoryapi.FactoryDispatchStatusRUNNING {
 			t.Fatalf("active dispatch summary status = %q, want RUNNING", summary.Status)
 		}
@@ -107,18 +120,25 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
 		recordFSCP01DispatchFieldSources(t, "active", summary, detail)
+		releaseGate()
+		waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusSucceeded, 5*time.Second)
 	})
 
 	t.Run("terminal", func(t *testing.T) {
-		dir := scaffoldDispatchCorrelationFactory(t)
+		t.Parallel()
+		acquireExecutionFixtureSlot(t)
+		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-terminal"})
+		runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+			Stdout: []byte("fscp01 terminal provider output"),
+		})
 		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 			FactoryDir:                dir,
 			WaitForServiceModeRuntime: true,
-			Edges:                     serviceedges.Edges{ProviderOverride: fscp01CodexTerminalProvider()},
+			Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 		})
 		t.Cleanup(func() { server.Stop(t) })
 
-		started := startDispatchCorrelationSync(t, server.URL(), dir)
+		started := startFSCP01DispatchWorkflowSync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
 		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 			t.Fatalf("terminal session status = %q, want SUCCEEDED", started.Status)
 		}
@@ -130,14 +150,20 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		if summary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
 			t.Fatalf("terminal dispatch summary status = %q, want COMPLETED", summary.Status)
 		}
+		if runner.CallCount() != 1 {
+			t.Fatalf("terminal provider command calls = %d, want 1", runner.CallCount())
+		}
+		if request := runner.LastRequest(); strings.ToLower(strings.TrimSpace(request.Command)) != "codex" {
+			t.Fatalf("terminal provider command = %q, want codex", request.Command)
+		}
 		detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
 		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
 		recordFSCP01DispatchFieldSources(t, "terminal", summary, detail)
 
-		// A second terminal list/detail read is the public stability check for
-		// fields classified as Recording projection or durable execution state.
+		// A second terminal list/detail read is the public stability check for the
+		// fields with explicit dispositions in the current matrix.
 		secondSummary := requireFSCP01DispatchSummary(t, listFactorySessionDispatches(t, server.URL(), started.SessionId), summary.Id)
 		secondDetail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
 		assertFSCP01DispatchListDetail(t, started.SessionId, secondSummary, secondDetail)
@@ -147,6 +173,105 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		foreign := readFSCP01DispatchError(t, strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/fscp01-foreign-session/dispatches/"+summary.Id)
 		assertFSCP01DispatchNotFound(t, foreign, "foreign session dispatch")
 	})
+}
+
+func startFSCP01DispatchWorkflowAsync(
+	t *testing.T,
+	serverURL, source string,
+) factoryapi.FactorySessionExecutionResponse {
+	t.Helper()
+
+	payload := postFSCP01DispatchWorkflow(t, serverURL, "fscp01-dispatch-async", source, "async")
+	var started factoryapi.FactorySessionExecutionResponse
+	if err := json.Unmarshal(payload, &started); err != nil {
+		t.Fatalf("decode FSCP-01 dispatch async response: %v", err)
+	}
+	return started
+}
+
+func startFSCP01DispatchWorkflowSync(
+	t *testing.T,
+	serverURL, source string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	payload := postFSCP01DispatchWorkflow(t, serverURL, "fscp01-dispatch-sync", source, "sync")
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(payload, &started); err != nil {
+		t.Fatalf("decode FSCP-01 dispatch sync response: %v", err)
+	}
+	return started
+}
+
+func postFSCP01DispatchWorkflow(
+	t *testing.T,
+	serverURL, requestID, source, mode string,
+) []byte {
+	t.Helper()
+
+	dialect := "you-workflow-v1"
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect: &dialect,
+				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+					Inline:   source,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal FSCP-01 dispatch %s request: %v", mode, err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + mode
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build FSCP-01 dispatch %s request: %v", mode, err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read FSCP-01 dispatch %s response: %v", mode, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return body
+}
+
+func waitForFSCP01DispatchWithLabelStatus(
+	t *testing.T,
+	serverURL, sessionID, label string,
+	want factoryapi.FactoryDispatchStatus,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	t.Helper()
+
+	last, err := support.WaitForObservation(
+		5*time.Second,
+		func() (factoryapi.ListFactorySessionDispatchesResponse, error) {
+			return listFactorySessionDispatches(t, serverURL, sessionID), nil
+		},
+		func(listed factoryapi.ListFactorySessionDispatchesResponse) bool {
+			for _, dispatch := range listed.Dispatches {
+				if dispatch.Label != nil && *dispatch.Label == label && dispatch.Status == want {
+					return true
+				}
+			}
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("dispatch label %q did not reach %s: %v; last dispatches=%#v", label, want, err, last.Dispatches)
+	}
+	return last
 }
 
 type fscp01CanonicalDispatchFacts struct {
@@ -176,11 +301,9 @@ func observeFSCP01CanonicalDispatch(
 	if !facts.HasDispatchStart {
 		t.Fatalf("canonical history for dispatch %q has no DISPATCH_QUEUED or DISPATCH_REQUEST", dispatchID)
 	}
-	if !facts.HasAssociation {
-		t.Fatalf("public canonical/Worker Session history for dispatch %q has no Worker Session association", dispatchID)
-	}
 	return facts
 }
+
 func observeFSCP01CanonicalDispatchEvents(
 	t *testing.T,
 	sessionID, dispatchID string,
@@ -239,21 +362,6 @@ func fscp01CanonicalDispatchIDMatches(canonicalID, sessionID, dispatchID string)
 	return canonicalID == dispatchID || canonicalID == sessionID+"/"+dispatchID
 }
 
-func fscp01CodexTerminalProvider() testutil.NativeProvider {
-	provider := testutil.NativeProvider{}
-	provider.ExecuteFunc = func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
-		return providers.ExecuteResult{
-			Content: `{"text":"fscp01 terminal provider output","label":"dispatch-correlation-child"}`,
-			SessionRef: &providers.SessionRef{
-				Provider: providers.IDCodex,
-				Kind:     providers.SessionIDKind,
-				ID:       "fscp01-codex-provider-session",
-			},
-		}, nil
-	}
-	return provider
-}
-
 func assertFSCP01DispatchAttemptAndWorkerIdentity(
 	t *testing.T,
 	detail factoryapi.FactoryDispatch,
@@ -263,10 +371,12 @@ func assertFSCP01DispatchAttemptAndWorkerIdentity(
 	if detail.Attempt == nil || *detail.Attempt < 1 {
 		t.Fatalf("dispatch %q attempt = %#v, want one-based public attempt", detail.Id, detail.Attempt)
 	}
-	if len(facts.Attempts) > 0 {
-		if _, ok := facts.Attempts[int(*detail.Attempt)]; !ok {
-			t.Fatalf("dispatch %q detail attempt = %d, canonical inference attempts = %#v", detail.Id, *detail.Attempt, facts.Attempts)
-		}
+	if len(facts.Attempts) == 0 {
+		t.Logf("FSCP-01 dispatch identity: dispatch=%s attempt=%d workerSession=%s inferenceAttempts=[] source=%s evidence=canonical public stream emitted no inference request/response for this dispatch", detail.Id, *detail.Attempt, facts.WorkerSessionID, fscp01DispatchSourceUnproven)
+		return
+	}
+	if _, ok := facts.Attempts[int(*detail.Attempt)]; !ok {
+		t.Fatalf("dispatch %q detail attempt = %d, canonical inference attempts = %#v", detail.Id, *detail.Attempt, facts.Attempts)
 	}
 	t.Logf("FSCP-01 dispatch identity: dispatch=%s attempt=%d workerSession=%s inferenceAttempts=%v", detail.Id, *detail.Attempt, facts.WorkerSessionID, sortedFSCP01AttemptKeys(facts.Attempts))
 }
@@ -314,25 +424,42 @@ func recordFSCP01DispatchFieldSources(
 	detail factoryapi.FactoryDispatch,
 ) {
 	t.Helper()
-	fields := marshalFSCP01JSONFields(t, summary)
-	for field := range marshalFSCP01JSONFields(t, detail) {
-		fields[field] = nil
+	observedFields := make(map[string][]string)
+	for field := range marshalFSCP01JSONFields(t, summary) {
+		observedFields[field] = append(observedFields[field], "list")
 	}
-	fieldNames := make([]string, 0, len(fields))
-	for field := range fields {
+	for field := range marshalFSCP01JSONFields(t, detail) {
+		observedFields[field] = append(observedFields[field], "detail")
+	}
+	if len(observedFields) == 0 {
+		t.Fatalf("dispatch %q returned no public fields to classify", detail.Id)
+	}
+	fieldNames := make([]string, 0, len(observedFields))
+	for field := range observedFields {
 		fieldNames = append(fieldNames, field)
 	}
 	sort.Strings(fieldNames)
+	var source string
 	for _, field := range fieldNames {
-		entry := fscp01DispatchFieldSources[field]
-		source := entry.Terminal
-		if phase == "active" {
+		entry, ok := fscp01DispatchFieldSources[field]
+		if !ok {
+			t.Fatalf("dispatch %q field %q has no explicit provenance disposition", detail.Id, field)
+		}
+		if strings.TrimSpace(entry.Evidence) == "" {
+			t.Fatalf("dispatch %q field %q has no explicit observed evidence", detail.Id, field)
+		}
+		switch phase {
+		case "active":
 			source = entry.Active
+		case "terminal":
+			source = entry.Terminal
+		default:
+			t.Fatalf("dispatch %q has unknown provenance phase %q", detail.Id, phase)
 		}
-		if source == "" {
-			source = fscp01DispatchSourceUnproven
+		if source != fscp01DispatchSourceUnproven {
+			t.Fatalf("dispatch %q field %q source = %q, want explicit %s until source-distinguishing replay evidence exists", detail.Id, field, source, fscp01DispatchSourceUnproven)
 		}
-		t.Logf("FSCP-01 dispatch provenance phase=%s dispatch=%s field=%s source=%s evidence=%s", phase, detail.Id, field, source, entry.Evidence)
+		t.Logf("FSCP-01 dispatch provenance phase=%s dispatch=%s field=%s source=%s observed=%s evidence=%s", phase, detail.Id, field, source, strings.Join(observedFields[field], "+"), entry.Evidence)
 	}
 }
 

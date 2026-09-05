@@ -34,7 +34,6 @@ func TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents(t *
 	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 	})
 	t.Cleanup(func() { server.Stop(t) })
