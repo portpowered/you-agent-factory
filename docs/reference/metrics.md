@@ -1,6 +1,6 @@
 ---
 author: You Agent Factory Team
-last-modified: 2026-08-21
+last-modified: 2026-09-05
 doc-id: agent-factory/metrics
 ---
 
@@ -109,6 +109,29 @@ Use `--session "$SESSION_ID"` with an exact live Factory Session identifier.
 The filter applies to totals, groups, failure reasons, and latency samples.
 
 Without `--session`, the command reports all recorded Factory Sessions.
+
+## Session-scoped dispatch and cost MVP
+
+From an empty working directory, inspect one server-scoped Factory Session:
+
+```bash
+you --server <uri> metrics session <factory-session-id>
+you --json --server <uri> metrics session <factory-session-id>
+you --json --server <uri> metrics session <factory-session-id> --lens cost --by-worker --by-dispatch
+```
+
+The session report uses the selected live Factory Session scope. It shows
+canonical attempts, outcomes, queue and execution samples, and exclusions.
+Running, unavailable, and unpriced values remain explicit. `--lens cost`
+composes the existing exact `GET /metrics/costs` report for the same session.
+`--by-worker` and `--by-dispatch` show only proven canonical identities.
+
+Unknown sessions, unavailable scope, timeout, cancellation, malformed replay,
+or any requested read failure return a coded error with empty stdout. The
+command never falls back to local metrics artifacts or unscoped history.
+
+The existing `you metrics --session` and `you metrics costs --session`
+compatibility workflows remain unchanged.
 
 ## Human Output
 

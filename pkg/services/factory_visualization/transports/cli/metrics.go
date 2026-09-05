@@ -27,29 +27,31 @@ type MetricsCommandConfig struct {
 	// SessionEvents is the server-owned retained Factory Event replay seam used
 	// by the remote session report. It is deliberately narrower than the run
 	// package's transport contract so this service-owned CLI remains reusable.
-	SessionEvents SessionEventOperation
-	Server        func() string
-	Query         factoryvisualization.RuntimeMetricsQuery
-	HomeDir       func() (string, error)
-	JSON          func() bool
-	Verbose       func() bool
-	Costs         *cobra.Command
-	CostReport    CostReportOperation
+	SessionEvents   SessionEventOperation
+	Server          func() string
+	Query           factoryvisualization.RuntimeMetricsQuery
+	HomeDir         func() (string, error)
+	JSON            func() bool
+	Verbose         func() bool
+	Costs           *cobra.Command
+	CostReport      CostReportOperation
+	CostHumanReport CostHumanReportOperation
 }
 
 // MetricsConfig contains the resolved inputs for one metrics query and output
 // rendering operation.
 type MetricsConfig struct {
-	Server      string
-	GroupBy     string
-	SessionID   string
-	JSON        bool
-	Output      io.Writer
-	Query       factoryvisualization.RuntimeMetricsQuery
-	HomeDir     func() (string, error)
-	Diagnostics io.Writer
-	Verbose     bool
-	CostReport  CostReportOperation
+	Server          string
+	GroupBy         string
+	SessionID       string
+	JSON            bool
+	Output          io.Writer
+	Query           factoryvisualization.RuntimeMetricsQuery
+	HomeDir         func() (string, error)
+	Diagnostics     io.Writer
+	Verbose         bool
+	CostReport      CostReportOperation
+	CostHumanReport CostHumanReportOperation
 
 	// SessionReport selects the remote, event-backed one-session report. The
 	// field is internal to the CLI composition boundary; callers should use
@@ -121,6 +123,7 @@ func NewMetricsCommand(config MetricsCommandConfig) *cobra.Command {
 				SessionReport:     true,
 				SessionEvents:     config.SessionEvents,
 				CostReport:        config.CostReport,
+				CostHumanReport:   config.CostHumanReport,
 				SessionLens:       sessionLens,
 				SessionByWorker:   sessionByWorker,
 				SessionByDispatch: sessionByDispatch,

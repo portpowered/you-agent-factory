@@ -132,6 +132,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 			Server:    func() string { return globals.server },
 			JSON:      func() bool { return globals != nil && globals.json },
 		}),
+		CostHumanReport: costscli.RenderHumanReport,
 	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {

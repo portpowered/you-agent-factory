@@ -29,6 +29,11 @@ type MetricsCostReportRequest struct {
 // schema or rendering policy.
 type CostReportOperation func(context.Context, MetricsCostReportRequest) (generatedclient.CostsReport, error)
 
+// CostHumanReportOperation renders the existing Costs report for a composed
+// human CLI document. Wire supplies the Costs-owned renderer so this service
+// transport does not import a peer service's transport package.
+type CostHumanReportOperation func(generatedclient.CostsReport) string
+
 // Client is the narrow generated response-aware capability used by the base
 // metrics command. Wire owns client construction and server selection.
 type Client interface {
@@ -159,7 +164,7 @@ func runMetricsSessionOperation(
 		addMetricsSessionDetails(&document, report.UsageRows, costReport, config.SessionByWorker, config.SessionByDispatch)
 	}
 	document.Cost = costReport
-	output, err := renderMetricsSessionOutput(document, config.JSON)
+	output, err := renderMetricsSessionOutput(document, config.JSON, config.CostHumanReport)
 	if err != nil {
 		return err
 	}
@@ -486,14 +491,6 @@ func metricsSessionCostItemsForDispatch(index *metricsSessionCostIndex, key stri
 	return index.byDispatch[key]
 }
 
-func metricsSessionItemsIdentity(items []generatedclient.CostsLineItem, provider bool) *string {
-	value, complete, conflict := metricsSessionItemsIdentityState(items, provider)
-	if !complete || conflict {
-		return nil
-	}
-	return value
-}
-
 func metricsSessionIdentityWithItems(
 	candidate *string,
 	items []generatedclient.CostsLineItem,
@@ -545,8 +542,4 @@ func metricsSessionItemsWorkIDsSet(items []generatedclient.CostsLineItem) map[st
 		}
 	}
 	return values
-}
-
-func metricsSessionItemsWorkIDs(items []generatedclient.CostsLineItem) []string {
-	return sortedMetricsSessionSet(metricsSessionItemsWorkIDsSet(items))
 }

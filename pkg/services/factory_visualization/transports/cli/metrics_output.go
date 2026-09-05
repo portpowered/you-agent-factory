@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -836,7 +835,7 @@ func pointerString(value *string) string {
 	return *value
 }
 
-func renderMetricsSessionOutput(document metricsSessionDocument, jsonOutput bool) (string, error) {
+func renderMetricsSessionOutput(document metricsSessionDocument, jsonOutput bool, costHumanReport CostHumanReportOperation) (string, error) {
 	if jsonOutput {
 		encoded, err := json.Marshal(document)
 		if err != nil {
@@ -844,10 +843,17 @@ func renderMetricsSessionOutput(document metricsSessionDocument, jsonOutput bool
 		}
 		return string(append(encoded, '\n')), nil
 	}
-	return renderHumanMetricsSession(document), nil
+	if document.Cost != nil && costHumanReport == nil {
+		return "", newMetricsError(
+			MetricsQueryFailedCode,
+			"render Factory Session costs: human report renderer is required",
+			nil,
+		)
+	}
+	return renderHumanMetricsSession(document, costHumanReport), nil
 }
 
-func renderHumanMetricsSession(document metricsSessionDocument) string {
+func renderHumanMetricsSession(document metricsSessionDocument, costHumanReport CostHumanReportOperation) string {
 	var output strings.Builder
 	fmt.Fprintf(&output, "Factory Session %s metrics as of %s\n\n", document.FactorySessionID, formatMetricsSessionTime(document.AsOf))
 	renderSessionSummaryValue(&output, "STATUS", document.Status)
@@ -893,7 +899,7 @@ func renderHumanMetricsSession(document metricsSessionDocument) string {
 	if document.Cost != nil {
 		fmt.Fprintln(&output)
 		fmt.Fprintln(&output, "COST")
-		output.WriteString(costscli.RenderHumanReport(*document.Cost))
+		output.WriteString(costHumanReport(*document.Cost))
 	}
 	if len(document.ByWorker) > 0 {
 		fmt.Fprintln(&output)
