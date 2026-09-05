@@ -136,10 +136,11 @@ func loadModel(
 ) error {
 	modelFile := strings.TrimSpace(request.ModelPath)
 	payload, err := proto.Marshal(&ModelOptions{
-		Model:     request.ModelName,
-		NBatch:    localAIModelBatchSize,
-		ModelFile: modelFile,
-		ModelPath: filepath.Dir(modelFile),
+		Model:      request.ModelName,
+		NBatch:     localAIModelBatchSize,
+		Embeddings: strings.EqualFold(request.ModelName, models.BuiltInModelNameEmbed),
+		ModelFile:  modelFile,
+		ModelPath:  filepath.Dir(modelFile),
 	})
 	if err != nil {
 		return fmt.Errorf(

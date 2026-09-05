@@ -13,6 +13,7 @@ message HealthMessage {}
 message ModelOptions {
   string Model = 1;
   int32 NBatch = 4;
+  bool Embeddings = 10;
   string ModelFile = 21;
   string ModelPath = 59;
 }

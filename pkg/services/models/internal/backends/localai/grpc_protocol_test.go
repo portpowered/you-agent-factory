@@ -246,6 +246,7 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		t.Fatalf("load transport facts = methods %#v, ready %t, closed %d, want Health/LoadModel/ready/one close", connection.methods, result.Ready, connection.closed)
 	}
 	if connection.loadRequest.GetModel() != "llm" ||
+		connection.loadRequest.GetEmbeddings() ||
 		connection.loadRequest.GetModelFile() != modelFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize {
@@ -253,6 +254,26 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 			"load request model=%q modelFile=%q modelPath=%q nBatch=%d, want model name, file path, model directory, and nonzero batch size",
 			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(),
 		)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorEnablesEmbeddingModeForBuiltinEmbed(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-llamacpp",
+		ModelName:       models.BuiltInModelNameEmbed,
+		ModelPath:       `C:\models\embed\model.gguf`,
+	})
+	if err != nil {
+		t.Fatalf("Negotiate() error = %v", err)
+	}
+	if !connection.loadRequest.GetEmbeddings() {
+		t.Fatal("embedding load request flag = false, want pinned LocalAI embedding mode")
 	}
 }
 
