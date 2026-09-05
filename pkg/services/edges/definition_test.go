@@ -511,6 +511,32 @@ func TestMergeWithEmptyReplacementsPreservesProductionDefaults(t *testing.T) {
 	}
 }
 
+func TestMergeWorkerSessionHomeDirectoryUsesReplacementAndPreservesDefault(t *testing.T) {
+	t.Parallel()
+
+	defaultResolver := func() (string, error) { return "default-home", nil }
+	replacementResolver := func() (string, error) { return "scenario-home", nil }
+
+	merged := Merge(
+		Edges{WorkerSessionResolveHomeDirectory: defaultResolver},
+		Edges{WorkerSessionResolveHomeDirectory: replacementResolver},
+	)
+	if merged.WorkerSessionResolveHomeDirectory == nil {
+		t.Fatal("WorkerSessionResolveHomeDirectory = nil, want replacement")
+	}
+	if home, err := merged.WorkerSessionResolveHomeDirectory(); err != nil || home != "scenario-home" {
+		t.Fatalf("merged WorkerSessionResolveHomeDirectory() = (%q, %v), want scenario-home", home, err)
+	}
+
+	preserved := Merge(Edges{WorkerSessionResolveHomeDirectory: defaultResolver}, Edges{})
+	if preserved.WorkerSessionResolveHomeDirectory == nil {
+		t.Fatal("preserved WorkerSessionResolveHomeDirectory = nil")
+	}
+	if home, err := preserved.WorkerSessionResolveHomeDirectory(); err != nil || home != "default-home" {
+		t.Fatalf("preserved WorkerSessionResolveHomeDirectory() = (%q, %v), want default-home", home, err)
+	}
+}
+
 func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	t.Parallel()
 

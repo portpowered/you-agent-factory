@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	runtime "runtime"
+	"strings"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -80,16 +81,44 @@ func provideWorkerRecordingWriter(
 ) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
 	if writer == nil {
-		var err error
+		root, err := workerRecordingRoot(edges)
+		if err != nil {
+			return nil, err
+		}
 		writer, err = recordingswire.NewWorkerRecordingFileWriter(
 			platformreplay.NewLocal(runtime.GOOS),
-			filepath.Join(os.TempDir(), "you-worker-recordings"),
+			root,
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return writer, nil
+}
+
+const (
+	workerRecordingTemporaryDirectory = "you-worker-recordings"
+	workerRecordingHomeDirectory      = ".you-agent-factory"
+	workerRecordingStoreDirectory     = "worker-sessions"
+)
+
+// workerRecordingRoot keeps the pre-characterization temporary default until
+// the durable home-root cutover is owned by the next story. An explicitly
+// supplied resolver is the isolated scenario seam used by functional callers.
+func workerRecordingRoot(edges serviceedges.Edges) (string, error) {
+	if edges.WorkerSessionResolveHomeDirectory == nil {
+		return filepath.Join(os.TempDir(), workerRecordingTemporaryDirectory), nil
+	}
+
+	home, err := edges.WorkerSessionResolveHomeDirectory()
+	if err != nil {
+		return "", fmt.Errorf("resolve Worker Session recording home directory: %w", err)
+	}
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return "", fmt.Errorf("resolve Worker Session recording home directory: empty path")
+	}
+	return filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory), nil
 }
 
 func provideWorkerSessionsFactoryWithRecorder(
