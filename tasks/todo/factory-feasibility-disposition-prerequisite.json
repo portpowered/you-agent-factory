@@ -50,8 +50,142 @@
       "format": "json",
       "classification": "additive diagnostic stdout keys; existing flags, public reads, and move behavior retained",
       "current": "{\"sessionId\":\"session-id\",\"server\":\"http://127.0.0.1:7437\",\"status\":\"completed\",\"moved\":[],\"skipped\":[]}",
-      "proposed": "{\"sessionId\":\"session-id\",\"server\":\"http://127.0.0.1:7437\",\"status\":\"completed\",\"moved\":[],\"skipped\":[],\"incidents\":[{\"fingerprint\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"workId\":\"work-id\",\"workGeneration\":\"trace-id\",\"failureCategory\":\"contract_conflict\",\"causalEvidence\":\"omni-text-usage-to-work-artifact-gap\",\"classification\":\"scope_or_plan_failure\",\"disposition\":\"correction-in-progress\",\"owner\":\"localai-project-lead\",\"correctiveWorkId\":\"corrective-work-id\",\"nextCheckAt\":\"2026-09-05T11:02:28Z\",\"deadlineAt\":\"2026-09-05T11:02:28Z\",\"correctionRevision\":\"localai-project-v1\",\"verificationWitness\":null,\"action\":\"none\",\"actionRequestId\":null,\"holdCondition\":null,\"evidence\":[{\"kind\":\"factory-event\",\"reference\":\"dispatch-completed/dispatch-id\",\"summary\":\"bounded failure feedback identifies the contract conflict\"}]}],\"escalations\":[]}",
-      "compatibility": "sessionId, server, status, moved, and skipped remain. incidents and escalations are additive bounded diagnostics only; --server, --session, --dry-run, public Work reads, and move behavior remain unchanged. The diagnostic is not a second queue.",
+      "currentContract": {
+        "examplesAre": "The current string above is one successful completed response; the variants below are the complete native contract implemented by reconcile() and main().",
+        "responseVariants": [
+          {
+            "variant": "running",
+            "condition": "Factory Session is running; --dry-run selects the status literal.",
+            "status": ["completed", "dry-run"],
+            "requiredFields": {
+              "sessionId": "string: trimmed, non-empty input",
+              "server": "string: trimmed, non-empty input",
+              "status": "literal completed or dry-run",
+              "moved": "array of MovedRecord",
+              "skipped": "array of SkippedRecord"
+            }
+          },
+          {
+            "variant": "factory-not-running",
+            "condition": "Factory Session is not running.",
+            "requiredFields": {
+              "sessionId": "string: trimmed, non-empty input",
+              "server": "string: trimmed, non-empty input",
+              "status": "literal skipped",
+              "reason": "literal factory-not-running",
+              "moved": "empty array",
+              "skipped": "empty array"
+            }
+          }
+        ],
+        "movedRecord": {
+          "requiredFields": {
+            "name": "string: non-empty project name",
+            "workId": "string: non-empty Work identity",
+            "reason": "literal missing-cycle",
+            "observationRevision": "string: 20 lowercase hexadecimal characters"
+          },
+          "optionalFields": {
+            "unfinishedChildren": "array of Work identity strings, present only when a child is nonterminal"
+          }
+        },
+        "skippedRecord": {
+          "requiredFields": {
+            "reason": "one of project-without-name, ambiguous-project-name, blocked-inspect-only, project-without-work-id, cycle-in-progress, cycle-transition-pending, project-lead-active"
+          },
+          "optionalFields": {
+            "name": "string: present for every reason except project-without-name"
+          }
+        },
+        "processErrors": [
+          {
+            "condition": "ReconcileError from validation, a public CLI read/move failure, malformed JSON, or a non-object response",
+            "stdout": "empty",
+            "stderr": "project reconciliation failed: <message> followed by newline",
+            "exit": 1
+          },
+          {
+            "condition": "argparse rejects missing/invalid CLI arguments",
+            "stdout": "empty",
+            "stderr": "argparse diagnostic",
+            "exit": 2
+          }
+        ],
+        "flags": {
+          "--server": "optional string; defaults to the existing default server",
+          "--session": "required string",
+          "--dry-run": "optional boolean; changes only status and suppresses the public move"
+        }
+      },
+      "proposed": "{\"sessionId\":\"session-id\",\"server\":\"http://127.0.0.1:7437\",\"status\":\"completed\",\"moved\":[],\"skipped\":[],\"incidents\":[{\"schemaVersion\":\"factory.incident-disposition.v1\",\"fingerprint\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"workId\":\"work-id\",\"workGeneration\":\"trace-id\",\"failureCategory\":\"contract_conflict\",\"causalEvidence\":\"omni-text-usage-to-work-artifact-gap\",\"classification\":\"scope_or_plan_failure\",\"disposition\":\"correction-in-progress\",\"owner\":\"localai-project-lead\",\"correctiveWorkId\":\"corrective-work-id\",\"nextCheckAt\":\"2026-09-05T11:02:28Z\",\"deadlineAt\":\"2026-09-05T11:02:28Z\",\"correctionRevision\":\"localai-project-v1\",\"verificationWitness\":null,\"action\":\"none\",\"actionRequestId\":null,\"holdCondition\":null,\"evidence\":[{\"kind\":\"factory-event\",\"reference\":\"dispatch-completed/dispatch-id\",\"summary\":\"bounded failure feedback identifies the contract conflict\"}]}],\"escalations\":[]}",
+      "proposedContract": {
+        "examplesAre": "The proposed string above is one completed response with one handled incident; the rules below are the complete additive result contract.",
+        "responseVariants": [
+          {
+            "variant": "running",
+            "condition": "Factory Session is running; --dry-run selects the status literal.",
+            "status": ["completed", "dry-run"],
+            "fields": "Every current running-response field and MovedRecord/SkippedRecord shape is preserved exactly, plus incidents: IncidentDiagnostic[] and escalations: EscalationDiagnostic[].",
+            "dryRunRule": "The arrays report bounded classifications or would-be stable actions only; --dry-run performs no Work Request, Factory Event append, or move."
+          },
+          {
+            "variant": "factory-not-running",
+            "condition": "Factory Session is not running.",
+            "fields": "Every current factory-not-running field is preserved exactly, plus incidents: [] and escalations: []. No Work list is inspected and no action is attempted."
+          }
+        ],
+        "preservedRecords": "moved and skipped retain the exact current record fields, reason literals, ordering, and optional unfinishedChildren behavior.",
+        "incidentDiagnostic": {
+          "requiredFields": ["schemaVersion", "fingerprint", "workId", "workGeneration", "failureCategory", "causalEvidence", "classification", "disposition", "owner", "correctiveWorkId", "nextCheckAt", "deadlineAt", "correctionRevision", "verificationWitness", "action", "actionRequestId", "holdCondition", "evidence"],
+          "fieldRules": {
+            "schemaVersion": "literal factory.incident-disposition.v1",
+            "fingerprint": "64 lowercase hexadecimal SHA-256 characters over sessionId|workId|workGeneration|failureCategory|causalEvidence; sweep timestamps, ticks, and attempts are excluded",
+            "workId": "non-empty bounded Work identity",
+            "workGeneration": "non-empty bounded public generation token",
+            "failureCategory": "non-empty normalized token, max 128 characters",
+            "causalEvidence": "non-empty bounded normalized reference, max 1024 characters",
+            "classification": "one of recoverable, permanent, scope_or_plan_failure, external_blocker, unknown",
+            "disposition": "one of untriaged, correction-in-progress, externally-blocked, verified-resolved",
+            "owner": "nullable string, max 256 characters",
+            "correctiveWorkId": "nullable string, max 256 characters",
+            "nextCheckAt": "nullable RFC 3339 date-time",
+            "deadlineAt": "nullable RFC 3339 date-time",
+            "correctionRevision": "nullable string, max 256 characters",
+            "verificationWitness": "nullable string, max 4096 characters",
+            "action": "one of none, discovery_prerequisite, escalation, orphan_repair",
+            "actionRequestId": "nullable string, max 180 characters",
+            "holdCondition": "nullable string, max 1024 characters",
+            "evidence": "1–16 objects, each with non-empty kind (max 64), reference (max 512), and summary (max 1024)"
+          }
+        },
+        "escalationDiagnostic": {
+          "requiredFields": {
+            "fingerprint": "64 lowercase hexadecimal characters matching the incident",
+            "actionRequestId": "stable accepted Work Request identity, max 180 characters",
+            "dispositionEventId": "stable incident-disposition/<sha256> Factory Event identity",
+            "reason": "one of unowned, overdue, repeated-after-correction",
+            "action": "literal escalation"
+          },
+          "optionalFields": {
+            "correctionRevision": "nullable normalized revision string"
+          }
+        },
+        "responseRules": [
+          "Successful completed and dry-run responses always include both arrays; either may be empty.",
+          "A non-running skipped response always includes both arrays as empty because no incident source was inspected.",
+          "Malformed or contradictory incident metadata fails closed before an action: no guessed diagnostic, Work Request, retry, Factory Event, or move; if the public read itself fails, the current ReconcileError stdout/stderr/exit contract applies.",
+          "A lost action/event response is reread by stable identity; accepted readback is reported once, while uncertain readback is a structured blocker and creates no further action."
+        ],
+        "ownership": "Automations owns diagnostic classification; Recordings owns canonical event append/replay/latest projection; Work and Factory Runtime own Work/action controls; the script only renders bounded diagnostics.",
+        "validation": "Readers validate arrays and exact record shapes before a writer emits them; same-ID payload conflicts and invalid fields fail closed.",
+        "migration": "No existing output, Work state, recording, or event is backfilled or rewritten. Existing consumers must tolerate/handle the additive arrays before emission.",
+        "rollback": "Stop the new diagnostic writer and return to the current reconciler read/move output; preserve all existing fields, failed Work, Factory Events, and replay inputs."
+      },
+      "compatibility": "sessionId, server, status, reason, moved, skipped, every existing record field, reason literal, flag, public read, move, stderr, and exit behavior remain unchanged. incidents and escalations are additive bounded diagnostics on every successful JSON variant only; the diagnostic is not a second queue or lifecycle store. Reader-before-writer deployment is required.",
+      "ownership": "Automations owns classification; Recordings owns the canonical event projection; Work/Factory Runtime owns public actions; the reconciler only renders the diagnostic result.",
+      "validation": "Validate the complete response union, bounded diagnostic fields, stable IDs, exact same-ID payload equality, and fail-closed malformed/partial-read behavior in the future policy/contract lanes.",
+      "migration": "No migration or historical backfill; old JSON responses remain valid and replay without incident facts.",
+      "rollback": "Disable diagnostic emission and retain the current read/move response, all Factory Events, failed Work, and replay inputs; do not retry or rewrite Work.",
       "generatedOutputs": [],
       "consumers": [
         "factory/workstations/project-reconcile",
@@ -193,7 +327,7 @@
       {
         "scope": "end-to-end",
         "dependencyFidelity": "none",
-        "procedure": "Push the final task-artifact head, open/update the named PR with prd.json as its description, and confirm required CI has started on that exact head; record only PR/head/CI-start facts in untracked progress.",
+        "procedure": "Push the final task-artifact head, generate the guarded bounded projection of prd.json with source SHA-256 and byte count, open/update the named PR with .prd-body.json, delete the temporary body, and confirm required CI has started on that exact head; record only PR/head/CI-start facts in untracked progress.",
         "artifact": "Named PR, final commit head, and started required CI.",
         "proves": "Implementation-stage delivery readiness.",
         "doesNotProve": "Terminal CI, merge, VAL-001 outcome, runtime behavior, LocalAI, or rollout."
@@ -220,7 +354,16 @@
     "integration": "YOU_TEST_BINARY=<immutable-path> python -m unittest tests/factory/scripts/test_factory_recovery_integration.py",
     "cleanRoom": "VAL-001 using factory/docs/standards/validation-loopback-template.md",
     "artifactOwner": "build/release supplies the immutable prebuilt YOU_TEST_BINARY; the integration test never builds it",
-    "delivery": "python -m json.tool <task-json> && python -m json.tool prd.json; git diff --check; git push; gh pr create --base main --head factory-feasibility-disposition-prerequisite --title factory-feasibility-disposition-prerequisite --body-file prd.json; confirm required CI started on the exact head and stop"
+    "deliveryProjection": {
+      "sourceFile": "prd.json",
+      "sourceSha256AndBytes": "Compute from the exact UTF-8 bytes immediately before delivery and include both values in the generated source object; current measurement is sha256 126facfa560922ab0a0756ee30c97ebb5ac9c2c25ec2409f99dd01b808ed0439 and 98086 bytes.",
+      "bodyFile": ".prd-body.json",
+      "maxBodyBytes": 65536,
+      "projectionKeys": ["project", "branchName", "description", "sourcePlan", "problem", "solution", "acceptanceCriteria", "behaviorLanes", "userStories"],
+      "algorithm": "Read prd.json as UTF-8 bytes; compute sha256 and byte count; parse JSON; copy only projectionKeys in that order under a source object containing file, sha256, bytes, and the bounded-projection note; serialize with ensure_ascii=false, sort_keys=true, and separators=(',', ':'); assert UTF-8 byte length < 65536; write only the temporary bodyFile; delete it after gh completes.",
+      "fullSourceRule": "The full prd.json remains the immutable handoff input and is not committed or passed directly as --body-file."
+    },
+    "delivery": "python -m json.tool <task-json> && python -m json.tool prd.json; git diff --check; generate .prd-body.json with deliveryProjection.algorithm; git push; gh pr create --base main --head factory-feasibility-disposition-prerequisite --title factory-feasibility-disposition-prerequisite --body-file .prd-body.json (or gh pr edit <number> --body-file .prd-body.json when the PR already exists); delete .prd-body.json; confirm required CI started on the exact head and stop"
   },
   "qualityBoundaries": {
     "securityPrivacy": "Bounded normalized keys/references/summaries only; no raw provider output, prompts, credentials, tokens, or transcript bodies; existing Factory authorization remains authoritative.",
@@ -290,7 +433,7 @@
     "sequence": [
       "Run python -m json.tool on the task JSON and prd.json, git diff --check, and field-by-field Markdown/JSON parity review.",
       "Confirm only the two task artifacts are tracked; keep prd.json and progress.txt untracked and commit the focused packet change.",
-      "Push the named branch and open/update a PR targeting main with title factory-feasibility-disposition-prerequisite and prd.json as the body file.",
+      "Read prd.json as the immutable handoff input, generate the guarded .prd-body.json projection with source SHA-256 and byte count, and open/update the PR with that bounded body file; never pass full prd.json as --body-file and delete the temporary file after the GitHub command.",
       "Confirm required CI started on the exact head and address known blocking feedback or a reported conflict; contradictory feedback becomes a structured blocker.",
       "Stop implementation after pushed head, open PR, started CI, and addressed blocking feedback; do not wait for terminal CI, merge, VAL-001, runtime, LocalAI, or canary evidence."
     ],
@@ -371,5 +514,5 @@
   ],
   "priority": "P0",
   "passes": true,
-  "notes": "T004 packet prepared. No production/API/generated/test/live Factory files were changed; runtime behavior, clean-room execution, terminal CI/merge, LocalAI acceptance, and canary safety remain explicit later gates. The implementation-stage finish line is pushed head, open PR, started required CI, and addressed blocking feedback; review owns terminal CI/conflicts/merge."
+  "notes": "T004 packet corrected after first review. The complete native reconciler response/error union, additive diagnostic field rules, migration/rollback ownership, and guarded bounded PRD-body projection are explicit. No production/API/generated/test/live Factory files were changed; runtime behavior, clean-room execution, terminal CI/merge, LocalAI acceptance, and canary safety remain explicit later gates. The implementation-stage finish line is corrected head pushed, open PR, started required CI, and addressed blocking feedback; review owns terminal CI/conflicts/merge."
 }

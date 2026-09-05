@@ -98,22 +98,90 @@ Current:
 {"sessionId":"session-id","server":"http://127.0.0.1:7437","status":"completed","moved":[],"skipped":[]}
 ```
 
+The JSON above is one successful `completed` example only. The complete
+current native result contract is:
+
+| Variant | Required top-level shape and behavior |
+| --- | --- |
+| Running, normal | `sessionId` (trimmed non-empty string), `server` (trimmed non-empty string), `status:"completed"`, `moved: MovedRecord[]`, and `skipped: SkippedRecord[]`. |
+| Running, `--dry-run` | The same fields, with `status:"dry-run"`; `moved` reports the same candidate details but no public move is issued. |
+| Not running | `sessionId`, `server`, `status:"skipped"`, `reason:"factory-not-running"`, `moved:[]`, and `skipped:[]`; no Work list is inspected. |
+
+The current record shapes are exact: `MovedRecord` requires
+`name:string`, `workId:string`, `reason:"missing-cycle"`, and
+`observationRevision:string` containing 20 lowercase hexadecimal characters;
+it may include `unfinishedChildren:string[]` only when a child is
+nonterminal. `SkippedRecord` requires `reason` from
+`project-without-name`, `ambiguous-project-name`, `blocked-inspect-only`,
+`project-without-work-id`, `cycle-in-progress`,
+`cycle-transition-pending`, or `project-lead-active`; it may include
+`name:string`, which is absent for `project-without-name`.
+
+For a `ReconcileError` from input validation, a public read/move failure,
+invalid JSON, or an invalid response, stdout is empty, stderr is exactly
+`project reconciliation failed: <message>` plus a newline, and the process
+exits `1`. Argument-parser rejection remains stderr-only with exit `2`.
+
 Proposed:
 
 ```json
-{"sessionId":"session-id","server":"http://127.0.0.1:7437","status":"completed","moved":[],"skipped":[],"incidents":[{"fingerprint":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","workId":"work-id","workGeneration":"trace-id","failureCategory":"contract_conflict","causalEvidence":"omni-text-usage-to-work-artifact-gap","classification":"scope_or_plan_failure","disposition":"correction-in-progress","owner":"localai-project-lead","correctiveWorkId":"corrective-work-id","nextCheckAt":"2026-09-05T11:02:28Z","deadlineAt":"2026-09-05T11:02:28Z","correctionRevision":"localai-project-v1","verificationWitness":null,"action":"none","actionRequestId":null,"holdCondition":null,"evidence":[{"kind":"factory-event","reference":"dispatch-completed/dispatch-id","summary":"bounded failure feedback identifies the contract conflict"}]}],"escalations":[]}
+{"sessionId":"session-id","server":"http://127.0.0.1:7437","status":"completed","moved":[],"skipped":[],"incidents":[{"schemaVersion":"factory.incident-disposition.v1","fingerprint":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","workId":"work-id","workGeneration":"trace-id","failureCategory":"contract_conflict","causalEvidence":"omni-text-usage-to-work-artifact-gap","classification":"scope_or_plan_failure","disposition":"correction-in-progress","owner":"localai-project-lead","correctiveWorkId":"corrective-work-id","nextCheckAt":"2026-09-05T11:02:28Z","deadlineAt":"2026-09-05T11:02:28Z","correctionRevision":"localai-project-v1","verificationWitness":null,"action":"none","actionRequestId":null,"holdCondition":null,"evidence":[{"kind":"factory-event","reference":"dispatch-completed/dispatch-id","summary":"bounded failure feedback identifies the contract conflict"}]}],"escalations":[]}
 ```
 
-Compatibility and ownership: `sessionId`, `server`, `status`, `moved`, and
-`skipped` remain unchanged. `incidents` and `escalations` are additive bounded
-diagnostics only. Existing `--server`, `--session`, and `--dry-run` behavior,
-public Work reads, and public move behavior remain unchanged. The canonical
-incident event remains T002's proposed
-`INCIDENT_DISPOSITION_RECORDED` Factory Event; this stdout shape is a read
-diagnostic and is not an alternate queue. No generated output is refreshed in
-this design packet. A future implementation must author the event schema and
-its readers before writers, then regenerate the declared clients and run the
-contract gates.
+The proposed response is the same complete union plus two additive arrays on
+every successful JSON result:
+
+| Variant | Additive behavior |
+| --- | --- |
+| Running, normal or `--dry-run` | Preserve every current top-level field and record shape, then add `incidents: IncidentDiagnostic[]` and `escalations: EscalationDiagnostic[]`. A dry run reports bounded classifications or would-be stable actions but performs no Work Request, Factory Event append, or move. |
+| Not running | Preserve the exact current skipped response and add `incidents:[]` and `escalations:[]`; no incident source is inspected. |
+| Read/validation/process error | Preserve the current stderr, stdout, and exit behavior. No guessed diagnostic, Work Request, retry, Factory Event, or move is emitted. |
+
+`IncidentDiagnostic` has the following complete bounded shape:
+
+| Field | Type/validation |
+| --- | --- |
+| `schemaVersion` | Required literal `factory.incident-disposition.v1`. |
+| `fingerprint` | Required 64-character lowercase hexadecimal SHA-256 over `sessionId\|workId\|workGeneration\|failureCategory\|causalEvidence`; sweep timestamps, ticks, and Worker Session attempts are excluded. |
+| `workId`, `workGeneration` | Required non-empty bounded Work identity and public generation token. |
+| `failureCategory` | Required normalized token, maximum 128 characters. |
+| `causalEvidence` | Required bounded normalized reference, maximum 1024 characters; raw provider output is excluded. |
+| `classification` | Required enum: `recoverable`, `permanent`, `scope_or_plan_failure`, `external_blocker`, `unknown`. |
+| `disposition` | Required enum: `untriaged`, `correction-in-progress`, `externally-blocked`, `verified-resolved`. |
+| `owner`, `correctiveWorkId` | Required nullable strings, maximum 256 characters each. |
+| `nextCheckAt`, `deadlineAt` | Required nullable RFC 3339 date-times. |
+| `correctionRevision` | Required nullable normalized string, maximum 256 characters. |
+| `verificationWitness` | Required nullable bounded string, maximum 4096 characters. |
+| `action` | Required enum: `none`, `discovery_prerequisite`, `escalation`, `orphan_repair`. |
+| `actionRequestId` | Required nullable stable action identity, maximum 180 characters. |
+| `holdCondition` | Required nullable bounded string, maximum 1024 characters. |
+| `evidence` | Required array of 1–16 objects; each object has non-empty `kind` (max 64), `reference` (max 512), and `summary` (max 1024). |
+
+`EscalationDiagnostic` requires `fingerprint`, the matching stable
+`actionRequestId`, `dispositionEventId` in the form
+`incident-disposition/<sha256>`, `reason` from `unowned`, `overdue`, or
+`repeated-after-correction`, and `action:"escalation"`; it may include a
+nullable normalized `correctionRevision`.
+
+The arrays are views of canonical Factory Event facts and accepted public
+actions, not a second queue. A malformed or contradictory incident fails
+closed before action selection. A lost action/event response is reread by
+stable identity: accepted readback is reported once, while uncertain readback
+is a structured blocker and creates no further action. Automations owns
+classification, Recordings owns append/replay/latest projection, Work and
+Factory Runtime own public actions, and the script only renders bounded
+diagnostics. Readers validate the complete union before a writer emits it;
+same-ID payload conflicts remain failures.
+
+Compatibility, migration, and rollback are explicit: all existing fields,
+record reasons, flags, public reads, move behavior, stderr, and exit behavior
+remain unchanged; old output remains valid; no output, Work, recording, or
+Factory Event is backfilled or rewritten; readers must be ready before a new
+writer; and disabling the new diagnostic writer returns to the current
+read/move output while preserving failed Work, Events, and replay inputs.
+No generated output is refreshed in this design packet. A future
+implementation must author the event schema and its readers before writers,
+then regenerate the declared clients and run the contract gates.
 
 Future consumers are `factory/workstations/project-reconcile`, Portfolio
 Supervisor diagnostics, the focused `tests/factory/scripts/test_reconcile_projects.py`
@@ -358,6 +426,33 @@ This criterion distinguishes this workstation's ready-for-review finish line
 from the lane-wide merge boundary. A PR being open or CI being started is not
 runtime acceptance, a clean-room PASS, or canary authorization.
 
+### Bounded PR body projection
+
+The full `prd.json` is the immutable handoff input, but it is larger than
+GitHub's 65,536-byte PR-body limit. Delivery therefore computes a deterministic
+bounded projection immediately before the GitHub command. It reads the exact
+UTF-8 source bytes, records the source SHA-256 and byte count in the PR body,
+copies the ordered keys `project`, `branchName`, `description`, `sourcePlan`,
+`problem`, `solution`, `acceptanceCriteria`, `behaviorLanes`, and `userStories`,
+serializes with sorted keys and compact separators, asserts the encoded body is
+less than 65,536 bytes, writes only the untracked temporary `.prd-body.json`,
+and deletes that file after the GitHub command. The full source is never
+committed or passed directly as the body file.
+
+The exact projection command is:
+
+```powershell
+python -c "import hashlib,json; p='prd.json'; raw=open(p,'rb').read(); doc=json.loads(raw); keys=('project','branchName','description','sourcePlan','problem','solution','acceptanceCriteria','behaviorLanes','userStories'); body={'source':{'file':p,'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),'note':'Full prd.json remains the immutable handoff input; this is its deterministic bounded projection.'}}; body.update({key:doc[key] for key in keys}); encoded=json.dumps(body,ensure_ascii=False,sort_keys=True,separators=(',',':')); assert len(encoded.encode('utf-8')) < 65536; open('.prd-body.json','w',encoding='utf-8',newline='').write(encoded)"
+gh pr create --base main --head factory-feasibility-disposition-prerequisite --title factory-feasibility-disposition-prerequisite --body-file .prd-body.json
+# If the named PR already exists, use: gh pr edit 2540 --body-file .prd-body.json
+Remove-Item -LiteralPath .prd-body.json
+```
+
+The PR description produced by this procedure must expose the computed
+`source.file`, `source.sha256`, and `source.bytes` values. The source hash and
+byte count are recomputed after any planner-scaffolding update; no stale
+measurement is reused.
+
 ### Exact delivery sequence and ownership
 
 1. Run the packet-only checks: `python -m json.tool` on the task JSON and
@@ -368,8 +463,10 @@ runtime acceptance, a clean-room PASS, or canary authorization.
    tracked. Keep `prd.json` and `progress.txt` untracked; never add them to the
    PR. Commit the task artifact change with a focused message.
 3. Push the final head to the named branch and open/update the PR with title
-   `factory-feasibility-disposition-prerequisite` and `prd.json` as the PR
-   description. The PR must target `main` and expose the final commit identity.
+   `factory-feasibility-disposition-prerequisite` and the guarded `.prd-body.json`
+   projection as the PR description. The PR must target `main`, expose the
+   final commit identity, and retain the full `prd.json` only as untracked
+   handoff input.
 4. Confirm required CI has started on that exact head and address any known
    blocking review feedback or reported conflict. If feedback reveals a
    contract/plan contradiction, stop and return a structured blocker with the
@@ -442,9 +539,11 @@ the Supervisor records any later canary decision through its owned workflow.
   parseable, clean, aligned, and scoped. Does not prove semantic runtime
   behavior.
 - **Required evidence 3:** Scope `end-to-end`; dependency fidelity `none`.
-  Procedure: push the final task-artifact head, open/update the named PR with
-  `prd.json` as its description, and confirm required CI has started on that
-  exact head; record only the PR/head/CI-start facts in untracked progress.
+  Procedure: push the final task-artifact head, generate the guarded bounded
+  projection of `prd.json` with source SHA-256 and byte count, open/update the
+  named PR with `.prd-body.json`, delete the temporary body, and confirm
+  required CI has started on that exact head; record only the PR/head/CI-start
+  facts in untracked progress.
   Proves implementation-stage delivery readiness. Does not prove terminal CI,
   merge, VAL-001 outcome, runtime behavior, LocalAI, or rollout.
 - **Highest feasible level:** Independent clean-room design handoff plus the
