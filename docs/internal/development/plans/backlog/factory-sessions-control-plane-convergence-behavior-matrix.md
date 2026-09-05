@@ -361,4 +361,3 @@ Each semantic run must record the following before claiming a row:
 5. Transport mapping and final integrated proof remain owned by story 004.
 6. Independent project validation, final acceptance, and any real-provider
    artifact behavior are later gates; this packet does not claim them.
-
