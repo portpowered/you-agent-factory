@@ -1,0 +1,518 @@
+{
+  "taskId": "factory-feasibility-disposition-prerequisite-004",
+  "project": "factory-feasibility-disposition-prerequisite",
+  "title": "Deliver the reviewed design through CI, review, merge, and clean-room handoff",
+  "status": "complete",
+  "parentBehavior": {
+    "ids": ["BEH-DESIGN-DELIVERY"],
+    "description": "Deliver one reviewed design prerequisite with explicit CI/review/merge ownership while keeping runtime and rollout as future gates."
+  },
+  "problem": "T003 has the complete feasibility, incident, replay, orphan, and rollout evidence, but the one-document delivery path, exact implementation finish line, clean-room handoff, and review-owned merge boundary still need one self-contained task packet.",
+  "outcome": "The final task packet gives an independent reviewer one immutable design head to inspect, preserves the exact Current/Proposed contract and M-01–M-18 matrix, routes VAL-001 through its required read-only template, and stops the implementation workstation after the final head is pushed, the PR is open, required CI has started, and blocking feedback is addressed. Review owns terminal CI, conflicts, and merge; the Supervisor owns any later canary.",
+  "sourcePlanRef": "factory/docs/operating-policy.md#validation-missions; #learning-and-controlled-change; #no-action-and-hold-policy; #executable-recovery-boundaries; requirement: reviewed merge precedes controlled rollout",
+  "actorAndTrigger": "The planning/review owner receives dependency-ready T001–T003 evidence and prepares the final handoff. Validation receives only the immutable final head, acceptance rubric, public entry points, sanitized fixture, and budget. Review owns the PR's terminal checks, conflict resolution, and merge; the Portfolio Supervisor owns post-merge canary admission and promotion.",
+  "dependencies": [
+    "factory-feasibility-disposition-prerequisite-001",
+    "factory-feasibility-disposition-prerequisite-002",
+    "factory-feasibility-disposition-prerequisite-003"
+  ],
+  "sharedSurfaceOwnership": "T004 owns the final task packet and delivery handoff. No task may concurrently author the future design document. The future implementation owner owns production/API/generated/test changes; Recordings owns event append/replay; Automations owns classification/eligibility; Work/Factory Runtime owns public Work admission/move controls; build/release owns immutable YOU_TEST_BINARY; validation owns VAL-001; review owns terminal CI/conflicts/merge; the Portfolio Supervisor owns post-merge canary admission/promotion.",
+  "scope": {
+    "in": [
+      "Complete M-01–M-18 given/when/then matrix",
+      "Additive reconciliation diagnostic result and controlled tabletop",
+      "Future unit, contract, functional, integration, and clean-room proof placement",
+      "One future design-document lease, exact owners, immutable artifact leases, commands, and unproven edges",
+      "PR, review, merge, and clean-room handoff ownership",
+      "One-session canary, observation window, hold, rollback, and promotion conditions",
+      "Security, privacy, performance, accessibility, localization, and cost boundaries"
+    ],
+    "out": [
+      "Production implementation",
+      "Generated files and executable test changes",
+      "Live event emission, live Factory settings, or active Work mutation",
+      "LocalAI or provider/model calls",
+      "Canary execution, VAL-001 execution, terminal CI waiting, merge, and silent loopback repair"
+    ]
+  },
+  "constraints": [
+    "Factory Work and Factory Events remain the lifecycle authority; incident disposition is event metadata plus a replay-built projection, never a Work state, filesystem queue, or second store.",
+    "Preserve T001's ten-minute no-build/no-broad-test preflight and T002's reader-before-writer, same-ID payload equality, stable identity, and fail-closed partial-write rules.",
+    "Use Factory, Factory Session, Work, Worker Session, and Factory Event vocabulary; do not expose Petri-net implementation terminology in the future public design.",
+    "Routine design and implementation remain autonomous; do not invent an operator-approval Work.",
+    "The implementation-stage delivery criterion is exact: stop after the final head is pushed, the PR is open, CI has started, and blocking review feedback is addressed; do not poll or re-check CI after that finish line. Review owns terminal-and-passing CI, conflicts, and merge.",
+    "This iteration writes only the task artifacts plus untracked planner scaffolding; it does not create the future design document, commit CI/audit evidence, or edit excluded paths."
+  ],
+  "contractChanges": [
+    {
+      "name": "Project reconciliation result",
+      "authoredSource": "factory/scripts/reconcile-projects.py, reconcile() return value and main() stdout",
+      "format": "json",
+      "classification": "additive diagnostic stdout keys; existing flags, public reads, and move behavior retained",
+      "current": "{\"sessionId\":\"session-id\",\"server\":\"http://127.0.0.1:7437\",\"status\":\"completed\",\"moved\":[],\"skipped\":[]}",
+      "currentContract": {
+        "examplesAre": "The current string above is one successful completed response; the variants below are the complete native contract implemented by reconcile() and main().",
+        "responseVariants": [
+          {
+            "variant": "running",
+            "condition": "Factory Session is running; --dry-run selects the status literal.",
+            "status": ["completed", "dry-run"],
+            "requiredFields": {
+              "sessionId": "string: trimmed, non-empty input",
+              "server": "string: trimmed, non-empty input",
+              "status": "literal completed or dry-run",
+              "moved": "array of MovedRecord",
+              "skipped": "array of SkippedRecord"
+            }
+          },
+          {
+            "variant": "factory-not-running",
+            "condition": "Factory Session is not running.",
+            "requiredFields": {
+              "sessionId": "string: trimmed, non-empty input",
+              "server": "string: trimmed, non-empty input",
+              "status": "literal skipped",
+              "reason": "literal factory-not-running",
+              "moved": "empty array",
+              "skipped": "empty array"
+            }
+          }
+        ],
+        "movedRecord": {
+          "requiredFields": {
+            "name": "string: non-empty project name",
+            "workId": "string: non-empty Work identity",
+            "reason": "literal missing-cycle",
+            "observationRevision": "string: 20 lowercase hexadecimal characters"
+          },
+          "optionalFields": {
+            "unfinishedChildren": "array of Work identity strings, present only when a child is nonterminal"
+          }
+        },
+        "skippedRecord": {
+          "requiredFields": {
+            "reason": "one of project-without-name, ambiguous-project-name, blocked-inspect-only, project-without-work-id, cycle-in-progress, cycle-transition-pending, project-lead-active"
+          },
+          "optionalFields": {
+            "name": "string: present for every reason except project-without-name"
+          }
+        },
+        "processErrors": [
+          {
+            "condition": "ReconcileError from validation, a public CLI read/move failure, malformed JSON, or a non-object response",
+            "stdout": "empty",
+            "stderr": "project reconciliation failed: <message> followed by newline",
+            "exit": 1
+          },
+          {
+            "condition": "argparse rejects missing/invalid CLI arguments",
+            "stdout": "empty",
+            "stderr": "argparse diagnostic",
+            "exit": 2
+          }
+        ],
+        "flags": {
+          "--server": "optional string; defaults to the existing default server",
+          "--session": "required string",
+          "--dry-run": "optional boolean; changes only status and suppresses the public move"
+        }
+      },
+      "proposed": "{\"sessionId\":\"session-id\",\"server\":\"http://127.0.0.1:7437\",\"status\":\"completed\",\"moved\":[],\"skipped\":[],\"incidents\":[{\"schemaVersion\":\"factory.incident-disposition.v1\",\"fingerprint\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"workId\":\"work-id\",\"workGeneration\":\"trace-id\",\"failureCategory\":\"contract_conflict\",\"causalEvidence\":\"omni-text-usage-to-work-artifact-gap\",\"classification\":\"scope_or_plan_failure\",\"disposition\":\"correction-in-progress\",\"owner\":\"localai-project-lead\",\"correctiveWorkId\":\"corrective-work-id\",\"nextCheckAt\":\"2026-09-05T11:02:28Z\",\"deadlineAt\":\"2026-09-05T11:02:28Z\",\"correctionRevision\":\"localai-project-v1\",\"verificationWitness\":null,\"action\":\"none\",\"actionRequestId\":null,\"holdCondition\":null,\"evidence\":[{\"kind\":\"factory-event\",\"reference\":\"dispatch-completed/dispatch-id\",\"summary\":\"bounded failure feedback identifies the contract conflict\"}]}],\"escalations\":[]}",
+      "proposedContract": {
+        "examplesAre": "The proposed string above is one completed response with one handled incident; the rules below are the complete additive result contract.",
+        "responseVariants": [
+          {
+            "variant": "running",
+            "condition": "Factory Session is running; --dry-run selects the status literal.",
+            "status": ["completed", "dry-run"],
+            "fields": "Every current running-response field and MovedRecord/SkippedRecord shape is preserved exactly, plus incidents: IncidentDiagnostic[] and escalations: EscalationDiagnostic[].",
+            "dryRunRule": "The arrays report bounded classifications or would-be stable actions only; --dry-run performs no Work Request, Factory Event append, or move."
+          },
+          {
+            "variant": "factory-not-running",
+            "condition": "Factory Session is not running.",
+            "fields": "Every current factory-not-running field is preserved exactly, plus incidents: [] and escalations: []. No Work list is inspected and no action is attempted."
+          }
+        ],
+        "preservedRecords": "moved and skipped retain the exact current record fields, reason literals, ordering, and optional unfinishedChildren behavior.",
+        "incidentDiagnostic": {
+          "requiredFields": ["schemaVersion", "fingerprint", "workId", "workGeneration", "failureCategory", "causalEvidence", "classification", "disposition", "owner", "correctiveWorkId", "nextCheckAt", "deadlineAt", "correctionRevision", "verificationWitness", "action", "actionRequestId", "holdCondition", "evidence"],
+          "fieldRules": {
+            "schemaVersion": "literal factory.incident-disposition.v1",
+            "fingerprint": "64 lowercase hexadecimal SHA-256 characters over sessionId|workId|workGeneration|failureCategory|causalEvidence; sweep timestamps, ticks, and attempts are excluded",
+            "workId": "non-empty bounded Work identity",
+            "workGeneration": "non-empty bounded public generation token",
+            "failureCategory": "non-empty normalized token, max 128 characters",
+            "causalEvidence": "non-empty bounded normalized reference, max 1024 characters",
+            "classification": "one of recoverable, permanent, scope_or_plan_failure, external_blocker, unknown",
+            "disposition": "one of untriaged, correction-in-progress, externally-blocked, verified-resolved",
+            "owner": "nullable string, max 256 characters",
+            "correctiveWorkId": "nullable string, max 256 characters",
+            "nextCheckAt": "nullable RFC 3339 date-time",
+            "deadlineAt": "nullable RFC 3339 date-time",
+            "correctionRevision": "nullable string, max 256 characters",
+            "verificationWitness": "nullable string, max 4096 characters",
+            "action": "one of none, discovery_prerequisite, escalation, orphan_repair",
+            "actionRequestId": "nullable string, max 180 characters",
+            "holdCondition": "nullable string, max 1024 characters",
+            "evidence": "1–16 objects, each with non-empty kind (max 64), reference (max 512), and summary (max 1024)"
+          }
+        },
+        "escalationDiagnostic": {
+          "requiredFields": {
+            "fingerprint": "64 lowercase hexadecimal characters matching the incident",
+            "actionRequestId": "stable accepted Work Request identity, max 180 characters",
+            "dispositionEventId": "stable incident-disposition/<sha256> Factory Event identity",
+            "reason": "one of unowned, overdue, repeated-after-correction",
+            "action": "literal escalation"
+          },
+          "optionalFields": {
+            "correctionRevision": "nullable normalized revision string"
+          }
+        },
+        "responseRules": [
+          "Successful completed and dry-run responses always include both arrays; either may be empty.",
+          "A non-running skipped response always includes both arrays as empty because no incident source was inspected.",
+          "Malformed or contradictory incident metadata fails closed before an action: no guessed diagnostic, Work Request, retry, Factory Event, or move; if the public read itself fails, the current ReconcileError stdout/stderr/exit contract applies.",
+          "A lost action/event response is reread by stable identity; accepted readback is reported once, while uncertain readback is a structured blocker and creates no further action."
+        ],
+        "ownership": "Automations owns diagnostic classification; Recordings owns canonical event append/replay/latest projection; Work and Factory Runtime own Work/action controls; the script only renders bounded diagnostics.",
+        "validation": "Readers validate arrays and exact record shapes before a writer emits them; same-ID payload conflicts and invalid fields fail closed.",
+        "migration": "No existing output, Work state, recording, or event is backfilled or rewritten. Existing consumers must tolerate/handle the additive arrays before emission.",
+        "rollback": "Stop the new diagnostic writer and return to the current reconciler read/move output; preserve all existing fields, failed Work, Factory Events, and replay inputs."
+      },
+      "compatibility": "sessionId, server, status, reason, moved, skipped, every existing record field, reason literal, flag, public read, move, stderr, and exit behavior remain unchanged. incidents and escalations are additive bounded diagnostics on every successful JSON variant only; the diagnostic is not a second queue or lifecycle store. Reader-before-writer deployment is required.",
+      "ownership": "Automations owns classification; Recordings owns the canonical event projection; Work/Factory Runtime owns public actions; the reconciler only renders the diagnostic result.",
+      "validation": "Validate the complete response union, bounded diagnostic fields, stable IDs, exact same-ID payload equality, and fail-closed malformed/partial-read behavior in the future policy/contract lanes.",
+      "migration": "No migration or historical backfill; old JSON responses remain valid and replay without incident facts.",
+      "rollback": "Disable diagnostic emission and retain the current read/move response, all Factory Events, failed Work, and replay inputs; do not retry or rewrite Work.",
+      "generatedOutputs": [],
+      "consumers": [
+        "factory/workstations/project-reconcile",
+        "Portfolio Supervisor diagnostics",
+        "tests/factory/scripts/test_reconcile_projects.py",
+        "future public integration witness"
+      ]
+    }
+  ],
+  "inheritedRules": {
+    "normalization": "Trim values, lowercase ASCII identifiers, reject empty/control-character/pipe values, and exclude sweep timestamps, ticks, and Worker Session attempts.",
+    "incidentTuple": "sessionId|workId|workGeneration|failureCategory|causalEvidence",
+    "actionIdentity": "factory.incident-action.v1|fingerprint|correctionRevision-or-unrevised|action -> incident-action/<sha256>",
+    "eventIdentity": "factory.incident-event.v1|fingerprint|correctionRevision-or-unrevised|disposition|action|actionRequestId-or-none -> incident-disposition/<sha256>",
+    "handled": [
+      "Owned correction-in-progress with nonterminal corrective Work and a future check",
+      "Named external hold before its deadline",
+      "Verified-resolved with no current failure",
+      "Already recorded identical action/event"
+    ],
+    "actionable": [
+      "Complete unowned/untriaged failure",
+      "Overdue owner/hold",
+      "Same causal failure after a new correction revision",
+      "All valid orphan predicates"
+    ],
+    "failClosed": [
+      "Stale generation",
+      "Active execution",
+      "Invalid readiness",
+      "Malformed or contradictory metadata",
+      "Same-ID payload conflict",
+      "Uncertain public readback"
+    ],
+    "canonicalState": "Retain every Factory Event and failed Work; derive only the latest-by-fingerprint eligibility projection. No filesystem marker or second queue is correctness state."
+  },
+  "caseMatrix": [
+    {"id":"M-01","given":"A required capability has no bounded public operation or directly cited symbol.","when":"The ten-minute preflight runs.","then":"DISCOVERY_REQUIRED; 0 Work Requests, 0 retries, 0 events, 0 moves; return capability, owner, dependency, witness, smallest exit, and stable prerequisite ID.","observer":"Controlled result fields and public request count; existing Work/history remain unchanged.","laterGate":"GATE-IMPL-PREFLIGHT"},
+    {"id":"M-02","given":"LA-06 requires InferenceOutput.Artifact, InvocationProtocolResponse exposes only Text/Usage, and localai-project-v1 is immutable for this slice.","when":"The preflight evaluates the criterion.","then":"CONTRADICTION; 0 duplicate Work Requests, 0 retries, 0 events, 0 moves; name exact boundaries and the allowed discovery/design exit.","observer":"LocalAI event, Worker Session, and Work lineage; failed/corrective/recovery Work remains visible.","laterGate":"GATE-IMPL-PREFLIGHT + LA-05/LA-06"},
+    {"id":"M-03","given":"A routine criterion is covered by existing public Work, Factory Event, and Worker Session reads and has a permitted design change.","when":"The preflight evaluates the bounded slice.","then":"ADMIT_BOUNDED_SLICE; 0 approval requests, 0 retries, 0 incident events, 0 moves; emit capability/witness map.","observer":"Capability, permitted change, dependency, owner, witness, and no HUMAN_APPROVAL request.","laterGate":"GATE-IMPL-PREFLIGHT"},
+    {"id":"M-04","given":"A fingerprint is correction-in-progress with owned nonterminal corrective Work and future check.","when":"The first unchanged eligibility pass runs.","then":"HANDLED; 0 Astra requests, 0 retries, 0 new events, 0 moves.","observer":"Latest projection and failed Work read; history remains visible.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-05","given":"M-04 evidence is unchanged on a second tick.","when":"Eligibility runs again.","then":"Exact M-04 no-op counts; no timestamp-derived identity or new event.","observer":"Fingerprint, action/event counts, and historical failure.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-06","given":"M-04 projection is reconstructed after restart/replay.","when":"The next pass checks handled state.","then":"Same projection; 0 new Astra requests, retries, events, or moves.","observer":"Public event replay and Work history equal pre-replay facts.","laterGate":"GATE-IMPL-ISOLATED"},
+    {"id":"M-07","given":"Complete unowned/untriaged failure evidence has a valid causal witness.","when":"Eligibility runs.","then":"One stable revision-scoped escalation request and 1 matching disposition event; unchanged repeat is 0/0/0/0.","observer":"Public Work request and Factory Event IDs; failed Work and prior evidence remain.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-08","given":"A named external hold is overdue.","when":"Eligibility runs.","then":"One stable escalation request and 1 event; no failed-Work retry or move; repeat is a no-op.","observer":"Escalation/hold deadline, event, and Work history.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-09","given":"The same causal failure remains after a recorded correction revision.","when":"Eligibility runs.","then":"One new revision-scoped escalation request and 1 event; prior correction/history are retained.","observer":"Distinct revision-scoped IDs and complete event/Work history.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-10","given":"A named external hold has a future deadline.","when":"Eligibility runs before its deadline.","then":"HANDLED; 0 requests, 0 retries, 0 events, 0 moves.","observer":"Latest disposition and hold remain visible.","laterGate":"GATE-IMPL-INCIDENT"},
+    {"id":"M-11","given":"Captured Work generation differs from current public generation.","when":"Orphan/action selection runs.","then":"BLOCKED(stale-generation); 0 moves, 0 events, 0 requests, 0 retries.","observer":"Current Work generation and failed history are unchanged.","laterGate":"GATE-IMPL-ORPHAN"},
+    {"id":"M-12","given":"An active Worker Session exists, including an active observation without Work identity.","when":"Orphan/action selection runs.","then":"BLOCKED(active-execution); 0 moves, 0 events, 0 requests, 0 retries.","observer":"Worker Session read and Work state show no mutation.","laterGate":"GATE-IMPL-ORPHAN"},
+    {"id":"M-13","given":"Factory Session is not RUNNING or a required public read is invalid.","when":"Orphan/action selection runs.","then":"BLOCKED(invalid-readiness); 0 moves, 0 events, 0 requests, 0 retries.","observer":"Session/read error retained; no guessed mutation or history loss.","laterGate":"GATE-IMPL-ORPHAN"},
+    {"id":"M-14","given":"The same action request or event ID is already visible with an equivalent payload.","when":"Eligibility/action selection runs.","then":"ALREADY_RECORDED; 0 new requests, 0 new events, 0 retries, 0 moves.","observer":"Public IDs and exact payload equality; retained event/history stay intact.","laterGate":"GATE-IMPL-INCIDENT + CONTRACT-EVENT"},
+    {"id":"M-15","given":"An action or event response is lost.","when":"The next pass rereads public facts.","then":"Accepted readback reuses identity with 0 duplicate requests/events; otherwise PARTIAL_WRITE_UNCERTAIN with 0 further actions.","observer":"Public Work/Event readback and structured blocker; no deletion or retry.","laterGate":"GATE-IMPL-INCIDENT + GATE-IMPL-ISOLATED"},
+    {"id":"M-16","given":"Metadata is missing, malformed, contradictory, or fingerprint-invalid.","when":"Append or action selection runs.","then":"Validation rejects/fails closed; 0 requests, 0 events, 0 retries, 0 moves.","observer":"Structured validation reason; Work, failed history, and unrelated active Work remain.","laterGate":"CONTRACT-EVENT"},
+    {"id":"M-17","given":"Waiting parent has matching generation, no same-name cycle, no active Worker Session, valid readiness, and no duplicate.","when":"Public move runs.","then":"Exactly 1 stable move, 1 WORK_STATE_CHANGE, and 1 successful next-dispatch readback; no failed-Work retry.","observer":"Public Work target/dispatch readback; failed and unrelated Work remain visible.","laterGate":"GATE-IMPL-ORPHAN"},
+    {"id":"M-18","given":"Routine design has no authority, budget, safety, or immutable-contract decision.","when":"Supervisor/lead submits through ordinary delivery/review.","then":"Continue autonomously; 0 invented approval requests; escalate only on a real authority/contract/safety/budget decision.","observer":"Review path and request count; no live Factory mutation.","laterGate":"REVIEW-CI-MERGE + VAL-001"}
+  ],
+  "tabletop": {
+    "fixture": {
+      "factorySessionId": "5cd877a9-2674-451d-bcc8-c3bda4d3f9c0",
+      "eventId": "factory-event/dispatch-completed/96b67964-3721-4d05-afd0-611f4a4f6f8b",
+      "eventSequence": 70,
+      "workLineage": "T001 preserved failed/corrective/recovery Work lineage"
+    },
+    "liveMutation": false,
+    "paidCalls": 0,
+    "procedure": [
+      "Record fixture identity, source revision, and baseline request, move, event, retry, failed-Work, handled-visibility, and unrelated-Work counts.",
+      "Walk M-01–M-03 and M-18 with a monotonic ten-minute preflight timer; timeout is BLOCKED, never permission to continue.",
+      "Walk M-04–M-10 with a deterministic clock across first pass, unchanged second tick, restart/replay, overdue/future hold, and correction revision; record stable IDs and no-op counts.",
+      "Walk M-11–M-17 with copied public Work, Session, Worker Session, and event facts; use controlled fake append/action/readback outcomes only at the external-effect boundary.",
+      "Compare every result with the matrix; record mismatch as a finding and leave the source fixture and active Factory untouched."
+    ],
+    "evidenceFields": [
+      "matrix row and fixture identity",
+      "exact request/event/move/no-action counts",
+      "fingerprint and stable IDs",
+      "projection before and after replay",
+      "public readback outcome",
+      "preserved failed/history facts",
+      "unrelated Work result",
+      "later gate"
+    ],
+    "proves": "Design completeness and deterministic policy boundaries.",
+    "doesNotProve": "Production event append, compiled reconciler behavior, real LocalAI inference, terminal CI, merge, or rollout."
+  },
+  "cleanRoom": {
+    "gateId": "VAL-001",
+    "template": "factory/docs/standards/validation-loopback-template.md",
+    "mode": "fresh read-only engineering validation",
+    "inputs": [
+      "final design head and immutable artifact/commit identity",
+      "acceptance rubric and public entry points",
+      "sanitized fixture identity",
+      "declared budget"
+    ],
+    "prohibited": [
+      "provider/model calls",
+      "binary builds",
+      "Factory writes, settings changes, or Work mutation",
+      "silent repair",
+      "use of a claimed-fix narrative or another validation report"
+    ],
+    "steps": [
+      "Verify exact Current/Proposed contract, M-01–M-18, source-plan references, owners, leases, commands, unproven edges, and no-live-change boundary.",
+      "Reproduce the controlled tabletop without live mutation.",
+      "Fill every template section: environment/artifact, project criteria, customer journey, cross-task integration/usability, findings, and verdict.",
+      "Emit PASS only for observed design properties; emit BLOCKED for unproven runtime/delivery edges with owner, uncertainty, smallest delta, and retest scope."
+    ],
+    "criterionClassifications": [
+      {"criterion":"AC-01","status":"PASS for design prerequisite; runtime admission unproven","evidence":"M-02, LocalAI symbol map, stable identity, and no-retry/no-duplicate fields","laterGate":"GATE-IMPL-PREFLIGHT + LA-05/LA-06"},
+      {"criterion":"AC-02","status":"PASS for feasible tabletop; execution unproven","evidence":"M-03/M-18 capability/witness map and no-approval rule","laterGate":"GATE-IMPL-PREFLIGHT"},
+      {"criterion":"AC-03","status":"PASS for matrix semantics; public behavior unproven","evidence":"M-04–M-17 counts, identities, handled projection, and fail-closed rules","laterGate":"GATE-IMPL-INCIDENT + GATE-IMPL-ISOLATED + GATE-IMPL-ORPHAN"},
+      {"criterion":"AC-04","status":"PASS when contracts, rows, owners, exits, and blocker format are present","evidence":"Integrated contract, complete matrix, structured escalation, and source-plan trace","laterGate":"VAL-001"},
+      {"criterion":"AC-05","status":"PASS for future delivery/rollout design only","evidence":"Path lease, artifact owner, one-session window, holds, rollback, and Supervisor boundary","laterGate":"GATE-CANARY"},
+      {"criterion":"AC-06","status":"BLOCKED until review owns terminal CI, conflicts, and merge","evidence":"Review must open/update PR, start required CI, resolve blocking feedback, and merge","laterGate":"REVIEW-CI-MERGE"}
+    ],
+    "deltaPlanRequiredFor": ["FAIL", "BLOCKED"]
+  },
+  "verification": {
+    "behavioralWitness": "Independent review and fresh VAL-001 receive the final design head, reproduce the sanitized M-01–M-18 tabletop and LocalAI contradiction, verify all six project-criterion mappings, and distinguish design PASS from future runtime/delivery gates.",
+    "executableSpineEffect": "promote",
+    "evidence": [
+      {
+        "scope": "end-to-end",
+        "dependencyFidelity": "controlled",
+        "procedure": "Fresh read-only VAL-001 follows factory/docs/standards/validation-loopback-template.md, the clean-room steps, and the integrated matrix.",
+        "artifact": "Final design head and validation report.",
+        "proves": "Independent reviewability, criterion classification, source-plan trace, and safe handoff.",
+        "doesNotProve": "Runtime event append/replay, real LocalAI, terminal CI, merge, or canary."
+      },
+      {
+        "scope": "functional",
+        "dependencyFidelity": "none",
+        "procedure": "python -m json.tool on the task JSON and prd.json; git diff --check; field-by-field Markdown/JSON parity review; and a tracked-path check before commit.",
+        "artifact": "Both task packet representations at the final task head.",
+        "proves": "Both packet representations are parseable, clean, aligned, and scoped.",
+        "doesNotProve": "Semantic runtime behavior."
+      },
+      {
+        "scope": "end-to-end",
+        "dependencyFidelity": "none",
+        "procedure": "Push the final task-artifact head, generate the guarded bounded projection of prd.json with source SHA-256 and byte count, open/update the named PR with .prd-body.json, delete the temporary body, and confirm required CI has started on that exact head; record only PR/head/CI-start facts in untracked progress.",
+        "artifact": "Named PR, final commit head, and started required CI.",
+        "proves": "Implementation-stage delivery readiness.",
+        "doesNotProve": "Terminal CI, merge, VAL-001 outcome, runtime behavior, LocalAI, or rollout."
+      }
+    ],
+    "highestFeasibleLevel": "Independent clean-room design handoff plus the implementation-stage PR/CI-start finish line; runtime E2E is not applicable because the path lease forbids production representation/code, executable tests, and live Factory mutation.",
+    "remainingUnprovenEdges": [
+      {"edge":"Preflight runtime","gateId":"GATE-IMPL-PREFLIGHT"},
+      {"edge":"Incident/event runtime","gateId":"GATE-IMPL-INCIDENT"},
+      {"edge":"Authored/generated contract alignment","gateId":"CONTRACT-EVENT"},
+      {"edge":"Public replay/isolation","gateId":"GATE-IMPL-ISOLATED"},
+      {"edge":"Orphan runtime","gateId":"GATE-IMPL-ORPHAN"},
+      {"edge":"LocalAI artifact acceptance","gateId":"LA-05/LA-06"},
+      {"edge":"Clean-room execution","gateId":"VAL-001"},
+      {"edge":"Terminal CI/conflicts/merge","gateId":"REVIEW-CI-MERGE"},
+      {"edge":"Canary","gateId":"GATE-CANARY"}
+    ],
+    "testLayerDesign": "No tests change in T004. Future pure policy cases use the isolated script unit lane; public behavior uses parallel Factory Sessions and one reusable root.BuildProcess; compiled integration consumes build/release-owned YOU_TEST_BINARY; load/stress remains dedicated; no source-scanning meta-tests or in-test builds."
+  },
+  "futureCommands": {
+    "unit": "python -m unittest tests/factory/scripts/test_reconcile_projects.py",
+    "contract": "make api-smoke",
+    "functional": "make test or the focused public Factory Session lane",
+    "integration": "YOU_TEST_BINARY=<immutable-path> python -m unittest tests/factory/scripts/test_factory_recovery_integration.py",
+    "cleanRoom": "VAL-001 using factory/docs/standards/validation-loopback-template.md",
+    "artifactOwner": "build/release supplies the immutable prebuilt YOU_TEST_BINARY; the integration test never builds it",
+    "deliveryProjection": {
+      "sourceFile": "prd.json",
+      "sourceSha256AndBytes": "Compute from the exact UTF-8 bytes immediately before delivery and include both values in the generated source object; current measurement is sha256 126facfa560922ab0a0756ee30c97ebb5ac9c2c25ec2409f99dd01b808ed0439 and 98086 bytes.",
+      "bodyFile": ".prd-body.json",
+      "maxBodyBytes": 65536,
+      "projectionKeys": ["project", "branchName", "description", "sourcePlan", "problem", "solution", "acceptanceCriteria", "behaviorLanes", "userStories"],
+      "algorithm": "Read prd.json as UTF-8 bytes; compute sha256 and byte count; parse JSON; copy only projectionKeys in that order under a source object containing file, sha256, bytes, and the bounded-projection note; serialize with ensure_ascii=false, sort_keys=true, and separators=(',', ':'); assert UTF-8 byte length < 65536; write only the temporary bodyFile; delete it after gh completes.",
+      "fullSourceRule": "The full prd.json remains the immutable handoff input and is not committed or passed directly as --body-file."
+    },
+    "delivery": "python -m json.tool <task-json> && python -m json.tool prd.json; git diff --check; generate .prd-body.json with deliveryProjection.algorithm; git push; gh pr create --base main --head factory-feasibility-disposition-prerequisite --title factory-feasibility-disposition-prerequisite --body-file .prd-body.json (or gh pr edit <number> --body-file .prd-body.json when the PR already exists); delete .prd-body.json; confirm required CI started on the exact head and stop"
+  },
+  "qualityBoundaries": {
+    "securityPrivacy": "Bounded normalized keys/references/summaries only; no raw provider output, prompts, credentials, tokens, or transcript bodies; existing Factory authorization remains authoritative.",
+    "accessibilityLocalization": "No UI/browser/product-copy change in this packet; any future UI must follow repository website and accessibility standards.",
+    "performance": "Do not broaden the fifteen-minute reconciler into an unmeasured event scan; report event/read/action counts and canary readback latency without inventing a threshold.",
+    "cost": "0 provider/model calls, USD 0, 0 download bytes, at most two read-only inspection processes and 256 MiB temporary disk."
+  },
+  "pathLease": {
+    "currentWrites": [
+      "tasks/todo/factory-feasibility-disposition-prerequisite.md",
+      "tasks/todo/factory-feasibility-disposition-prerequisite.json",
+      "prd.json and progress.txt as untracked planner scaffolding"
+    ],
+    "futureImplementationWrite": "docs/internal/development/plans/factory-feasibility-disposition-correction.md",
+    "excluded": [
+      "factory/factory.json",
+      "factory/scripts/**",
+      "factory/workstations/**",
+      "pkg/**",
+      "api/**",
+      "ui/**",
+      "tests/**",
+      "docs/internal/development/plans/localai-extensions-factory-artifact-delta.md"
+    ],
+    "immutableOwners": {
+      "operatingPolicyAndLocalAIEvidence": "LocalAI Project lead / source-plan owner",
+      "prebuiltIntegrationArtifact": "build/release",
+      "canonicalFactoryEventsAndWork": "Recordings and Work service owners",
+      "canaryPromotion": "Portfolio Supervisor"
+    }
+  },
+  "rollout": {
+    "precondition": "Authored implementation, focused/public tests, review, terminal CI, conflict resolution, and merge are complete; Supervisor authorizes promotion.",
+    "sessionScope": "Exactly one private or explicitly bounded Factory Session with no unrelated active Work.",
+    "observationWindow": "One complete fifteen-minute reconciler interval plus the immediate public replay/readback check.",
+    "requiredSignals": [
+      "Zero duplicate action/event IDs",
+      "Zero retries for M-04–M-06 and M-10",
+      "Exactly one stable escalation for each actionable M-07–M-09 fixture",
+      "No unrelated Work mutation",
+      "Preserved failed/history visibility",
+      "No contract-conflict or partial-write uncertainty"
+    ],
+    "holdConditions": [
+      "Duplicate or retry",
+      "Same-ID payload conflict",
+      "Uncertain readback",
+      "Stale/active orphan mutation",
+      "Lost history",
+      "Invalid generated contract",
+      "Permission or data exposure",
+      "Canary session failure",
+      "Budget or capacity signal outside the declared bound"
+    ],
+    "rollback": "Disable the new incident writer at its canonical seam and return to existing reconciler read/move behavior; preserve all prior Events, failed Work, and replay inputs; do not delete, rewrite, or retry affected Work; record the hold and require reviewed correction before re-enable.",
+    "promotionOwner": "Portfolio Supervisor",
+    "executorBoundary": "This task/workstation does not execute or approve rollout."
+  },
+  "deliveryHandoff": {
+    "futureDesignDocument": "docs/internal/development/plans/factory-feasibility-disposition-correction.md",
+    "currentWrites": [
+      "tasks/todo/factory-feasibility-disposition-prerequisite.md",
+      "tasks/todo/factory-feasibility-disposition-prerequisite.json",
+      "prd.json and progress.txt as untracked planner scaffolding"
+    ],
+    "implementationFinishLine": "Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.",
+    "sequence": [
+      "Run python -m json.tool on the task JSON and prd.json, git diff --check, and field-by-field Markdown/JSON parity review.",
+      "Confirm only the two task artifacts are tracked; keep prd.json and progress.txt untracked and commit the focused packet change.",
+      "Read prd.json as the immutable handoff input, generate the guarded .prd-body.json projection with source SHA-256 and byte count, and open/update the PR with that bounded body file; never pass full prd.json as --body-file and delete the temporary file after the GitHub command.",
+      "Confirm required CI started on the exact head and address known blocking feedback or a reported conflict; contradictory feedback becomes a structured blocker.",
+      "Stop implementation after pushed head, open PR, started CI, and addressed blocking feedback; do not wait for terminal CI, merge, VAL-001, runtime, LocalAI, or canary evidence."
+    ],
+    "owners": {
+      "implementation": "Current workstation through open PR and CI-start finish line",
+      "validation": "Fresh VAL-001 report using factory/docs/standards/validation-loopback-template.md",
+      "review": "Terminal required CI, conflict resolution, merge, and CI evidence in PR comments",
+      "supervisor": "Post-merge one-session canary admission and promotion"
+    },
+    "blockerFields": [
+      "failed criterion",
+      "reproduction or exact evidence",
+      "system/customer impact",
+      "safe work completed",
+      "accountable owner",
+      "observable exit",
+      "dependencies and retest scope",
+      "smallest plan or contract delta"
+    ],
+    "ciEvidencePolicy": "Never commit CI results, audit notes, or validation records; review records CI-run evidence in the PR conversation."
+  },
+  "acceptanceCriteria": [
+    {"id":"T004-AC-01","requirement":"Given the integrated design, an independent reviewer can find the exact diagnostic Current/Proposed contract, M-01–M-18 matrix, path lease, owners, commands, and unproven edges, with no live Factory change claimed.","passes":true,"evidence":"The retained contract excerpt, complete matrix, pathLease, futureCommands, quality boundaries, and remainingUnprovenEdges are explicit; liveMutation is false.","laterGate":"VAL-001 and the named implementation gates"},
+    {"id":"T004-AC-02","requirement":"Given a blocking review finding or conflict, the handoff requires a reviewed design/PR correction or a structured blocker with an owner and observable exit; it never hides the finding or repairs live state.","passes":true,"evidence":"deliveryHandoff owners, sequence, blockerFields, and cleanRoom deltaPlanRequiredFor define the convergent response and no-live-repair boundary.","laterGate":"REVIEW-CI-MERGE and VAL-001"},
+    {"id":"T004-AC-03","requirement":"Given the final merged design, the Supervisor handoff keeps preflight, incident/replay, LocalAI artifact, isolated public behavior, and canary as explicit future gates; the proposal is not runtime accepted.","passes":true,"evidence":"handoff artifacts, remainingUnprovenEdges, rollout executorBoundary, and promotionOwner retain all future gates and prohibit runtime acceptance claims.","laterGate":"REVIEW-CI-MERGE, GATE-IMPL-ISOLATED, LA-05/LA-06, and GATE-CANARY"},
+    {"id":"T004-AC-04","requirement":"Given the final design head, VAL-001 has the exact read-only template, all criterion classifications, and a required delta plan for every FAIL/BLOCKED result; it never silently repairs.","passes":true,"evidence":"cleanRoom.template, mode, inputs, prohibited actions, steps, six criterion classifications, and deltaPlanRequiredFor are explicit.","laterGate":"VAL-001"},
+    {"id":"T004-AC-05","requirement":"The exact implementation-stage delivery criterion is preserved verbatim and stops this stage at pushed head, open PR, started CI, and addressed blocking feedback while review owns terminal CI, conflicts, and merge.","passes":true,"evidence":"deliveryHandoff.implementationFinishLine preserves the exact prd.json criterion and its sequence/owners forbid CI polling or merge by this stage.","laterGate":"REVIEW-CI-MERGE"}
+  ],
+  "paidValidation": {
+    "applicable": false,
+    "trigger": "None; provider/model validation is prohibited.",
+    "maximumCalls": 0,
+    "maximumCostUsd": 0,
+    "maximumDuration": "0 paid execution minutes",
+    "fixture": "Sanitized public facts, controlled tabletop, and validation-loopback template.",
+    "evidenceReuseKey": "FACTORY-FEASIBILITY-01/matrix-v1"
+  },
+  "operationalAndRollout": "No production/API/generated/test/live Factory surface changes. Future readers and projections precede writers; same-ID conflicts and partial-write uncertainty hold the action; rollback disables new writers and preserves events and failed Work; the implementation stage stops after pushed head/open PR/started CI/addressed feedback; review owns terminal CI/conflicts/merge; only the Portfolio Supervisor promotes after reviewed merge and the one-session observation window.",
+  "escalation": {
+    "conditions": [
+      "Any M-01–M-18 row lacks a deterministic observer or outcome",
+      "The diagnostic/event contract cannot remain additive",
+      "A future artifact owner or immutable input is missing",
+      "The prebuilt artifact cannot be identified",
+      "The one-session canary cannot have a measurable hold/rollback condition"
+    ],
+    "requiredBlockerFields": [
+      "failed criterion",
+      "exact evidence",
+      "system impact",
+      "safe work completed",
+      "accountable owner",
+      "observable exit",
+      "smallest plan or contract delta"
+    ],
+    "implementationReadyClaimAllowed": false,
+    "deliveryBlockerFields": [
+      "failed criterion",
+      "reproduction or exact evidence",
+      "system/customer impact",
+      "safe work completed",
+      "accountable owner",
+      "observable exit",
+      "dependencies and retest scope",
+      "smallest plan or contract delta"
+    ]
+  },
+  "handoffArtifacts": [
+    "Integrated Current/Proposed reconciliation result",
+    "M-01–M-18 matrix",
+    "Controlled tabletop procedure and fixture identity",
+    "VAL-001 clean-room procedure and criterion rubric",
+    "Unit/contract/functional/integration layer placement",
+    "Path lease and immutable artifact ownership",
+    "One-session canary observation, hold, rollback, and Supervisor-promotion gate",
+    "PR title/body/CI-start delivery handoff",
+    "VAL-001, REVIEW-CI-MERGE, GATE-IMPL-ISOLATED, and GATE-CANARY inputs"
+  ],
+  "priority": "P0",
+  "passes": true,
+  "notes": "T004 packet corrected after first review. The complete native reconciler response/error union, additive diagnostic field rules, migration/rollback ownership, and guarded bounded PRD-body projection are explicit. No production/API/generated/test/live Factory files were changed; runtime behavior, clean-room execution, terminal CI/merge, LocalAI acceptance, and canary safety remain explicit later gates. The implementation-stage finish line is corrected head pushed, open PR, started required CI, and addressed blocking feedback; review owns terminal CI/conflicts/merge."
+}
