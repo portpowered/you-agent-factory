@@ -101,7 +101,7 @@ func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {
 	}
 }
 
-func TestNewInvocationRuntimeUsesGenericFallbackForNonOmni(t *testing.T) {
+func TestNewInvocationRuntimeUsesFailClosedFallbackForNonOmni(t *testing.T) {
 	t.Parallel()
 
 	runtime := newInvocationRuntime(nil, nil)
@@ -116,11 +116,58 @@ func TestNewInvocationRuntimeUsesGenericFallbackForNonOmni(t *testing.T) {
 		},
 		Operation: operation,
 	})
-	if err != nil {
-		t.Fatalf("non-OMNI Invoke error = %v", err)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration {
+		t.Fatalf("non-OMNI Invoke error = %v, failure = %#v, want typed configuration failure", err, failure)
 	}
-	if len(result.Content) != 1 || result.Content[0].Content != "hello" {
-		t.Fatalf("non-OMNI content = %#v, want input echo", result.Content)
+	if !errors.Is(err, models.ErrUnavailable) {
+		t.Fatalf("non-OMNI Invoke error = %v, want ErrUnavailable cause", err)
+	}
+	if len(result.Content) != 0 || len(result.Artifacts) != 0 {
+		t.Fatalf("non-OMNI content = %#v artifacts = %#v, want no output", result.Content, result.Artifacts)
+	}
+}
+
+func TestInferenceRuntimeFailsClosedWithoutProductionAdapters(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+	composed, ok := runtime.(operationInvocationRuntime)
+	if !ok {
+		t.Fatalf("inferenceRuntime type = %T, want operationInvocationRuntime", runtime)
+	}
+	if _, ok := composed.generic.(failClosedInvocationRuntime); !ok {
+		t.Fatalf("production default generic runtime = %T, want fail-closed runtime", composed.generic)
+	}
+
+	catalog := models.GenericOperationCatalog{}
+	for _, operationName := range []string{models.OperationTTS, models.OperationASR, models.OperationEMBED} {
+		t.Run(operationName, func(t *testing.T) {
+			operation, ok := catalog.GenericOperationContract(operationName)
+			if !ok {
+				t.Fatalf("GenericOperationContract(%q) = false", operationName)
+			}
+			result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+				Request: models.InvokeModelRequest{
+					Model: models.ModelReference{NameOrURI: "fixture-model"}, Operation: operationName,
+					Inputs: []models.InferenceInput{{Name: "input", Content: "must not be echoed"}},
+				},
+				Operation: operation,
+			})
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration {
+				t.Fatalf("Invoke error = %v, failure = %#v, want typed configuration failure", err, failure)
+			}
+			if !errors.Is(err, models.ErrUnavailable) {
+				t.Fatalf("Invoke error = %v, want ErrUnavailable cause", err)
+			}
+			if len(result.Content) != 0 || len(result.Artifacts) != 0 {
+				t.Fatalf("Invoke result = %#v, want no partial output", result)
+			}
+		})
 	}
 }
 

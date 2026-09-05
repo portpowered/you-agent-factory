@@ -492,7 +492,7 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 
 func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 	if backend == nil {
-		return inference.InputEchoInvocationRuntime{}
+		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
 }
@@ -543,13 +543,13 @@ type omniInvocationRuntime struct {
 }
 
 // newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
-// client fails closed for OMNI while non-OMNI operations retain the generic
-// input-echo behavior used by lightweight composition tests.
+// client fails closed for OMNI, while non-OMNI operations also fail closed
+// unless an explicit operation backend is composed.
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
 ) invocationRuntime {
-	fallback := inference.InputEchoInvocationRuntime{}
+	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
 		client = nil
 	}
