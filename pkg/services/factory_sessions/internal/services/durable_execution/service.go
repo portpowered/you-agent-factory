@@ -44,3 +44,43 @@ type CanonicalStartResult struct {
 type CanonicalService interface {
 	StartCanonical(context.Context, factorysessions.StartRequest, bool) (CanonicalStartResult, error)
 }
+
+// CanonicalReadService is the private durable read seam used by the
+// mode-neutral Factory Sessions owner. It keeps compatibility-shaped durable
+// methods behind the durable owner while allowing the public root to map
+// Session* projections directly.
+type CanonicalReadService interface {
+	GetCanonical(context.Context, string) (factorysessions.SessionReadResult, error)
+	ListCanonical(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+}
+
+// CanonicalControlResult carries either a durable lifecycle control result or
+// the async projection returned by restart recovery.
+type CanonicalControlResult struct {
+	Lifecycle *factorysessions.LifecycleControlResult
+	Recovery  *factorysessions.AsyncStartResult
+}
+
+// CanonicalControlService is the private durable control seam used by the
+// mode-neutral Factory Sessions owner.
+type CanonicalControlService interface {
+	ControlCanonical(context.Context, factorysessions.SessionControlRequest) (CanonicalControlResult, error)
+}
+
+// CanonicalResultService is the private durable result-read seam used by the
+// mode-neutral Factory Sessions owner.
+type CanonicalResultService interface {
+	ReadResultCanonical(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
+}
+
+// CanonicalDispatchService is the private durable dispatch-query seam used by
+// the mode-neutral Factory Sessions owner.
+type CanonicalDispatchService interface {
+	QueryDispatchesCanonical(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+}
+
+// CanonicalResponseService is the private durable response-event subscription
+// seam used by the mode-neutral Factory Sessions owner.
+type CanonicalResponseService interface {
+	SubscribeResponsesCanonical(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+}

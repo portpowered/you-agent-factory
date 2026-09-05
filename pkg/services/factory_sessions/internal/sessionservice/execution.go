@@ -120,11 +120,7 @@ func (s *Service) ListDispatches(ctx context.Context, sessionID string) (factory
 }
 
 func (s *Service) QueryDispatches(ctx context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
-	execution, err := s.durableExecution()
-	if err != nil {
-		return factorysessions.ListDispatchesResult{}, err
-	}
-	return execution.QueryDispatches(ctx, request)
+	return s.queryCanonicalDispatches(ctx, request)
 }
 
 func (s *Service) GetDispatch(ctx context.Context, sessionID, dispatchID string) (factorysessions.DispatchDetail, error) {

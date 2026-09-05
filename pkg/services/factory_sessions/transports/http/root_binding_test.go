@@ -170,6 +170,26 @@ func (fake *httpSessionsRootFake) Invoke(_ context.Context, _ factorysessions.Se
 	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
 }
 
+func (fake *httpSessionsRootFake) Get(_ context.Context, _ factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	return factorysessions.SessionGetResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) List(_ context.Context, _ factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
+	return factorysessions.SessionListResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) Control(_ context.Context, _ factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	return factorysessions.SessionControlResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) ReadResult(_ context.Context, _ factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
+	return factorysessions.SessionResultReadResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) SubscribeResponses(_ context.Context, _ factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+	return factorysessions.SessionResponseSubscriptionResult{}, factorysessions.ErrSessionNotFound
+}
+
 func (fake *httpSessionsRootFake) ActivateNamedFactory(context.Context, string) error {
 	return factorysessions.ErrSessionNotFound
 }

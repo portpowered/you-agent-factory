@@ -90,6 +90,12 @@ type Service interface {
 	// Canonical Factory Sessions operation vocabulary.
 	Start(context.Context, SessionStartRequest) (SessionStartResult, error)
 	Invoke(context.Context, SessionInvokeRequest) (InvocationResult, error)
+	Get(context.Context, SessionGetRequest) (SessionGetResult, error)
+	List(context.Context, SessionListRequest) (SessionListResult, error)
+	Control(context.Context, SessionControlRequest) (SessionControlResult, error)
+	ReadResult(context.Context, SessionResultReadRequest) (SessionResultReadResult, error)
+	SubscribeResponses(context.Context, SessionResponseSubscriptionRequest) (SessionResponseSubscriptionResult, error)
+	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
 
 	// Legacy compatibility vocabulary retained until its assigned migration story.
 	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
@@ -105,7 +111,6 @@ type Service interface {
 	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
 	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
 	ListDispatches(context.Context, string) (ListDispatchesResult, error)
-	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
 	GetDispatch(context.Context, string, string) (DispatchDetail, error)
 	ListArtifacts(context.Context, string) (ListArtifactsResult, error)
 	GetArtifact(context.Context, string, string) (ArtifactDetail, error)
