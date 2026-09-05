@@ -22,12 +22,36 @@ recorded as `passes:true`.
 3. If there is task items that are not yet complete, please implement the task as much as possible. Then update the progress.txt/prd.json.
 4. If all tasks are done, please submit a PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
-6. If the PR for this work item is already MERGED, the lane is DONE: respond `<COMPLETE>` immediately. Ignore any "post-merge follow-up" or post-merge blocking comments — those belong to new work items filed by the operator, never to this lane. Do not push new commits to a merged branch.
+6. If the PR for this work item is already MERGED, the lane is DONE: return the
+canonical JSON decision envelope with `decision` set to `ACCEPTED` immediately.
+Ignore any "post-merge follow-up" or post-merge blocking comments — those
+belong to new work items filed by the operator, never to this lane. Do not push
+new commits to a merged branch.
 
-17. Respond finally as follows:
-17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, except that a browser criterion may remain recorded as unavailable after the one supported browser availability check when every non-browser story and acceptance criterion passes and no code change or blocking feedback remains. For that browser-waiver exception, the final head must be pushed, a pull request must be open or opened in that session, and required CI must have started before emitting the marker in the same session. All relevant PR conversation comments must be addressed, and the PR must be updated to the latest commits so the task is ready to move into review. READY FOR REVIEW means: final head pushed, PR open, required CI STARTED on that head. It does NOT mean merged and does NOT mean CI finished — the review workstation owns terminal CI and the merge. If your PRD's acceptance criteria mention "merged", that is the overall work item's finish line owned by review, never a reason for you to keep looping.
-17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.
-17.3. Do not use rejection to mean "more executor work remains". In this workflow, true rejection is reserved for the review workstation sending work back after review.
+17. Respond finally with the canonical raw JSON decision envelope defined below.
+17.1. Set `decision` to `ACCEPTED` only when all items in the PRD have been
+marked as passes:true, except that a browser criterion may remain recorded as
+unavailable after the one supported browser availability check when every
+non-browser story and acceptance criterion passes and no code change or
+blocking feedback remains. For that browser limitation, the final head must be
+pushed, a pull request must be open or opened in that session, and required CI
+must have started before returning the envelope. All relevant PR conversation
+comments must be addressed, and the PR must be updated to the latest commits so
+the task is ready to move into review. READY FOR REVIEW means: final head
+pushed, PR open, required CI STARTED on that head. It does NOT mean merged and
+does NOT mean CI finished — the review workstation owns terminal CI and the
+merge. If the PRD's acceptance criteria mention "merged", that is the overall
+work item's finish line owned by review, never a reason for you to keep looping.
+17.2. Set `decision` to `CONTINUE` when you completed this iteration but the
+task still has remaining story work, unresolved feedback, or PR follow-up; this
+is ordinary partial progress and stays on the process continue path.
+17.3. Set `decision` to `REJECTED` only when the owning workflow gives an
+explicit rejection, such as a review-owned correction or an invalid plan
+rejected by its authority. Do not use rejection to mean that more executor
+work remains; use `CONTINUE` while this lane has actionable story work.
+17.4. Set `decision` to `FAILED` when execution cannot complete, a required
+prerequisite is absent, or an unresolved authority/plan contradiction prevents
+a valid decision.
 
 ## Important
 
@@ -63,7 +87,7 @@ recorded as `passes:true`.
   burn your session re-proving them.
 - Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record that exact result in progress.txt ONE time and mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true. Do NOT retry the same connection/availability check within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; use other permitted automated evidence when the PRD allows it, and continue only with actionable remaining stories or acceptance criteria.
 
-  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `<COMPLETE>` in that same session once CI has started. Do not return `<CONTINUE>` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
+  When that one unavailable result has been recorded, continue in the same session only if actionable stories or acceptance criteria remain. If every other story and acceptance criterion is passing, no code change or blocking feedback remains, the final head is pushed, and a pull request is open or is opened in that session, start the required CI and emit `ACCEPTED` in that same session once CI has started. Do not return `CONTINUE` solely because the browser criterion is waived. Re-running or re-confirming unchanged tests, typecheck, lint, pull-request state, or CI state is not moving on to another PRD item and must not schedule another process visit when no actionable work remains. After this process finish line, do not wait for or re-check terminal CI; review owns terminal CI, conflicts, waiver judgment, and merge.
 - NEVER commit CI results, audit notes, or verification records onto your
   branch: each such commit creates a new head, invalidates the CI run it
   describes, and restarts CI. Evidence about a CI run belongs in a PR comment.
@@ -72,7 +96,7 @@ recorded as `passes:true`.
 - CI watching: at most ONE bounded watcher per head (`gh pr checks <n> --watch
   --interval 180` or one `gh run watch`). Never poll `gh run view` in a tight
   loop. One rerun of failed jobs per unchanged head, maximum. Never wait for
-  CI to FINISH before ending `<COMPLETE>`: after your final push, the
+  CI to FINISH before ending `ACCEPTED`: after your final push, the
   `ci-wait` gate between process and review owns waiting for terminal CI.
 - Sync with origin/main ONLY immediately before your final push, when GitHub
   reports a real conflict, or when the reviewer asks. New commits on main are
@@ -125,3 +149,25 @@ If you discover a **reusable pattern** that future iterations should know, add i
 ```
 
 Only add patterns that are **general and reusable**, not story-specific details.
+
+## Structured result and escalation (canonical response contract)
+
+Return one raw JSON object, never a bare marker or a Markdown fence:
+
+`{"decision":"ACCEPTED","feedback":"Evidence and handoff summary","output":"Artifact or PR reference"}`
+
+Use the standard decision envelope without classificationRoutes. ACCEPTED means
+this workstation's own delivery gate is satisfied, never that all Project
+criteria are satisfied. CONTINUE means actionable work remains in this slice.
+REJECTED means an invalid plan at planning/execution, or actionable code changes
+at review. FAILED means execution could not complete or a review discovered a
+plan/authority contradiction. Put the failure category (transient,
+implementation_defect, plan_defect, missing_prerequisite, contract_conflict, or
+shared_infrastructure), evidence, attempt history, and smallest next action in
+feedback. Preserve work and do not weaken the governing contract. A repeated
+unchanged blocker requires escalation, not another empty CONTINUE.
+
+Project acceptance belongs to independent validation after contributing slices
+integrate. Preserve criterion IDs and identify the later gate for outcomes this
+slice cannot yet prove. Measured counts are estimates to re-measure, not new
+product requirements. Only the operator may revise the acceptance contract.

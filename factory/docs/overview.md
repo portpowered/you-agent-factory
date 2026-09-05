@@ -1,279 +1,245 @@
 # Factory Overview
 
-Planning and delivery work in this factory is governed by the canonical
-[factory standards](./standards/README.md). Workers must read the standard for
-their role before creating plans, implementing tasks, reviewing changes, or
-acting on validation loopback results.
+This Factory coordinates autonomous work for you-agent-factory, the Go,
+OpenAPI, and React system for scheduling and orchestrating concurrent AI
+workers through the you CLI, backend runtime, and dashboard.
 
-This factory coordinates autonomous work for **you-agent-factory**: the Go,
-OpenAPI, and React system for scheduling and orchestrating concurrent AI workers
-through the `you` CLI, backend runtime, and dashboard. The **ideafy** workstation
-is the meta-planner: it supervises factory health, Project admission, and stalled
-Project Leads. Each **project-lead** owns one substantial outcome, generates
-ordinary `idea` Work as a dependency graph, and independently validates completion.
-The **plan** workstation still turns each idea into a PRD. **process**, **ci-wait**,
-and **review** still implement and gate work in isolated worktrees.
+The Factory has four operating roles:
 
-## Read First
+- the Astra Portfolio Supervisor uses medium reasoning with high autonomy to
+  watch the whole repository, admit Projects, reconcile health, and choose the
+  next priority every four hours or when a significant exception occurs;
+- a Sol Project Lead owns one Project's immutable acceptance contract and
+  chooses its next behavior slice;
+- Luna planning, delivery, and review workers execute and gate one local
+  Work item at maximum reasoning; and
+- Luna validation workers run fresh, read-only customer, engineering, or
+  retrospective missions against immutable artifacts.
 
-Before submitting work, read:
+The executable Factory definition is the authority for Work types, states,
+Workstations, relations, resources, and worker selection. The presentation
+layout is metadata: it makes the system legible without changing runtime
+behavior. Read [operating-policy.md](./operating-policy.md) for the decision
+policy and [projects.md](./projects.md) for Project admission and lead
+responsibilities.
 
-* `factory/factory.json`
-* `factory/workstations/ideafy/AGENTS.md`
-* `docs/temp/customer-ask.md` — current customer authorization and goals
-* `docs/temp/progress.md`, `docs/temp/checklist.md`, and `docs/temp/meta.md` —
-  live planner state files (local, not checked in)
-* `factory/docs/batch-inputs.md`
-* `factory/docs/batch-input-example.json`
-* `factory/docs/projects.md`
-* `docs/temp/board-lessons.md` — operator-local board-shape admonitions
-  (repo-root only; not materialized into worktrees)
-* `factory/docs/decision-envelope.md`
-* `you docs agents`
-* `you docs batch-inputs`
+## Read first
 
-Repository context that shapes planner batches:
+Before submitting or changing Work, read:
 
-* root `AGENTS.md` — architecture, package map, and verification expectations
-* `docs/architecture/data-model.md` — public vocabulary (`Factory`, `Factory
-  Session`, `Work`, `Work Request`)
-* `docs/reference/` — packaged `you docs <topic>` contracts
+- `factory/factory.json`;
+- `factory/docs/operating-policy.md`;
+- `factory/docs/projects.md`;
+- `factory/workstations/ideafy/AGENTS.md`;
+- `factory/workstations/project-lead/AGENTS.md`;
+- `factory/docs/batch-inputs.md` and its checked-in example;
+- `docs/temp/customer-ask.md`, when present;
+- `docs/temp/progress.md`, `docs/temp/checklist.md`, and `docs/temp/meta.md`,
+  when present; and
+- `docs/temp/board-lessons.md`, when present.
 
-## Project and Planner Loops
+Also read root `AGENTS.md`, the architecture notes relevant to the requested
+surface, and the applicable factory and repository standards.
 
-The preferred outer loop for substantial independent outcomes is:
+The canonical local Factory server is `http://127.0.0.1:7437`. Workers must pass
+it explicitly to every API-backed you command. This Factory endpoint is separate
+from any unrelated local service.
 
-```txt
+## Control loop
+
+The Factory observes current runtime state, chooses the smallest useful
+behavior slice or proof, dispatches through the existing Work graph, and
+reconciles the resulting evidence. It does not manufacture activity when the
+queue is quiet.
+
+The outer Project loop is:
+
+```text
 project:init -> project-lead -> project:waiting
-                              + idea:init (all currently well-scoped Work)
-                              + project-cycle:init (depends on every idea:complete)
+                              + idea:init
+                              + validation:init
+                              + one same-name project-cycle:init
 
 project:waiting + project-cycle:continue -> project:init
 project:waiting + project-cycle:complete -> project:complete
-project:waiting + project-cycle:failed   -> project:init
 project:waiting + project-cycle:blocked  -> project:blocked
 ```
 
-On first dispatch, the Project Lead bootstraps its working memory under
-`docs/temp/<project-name>/` from the Project payload and source plan. Admission
-never pre-creates that directory. The lead completes a Project only after blind
-clean-room probes pass. See `factory/docs/projects.md`.
+The Project cycle is released only after every current idea and validation Work
+has reached its terminal success state. A child failure or rejection is
+preserved as cycle failure evidence and wakes the Project Lead for a smaller
+correction. It must not be silently converted into an idea or Project success.
 
-The meta-planner operates above Project Leads rather than implementing every
-feature directly:
+The Project Lead emits only the immediate behavior and proof Work justified by
+current evidence. Local Work may complete before the Project acceptance
+criteria are proven. The lead then emits another behavior slice or validation
+mission, or records a concrete external hold.
 
-1. Check session, provider, resource, automation, and dispatch liveness.
-2. Admit Project Work with one dedicated Project root and acceptance contract.
-3. Inspect active Projects for stale leads, repeated failure, or shared-surface
-   contention without taking over their healthy child Work.
-4. Repair a recoverable blocked Project or factory-level fault once and record
-   the evidence.
-5. Retain `thoughts` loopbacks for small legacy/unowned work and periodic
-   supervision.
+## Work types
 
-Always dry-run a batch before real submission:
+The current operating vocabulary is:
+
+| Work type | Purpose |
+| --- | --- |
+| `thoughts` | Portfolio Supervisor trigger and legacy unowned-work loopback |
+| `project` | One substantial outcome with one Project Lead |
+| `project-cycle` | Same-name Project Lead synchronization and decision |
+| `idea` | One behavior slice or justified bounded enabler |
+| `plan` | PRD planning generated from an idea |
+| `task` | Implementation/review delivery Work generated by the inner graph |
+| `validation` | First-class read-only customer, engineering, or retrospective mission |
+| `cron-triggers` | Runtime trigger input |
+
+Use `idea` for an implementation proposal and `validation` for independent
+evidence. Do not use an informal subagent call as a substitute for either.
+
+## Presentation shape
+
+The Factory layout has two layers:
+
+1. executable topology: Work types, states, Workstations, workers, resources,
+   and runtime relations; and
+2. presentation metadata: authored node geometry, edge geometry, semantic
+   groups, named flows, annotations, viewport, and display preferences.
+
+Presentation groups should organize the canvas by responsibility and decision
+boundary, for example:
+
+- Portfolio supervision: trigger, liveness, admission, and priority;
+- Project control: Project Lead, Project state, and Project cycle;
+- Delivery: idea, plan, task, CI, review, and consume;
+- Validation and learning: validation missions, reports, and retrospective
+  feedback; and
+- Inputs and outputs: customer requests, source plans, acceptance contracts,
+  artifacts, and terminal results.
+
+Named presentation flows should show the customer-relevant routes through those
+groups, such as Project admission, behavior delivery, failure escalation,
+independent validation, and retrospective learning. A group or flow is
+presentation metadata only; it must reference stable canonical topology IDs and
+must not become a second source of runtime state. Coordinates are never a
+semantic dependency. The layout should remain readable when a group is empty,
+a route is failed, or a Project is waiting.
+
+## Delivery flow
+
+The ordinary implementation flow remains:
+
+```text
+idea:init
+  -> plan
+  -> plan:init
+  -> setup-workspace
+  -> task:init
+  -> process
+  -> task:awaiting-ci
+  -> ci-wait
+  -> task:in-review
+  -> review
+  -> task:to-complete
+  -> consume
+```
+
+The validation flow is first-class and uses the same Work lifecycle:
+
+```text
+validation:init
+  -> prepare-validation
+  -> validation:ready
+  -> validate
+  -> validation:complete
+```
+
+A failed or rejected validation reaches `validation:failed` and cascades to the
+dependent Project cycle. A validation mission never edits the repository,
+advances another Work item, weakens a rubric, or marks product acceptance by
+itself.
+
+The Project cycle depends on every idea and validation mission in its current
+batch. The exact relation endpoint fields and relation type are owned by the
+Factory definition and the batch-input contract; the conceptual invariant is
+one same-name cycle with one required-success dependency per emitted item.
+
+## Validation and acceptance
+
+When a Project is near completion, its lead emits two complementary validation
+missions:
+
+- customer: a fresh source-blind journey from the public entry point using only
+  the acceptance contract, mission, rubric, and immutable build/fixture identity;
+- engineering: a fresh independent check of regression, failure behavior,
+  persistence/recovery, performance, LocalAI/model fidelity, or another named
+  quality property.
+
+Both are Luna at maximum reasoning, read-only,
+and independently reported. A
+FAIL or BLOCKED result cannot be outvoted by a pass. The Project Lead enqueues
+the smallest correction supported by the evidence.
+
+A retrospective is a validation mission with role `retrospective`. It reports a
+common or special cause and proposes an owner, evidence, verification
+procedure, and rollback/stop condition. Retrospective output informs the Astra
+Portfolio Supervisor; it does not mark product acceptance complete.
+
+## Project working memory
+
+Each Project has a separate durable root:
+
+```text
+docs/temp/projects/<project-name>/
+  source-plan.md
+  request.md
+  acceptance.md
+  state.md
+  progress.md
+  validation/
+```
+
+The operator or admission path supplies the immutable source plan, request, and
+acceptance contract. The Project Lead maintains only mutable state, progress,
+and validation reports. Runtime Work and Factory Events remain authoritative.
+The supervisor and leads must keep all of these files out of feature branches.
+
+The supervisor's own local state stays directly under `docs/temp/`:
+
+```text
+docs/temp/progress.md
+docs/temp/checklist.md
+docs/temp/meta.md
+```
+
+## Submission and no-action rule
+
+Use the canonical `FACTORY_REQUEST_BATCH` shape from
+`factory/docs/batch-inputs.md`. Dry-run every batch before submission:
 
 ```sh
-you submit batch --dry-run <path> --session <session_id>
+you --server http://127.0.0.1:7437 submit batch --dry-run <path> --session <session_id>
+you --server http://127.0.0.1:7437 submit batch <path> --session <session_id>
 ```
 
-Do not submit a real batch until the customer ask, checklist, and live queue
-state agree the next slice of work is ready.
+The checked-in example is `factory/docs/batch-input-example.json`; use it to
+verify the batch envelope and dependency relation shape before preparing a
+project-specific batch.
 
-## Work Types
-
-Configured work types:
-
-```txt
-thoughts       meta-planner loopback work
-project        independently owned end-to-end outcome
-project-cycle  dependency-held Project Lead loopback/decision
-idea           product/implementation idea submitted by ideafy
-plan           PRD planning output from an idea
-task           executor/review implementation work
-cron-triggers  runtime trigger type
-```
-
-Use `idea`, singular, for implementation proposals.
-Use `thoughts`, plural, for ideafy loopback.
-
-## Workstation Flow
-
-```txt
-thoughts:init -> ideafy -> thoughts:complete
-
-project:init -> project-lead -> project:waiting + idea:init + project-cycle:init
-project-cycle:init -> decide-project-cycle -> continue|complete|blocked
-project:waiting + same-name project-cycle -> project:init|complete|blocked
-
-idea:init -> plan -> idea:to-complete + plan:init
-plan:init -> setup-workspace -> plan:complete + task:init
-task:init -> process -> task:awaiting-ci
-task:awaiting-ci -> ci-wait -> task:in-review
-task:in-review + review:init with the same name -> review -> task:to-complete
-idea:to-complete + task:to-complete with the same name -> consume
-```
-
-The **ci-wait** workstation is an agentless CI gate: a script
-(`factory/scripts/ci-wait.py`) waits until every required PR check on the
-lane's head is terminal (pass or fail — terminal-ness, not verdict), so
-reviewer agent sessions never spend time or review visits watching CI. A
-reviewer `<CONTINUE>` hold routes the task back to `awaiting-ci`, re-entering
-the same gate instead of burning a review visit.
-
-### Process and review visit budget
-
-The process and review loop uses one logical cycle for each paired traversal.
-Its two loop-breaker guards set `maxVisits` to `12` and `maxRawVisits` to
-`24`. Seven review rejections therefore use fourteen raw visits without
-reaching the logical limit.
-
-The raw backstop still stops an imbalanced or unchanged route. It sums visits
-from `process` and `review`, then fails the Work when it reaches `24`. A
-`VISIT_COUNT` guard without `logicalRoundTrip` keeps the legacy raw behavior.
-
-Executor and review workstations run in worktrees under
-`.claude/worktrees/<work-item-name>/`, created by
-`factory/scripts/setup-workspace.py`.
-
-For a plan-to-task handoff, `setup-workspace.py` reads exactly one
-`tasks/todo/<work-item-name>.json` from the main checkout or a Git-registered
-worktree. The packet must be a JSON object whose `branchName` exactly matches
-the requested Work; a non-root packet must also be in an existing attached
-worktree on `refs/heads/<work-item-name>` with positive live-lane evidence
-(otherwise an abandoned same-name lane is refused). Missing, invalid,
-mismatched, stale, or ambiguous candidates fail before root synchronization,
-pruning, worktree preparation, or copying. Each selected JSON or Markdown
-source must resolve to a regular file under its registered worktree; links that
-escape that boundary fail closed. The root packet and its existing destination
-behavior remain supported.
-
-The **review** workstation runs the dedicated `reviewer` worker
-(codex `gpt-5.6-luna`, reasoning effort `max`). Planning (`plan`) stays on the
-`planner` worker (codex `gpt-5.6-sol`).
-
-### Review quality probes
-
-Reviews run on luna at max reasoning effort for cost reasons: sol review
-sessions were the factory's largest spend bucket, and luna runs at roughly
-1/25th of sol's token rates. Because review-evaluation quality on luna is a
-known risk, the operator dispatches an independent "review quality probe"
-subagent on luna-reviewed PRs. The probe re-reviews the same PR head at high
-capability and grades the factory review as one of:
-
-* `CONCUR` — the probe agrees with the factory review's verdict
-* `MISSED_BLOCKER` — the factory review approved despite a real blocker
-  (false approve)
-* `FALSE_REJECTION` — the factory review rejected without a real blocker
-
-A `MISSED_BLOCKER` on a merged PR, or a low concur rate over the first ~10
-luna reviews, reverts the review worker to sol.
-
-## Batch Submission
-
-Use the canonical `FACTORY_REQUEST_BATCH` shape from `you docs batch-inputs`.
-Human-readable notes live in `factory/docs/batch-inputs.md`.
-
-For a running factory, prefer:
-
-```sh
-you submit batch <path> --session <session_id>
-```
-
-Always dry-run first:
-
-```sh
-you submit batch --dry-run <path> --session <session_id>
-```
-
-For watched-folder operator ingress, use:
-
-```txt
-factory/inputs/BATCH/default/<request_id>.json
-```
-
-The checked-in example is:
-
-```txt
-factory/docs/batch-input-example.json
-```
-
-Each batch should include several concrete `idea` items plus one `thoughts`
-loopback item connected through `DEPENDS_ON` relations so the meta-planner
-re-enters after the ideas complete.
-
-## State Inspection
-
-Before submitting new work, inspect the current queue and active sessions.
-
-Use:
+Before submitting or repairing Work, inspect the live queue and Factory
+Session:
 
 ```sh
 you work list --session <session_id>
-```
-
-to see current work items, work types, states, names, and whether previous
-batches are still running, blocked, failed, or ready to be consumed.
-
-Use:
-
-```sh
 you session list
 ```
 
-to enumerate active and recent factory sessions. Check both commands before
-deciding that work is stuck or before submitting a new batch. Session list
-answers whether the runtime is alive; work list answers what the queue is doing
-inside a session.
+When the CLI is not already configured for the canonical local server, use
+`--server http://127.0.0.1:7437` with these inspection commands as well.
 
-Replace `<session_id>` with a live id from `you session list` (for example
-`c803e7f7-1361-4ba6-bb2b-b5c9cfeb2754` on a long-running host).
+Admit a Project only when its source plan, contract revision, ownership, and
+capacity are clear. Emit behavior slices instead of a complete speculative
+graph. Use package or package-family ownership to avoid collisions, then
+parallelize only when semantic prerequisites are satisfied.
 
-## Repair
-
-Use:
-
-```sh
-you work move --session <session_id>
-```
-
-only for deliberate workflow repair. Record every manual move in
-`docs/temp/progress.md` with the work item, old state, new state, reason, and
-expected next workstation. Do not use work moves to skip implementation,
-review, or validation.
-
-## Local State Files
-
-Planner-owned state under `docs/temp/`:
-
-```txt
-docs/temp/customer-ask.md  current customer authorization and goals
-docs/temp/progress.md      append-only meta-planner progress log
-docs/temp/checklist.md     high-level customer-ask and phase tracking
-docs/temp/meta.md          lightweight world-state notes for long-running passes
-```
-
-These files are local planner state. Keep them out of version control when
-possible. The meta-planner creates and maintains them during planning passes.
-Task executors append to the worktree `progress.txt` at the repository root
-during implementation batches.
-
-## Quality Gates
-
-Before opening or merging reconciliation PRs, run from the repository root:
-
-```sh
-make verify-fast   # dashboard typecheck, short UI/unit tests, short Go tests
-make lint          # broader repository lint when touching shared surfaces
-```
-
-For higher-risk runtime, API, or UI changes, use `make verify-pr` or the
-focused targets described in root `AGENTS.md`.
-
-When changing factory-local planner docs or the checked-in batch example, also
-run the narrow verification recipe documented in `factory/docs/batch-inputs.md`:
-
-```sh
-go test ./pkg/services/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
-go test ./pkg/services/work/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
-```
+When all active Projects are progressing or held on named external conditions
+and no priority class has a safe, dependency-ready action, record a hold with
+the next four-hour review or exception trigger and stop. Do not create
+placeholder Work, duplicate validation, restart healthy Projects, or weaken
+acceptance criteria.

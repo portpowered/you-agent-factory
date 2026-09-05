@@ -31,8 +31,8 @@ full before planning. The source plan is the source of truth: the PRD you
 write is a derived execution artifact for one slice of it. Reference the
 source plan path in the PRD, trace every task to the plan section or
 requirement it implements, and stay within the sections the ask assigns. If
-the ask or repository reality contradicts the source plan, record the conflict
-as an open question with your safe assumption — never silently resolve it by
+the ask or repository reality contradicts the source plan, return `FAILED` with
+evidence of the conflict and a proposed plan correction — never silently resolve it by
 weakening or reinterpreting the plan.
 
 Write `tasks/todo/{{ (index .Inputs 0).Name }}.md` using the plan template.
@@ -116,7 +116,10 @@ Mechanically convert the Markdown plan into
   when the ask names none
 - `context.problem`
 - `context.solution`
-- `acceptanceCriteria` containing the project criteria, relevant named quality
+- `acceptanceCriteria` containing a complete project-to-slice criterion map:
+  preserve every immutable Project criterion ID and requirement, identify the
+  local criteria this slice owns, and name the later verification gate for
+  every criterion this slice cannot prove; include relevant named quality
   gates, clean-room validation, and the canonical delivery criterion
 - `behaviorLanes`
 - `contractChanges` when interfaces or configuration change; each entry must
@@ -169,10 +172,41 @@ Markdown and JSON describe the same behaviors, dependencies, evidence, budgets,
 and delivery responsibilities. Remove unresolved placeholders and invented
 alternatives.
 
-When both artifacts are complete, respond exactly:
+If either artifact cannot be completed because required evidence, a source-plan
+section, a prerequisite, or a contract decision is missing, malformed, or
+contradictory, return the canonical decision envelope with `decision` set to
+`FAILED`. Put the gap, evidence, attempt history, category, and smallest next
+action in `feedback`; do not claim a partial artifact is accepted. Do not return
+`CONTINUE` to request another local planning pass: this workstation routes
+`CONTINUE`, `REJECTED`, and runtime failure to the owning idea's `failed` state.
 
-`<COMPLETE>`
+When both artifacts are complete, return the canonical decision envelope below
+with `decision` set to `ACCEPTED` and feedback naming the artifact paths and
+verification evidence.
 
 ## Customer ask
 
 {{ (index .Inputs 0).Payload }}
+
+## Structured result and escalation (canonical response contract)
+
+Return one raw JSON object, never a bare marker or a Markdown fence:
+
+`{"decision":"ACCEPTED","feedback":"Evidence and handoff summary","output":"Artifact or PR reference"}`
+
+Use the standard decision envelope without classificationRoutes. ACCEPTED means
+this workstation's own delivery gate is satisfied, never that all Project
+criteria are satisfied. This planner does not use `CONTINUE` as a local retry:
+its authored route is the owning idea's `failed` state, so incomplete planning
+must use `FAILED` with the gap details. `REJECTED` is reserved for an explicit
+rejection condition. FAILED means execution could not complete or a review
+discovered a plan/authority contradiction. Put the failure category (transient,
+implementation_defect, plan_defect, missing_prerequisite, contract_conflict, or
+shared_infrastructure), evidence, attempt history, and smallest next action in
+feedback. Preserve work and do not weaken the governing contract. A repeated
+unchanged blocker requires escalation, not another empty CONTINUE.
+
+Project acceptance belongs to independent validation after contributing slices
+integrate. Preserve criterion IDs and identify the later gate for outcomes this
+slice cannot yet prove. Measured counts are estimates to re-measure, not new
+product requirements. Only the operator may revise the acceptance contract.
