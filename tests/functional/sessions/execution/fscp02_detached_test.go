@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -47,8 +48,13 @@ func TestFSCP02DetachedCanonicalProcessBoundary(t *testing.T) {
 	if !ok || detached == nil {
 		t.Fatalf("detached capability type = %T, want factorysessions.DetachedService", capability.DetachedOperations())
 	}
+	assertDetachedLiveBoundary(t, detached, factoryDir)
+	assertProcessComposedDurableOwner(t, process.ExecutionRuntimeOpening(), factoryDir, home)
+}
 
-	_, err = detached.Start(t.Context(), factorysessions.SessionStartRequest{
+func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.DetachedService, factoryDir string) {
+	t.Helper()
+	_, err := detached.Start(t.Context(), factorysessions.SessionStartRequest{
 		Mode:       factorysessions.SessionOperationModeLive,
 		FolderPath: factoryDir,
 	})
@@ -70,8 +76,14 @@ func TestFSCP02DetachedCanonicalProcessBoundary(t *testing.T) {
 	t.Log("FSCP-02 F13 PASS: detached invalid requests returned canonical field-scoped errors before the excluded live gateway")
 
 	t.Log("FSCP-02 durable detached calls remain INCONCLUSIVE at the excluded late-bound assembly boundary")
+}
 
-	openingCapability := process.ExecutionRuntimeOpening()
+func assertProcessComposedDurableOwner(
+	t *testing.T,
+	openingCapability processcontract.ExecutionRuntimeOpeningCapability,
+	factoryDir, home string,
+) {
+	t.Helper()
 	if openingCapability == nil {
 		t.Fatal("root process returned no execution runtime opening capability")
 	}
