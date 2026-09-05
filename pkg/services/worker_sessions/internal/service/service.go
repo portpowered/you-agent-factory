@@ -215,6 +215,8 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
 		RecordingID: recordingID, FactorySessionID: req.Execution.Execution.FactorySessionID,
 		WorkerSessionID: req.ID, Topic: workersessions.Topic(req.ID),
+		WorkIDs:   append([]string(nil), req.Execution.Execution.Dispatch.Execution.WorkIDs...),
+		AttemptID: req.Execution.Execution.Dispatch.DispatchID,
 	})
 }
 

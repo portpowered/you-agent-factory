@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -30,7 +31,10 @@ func (r *registry) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	idCollectionStartedAt := r.clock.Now()
-	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	ids, err := r.observationListIDsWithDurable(ctx, query.cursor, query.scope, req.States)
+	if err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
 	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
@@ -119,6 +123,38 @@ func (r *registry) observationListIDs(cursor string, scope workersessions.Observ
 	return ids
 }
 
+func (r *registry) observationListIDsWithDurable(
+	ctx context.Context,
+	cursor string,
+	scope workersessions.ObservationScope,
+	states []workersessions.State,
+) ([]string, error) {
+	ids := make(map[string]struct{})
+	for _, id := range r.observationListIDs(cursor, scope, states) {
+		ids[id] = struct{}{}
+	}
+	durable, err := r.durableWorkerProjections(ctx, recordings.WorkerRecordingListRequest{})
+	if err != nil {
+		return nil, err
+	}
+	for _, projection := range durable {
+		if projection.WorkerSessionID <= cursor || !observationScopeMatches(projection.FactorySessionID == "", scope) {
+			continue
+		}
+		state, stateErr := durableWorkerState(projection)
+		if stateErr != nil || !observationStateMatches(state, states) {
+			continue
+		}
+		ids[projection.WorkerSessionID] = struct{}{}
+	}
+	result := make([]string, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
 func observationListPage(ids []string, limit int) []string {
 	if len(ids) <= limit {
 		return ids
@@ -185,7 +221,23 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	// A retained Worker recording is the provider-neutral identity boundary.
+	// Prefer it even when this process still has a provider association so a
+	// restarted or provider-degraded read cannot change the Worker-ID contract.
+	if projection, found, err := r.durableWorkerProjection(ctx, req.WorkerSessionID); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	} else if found {
+		result, err := durableTranscript(projection)
+		if err != nil {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+		return r.attachLiveProviderTranscript(req.WorkerSessionID, result), nil
+	}
 	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	if ok && session.ProviderSessionAssociation != nil {
+		providerSession := session.ProviderSessionAssociation.Reference
+		return r.projectTranscript(ctx, session, metadata, providerSession)
+	}
 	if !ok {
 		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
@@ -262,6 +314,20 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
+	}
+	if req.WorkerSessionID != "" {
+		// Worker-ID transcript reads are backed by the durable source-native
+		// history whenever it is present. Provider-reference reads retain the
+		// existing Provider Sessions projection below.
+		if projection, found, durableErr := r.durableWorkerProjection(ctx, req.WorkerSessionID); durableErr != nil {
+			return workersessions.ReadTranscriptResult{}, durableErr
+		} else if found {
+			result, err := durableTranscript(projection)
+			if err != nil {
+				return workersessions.ReadTranscriptResult{}, err
+			}
+			return r.attachLiveProviderTranscript(req.WorkerSessionID, result), nil
+		}
 	}
 
 	session, metadata, err := r.transcriptSession(req)
@@ -350,6 +416,25 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		}
 	}
 	r.mu.RUnlock()
+	durable, durableErr := r.durableWorkerProjections(ctx, recordings.WorkerRecordingListRequest{WorkID: req.WorkID})
+	if durableErr != nil {
+		return workersessions.ListObservationsResult{}, durableErr
+	}
+	seen := make(map[string]struct{}, len(ids)+len(durable))
+	for _, item := range ids {
+		seen[item.id] = struct{}{}
+	}
+	for _, projection := range durable {
+		if _, exists := seen[projection.WorkerSessionID]; exists {
+			continue
+		}
+		ids = append(ids, observationOrder{
+			id:        projection.WorkerSessionID,
+			startedAt: durableObservationStartedAt(projection),
+			attemptID: projection.AttemptID,
+		})
+		seen[projection.WorkerSessionID] = struct{}{}
+	}
 	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
@@ -457,16 +542,83 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	// Durable Worker history is provider-neutral and authoritative for the
+	// canonical Worker-ID read. This also prevents a provider association in
+	// an in-memory registry from leaking into a restarted-history response.
+	if projection, found, err := r.durableWorkerProjection(ctx, id); err != nil {
+		return workersessions.Observation{}, err
+	} else if found {
+		projected, err := durableObservation(projection)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		return r.attachLiveProviderAssociation(id, projected), nil
+	}
 
 	session, metadata, ok := r.loadObservationState(id)
 	if !ok {
-		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		projection, found, err := r.durableWorkerProjection(ctx, id)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		if !found {
+			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		}
+		projected, err := durableObservation(projection)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		return r.attachLiveProviderAssociation(id, projected), nil
 	}
 
 	projected := baseObservation(id, session, metadata)
 	applyObservationTiming(&projected, session, metadata, r.clock)
 	projected.Failure = observedTerminalCause(session)
 	return projected, nil
+}
+
+// attachLiveProviderAssociation preserves a provider reference only when the
+// current process still owns the Worker Session association. The durable
+// recording remains the source of lifecycle and output facts; after restart,
+// loadObservationState returns false and the same Worker-ID read stays
+// provider-neutral.
+func (r *registry) attachLiveProviderAssociation(
+	id string,
+	projected workersessions.Observation,
+) workersessions.Observation {
+	session, _, ok := r.loadObservationState(id)
+	if !ok || session.ProviderSessionAssociation == nil {
+		return projected
+	}
+	association := session.ProviderSessionAssociation
+	projected.ProviderSession = association.Reference.Clone()
+	projected.ProviderSessionAvailable = true
+	if strings.TrimSpace(association.TurnID) != "" {
+		projected.TurnID = association.TurnID
+	}
+	if strings.TrimSpace(association.AttemptID) != "" {
+		projected.AttemptID = association.AttemptID
+	}
+	return projected
+}
+
+func (r *registry) attachLiveProviderTranscript(
+	id string,
+	result workersessions.ReadTranscriptResult,
+) workersessions.ReadTranscriptResult {
+	session, _, ok := r.loadObservationState(id)
+	if !ok || session.ProviderSessionAssociation == nil {
+		return result
+	}
+	association := session.ProviderSessionAssociation
+	result.ProviderSession = association.Reference.Clone()
+	if strings.TrimSpace(association.TurnID) != "" {
+		result.TurnID = association.TurnID
+	}
+	if strings.TrimSpace(association.AttemptID) != "" {
+		result.AttemptID = association.AttemptID
+	}
+	return result
 }
 
 // controlTerminalCause maps the two absorbing control states to the operator
@@ -846,9 +998,10 @@ func safeDiagnosticMessage(message string) string {
 // Worker Sessions outcome vocabulary and closes itself immediately after the
 // lifecycle terminal record.
 type observationSubscription struct {
-	source          events.Subscription
-	replay          *replayObservationSubscription
-	workerSessionID string
+	source             events.Subscription
+	replay             *replayObservationSubscription
+	workerSessionID    string
+	streamGenerationID string
 
 	mu             sync.Mutex
 	closed         bool
@@ -890,6 +1043,7 @@ func (s *observationSubscription) projectSourceDelivery(delivery events.Delivery
 	switch delivery.Kind {
 	case events.DeliveryRecord:
 		event := projectObservationEvent(delivery.Record, s.workerSessionID)
+		event.Cursor.StreamGenerationID = s.streamGenerationID
 		s.mu.Lock()
 		s.delivered = true
 		s.mu.Unlock()

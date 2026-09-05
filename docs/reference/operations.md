@@ -353,6 +353,16 @@ does not expose that fact. The Worker Session ID is the canonical identity for
 provider-issued correlation value. JSON output preserves these identities and
 includes `workId` and `workName` when Work attribution can be resolved.
 
+Worker-ID inspection is backed by the Recordings-owned history under the
+configured home root (`.you-agent-factory/worker-sessions`). A completed
+Worker's `show`, `stream --replay-only`, and `read` results remain available
+after a normal process restart without resolving a Provider Session. Such
+responses may set `providerSession` to `null`; `recordingHealth` is then the
+authoritative history state: `COMPLETE`, `DEGRADED`, or `INCOMPLETE`, with an
+optional `recordingHealthReason` explaining a readable prefix or retention
+condition. Provider-keyed commands remain the compatibility path when a
+provider-native identity is available.
+
 Direct Worker Session stdin is limited to 1,048,576 bytes, inclusive. This
 limit applies to `--execution -` and to non-terminal stdin used for direct
 Worker messages, continuation input, or replacement input.

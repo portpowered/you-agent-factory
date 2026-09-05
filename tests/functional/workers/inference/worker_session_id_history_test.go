@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -30,12 +31,14 @@ import (
 func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-010-worker-id-history")
+	home := t.TempDir()
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-010-worker-id-history.replay.json")
 	sessionID := uuid.NewString()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--session", sessionID, "--record", artifactPath},
+		Edges:                     serviceedges.Edges{WorkerSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
 		ProviderOverride:          support.MockInferenceProvider("provider-neutral completion"),
 	})
 
@@ -67,7 +70,7 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 	}
 	liveEvents := getWSRFT010Events(t, server.URL(), sessionID, workerID)
 	assertWSRFT010Events(t, liveEvents, workerID, workID)
-	assertWSRFT010NoProviderTranscript(t, server.URL(), sessionID, workerID)
+	assertWSRFT010DurableTranscript(t, server.URL(), sessionID, workerID, workID)
 	assertWSRFT010IdentityErrors(t, server.URL(), sessionID)
 
 	server.Stop(t)
@@ -75,6 +78,7 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 		FactoryDir:                t.TempDir(),
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--session", sessionID, "--replay", artifactPath, "--no-record"},
+		Edges:                     serviceedges.Edges{WorkerSessionResolveHomeDirectory: func() (string, error) { return home, nil }},
 	})
 	historical := getWSRFT010Observation(t, replayServer.URL(), sessionID, workerID)
 	assertWSRFT010Observation(t, historical, sessionID, workerID, workID)
@@ -83,7 +87,7 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 	}
 	historicalEvents := getWSRFT010Events(t, replayServer.URL(), sessionID, workerID)
 	assertWSRFT010Events(t, historicalEvents, workerID, workID)
-	assertWSRFT010NoProviderTranscript(t, replayServer.URL(), sessionID, workerID)
+	assertWSRFT010DurableTranscript(t, replayServer.URL(), sessionID, workerID, workID)
 
 	status, response := getWSRFT010Error(t, workerObservationURL(replayServer.URL(), "other-session", workerID))
 	if status != http.StatusNotFound || response.Code != factoryapi.ErrorResponseCodeNOTFOUND {
@@ -205,17 +209,40 @@ func assertWSRFT010Events(
 		t.Fatalf("Worker-ID event history final frame = %#v, want complete replay summary", last)
 	}
 	for _, event := range events[:len(events)-1] {
-		if event.ProviderSession.Provider != "" || event.ProviderSession.Id != "" {
+		if event.ProviderSession != nil {
 			t.Fatalf("provider-neutral Worker-ID event = %#v, want no Provider Session reference", event.ProviderSession)
 		}
 	}
 }
 
-func assertWSRFT010NoProviderTranscript(t *testing.T, baseURL, sessionID, workerID string) {
+func assertWSRFT010DurableTranscript(t *testing.T, baseURL, sessionID, workerID, workID string) {
 	t.Helper()
-	status, response := getWSRFT010Error(t, workerObservationURL(baseURL, sessionID, workerID)+"/transcript")
-	if status != http.StatusInternalServerError || response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE {
-		t.Fatalf("no-provider transcript read = %d/%#v, want 500/WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", status, response)
+	response, err := http.Get(workerObservationURL(baseURL, sessionID, workerID) + "/transcript")
+	if err != nil {
+		t.Fatalf("GET durable Worker-ID transcript: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("durable Worker-ID transcript status = %d, want 200: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var transcript factoryapi.WorkerSessionTranscriptResponse
+	if err := json.NewDecoder(response.Body).Decode(&transcript); err != nil {
+		t.Fatalf("decode durable Worker-ID transcript: %v", err)
+	}
+	if transcript.WorkerSessionId != workerID || transcript.ProviderSession != nil {
+		t.Fatalf("durable Worker-ID transcript identity = %#v, want Worker %q and no Provider Session", transcript, workerID)
+	}
+	if transcript.RecordingHealth != factoryapi.WorkerSessionTranscriptRecordingHealthComplete {
+		t.Fatalf("durable Worker-ID transcript health = %q, want COMPLETE", transcript.RecordingHealth)
+	}
+	if !containsWSRFT010(transcript.WorkIds, workID) || len(transcript.Entries) == 0 {
+		t.Fatalf("durable Worker-ID transcript correlation = Work %#v/entries=%d, want Work %q and entries", transcript.WorkIds, len(transcript.Entries), workID)
+	}
+	for index := 1; index < len(transcript.Entries); index++ {
+		if transcript.Entries[index].Order <= transcript.Entries[index-1].Order {
+			t.Fatalf("durable Worker-ID transcript entries out of order: %#v", transcript.Entries)
+		}
 	}
 }
 

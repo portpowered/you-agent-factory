@@ -89,9 +89,10 @@ func workerSessionEventFrameWithIdentity(
 	if len(failure) > 1 {
 		errorMessage = failure[1]
 	}
-	providerSession := factoryapi.WorkerSessionProviderSessionRef{}
+	var providerSession *factoryapi.WorkerSessionProviderSessionRef
 	if observation.ProviderSession != nil {
-		providerSession = *observation.ProviderSession
+		ref := *observation.ProviderSession
+		providerSession = &ref
 	}
 	return workerSessionEventFramePayload{
 		Delivery: delivery, WorkerSessionID: observation.WorkerSessionId,
@@ -103,11 +104,12 @@ func workerSessionEventFrameWithIdentity(
 	}
 }
 
-func workerSessionProviderSessionRef(observation factoryapi.WorkerSessionObservation) factoryapi.WorkerSessionProviderSessionRef {
+func workerSessionProviderSessionRef(observation factoryapi.WorkerSessionObservation) *factoryapi.WorkerSessionProviderSessionRef {
 	if observation.ProviderSession == nil {
-		return factoryapi.WorkerSessionProviderSessionRef{}
+		return nil
 	}
-	return *observation.ProviderSession
+	ref := *observation.ProviderSession
+	return &ref
 }
 
 func eventRecordingHealth(value *factoryapi.WorkerSessionObservationRecordingHealth) *factoryapi.WorkerSessionEventRecordingHealth {

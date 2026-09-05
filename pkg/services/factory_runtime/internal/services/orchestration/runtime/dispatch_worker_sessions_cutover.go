@@ -538,6 +538,23 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 	return result, err
 }
 
+// hasDurableWorkerHistory reports whether the embedded per-runtime Worker
+// Sessions service exposes the Recordings-owned Worker-ID history seam. The
+// runtime ledger remains the compatibility fallback for test doubles and
+// older callers that do not provide the new capability.
+func (s *recordedWorkerSessionObservation) hasDurableWorkerHistory() bool {
+	if s == nil {
+		return false
+	}
+	if reader, ok := s.Service.(recordings.WorkerRecordingHistoryReader); ok && reader != nil {
+		return true
+	}
+	if reader, ok := s.recordingReader.(recordings.WorkerRecordingHistoryReader); ok && reader != nil {
+		return true
+	}
+	return false
+}
+
 // Start carries the runtime-owned recording identity into direct admission.
 func (s *recordedWorkerSessionObservation) Start(
 	ctx context.Context,
@@ -753,6 +770,26 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	if s.hasDurableWorkerHistory() && s.Service != nil {
+		observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
+		if err == nil {
+			// A live process may still have the exact provider association. In
+			// that case preserve the existing provider-backed projection parity;
+			// the durable result remains the fallback after restart or provider
+			// loss.
+			if observation.ProviderSessionAvailable && s.ledger != nil && s.projector != nil {
+				if recorded, found, recordedErr := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID); recordedErr != nil {
+					return workersessions.Observation{}, recordedErr
+				} else if found {
+					return recorded, nil
+				}
+			}
+			return observation, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, err
+		}
+	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		observation, found, err := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID)
 		if err != nil {
@@ -819,6 +856,22 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	if req.WorkerSessionID != "" && s.hasDurableWorkerHistory() && s.Service != nil {
+		result, err := s.Service.ReadTranscript(ctx, req)
+		if err == nil {
+			if transcriptProviderSessionAvailable(result) && s.ledger != nil && s.projector != nil {
+				if recorded, handled, recordedErr := s.readRecordedTranscriptForRequest(ctx, req); recordedErr != nil {
+					return workersessions.ReadTranscriptResult{}, recordedErr
+				} else if handled {
+					return recorded, nil
+				}
+			}
+			return result, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+	}
 	if s != nil && s.ledger != nil && s.projector != nil {
 		result, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
 		if handled || err != nil {
@@ -836,6 +889,12 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 		return workersessions.ReadTranscriptResult{}, err
 	}
 	return result, nil
+}
+
+func transcriptProviderSessionAvailable(result workersessions.ReadTranscriptResult) bool {
+	return strings.TrimSpace(string(result.ProviderSession.Provider)) != "" ||
+		strings.TrimSpace(result.ProviderSession.Kind) != "" ||
+		strings.TrimSpace(result.ProviderSession.ID) != ""
 }
 
 func (s *recordedWorkerSessionObservation) readRecordedTranscriptForRequest(

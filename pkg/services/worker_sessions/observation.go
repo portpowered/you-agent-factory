@@ -673,11 +673,15 @@ func (r ReadTranscriptRequest) Validate() error {
 type ReadTranscriptResult struct {
 	WorkerSessionID string
 	ProviderSession providers.SessionRef
-	WorkIDs         []string
-	TurnID          string
-	AttemptID       string
-	State           State
-	Entries         []TranscriptEntry
+	// RecordingHealth is required for provider-neutral durable transcripts and
+	// remains empty for the legacy provider-backed projection.
+	RecordingHealth       recordings.WorkerRecordingStatus
+	RecordingHealthReason string
+	WorkIDs               []string
+	TurnID                string
+	AttemptID             string
+	State                 State
+	Entries               []TranscriptEntry
 }
 
 // Clone returns a detached transcript result.
@@ -698,13 +702,19 @@ func (r ReadTranscriptResult) Validate() error {
 	if strings.TrimSpace(r.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity
 	}
-	if err := r.ProviderSession.Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+	providerIdentityPresent := strings.TrimSpace(string(r.ProviderSession.Provider)) != "" ||
+		strings.TrimSpace(r.ProviderSession.Kind) != "" || strings.TrimSpace(r.ProviderSession.ID) != ""
+	if providerIdentityPresent {
+		if err := r.ProviderSession.Validate(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+		}
+	} else if !validTranscriptRecordingHealth(r.RecordingHealth, r.RecordingHealthReason) {
+		return ErrInvalidObservationRecordingHealth
 	}
 	if !r.State.Valid() {
 		return ErrInvalidState
 	}
-	if !r.State.Terminal() {
+	if !r.State.Terminal() && (providerIdentityPresent || r.RecordingHealth != recordings.WorkerRecordingStatusIncomplete) {
 		return ErrObservationTranscriptActive
 	}
 	if strings.TrimSpace(r.AttemptID) == "" {
@@ -716,6 +726,17 @@ func (r ReadTranscriptResult) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validTranscriptRecordingHealth(status recordings.WorkerRecordingStatus, reason string) bool {
+	switch status {
+	case recordings.WorkerRecordingStatusComplete,
+		recordings.WorkerRecordingStatusDegraded,
+		recordings.WorkerRecordingStatusIncomplete:
+		return status == recordings.WorkerRecordingStatusComplete || strings.TrimSpace(reason) != ""
+	default:
+		return false
+	}
 }
 
 // TranscriptEntryType is the normalized provider-neutral role or activity

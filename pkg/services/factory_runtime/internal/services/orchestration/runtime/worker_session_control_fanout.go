@@ -246,13 +246,66 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
+	if s.hasDurableWorkerHistory() && s.Service != nil {
+		// Preserve provider-reference parity while the live registry still
+		// owns an association: the canonical Factory ledger carries the same
+		// normalized projection as the provider route. A provider-neutral
+		// Worker-ID falls through to the source-native Worker stream, whose
+		// stable generation is decorated below.
+		if observation, observationErr := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: req.WorkerSessionID,
+		}); observationErr == nil && observation.ProviderSessionAvailable && !durableWorkerCursor(req.Cursor) {
+			if subscription, handled, err := s.streamRecordedByWorkerSessionID(ctx, req); handled {
+				return subscription, err
+			}
+		}
+		subscription, err := s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+		if err == nil {
+			return withRecordedWorkerStreamGeneration(subscription, req.WorkerSessionID), nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ObservationSubscription{}, err
+		}
+	}
 	if subscription, handled, err := s.streamRecordedByWorkerSessionID(ctx, req); handled {
 		return subscription, err
 	}
 	if s.Service == nil {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	return s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+	subscription, err := s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if s.hasDurableWorkerHistory() {
+		return withRecordedWorkerStreamGeneration(subscription, req.WorkerSessionID), nil
+	}
+	return subscription, nil
+}
+
+func durableWorkerCursor(cursor *workersessions.ObservationCursor) bool {
+	return cursor != nil && strings.HasPrefix(strings.TrimSpace(cursor.StreamGenerationID), "worker-recording/")
+}
+
+func withRecordedWorkerStreamGeneration(
+	subscription workersessions.ObservationSubscription,
+	workerSessionID string,
+) workersessions.ObservationSubscription {
+	if subscription.NextFunc == nil {
+		return subscription
+	}
+	next := subscription.NextFunc
+	generationID := recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	subscription.NextFunc = func(ctx context.Context) workersessions.ObservationDelivery {
+		delivery := next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminal ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
+			delivery.Event.Cursor.StreamGenerationID = generationID
+		}
+		return delivery
+	}
+	return subscription
 }
 
 func (s *recordedWorkerSessionObservation) streamRecorded(
@@ -315,7 +368,7 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	streamContext, cancel := context.WithCancel(streamContext)
 	limit = observationStreamLimit(limit)
 	canonicalEvents := s.canonicalEvents()
-	if err := validateRecordedObservationCursor(s.ledger, canonicalEvents, fact, cursor); err != nil {
+	if err := validateRecordedObservationCursor(s.ledger, canonicalEvents, fact, cursor, s.hasDurableWorkerHistory()); err != nil {
 		cancel()
 		return workersessions.ObservationSubscription{}, true, err
 	}
@@ -344,6 +397,9 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 		return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSourceUnavailable
 	}
 	source.History = recordedObservationHistory(source.History, fact.dispatchID, cursor)
+	if s.hasDurableWorkerHistory() {
+		source.StreamGenerationID = recordedWorkerStreamGenerationForIdentity(fact.workerSessionID)
+	}
 	terminalReplay := recordedObservationHistoryHasTerminal(source.History, fact.dispatchID)
 	finite := replayOnly || fact.state.Terminal() || terminalReplay
 	var summary *workersessions.ReplaySummary
@@ -416,6 +472,7 @@ func validateRecordedObservationCursor(
 	events []interfaces.FactoryEvent,
 	fact recordedDispatchObservation,
 	cursor *workersessions.ObservationCursor,
+	durableHistory bool,
 ) error {
 	if cursor == nil {
 		return nil
@@ -428,7 +485,11 @@ func validateRecordedObservationCursor(
 		return workersessions.ErrObservationCursorForeign
 	}
 	if generationID := strings.TrimSpace(cursor.StreamGenerationID); generationID != "" &&
-		generationID != strings.TrimSpace(ledger.StreamGenerationID()) {
+		generationID != recordedObservationGeneration(ledger, fact.workerSessionID, durableHistory) {
+		if strings.HasPrefix(generationID, "worker-recording/") &&
+			strings.TrimPrefix(generationID, "worker-recording/") != strings.TrimSpace(fact.workerSessionID) {
+			return workersessions.ErrObservationCursorForeign
+		}
 		return workersessions.ErrObservationCursorUnavailable
 	}
 	var highest uint64
@@ -453,6 +514,24 @@ func validateRecordedObservationCursor(
 		return workersessions.ErrObservationCursorForeign
 	}
 	return nil
+}
+
+func recordedObservationGeneration(ledger recordings.RuntimeLedger, workerSessionID string, durableHistory bool) string {
+	if durableHistory {
+		return recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	}
+	generationID := ""
+	if ledger != nil {
+		generationID = strings.TrimSpace(ledger.StreamGenerationID())
+	}
+	if generationID == "" && durableHistory {
+		generationID = recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	}
+	return generationID
+}
+
+func recordedWorkerStreamGenerationForIdentity(workerSessionID string) string {
+	return "worker-recording/" + strings.TrimSpace(workerSessionID)
 }
 
 func recordedObservationReplaySummary(

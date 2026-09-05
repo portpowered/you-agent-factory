@@ -25,7 +25,7 @@ func TestReadJSONUsesTranscriptRouteAndPreservesNormalizedEntries(t *testing.T) 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
 			WorkerSessionId: "worker-session-1",
-			ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
+			ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 			WorkIds:         []string{"work-1"}, TurnId: stringPtrForTest("turn-1"), AttemptId: "attempt-1", State: "COMPLETED",
 			Entries: []generated.ProviderSessionTranscriptEntry{
 				{Order: 1, Type: generated.ProviderSessionTranscriptEntryType("user_message"), Text: stringPtrForTest("operator request")},
@@ -58,7 +58,7 @@ func TestReadByWorkerSessionIDUsesTopLevelTranscriptRoute(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
 			WorkerSessionId: "direct-1", AttemptId: "attempt-1", State: "COMPLETED",
-			ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-1"},
+			ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-1"},
 		})
 	}))
 	defer server.Close()
@@ -110,7 +110,7 @@ func TestReadHumanLabelsTranscriptRolesAndEncryptedContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
-			WorkerSessionId: "worker-session-1", ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "cursor", Kind: "session_id", Id: "cursor-session-1"},
+			WorkerSessionId: "worker-session-1", ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "cursor", Kind: "session_id", Id: "cursor-session-1"},
 			WorkIds: []string{"work-1"}, AttemptId: "attempt-1", State: "FAILED",
 			Entries: []generated.ProviderSessionTranscriptEntry{
 				{Order: 1, Type: generated.ProviderSessionTranscriptEntryType("tool_output"), Output: stringPtrForTest("tool result")},

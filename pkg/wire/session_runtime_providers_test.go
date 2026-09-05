@@ -889,14 +889,18 @@ func TestWorkerProviderCommandRunnerHonorsInjectedAndDefaultOwnership(t *testing
 	}
 }
 
-func TestWorkerRecordingRootUsesScenarioHomeAndRetainsTemporaryDefault(t *testing.T) {
+func TestWorkerRecordingRootUsesCanonicalHomeAndScenarioHome(t *testing.T) {
 	t.Parallel()
 
 	defaultRoot, err := workerRecordingRoot(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("workerRecordingRoot(default) error = %v", err)
 	}
-	if want := filepath.Join(os.TempDir(), workerRecordingTemporaryDirectory); defaultRoot != want {
+	defaultHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() error = %v", err)
+	}
+	if want := filepath.Join(defaultHome, workerRecordingHomeDirectory, workerRecordingStoreDirectory); defaultRoot != want {
 		t.Fatalf("workerRecordingRoot(default) = %q, want %q", defaultRoot, want)
 	}
 

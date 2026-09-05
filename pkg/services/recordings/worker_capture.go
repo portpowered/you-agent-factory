@@ -18,6 +18,7 @@ type (
 	WorkerSessionRecordingRequest            = workerrecording.WorkerSessionRecordingRequest
 	WorkerRecordingRecord                    = workerrecording.WorkerRecordingRecord
 	WorkerRecordingReader                    = recordingcontracts.WorkerRecordingReader
+	WorkerRecordingHistoryReader             = recordingcontracts.WorkerRecordingHistoryReader
 	WorkerRecordingProjectionReader          = recordingcontracts.WorkerRecordingProjectionReader
 	WorkerRecordingFailure                   = workerrecording.WorkerRecordingFailure
 	WorkerRecordingFailureWriter             = recordingcontracts.WorkerRecordingFailureWriter
@@ -30,6 +31,10 @@ type (
 	WorkerRecordingProjection                = workerrecording.WorkerRecordingProjection
 	WorkerRecordingReplayRequest             = workerrecording.WorkerRecordingReplayRequest
 	WorkerRecordingReplayResult              = workerrecording.WorkerRecordingReplayResult
+	WorkerRecordingListRequest               = workerrecording.WorkerRecordingListRequest
+	WorkerRecordingListResult                = workerrecording.WorkerRecordingListResult
+	WorkerRecordingCatalogDiagnostic         = workerrecording.WorkerRecordingCatalogDiagnostic
+	WorkerRecordingCatalogDiagnosticCode     = workerrecording.WorkerRecordingCatalogDiagnosticCode
 	WorkerPortableRecording                  = workerrecording.WorkerPortableRecording
 	WorkerPortableRecordingIdentity          = workerrecording.WorkerPortableRecordingIdentity
 	WorkerPortableRecordingLifecycle         = workerrecording.WorkerPortableRecordingLifecycle
@@ -70,6 +75,11 @@ const (
 	WorkerPortableCodeInvalidOrder         = workerrecording.WorkerPortableCodeInvalidOrder
 	WorkerPortableCodeInvalidTerminal      = workerrecording.WorkerPortableCodeInvalidTerminal
 	WorkerPortableCodeInvalidIntegrity     = workerrecording.WorkerPortableCodeInvalidIntegrity
+	WorkerRecordingCatalogMalformedTail    = workerrecording.WorkerRecordingCatalogMalformedTail
+	WorkerRecordingCatalogUnsupported      = workerrecording.WorkerRecordingCatalogUnsupported
+	WorkerRecordingCatalogUnreadable       = workerrecording.WorkerRecordingCatalogUnreadable
+	WorkerRecordingCatalogRetention        = workerrecording.WorkerRecordingCatalogRetention
+	WorkerRecordingCatalogInvalidIdentity  = workerrecording.WorkerRecordingCatalogInvalidIdentity
 )
 
 // WorkerRecordingWriterFunc adapts a function to WorkerRecordingWriter.
@@ -103,6 +113,10 @@ var (
 	ErrWorkerRecordingIncomplete            = workerrecording.ErrWorkerRecordingIncomplete
 	ErrWorkerRecordingCompatibility         = workerrecording.ErrWorkerRecordingCompatibility
 	ErrWorkerRecordingReplay                = workerrecording.ErrWorkerRecordingReplay
+	ErrWorkerRecordingCorruptTail           = workerrecording.ErrWorkerRecordingCorruptTail
+	ErrWorkerRecordingAppend                = workerrecording.ErrWorkerRecordingAppend
+	ErrWorkerRecordingRetention             = workerrecording.ErrWorkerRecordingRetention
+	ErrWorkerRecordingCursor                = workerrecording.ErrWorkerRecordingCursor
 	ErrMissingWorkerRecordingReader         = errors.New("recordings: Worker recording reader is required")
 	ErrWorkerPortableRecording              = workerrecording.ErrWorkerPortableRecording
 	ErrWorkerPortableRecordingCompatibility = workerrecording.ErrWorkerPortableRecordingCompatibility

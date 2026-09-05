@@ -816,6 +816,19 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
+	// A restarted process has no in-memory session or Events topic. The
+	// Recordings-owned v2 artifact is the authoritative Worker-ID replay
+	// source in that case, and also avoids making replay depend on a provider
+	// session store.
+	session, _, exists := r.loadObservationState(req.WorkerSessionID)
+	preferDurable := req.ReplayOnly || !exists || session.State.Terminal()
+	if preferDurable {
+		if projection, found, err := r.durableWorkerProjection(ctx, req.WorkerSessionID); err != nil {
+			return workersessions.ObservationSubscription{}, err
+		} else if found {
+			return durableObservationStream(ctx, projection, req.Limit, req.Cursor)
+		}
+	}
 	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
@@ -970,10 +983,15 @@ func (r *registry) liveObservationStream(
 	terminalReplay bool,
 	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
+	workerSessionID := observationWorkerSessionIDFromTopic(topic)
+	streamGenerationID := ""
+	if r.workerRecordingHistoryReader() != nil {
+		streamGenerationID = durableWorkerStreamGenerationForIdentity(workerSessionID)
+	}
 	from := events.Cursor{Topic: topic}
 	if cursor != nil {
 		from.Position = events.AggregateSequence(cursor.Position)
-		if cursor.StreamGenerationID != "" {
+		if cursor.StreamGenerationID != "" && cursor.StreamGenerationID != streamGenerationID {
 			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCursorUnavailable
 		}
 	}
@@ -992,7 +1010,7 @@ func (r *registry) liveObservationStream(
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
 	wrapped := &observationSubscription{
-		source: subscription, workerSessionID: observationWorkerSessionIDFromTopic(topic), terminalReplay: terminalReplay,
+		source: subscription, workerSessionID: workerSessionID, streamGenerationID: streamGenerationID, terminalReplay: terminalReplay,
 		cursorProvided: cursor != nil,
 	}
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil

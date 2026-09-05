@@ -1713,7 +1713,7 @@ export interface components {
       workerSessionId: string;
       /** @description Explicit Factory Session scope used for this transcript read. */
       factorySessionId?: string;
-      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with this Worker Session attempt. */
       workIds: string[];
       /** @description Optional turn correlation identifier. */
@@ -1722,8 +1722,15 @@ export interface components {
       attemptId: string;
       /** @description Terminal Worker Session lifecycle state at transcript read time. */
       state: string;
-      /** @description Ordered normalized transcript entries projected by Provider Sessions. */
+      /** @description Ordered normalized transcript entries projected by Provider Sessions or durable Worker history. */
       entries: components["schemas"]["ProviderSessionTranscriptEntry"][];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth: WorkerSessionTranscriptResponseRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string | null;
     };
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
@@ -1794,7 +1801,7 @@ export interface components {
       workerSessionId: string;
       /** @description Explicit Factory Session scope used for this event stream. */
       factorySessionId?: string;
-      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Work identities correlated with the streamed attempt. */
       workIds: string[];
       /** @description Canonical event record, or null for an explicit source failure. */
@@ -1811,7 +1818,7 @@ export interface components {
        */
       recordingHealth?: WorkerSessionEventRecordingHealth;
       /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
-      recordingHealthReason?: string;
+      recordingHealthReason?: string | null;
     };
     WorkerSessionReplaySummary: {
       /**
@@ -10443,6 +10450,13 @@ export const WorkerSessionControlResponseState = {
 } as const;
 export type WorkerSessionControlResponseState =
   (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
+export const WorkerSessionTranscriptResponseRecordingHealth = {
+  WorkerSessionTranscriptRecordingHealthComplete: "COMPLETE",
+  WorkerSessionTranscriptRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionTranscriptRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionTranscriptResponseRecordingHealth =
+  (typeof WorkerSessionTranscriptResponseRecordingHealth)[keyof typeof WorkerSessionTranscriptResponseRecordingHealth];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",

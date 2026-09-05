@@ -1545,6 +1545,13 @@ const (
 	WorkerSessionStartResponseStateTerminated WorkerSessionStartResponseState = "TERMINATED"
 )
 
+// Defines values for WorkerSessionTranscriptResponseRecordingHealth.
+const (
+	WorkerSessionTranscriptRecordingHealthComplete   WorkerSessionTranscriptResponseRecordingHealth = "COMPLETE"
+	WorkerSessionTranscriptRecordingHealthDegraded   WorkerSessionTranscriptResponseRecordingHealth = "DEGRADED"
+	WorkerSessionTranscriptRecordingHealthIncomplete WorkerSessionTranscriptResponseRecordingHealth = "INCOMPLETE"
+)
+
 // Defines values for WorkerType.
 const (
 	WorkerTypeAgentWorker     WorkerType = "AGENT_WORKER"
@@ -8861,14 +8868,14 @@ type WorkerSessionEvent struct {
 	Event        WorkerSessionEventRecord `json:"event"`
 
 	// FactorySessionId Explicit Factory Session scope used for this event stream.
-	FactorySessionId *string                         `json:"factorySessionId,omitempty"`
-	ProviderSession  WorkerSessionProviderSessionRef `json:"providerSession"`
+	FactorySessionId *string                          `json:"factorySessionId,omitempty"`
+	ProviderSession  *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
 
 	// RecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
 	RecordingHealth *WorkerSessionEventRecordingHealth `json:"recordingHealth,omitempty"`
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
-	RecordingHealthReason *string                     `json:"recordingHealthReason,omitempty"`
+	RecordingHealthReason *string                     `json:"recordingHealthReason"`
 	ReplaySummary         *WorkerSessionReplaySummary `json:"replaySummary,omitempty"`
 
 	// WorkIds Work identities correlated with the streamed attempt.
@@ -9238,12 +9245,18 @@ type WorkerSessionTranscriptResponse struct {
 	// AttemptId Stable attempt or dispatch identity.
 	AttemptId string `json:"attemptId"`
 
-	// Entries Ordered normalized transcript entries projected by Provider Sessions.
+	// Entries Ordered normalized transcript entries projected by Provider Sessions or durable Worker history.
 	Entries []ProviderSessionTranscriptEntry `json:"entries"`
 
 	// FactorySessionId Explicit Factory Session scope used for this transcript read.
-	FactorySessionId *string                         `json:"factorySessionId,omitempty"`
-	ProviderSession  WorkerSessionProviderSessionRef `json:"providerSession"`
+	FactorySessionId *string                          `json:"factorySessionId,omitempty"`
+	ProviderSession  *WorkerSessionProviderSessionRef `json:"providerSession,omitempty"`
+
+	// RecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+	RecordingHealth WorkerSessionTranscriptResponseRecordingHealth `json:"recordingHealth"`
+
+	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
+	RecordingHealthReason *string `json:"recordingHealthReason"`
 
 	// State Terminal Worker Session lifecycle state at transcript read time.
 	State string `json:"state"`
@@ -9257,6 +9270,9 @@ type WorkerSessionTranscriptResponse struct {
 	// WorkerSessionId Stable Worker Session identity.
 	WorkerSessionId string `json:"workerSessionId"`
 }
+
+// WorkerSessionTranscriptResponseRecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
+type WorkerSessionTranscriptResponseRecordingHealth string
 
 // WorkerSessionTurnUsage Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics.
 type WorkerSessionTurnUsage struct {

@@ -37,6 +37,15 @@ type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (workerrecording.WorkerRecordingSnapshot, error)
 }
 
+// WorkerRecordingHistoryReader is the bounded catalog and Worker-ID read
+// capability used after a process restart. It deliberately returns the same
+// source-native snapshot shape as the recording reader so callers cannot
+// confuse catalog metadata with a provider transcript.
+type WorkerRecordingHistoryReader interface {
+	ListWorkerRecordingProjections(context.Context, workerrecording.WorkerRecordingListRequest) (workerrecording.WorkerRecordingListResult, error)
+	LoadWorkerRecordingByWorkerSessionID(context.Context, string) (workerrecording.WorkerRecordingSnapshot, error)
+}
+
 // WorkerRecordingProjectionReader observes one live capture projection.
 type WorkerRecordingProjectionReader interface {
 	WorkerRecordingProjection() (workerrecording.WorkerRecordingProjection, error)

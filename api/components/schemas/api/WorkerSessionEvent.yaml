@@ -3,7 +3,6 @@ additionalProperties: false
 required:
   - delivery
   - workerSessionId
-  - providerSession
   - workIds
   - event
   - errorCode
@@ -19,6 +18,7 @@ properties:
     description: Explicit Factory Session scope used for this event stream.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
+    nullable: true
   workIds:
     type: array
     items:
@@ -53,4 +53,5 @@ properties:
     description: Recordings-owned capture health, independent of Worker execution outcome.
   recordingHealthReason:
     type: string
+    nullable: true
     description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.

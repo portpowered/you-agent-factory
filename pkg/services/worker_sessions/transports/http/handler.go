@@ -651,7 +651,7 @@ type workerSessionEventFramePayload struct {
 	Delivery              workersessions.ObservationDeliveryKind        `json:"delivery"`
 	WorkerSessionID       string                                        `json:"workerSessionId"`
 	FactorySessionID      *string                                       `json:"factorySessionId,omitempty"`
-	ProviderSession       factoryapi.WorkerSessionProviderSessionRef    `json:"providerSession"`
+	ProviderSession       *factoryapi.WorkerSessionProviderSessionRef   `json:"providerSession"`
 	WorkIDs               []string                                      `json:"workIds"`
 	Event                 *workerSessionEventRecordPayload              `json:"event"`
 	ErrorCode             *string                                       `json:"errorCode"`

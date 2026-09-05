@@ -26,6 +26,7 @@ type Service struct {
 
 var _ recordings.WorkerSessionRecordingService = (*Service)(nil)
 var _ recordings.WorkerRecordingReader = (*Service)(nil)
+var _ recordings.WorkerRecordingHistoryReader = (*Service)(nil)
 var _ recordings.WorkerRecordingWriter = (*Service)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*Service)(nil)
 var _ recordings.WorkerSessionRecordingFinalizer = (*capture)(nil)
@@ -75,6 +76,38 @@ func (service *Service) LoadWorkerRecording(
 		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
 	}
 	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+// ListWorkerRecordingProjections forwards the bounded durable catalog through
+// the same Recordings-owned writer used by capture.
+func (service *Service) ListWorkerRecordingProjections(
+	ctx context.Context,
+	request recordings.WorkerRecordingListRequest,
+) (recordings.WorkerRecordingListResult, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerRecordingListResult{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := service.writer.(recordings.WorkerRecordingHistoryReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingListResult{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.ListWorkerRecordingProjections(ctx, request)
+}
+
+// LoadWorkerRecordingByWorkerSessionID resolves one durable Worker identity
+// without exposing the catalog implementation to Worker Sessions.
+func (service *Service) LoadWorkerRecordingByWorkerSessionID(
+	ctx context.Context,
+	workerSessionID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if service == nil || service.writer == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	reader, ok := service.writer.(recordings.WorkerRecordingHistoryReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecordingByWorkerSessionID(ctx, workerSessionID)
 }
 
 // PersistWorkerRecord forwards a source-native record to the same durable
@@ -263,10 +296,13 @@ func (capture *capture) accept(record events.Record) error {
 	}
 	history = append(history, record.Detached())
 	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:     capture.request.RecordingID,
-		WorkerSessionID: capture.request.WorkerSessionID,
-		Topic:           capture.request.Topic,
-		Records:         history,
+		RecordingID:      capture.request.RecordingID,
+		WorkerSessionID:  capture.request.WorkerSessionID,
+		FactorySessionID: capture.request.FactorySessionID,
+		WorkIDs:          append([]string(nil), capture.request.WorkIDs...),
+		AttemptID:        capture.request.AttemptID,
+		Topic:            capture.request.Topic,
+		Records:          history,
 	})
 	if err != nil {
 		return err
@@ -275,6 +311,8 @@ func (capture *capture) accept(record events.Record) error {
 		RecordingID:      capture.request.RecordingID,
 		FactorySessionID: capture.request.FactorySessionID,
 		WorkerSessionID:  capture.request.WorkerSessionID,
+		WorkIDs:          append([]string(nil), capture.request.WorkIDs...),
+		AttemptID:        capture.request.AttemptID,
 		Record:           record.Detached(),
 	}); err != nil {
 		return fmt.Errorf("%w: position %d: %v", recordings.ErrWorkerRecordingPersistence, record.ID.Position, err)

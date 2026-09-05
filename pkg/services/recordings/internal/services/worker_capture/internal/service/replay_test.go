@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -35,6 +37,193 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	}
 	if !live.Complete || len(live.Records) != 3 || live.Records[2].ID.Position != 3 {
 		t.Fatalf("live projection = %#v, want complete opening/output/terminal history", live)
+	}
+}
+
+func TestFileWriterPersistsV2JSONLAndCatalogResolvesWorkerID(t *testing.T) {
+	const (
+		recordingID = "recording-v2-catalog"
+		sessionID   = "worker-v2-catalog"
+	)
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileWriter := writer.(*FileWriter)
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	for _, record := range []events.Record{
+		mustRecord(t, openingAppend(topic, sessionID), 1),
+		mustRecord(t, workerOutputAppend(topic, sessionID, 1, "message-1"), 2),
+		mustRecord(t, terminalAppend(topic, sessionID), 3),
+	} {
+		if err := writer.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{
+			RecordingID:      recordingID,
+			WorkerSessionID:  sessionID,
+			FactorySessionID: "factory-v2",
+			WorkIDs:          []string{"work-v2"},
+			AttemptID:        "attempt-v2",
+			Record:           record,
+		}); err != nil {
+			t.Fatalf("PersistWorkerRecord(%d): %v", record.ID.Position, err)
+		}
+	}
+
+	data, err := storage.ReadFile(fileWriter.v2Path(recordingID))
+	if err != nil {
+		t.Fatalf("read v2 artifact: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("v2 artifact lines = %d, want header, three records, and health: %s", len(lines), string(data))
+	}
+	wantKinds := []string{"header", "record", "record", "record", "health"}
+	for index, line := range lines {
+		var envelope struct {
+			SchemaVersion string `json:"schemaVersion"`
+			Kind          string `json:"kind"`
+		}
+		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+			t.Fatalf("decode v2 line %d: %v", index+1, err)
+		}
+		if envelope.SchemaVersion != workerRecordingV2SchemaVersion || envelope.Kind != wantKinds[index] {
+			t.Fatalf("v2 line %d = %#v, want schema %q kind %q", index+1, envelope, workerRecordingV2SchemaVersion, wantKinds[index])
+		}
+	}
+	if _, err := storage.ReadFile(fileWriter.path(recordingID)); err == nil {
+		t.Fatal("new Worker recording unexpectedly wrote a v1 snapshot")
+	}
+
+	reopened, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	historyReader := reopened.(recordings.WorkerRecordingHistoryReader)
+	snapshot, err := historyReader.LoadWorkerRecordingByWorkerSessionID(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecordingByWorkerSessionID(): %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != sessionID ||
+		snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusComplete ||
+		len(snapshot.Sessions[0].Records) != 3 {
+		t.Fatalf("Worker-ID snapshot = %#v, want complete three-record history", snapshot)
+	}
+	page, err := historyReader.ListWorkerRecordingProjections(context.Background(), recordings.WorkerRecordingListRequest{MaxResults: 1})
+	if err != nil {
+		t.Fatalf("ListWorkerRecordingProjections(): %v", err)
+	}
+	if len(page.Projections) != 1 || page.NextToken != "" || len(page.Diagnostics) != 0 ||
+		page.Projections[0].WorkerSessionID != sessionID || page.Projections[0].FactorySessionID != "factory-v2" ||
+		!containsString(page.Projections[0].WorkIDs, "work-v2") {
+		t.Fatalf("catalog page = %#v, want one complete Worker-ID projection without diagnostics", page)
+	}
+}
+
+func TestFileWriterCatalogPaginatesWorkerIDLookup(t *testing.T) {
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileWriter := writer.(*FileWriter)
+	const count = defaultWorkerRecordingPageSize + 7
+	for index := 0; index < count; index++ {
+		sessionID := fmt.Sprintf("worker-page-%03d", index)
+		recordingID := fmt.Sprintf("recording-page-%03d", index)
+		topic := events.Topic("worker-session/" + sessionID + "/events")
+		record := mustRecord(t, openingAppend(topic, sessionID), 1)
+		header, err := json.Marshal(workerRecordingV2Header{
+			SchemaVersion:   workerRecordingV2SchemaVersion,
+			Kind:            "header",
+			RecordingID:     recordingID,
+			WorkerSessionID: sessionID,
+			Topic:           topic,
+			Status:          recordings.WorkerRecordingStatusActive,
+		})
+		if err != nil {
+			t.Fatalf("encode catalog header %d: %v", index, err)
+		}
+		body, err := json.Marshal(workerRecordingV2Record{
+			SchemaVersion:   workerRecordingV2SchemaVersion,
+			Kind:            "record",
+			WorkerSessionID: sessionID,
+			Record:          record,
+		})
+		if err != nil {
+			t.Fatalf("encode catalog record %d: %v", index, err)
+		}
+		data := append(header, '\n')
+		data = append(data, body...)
+		data = append(data, '\n')
+		if err := storage.WriteFile(fileWriter.v2Path(recordingID), data); err != nil {
+			t.Fatalf("seed catalog artifact %d: %v", index, err)
+		}
+	}
+
+	reopened, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	historyReader := reopened.(recordings.WorkerRecordingHistoryReader)
+	snapshot, err := historyReader.LoadWorkerRecordingByWorkerSessionID(context.Background(), "worker-page-056")
+	if err != nil {
+		t.Fatalf("paginated Worker-ID lookup: %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].WorkerSessionID != "worker-page-056" {
+		t.Fatalf("paginated Worker-ID snapshot = %#v, want worker-page-056", snapshot)
+	}
+}
+
+func TestFileWriterCatalogReportsMalformedTailWithValidPrefix(t *testing.T) {
+	const (
+		recordingID = "recording-v2-malformed-tail"
+		sessionID   = "worker-v2-malformed-tail"
+	)
+	root := t.TempDir()
+	storage := platformreplay.NewLocal(runtime.GOOS)
+	writer, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := events.Topic("worker-session/" + sessionID + "/events")
+	for _, record := range []events.Record{
+		mustRecord(t, openingAppend(topic, sessionID), 1),
+		mustRecord(t, terminalAppend(topic, sessionID), 2),
+	} {
+		if err := writer.PersistWorkerRecord(context.Background(), recordings.WorkerRecordingRecord{
+			RecordingID: recordingID, WorkerSessionID: sessionID, Record: record,
+		}); err != nil {
+			t.Fatalf("seed Worker recording: %v", err)
+		}
+	}
+	fileWriter := writer.(*FileWriter)
+	if err := storage.AppendFile(fileWriter.v2Path(recordingID), []byte("{malformed-tail\n")); err != nil {
+		t.Fatalf("append malformed tail: %v", err)
+	}
+
+	reopened, err := NewFileWriter(storage, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(recordings.WorkerRecordingReader)
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("read valid prefix: %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusDegraded ||
+		snapshot.Sessions[0].Failure != "MALFORMED_TAIL" || len(snapshot.Sessions[0].Records) != 2 {
+		t.Fatalf("malformed-tail snapshot = %#v, want degraded valid prefix", snapshot)
+	}
+	historyReader := reopened.(recordings.WorkerRecordingHistoryReader)
+	page, err := historyReader.ListWorkerRecordingProjections(context.Background(), recordings.WorkerRecordingListRequest{MaxResults: 1})
+	if err != nil {
+		t.Fatalf("catalog malformed tail: %v", err)
+	}
+	if len(page.Projections) != 1 || page.Projections[0].Status != recordings.WorkerRecordingStatusDegraded || len(page.Diagnostics) != 1 ||
+		page.Diagnostics[0].Code != recordings.WorkerRecordingCatalogMalformedTail || page.Diagnostics[0].RecordingID != recordingID {
+		t.Fatalf("malformed-tail catalog = %#v, want degraded projection plus MALFORMED_TAIL diagnostic", page)
 	}
 }
 

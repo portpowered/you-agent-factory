@@ -160,13 +160,15 @@ func workerSessionTranscriptEndpoint(server, sessionID, workerSessionID, provide
 }
 
 type readJSONResponse struct {
-	AttemptID       string                  `json:"attemptId"`
-	Entries         []readJSONEntry         `json:"entries"`
-	ProviderSession readJSONProviderSession `json:"providerSession"`
-	State           string                  `json:"state"`
-	TurnID          *string                 `json:"turnId"`
-	WorkIDs         []string                `json:"workIds"`
-	WorkerSessionID string                  `json:"workerSessionId"`
+	AttemptID             string                   `json:"attemptId"`
+	Entries               []readJSONEntry          `json:"entries"`
+	ProviderSession       *readJSONProviderSession `json:"providerSession"`
+	RecordingHealth       string                   `json:"recordingHealth"`
+	RecordingHealthReason *string                  `json:"recordingHealthReason"`
+	State                 string                   `json:"state"`
+	TurnID                *string                  `json:"turnId"`
+	WorkIDs               []string                 `json:"workIds"`
+	WorkerSessionID       string                   `json:"workerSessionId"`
 }
 
 type readJSONProviderSession struct {
@@ -204,24 +206,36 @@ func encodeReadJSON(output io.Writer, response factoryapi.WorkerSessionTranscrip
 			Type: string(entry.Type),
 		}
 	}
+	var providerSession *readJSONProviderSession
+	if response.ProviderSession != nil {
+		providerSession = &readJSONProviderSession{
+			Provider: response.ProviderSession.Provider, Kind: response.ProviderSession.Kind, ID: response.ProviderSession.Id,
+		}
+	}
 	return json.NewEncoder(output).Encode(readJSONResponse{
-		AttemptID: response.AttemptId, Entries: entries,
-		ProviderSession: readJSONProviderSession{Provider: response.ProviderSession.Provider, Kind: response.ProviderSession.Kind, ID: response.ProviderSession.Id},
-		State:           response.State, TurnID: response.TurnId, WorkIDs: response.WorkIds, WorkerSessionID: response.WorkerSessionId,
+		AttemptID: response.AttemptId, Entries: entries, ProviderSession: providerSession,
+		RecordingHealth: string(response.RecordingHealth), RecordingHealthReason: response.RecordingHealthReason,
+		State: response.State, TurnID: response.TurnId, WorkIDs: response.WorkIds, WorkerSessionID: response.WorkerSessionId,
 	})
 }
 
 func renderRead(output io.Writer, response factoryapi.WorkerSessionTranscriptResponse) error {
 	provider := response.ProviderSession
+	var providerName, providerKind, providerID string
+	if provider != nil {
+		providerName, providerKind, providerID = provider.Provider, provider.Kind, provider.Id
+	}
 	fields := []struct{ label, value string }{
 		{"Worker Session ID", response.WorkerSessionId},
-		{"Provider", stringOrDashPtr(provider.Provider)},
-		{"Kind", stringOrDashPtr(provider.Kind)},
-		{"Provider Session ID", stringOrDashPtr(provider.Id)},
+		{"Provider", stringOrDashPtr(providerName)},
+		{"Kind", stringOrDashPtr(providerKind)},
+		{"Provider Session ID", stringOrDashPtr(providerID)},
 		{"Work IDs", joinOrDash(response.WorkIds)},
 		{"Turn ID", stringOrDash(response.TurnId)},
 		{"Attempt ID", stringOrDashPtr(response.AttemptId)},
 		{"State", stringOrDashPtr(response.State)},
+		{"Recording Health", stringOrDashPtr(string(response.RecordingHealth))},
+		{"Recording Health Reason", stringOrDash(response.RecordingHealthReason)},
 	}
 	for _, field := range fields {
 		if _, err := fmt.Fprintf(output, "%s:\t%s\n", field.label, field.value); err != nil {

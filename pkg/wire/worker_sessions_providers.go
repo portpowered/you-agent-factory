@@ -97,17 +97,20 @@ func provideWorkerRecordingWriter(
 }
 
 const (
-	workerRecordingTemporaryDirectory = "you-worker-recordings"
-	workerRecordingHomeDirectory      = ".you-agent-factory"
-	workerRecordingStoreDirectory     = "worker-sessions"
+	workerRecordingHomeDirectory  = ".you-agent-factory"
+	workerRecordingStoreDirectory = "worker-sessions"
 )
 
-// workerRecordingRoot keeps the pre-characterization temporary default until
-// the durable home-root cutover is owned by the next story. An explicitly
-// supplied resolver is the isolated scenario seam used by functional callers.
+// workerRecordingRoot places durable Worker history under the operator home.
+// An explicitly supplied resolver remains the isolated scenario seam used by
+// functional callers and embedding applications.
 func workerRecordingRoot(edges serviceedges.Edges) (string, error) {
 	if edges.WorkerSessionResolveHomeDirectory == nil {
-		return filepath.Join(os.TempDir(), workerRecordingTemporaryDirectory), nil
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve Worker Session recording home directory: %w", err)
+		}
+		return filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory), nil
 	}
 
 	home, err := edges.WorkerSessionResolveHomeDirectory()

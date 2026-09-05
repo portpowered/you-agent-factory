@@ -40,11 +40,41 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
+## Durable Worker-ID history and finite event captures
+
+Worker Session history is written as bounded, append-oriented Recordings data
+under the configured home root at `.you-agent-factory/worker-sessions`. New
+writes use the versioned v2 JSONL format; older v1 snapshot files remain
+readable, but temporary files from an earlier home are not discovered. The
+Worker Session ID is the durable lookup key, so a normal process restart does
+not require the provider's session store for `list`, `show`, `stream`, or
+`read`.
+
+Use the canonical Worker-ID form for a provider-neutral replay:
+
+```bash
+you --server http://localhost:7437 worker-sessions stream \
+  --worker-session-id <worker-session-id> --replay-only --output json
+you --server http://localhost:7437 worker-sessions read \
+  --worker-session-id <worker-session-id> --output json
+```
+
+The API and SSE frames may return `providerSession: null` when only durable
+Worker evidence is available. Inspect `recordingHealth` on the observation,
+transcript, and replay summary: `COMPLETE` means the terminal history is
+present, `DEGRADED` means a readable prefix has an explicit failure, and
+`INCOMPLETE` means the prefix has no confirmed terminal completion.
+`recordingHealthReason` identifies the bounded tail, write, retention, or
+interruption condition when one is known. A Worker-ID stream cursor is scoped
+to the Worker ID and its stable stream generation; a future, stale, foreign,
+or unavailable cursor is reported as a typed error rather than silently
+restarting at the beginning.
+
 ## Finite Worker Session event captures
 
 Use `worker-sessions stream --replay-only` when you need a redirect-safe
-snapshot of one provider-issued Worker Session without attaching a live
-follower:
+snapshot of one Worker Session without attaching a live follower. The
+provider-keyed form remains available for compatibility:
 
 ```bash
 you --server http://localhost:7437 worker-sessions stream \
