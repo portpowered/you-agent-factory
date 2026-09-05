@@ -2,6 +2,7 @@ package localai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -13,8 +14,10 @@ import (
 )
 
 const (
-	localAIHealthMethod  = "/backend.Backend/Health"
-	localAIPredictMethod = "/backend.Backend/Predict"
+	localAIHealthMethod    = "/backend.Backend/Health"
+	localAILoadModelMethod = "/backend.Backend/LoadModel"
+	localAIPredictMethod   = "/backend.Backend/Predict"
+	localAIModelBatchSize  = 512
 )
 
 type invocationEndpointContextKey struct{}
@@ -40,9 +43,10 @@ func NewPinnedGRPCProtocolClient(dialer platformgrpc.Dialer) ProtocolClient {
 }
 
 // NewPinnedGRPCHostProtocolNegotiator creates the matching readiness probe
-// for the same LocalAI transport. Health is the pinned protocol's only
-// readiness operation; the requested backend identity remains a Models-owned
-// fact because the wire reply does not carry a backend selector.
+// for the same LocalAI transport. It checks Health and, when a model path is
+// available, loads that model before declaring the host ready. The requested
+// backend identity remains a Models-owned fact because the wire reply does not
+// carry a backend selector.
 func NewPinnedGRPCHostProtocolNegotiator(
 	dialer platformgrpc.Dialer,
 ) modelseffects.HostProtocolNegotiator {
@@ -67,10 +71,18 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if negotiator.dialer == nil {
+		return modelseffects.HostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
 	connection, err := negotiator.dialer.Dial(ctx, endpoint)
 	if err != nil {
 		return modelseffects.HostProtocolNegotiationResult{}, fmt.Errorf(
 			"%w: LocalAI health connection failed: %v", models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	if connection == nil {
+		return modelseffects.HostProtocolNegotiationResult{}, fmt.Errorf(
+			"%w: LocalAI health connection is unavailable", models.ErrHostProtocolIncompatible,
 		)
 	}
 	defer func() { _ = connection.Close() }()
@@ -88,11 +100,59 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 			"%w: LocalAI health request failed: %v", models.ErrHostProtocolIncompatible, err,
 		)
 	}
+	if strings.TrimSpace(request.ModelPath) != "" {
+		if err := loadModel(ctx, connection, request); err != nil {
+			return modelseffects.HostProtocolNegotiationResult{}, err
+		}
+	}
 	return modelseffects.HostProtocolNegotiationResult{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         request.Backend,
 		Ready:           true,
 	}, nil
+}
+
+func loadModel(
+	ctx context.Context,
+	connection platformgrpc.Connection,
+	request modelseffects.HostProtocolNegotiationRequest,
+) error {
+	payload, err := proto.Marshal(&ModelOptions{
+		Model:     request.ModelName,
+		NBatch:    localAIModelBatchSize,
+		ModelFile: strings.TrimSpace(request.ModelPath),
+	})
+	if err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI model load request could not be serialized: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	responsePayload, err := connection.Invoke(ctx, localAILoadModelMethod, payload)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return fmt.Errorf(
+			"%w: LocalAI model load request failed: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	response := &Result{}
+	if err := proto.Unmarshal(responsePayload, response); err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI model load response was malformed: %v",
+			models.ErrHostProtocolIncompatible, err,
+		)
+	}
+	if !response.Success {
+		message := strings.TrimSpace(response.Message)
+		if message == "" {
+			message = "LocalAI model load response was unsuccessful"
+		}
+		return fmt.Errorf("%w: %s", models.ErrHostProtocolIncompatible, message)
+	}
+	return nil
 }
 
 type grpcProtocolClient struct {
@@ -113,6 +173,9 @@ func (client grpcProtocolClient) Predict(
 	if strings.TrimSpace(endpoint) == "" {
 		return PredictResponse{}, protocolFailure("LocalAI Predict endpoint is unavailable", nil)
 	}
+	if client.dialer == nil {
+		return PredictResponse{}, protocolFailure("LocalAI Predict dialer is unavailable", models.ErrUnavailable)
+	}
 	options, err := predictOptions(request)
 	if err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict request could not be encoded", err)
@@ -124,6 +187,9 @@ func (client grpcProtocolClient) Predict(
 	connection, err := client.dialer.Dial(ctx, endpoint)
 	if err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict connection failed", err)
+	}
+	if connection == nil {
+		return PredictResponse{}, protocolFailure("LocalAI Predict connection is unavailable", models.ErrUnavailable)
 	}
 	defer func() { _ = connection.Close() }()
 	responsePayload, err := connection.Invoke(ctx, localAIPredictMethod, payload)
@@ -137,8 +203,18 @@ func (client grpcProtocolClient) Predict(
 	if err := proto.Unmarshal(responsePayload, response); err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict response was malformed", err)
 	}
+	text := string(response.Message)
+	if text == "" {
+		var builder strings.Builder
+		for _, delta := range response.GetChatDeltas() {
+			if delta != nil {
+				builder.WriteString(delta.GetContent())
+			}
+		}
+		text = builder.String()
+	}
 	return PredictResponse{
-		Text:  string(response.Message),
+		Text:  text,
 		Usage: usageJSON(response),
 	}, nil
 }
@@ -146,10 +222,7 @@ func (client grpcProtocolClient) Predict(
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
 	for _, input := range request.Inputs {
-		value := input.Content
-		if value == "" {
-			value = input.Reference
-		}
+		value := predictInputValue(input)
 		switch input.Modality {
 		case models.ModalityImage:
 			options.Images = append(options.Images, value)
@@ -175,6 +248,22 @@ func predictOptions(request PredictRequest) (*PredictOptions, error) {
 		options.Metadata[name] = string(value)
 	}
 	return options, nil
+}
+
+// predictInputValue maps the public byte-preserving content carrier to the
+// pinned LocalAI protobuf convention. LocalAI's media fields are protobuf
+// strings containing base64 data; references remain references because the
+// backend may resolve them from its own storage.
+func predictInputValue(input ProtocolInput) string {
+	if input.Content == "" {
+		return input.Reference
+	}
+	switch input.Modality {
+	case models.ModalityImage, models.ModalityAudio, models.ModalityVideo:
+		return base64.StdEncoding.EncodeToString([]byte(input.Content))
+	default:
+		return input.Content
+	}
 }
 
 func usageJSON(response *Reply) string {

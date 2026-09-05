@@ -10,6 +10,30 @@ package backend;
 
 message HealthMessage {}
 
+message ModelOptions {
+  string Model = 1;
+  int32 NBatch = 4;
+  string ModelFile = 21;
+}
+
+message Result {
+  string message = 1;
+  bool success = 2;
+}
+
+message ToolCallDelta {
+  int32 index = 1;
+  string id = 2;
+  string name = 3;
+  string arguments = 4;
+}
+
+message ChatDelta {
+  string content = 1;
+  string reasoning_content = 2;
+  repeated ToolCallDelta tool_calls = 3;
+}
+
 message PredictOptions {
   string Prompt = 1;
   repeated string Images = 42;
@@ -22,4 +46,35 @@ message Reply {
   bytes message = 1;
   int32 tokens = 2;
   int32 prompt_tokens = 3;
+  repeated ChatDelta chat_deltas = 8;
+}
+
+message EmbeddingResult {
+  repeated float embeddings = 1;
+}
+
+message TranscriptRequest {
+  string dst = 2;
+  string language = 3;
+  uint32 threads = 4;
+  bool translate = 5;
+  bool diarize = 6;
+  string prompt = 7;
+  float temperature = 8;
+  repeated string timestamp_granularities = 9;
+  bool stream = 10;
+}
+
+message TranscriptResult {
+  repeated TranscriptSegment segments = 1;
+  string text = 2;
+  string language = 3;
+  float duration = 4;
+}
+
+message TranscriptSegment {
+  int32 id = 1;
+  int64 start = 2;
+  int64 end = 3;
+  string text = 4;
 }

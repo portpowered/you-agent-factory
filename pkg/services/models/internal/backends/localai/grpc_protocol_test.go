@@ -2,6 +2,8 @@ package localai
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"net"
 	"testing"
 
@@ -41,11 +43,60 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 		t.Fatalf("transport facts = method %q, closed %d, want Predict and one close", connection.method, connection.closed)
 	}
 	if connection.request.Prompt != request.Prompt ||
-		!equalStrings(connection.request.Images, []string{"image-a.png", "image-b.png"}) ||
+		!equalStrings(connection.request.Images, []string{
+			base64.StdEncoding.EncodeToString([]byte("image-a.png")),
+			base64.StdEncoding.EncodeToString([]byte("image-b.png")),
+		}) ||
 		!equalStrings(connection.request.Audios, []string{"audio-a.wav"}) ||
-		!equalStrings(connection.request.Videos, []string{"video-a.mp4"}) ||
+		!equalStrings(connection.request.Videos, []string{
+			base64.StdEncoding.EncodeToString([]byte("video-a.mp4")),
+		}) ||
 		connection.request.Metadata["temperature"] != "0.2" {
 		t.Fatal("pinned request fields do not preserve prompt/media order/metadata")
+	}
+}
+
+func TestPinnedGRPCProtocolClientPreservesBinaryMediaThroughBase64Fields(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	image := string([]byte{0x00, 0xff, 0x10, 0x80, 0x7f})
+	if _, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Inputs: []ProtocolInput{{Modality: models.ModalityImage, Content: image}}},
+	); err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if len(connection.request.Images) != 1 {
+		t.Fatalf("encoded images = %#v, want one image", connection.request.Images)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(connection.request.Images[0])
+	if err != nil {
+		t.Fatalf("DecodeString(image) error = %v", err)
+	}
+	if string(decoded) != image {
+		t.Fatalf("decoded image = %v, want original bytes %v", decoded, []byte(image))
+	}
+}
+
+func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{ChatDeltas: []*ChatDelta{
+		{Content: "generated "}, {Content: "from chat deltas"},
+	}})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if response.Text != "generated from chat deltas" {
+		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
 	}
 }
 
@@ -67,6 +118,67 @@ func TestPinnedGRPCHostProtocolNegotiatorUsesHealthRPC(t *testing.T) {
 	}
 	if connection.method != localAIHealthMethod || connection.closed != 1 {
 		t.Fatalf("health transport facts = method %q, closed %d, want Health and one close", connection.method, connection.closed)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-llamacpp",
+		ModelName:       "llm",
+		ModelPath:       `C:\models\llm\model.gguf`,
+	})
+	if err != nil {
+		t.Fatalf("Negotiate() error = %v", err)
+	}
+	if !result.Ready || !equalStrings(connection.methods, []string{localAIHealthMethod, localAILoadModelMethod}) || connection.closed != 1 {
+		t.Fatalf("load transport facts = methods %#v, ready %t, closed %d, want Health/LoadModel/ready/one close", connection.methods, result.Ready, connection.closed)
+	}
+	if connection.loadRequest.GetModel() != "llm" ||
+		connection.loadRequest.GetModelFile() != `C:\models\llm\model.gguf` ||
+		connection.loadRequest.GetNBatch() != localAIModelBatchSize {
+		t.Fatalf(
+			"load request model=%q modelFile=%q nBatch=%d, want model name, nonzero batch size, and exact model path",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetNBatch(),
+		)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorRejectsFailedOrMalformedLoadModel(t *testing.T) {
+	t.Parallel()
+
+	failed, _ := proto.Marshal(&Result{Message: "model rejected"})
+	for _, test := range []struct {
+		name     string
+		response []byte
+	}{
+		{name: "unsuccessful result", response: failed},
+		{name: "malformed result", response: []byte{0xff}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			connection := &recordingGRPCConnection{response: test.response}
+			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+			result, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Backend:         "localai-llamacpp",
+				ModelName:       "llm",
+				ModelPath:       `C:\models\llm\model.gguf`,
+			})
+			if result.Ready || !errors.Is(err, models.ErrHostProtocolIncompatible) {
+				t.Fatalf("Negotiate() = result %#v, error %v, want typed protocol failure", result, err)
+			}
+			if !equalStrings(connection.methods, []string{localAIHealthMethod, localAILoadModelMethod}) || connection.closed != 1 {
+				t.Fatalf("load failure transport facts = methods %#v, closed %d, want Health/LoadModel and one close", connection.methods, connection.closed)
+			}
+		})
 	}
 }
 
@@ -105,10 +217,12 @@ func (dialer recordingGRPCDialer) Dial(context.Context, string) (platformgrpc.Co
 }
 
 type recordingGRPCConnection struct {
-	method   string
-	request  PredictOptions
-	response []byte
-	closed   int
+	method      string
+	methods     []string
+	request     PredictOptions
+	loadRequest ModelOptions
+	response    []byte
+	closed      int
 }
 
 func (connection *recordingGRPCConnection) Invoke(
@@ -117,8 +231,14 @@ func (connection *recordingGRPCConnection) Invoke(
 	payload []byte,
 ) ([]byte, error) {
 	connection.method = method
+	connection.methods = append(connection.methods, method)
 	if method == localAIPredictMethod {
 		if err := proto.Unmarshal(payload, &connection.request); err != nil {
+			return nil, err
+		}
+	}
+	if method == localAILoadModelMethod {
+		if err := proto.Unmarshal(payload, &connection.loadRequest); err != nil {
 			return nil, err
 		}
 	}
