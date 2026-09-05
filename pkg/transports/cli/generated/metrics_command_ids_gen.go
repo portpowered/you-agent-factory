@@ -6,5 +6,6 @@ package generated
 // contracts/cli/commands.json for the runtime-metrics CLI family.
 var MetricsFamilyCommandIDs = []string{
 	"you.metrics",
+	"you.metrics.session",
 	"you.metrics.costs",
 }

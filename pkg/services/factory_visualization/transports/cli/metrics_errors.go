@@ -27,6 +27,12 @@ const (
 	// MetricsScopeUnavailableCode identifies a known session with no retained
 	// metrics identity.
 	MetricsScopeUnavailableCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
+	// MetricsSessionEventsFailedCode identifies a failure reading the bounded
+	// canonical Factory Event replay required by the session report.
+	MetricsSessionEventsFailedCode = "METRICS_SESSION_EVENTS_FAILED"
+	// MetricsUnsupportedSessionOptionCode identifies a session flag owned by a
+	// later metrics lens/detail slice and not implemented by this report spine.
+	MetricsUnsupportedSessionOptionCode = "METRICS_UNSUPPORTED_SESSION_OPTION"
 )
 
 const (
@@ -97,6 +103,8 @@ func (err *MetricsError) CLIErrorFamily() factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyBadRequest
 	case MetricsSessionNotFoundCode:
 		return factoryapi.ErrorFamilyNotFound
+	case MetricsUnsupportedSessionOptionCode:
+		return factoryapi.ErrorFamilyBadRequest
 	}
 	return factoryapi.ErrorFamilyInternalServerError
 }

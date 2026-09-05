@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Operation is the injected HTTP-backed operation for one base metrics report.
@@ -26,6 +28,29 @@ type Client interface {
 
 // ClientFactory constructs one generated client for the selected server.
 type ClientFactory func(string) (Client, error)
+
+// SessionEventRequest is the narrow server/event input needed by the metrics
+// report. The owning CLI root adapts the existing run replay operation to this
+// contract without making the visualization package depend on run.
+type SessionEventRequest struct {
+	Server      string
+	SessionID   string
+	Diagnostics io.Writer
+	Verbose     bool
+}
+
+// SessionEventStream is a finite retained Factory Event replay. Implementations
+// must honor context cancellation and return io.EOF after the bounded replay.
+type SessionEventStream interface {
+	Next(context.Context) (factoryapi.FactoryEvent, error)
+	Close() error
+}
+
+// SessionEventOperation opens the server-owned canonical event lane for one
+// selected Factory Session.
+type SessionEventOperation interface {
+	OpenFactorySessionEvents(context.Context, SessionEventRequest) (SessionEventStream, error)
+}
 
 // NewOperation binds the generated HTTP client factory to the base metrics
 // command. It renders only after the complete report and any error response
@@ -53,6 +78,9 @@ func NewOperation(factory ClientFactory) Operation {
 			return metricsResponseError(response)
 		}
 		result := metricsReportFromAPI(*response.JSON200)
+		if config.SessionReport {
+			return runMetricsSessionOperation(ctx, config, *response.JSON200)
+		}
 		groupBy, err := normalizeMetricsGroupBy(config.GroupBy)
 		if err != nil {
 			return err
@@ -66,6 +94,152 @@ func NewOperation(factory ClientFactory) Operation {
 		}
 		return nil
 	}
+}
+
+const maxMetricsSessionEvents = 100_000
+
+func runMetricsSessionOperation(
+	ctx context.Context,
+	config MetricsConfig,
+	report generatedclient.MetricsReport,
+) error {
+	if err := validateMetricsSessionConfig(config); err != nil {
+		return err
+	}
+	if err := validateMetricsSessionScope(report, config.SessionID); err != nil {
+		return err
+	}
+	events, err := readMetricsSessionEvents(ctx, config)
+	if err != nil {
+		return err
+	}
+	document, err := reduceMetricsSession(config.SessionID, events)
+	if err != nil {
+		return newMetricsError(
+			MetricsSessionEventsFailedCode,
+			"read Factory Session events: retained event data was invalid",
+			err,
+		)
+	}
+	output, err := renderMetricsSessionOutput(document, config.JSON)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(config.Output, output); err != nil {
+		return fmt.Errorf("write metrics session output: %w", err)
+	}
+	return nil
+}
+
+func validateMetricsSessionConfig(config MetricsConfig) error {
+	if strings.TrimSpace(config.SessionID) == "" {
+		return newMetricsError(
+			MetricsInvalidRequestCode,
+			"metrics session requires a non-empty Factory Session ID",
+			nil,
+		)
+	}
+	if lens := strings.TrimSpace(config.SessionLens); lens != "" {
+		return newMetricsError(
+			MetricsUnsupportedSessionOptionCode,
+			fmt.Sprintf("unsupported metrics session lens %q: only the default lens is available", lens),
+			nil,
+		)
+	}
+	if config.SessionByWorker || config.SessionByDispatch {
+		return newMetricsError(
+			MetricsUnsupportedSessionOptionCode,
+			"metrics session detail flags are not available in the default report",
+			nil,
+		)
+	}
+	if config.SessionEvents == nil {
+		return newMetricsError(
+			MetricsSessionEventsFailedCode,
+			"read Factory Session events: canonical event operation is required",
+			nil,
+		)
+	}
+	return nil
+}
+
+func validateMetricsSessionScope(report generatedclient.MetricsReport, sessionID string) error {
+	want := strings.TrimSpace(sessionID)
+	kind := strings.ToUpper(strings.TrimSpace(report.Scope.Kind))
+	got := metricStringFromAPI(report.Scope.FactorySessionId)
+	if kind != "FACTORY_SESSION" || got != want {
+		return newMetricsError(
+			MetricsScopeUnavailableCode,
+			"the selected Factory Session metrics scope was not returned by the server",
+			nil,
+		)
+	}
+	return nil
+}
+
+func readMetricsSessionEvents(ctx context.Context, config MetricsConfig) ([]factoryapi.FactoryEvent, error) {
+	stream, err := config.SessionEvents.OpenFactorySessionEvents(ctx, SessionEventRequest{
+		Server:      strings.TrimSpace(config.Server),
+		SessionID:   strings.TrimSpace(config.SessionID),
+		Diagnostics: config.Diagnostics,
+		Verbose:     config.Verbose,
+	})
+	if err != nil {
+		return nil, newMetricsSessionEventsError(err)
+	}
+	if stream == nil {
+		return nil, newMetricsError(
+			MetricsSessionEventsFailedCode,
+			"read Factory Session events: operation returned an empty stream",
+			nil,
+		)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = stream.Close()
+		}
+	}()
+	events := make([]factoryapi.FactoryEvent, 0)
+	for len(events) < maxMetricsSessionEvents {
+		event, nextErr := stream.Next(ctx)
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			return nil, newMetricsSessionEventsError(nextErr)
+		}
+		if event.Context.SessionId != nil && strings.TrimSpace(*event.Context.SessionId) != strings.TrimSpace(config.SessionID) {
+			return nil, newMetricsError(
+				MetricsSessionEventsFailedCode,
+				"read Factory Session events: the server returned an event from another session",
+				nil,
+			)
+		}
+		events = append(events, event)
+	}
+	if len(events) == maxMetricsSessionEvents {
+		return nil, newMetricsError(
+			MetricsSessionEventsFailedCode,
+			"read Factory Session events: retained replay exceeded the safety bound",
+			nil,
+		)
+	}
+	if err := stream.Close(); err != nil {
+		return nil, newMetricsSessionEventsError(err)
+	}
+	closed = true
+	return events, nil
+}
+
+func newMetricsSessionEventsError(err error) error {
+	message := "read Factory Session events: canonical replay failed"
+	if errors.Is(err, context.Canceled) {
+		message = "read Factory Session events: request canceled"
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		message = "read Factory Session events: request timed out"
+	}
+	return newMetricsError(MetricsSessionEventsFailedCode, message, err)
 }
 
 // RunMetricsOperation invokes the generated-client-backed operation after
@@ -92,6 +266,11 @@ func validateMetricsOperationConfig(ctx context.Context, config MetricsConfig) e
 	}
 	if _, err := normalizeMetricsGroupBy(config.GroupBy); err != nil {
 		return err
+	}
+	if config.SessionReport {
+		if err := validateMetricsSessionConfig(config); err != nil {
+			return err
+		}
 	}
 	return nil
 }

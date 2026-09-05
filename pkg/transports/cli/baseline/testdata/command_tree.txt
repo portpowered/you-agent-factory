@@ -15,6 +15,7 @@ you factory update	update <name>	you factory
 you init	init	you
 you metrics	metrics	you
 you metrics costs	costs	you metrics
+you metrics session	session <session-id>	you metrics
 you models	models	you
 you models inspect	inspect <model-name>	you models
 you models invoke	invoke <model-name>	you models
