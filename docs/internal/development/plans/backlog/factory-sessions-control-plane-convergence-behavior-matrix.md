@@ -18,12 +18,12 @@ still own their declared semantic edges.
 | --- | --- |
 | Packet | `FSCP-01` |
 | Current branch | `system-convergence-fscp-01-characterize-legacy-behavior` |
-| Current main / HEAD audited | `5165e8bd6e63f0405252c099dbbc99b159e3ed21` |
+| Current code HEAD audited (before documentation freeze) | `f1fc6a7a69a5260cf5059f1efae239e17ae5cbf2` |
 | Governing source plan | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/source-plan.md` — `FSCP-01 — Characterize behavior across legacy entrypoints` |
 | Source-plan SHA-256 | `058BF1A1E74CBC64DFEDB89BB83F0CBC3B805F941D489BB24BD207E00371794A` |
 | Reconciliation dependency | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/state.md` — `SC-01` current reconciliation |
 | Contract changes in this packet | None |
-| Runtime tests run for this packet | Stories 002–003 owner and focused Factory Sessions functional suites; exact commands and observed outcomes are recorded below |
+| Runtime tests run for this packet | Stories 002–004 owner and focused Factory Sessions, Recordings, transport, session/event, and changed-package race suites; exact commands and observed outcomes are recorded below |
 
 ### Disposition vocabulary
 
@@ -417,6 +417,70 @@ explicit response-stream teardown, restart/replay field parity across every
 dispatch path, transport mapping, real provider or persistence behavior, or
 independent project validation.
 
+### Story 004 procedure and observed evidence
+
+Story 004 reconciled every current transport row, T-01 through T-13, against
+its exact package or functional witness. Each row already had a current owner
+test covering the documented identity, status, result, control, error, or
+ordering cell; no missing transport assertion was found, so no transport test
+or production file was added. T-13 remains `UNSUPPORTED` because the current
+transport contracts intentionally do not expose canonical event or artifact
+operations.
+
+The integrated hermetic proof is the composition of these root-built
+witnesses:
+
+- `tests/functional/sessions/root_composition/process_reuse_inert_test.go:TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` proves reusable
+  process construction, two terminal outcomes, response/canonical stream
+  identity, cleanup, and an injected start failure surfaced without a success
+  payload after the process has handled prior sessions.
+- `tests/functional/transport/http/server/concurrent_requests_test.go:TestAPIConcurrentSessionRequestsRemainIsolated`
+  proves two explicit sessions remain correlated during overlapping work.
+- `tests/functional/events/response_events/concurrent_session_isolation_test.go:TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor`
+  proves concurrent response streams retain session identity and cursor order.
+- The story-002 lifecycle witness, story-003 canonical/artifact witness, and
+  story-003 dispatch-provenance witness prove the corresponding public result,
+  canonical, artifact, and dispatch fields without requiring one fixture to
+  expose every authority at once.
+- T-01 through T-12 retain the exact HTTP, CLI, ACP, and MCP mappings listed in
+  the transport matrix; T-13 records the intentional unsupported surface.
+
+Exact verification commands and observed results:
+
+```text
+go test ./pkg/transports/http/... ./pkg/transports/cli/... ./pkg/transports/acp/... ./pkg/transports/mcp/... -count=1 -timeout 10m
+go test ./tests/functional/transport/http/... ./tests/functional/transport/cli/... ./tests/functional/transport/acp/... ./tests/functional/transport/mcp/... -count=1 -timeout 15m
+go test ./pkg/services/factory_sessions/... -count=1 -timeout 10m
+go test ./pkg/services/recordings/... -count=1 -timeout 10m
+go test ./tests/functional/sessions/... -count=1 -timeout 15m
+go test ./tests/functional/events/... -count=1 -timeout 15m
+go test -race ./tests/functional/events/factory_events ./tests/functional/sessions/execution ./tests/functional/sessions/lifecycle ./pkg/services/factory_sessions/... -count=1 -timeout 20m
+go test -race ./pkg/services/recordings/... -count=1 -timeout 20m
+go test -race ./tests/functional/transport/http/... ./tests/functional/transport/cli/... ./tests/functional/transport/acp/... ./tests/functional/transport/mcp/... ./tests/functional/events/response_events -count=1 -timeout 20m
+make test
+make lint
+```
+
+- All focused transport package and functional transport commands passed.
+  Factory Sessions, Recordings, session, event, and all three changed-surface
+  race commands also passed. `make test` passed.
+- The backend-size target passed after splitting a canonical witness helper;
+  the remaining Go/static lint targets passed. `make lint` could not complete
+  green in this checkout because `ui-lint` cannot resolve the absent
+  `ui/node_modules/@biomejs/biome/bin/biome`, `ui-deadcode` has no existing
+  `knip` binary under its `--no-install` policy, and `deadcode` reports the
+  repository baseline drift `3080` baseline findings versus `3078` current.
+  No dependency download or baseline rewrite is in scope for this packet.
+- No browser, paid, binary-artifact, real-provider, or persistence edge was
+  applicable or claimed. The changed-file allowlist remains the matrix and
+  unreserved functional test files only; no production, generated, public
+  contract, or persisted-schema file changed.
+
+This completes FSCP01-TRANSPORT-005 at the hermetic implementation boundary.
+It does not claim clean-room validation, real artifact/process/persistence
+behavior, blind customer validation, independent engineering validation, or
+later convergence work.
+
 ### Later run declarations
 
 Each semantic run must record the following before claiming a row:
@@ -445,6 +509,7 @@ Each semantic run must record the following before claiming a row:
    ephemeral stream.
 2. Restart/replay dispatch field parity remains `INCONCLUSIVE`/`UNPROVEN`
    where the current tests do not assert each field across every handoff path.
-3. Transport mapping and final integrated proof remain owned by story 004.
+3. Transport rows and the final hermetic integrated proof are recorded above;
+   the unsupported T-13 surface remains intentionally non-comparable.
 4. Independent project validation, final acceptance, and any real-provider
    artifact behavior are later gates; this packet does not claim them.
