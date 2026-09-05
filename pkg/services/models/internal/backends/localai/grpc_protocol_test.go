@@ -6,12 +6,15 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	grpcgo "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -98,6 +101,106 @@ func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *te
 	}
 	if response.Text != "generated from chat deltas" {
 		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
+	}
+}
+
+func TestPinnedEmbeddingBackendMapsTextParametersAndResponse(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&EmbeddingResult{
+		Embeddings: []float32{0.1, -0.2, 0.3},
+	})
+	backend := NewPinnedEmbeddingBackend(recordingGRPCDialer{connection: connection})
+	response, err := backend(
+		WithInvocationEndpoint(context.Background(), "grpc://127.0.0.1:50051"),
+		models.EmbeddingBackendRequest{
+			Text:       "Find similar work",
+			Parameters: map[string]any{"normalize": true, "dimensions": 3},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Embedding() error = %v", err)
+	}
+	if len(response.Embeddings) != 3 || response.Embeddings[0] != float64(float32(0.1)) ||
+		response.Embeddings[1] != float64(float32(-0.2)) {
+		t.Fatalf("Embedding() response = %#v, want three mapped values", response.Embeddings)
+	}
+	if connection.method != localAIEmbeddingMethod || connection.closed != 1 {
+		t.Fatalf("embedding transport facts = method %q, closed %d, want Embedding and one close", connection.method, connection.closed)
+	}
+	if connection.embeddingRequest.GetPrompt() != "Find similar work" ||
+		connection.embeddingRequest.GetMetadata()["normalize"] != "true" ||
+		connection.embeddingRequest.GetMetadata()["dimensions"] != "3" {
+		t.Fatalf("embedding request prompt=%q metadata=%v, want prompt and JSON metadata", connection.embeddingRequest.GetPrompt(), connection.embeddingRequest.GetMetadata())
+	}
+}
+
+func TestPinnedEmbeddingBackendFailsClosedWithoutEndpoint(t *testing.T) {
+	t.Parallel()
+
+	backend := NewPinnedEmbeddingBackend(recordingGRPCDialer{connection: &recordingGRPCConnection{}})
+	_, err := backend(context.Background(), models.EmbeddingBackendRequest{Text: "secret input"})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol {
+		t.Fatalf("Embedding() error = %v, failure = %#v, want typed backend-protocol failure", err, failure)
+	}
+	if strings.Contains(err.Error(), "secret input") {
+		t.Fatalf("Embedding() error leaked input: %v", err)
+	}
+}
+
+func TestPinnedEmbeddingBackendClassifiesTransportFailures(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		cause   error
+		class   models.InvocationFailureClass
+		message string
+	}{
+		{
+			name:    "backend unavailable",
+			cause:   status.Error(codes.Unavailable, "backend stopped"),
+			class:   models.InvocationFailureClassBackendReadiness,
+			message: "LocalAI backend is unavailable",
+		},
+		{
+			name:    "protocol mismatch",
+			cause:   status.Error(codes.FailedPrecondition, "wrong protocol"),
+			class:   models.InvocationFailureClassBackendProtocol,
+			message: "LocalAI backend protocol is incompatible",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			connection := &recordingGRPCConnection{invokeErr: test.cause}
+			backend := NewPinnedEmbeddingBackend(recordingGRPCDialer{connection: connection})
+			_, err := backend(
+				WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+				models.EmbeddingBackendRequest{Text: "query"},
+			)
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != test.class || !strings.Contains(failure.Message, test.message) {
+				t.Fatalf("Embedding() error = %v, failure = %#v, want %s containing %q", err, failure, test.class, test.message)
+			}
+			if connection.closed != 1 {
+				t.Fatalf("connection closes = %d, want one close after transport failure", connection.closed)
+			}
+		})
+	}
+}
+
+func TestPinnedEmbeddingBackendReturnsContextCancellationBeforeDial(t *testing.T) {
+	dialer := &countingEmbeddingDialer{}
+	backend := NewPinnedEmbeddingBackend(dialer)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := backend(WithInvocationEndpoint(ctx, "127.0.0.1:50051"), models.EmbeddingBackendRequest{Text: "query"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Embedding() error = %v, want context cancellation", err)
+	}
+	if dialer.calls != 0 {
+		t.Fatalf("dial calls = %d, want no dial after cancellation", dialer.calls)
 	}
 }
 
@@ -220,12 +323,14 @@ func (dialer recordingGRPCDialer) Dial(context.Context, string) (platformgrpc.Co
 }
 
 type recordingGRPCConnection struct {
-	method      string
-	methods     []string
-	request     PredictOptions
-	loadRequest ModelOptions
-	response    []byte
-	closed      int
+	method           string
+	methods          []string
+	request          PredictOptions
+	embeddingRequest PredictOptions
+	loadRequest      ModelOptions
+	response         []byte
+	invokeErr        error
+	closed           int
 }
 
 func (connection *recordingGRPCConnection) Invoke(
@@ -235,8 +340,16 @@ func (connection *recordingGRPCConnection) Invoke(
 ) ([]byte, error) {
 	connection.method = method
 	connection.methods = append(connection.methods, method)
+	if connection.invokeErr != nil {
+		return nil, connection.invokeErr
+	}
 	if method == localAIPredictMethod {
 		if err := proto.Unmarshal(payload, &connection.request); err != nil {
+			return nil, err
+		}
+	}
+	if method == localAIEmbeddingMethod {
+		if err := proto.Unmarshal(payload, &connection.embeddingRequest); err != nil {
 			return nil, err
 		}
 	}
@@ -246,6 +359,15 @@ func (connection *recordingGRPCConnection) Invoke(
 		}
 	}
 	return connection.response, nil
+}
+
+type countingEmbeddingDialer struct {
+	calls int
+}
+
+func (dialer *countingEmbeddingDialer) Dial(context.Context, string) (platformgrpc.Connection, error) {
+	dialer.calls++
+	return &recordingGRPCConnection{}, nil
 }
 
 func (connection *recordingGRPCConnection) Close() error {

@@ -471,7 +471,9 @@ func (runtime operationInvocationRuntime) Invoke(
 		return runtime.omni.Invoke(ctx, request)
 	}
 	if runtime.embedding != nil && isEmbeddingOperation(request) {
-		return runtime.embedding.Invoke(ctx, request)
+		return runtime.embedding.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
 	}
 	return runtime.generic.Invoke(ctx, request)
 }
@@ -496,8 +498,12 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		}
 		runtime.asr = asr
 	}
-	if options.Embedding != nil {
-		embedding, err := newEmbeddingInvocationRuntime(options.Embedding)
+	embeddingBackend := options.Embedding
+	if embeddingBackend == nil {
+		embeddingBackend = localai.NewPinnedEmbeddingBackend(options.Dialer)
+	}
+	if embeddingBackend != nil {
+		embedding, err := newEmbeddingInvocationRuntime(embeddingBackend)
 		if err != nil {
 			return nil, err
 		}
