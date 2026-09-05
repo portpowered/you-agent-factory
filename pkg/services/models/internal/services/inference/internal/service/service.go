@@ -32,8 +32,6 @@ type service struct {
 	clock             func() time.Time
 	executionDeadline func() time.Duration
 
-	hostMu         sync.Mutex
-	hostSlots      map[hostSlotKey]*hostSlotEntry
 	mu             sync.Mutex
 	nextInvocation int
 	invocations    map[models.ModelInvocationRef]models.InvokeModelResult
@@ -66,7 +64,6 @@ func New(
 		artifacts:         artifacts,
 		clock:             clock,
 		executionDeadline: executionDeadline,
-		hostSlots:         make(map[hostSlotKey]*hostSlotEntry),
 		invocations:       make(map[models.ModelInvocationRef]models.InvokeModelResult),
 	}
 }

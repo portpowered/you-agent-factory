@@ -148,6 +148,9 @@ type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
 	WorkDir, HealthEndpoint string
+	Backend                 string
+	ModelPath               string
+	BackendFiles            []string
 }
 
 type HostManagedProcess interface {
@@ -188,6 +191,7 @@ type HostProtocolNegotiationRequest struct {
 	ModelName       string
 	Revision        string
 	Platform        models.AssetHostPlatform
+	ModelPath       string
 }
 
 // HostProtocolNegotiationResult is the detached result of one pinned

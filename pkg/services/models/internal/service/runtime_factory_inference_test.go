@@ -27,6 +27,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type constructionInvocationRuntime struct{}
+
+func (constructionInvocationRuntime) Invoke(
+	context.Context,
+	inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	return inference.InvocationRuntimeResult{}, nil
+}
+
 func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -292,7 +301,7 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 		assets,
 		catalog,
 		runtimeHost,
-		inference.InputEchoInvocationRuntime{},
+		constructionInvocationRuntime{},
 		inference.InertArtifactFileSystem{},
 		clock.Now,
 	)
@@ -330,7 +339,7 @@ func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
 	inferenceService, err := inferencewire.NewService(
-		scopes, assets, catalog, runtimeHost, inference.InputEchoInvocationRuntime{},
+		scopes, assets, catalog, runtimeHost, constructionInvocationRuntime{},
 		inference.InertArtifactFileSystem{}, clock.Now,
 	)
 	if err != nil {

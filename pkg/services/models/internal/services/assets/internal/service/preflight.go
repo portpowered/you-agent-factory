@@ -110,17 +110,24 @@ func (s *service) preflightGenericPreparation(
 	}
 	plan.backendRequirements = backendFacts.artifacts
 
-	modelFacts, err := s.preflightGenericArtifactSet(
-		ctx, assetKindModel, plan.source, plan.modelRequirements,
-		plan.modelRoots, request.Offline,
-	)
+	modelFacts, err := s.preflightInstalledGenericRuntime(ctx, &plan)
 	if err != nil {
-		if backendPreflightErr != nil {
-			if combined := combinedOfflineError(backendPreflightErr, err); combined != nil {
-				return genericPreflightState{plan: plan, modelMissing: modelFacts.missing, backendMissed: backendFacts.missing}, wrapAssetPreflightError(request.Name, combined)
-			}
-		}
 		return genericPreflightState{plan: plan}, wrapAssetPreflightError(request.Name, err)
+	}
+	if modelFacts == nil {
+		facts, preflightErr := s.preflightGenericArtifactSet(
+			ctx, assetKindModel, plan.source, plan.modelRequirements,
+			plan.modelRoots, request.Offline,
+		)
+		modelFacts = &facts
+		if preflightErr != nil {
+			if backendPreflightErr != nil {
+				if combined := combinedOfflineError(backendPreflightErr, preflightErr); combined != nil {
+					return genericPreflightState{plan: plan, modelMissing: modelFacts.missing, backendMissed: backendFacts.missing}, wrapAssetPreflightError(request.Name, combined)
+				}
+			}
+			return genericPreflightState{plan: plan}, wrapAssetPreflightError(request.Name, preflightErr)
+		}
 	}
 	plan.modelRequirements = modelFacts.artifacts
 	state := genericPreflightState{
@@ -140,6 +147,29 @@ func (s *service) preflightGenericPreparation(
 type genericPreflightFacts struct {
 	artifacts []genericArtifact
 	missing   []genericArtifact
+}
+
+// preflightInstalledGenericRuntime reuses a verified managed runtime before
+// consulting an upstream source. The durable runtime metadata is the
+// authoritative cache record for a model already installed by this service;
+// older content-addressed metadata may intentionally lack integrity facts and
+// must not force a fresh download when the managed record is verified.
+func (s *service) preflightInstalledGenericRuntime(
+	ctx context.Context,
+	plan *genericPreparationPlan,
+) (*genericPreflightFacts, error) {
+	if plan == nil {
+		return nil, nil
+	}
+	inspection, reusable, err := s.reusableGenericRuntimeCache(ctx, *plan)
+	if err != nil || !reusable {
+		return nil, err
+	}
+	plan.modelRuntimeCache = inspection
+	artifacts := s.genericArtifactsFromRequirements(
+		plan.source, inspection.ExpectedArtifacts,
+	)
+	return &genericPreflightFacts{artifacts: artifacts}, nil
 }
 
 func (s *service) preflightGenericArtifactSet(

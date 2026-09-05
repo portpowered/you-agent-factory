@@ -91,11 +91,15 @@ func NewPinnedGRPCHostProtocolNegotiator(
 }
 
 type invocationRuntimeOptions struct {
-	Backend   InvocationBackend
-	ASR       ASRBackend
-	Embedding EmbeddingBackend
-	Client    InvocationProtocolClient
-	Dialer    InvocationProtocolDialer
+	Backend          InvocationBackend
+	ASR              ASRBackend
+	Embedding        EmbeddingBackend
+	Client           InvocationProtocolClient
+	Dialer           InvocationProtocolDialer
+	ASRTempDirectory func() string
+	ASRCreateTemp    localai.TempFileFactory
+	ASRWriteFile     localai.InputFileWriter
+	ASRRemoveFile    localai.InputFileRemover
 }
 
 type invocationRuntime interface {
@@ -397,6 +401,9 @@ func composeModelsService(
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	runtimeOptions = bindASRStaging(
+		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
+	)
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,
 	)
@@ -456,13 +463,17 @@ func (runtime operationInvocationRuntime) Invoke(
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
 	if runtime.asr != nil && isASROperation(request) {
-		return runtime.asr.Invoke(ctx, request)
+		return runtime.asr.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
 	}
 	if runtime.omni != nil && isOMNIOperation(request) {
 		return runtime.omni.Invoke(ctx, request)
 	}
 	if runtime.embedding != nil && isEmbeddingOperation(request) {
-		return runtime.embedding.Invoke(ctx, request)
+		return runtime.embedding.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
 	}
 	return runtime.generic.Invoke(ctx, request)
 }
@@ -473,15 +484,29 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		generic: generic,
 		omni:    newInvocationRuntime(options.Client, options.Dialer),
 	}
-	if options.ASR != nil {
-		asr, err := newASRInvocationRuntime(options.ASR)
+	asrBackend := options.ASR
+	// An explicitly injected generic backend is a complete controlled
+	// operation effect. Keep it authoritative when a typed edge is absent;
+	// pinned typed defaults are production fallbacks, not fixture overrides.
+	if asrBackend == nil && options.Backend == nil {
+		asrBackend = localai.NewPinnedASRBackend(
+			options.Dialer, options.ASRTempDirectory, options.ASRCreateTemp,
+			options.ASRWriteFile, options.ASRRemoveFile,
+		)
+	}
+	if asrBackend != nil {
+		asr, err := newASRInvocationRuntime(asrBackend)
 		if err != nil {
 			return nil, err
 		}
 		runtime.asr = asr
 	}
-	if options.Embedding != nil {
-		embedding, err := newEmbeddingInvocationRuntime(options.Embedding)
+	embeddingBackend := options.Embedding
+	if embeddingBackend == nil && options.Backend == nil {
+		embeddingBackend = localai.NewPinnedEmbeddingBackend(options.Dialer)
+	}
+	if embeddingBackend != nil {
+		embedding, err := newEmbeddingInvocationRuntime(embeddingBackend)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +517,7 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 
 func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 	if backend == nil {
-		return inference.InputEchoInvocationRuntime{}
+		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
 }
@@ -543,13 +568,13 @@ type omniInvocationRuntime struct {
 }
 
 // newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
-// client fails closed for OMNI while non-OMNI operations retain the generic
-// input-echo behavior used by lightweight composition tests.
+// client fails closed for OMNI, while non-OMNI operations also fail closed
+// unless an explicit operation backend is composed.
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
 ) invocationRuntime {
-	fallback := inference.InputEchoInvocationRuntime{}
+	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
 		client = nil
 	}

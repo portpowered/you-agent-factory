@@ -127,44 +127,89 @@ func (s *service) prepareGenericAssets(
 	if backendErr != nil {
 		return genericAssetFailureResult(plan.source, genericCacheResult{}, backendResult), backendErr
 	}
-	modelResult, modelErr := s.acquireGenericCache(
-		ctx, assetKindModel, models.AssetArtifactKindModel, plan.source,
-		plan.modelRequirements, plan.modelRoots, request.Offline,
-	)
-	if modelErr != nil {
-		return genericAssetFailureResult(plan.source, modelResult, backendResult), modelErr
+	modelResult, err := s.acquireGenericModel(ctx, plan, request.Offline)
+	if err != nil {
+		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
 	}
-	var runtimeInspection scopedassets.RuntimeCacheInspection
-	if modelResult.snapshotPath != "" {
+	if err := s.rememberGenericPreparedRuntime(
+		ctx, request, plan, expected, modelResult, backendResult,
+	); err != nil {
+		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+	}
+	return genericAssetResult(plan.source, modelResult, backendResult), nil
+}
+
+func (s *service) acquireGenericModel(
+	ctx context.Context,
+	plan genericPreparationPlan,
+	offline bool,
+) (genericCacheResult, error) {
+	if plan.modelRuntimeCache != nil {
+		// Managed-runtime reuse still crosses the asset staging ownership
+		// boundary. This preserves access-denied/cancellation behavior for
+		// callers that prepare an already-installed model while avoiding any
+		// content download or weak content-cache lookup.
+		lock, err := s.lockGenericCache(
+			ctx, assetKindModel, plan.source, plan.modelRequirements, plan.modelRoots,
+		)
+		if err != nil {
+			return genericCacheResult{}, err
+		}
+		if err := closeAssetStagingLock(lock, nil); err != nil {
+			return genericCacheResult{}, err
+		}
+		return genericCacheResultFromRuntimeCache(*plan.modelRuntimeCache), nil
+	}
+	return s.acquireGenericCache(
+		ctx, assetKindModel, models.AssetArtifactKindModel, plan.source,
+		plan.modelRequirements, plan.modelRoots, offline,
+	)
+}
+
+func (s *service) rememberGenericPreparedRuntime(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
+	plan genericPreparationPlan,
+	expected []models.AssetRequirement,
+	modelResult genericCacheResult,
+	backendResult genericCacheResult,
+) error {
+	if plan.modelRuntimeCache == nil && modelResult.snapshotPath == "" && backendResult.snapshotPath == "" {
+		return nil
+	}
+	runtimeInspection := scopedassets.RuntimeCacheInspection{}
+	if plan.modelRuntimeCache != nil {
+		runtimeInspection = *plan.modelRuntimeCache
+	} else if modelResult.snapshotPath != "" {
+		var err error
 		runtimeInspection, err = s.publishGenericRuntimeCache(
 			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
 		)
 		if err != nil {
-			return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+			return err
 		}
 	}
-	if modelResult.snapshotPath != "" || backendResult.snapshotPath != "" {
-		if !runtimeInspection.Supported {
-			runtimeInspection = scopedassets.RuntimeCacheInspection{
-				Supported:          true,
-				Installed:          modelResult.snapshotPath != "",
-				ManifestPresent:    modelResult.snapshotPath != "",
-				ManifestValid:      modelResult.snapshotPath != "",
-				ExpectedArtifacts:  append([]models.AssetRequirement(nil), expected...),
-				ObservedArtifacts:  append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
-				IntegrityVerified:  modelResult.snapshotPath != "",
-				Revision:           plan.source.revision,
-				CachePath:          modelResult.snapshotPath,
-				InstalledFileCount: len(modelResult.artifacts),
-			}
+	if !runtimeInspection.Supported {
+		runtimeInspection = scopedassets.RuntimeCacheInspection{
+			Supported:          true,
+			Installed:          modelResult.snapshotPath != "",
+			ManifestPresent:    modelResult.snapshotPath != "",
+			ManifestValid:      modelResult.snapshotPath != "",
+			ExpectedArtifacts:  append([]models.AssetRequirement(nil), expected...),
+			ObservedArtifacts:  append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
+			IntegrityVerified:  modelResult.snapshotPath != "",
+			Revision:           plan.source.revision,
+			CachePath:          modelResult.snapshotPath,
+			InstalledFileCount: len(modelResult.artifacts),
 		}
-		runtimeInspection.BackendRequired = len(plan.backendRequirements) > 0
-		runtimeInspection.BackendCachePath = backendResult.snapshotPath
-		runtimeInspection.BackendRevision = plan.backendSource.revision
-		runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
-		s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
 	}
-	return genericAssetResult(plan.source, modelResult, backendResult), nil
+	runtimeInspection.BackendRequired = len(plan.backendRequirements) > 0
+	runtimeInspection.BackendCachePath = backendResult.snapshotPath
+	runtimeInspection.BackendRevision = plan.backendSource.revision
+	runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
+	runtimeInspection.BackendFiles = append([]string(nil), backendResult.paths...)
+	s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
+	return nil
 }
 
 type genericPreparationPlan struct {
@@ -172,6 +217,7 @@ type genericPreparationPlan struct {
 	source              genericSource
 	modelRequirements   []genericArtifact
 	modelRoots          []string
+	modelRuntimeCache   *scopedassets.RuntimeCacheInspection
 	backendSource       genericSource
 	backendRequirements []genericArtifact
 	backendRoots        []string

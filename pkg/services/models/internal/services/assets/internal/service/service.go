@@ -500,6 +500,7 @@ func (s *service) rememberPreparedRuntime(
 	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
 	inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...)
 	inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...)
+	inspection.BackendFiles = append([]string(nil), inspection.BackendFiles...)
 	s.preparedRuntimeMu.Lock()
 	s.preparedRuntime[preparedRuntimeKey(scope, name)] = inspection
 	s.preparedRuntimeMu.Unlock()

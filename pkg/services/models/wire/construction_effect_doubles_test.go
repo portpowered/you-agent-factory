@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -10,13 +11,16 @@ import (
 	"testing"
 	"time"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 type constructionEdges struct {
@@ -433,6 +437,112 @@ func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
 	}
 }
 
+func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	response, err := proto.Marshal(&localai.EmbeddingResult{Embeddings: []float32{0.1, -0.2, 0.3}})
+	if err != nil {
+		t.Fatalf("marshal embedding response: %v", err)
+	}
+	connection := &embeddingRuntimeConnection{response: response}
+	dialer := &embeddingRuntimeDialer{connection: connection}
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{Dialer: dialer})
+	if err != nil {
+		t.Fatalf("inferenceRuntime() error = %v", err)
+	}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Operation: models.OperationEMBED,
+			Inputs: []models.InferenceInput{{
+				Name: "text", Modality: models.ModalityText,
+				ContentType: "text/plain", MediaType: "text/plain", Content: "Find similar work",
+			}},
+		},
+		Operation: models.Operation{Name: models.OperationEMBED},
+		HostSlot:  inference.HostHandleSlot{Endpoint: "grpc://127.0.0.1:50051"},
+	})
+	if err != nil {
+		t.Fatalf("embedding runtime Invoke() error = %v", err)
+	}
+	assertPinnedEmbeddingResult(t, result)
+	assertPinnedEmbeddingTransport(t, dialer, connection)
+	assertPinnedEmbeddingRequest(t, connection)
+}
+
+func TestInferenceRuntimePreservesExplicitGenericBackendOverPinnedEmbedding(t *testing.T) {
+	t.Parallel()
+
+	connection := &embeddingRuntimeConnection{}
+	dialer := &embeddingRuntimeDialer{connection: connection}
+	genericCalls := 0
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			genericCalls++
+			return []models.InferenceContent{{
+				Name: "embedding", Modality: models.ModalityJSON,
+				ContentType: "application/json", MediaType: "application/json", Content: "[0.25]",
+			}}, nil, nil
+		},
+		Dialer: dialer,
+	})
+	if err != nil {
+		t.Fatalf("inferenceRuntime() error = %v", err)
+	}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Operation: models.OperationEMBED,
+			Inputs: []models.InferenceInput{{
+				Name: "text", Modality: models.ModalityText,
+				ContentType: "text/plain", MediaType: "text/plain", Content: "fixture text",
+			}},
+		},
+		Operation: models.Operation{Name: models.OperationEMBED},
+	})
+	if err != nil {
+		t.Fatalf("explicit generic EMBED error = %v", err)
+	}
+	if genericCalls != 1 || len(result.Content) != 1 || result.Content[0].Content != "[0.25]" {
+		t.Fatalf("explicit generic EMBED result = calls:%d content:%#v, want one generic result", genericCalls, result.Content)
+	}
+	if dialer.endpoint != "" || connection.method != "" || connection.closed != 0 {
+		t.Fatalf("pinned EMBED transport = endpoint:%q method:%q closed:%d, want unused", dialer.endpoint, connection.method, connection.closed)
+	}
+}
+
+func assertPinnedEmbeddingResult(t *testing.T, result inference.InvocationRuntimeResult) {
+	t.Helper()
+	if len(result.Content) != 1 || result.Content[0].Name != "embedding" {
+		t.Fatalf("embedding runtime content = %#v, want canonical vector output", result.Content)
+	}
+	var vector []float64
+	if err := json.Unmarshal([]byte(result.Content[0].Content), &vector); err != nil {
+		t.Fatalf("decode embedding runtime content: %v", err)
+	}
+	if len(vector) != 3 || vector[0] != float64(float32(0.1)) || vector[1] != float64(float32(-0.2)) {
+		t.Fatalf("embedding runtime vector = %#v, want three pinned values", vector)
+	}
+}
+
+func assertPinnedEmbeddingTransport(t *testing.T, dialer *embeddingRuntimeDialer, connection *embeddingRuntimeConnection) {
+	t.Helper()
+	if dialer.endpoint != "grpc://127.0.0.1:50051" || connection.method != "/backend.Backend/Embedding" || connection.closed != 1 {
+		t.Fatalf("embedding runtime transport = endpoint:%q method:%q closed:%d, want selected endpoint/Embedding/one close", dialer.endpoint, connection.method, connection.closed)
+	}
+}
+
+func assertPinnedEmbeddingRequest(t *testing.T, connection *embeddingRuntimeConnection) {
+	t.Helper()
+	var request localai.PredictOptions
+	if err := proto.Unmarshal(connection.request, &request); err != nil {
+		t.Fatalf("decode embedding request: %v", err)
+	}
+	if request.GetPrompt() != "Find similar work" || request.GetEmbeddings() != "Find similar work" {
+		t.Fatalf("embedding request prompt = %q, embeddings = %q, want input text in both shared and dedicated fields", request.GetPrompt(), request.GetEmbeddings())
+	}
+}
+
 func TestCloneASRParametersDetachesNestedValues(t *testing.T) {
 	t.Parallel()
 
@@ -453,6 +563,41 @@ type recordingInvocationRuntime struct {
 	result inference.InvocationRuntimeResult
 	err    error
 	calls  int
+}
+
+type embeddingRuntimeDialer struct {
+	connection *embeddingRuntimeConnection
+	endpoint   string
+}
+
+func (dialer *embeddingRuntimeDialer) Dial(
+	_ context.Context,
+	endpoint string,
+) (platformgrpc.Connection, error) {
+	dialer.endpoint = endpoint
+	return dialer.connection, nil
+}
+
+type embeddingRuntimeConnection struct {
+	method   string
+	request  []byte
+	response []byte
+	closed   int
+}
+
+func (connection *embeddingRuntimeConnection) Invoke(
+	_ context.Context,
+	method string,
+	request []byte,
+) ([]byte, error) {
+	connection.method = method
+	connection.request = append([]byte(nil), request...)
+	return connection.response, nil
+}
+
+func (connection *embeddingRuntimeConnection) Close() error {
+	connection.closed++
+	return nil
 }
 
 func (runtime *recordingInvocationRuntime) Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {

@@ -189,29 +189,6 @@ func (o *Root) OpenRuntimeScope(
 	return models.OpenRuntimeScopeResult{Scope: scope}, nil
 }
 
-func (o *Root) CloseRuntimeScope(
-	ctx context.Context,
-	request models.CloseRuntimeScopeRequest,
-) (models.CloseRuntimeScopeResult, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
-	}
-	if err := ctx.Err(); err != nil {
-		return models.CloseRuntimeScopeResult{}, err
-	}
-	if request.Scope.IsZero() {
-		return models.CloseRuntimeScopeResult{}, models.ErrRuntimeScopeInvalid
-	}
-	err := o.runtimeScopes.Close(runtimescopes.Reference(request.Scope.String()))
-	if err != nil {
-		return models.CloseRuntimeScopeResult{}, runtimeScopeError(err)
-	}
-	o.runtimeMu.Lock()
-	delete(o.runtimeByScope, request.Scope)
-	o.runtimeMu.Unlock()
-	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
-}
-
 // Close shuts down every supervised model host retained by the process-wide
 // Models root. This is an internal process-lifecycle hook; the public Models
 // contract remains focused on scoped customer operations.

@@ -180,9 +180,9 @@ func NewWithOutputFileSystem(
 }
 
 // NewWithOutputFileSystemAndPullProtocol constructs the Models CLI service
-// with an operation-appropriate HTTP protocol for synchronous pulls. The
-// pull protocol is expected to rely on caller cancellation rather than the
-// ordinary short CLI request deadline.
+// with an operation-appropriate HTTP protocol for synchronous pulls and
+// remote generic inference. The long-running protocol is expected to rely on
+// caller cancellation rather than the ordinary short CLI request deadline.
 func NewWithOutputFileSystemAndPullProtocol(
 	httpProtocol clihttp.Protocol,
 	pullHTTPProtocol clihttp.Protocol,
@@ -791,6 +791,14 @@ func (service *httpService) invokeRemoteGeneric(
 	if service.http == nil {
 		return fmt.Errorf("CLI HTTP protocol is required for remote models invoke")
 	}
+	// Catalog discovery is a short control-plane request, but generic
+	// inference can include model loading and backend execution. Use the
+	// caller-cancellable long-running protocol for the POST so the ordinary
+	// CLI control-plane deadline cannot cancel a real remote invocation.
+	inferenceHTTP := service.pullHTTP
+	if inferenceHTTP == nil {
+		inferenceHTTP = service.http
+	}
 	inputFileReader, err := preflightGenericCLIInputsWithReader(cfg, service.inputFileReader)
 	if err != nil {
 		return err
@@ -816,7 +824,7 @@ func (service *httpService) invokeRemoteGeneric(
 	request := genericCLIRequestFromInputs(modelName, operation, inputs)
 	var response factoryapi.GenericModelInvocationResponse
 	if err := doModelsPOST(
-		cfg.Context, service.http, cfg.Server, "/models/invocations", request, &response,
+		cfg.Context, inferenceHTTP, cfg.Server, "/models/invocations", request, &response,
 		requestDiagnostics{
 			Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke",
 			Server: cfg.Server, ModelName: modelName, Operation: operation,
