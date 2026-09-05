@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -36,22 +35,18 @@ const (
 	// run after replay reaches terminal state. This is the bounded cleanup
 	// grace period before terminating that deliberately long-lived process.
 	probeCostProcessStopWait = 5 * time.Second
-	probeCostEnableEnv       = "INFINITE_YOU_ENABLE_PROBE_COST"
+	probeCostArtifactEnv     = "INFINITE_YOU_PREBUILT_ARTIFACT"
 )
 
 const probeCostFalsifier = "reject UNPRICED, NO_USAGE, zero/null known_cost, missing measured row, or provider/model drift"
 
 // TestProbeCostReplaysTheInstalledCodexFixture is the PROBE-COST cell from
 // the program verification plan. It intentionally crosses the OS process
-// boundary: the checked-in recording is copied into a blank workspace, an
-// installed-style binary is run with a blank operator home, and the result is
-// read back through the customer-facing metrics costs command.
+// boundary: the checked-in recording is copied into a blank workspace, a pinned
+// prebuilt artifact is run with a blank operator home, and the result is read
+// back through the customer-facing metrics costs command.
 func TestProbeCostReplaysTheInstalledCodexFixture(t *testing.T) {
-	if os.Getenv(probeCostEnableEnv) != "1" {
-		t.Skipf("PROBE-COST is non-blocking until Integration Story 0 (#2191) merges; set %s=1 to run it", probeCostEnableEnv)
-	}
-
-	binaryPath := buildProbeCostBinary(t)
+	binaryPath := prebuiltProbeCostArtifact(t)
 	fixturePath := testutil.MustRepoPath(t,
 		"tests/functional/factory/visualization/runtime_metrics/testdata/codex-gpt-5-codex.factory-recording.v1.json",
 	)
@@ -322,18 +317,18 @@ func logProbeCostVerdict(t *testing.T, result probeCostResult) {
 	)
 }
 
-func buildProbeCostBinary(t *testing.T) string {
+func prebuiltProbeCostArtifact(t *testing.T) string {
 	t.Helper()
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
+	binaryPath := strings.TrimSpace(os.Getenv(probeCostArtifactEnv))
+	if binaryPath == "" {
+		t.Skipf("PROBE-COST requires a pinned prebuilt artifact; set %s to its path", probeCostArtifactEnv)
 	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	output, err := build.CombinedOutput()
+	info, err := os.Stat(binaryPath)
 	if err != nil {
-		t.Fatalf("build installed-style you binary: %v\n%s", err, output)
+		t.Fatalf("stat pinned PROBE-COST artifact %q: %v", binaryPath, err)
+	}
+	if info.IsDir() {
+		t.Fatalf("pinned PROBE-COST artifact %q is a directory", binaryPath)
 	}
 	return binaryPath
 }

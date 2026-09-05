@@ -37,7 +37,7 @@ const (
 // fleet-wide route must be observed across the same process boundary a
 // customer uses, rather than inferred from an in-process service test.
 func TestProbeObservabilityWorkerSessionListing(t *testing.T) {
-	binaryPath := buildProbeCostBinary(t)
+	binaryPath := prebuiltProbeCostArtifact(t)
 	fixturePath := testutil.MustRepoPath(t,
 		"tests/functional/factory/visualization/runtime_metrics/testdata/codex-gpt-5-codex.factory-recording.v1.json",
 	)
