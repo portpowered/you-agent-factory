@@ -1,30 +1,30 @@
-# factory-feasibility-disposition-prerequisite-003 — Integrate the case matrix, tabletop, clean-room, and controlled rollout packet
+# factory-feasibility-disposition-prerequisite-004 — Deliver the reviewed design through CI, review, merge, and clean-room handoff
 
-**Parent behavior:** BEH-INCIDENT and BEH-RECOVERY — escalate only actionable
-failed-work incidents, preserve causal failure history, and repair a valid
-orphan only through a public, idempotent Factory path.
+**Parent behavior:** BEH-DESIGN-DELIVERY — deliver one reviewed design
+prerequisite with explicit CI/review/merge ownership while keeping runtime and
+rollout as future gates.
 
-**Problem:** T001 and T002 define the admission and incident primitives, but
-there is not yet one independently reviewable packet that joins every failure,
-replay, idempotence, orphan, clean-room, and rollout boundary without implying
-that the Factory has already been changed.
+**Problem:** T003 has the complete feasibility, incident, replay, orphan, and
+rollout evidence, but the one-document delivery path, exact implementation
+finish line, clean-room handoff, and review-owned merge boundary still need one
+self-contained task packet.
 
-**Outcome:** A reviewer can walk M-01–M-18 with deterministic expected request,
-event, move, no-action, and preserved-state results; assign each proof to the
-lowest valid future test layer; run a read-only VAL-001 clean-room review; and
-hand a tested design to a Supervisor-controlled one-session canary with explicit
-hold and rollback conditions.
+**Outcome:** The final task packet gives an independent reviewer one immutable
+design head to inspect, preserves the exact Current/Proposed contract and
+M-01–M-18 matrix, routes VAL-001 through its required read-only template, and
+stops the implementation workstation after the final head is pushed, the PR is
+open, required CI has started, and blocking feedback is addressed. Review owns
+terminal CI, conflicts, and merge; the Supervisor owns any later canary.
 
 **Plan reference:** `factory/docs/operating-policy.md` — Validation missions;
 Learning and controlled change; No-action and hold policy; Executable recovery
-boundaries. Source requirement: complete failure/replay/idempotence matrix and
-one-session observation window before controlled rollout.
+boundaries; requirement: reviewed merge precedes controlled rollout.
 
-**Actor and trigger:** The planning/review owner integrates the dependency-ready
-T001/T002 evidence before implementation admission. A future engineering
-validator receives only the final immutable design head, the acceptance rubric,
-and the sanitized fixture identity; the Portfolio Supervisor owns any later
-canary or promotion decision.
+**Actor and trigger:** The planning/review owner receives dependency-ready
+T001–T003 evidence and prepares the final handoff. Validation receives only the
+immutable final head, acceptance rubric, public entry points, sanitized fixture,
+and budget. Review owns the PR's terminal checks, conflict resolution, and
+merge; the Portfolio Supervisor owns post-merge canary admission and promotion.
 
 **Dependencies:**
 
@@ -33,9 +33,11 @@ canary or promotion decision.
 - `factory-feasibility-disposition-prerequisite-002` — incident event,
   fingerprint/action identities, handled protocol, replay, lost-response, and
   safe-orphan semantics.
+- `factory-feasibility-disposition-prerequisite-003` — complete M-01–M-18
+  matrix, tabletop, clean-room procedure, path leases, and rollout safeguards.
 
-**Parallel and shared-surface ownership:** T003 owns this integrated evidence
-packet. No task may concurrently author the future
+**Parallel and shared-surface ownership:** T004 owns the final task packet and
+its delivery handoff. No task may concurrently author the future
 `docs/internal/development/plans/factory-feasibility-disposition-correction.md`.
 The future implementation owner owns production/API/generated/test changes;
 Recordings owns event append/replay; Automations owns classification and
@@ -46,16 +48,17 @@ Supervisor owns post-merge canary admission and promotion.
 
 **Scope:**
 
-- In: the complete M-01–M-18 given/when/then matrix; a controlled tabletop
-  procedure; the additive reconciliation diagnostic result; future unit,
-  contract, functional, integration, and clean-room proof placement; exact
-  owners and immutable artifact leases; one-session canary, observation,
-  hold, rollback, and promotion conditions; security, privacy, performance,
-  accessibility, localization, and cost boundaries.
+- In: the complete M-01–M-18 given/when/then matrix; the additive
+  reconciliation diagnostic result; a controlled tabletop; the exact future
+  unit, contract, functional, integration, and clean-room proof placement;
+  one future design-document lease; PR/review/merge ownership; exact owners,
+  immutable artifact leases, commands, unproven edges, one-session canary,
+  observation, hold, rollback, and promotion conditions; security, privacy,
+  performance, accessibility, localization, and cost boundaries.
 - Out: production implementation, generated files, executable test changes,
   live event emission, live Factory settings or active Work mutation, LocalAI
-  or provider/model calls, canary execution, VAL-001 execution, and silent
-  loopback repair.
+  or provider/model calls, canary execution, VAL-001 execution, terminal CI
+  waiting, merge, and silent loopback repair.
 
 **Implementation constraints:**
 
@@ -71,14 +74,19 @@ Supervisor owns post-merge canary admission and promotion.
 - Routine design and implementation remain autonomous. Do not invent an
   operator-approval Work. Escalate only a real authority, immutable-contract,
   safety, budget, or data-integrity decision.
+- The implementation-stage delivery criterion is exact: stop after the final
+  head is pushed, the PR is open, CI has started, and blocking review feedback
+  is addressed; do not poll or re-check CI after that finish line. Review owns
+  terminal-and-passing CI, conflicts, and merge.
 - This iteration writes only the two leased task artifacts plus the untracked
   planner scaffolding `prd.json` and `progress.txt`; it does not create the
-  future design document or edit any excluded path.
+  future design document, commit CI/audit evidence, or edit any excluded path.
 
 ## Integrated contract boundary
 
-The only new shape integrated by T003 is a future additive diagnostic result
-from the existing project reconciler. It is not a second lifecycle store and
+The only new shape retained in this T004 handoff is T003's future additive
+diagnostic result from the existing project reconciler. T004 adds no runtime or
+public contract change. The diagnostic is not a second lifecycle store and
 does not make incident metadata a Work state.
 
 Authored source: `factory/scripts/reconcile-projects.py` — `reconcile()` return
@@ -246,7 +254,7 @@ dependencies, and retest scope.
 
 ## Future verification layers and exact commands
 
-No tests change in T003. The following placement is the future implementation
+No tests change in T004. The following placement is the future implementation
 contract and avoids meta-tests that only inspect source topology:
 
 | Layer | Future proof and observer | Boundary and ownership | Exact command/gate |
@@ -330,58 +338,126 @@ is:
 6. Only the Portfolio Supervisor promotes beyond the one-session window. This
    task/workstation does not execute or approve that rollout.
 
+## T004 delivery, review, and clean-room handoff
+
+The future authored design is exactly one file:
+`docs/internal/development/plans/factory-feasibility-disposition-correction.md`.
+It is not created by this task. The future implementation/design owner must
+carry T001–T003's Current/Proposed blocks, event/readers-before-writers order,
+M-01–M-18 matrix, path lease, and rollout boundaries into that file before any
+production change is admitted. No second design copy, filesystem incident
+queue, or live Factory setting is introduced.
+
+### Implementation-stage delivery criterion
+
+The following criterion is preserved verbatim from `prd.json`:
+
+> Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
+
+This criterion distinguishes this workstation's ready-for-review finish line
+from the lane-wide merge boundary. A PR being open or CI being started is not
+runtime acceptance, a clean-room PASS, or canary authorization.
+
+### Exact delivery sequence and ownership
+
+1. Run the packet-only checks: `python -m json.tool` on the task JSON and
+   `prd.json`; `git diff --check`; and a field-by-field Markdown/JSON parity
+   review covering story ID, contract excerpts, matrix IDs, evidence, owners,
+   budgets, leases, and gates.
+2. Review the complete diff and ensure only the two leased task artifacts are
+   tracked. Keep `prd.json` and `progress.txt` untracked; never add them to the
+   PR. Commit the task artifact change with a focused message.
+3. Push the final head to the named branch and open/update the PR with title
+   `factory-feasibility-disposition-prerequisite` and `prd.json` as the PR
+   description. The PR must target `main` and expose the final commit identity.
+4. Confirm required CI has started on that exact head and address any known
+   blocking review feedback or reported conflict. If feedback reveals a
+   contract/plan contradiction, stop and return a structured blocker with the
+   failed criterion, reproduction, impact, safe work, owner, observable exit,
+   dependencies, and smallest delta.
+5. Once the head is pushed, the PR is open, CI has started, and blocking
+   feedback is addressed, stop this implementation stage. Do not wait for
+   terminal CI, merge, VAL-001, runtime tests, LocalAI, or canary behavior.
+
+Review then owns terminal required CI, conflict resolution, and merge. CI-run
+evidence is recorded in a PR comment, never in a commit. Validation owns the
+fresh VAL-001 report and must run it from the final design head through
+`factory/docs/standards/validation-loopback-template.md`; a FAIL or BLOCKED
+result requests a delta plan and never edits the design or live Factory.
+
+### Handoff inputs and finish records
+
+The handoff passes these immutable inputs to review and validation:
+
+- final task-artifact commit and PR head;
+- `prd.json` acceptance rubric and source-plan references;
+- the exact diagnostic Current/Proposed excerpts;
+- M-01–M-18 and the sanitized LocalAI fixture identity;
+- future implementation path lease and excluded paths;
+- future command matrix, artifact owner, budgets, unproven edges, and
+  one-session canary hold/rollback conditions.
+
+The implementation stage records only the delivery facts needed for review in
+the untracked planner log: final head, PR URL/number, CI-start observation,
+and any addressed feedback. It does not commit CI results, audit notes, or a
+validation report. Review records terminal CI and merge in the PR conversation;
+the Supervisor records any later canary decision through its owned workflow.
+
 ## Acceptance criteria
 
-- [x] Given the complete matrix, an independent reviewer can walk every happy,
-  unhappy, replay, idempotence, and public-boundary case with a deterministic
-  result, observer, preserved state, and later gate.
-- [x] Given LocalAI, feasible, handled/replay, unowned, corrected-repeat,
-  overdue, external-hold, and orphan fixtures, the controlled tabletop records
-  expected request/event/move/no-action counts without live mutation.
-- [x] Given a final design head, VAL-001 has an exact read-only procedure,
-  template fields, criterion classifications, and a required delta request for
-  every FAIL/BLOCKED outcome; it never silently repairs.
-- [x] Given future tested/reviewed implementation, the rollout packet names one
-  Factory Session, one observation window, measurable hold conditions, a
-  rollback path, and the upstream immutable artifact owner; no current setting
-  or active Work is changed.
+- [x] Given the integrated design, an independent reviewer can find the exact
+  diagnostic Current/Proposed contract, M-01–M-18 matrix, path lease, owners,
+  commands, and unproven edges, with no live Factory change claimed.
+- [x] Given a blocking review finding or conflict, the handoff requires a
+  reviewed design/PR correction or a structured blocker with an owner and
+  observable exit; it never hides the finding or repairs live state.
+- [x] Given the final merged design, the Supervisor handoff keeps preflight,
+  incident/replay, LocalAI artifact, isolated public behavior, and canary as
+  explicit future gates; the proposal is not runtime accepted.
+- [x] Given the final design head, VAL-001 has the exact read-only template,
+  all criterion classifications, and a required delta plan for every
+  `FAIL`/`BLOCKED` result; it never silently repairs.
+- [x] The exact implementation-stage delivery criterion is preserved verbatim:
+  final head pushed, PR open, CI started, blocking feedback addressed, then
+  implementation stops while review owns terminal CI, conflicts, and merge.
 
 ## Verification
 
-- **Behavioral witness:** An independent reviewer executes the sanitized M-01–M-18
-  tabletop and checks every expected request/event/move/no-action count,
-  stable identity, replay projection, public readback, preserved failed
-  history, and unrelated Work result.
-- **Executable-spine effect:** `increase_fidelity`.
-- **Required evidence 1:** Scope `functional`; dependency fidelity `controlled`.
-  Procedure: use the matrix and tabletop above with copied public facts and
-  controlled append/action/readback outcomes. Artifact: this task packet and
-  the sanitized fixture identity. Proves matrix completeness, deterministic
-  outcomes, test-layer ownership, and no-retry/no-live-mutation boundaries.
-  Does not prove production Recordings/Automations behavior or LocalAI.
-- **Required evidence 2:** Scope `end-to-end`; dependency fidelity `controlled`.
-  Procedure: a fresh validator follows `validation-loopback-template.md` and
-  the VAL-001 steps above. Artifact: final design head and loopback report.
-  Proves independent design review, criterion classification, source-plan
-  trace, and safe future handoff. Does not prove terminal CI, merge, runtime
-  replay/idempotence, real LocalAI, or canary safety.
-- **Required evidence 3:** Scope `functional`; dependency fidelity `none`.
-  Procedure: `python -m json.tool` on both task JSON and `prd.json`,
-  `git diff --check`, and field-by-field Markdown/JSON parity review. Proves
-  both packet representations are parseable, whitespace-clean, and carry the
-  same story, matrix, contract, evidence, budget, owner, and gate decisions.
-  Does not prove semantic runtime behavior.
-- **Highest feasible level:** Controlled functional design review plus a
-  clean-room end-to-end design validation. Runtime E2E is not applicable
-  because the changed-path lease forbids production representation/code,
-  executable tests, and live Factory mutation.
+- **Behavioral witness:** Independent review and fresh VAL-001 receive the
+  final design head, reproduce the sanitized M-01–M-18 tabletop and LocalAI
+  contradiction, verify all six project-criterion mappings, and distinguish
+  design PASS from future runtime/delivery gates.
+- **Executable-spine effect:** `promote`.
+- **Required evidence 1:** Scope `end-to-end`; dependency fidelity `controlled`.
+  Procedure: fresh read-only VAL-001 follows
+  `factory/docs/standards/validation-loopback-template.md`, the clean-room
+  steps above, and the integrated matrix. Artifact: final design head and
+  validation report. Proves independent reviewability, criterion
+  classification, source-plan trace, and safe handoff. Does not prove runtime
+  event append/replay, real LocalAI, terminal CI, merge, or canary.
+- **Required evidence 2:** Scope `functional`; dependency fidelity `none`.
+  Procedure: `python -m json.tool` on the task JSON and `prd.json`,
+  `git diff --check`, field-by-field Markdown/JSON parity review, and a
+  tracked-path check before commit. Proves both packet representations are
+  parseable, clean, aligned, and scoped. Does not prove semantic runtime
+  behavior.
+- **Required evidence 3:** Scope `end-to-end`; dependency fidelity `none`.
+  Procedure: push the final task-artifact head, open/update the named PR with
+  `prd.json` as its description, and confirm required CI has started on that
+  exact head; record only the PR/head/CI-start facts in untracked progress.
+  Proves implementation-stage delivery readiness. Does not prove terminal CI,
+  merge, VAL-001 outcome, runtime behavior, LocalAI, or rollout.
+- **Highest feasible level:** Independent clean-room design handoff plus the
+  implementation-stage PR/CI-start finish line. Runtime E2E is not applicable
+  because the path lease forbids production representation/code, executable
+  tests, and live Factory mutation.
 - **Remaining unproven edges:** preflight runtime → `GATE-IMPL-PREFLIGHT`;
   incident/event runtime → `GATE-IMPL-INCIDENT`; authored/generated contract
   alignment → `CONTRACT-EVENT`; public replay/isolation →
   `GATE-IMPL-ISOLATED`; orphan runtime → `GATE-IMPL-ORPHAN`; LocalAI artifact
   acceptance → `LA-05/LA-06`; clean-room execution → `VAL-001`; terminal
   CI/conflicts/merge → `REVIEW-CI-MERGE`; canary → `GATE-CANARY`.
-- **Test-layer design when tests change:** No tests change in T003. Future pure
+- **Test-layer design when tests change:** No tests change in T004. Future pure
   policy cases use the isolated script unit lane; public behavior uses parallel
   Factory Sessions and one reusable `root.BuildProcess`; compiled integration
   uses the build/release-owned prebuilt `YOU_TEST_BINARY`; load/stress remains
@@ -398,10 +474,12 @@ is:
 - Evidence-reuse key: `FACTORY-FEASIBILITY-01/matrix-v1`.
 
 **Operational and rollout notes:** This packet changes no production/API/
-generated/test/live Factory surface. It preserves T001/T002 failure history and
+generated/test/live Factory surface. It preserves T001–T003 failure history and
 hands future readers, writers, tests, clean-room validation, and canary
-promotion to named owners. A failed or blocked validation is a structured
-delta, not an implementation or acceptance claim.
+promotion to named owners. The implementation stage stops at pushed-head,
+open-PR, started-CI, addressed-feedback readiness; review owns terminal CI,
+conflicts, and merge; a failed or blocked validation is a structured delta,
+not an implementation or runtime acceptance claim.
 
 **Escalation:** Stop with a structured blocker if any M-01–M-18 row lacks a
 deterministic observer/outcome, if the diagnostic/event contract cannot remain
@@ -415,7 +493,7 @@ repair the live Factory.
 **Handoff artifacts:** Integrated Current/Proposed reconciliation result;
 M-01–M-18 matrix; controlled tabletop procedure and fixture identity; VAL-001
 clean-room procedure and criterion rubric; unit/contract/functional/
-integration layer placement; path lease and artifact ownership; one-session
-canary observation, hold, rollback, and Supervisor-promotion gate; and inputs
-for T004, `VAL-001`, `REVIEW-CI-MERGE`, `GATE-IMPL-ISOLATED`, and
-`GATE-CANARY`.
+integration layer placement; exact one-document path lease and artifact
+ownership; PR title/body/CI-start delivery procedure; one-session canary
+observation, hold, rollback, and Supervisor-promotion gate; and inputs for
+`VAL-001`, `REVIEW-CI-MERGE`, `GATE-IMPL-ISOLATED`, and `GATE-CANARY`.

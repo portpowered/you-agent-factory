@@ -1,27 +1,29 @@
 {
-  "taskId": "factory-feasibility-disposition-prerequisite-003",
+  "taskId": "factory-feasibility-disposition-prerequisite-004",
   "project": "factory-feasibility-disposition-prerequisite",
-  "title": "Integrate the case matrix, tabletop, clean-room, and controlled rollout packet",
+  "title": "Deliver the reviewed design through CI, review, merge, and clean-room handoff",
   "status": "complete",
   "parentBehavior": {
-    "ids": ["BEH-INCIDENT", "BEH-RECOVERY"],
-    "description": "Escalate only actionable failed-work incidents, preserve causal failure history, and repair a valid orphan only through a public, idempotent Factory path."
+    "ids": ["BEH-DESIGN-DELIVERY"],
+    "description": "Deliver one reviewed design prerequisite with explicit CI/review/merge ownership while keeping runtime and rollout as future gates."
   },
-  "problem": "T001 and T002 define the admission and incident primitives, but no independently reviewable packet yet joins every failure, replay, idempotence, orphan, clean-room, and rollout boundary without implying that the Factory has changed.",
-  "outcome": "A reviewer can walk M-01–M-18 with deterministic request, event, move, no-action, and preserved-state results; assign proof to the lowest valid future test layer; run read-only VAL-001; and hand a tested design to a Supervisor-controlled one-session canary.",
-  "sourcePlanRef": "factory/docs/operating-policy.md#validation-missions; #learning-and-controlled-change; #no-action-and-hold-policy; #executable-recovery-boundaries; requirement: complete failure/replay/idempotence matrix and one-session observation window",
-  "actorAndTrigger": "The planning/review owner integrates dependency-ready T001/T002 evidence before implementation admission. A future validator receives only the final immutable design head, acceptance rubric, and sanitized fixture identity; the Portfolio Supervisor owns later canary/promotion.",
+  "problem": "T003 has the complete feasibility, incident, replay, orphan, and rollout evidence, but the one-document delivery path, exact implementation finish line, clean-room handoff, and review-owned merge boundary still need one self-contained task packet.",
+  "outcome": "The final task packet gives an independent reviewer one immutable design head to inspect, preserves the exact Current/Proposed contract and M-01–M-18 matrix, routes VAL-001 through its required read-only template, and stops the implementation workstation after the final head is pushed, the PR is open, required CI has started, and blocking feedback is addressed. Review owns terminal CI, conflicts, and merge; the Supervisor owns any later canary.",
+  "sourcePlanRef": "factory/docs/operating-policy.md#validation-missions; #learning-and-controlled-change; #no-action-and-hold-policy; #executable-recovery-boundaries; requirement: reviewed merge precedes controlled rollout",
+  "actorAndTrigger": "The planning/review owner receives dependency-ready T001–T003 evidence and prepares the final handoff. Validation receives only the immutable final head, acceptance rubric, public entry points, sanitized fixture, and budget. Review owns the PR's terminal checks, conflict resolution, and merge; the Portfolio Supervisor owns post-merge canary admission and promotion.",
   "dependencies": [
     "factory-feasibility-disposition-prerequisite-001",
-    "factory-feasibility-disposition-prerequisite-002"
+    "factory-feasibility-disposition-prerequisite-002",
+    "factory-feasibility-disposition-prerequisite-003"
   ],
-  "sharedSurfaceOwnership": "T003 owns this integrated evidence packet. The future implementation owner owns production/API/generated/test changes; Recordings owns event append/replay; Automations owns classification/eligibility; Work/Factory Runtime owns public Work admission/move controls; build/release owns immutable YOU_TEST_BINARY; validation owns VAL-001; review owns terminal CI/conflicts/merge; the Portfolio Supervisor owns post-merge canary admission/promotion.",
+  "sharedSurfaceOwnership": "T004 owns the final task packet and delivery handoff. No task may concurrently author the future design document. The future implementation owner owns production/API/generated/test changes; Recordings owns event append/replay; Automations owns classification/eligibility; Work/Factory Runtime owns public Work admission/move controls; build/release owns immutable YOU_TEST_BINARY; validation owns VAL-001; review owns terminal CI/conflicts/merge; the Portfolio Supervisor owns post-merge canary admission/promotion.",
   "scope": {
     "in": [
       "Complete M-01–M-18 given/when/then matrix",
-      "Controlled tabletop and exact expected request/event/move/no-action counts",
+      "Additive reconciliation diagnostic result and controlled tabletop",
       "Future unit, contract, functional, integration, and clean-room proof placement",
-      "Exact owners, immutable artifact leases, path lease, and unproven edges",
+      "One future design-document lease, exact owners, immutable artifact leases, commands, and unproven edges",
+      "PR, review, merge, and clean-room handoff ownership",
       "One-session canary, observation window, hold, rollback, and promotion conditions",
       "Security, privacy, performance, accessibility, localization, and cost boundaries"
     ],
@@ -30,7 +32,7 @@
       "Generated files and executable test changes",
       "Live event emission, live Factory settings, or active Work mutation",
       "LocalAI or provider/model calls",
-      "Canary execution, VAL-001 execution, and silent loopback repair"
+      "Canary execution, VAL-001 execution, terminal CI waiting, merge, and silent loopback repair"
     ]
   },
   "constraints": [
@@ -38,7 +40,8 @@
     "Preserve T001's ten-minute no-build/no-broad-test preflight and T002's reader-before-writer, same-ID payload equality, stable identity, and fail-closed partial-write rules.",
     "Use Factory, Factory Session, Work, Worker Session, and Factory Event vocabulary; do not expose Petri-net implementation terminology in the future public design.",
     "Routine design and implementation remain autonomous; do not invent an operator-approval Work.",
-    "This iteration writes only the task artifacts plus untracked planner scaffolding; it does not create the future design document or edit excluded paths."
+    "The implementation-stage delivery criterion is exact: stop after the final head is pushed, the PR is open, CI has started, and blocking review feedback is addressed; do not poll or re-check CI after that finish line. Review owns terminal-and-passing CI, conflicts, and merge.",
+    "This iteration writes only the task artifacts plus untracked planner scaffolding; it does not create the future design document, commit CI/audit evidence, or edit excluded paths."
   ],
   "contractChanges": [
     {
@@ -168,35 +171,35 @@
     "deltaPlanRequiredFor": ["FAIL", "BLOCKED"]
   },
   "verification": {
-    "behavioralWitness": "Independent reviewer executes sanitized M-01–M-18 tabletop and checks expected counts, stable identity, replay projection, public readback, preserved failed history, and unrelated Work.",
-    "executableSpineEffect": "increase_fidelity",
+    "behavioralWitness": "Independent review and fresh VAL-001 receive the final design head, reproduce the sanitized M-01–M-18 tabletop and LocalAI contradiction, verify all six project-criterion mappings, and distinguish design PASS from future runtime/delivery gates.",
+    "executableSpineEffect": "promote",
     "evidence": [
-      {
-        "scope": "functional",
-        "dependencyFidelity": "controlled",
-        "procedure": "Use the integrated matrix with copied public facts and controlled append/action/readback outcomes; no live write.",
-        "artifact": "This task packet and the sanitized Factory Session/event fixture identity.",
-        "proves": "Matrix completeness, deterministic outcomes, test-layer ownership, and no-retry/no-live-mutation boundaries.",
-        "doesNotProve": "Production Recordings/Automations behavior or LocalAI."
-      },
       {
         "scope": "end-to-end",
         "dependencyFidelity": "controlled",
-        "procedure": "Fresh validator follows validation-loopback-template.md and the VAL-001 steps.",
-        "artifact": "Final design head and loopback report.",
-        "proves": "Independent design review, criterion classification, source-plan trace, and safe future handoff.",
-        "doesNotProve": "Terminal CI, merge, runtime replay/idempotence, real LocalAI, or canary safety."
+        "procedure": "Fresh read-only VAL-001 follows factory/docs/standards/validation-loopback-template.md, the clean-room steps, and the integrated matrix.",
+        "artifact": "Final design head and validation report.",
+        "proves": "Independent reviewability, criterion classification, source-plan trace, and safe handoff.",
+        "doesNotProve": "Runtime event append/replay, real LocalAI, terminal CI, merge, or canary."
       },
       {
         "scope": "functional",
         "dependencyFidelity": "none",
-        "procedure": "python -m json.tool on task JSON and prd.json; git diff --check; field-by-field Markdown/JSON parity review.",
+        "procedure": "python -m json.tool on the task JSON and prd.json; git diff --check; field-by-field Markdown/JSON parity review; and a tracked-path check before commit.",
         "artifact": "Both task packet representations at the final task head.",
-        "proves": "Parseable, whitespace-clean, semantically aligned story, matrix, contract, evidence, budget, owner, and gate records.",
+        "proves": "Both packet representations are parseable, clean, aligned, and scoped.",
         "doesNotProve": "Semantic runtime behavior."
+      },
+      {
+        "scope": "end-to-end",
+        "dependencyFidelity": "none",
+        "procedure": "Push the final task-artifact head, open/update the named PR with prd.json as its description, and confirm required CI has started on that exact head; record only PR/head/CI-start facts in untracked progress.",
+        "artifact": "Named PR, final commit head, and started required CI.",
+        "proves": "Implementation-stage delivery readiness.",
+        "doesNotProve": "Terminal CI, merge, VAL-001 outcome, runtime behavior, LocalAI, or rollout."
       }
     ],
-    "highestFeasibleLevel": "Controlled functional design review plus clean-room end-to-end design validation; runtime E2E is not applicable because the path lease forbids production representation/code, executable tests, and live Factory mutation.",
+    "highestFeasibleLevel": "Independent clean-room design handoff plus the implementation-stage PR/CI-start finish line; runtime E2E is not applicable because the path lease forbids production representation/code, executable tests, and live Factory mutation.",
     "remainingUnprovenEdges": [
       {"edge":"Preflight runtime","gateId":"GATE-IMPL-PREFLIGHT"},
       {"edge":"Incident/event runtime","gateId":"GATE-IMPL-INCIDENT"},
@@ -208,7 +211,7 @@
       {"edge":"Terminal CI/conflicts/merge","gateId":"REVIEW-CI-MERGE"},
       {"edge":"Canary","gateId":"GATE-CANARY"}
     ],
-    "testLayerDesign": "No tests change in T003. Future pure policy cases use the isolated script unit lane; public behavior uses parallel Factory Sessions and one reusable root.BuildProcess; compiled integration consumes build/release-owned YOU_TEST_BINARY; load/stress remains dedicated; no source-scanning meta-tests or in-test builds."
+    "testLayerDesign": "No tests change in T004. Future pure policy cases use the isolated script unit lane; public behavior uses parallel Factory Sessions and one reusable root.BuildProcess; compiled integration consumes build/release-owned YOU_TEST_BINARY; load/stress remains dedicated; no source-scanning meta-tests or in-test builds."
   },
   "futureCommands": {
     "unit": "python -m unittest tests/factory/scripts/test_reconcile_projects.py",
@@ -216,7 +219,8 @@
     "functional": "make test or the focused public Factory Session lane",
     "integration": "YOU_TEST_BINARY=<immutable-path> python -m unittest tests/factory/scripts/test_factory_recovery_integration.py",
     "cleanRoom": "VAL-001 using factory/docs/standards/validation-loopback-template.md",
-    "artifactOwner": "build/release supplies the immutable prebuilt YOU_TEST_BINARY; the integration test never builds it"
+    "artifactOwner": "build/release supplies the immutable prebuilt YOU_TEST_BINARY; the integration test never builds it",
+    "delivery": "python -m json.tool <task-json> && python -m json.tool prd.json; git diff --check; git push; gh pr create --base main --head factory-feasibility-disposition-prerequisite --title factory-feasibility-disposition-prerequisite --body-file prd.json; confirm required CI started on the exact head and stop"
   },
   "qualityBoundaries": {
     "securityPrivacy": "Bounded normalized keys/references/summaries only; no raw provider output, prompts, credentials, tokens, or transcript bodies; existing Factory authorization remains authoritative.",
@@ -275,11 +279,45 @@
     "promotionOwner": "Portfolio Supervisor",
     "executorBoundary": "This task/workstation does not execute or approve rollout."
   },
+  "deliveryHandoff": {
+    "futureDesignDocument": "docs/internal/development/plans/factory-feasibility-disposition-correction.md",
+    "currentWrites": [
+      "tasks/todo/factory-feasibility-disposition-prerequisite.md",
+      "tasks/todo/factory-feasibility-disposition-prerequisite.json",
+      "prd.json and progress.txt as untracked planner scaffolding"
+    ],
+    "implementationFinishLine": "Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.",
+    "sequence": [
+      "Run python -m json.tool on the task JSON and prd.json, git diff --check, and field-by-field Markdown/JSON parity review.",
+      "Confirm only the two task artifacts are tracked; keep prd.json and progress.txt untracked and commit the focused packet change.",
+      "Push the named branch and open/update a PR targeting main with title factory-feasibility-disposition-prerequisite and prd.json as the body file.",
+      "Confirm required CI started on the exact head and address known blocking feedback or a reported conflict; contradictory feedback becomes a structured blocker.",
+      "Stop implementation after pushed head, open PR, started CI, and addressed blocking feedback; do not wait for terminal CI, merge, VAL-001, runtime, LocalAI, or canary evidence."
+    ],
+    "owners": {
+      "implementation": "Current workstation through open PR and CI-start finish line",
+      "validation": "Fresh VAL-001 report using factory/docs/standards/validation-loopback-template.md",
+      "review": "Terminal required CI, conflict resolution, merge, and CI evidence in PR comments",
+      "supervisor": "Post-merge one-session canary admission and promotion"
+    },
+    "blockerFields": [
+      "failed criterion",
+      "reproduction or exact evidence",
+      "system/customer impact",
+      "safe work completed",
+      "accountable owner",
+      "observable exit",
+      "dependencies and retest scope",
+      "smallest plan or contract delta"
+    ],
+    "ciEvidencePolicy": "Never commit CI results, audit notes, or validation records; review records CI-run evidence in the PR conversation."
+  },
   "acceptanceCriteria": [
-    {"id":"T003-AC-01","requirement":"Every happy, unhappy, replay, idempotence, and public-boundary case has a deterministic result, observer, preserved state, and later gate.","passes":true,"evidence":"M-01–M-18 matrix includes given/when/then result, counts, observer, preserved state, and owner gate.","laterGate":"VAL-001 and the named implementation gates"},
-    {"id":"T003-AC-02","requirement":"LocalAI, feasible, handled/replay, unowned, corrected-repeat, overdue, external-hold, and orphan fixtures produce expected counts in a no-live-mutation tabletop.","passes":true,"evidence":"Tabletop fixture, five-step procedure, expected matrix counts, and explicit liveMutation=false record the controlled witness.","laterGate":"GATE-IMPL-PREFLIGHT, GATE-IMPL-INCIDENT, GATE-IMPL-ORPHAN, and GATE-IMPL-ISOLATED"},
-    {"id":"T003-AC-03","requirement":"VAL-001 has an exact template procedure, classifies every project criterion, and requires a precise delta for FAIL/BLOCKED without silent repair.","passes":true,"evidence":"cleanRoom.template, steps, criterionClassifications, prohibited actions, and deltaPlanRequiredFor are explicit.","laterGate":"VAL-001"},
-    {"id":"T003-AC-04","requirement":"The future rollout names one Factory Session, one observation window, measurable hold conditions, rollback, and upstream immutable artifact ownership without changing live state.","passes":true,"evidence":"rollout and pathLease name the session/window/signals/holds/rollback and build/release, source-plan, and Supervisor owners.","laterGate":"REVIEW-CI-MERGE and GATE-CANARY"}
+    {"id":"T004-AC-01","requirement":"Given the integrated design, an independent reviewer can find the exact diagnostic Current/Proposed contract, M-01–M-18 matrix, path lease, owners, commands, and unproven edges, with no live Factory change claimed.","passes":true,"evidence":"The retained contract excerpt, complete matrix, pathLease, futureCommands, quality boundaries, and remainingUnprovenEdges are explicit; liveMutation is false.","laterGate":"VAL-001 and the named implementation gates"},
+    {"id":"T004-AC-02","requirement":"Given a blocking review finding or conflict, the handoff requires a reviewed design/PR correction or a structured blocker with an owner and observable exit; it never hides the finding or repairs live state.","passes":true,"evidence":"deliveryHandoff owners, sequence, blockerFields, and cleanRoom deltaPlanRequiredFor define the convergent response and no-live-repair boundary.","laterGate":"REVIEW-CI-MERGE and VAL-001"},
+    {"id":"T004-AC-03","requirement":"Given the final merged design, the Supervisor handoff keeps preflight, incident/replay, LocalAI artifact, isolated public behavior, and canary as explicit future gates; the proposal is not runtime accepted.","passes":true,"evidence":"handoff artifacts, remainingUnprovenEdges, rollout executorBoundary, and promotionOwner retain all future gates and prohibit runtime acceptance claims.","laterGate":"REVIEW-CI-MERGE, GATE-IMPL-ISOLATED, LA-05/LA-06, and GATE-CANARY"},
+    {"id":"T004-AC-04","requirement":"Given the final design head, VAL-001 has the exact read-only template, all criterion classifications, and a required delta plan for every FAIL/BLOCKED result; it never silently repairs.","passes":true,"evidence":"cleanRoom.template, mode, inputs, prohibited actions, steps, six criterion classifications, and deltaPlanRequiredFor are explicit.","laterGate":"VAL-001"},
+    {"id":"T004-AC-05","requirement":"The exact implementation-stage delivery criterion is preserved verbatim and stops this stage at pushed head, open PR, started CI, and addressed blocking feedback while review owns terminal CI, conflicts, and merge.","passes":true,"evidence":"deliveryHandoff.implementationFinishLine preserves the exact prd.json criterion and its sequence/owners forbid CI polling or merge by this stage.","laterGate":"REVIEW-CI-MERGE"}
   ],
   "paidValidation": {
     "applicable": false,
@@ -290,7 +328,7 @@
     "fixture": "Sanitized public facts, controlled tabletop, and validation-loopback template.",
     "evidenceReuseKey": "FACTORY-FEASIBILITY-01/matrix-v1"
   },
-  "operationalAndRollout": "No production/API/generated/test/live Factory surface changes. Future readers and projections precede writers; same-ID conflicts and partial-write uncertainty hold the action; rollback disables new writers and preserves events and failed Work; only the Portfolio Supervisor promotes after reviewed merge and the one-session observation window.",
+  "operationalAndRollout": "No production/API/generated/test/live Factory surface changes. Future readers and projections precede writers; same-ID conflicts and partial-write uncertainty hold the action; rollback disables new writers and preserves events and failed Work; the implementation stage stops after pushed head/open PR/started CI/addressed feedback; review owns terminal CI/conflicts/merge; only the Portfolio Supervisor promotes after reviewed merge and the one-session observation window.",
   "escalation": {
     "conditions": [
       "Any M-01–M-18 row lacks a deterministic observer or outcome",
@@ -308,7 +346,17 @@
       "observable exit",
       "smallest plan or contract delta"
     ],
-    "implementationReadyClaimAllowed": false
+    "implementationReadyClaimAllowed": false,
+    "deliveryBlockerFields": [
+      "failed criterion",
+      "reproduction or exact evidence",
+      "system/customer impact",
+      "safe work completed",
+      "accountable owner",
+      "observable exit",
+      "dependencies and retest scope",
+      "smallest plan or contract delta"
+    ]
   },
   "handoffArtifacts": [
     "Integrated Current/Proposed reconciliation result",
@@ -318,9 +366,10 @@
     "Unit/contract/functional/integration layer placement",
     "Path lease and immutable artifact ownership",
     "One-session canary observation, hold, rollback, and Supervisor-promotion gate",
-    "T004, VAL-001, REVIEW-CI-MERGE, GATE-IMPL-ISOLATED, and GATE-CANARY inputs"
+    "PR title/body/CI-start delivery handoff",
+    "VAL-001, REVIEW-CI-MERGE, GATE-IMPL-ISOLATED, and GATE-CANARY inputs"
   ],
   "priority": "P0",
   "passes": true,
-  "notes": "T003 design packet completed. No production/API/generated/test/live Factory files were changed; runtime behavior, clean-room execution, terminal CI/merge, LocalAI acceptance, and canary safety remain explicit later gates."
+  "notes": "T004 packet prepared. No production/API/generated/test/live Factory files were changed; runtime behavior, clean-room execution, terminal CI/merge, LocalAI acceptance, and canary safety remain explicit later gates. The implementation-stage finish line is pushed head, open PR, started required CI, and addressed blocking feedback; review owns terminal CI/conflicts/merge."
 }
