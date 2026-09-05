@@ -167,7 +167,7 @@ open result and durable start are the same representation.
 | R-08 | Ephemeral response events replay retained prefix, then live events, and close at documented terminal boundary | `tests/functional/events/response_events/stream_test.go:TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`, `TestAPIResponseEventStreamClosesAtDocumentedBoundary`; terminal outcomes `tests/functional/events/response_events/terminal_outcomes_test.go:TestReadResponseEventStreamUntilTerminalRunOutcomes` | `PASS` | FSCP01-TRANSPORT-005 |
 | R-09 | Response cursor gap, expiry, filters, and typed errors | `tests/functional/events/response_events/stream_test.go:TestAPIResponseEventCursorGapEmitsStreamGap`, `TestAPIResponseEventSessionExpiryReturnsTypedGone`; `pkg/services/factory_sessions/discovery_test.go:TestResponseStreamRootContract_TypedStaleCursorGapAndCancelFailures`; handler validation `pkg/services/factory_sessions/transports/http/handlers_response_events_test.go:TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence`, `TestGetFactoryResponseEventsBySessionId_RejectsInvalidKindFilter` | `PASS` | FSCP01-TRANSPORT-005 |
 | R-10 | Concurrent response subscriptions remain isolated and reconnect from cursor | `tests/functional/events/response_events/concurrent_session_isolation_test.go:TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor`; runtime replacement `tests/functional/events/response_events/session_runtime_replace_test.go:TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement` | `PASS` | FSCP01-TRANSPORT-005 |
-| R-11 | Response stream and canonical event/artifact reads are independent after reconnect/close | `tests/functional/events/factory_events/fscp01_canonical_reads_test.go:TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents` deliberately makes no `response-events` subscription, then reads canonical history, reconnects from event ID and sequence cursors, and reads artifacts. An explicit open-then-close response subscription remains outside this witness. | `PASS` | FSCP01-CANONICAL-003; explicit close-after-subscription remains a later edge |
+| R-11 | Response stream and canonical event/artifact reads are independent after reconnect/close | `tests/functional/events/factory_events/fscp01_response_teardown_test.go:TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads` opens the session-scoped SSE stream before controlled provider output, observes ordered frames, deliberately closes it, requires the explicit canceled outcome, then reads canonical history/cursors and artifacts; the no-subscription control remains `TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents`. | `PASS` | FSCP01-CANONICAL-003 |
 | R-12 | Response stream for a recording-only session before resume handoff | `pkg/services/factory_sessions/internal/execution/recordingreplay/service_test.go:TestServiceRejectsUnknownSessionsAndLiveOperations`; `recordingreplay/service.go:115-136` returns `ErrNonLiveReplay` before handoff | `UNSUPPORTED` | Story 002 recovery characterization |
 
 ## Canonical events, artifacts, and replay
@@ -187,7 +187,7 @@ history or artifact retrieval.
 | K-07 | Canonical dispatch lifecycle records queue/interrupt/reconcile/artifact sequence | `pkg/services/recordings/internal/events/event_history_dispatch_lifecycle_test.go:TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueInterruptReconcileAndArtifactSequence`; association `pkg/services/recordings/internal/events/event_history_dispatch_worker_session_association_test.go:TestFactoryEventHistory_RecordDispatchWorkerSessionAssociation_RecordsCanonicalAssociation` | `PASS` | FSCP01-DISPATCH-004 |
 | K-08 | `ListArtifacts`/`GetArtifact` return stable summaries/detail from the durable owner | `pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go:TestFakeService_PublishedScenarios_ListArtifactsStableSummaries`, `TestFakeService_PublishedScenarios_GetArtifactDetailAndUnknownError`; `pkg/services/factory_sessions/internal/execution/recordingreplay/service_test.go:TestServiceExposesRecordedArtifactsAndEmptyDispatches` | `PASS` | FSCP01-CANONICAL-003 |
 | K-09 | Recording root artifact/replay export and typed validation failures | `pkg/services/recordings/replay_artifact_capability_test.go:TestRecordingReplayArtifacts_UnchangedBehaviorThroughComposedImplementation`, `TestRecordingReplayArtifacts_TypedFailures`, `TestRecordingReplayArtifacts_UnsupportedSchemaVersion`, `TestRecordingReplayArtifacts_InvalidOrder`, `TestRecordingReplayArtifacts_InvalidIntegrity`, `TestRecordingReplayArtifacts_MalformedDecode`, `TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries`; root contract `pkg/services/recordings/wire/fold_behavior_preservation_test.go:TestWireFoldPreservesPortableArtifactExportThroughPublishedRoot` | `PASS` | FSCP01-CANONICAL-003 |
-| K-10 | Independent canonical artifact retrieval after response-stream closure | `tests/functional/events/factory_events/fscp01_canonical_reads_test.go:TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents` reads stable artifact list/detail data, safe retrieval refs, and typed missing/corrupt/foreign-session failures without subscribing to response events. | `PASS` | FSCP01-CANONICAL-003; explicit close-after-subscription remains a later edge |
+| K-10 | Independent canonical artifact retrieval after response-stream closure | `tests/functional/events/factory_events/fscp01_response_teardown_test.go:TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads` closes an active response subscription before reading canonical event cursors and stable artifact list/detail/retrieval data, and asserts typed missing/corrupt/foreign-session failures; the no-subscription independence control remains `TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents`. | `PASS` | FSCP01-CANONICAL-003 |
 | K-11 | Historical recording dispatch list/detail before durable execution handoff | `pkg/services/factory_sessions/internal/execution/recordingreplay/service_test.go:TestServiceHistoricalDispatchQueriesRemainEmptyForEveryFilter`; `recordingreplay/service.go:222-255` returns empty/not-found before handoff | `UNSUPPORTED` | Preserve existing replay behavior until a later canonical dispatch projection is specified |
 | K-12 | Canonical event/artifact reads through every CLI/ACP/MCP transport | MCP canonical read witness `pkg/services/factory_sessions/transports/mcp/inspection_test.go:TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents`; ACP child stream witness `tests/functional/sessions/chat_sessions/root_composition/acp_worker_child_events_test.go:TestACPWorkerChildStreamSurvivesRetainedReplay`; no separate CLI artifact endpoint is exposed by the current contract | `NOT_COMPARABLE` | Transport gate FSCP01-TRANSPORT-005; do not invent unsupported transport operations |
 
@@ -195,44 +195,62 @@ history or artifact retrieval.
 
 The public dispatch list/detail response exposes values but does not identify
 whether each value came from a Runtime snapshot, durable execution state, or a
-Recording projection. Source-code inspection can describe candidate producer
-paths, but it is not semantic evidence for this matrix. Until a recording-only
-or replay witness distinguishes those paths, every returned field remains an
-explicit `UNPROVEN` disposition.
+Recording projection. The correction uses executing Recordings observations
+only where a canonical fact can be matched to the public value. Every other
+observed field retains a stable `INCONCLUSIVE` blocker; no source is inferred
+from a label, constructor, or source inventory.
 
 | Field/group returned by `DispatchSummary` / `DispatchDetail` | Active source disposition | Terminal/replay source disposition | Witness and current limit |
 | --- | --- | --- | --- |
-| `ID`, `Status`, `Phase`, `Label`, `Attempt`, `Retryable`, `FailureClassification`, `FailureDetail` | `UNPROVEN` | `UNPROVEN` | Public active/terminal list/detail values, typed missing/foreign dispatch reads, and repeated terminal reads are observed by `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`; producer source and replay parity are not distinguishable at this boundary |
-| `RunnerID`, `PresetID`, `ModelProvider`, `Model`, `ReasoningEffort`, `Provider` | `UNPROVEN` | `UNPROVEN` | Controlled provider-command edge is exercised for the active and terminal root-built sessions; any returned field is logged with its list/detail observation, but no source ownership is inferred |
-| `ProviderSessionRefs` | `UNPROVEN` | `UNPROVEN` | Owner fixtures cover provider-session reference shapes; the public FSCP-01 witness records only fields actually returned by list/detail, so source parity across terminal paths remains unproven |
-| `OutputArtifactIDs` and `ArtifactIDs` | `UNPROVEN` | `UNPROVEN` | Public terminal artifact fields are observed alongside the independent canonical artifact witness; dispatch-field producer source is not distinguishable |
-| `Usage`, `Warnings` | `UNPROVEN` | `UNPROVEN` | Existing usage coverage and the public FSCP-01 field observation do not identify the producing authority |
-| `ConfirmationState` | `UNPROVEN` | `UNPROVEN` | Existing read-boundary tests observe confirmation behavior; this packet does not promote that observation into a source-ownership claim |
-| `StateSequence`, `StateSequenceKnown`, `StreamGenerationID` | `UNPROVEN` | `UNPROVEN` | Existing lifecycle-cursor tests observe the fields where present; field-by-field terminal/replay source persistence remains unproven |
-| `StatusTransitions` | `UNPROVEN` | `UNPROVEN` | Existing interrupted/replay projection tests cover related metadata; the public active/terminal witness does not distinguish its source |
-| `DispatchDetail.SessionID`, `OrchestratorKind` | `UNPROVEN` | `UNPROVEN` | Existing correlation tests and the FSCP-01 witness prove public identity/correlation, not source parity across replay paths |
-| `DispatchDetail.Petri` | `UNPROVEN` | `UNPROVEN` | No exact field-level public witness establishes a source for this private/internal-shaped field |
-| `DispatchDetail.JavaScript` / `DispatchSummary.JavaScript` | `UNPROVEN` | `UNPROVEN` | Existing runtime projection tests and the public FSCP-01 witness observe the shape where present; complete restart/replay source parity remains unproven |
+| `ID` | `PASS` | `PASS` | `TestFSCP01DispatchReadFieldProvenanceMatrix` matches public list/detail `id` to the executing Recordings association context. `TestFSCP01DispatchReplayParityAndSourceWitness` matches the same identity in the finalized artifact and requires exact non-transient list/detail parity after the second root-built replay process. |
+| `Status`, `Phase`, `Label`, `Retryable`, `FailureClassification`, `FailureDetail` | `INCONCLUSIVE` (`DISPATCH_LIFECYCLE_EVENTS_NOT_RECORDED_BY_FIXTURE`, `DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`, or field-specific blocker) | `INCONCLUSIVE` (same typed blockers) | Active/terminal list/detail values, typed missing/foreign reads, repeated reads, and replay equality are observed, but this JavaScript fixture emits no canonical dispatch lifecycle/reconciliation fact that distinguishes their producer. |
+| `Attempt` | `INCONCLUSIVE` (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`) | The public attempt is `1`, but the canonical stream emitted no inference request/response event for the selected dispatch. The witness records the absence explicitly and does not turn it into lineage PASS. |
+| `RunnerID`, `PresetID`, `ModelProvider`, `ReasoningEffort`, `Provider` | `INCONCLUSIVE` (`RUNNER_NOT_RETAINED_BY_ASSOCIATION_EVENT`, `PRESET_NOT_RETAINED_BY_ASSOCIATION_EVENT`, or field-specific blocker) | `INCONCLUSIVE` (same typed blockers) | The controlled provider-command edge is exercised, but those values are not retained by the fixture's canonical association fact. |
+| `Model` | `PASS` | `PASS` | The live Recordings association event retains private `model` metadata; the witness matches that value to public list/detail. The finalized replay artifact retains the same association payload and the second process returns the same value. |
+| `ProviderSessionRefs` | `INCONCLUSIVE` (`PROVIDER_SESSION_REFERENCE_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`PROVIDER_SESSION_REFERENCE_NOT_EMITTED_BY_FIXTURE`) | No provider-session reference is emitted by this fixture, so the public shape is not assigned a producer source. |
+| `OutputArtifactIDs` and `ArtifactIDs` | `INCONCLUSIVE` (`DISPATCH_ARTIFACT_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_ARTIFACT_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | Public artifact values and independent artifact reads are stable, but this fixture emits no dispatch artifact reconciliation event tying those fields to a canonical producer. |
+| `Usage`, `Warnings` | `INCONCLUSIVE` (`DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_RECONCILIATION_NOT_EMITTED_BY_FIXTURE`) | No dispatch reconciliation fact is emitted for the JavaScript child in this witness. |
+| `ConfirmationState` | `INCONCLUSIVE` (`READ_BOUNDARY_CONFIRMATION_IS_TRANSIENT`) | `INCONCLUSIVE` (`READ_BOUNDARY_CONFIRMATION_IS_TRANSIENT`) | The replay comparison logs and deliberately excludes this process/read-boundary durability watermark from canonical parity. |
+| `StateSequence`, `StateSequenceKnown`, `StreamGenerationID` | `INCONCLUSIVE` (`STATE_CURSOR_NOT_RETURNED_BY_FIXTURE`) | `INCONCLUSIVE` (`STATE_CURSOR_NOT_RETURNED_BY_FIXTURE`) | These optional cursor fields are not returned by the selected public dispatch fixture, so no source claim is made. |
+| `StatusTransitions` | `INCONCLUSIVE` (`DISPATCH_LIFECYCLE_EVENTS_NOT_RECORDED_BY_FIXTURE`) | `INCONCLUSIVE` (`DISPATCH_LIFECYCLE_EVENTS_NOT_RECORDED_BY_FIXTURE`) | Public transitions are observed and compared after replay, but the fixture does not retain corresponding canonical dispatch lifecycle events. |
+| `DispatchDetail.SessionID` | `INCONCLUSIVE` (`CANONICAL_ASSOCIATION_SCOPE_IS_DEFAULT_ALIAS`) | `INCONCLUSIVE` (`CANONICAL_ASSOCIATION_SCOPE_IS_DEFAULT_ALIAS`) | The public durable session identity is stable and replay-equal, but the observed association scope is the `~default` alias, so it cannot be promoted to a direct source match. |
+| `OrchestratorKind` | `INCONCLUSIVE` (`ORCHESTRATOR_KIND_NOT_RETAINED_BY_ASSOCIATION_EVENT`) | `INCONCLUSIVE` (`ORCHESTRATOR_KIND_NOT_RETAINED_BY_ASSOCIATION_EVENT`) | The JavaScript value is returned by the public detail, but the association event does not retain the corresponding producer fact. |
+| `DispatchDetail.Petri` | `INCONCLUSIVE` (`FIXTURE_IS_JAVASCRIPT_ONLY`) | `INCONCLUSIVE` (`FIXTURE_IS_JAVASCRIPT_ONLY`) | The selected fixture does not produce a Petri projection. |
+| `DispatchDetail.JavaScript` / `DispatchSummary.JavaScript` | `INCONCLUSIVE` (`JAVASCRIPT_PROJECTION_NOT_RETAINED_AS_CANONICAL_DISPATCH_FACT`) | `INCONCLUSIVE` (`JAVASCRIPT_PROJECTION_NOT_RETAINED_AS_CANONICAL_DISPATCH_FACT`) | The JavaScript projection is observed and replay-compared, but no canonical dispatch event in this fixture retains its source fields. |
 
 ### Dispatch conclusion
 
-The public behavior is characterized, but source ownership is intentionally not
-selected by this packet:
+The public behavior is characterized, and only the directly matched source
+facts are promoted by this packet:
 
 1. Root-built active and terminal sessions expose stable public list/detail
    values, attempt `1`, and a canonical Worker Session association.
 2. The active fixture uses the exact injected provider-command edge and holds
    the command until the `RUNNING` dispatch read is observed; the terminal
    fixture uses the same edge and observes the completed read.
-3. The canonical public streams emit dispatch start and Worker Session
-   association facts for the selected dispatch. They emit no inference
-   request/response event in this fixture, so attempt-to-inference-event
-   association is explicitly `UNPROVEN`; the public attempt and Worker Session
-   facts remain asserted.
-4. No recording-only/replay witness distinguishes Runtime, durable, and
-   Recording producers for returned fields. Every observed field therefore
-   remains `UNPROVEN`, and the functional test fails closed if a returned field
-   has no explicit disposition/evidence entry.
+3. The Recordings root retains one association event at canonical sequence 4
+   with the selected dispatch identity, session-qualified Worker Session ID,
+   and private model metadata. Those exact facts are matched to public `ID`
+   and `Model` in both active and terminal reads. The association scope remains
+   `~default`, so the public durable `SessionID` remains typed
+   `INCONCLUSIVE` rather than inferred.
+4. The fixture's `DispatchRecorder` is not invoked for JavaScript child
+   dispatches (`JAVASCRIPT_DISPATCH_NOT_SENT_TO_DISPATCH_RECORDER`), and no
+   inference request/response is emitted (`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`).
+   Both absences are recorded as blockers; attempt/Worker Session lineage is
+   never optionalized into a pass.
+5. `TestFSCP01DispatchReplayParityAndSourceWitness` writes a finalized
+   recording, stops and closes the first root, opens a second `--replay`
+   root, and compares every non-transient returned list/detail field. It also
+   proves exact public canonical event count/order/content (five events), the
+   persisted association and `SESSION_COMPLETED` boundary (nine artifact
+   events), and stable Worker Session association identity. Only
+   `ConfirmationState` is excluded, with its process-local watermark reason
+   logged explicitly.
+6. Fields without an executing canonical dispatch fact remain
+   `INCONCLUSIVE` with the exact blockers in the table. The witness fails
+   closed for a missing disposition, missing parity field, mismatch, or
+   unexpected post-replay field.
 
 These are intentional stop points for FSCP01-DISPATCH-004. A convergence
 change must not silently turn them into a new projection rule.
@@ -381,50 +399,78 @@ deliberately opens no `response-events` subscription, and reads only the
 canonical session event and artifact authorities. The dispatch witness is
 `tests/functional/sessions/execution/fscp01_dispatch_provenance_test.go:TestFSCP01DispatchReadFieldProvenanceMatrix`.
 It uses controlled root-built active and terminal sessions, compares public
-list/detail fields, joins each selected dispatch to its canonical Worker
-Session association, and logs an explicit source label for every returned
-field. Because the public boundary does not distinguish its producer, every
-observed field is deliberately labeled `UNPROVEN`; the test fails closed when
-a returned field has no explicit disposition/evidence entry. The fixtures use
-the injected provider-command edge rather than mock workers. The canonical
-stream observation records dispatch start and Worker Session association; this
-fixture emits no inference request/response event, so that attempt-to-event
-association is also explicitly `UNPROVEN`.
+list/detail fields, joins each selected dispatch to its Recordings association,
+and logs `PASS` only for the matched dispatch ID and private model fact. All
+other returned fields carry the exact `INCONCLUSIVE` blockers in the dispatch
+table. The fixtures use the injected provider-command edge rather than mock
+workers. The canonical stream observation records dispatch start and Worker
+Session association; this fixture emits no inference request/response event,
+so attempt-to-event lineage is explicitly `INCONCLUSIVE` with
+`INFERENCE_EVENT_NOT_EMITTED_BY_FIXTURE`.
+
+The restart/replay witness is
+`tests/functional/sessions/execution/fscp01_dispatch_replay_test.go:TestFSCP01DispatchReplayParityAndSourceWitness`.
+It records a terminal JavaScript child, captures the live Recordings
+association and private model metadata, stops and closes the first root, loads
+the finalized artifact, then opens a second root with the existing replay
+path. It compares every non-transient list/detail JSON field, exact public
+canonical event order/content, and persisted Worker Session association. The
+only parity exclusion is `ConfirmationState`, named as a process-local
+read-boundary watermark and logged with its reason.
+
+The response handoff witness is
+`tests/functional/events/factory_events/fscp01_response_teardown_test.go:TestFSCP01ResponseTeardownThenCanonicalReconnectAndArtifactReads`.
+It opens a session-scoped SSE subscription before the gated provider returns,
+observes ordered session-owned frames, deliberately cancels the subscription
+and requires the `CANCELED` reader outcome, then completes the invocation and
+reads canonical reconnect cursors plus artifact list/detail/retrieval. The
+existing no-subscription witness remains the independence control.
 
 Exact verification commands and observed results:
 
 ```text
 go test ./pkg/services/recordings/... -count=1 -timeout 10m
-go test ./tests/functional/events/factory_events -run '^TestFSCP01CanonicalReconnectAndArtifactReadsIndependentOfResponseEvents$' -count=1 -timeout 15m -v
-go test ./tests/functional/sessions/execution -run '^TestFSCP01DispatchReadFieldProvenanceMatrix$' -count=1 -timeout 15m -v
+go test ./tests/functional/sessions/execution -run '^TestFSCP01' -count=1 -timeout 15m -v
+go test ./tests/functional/events/factory_events ./tests/functional/events/response_events -run '^TestFSCP01' -count=1 -timeout 15m -v
+go test -race ./tests/functional/sessions/execution ./tests/functional/events/factory_events ./tests/functional/events/response_events -run '^TestFSCP01' -count=1 -timeout 20m
+make test && make lint
 ```
 
 - The complete Recordings owner suite passed across canonical events, replay,
   projections, artifacts, dispatch lifecycle, worker associations, and typed
   failures.
-- The canonical root-built witness passed with three ordered canonical
-  lifecycle events and one completed-workflow artifact. Repeated full reads
-  were stable; event-ID and session-sequence reconnects returned the exact
-  suffix with no duplicate or gap; the terminal boundary was unique and last;
-  the artifact list/detail and safe retrieval reference were stable; unknown
-  cursor, missing/corrupt/foreign artifact, and unknown-session probes returned
-  typed outcomes. No response stream was opened, so this proves canonical
-  reads do not require a retained/live response subscription. It does not
-  prove an explicit response-subscription open/close teardown sequence.
+- The canonical root-built witness passed with ordered canonical lifecycle
+  events and a completed-workflow artifact. Repeated full reads were stable;
+  event-ID and session-sequence reconnects returned the exact suffix with no
+  duplicate or gap; the terminal boundary was unique and last; the artifact
+  list/detail and safe retrieval reference were stable; unknown cursor,
+  missing/corrupt/foreign artifact, and unknown-session probes returned typed
+  outcomes. No response stream is opened, so this remains the independence
+  control for the explicit teardown witness.
+- The response teardown witness opens a live session-scoped subscription before
+  releasing the controlled provider gate, observes three ordered frames owned
+  by the selected durable session, closes the client subscription, and observes
+  `CANCELED`. The session then reaches `SUCCEEDED`; canonical reads return five
+  ordered events and two artifacts, including stable list/detail/retrieval and
+  typed missing/corrupt/foreign artifact outcomes.
 - The dispatch root-built witness passed for active `dispatch-1` (`RUNNING`)
   and terminal `dispatch-1` (`COMPLETED`). Both had attempt `1`, a
-  session-qualified canonical Worker Session association, public list/detail
-  common-field equality, and a logged `UNPROVEN` disposition for every field
-  actually returned by the public reads. The active and terminal fixtures
-  exercised the injected provider-command edge; no inference request/response
-  event was emitted, which remains explicitly unproven rather than treated as
-  attempt evidence. Unknown and wrong-session dispatch reads returned typed
-  `404 NOT_FOUND` outcomes.
+  session-qualified Worker Session association, public list/detail common-field
+  equality, and executing `PASS` source matches for `ID` and `Model`; every
+  other observed field was logged with its stable `INCONCLUSIVE` blocker. The
+  runtime dispatch recorder was not invoked for this JavaScript child, and no
+  inference request/response event was emitted, both recorded as typed
+  limitations. Unknown and wrong-session dispatch reads returned typed `404
+  NOT_FOUND` outcomes.
+- The dispatch replay witness finalized a nine-event artifact, preserved the
+  association and `SESSION_COMPLETED` boundary, matched every non-transient
+  list/detail field after the second root-built replay process, and matched the
+  five-event public canonical history byte-for-byte at the generated boundary.
 
 This advances FSCP01-CANONICAL-003 and FSCP01-DISPATCH-004. It does not prove
-explicit response-stream teardown, restart/replay field parity across every
-dispatch path, transport mapping, real provider or persistence behavior, or
-independent project validation.
+source distinctions for fields whose canonical dispatch fact is absent from
+the JavaScript fixture, transport mapping, real provider or persistence
+behavior, or independent project validation.
 
 ### Story 004 procedure and observed evidence
 
@@ -513,11 +559,13 @@ Each semantic run must record the following before claiming a row:
 
 ### Remaining unproven edges
 
-1. Explicit response-stream open/close teardown followed by canonical reads is
-   not covered; the story-003 witness proves independence by never opening the
-   ephemeral stream.
-2. Restart/replay dispatch field parity remains `INCONCLUSIVE`/`UNPROVEN`
-   where the current tests do not assert each field across every handoff path.
+1. Dispatch source distinctions remain `INCONCLUSIVE` for fields whose
+   JavaScript fixture emits no canonical dispatch lifecycle, reconciliation,
+   inference, provider-session, artifact, or producer metadata fact; the exact
+   blockers and later FSCP-06 gate are recorded in the dispatch table.
+2. The response teardown witness covers one session-scoped subscription; the
+   existing concurrent response suite owns the two-session isolation and
+   cursor-resume edge.
 3. Transport rows and the final hermetic integrated proof are recorded above;
    the unsupported T-13 surface remains intentionally non-comparable.
 4. Independent project validation, final acceptance, and any real-provider
