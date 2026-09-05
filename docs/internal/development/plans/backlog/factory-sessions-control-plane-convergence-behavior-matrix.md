@@ -10,35 +10,36 @@ convergence. It does not change a Go contract, runtime, transport, persisted
 format, or dependency graph.
 
 `PASS` in this document means that the current tree contains an exact named
-witness whose assertion shape covers the row. It does not mean that the test
-was executed by this documentation-only story. Stories 002–004 own execution
-of the applicable witnesses and must record runtime results separately.
+witness whose assertion shape covers the row. Runtime execution evidence is
+recorded in the owning story procedure below when available; later stories
+still own their declared semantic edges.
 
 | Item | Identity |
 | --- | --- |
 | Packet | `FSCP-01` |
 | Current branch | `system-convergence-fscp-01-characterize-legacy-behavior` |
-| Current main / HEAD audited | `e10e38843aff30c7871b732b284976ee13ab42f1` |
+| Current main / HEAD audited | `5165e8bd6e63f0405252c099dbbc99b159e3ed21` |
 | Governing source plan | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/source-plan.md` — `FSCP-01 — Characterize behavior across legacy entrypoints` |
 | Source-plan SHA-256 | `058BF1A1E74CBC64DFEDB89BB83F0CBC3B805F941D489BB24BD207E00371794A` |
 | Reconciliation dependency | `C:/Users/andre/work/portos/infinite-you/docs/temp/projects/system-convergence/state.md` — `SC-01` current reconciliation |
 | Contract changes in this packet | None |
-| Runtime tests run for this packet | None; the declared verification is contract/documentation mapping only |
+| Runtime tests run for this packet | Story 002 owner and Factory Sessions functional suites; exact commands and observed outcomes are recorded below |
 
 ### Disposition vocabulary
 
 | Disposition | Meaning in this matrix |
 | --- | --- |
-| `PASS` | An exact current test name and path were reconciled, and the body is the intended semantic witness for the cell. Execution is deferred to the owning gate. |
+| `PASS` | An exact current test name and path were reconciled, and the body is the intended semantic witness for the cell. Execution evidence is recorded when its owning story runs it. |
 | `FAIL` | A runtime witness was executed and observed a current mismatch with the documented behavior. No row is marked `FAIL` by this non-runtime audit. |
 | `INCONCLUSIVE` | Related witnesses exist, but the current tree does not yet prove the required comparison or complete semantic edge. |
 | `UNSUPPORTED` | The current public contract intentionally rejects the operation or mode; the rejection citation is recorded. This is not a missing test. |
 | `UNPROVEN` | No exact semantic witness was found for the stated edge. Symbol counts, implementation presence, and source inventory do not satisfy this disposition. |
 | `NOT_COMPARABLE` | The paths have different customer intent or input/output semantics, so an identity/status equivalence claim would be invalid. |
 
-The audit therefore has no `FAIL` claim: it did not run behavior. Any later
-runtime failure must be recorded against the row and its owning gate rather
-than inferred from this artifact.
+The initial documentation audit had no `FAIL` claim. Story 002 now records
+its executed functional evidence below; any later runtime failure must be
+recorded against the row and its owning gate rather than inferred from this
+artifact.
 
 ## Contract and ownership boundary
 
@@ -87,7 +88,7 @@ transport-specific envelopes.
 | Live open | `OpenRequest`: trimmed folder, optional `TargetRef`, `ValidateOnly`, `InitNewFactory` | Stable live session identity, target metadata, `OPENED`/validation result, and typed failure | `OpenFactorySession`; folder discovery is a separate subfamily |
 | Folder open | Folder path, target selector, validation/scaffold flags passed to `OpenFactorySessionFromFolder` | Auto-selection, picker metadata, validate-only no-open behavior, scaffold/reinitialize behavior | Not a durable start |
 | Durable start | `StartRequest`: request ID, normalized `Source`, args, orchestrator/policy/runtime options, wait, event consumer | Session identity, initial status, source/policy/link projections, idempotent replay/conflict | `StartAsync` and `StartSync`; wait outcome is a request value |
-| Async/sync start | Same durable start tuple; hold source/args/policy/runtime constant and vary only wait policy/observation | Identity and initial status must be compared before final wait outcome | Cross-path proof is not present in this story; see `INCONCLUSIVE` row E-08 |
+| Async/sync start | Same durable start tuple; hold source/args/policy/runtime constant and vary only wait policy/observation | Identity and initial status must be compared before final wait outcome | Story 002 compares the public async/sync pair; final wait outcomes remain distinct |
 | Detached start | `SessionStartRequest.Mode` plus the corresponding live or durable fields | Mode-specific result and forwarding; no extra service construction | `DetachedOperations.Start` |
 | Invocation | Session ID, prepared input/source kind, request ID, timeout | Work/result identity, terminal status, failure code/message, work lineage | `InvokeFactorySession` and target invocation |
 | Session control | Session ID, typed operation, request ID, reason, turn ID; dispatch ID where applicable | Accepted/no-op/rejected outcome, status, links, and isolation | Live and durable controls are separate behavior families |
@@ -109,15 +110,15 @@ open result and durable start are the same representation.
 | E-03 | `OpenFactorySessionFromFolder`: validate-only returns targets without opening | `pkg/services/factory_sessions/internal/sessionservice/open_test.go:TestService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsWithoutOpening`; control-plane edge `pkg/services/factory_sessions/internal/controlplane/open_test.go:TestOpenFromFolder_ValidateOnlyNotRunnableReturnsInitNewFactoryHint` | `PASS` | FSCP01-HERMETIC-002 |
 | E-04 | Folder open scaffold/reinitialize/idempotency and propagation failures | `pkg/services/factory_sessions/internal/controlplane/open_test.go:TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens`, `TestOpenFromFolder_InitNewFactoryAcceptsMissingNestedFactory`, `TestOpenFromFolder_InitNewFactoryReinitializesExistingRunnableTargetIdempotently`, `TestOpenFromFolder_InitNewFactoryPropagatesResolveFolderError`, `TestOpenFromFolder_InitNewFactoryPropagatesUnrecoverableDiscoveryError`, `TestOpenFromFolder_IdempotentInitNewFactoryPropagatesSelectTargetError`, `TestOpenFromFolder_IdempotentInitNewFactoryRequiresRunnableTarget`, `TestOpenFromFolder_IdempotentInitNewFactoryPropagatesScaffoldError`, `TestOpenFromFolder_IdempotentInitNewFactoryRequiresLiveOpener`, `TestOpenFromFolder_IdempotentInitNewFactoryPropagatesOpenForTargetError` | `PASS` | FSCP01-HERMETIC-002 |
 | E-05 | Live open invalid flag combination and missing live opener | `pkg/services/factory_sessions/internal/sessionservice/open_test.go:TestService_OpenFactorySession_RejectsValidateOnlyWithInitNewFactory`; `pkg/services/factory_sessions/internal/controlplane/open_test.go:TestOpenFromFolder_InitNewFactoryRequiresLiveOpenerAfterScaffold` | `PASS` | FSCP01-HERMETIC-002 |
-| E-06 | `StartAsync`: durable running/success/failure/timeout projection | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartAsync_RunningBeforeCompletion`, `TestJavaScriptRuntimeService_StartAsync_SimpleWorkflowCompletesWithInspectableResult`, `TestJavaScriptRuntimeService_StartAsync_Failed`, `TestJavaScriptRuntimeService_StartAsync_TimedOut`; root-shape witness `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartAsyncReturnsPublishedSuccessShape` | `PASS` | FSCP01-HERMETIC-002 |
-| E-07 | `StartSync`: terminal result and bounded wait outcome | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryResult`, `TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning`; `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartSyncReturnsPublishedSuccessShapeWithSyncOutcome` | `PASS` | FSCP01-HERMETIC-002 |
-| E-08 | Supported live open and durable start identity/status equivalence for the same normalized input | Separate witnesses exist in E-01/E-06/E-07, but no current cross-entrypoint test compares both results with one normalized input and an explicit initial-status assertion. | `INCONCLUSIVE` | Story 002; planned unreserved gap test `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go` only if the existing suite still leaves this gap |
+| E-06 | `StartAsync`: durable running/success/failure/timeout projection | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartAsync_RunningBeforeCompletion`, `TestJavaScriptRuntimeService_StartAsync_SimpleWorkflowCompletesWithInspectableResult`, `TestJavaScriptRuntimeService_StartAsync_Failed`, `TestJavaScriptRuntimeService_StartAsync_TimedOut`; root-shape witness `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartAsyncReturnsPublishedSuccessShape`; public pair witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01StartOpenIdentityStatusModeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
+| E-07 | `StartSync`: terminal result and bounded wait outcome | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryResult`, `TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning`; `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartSyncReturnsPublishedSuccessShapeWithSyncOutcome`; public pair witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01StartOpenIdentityStatusModeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
+| E-08 | Supported live open and durable start identity/status equivalence for the same normalized input | Public functional witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01StartOpenIdentityStatusModeMatrix` compares selected live open, folder auto-open, durable async, and durable sync identities/read models. It observes live `IDLE`, durable async `RUNNING`, durable sync `SUCCEEDED` with `COMPLETED`/`FINAL`; live and durable are distinct public read unions, so no representation equivalence is claimed. | `PASS` | FSCP01-HERMETIC-002 |
 | E-09 | Durable start request identity, replay, conflict, and async/sync mode distinction | `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_idempotency_test.go:TestDurableStartAsyncIdempotentReplayReturnsStableSessionIdentity`, `TestDurableStartSyncIdempotentReplayReturnsStableSessionIdentity`, `TestDurableStartRequestIDConflictOnTupleMismatch`, `TestDurableStartRequestIDConflictOnAsyncSyncModeMismatch`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_boundary_test.go:TestJavaScriptRuntimeService_Start_ConcurrentIdempotentStarts`, `TestJavaScriptRuntimeService_Start_CrossModeRequestIDConflict` | `PASS` | FSCP01-HERMETIC-002 |
-| E-10 | Durable start validation and typed missing-source/bad-source errors | `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartValidationErrorsDistinguishInvalidFields`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_boundary_test.go:TestJavaScriptRuntimeService_Start_RejectsInvalidWaitAndPolicy`, `TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSource` | `PASS` | FSCP01-HERMETIC-002 |
+| E-10 | Durable start validation and typed missing-source/bad-source errors | `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/start_test.go:TestDurableStartValidationErrorsDistinguishInvalidFields`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_boundary_test.go:TestJavaScriptRuntimeService_Start_RejectsInvalidWaitAndPolicy`, `TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSource`; public typed-source witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01InvokeLifecycleAndResultOutcomeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
 | E-11 | `ResumeInterruptedSession`: checkpoint reconstruction and published result shape | `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/resume_test.go:TestDurableResumeInterruptedSessionReturnsPublishedSuccessShape`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume_test.go:TestJavaScriptRuntimeService_ResumeInterruptedSession_ReconstructsFromCheckpointSummary`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_RehydratesCheckpointStateForControlFlow`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_PreservesLiveChildOutput` | `PASS` | FSCP01-HERMETIC-002 |
 | E-12 | Resume missing/corrupt/invalid/not-eligible checkpoint and cursor failures | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_restart_resume_test.go:TestJavaScriptRuntimeService_ResumeInterruptedSession_MissingCheckpointReturnsTypedFailure`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_CorruptedPersistenceReturnsTypedFailure`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_InvalidCheckpointSummaryReturnsTypedFailure`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_NonApprovedCheckpointReturnsTypedFailure`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_RejectsCheckpointDispatchNotDurablyCompleted`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_RejectsRegressedEventCursor`, `TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSessionReturnsTypedFailure` | `PASS` | FSCP01-HERMETIC-002 |
 | E-13 | `InvokeFactorySession`: target routing, runtime reuse, unknown/closed identity | `pkg/services/factory_sessions/internal/ondemandtarget/service_test.go:TestInvokeFactorySessionRoutesByOrchestratorKind`; `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go:TestInvokeFactorySessionReusesTheCachedRuntime`, `TestInvokeAndCancelAfterCloseReportSessionNotFound`, `TestInvokeFactorySessionUnknownIdentityReportsSessionNotFound` | `PASS` | FSCP01-HERMETIC-002 |
-| E-14 | Invocation result, work lineage, failure/cancel/timeout visibility | `tests/functional/sessions/execution/visibility_test.go:TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`, `TestAPIInvocationResultMatchesCLICompatibleFacts`; `tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess`, `TestCLILocalAndRemoteRunCancellationParityThroughRootProcess` | `PASS` | FSCP01-TRANSPORT-005 |
+| E-14 | Invocation result, work lineage, failure/cancel/timeout visibility | `tests/functional/sessions/execution/visibility_test.go:TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`, `TestAPIInvocationResultMatchesCLICompatibleFacts`; `tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess`, `TestCLILocalAndRemoteRunCancellationParityThroughRootProcess`; public result/control witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01InvokeLifecycleAndResultOutcomeMatrix` | `PASS` | FSCP01-TRANSPORT-005 |
 | E-15 | Named activation and runtime-opening activation through the process root | `tests/functional/sessions/root_composition/lifecycle_runtime_opening_test.go:TestSessionsLifecycleAndRuntimeOpeningActivateThroughRootBuildProcessAfterLifecycle`; `pkg/services/factory_sessions/internal/sessionservice/definition_activation_gateway_test.go:TestDefinitionActivationGatewaySerializesActivationLock`, `TestDefinitionActivationGatewayRejectsIdleViolation` | `PASS` | FSCP01-TRANSPORT-005 |
 | E-16 | Durable `GetSession`: status, source, policy, progress, result summary, artifacts, links | `pkg/services/factory_sessions/internal/execution/fixtures/start_read_test.go:TestFakeService_PublishedScenarios_GetSessionReadModels`; `pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go:TestFakeService_PublishedScenarios_AsyncStartInspectionLinksAndEventPrefix`; functional partial/read coverage `tests/functional/sessions/execution/results_dispatches_test.go:TestAPIPartialResultIsAvailableBeforeTerminalCompletion` | `PASS` | FSCP01-HERMETIC-002 |
 | E-17 | Live `GetFactorySession`: projection, default identity, durable-ID rejection, fallback | `pkg/services/factory_sessions/internal/controlplane/read_test.go:TestGetLiveFactorySession_ReturnsProjectedSession`, `TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity`, `TestGetLiveFactorySession_RejectsDurableIDs`, `TestListLiveFactorySessions_FallsBackWhenProjectionFails`; public not-found witness `tests/functional/sessions/lifecycle/crud_test.go:TestAPIFactorySessionNotFoundUsesTypedError` | `PASS` | FSCP01-HERMETIC-002 |
@@ -145,7 +146,7 @@ open result and durable start are the same representation.
 | C-04 | Durable approve at policy boundary | `pkg/services/factory_sessions/internal/execution/fixtures/lifecycle_test.go:TestFakeService_PublishedScenarios_LifecycleControlApproveAwaitingApproval`, `TestJavaScriptRuntimeService_ApproveRunningSessionReturnsTypedControlError`; routing `pkg/services/factory_sessions/internal/controlplane/durable_lifecycle_test.go:TestApproveDurableFactorySession_RoutesDurableSessionToExecution` | `PASS` | FSCP01-HERMETIC-002 |
 | C-05 | Durable retry and interrupt dispatch | `pkg/services/factory_sessions/internal/execution/fixtures/lifecycle_test.go:TestFakeService_PublishedScenarios_LifecycleControlRetryDispatchPaths`, `TestJavaScriptRuntimeService_RetryDispatchMissingDispatchReturnsNotFound`; `pkg/services/factory_sessions/internal/controlplane/durable_lifecycle_test.go:TestRetryDurableFactorySessionDispatch_PreservesDistinctFromLiveLifecycle`, `TestInterruptDurableFactorySessionDispatch_RoutesDurableSessionToExecution` | `PASS` | FSCP01-DISPATCH-004 |
 | C-06 | Durable control idempotency, request conflict, and isolation | `pkg/services/factory_sessions/internal/execution/fixtures/lifecycle_test.go:TestFakeService_PublishedScenarios_LifecycleControlIdempotentReplayAndConflict`, `TestFakeService_PublishedScenarios_LifecycleControlIsolationAcrossSessions`, `TestFakeService_PublishedScenarios_LifecycleControlDeterministicAcrossServiceReload` | `PASS` | FSCP01-HERMETIC-002 |
-| C-07 | Live pause/resume, typed rejection, cancellation, close, and registry retirement | `pkg/services/factory_sessions/internal/sessionservice/live_runtime_lifecycle_control_test.go:TestLiveControlCapability_OpenPauseResumePreservesLifecycleResults`, `TestLiveControlCapability_PreservesTypedRejectionAndCancellation`, `TestLiveControlCapability_CompletesLifecycleAndRetiresCanonicalSession`, `TestService_LivePauseRejectsInvalidStateWithoutRegistryMutation`, `TestService_CloseFactorySessionThroughLiveRuntimeRetiresRegistryEntry`; public control `tests/functional/sessions/controls/pause_resume_test.go:TestAPIPauseResumeCancelAndTerminateFactorySession` | `PASS` | FSCP01-HERMETIC-002 |
+| C-07 | Live pause/resume, typed rejection, cancellation, close, and registry retirement | `pkg/services/factory_sessions/internal/sessionservice/live_runtime_lifecycle_control_test.go:TestLiveControlCapability_OpenPauseResumePreservesLifecycleResults`, `TestLiveControlCapability_PreservesTypedRejectionAndCancellation`, `TestLiveControlCapability_CompletesLifecycleAndRetiresCanonicalSession`, `TestService_LivePauseRejectsInvalidStateWithoutRegistryMutation`, `TestService_CloseFactorySessionThroughLiveRuntimeRetiresRegistryEntry`; public control `tests/functional/sessions/controls/pause_resume_test.go:TestAPIPauseResumeCancelAndTerminateFactorySession`; public pause/resume result witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01InvokeLifecycleAndResultOutcomeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
 | C-08 | Live cancel/terminate differ from close and preserve inspectability | `pkg/services/factory_sessions/service_contracts.go:166-178` defines the distinction; public witness `tests/functional/sessions/controls/pause_resume_test.go:TestAPIPauseResumeCancelAndTerminateFactorySession`; remote parity `tests/functional/sessions/lifecycle/remote_lifecycle_test.go:TestCLILocalAndRemoteRunCancellationParityThroughRootProcess` | `PASS` | FSCP01-TRANSPORT-005 |
 | C-09 | Close failure retains captured target for retry; unknown/no-runtime close is no-op; all runtimes close | `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go:TestCloseFactorySessionTearsDownAndEvicts`, `TestCloseFactorySessionFailureRetainsCapturedTargetForRetry`, `TestCloseFactorySessionUnknownIdentityIsNoOpSuccess`, `TestCloseTearsDownEveryTrackedRuntime`, `TestCloseWithNoOpenedRuntimesIsNoOpSuccess` | `PASS` | FSCP01-HERMETIC-002 |
 | C-10 | Delete requires lifecycle safety and distinguishes missing/conflict | `tests/functional/sessions/lifecycle/crud_test.go:TestFactorySessionCreateListShowDelete`, `TestFactorySessionMissingShowAndDeleteFail`; HTTP typed failure `pkg/services/factory_sessions/transports/http/root_errors_test.go:TestHandlerFromRoot_DeleteFactorySessionConflictReturnsTypedErrorResponse` | `PASS` | FSCP01-TRANSPORT-005 |
@@ -156,11 +157,11 @@ open result and durable start are the same representation.
 
 | ID | Result/stream cell | Exact witness | Disposition | Owner / later gate |
 | --- | --- | --- | --- | --- |
-| R-01 | Durable final result and terminal invocation data | `tests/functional/sessions/execution/results_dispatches_test.go:TestAPIResultAndResultsExposeTerminalInvocationData`; fixture result `pkg/services/factory_sessions/internal/execution/fixtures/start_read_test.go:TestFakeService_PublishedScenarios_ResultReadsWithStableHash` | `PASS` | FSCP01-HERMETIC-002 |
+| R-01 | Durable final result and terminal invocation data | `tests/functional/sessions/execution/results_dispatches_test.go:TestAPIResultAndResultsExposeTerminalInvocationData`; fixture result `pkg/services/factory_sessions/internal/execution/fixtures/start_read_test.go:TestFakeService_PublishedScenarios_ResultReadsWithStableHash`; public final-result witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01InvokeLifecycleAndResultOutcomeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
 | R-02 | Durable partial result before terminal completion | `tests/functional/sessions/execution/results_dispatches_test.go:TestAPIPartialResultIsAvailableBeforeTerminalCompletion`; result projection `pkg/services/factory_sessions/internal/execution/javascript_runtime_result_test.go:TestProjectResultRead_FailedWithPartialHonorsPartialMode`, `TestProjectResultRead_NotReadyRunningSession` | `PASS` | FSCP01-HERMETIC-002 |
 | R-03 | Running final result is not ready, with typed availability | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartAsync_RunningBeforeCompletion`, `TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning`; MCP envelope `pkg/services/factory_sessions/transports/mcp/execution_test.go:TestMockClient_GetResult_RunningFixtureReturnsTypedNotReadyEnvelope` | `PASS` | FSCP01-TRANSPORT-005 |
 | R-04 | Failed session preserves partial summary and failure detail | `pkg/services/factory_sessions/transports/mcp/failure_paths_test.go:TestMockClient_GetSession_FailedFixtureReturnsDeterministicStatusWithPartialSummary`, `TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails`; recording event mapping `pkg/services/recordings/internal/events/event_history_dispatch_lifecycle_test.go:TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails` | `PASS` | FSCP01-HERMETIC-002 |
-| R-05 | Sync timeout without cancellation leaves session running; cancellation-on-timeout is an explicit overlay | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_boundary_test.go:TestJavaScriptRuntimeService_StartSyncWaitTimeoutReplay_PreservesFirstObservedTimedOutResponse`; `pkg/services/factory_sessions/internal/execution/fake_service_construction_start_test.go:TestFakeService_StartSync_AppliesCancelOnTimeoutOverlay`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning` | `PASS` | FSCP01-HERMETIC-002 |
+| R-05 | Sync timeout without cancellation leaves session running; cancellation-on-timeout is an explicit overlay | `pkg/services/factory_sessions/internal/execution/fixtures/runtime_boundary_test.go:TestJavaScriptRuntimeService_StartSyncWaitTimeoutReplay_PreservesFirstObservedTimedOutResponse`; `pkg/services/factory_sessions/internal/execution/fake_service_construction_start_test.go:TestFakeService_StartSync_AppliesCancelOnTimeoutOverlay`; `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go:TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning`; public timeout witness `tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go:TestFSCP01InvokeLifecycleAndResultOutcomeMatrix` | `PASS` | FSCP01-HERMETIC-002 |
 | R-06 | Live complete and partial result projection | `pkg/services/factory_sessions/internal/controlplane/result_read_test.go:TestGetLiveFactorySessionResult_ReturnsJavaScriptProjection`, `TestGetLiveFactorySessionPartialResult_ReturnsJavaScriptProjection`, `TestGetLiveFactorySessionResult_RequiresInjectedProjection`; detached mapping `pkg/services/factory_sessions/types_behavior_test.go:TestDetachedOperationsReadResultMapsDetachedValues` | `PASS` | FSCP01-HERMETIC-002 |
 | R-07 | Result artifact inclusion/omission and stable artifact references | `pkg/services/factory_sessions/internal/execution/fixtures/inspection_test.go:TestFakeService_PublishedScenarios_ResultArtifactInclusion`; `pkg/services/factory_sessions/internal/execution/javascript_runtime_result_test.go:TestProjectResultRead_IncludeArtifactsShaping`; result read hash `pkg/services/factory_sessions/internal/execution/fixtures/start_read_test.go:TestProjectedResultReadHash_IsStableAcrossEquivalentReads` | `PASS` | FSCP01-CANONICAL-003 |
 | R-08 | Ephemeral response events replay retained prefix, then live events, and close at documented terminal boundary | `tests/functional/events/response_events/stream_test.go:TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`, `TestAPIResponseEventStreamClosesAtDocumentedBoundary`; terminal outcomes `tests/functional/events/response_events/terminal_outcomes_test.go:TestReadResponseEventStreamUntilTerminalRunOutcomes` | `PASS` | FSCP01-TRANSPORT-005 |
@@ -326,6 +327,49 @@ Observed for this packet:
 - No browser check or paid validation applies to this documentation-only
   story.
 
+### Story 002 procedure and observed evidence
+
+The semantic witness is
+`tests/functional/sessions/lifecycle/fscp01_entrypoint_matrix_test.go`. It
+uses the package `TestMain` shared root-built process and HTTP server, creates
+per-test temporary Factory folders, uses unique UUID request/session inputs,
+and registers live and durable cleanup. The assertions cross the public
+`/factory-sessions` open, sync-start, control, session-read, and result-read
+routes; the invocation branch uses the existing CLI `Process.Execute` path.
+No production or transport code changed.
+
+Exact verification commands and observed results:
+
+```text
+go test ./tests/functional/sessions/lifecycle -run '^TestFSCP01' -count=1 -timeout 15m -v
+go test ./pkg/services/factory_sessions/... -count=1 -timeout 10m
+go test ./tests/functional/sessions/... -count=1 -timeout 15m
+```
+
+- The focused FSCP-01 package run passed both witnesses. It observed selected
+  live and folder-auto-open sessions with UUID identities and `IDLE` status;
+  durable async with a `dur-sess-*` identity and `RUNNING` status; and durable
+  sync with an independent `dur-sess-*` identity, `SUCCEEDED` status,
+  `COMPLETED` sync outcome, and `FINAL` result.
+- The same run observed CLI invocation `COMPLETED` with the public result
+  `placement parity complete`; live pause and resume both returned `ACCEPTED`
+  and the read model asserted `PAUSED` then `RUNNING`; final durable result
+  read returned `FINAL`; a missing workflow returned HTTP 400 with typed
+  `BAD_REQUEST`; timeout without cancellation returned `TIMED_OUT` while the
+  durable session remained `RUNNING`; timeout with cancellation returned
+  `TIMED_OUT` with `sessionCanceledByTimeout=true` and reached `CANCELED`.
+- The complete owner suite and complete Factory Sessions functional suite both
+  passed. The owner suite covered the package contract, control plane,
+  durable execution, runtime opening, replay, transports, and wiring; the
+  functional suite covered lifecycle plus the sibling session layers.
+
+This proves the story-002 public identity/status/mode comparison, invocation
+result, live control, typed source failure, timeout overlay, session
+isolation, and cleanup properties. It does not prove canonical reconnect or
+artifact independence, field-by-field active/terminal dispatch provenance,
+CLI/ACP/MCP mapping parity, a built artifact, or independent project
+validation; those remain later gates.
+
 ### Later run declarations
 
 Each semantic run must record the following before claiming a row:
@@ -349,15 +393,11 @@ Each semantic run must record the following before claiming a row:
 
 ### Remaining unproven edges
 
-1. No semantic runtime row has been executed by FSCP-01; all `PASS` rows are
-   witness availability, not acceptance.
-2. Cross-entrypoint live-open/durable-start identity and initial status remain
-   `INCONCLUSIVE` (E-08).
-3. Response-stream independence from canonical event and artifact reads remains
+1. Response-stream independence from canonical event and artifact reads remains
    `UNPROVEN` (R-11 and K-10).
-4. Active versus terminal/replay dispatch field provenance remains
+2. Active versus terminal/replay dispatch field provenance remains
    `INCONCLUSIVE`/`UNPROVEN` where the current tests do not assert each field
    across both branches.
-5. Transport mapping and final integrated proof remain owned by story 004.
-6. Independent project validation, final acceptance, and any real-provider
+3. Transport mapping and final integrated proof remain owned by story 004.
+4. Independent project validation, final acceptance, and any real-provider
    artifact behavior are later gates; this packet does not claim them.
