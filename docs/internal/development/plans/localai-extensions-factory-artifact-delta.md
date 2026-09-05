@@ -1,22 +1,40 @@
 # LocalAI OMNI-to-Factory artifact contract delta
 
 Status: proposal-only characterization, story
-`localai-omni-artifact-contract-delta-001`. This document records the verified
-current path. It does not authorize a Proposed contract, production change,
-executable test change, generated-artifact change, or Project acceptance.
+`localai-omni-artifact-contract-delta-authority-retry-001`. This document
+records the verified current path. It does not authorize a Proposed contract,
+production change, executable test change, generated-artifact change, or
+Project acceptance.
 
 ## 0. Authority and scope boundary
 
-- Current evidence is from `HEAD`
-  `e10e38843aff30c7871b732b284976ee13ab42f1`.
+- The pre-edit checkout/current application head was
+  `e10e38843aff30c7871b732b284976ee13ab42f1`; the proposal commits are
+  documentation-only descendants of that head.
 - The execution packet is `prd.json` for
   `localai-omni-artifact-contract-delta`; no `operatorAmendment` is present.
-- The PRD identifies `docs/temp/projects/localai/source-plan.md`,
-  `docs/temp/projects/localai/request.md`, and
-  `docs/temp/projects/localai/acceptance.md` as immutable authority. None of
-  those paths exists in this worktree and none is tracked by this checkout.
-  Their contents therefore cannot be independently reconciled here. This is a
-  recorded authority gap, not permission to recreate, rewrite, or weaken them.
+- The immutable authority was read from the supplied absolute paths and was
+  verified before any proposal edit:
+
+  | Authority | Absolute path | SHA-256 |
+  | --- | --- | --- |
+  | Source plan | `C:\Users\andre\work\portos\infinite-you\docs\temp\projects\localai\source-plan.md` | `0c81aac27358bff4014ee623f13f5255d07ab67798ad6d306fc7e1a7f2af972e` |
+  | Request | `C:\Users\andre\work\portos\infinite-you\docs\temp\projects\localai\request.md` | `1562b040348625dc1a608011e13458d97cc5b600f4d95dd8bf98cf1dbe2da52c` |
+  | Acceptance | `C:\Users\andre\work\portos\infinite-you\docs\temp\projects\localai\acceptance.md` | `83c1368c05d1f84e7c61ca5632ad9422b33d646c7c4166d7fd5812764fd18172` |
+
+  `Get-FileHash -Algorithm SHA256` produced the recorded value for each
+  path. The same three paths and values are retained in `prd.json` under
+  `immutableAuthority`; neither artifact is authority for rewriting the other.
+- The supplied authority files remain outside this checkout and were not
+  copied, edited, rewritten, or committed. Their absence from the worktree is
+  therefore no longer an authority blocker because the operator supplied and
+  the preflight verified the absolute read-only paths.
+- The reconciliation found a clean task worktree, no open PR for this branch,
+  and no tracked application changes before the proposal commits. Relevant
+  existing refs were retained and inspected: `main`,
+  `localai-omni-artifact-contract-delta`, and the active
+  `localai-recover-real-inference` lane. The untracked main-workspace draft
+  named by the PRD was not copied or overwritten.
 - No production Go, test, OpenAPI, CLI, Factory graph, protobuf, generated, or
   immutable authority file is changed by this characterization.
 
@@ -345,23 +363,29 @@ new runtime call or modification:
 
 The witness is consistent with the source inspection: no public/durable shape
 is required merely to move an artifact fact through the existing private
-runtime result. Whether the source plan authorizes that private seam remains
-unverifiable until the missing immutable files are supplied or the operator
-issues a successor authority decision.
+runtime result. The supplied authority preserves the private-only boundary;
+operator approval or the existing-private-contract implementation gate is
+still required before any implementation work.
 
 ## 4. Story-001 evidence and handoff
 
 ### Procedure executed
 
-From the current worktree:
+From the current worktree, before the proposal edit:
 
 1. `git rev-parse HEAD` ->
    `e10e38843aff30c7871b732b284976ee13ab42f1`.
-2. `git ls-files docs/temp/projects/localai/source-plan.md docs/temp/projects/localai/request.md docs/temp/projects/localai/acceptance.md` -> no output; `Test-Path` for the directory is false.
-3. Inspected the cited current symbols in Models, LocalAI, Models wire and
+2. For each supplied absolute authority path, `Test-Path` succeeded and
+   `Get-FileHash -Algorithm SHA256` matched the exact value in §0.
+3. `git status --short --branch` was clean at the application head; `gh pr
+   list --state all --head
+   localai-omni-artifact-contract-delta-authority-retry` returned `[]`.
+4. Inspected the cited current symbols in Models, LocalAI, Models wire and
    lifecycle, Workers, Work/Factory Runtime, Recordings, and HTTP/CLI mappers.
-4. Ran `rg -n '^func Test'` over the focused directories listed in §2.
-5. Did not run runtime, network, real LocalAI, paid, or remote validation.
+5. Ran `rg -n '^func Test'` over the focused directories listed in §2. The
+   focused counts are retained in `prd.json.coverageSignal`; this is an
+   inventory signal, not behavior proof.
+6. Did not run runtime, network, real LocalAI, paid, or remote validation.
 
 ### Evidence boundary
 
@@ -379,9 +403,7 @@ From the current worktree:
 
 ### Smallest next step
 
-Supply the immutable source-plan/request/acceptance authority, or record an
-operator-authorized successor decision that explicitly permits the proposal to
-continue. After that authority check, story 002 may render the exact private
-Current/Proposed handoff and unchanged public/OpenAPI shapes. It must not add a
-public field, generated artifact, protobuf field, CLI grammar, Factory graph,
-artifact store, or implementation without a new approved contract revision.
+Story 002 may now render the exact private Current/Proposed handoff and
+unchanged public/OpenAPI shapes. It must not add a public field, generated
+artifact, protobuf field, CLI grammar, Factory graph, artifact store, or
+implementation without the required operator/private-contract gate.
