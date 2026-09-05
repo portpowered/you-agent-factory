@@ -14,6 +14,7 @@ message ModelOptions {
   string Model = 1;
   int32 NBatch = 4;
   string ModelFile = 21;
+  string ModelPath = 59;
 }
 
 message Result {

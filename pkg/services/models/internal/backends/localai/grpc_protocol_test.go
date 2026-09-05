@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net"
+	"path/filepath"
 	"testing"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -127,11 +128,12 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	connection := &recordingGRPCConnection{}
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	modelFile := filepath.Join("models", "llm", "model.gguf")
 	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         "localai-llamacpp",
 		ModelName:       "llm",
-		ModelPath:       `C:\models\llm\model.gguf`,
+		ModelPath:       modelFile,
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -140,11 +142,12 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		t.Fatalf("load transport facts = methods %#v, ready %t, closed %d, want Health/LoadModel/ready/one close", connection.methods, result.Ready, connection.closed)
 	}
 	if connection.loadRequest.GetModel() != "llm" ||
-		connection.loadRequest.GetModelFile() != `C:\models\llm\model.gguf` ||
+		connection.loadRequest.GetModelFile() != modelFile ||
+		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize {
 		t.Fatalf(
-			"load request model=%q modelFile=%q nBatch=%d, want model name, nonzero batch size, and exact model path",
-			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetNBatch(),
+			"load request model=%q modelFile=%q modelPath=%q nBatch=%d, want model name, file path, model directory, and nonzero batch size",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(),
 		)
 	}
 }

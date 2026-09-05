@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -117,10 +118,12 @@ func loadModel(
 	connection platformgrpc.Connection,
 	request modelseffects.HostProtocolNegotiationRequest,
 ) error {
+	modelFile := strings.TrimSpace(request.ModelPath)
 	payload, err := proto.Marshal(&ModelOptions{
 		Model:     request.ModelName,
 		NBatch:    localAIModelBatchSize,
-		ModelFile: strings.TrimSpace(request.ModelPath),
+		ModelFile: modelFile,
+		ModelPath: filepath.Dir(modelFile),
 	})
 	if err != nil {
 		return fmt.Errorf(
