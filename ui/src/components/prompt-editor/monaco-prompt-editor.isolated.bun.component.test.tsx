@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { useState } from "react";
 
 import * as monacoEditorAll from "../../testing/mocks/monaco-editor-all";
 import * as monacoEditorApi from "../../testing/mocks/monaco-editor-api";
 import * as monacoReact from "../../testing/mocks/monaco-react";
+import { AppColorPaletteProvider, useAppColorPalette } from "../../theme";
 
 mock.module("@monaco-editor/react", () => monacoReact);
 mock.module("monaco-editor/esm/vs/editor/editor.all.js", () => monacoEditorAll);
@@ -12,6 +20,15 @@ mock.module("monaco-editor/esm/vs/editor/editor.api.js", () => monacoEditorApi);
 const { MonacoPromptEditor } = await import("./monaco-prompt-editor");
 const { WORKSTATION_PROMPT_THEME_ID } = await import("./monaco-prompt-setup");
 const vi = { fn: mock };
+
+let setPaletteForTest:
+  | ((palette: string | null | undefined) => void)
+  | undefined;
+
+function PaletteDriver() {
+  setPaletteForTest = useAppColorPalette().setPalette;
+  return null;
+}
 
 const readyAutocompleteState = {
   contract: {
@@ -30,9 +47,8 @@ const readyAutocompleteState = {
 };
 
 function resetPromptEditorPalette() {
-  document.documentElement.removeAttribute("data-color-palette");
-  document.documentElement.style.removeProperty("--color-surface");
-  document.documentElement.style.removeProperty("--color-on-surface");
+  setPaletteForTest = undefined;
+  window.sessionStorage.clear();
 }
 
 function expectSingleThemeApplication(wrapper: Element | null) {
@@ -58,30 +74,33 @@ describe("MonacoPromptEditor", () => {
     const onScrollChange = vi.fn();
 
     const { unmount } = render(
-      <MonacoPromptEditor
-        ariaDescribedBy="prompt-help prompt-error"
-        ariaInvalid
-        ariaLabel="Prompt"
-        autocompleteState={readyAutocompleteState}
-        diagnostics={[
-          {
-            endOffset: 13,
-            kind: "INVALID_VARIABLE",
-            message: "Work ID is invalid.",
-            sourceText: "{{ .WorkID }}",
-            startOffset: 1,
-          },
-        ]}
-        hasDiagnostics
-        loadingMessage="Loading prompt editor."
-        modelPath="inmemory://model/test/workstation-prompt"
-        onChange={onChange}
-        onMount={onMount}
-        onReadyChange={onReadyChange}
-        onScrollChange={onScrollChange}
-        startupErrorMessage="Prompt editor failed."
-        value="{{ .WorkID }}"
-      />,
+      <AppColorPaletteProvider initialPalette="factory-dark">
+        <PaletteDriver />
+        <MonacoPromptEditor
+          ariaDescribedBy="prompt-help prompt-error"
+          ariaInvalid
+          ariaLabel="Prompt"
+          autocompleteState={readyAutocompleteState}
+          diagnostics={[
+            {
+              endOffset: 13,
+              kind: "INVALID_VARIABLE",
+              message: "Work ID is invalid.",
+              sourceText: "{{ .WorkID }}",
+              startOffset: 1,
+            },
+          ]}
+          hasDiagnostics
+          loadingMessage="Loading prompt editor."
+          modelPath="inmemory://model/test/workstation-prompt"
+          onChange={onChange}
+          onMount={onMount}
+          onReadyChange={onReadyChange}
+          onScrollChange={onScrollChange}
+          startupErrorMessage="Prompt editor failed."
+          value="{{ .WorkID }}"
+        />
+      </AppColorPaletteProvider>,
     );
 
     const promptEditor = screen.getByLabelText("Prompt");
@@ -118,5 +137,65 @@ describe("MonacoPromptEditor", () => {
     unmount();
 
     expect(onReadyChange).toHaveBeenCalledWith(false);
+  });
+
+  it("reapplies the selected palette without remounting or losing editor state", async () => {
+    function PaletteBoundPromptEditor() {
+      const [value, setValue] = useState("{{ .WorkID }}");
+
+      return (
+        <MonacoPromptEditor
+          ariaLabel="Prompt"
+          autocompleteState={readyAutocompleteState}
+          loadingMessage="Loading prompt editor."
+          modelPath="inmemory://model/test/workstation-prompt/palette-refresh"
+          onChange={setValue}
+          startupErrorMessage="Prompt editor failed."
+          value={value}
+        />
+      );
+    }
+
+    render(
+      <AppColorPaletteProvider initialPalette="factory-dark">
+        <PaletteDriver />
+        <PaletteBoundPromptEditor />
+      </AppColorPaletteProvider>,
+    );
+
+    const promptEditor = screen.getByLabelText("Prompt");
+    const wrapper = promptEditor.parentElement;
+
+    await waitFor(() => {
+      expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
+        "1",
+      );
+    });
+
+    fireEvent.change(promptEditor, { target: { value: "Updated prompt" } });
+    promptEditor.focus();
+
+    for (const [index, palette] of [
+      "factory-light",
+      "slate",
+      "olive",
+    ].entries()) {
+      await act(async () => {
+        setPaletteForTest?.(palette);
+      });
+
+      await waitFor(() => {
+        expect(
+          wrapper?.getAttribute("data-monaco-theme-application-count"),
+        ).toBe(String(index + 2));
+      });
+    }
+
+    expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+      JSON.stringify(["vs-dark", "vs", "vs-dark", "vs-dark"]),
+    );
+    expect(screen.getByLabelText("Prompt")).toBe(promptEditor);
+    expect((promptEditor as HTMLTextAreaElement).value).toBe("Updated prompt");
+    expect(document.activeElement).toBe(promptEditor);
   });
 });

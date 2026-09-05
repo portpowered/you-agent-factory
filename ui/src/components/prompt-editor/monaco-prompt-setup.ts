@@ -4,6 +4,10 @@ import type {
 } from "monaco-editor";
 
 import type { PromptTemplateContract } from "../../api/current-factory-prompt-template";
+import {
+  type ColorPaletteId,
+  DEFAULT_COLOR_PALETTE,
+} from "../../theme/color-palette";
 import { WORKSTATION_PROMPT_MONARCH_LANGUAGE } from "./monaco-prompt-language";
 import { buildWorkstationPromptTheme } from "./monaco-theme";
 import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
@@ -40,13 +44,11 @@ export function registerWorkstationPromptMonaco(monaco: MonacoModule) {
 
 export function applyWorkstationPromptTheme(
   monaco: MonacoModule,
-  root: Element | null = typeof document === "undefined"
-    ? null
-    : document.documentElement,
+  paletteId: ColorPaletteId = DEFAULT_COLOR_PALETTE,
 ) {
   monaco.editor.defineTheme(
     WORKSTATION_PROMPT_THEME_ID,
-    buildWorkstationPromptTheme(root),
+    buildWorkstationPromptTheme(paletteId),
   );
   monaco.editor.setTheme(WORKSTATION_PROMPT_THEME_ID);
 }

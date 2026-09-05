@@ -2,10 +2,11 @@ import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
+import { Text } from "@you-agent-factory/components/primitives";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Text } from "@you-agent-factory/components/primitives";
+import { type ColorPaletteId, useAppColorPalette } from "../../theme";
 import { Textarea } from "../ui/textarea";
 import {
   applyWorkstationGuardSelectorTheme,
@@ -89,13 +90,38 @@ export function MonacoGuardSelectorEditor({
   startupErrorMessage,
   value,
 }: MonacoGuardSelectorEditorProps) {
+  const { palette } = useAppColorPalette();
   const onChangeRef = useRef(onChange);
+  const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
+  const paletteRef = useRef<ColorPaletteId>(palette);
+  const appliedPaletteRef = useRef<ColorPaletteId | null>(null);
   const startupState = monacoSetupState;
+  paletteRef.current = palette;
   const options = useMemo(() => GUARD_SELECTOR_EDITOR_OPTIONS, []);
+  const mountHandler = useMemo(
+    () =>
+      createGuardSelectorEditorMountHandler({
+        appliedPaletteRef,
+        monacoRef,
+        onChangeRef,
+        paletteRef,
+      }),
+    [],
+  );
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    const monacoInstance = monacoRef.current;
+    if (!monacoInstance || appliedPaletteRef.current === palette) {
+      return;
+    }
+
+    applyWorkstationGuardSelectorTheme(monacoInstance, palette);
+    appliedPaletteRef.current = palette;
+  }, [palette]);
 
   if (startupState !== "ready") {
     return (
@@ -126,7 +152,7 @@ export function MonacoGuardSelectorEditor({
       height={height}
       language={WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID}
       onChange={(nextValue) => onChange(nextValue ?? "")}
-      onMount={createGuardSelectorEditorMountHandler({ onChangeRef })}
+      onMount={mountHandler}
       options={{ ...options, ariaLabel }}
       path={modelPath}
       theme={WORKSTATION_GUARD_SELECTOR_THEME_ID}
@@ -143,21 +169,24 @@ export function MonacoGuardSelectorEditor({
 }
 
 function createGuardSelectorEditorMountHandler({
+  appliedPaletteRef,
+  monacoRef,
   onChangeRef,
+  paletteRef,
 }: {
+  appliedPaletteRef: RefObject<ColorPaletteId | null>;
+  monacoRef: RefObject<typeof import("monaco-editor") | null>;
   onChangeRef: RefObject<(value: string) => void>;
+  paletteRef: RefObject<ColorPaletteId>;
 }) {
   return (
     editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
     monacoInstance: typeof import("monaco-editor"),
   ) => {
-    const themeObserver =
-      typeof MutationObserver === "undefined" || typeof document === "undefined"
-        ? null
-        : createGuardSelectorThemeObserver(
-            monacoInstance,
-            document.documentElement,
-          );
+    monacoRef.current = monacoInstance;
+    const currentPalette = paletteRef.current;
+    applyWorkstationGuardSelectorTheme(monacoInstance, currentPalette);
+    appliedPaletteRef.current = currentPalette;
     const completionProvider =
       registerWorkstationGuardSelectorCompletionProvider(monacoInstance);
     const contentChangeListener = editorInstance.onDidChangeModelContent(() => {
@@ -177,42 +206,13 @@ function createGuardSelectorEditorMountHandler({
     });
 
     editorInstance.onDidDispose(() => {
-      themeObserver?.disconnect();
+      monacoRef.current = null;
+      appliedPaletteRef.current = null;
       completionProvider.dispose();
       contentChangeListener.dispose();
       suggestListener.dispose();
     });
   };
-}
-
-function createGuardSelectorThemeObserver(
-  monaco: typeof import("monaco-editor"),
-  root: HTMLElement,
-) {
-  const applyTheme = () => {
-    applyWorkstationGuardSelectorTheme(monaco, root);
-  };
-
-  applyTheme();
-
-  const observer = new MutationObserver((mutations) => {
-    if (
-      mutations.some(
-        (mutation) =>
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-color-palette",
-      )
-    ) {
-      applyTheme();
-    }
-  });
-
-  observer.observe(root, {
-    attributeFilter: ["data-color-palette"],
-    attributes: true,
-  });
-
-  return observer;
 }
 
 function GuardSelectorEditorFallbackState({

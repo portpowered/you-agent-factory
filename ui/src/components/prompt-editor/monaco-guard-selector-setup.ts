@@ -1,3 +1,7 @@
+import {
+  type ColorPaletteId,
+  DEFAULT_COLOR_PALETTE,
+} from "../../theme/color-palette";
 import { WORKSTATION_GUARD_SELECTOR_MONARCH_LANGUAGE } from "./monaco-guard-selector-language";
 import { buildWorkstationGuardSelectorTheme } from "./monaco-theme";
 
@@ -34,11 +38,11 @@ export function registerWorkstationGuardSelectorMonaco(monaco: MonacoModule) {
 
 export function applyWorkstationGuardSelectorTheme(
   monaco: MonacoModule,
-  root: Element | null = document.documentElement,
+  paletteId: ColorPaletteId = DEFAULT_COLOR_PALETTE,
 ) {
   monaco.editor.defineTheme(
     WORKSTATION_GUARD_SELECTOR_THEME_ID,
-    buildWorkstationGuardSelectorTheme(root),
+    buildWorkstationGuardSelectorTheme(paletteId),
   );
   monaco.editor.setTheme(WORKSTATION_GUARD_SELECTOR_THEME_ID);
 }

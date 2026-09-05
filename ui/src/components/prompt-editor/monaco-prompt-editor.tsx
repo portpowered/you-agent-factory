@@ -2,10 +2,11 @@ import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
+import { Code, Text } from "@you-agent-factory/components/primitives";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Code, Text } from "@you-agent-factory/components/primitives";
+import { type ColorPaletteId, useAppColorPalette } from "../../theme";
 import {
   applyWorkstationPromptTheme,
   buildWorkstationPromptMarkers,
@@ -109,11 +110,15 @@ export function MonacoPromptEditor({
   startupErrorMessage,
   value,
 }: MonacoPromptEditorProps) {
+  const { palette } = useAppColorPalette();
   const autocompleteStateRef = useRef(autocompleteState);
   const onChangeRef = useRef(onChange);
   const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
+  const paletteRef = useRef<ColorPaletteId>(palette);
+  const appliedPaletteRef = useRef<ColorPaletteId | null>(null);
   const startupState = monacoSetupState;
+  paletteRef.current = palette;
   const markers = useMemo(
     () => buildWorkstationPromptMarkers(value, diagnostics),
     [diagnostics, value],
@@ -128,6 +133,16 @@ export function MonacoPromptEditor({
   }, [onChange]);
 
   useEffect(() => {
+    const monacoInstance = monacoRef.current;
+    if (!monacoInstance || appliedPaletteRef.current === palette) {
+      return;
+    }
+
+    applyWorkstationPromptTheme(monacoInstance, palette);
+    appliedPaletteRef.current = palette;
+  }, [palette]);
+
+  useEffect(() => {
     onReadyChange?.(startupState === "ready");
 
     return () => {
@@ -136,6 +151,20 @@ export function MonacoPromptEditor({
   }, [onReadyChange]);
 
   const options = useMemo(() => PROMPT_EDITOR_OPTIONS, []);
+  const mountHandler = useMemo(
+    () =>
+      createPromptEditorMountHandler({
+        appliedPaletteRef,
+        autocompleteStateRef,
+        editorRef,
+        monacoRef,
+        onChangeRef,
+        onMount,
+        onScrollChange,
+        paletteRef,
+      }),
+    [onMount, onScrollChange],
+  );
 
   useEffect(() => {
     const editorInstance = editorRef.current;
@@ -183,14 +212,7 @@ export function MonacoPromptEditor({
       height={height}
       language={WORKSTATION_PROMPT_LANGUAGE_ID}
       onChange={(nextValue) => onChange(nextValue ?? "")}
-      onMount={createPromptEditorMountHandler({
-        autocompleteStateRef,
-        editorRef,
-        monacoRef,
-        onChangeRef,
-        onMount,
-        onScrollChange,
-      })}
+      onMount={mountHandler}
       options={{ ...options, ariaLabel }}
       path={modelPath}
       theme={WORKSTATION_PROMPT_THEME_ID}
@@ -206,13 +228,16 @@ export function MonacoPromptEditor({
 }
 
 function createPromptEditorMountHandler({
+  appliedPaletteRef,
   autocompleteStateRef,
   editorRef,
   monacoRef,
   onChangeRef,
   onMount,
   onScrollChange,
+  paletteRef,
 }: {
+  appliedPaletteRef: RefObject<ColorPaletteId | null>;
   autocompleteStateRef: RefObject<PromptEditorAutocompleteState>;
   editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
   monacoRef: RefObject<typeof import("monaco-editor") | null>;
@@ -222,6 +247,7 @@ function createPromptEditorMountHandler({
     scrollLeft: number;
     scrollTop: number;
   }) => void;
+  paletteRef: RefObject<ColorPaletteId>;
 }) {
   return (
     editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
@@ -229,10 +255,9 @@ function createPromptEditorMountHandler({
   ) => {
     editorRef.current = editorInstance;
     monacoRef.current = monacoInstance;
-    const themeObserver =
-      typeof MutationObserver === "undefined" || typeof document === "undefined"
-        ? null
-        : createPromptThemeObserver(monacoInstance, document.documentElement);
+    const currentPalette = paletteRef.current;
+    applyWorkstationPromptTheme(monacoInstance, currentPalette);
+    appliedPaletteRef.current = currentPalette;
 
     const completionProvider = registerWorkstationPromptCompletionProvider(
       monacoInstance,
@@ -278,7 +303,7 @@ function createPromptEditorMountHandler({
     editorInstance.onDidDispose(() => {
       editorRef.current = null;
       monacoRef.current = null;
-      themeObserver?.disconnect();
+      appliedPaletteRef.current = null;
       completionProvider.dispose();
       contentChangeListener.dispose();
       typeListener.dispose();
@@ -295,36 +320,6 @@ function createPromptEditorMountHandler({
       });
     });
   };
-}
-
-function createPromptThemeObserver(
-  monaco: typeof import("monaco-editor"),
-  root: HTMLElement,
-) {
-  const applyTheme = () => {
-    applyWorkstationPromptTheme(monaco, root);
-  };
-
-  applyTheme();
-
-  const observer = new MutationObserver((mutations) => {
-    if (
-      mutations.some(
-        (mutation) =>
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-color-palette",
-      )
-    ) {
-      applyTheme();
-    }
-  });
-
-  observer.observe(root, {
-    attributeFilter: ["data-color-palette"],
-    attributes: true,
-  });
-
-  return observer;
 }
 
 function PromptEditorFallbackState({

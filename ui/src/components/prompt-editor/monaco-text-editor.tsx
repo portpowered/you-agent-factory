@@ -2,10 +2,11 @@ import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
+import { Text } from "@you-agent-factory/components/primitives";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Text } from "@you-agent-factory/components/primitives";
+import { type ColorPaletteId, useAppColorPalette } from "../../theme";
 import { Textarea } from "../ui/textarea";
 import {
   applyWorkstationPromptTheme,
@@ -88,14 +89,40 @@ export function MonacoTextEditor({
   startupErrorMessage,
   value,
 }: MonacoTextEditorProps) {
+  const { palette } = useAppColorPalette();
   const onChangeRef = useRef(onChange);
   const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
+  const paletteRef = useRef<ColorPaletteId>(palette);
+  const appliedPaletteRef = useRef<ColorPaletteId | null>(null);
   const startupState = monacoSetupState;
+  paletteRef.current = palette;
   const options = useMemo(() => TEXT_EDITOR_OPTIONS, []);
+  const mountHandler = useMemo(
+    () =>
+      createTextEditorMountHandler({
+        appliedPaletteRef,
+        editorRef,
+        monacoRef,
+        onChangeRef,
+        paletteRef,
+      }),
+    [],
+  );
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    const monacoInstance = monacoRef.current;
+    if (!monacoInstance || appliedPaletteRef.current === palette) {
+      return;
+    }
+
+    applyWorkstationPromptTheme(monacoInstance, palette);
+    appliedPaletteRef.current = palette;
+  }, [palette]);
 
   useEffect(() => {
     const editorInstance = editorRef.current;
@@ -166,7 +193,7 @@ export function MonacoTextEditor({
       height={height}
       defaultValue={value}
       language="plaintext"
-      onMount={createTextEditorMountHandler({ editorRef, onChangeRef })}
+      onMount={mountHandler}
       options={{ ...options, ariaLabel }}
       path={modelPath}
       theme={WORKSTATION_PROMPT_THEME_ID}
@@ -182,55 +209,38 @@ export function MonacoTextEditor({
 }
 
 function createTextEditorMountHandler({
+  appliedPaletteRef,
   editorRef,
+  monacoRef,
   onChangeRef,
+  paletteRef,
 }: {
+  appliedPaletteRef: RefObject<ColorPaletteId | null>;
   editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
+  monacoRef: RefObject<typeof import("monaco-editor") | null>;
   onChangeRef: RefObject<(value: string) => void>;
+  paletteRef: RefObject<ColorPaletteId>;
 }) {
-  return (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => {
+  return (
+    editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
+    monacoInstance: typeof import("monaco-editor"),
+  ) => {
     editorRef.current = editorInstance;
-    const themeObserver =
-      typeof MutationObserver === "undefined" || typeof document === "undefined"
-        ? null
-        : createTextEditorThemeObserver(document.documentElement);
+    monacoRef.current = monacoInstance;
+    const currentPalette = paletteRef.current;
+    applyWorkstationPromptTheme(monacoInstance, currentPalette);
+    appliedPaletteRef.current = currentPalette;
     const contentChangeListener = editorInstance.onDidChangeModelContent(() => {
       onChangeRef.current(editorInstance.getValue());
     });
 
     editorInstance.onDidDispose(() => {
       editorRef.current = null;
-      themeObserver?.disconnect();
+      monacoRef.current = null;
+      appliedPaletteRef.current = null;
       contentChangeListener.dispose();
     });
   };
-}
-
-function createTextEditorThemeObserver(root: HTMLElement) {
-  const applyTheme = () => {
-    applyWorkstationPromptTheme(monaco, root);
-  };
-
-  applyTheme();
-
-  const observer = new MutationObserver((mutations) => {
-    if (
-      mutations.some(
-        (mutation) =>
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-color-palette",
-      )
-    ) {
-      applyTheme();
-    }
-  });
-
-  observer.observe(root, {
-    attributeFilter: ["data-color-palette"],
-    attributes: true,
-  });
-
-  return observer;
 }
 
 function TextEditorFallbackState({

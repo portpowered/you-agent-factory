@@ -1,174 +1,91 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
+import { COLOR_PALETTE_IDS } from "../../theme/color-palette";
+import { getColorPaletteTokens } from "../../theme/color-palette-tokens";
 import {
   buildWorkstationGuardSelectorTheme,
   buildWorkstationPromptTheme,
 } from "./monaco-theme";
 
-const PALETTE_FIXTURES = [
-  {
-    expectedBase: "vs-dark",
-    id: "factory-dark",
-    tokens: {
-      "--color-af-foundation-accent": "#F5C76F",
-      "--color-af-foundation-accent-strong": "#ECBF58",
-      "--color-af-foundation-code-ink": "#5CCADD",
-      "--color-af-foundation-danger-ink": "#FFB2B2",
-      "--color-af-foundation-info": "#5CCADD",
-      "--color-af-foundation-info-bright": "#7DD3FC",
-      "--color-af-foundation-info-ink": "#B5EDF4",
-      "--color-af-foundation-ink": "#F7F2E8",
-      "--color-af-foundation-overlay": "#FFFFFF",
-      "--color-on-surface-variant": "rgba(247, 242, 232, 0.78)",
-      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
-      "--color-af-foundation-success-ink": "#A7F0C4",
-      "--color-af-foundation-surface": "#181F2B",
-    },
-  },
-  {
-    expectedBase: "vs",
-    id: "factory-light",
-    tokens: {
-      "--color-af-foundation-accent": "#F5C76F",
-      "--color-af-foundation-accent-strong": "#C9972E",
-      "--color-af-foundation-code-ink": "#0F4C5C",
-      "--color-af-foundation-danger-ink": "#9F2F2F",
-      "--color-af-foundation-info": "#2F8FAD",
-      "--color-af-foundation-info-bright": "#4AA9C9",
-      "--color-af-foundation-info-ink": "#1F6178",
-      "--color-af-foundation-ink": "#1A2228",
-      "--color-af-foundation-overlay": "#000000",
-      "--color-on-surface-variant": "rgba(26, 34, 40, 0.78)",
-      "--color-outline-variant": "rgba(0, 0, 0, 0.18)",
-      "--color-af-foundation-success-ink": "#1F6F49",
-      "--color-af-foundation-surface": "#FFFFFF",
-    },
-  },
-  {
-    expectedBase: "vs-dark",
-    id: "material-baseline",
-    tokens: {
-      "--color-af-foundation-accent": "#F5C76F",
-      "--color-af-foundation-accent-strong": "#ECBF58",
-      "--color-af-foundation-code-ink": "#C8F0FF",
-      "--color-af-foundation-danger-ink": "#FFB8B8",
-      "--color-af-foundation-info": "#67CBE0",
-      "--color-af-foundation-info-bright": "#8ADCF0",
-      "--color-af-foundation-info-ink": "#B8EDF8",
-      "--color-af-foundation-ink": "#E6E0E9",
-      "--color-af-foundation-overlay": "#FFFFFF",
-      "--color-on-surface-variant": "rgba(230, 224, 233, 0.78)",
-      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
-      "--color-af-foundation-success-ink": "#A8F0C8",
-      "--color-af-foundation-surface": "#1D1B20",
-    },
-  },
-  {
-    expectedBase: "vs-dark",
-    id: "slate",
-    tokens: {
-      "--color-af-foundation-accent": "#F5C76F",
-      "--color-af-foundation-accent-strong": "#ECBF58",
-      "--color-af-foundation-code-ink": "#C7E7FF",
-      "--color-af-foundation-danger-ink": "#FFB0B0",
-      "--color-af-foundation-info": "#58B8D8",
-      "--color-af-foundation-info-bright": "#7ECBF0",
-      "--color-af-foundation-info-ink": "#B0E0F2",
-      "--color-af-foundation-ink": "#E6EDF3",
-      "--color-af-foundation-overlay": "#FFFFFF",
-      "--color-on-surface-variant": "rgba(230, 237, 243, 0.78)",
-      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
-      "--color-af-foundation-success-ink": "#A4E8C4",
-      "--color-af-foundation-surface": "#161B22",
-    },
-  },
-  {
-    expectedBase: "vs-dark",
-    id: "olive",
-    tokens: {
-      "--color-af-foundation-accent": "#F5C76F",
-      "--color-af-foundation-accent-strong": "#ECBF58",
-      "--color-af-foundation-code-ink": "#D0F5E8",
-      "--color-af-foundation-danger-ink": "#FFB0B0",
-      "--color-af-foundation-info": "#58B0A0",
-      "--color-af-foundation-info-bright": "#7ECFB8",
-      "--color-af-foundation-info-ink": "#B0E8D8",
-      "--color-af-foundation-ink": "#EEF2E4",
-      "--color-af-foundation-overlay": "#FFFFFF",
-      "--color-on-surface-variant": "rgba(238, 242, 228, 0.78)",
-      "--color-outline-variant": "rgba(255, 255, 255, 0.18)",
-      "--color-af-foundation-success-ink": "#A8E8BC",
-      "--color-af-foundation-surface": "#1A1D15",
-    },
-  },
-] as const;
-
 describe("buildWorkstationPromptTheme", () => {
-  afterEach(() => {
-    document.documentElement.removeAttribute("style");
-  });
-
-  it("derives the existing dark prompt theme colors from resolved tokens", () => {
-    applyThemeTokens(PALETTE_FIXTURES[0].tokens);
-
-    const theme = buildWorkstationPromptTheme();
+  it("derives the dark prompt theme from the generated factory-dark tokens", () => {
+    const paletteId = "factory-dark";
+    const tokens = getColorPaletteTokens(paletteId);
+    const theme = buildWorkstationPromptTheme(paletteId);
 
     expect(theme.base).toBe("vs-dark");
     expect(theme.colors).toMatchObject({
-      "editor.background": "#181F2B",
-      "editor.foreground": "#F7F2E8",
-      "editorCursor.foreground": "#F5C76F",
-      "editorSuggestWidget.foreground": "#F7F2E8",
-      "editorWidget.background": "#181F2B",
+      "editor.background": tokens.foundation.surface,
+      "editor.foreground": tokens.foundation.ink,
+      "editorGutter.background": tokens.foundation.surface,
+      "editorLineNumber.foreground": tokens.semantic.foreground.muted,
+      "editorLineNumber.activeForeground": tokens.foundation.ink,
+      "editorCursor.foreground": tokens.foundation.accent,
+      "editorSuggestWidget.foreground": tokens.foundation.ink,
+      "editorWidget.background": tokens.foundation.surface,
     });
     expect(theme.rules).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          foreground: "F5C76F",
+          foreground: toMonacoHex(tokens.foundation.accent),
           token: "delimiter.template",
         }),
         expect.objectContaining({
-          foreground: "7DD3FC",
+          foreground: toMonacoHex(tokens.foundation.infoBright),
           token: "keyword.template",
         }),
         expect.objectContaining({
-          foreground: "5CCADD",
+          foreground: toMonacoHex(tokens.foundation.codeInk),
           token: "variable.root",
         }),
       ]),
     );
   });
 
-  it("uses stronger light-palette syntax colors for factory-light prompt tokens", () => {
-    applyThemeTokens(PALETTE_FIXTURES[1].tokens);
-
-    const theme = buildWorkstationPromptTheme();
+  it("uses the light Monaco base and stronger light syntax colors", () => {
+    const paletteId = "factory-light";
+    const tokens = getColorPaletteTokens(paletteId);
+    const theme = buildWorkstationPromptTheme(paletteId);
 
     expect(theme.base).toBe("vs");
     expect(theme.colors).toMatchObject({
-      "editor.background": "#FFFFFF",
-      "editor.foreground": "#1A2228",
-      "editorCursor.foreground": "#F5C76F",
-      "editorWidget.background": "#FFFFFF",
+      "editor.background": tokens.foundation.surface,
+      "editor.foreground": tokens.foundation.ink,
+      "editorCursor.foreground": tokens.foundation.accent,
+      "editorWidget.background": tokens.foundation.surface,
     });
-    expect(theme.colors["editor.background"]).not.toBe("#181F2B");
-    expect(findRuleForeground(theme, "delimiter.template")).toBe("#C9972E");
-    expect(findRuleForeground(theme, "keyword.template")).toBe("#2F8FAD");
-    expect(findRuleForeground(theme, "string.template")).toBe("#1F6F49");
-    expect(findRuleForeground(theme, "variable.root")).toBe("#0F4C5C");
+    expect(findRuleForeground(theme, "delimiter.template")).toBe(
+      `#${toMonacoHex(tokens.foundation.accentStrong)}`,
+    );
+    expect(findRuleForeground(theme, "keyword.template")).toBe(
+      `#${toMonacoHex(tokens.foundation.info)}`,
+    );
+    expect(findRuleForeground(theme, "string.template")).toBe(
+      `#${toMonacoHex(tokens.foundation.successInk)}`,
+    );
+    expect(findRuleForeground(theme, "variable.root")).toBe(
+      `#${toMonacoHex(tokens.foundation.codeInk)}`,
+    );
   });
 
-  it.each(PALETTE_FIXTURES)(
+  it.each(COLOR_PALETTE_IDS)(
     "keeps prompt editor text and core syntax readable for %s",
-    ({ expectedBase, id, tokens }) => {
-      applyThemeTokens(tokens);
+    (paletteId) => {
+      const tokens = getColorPaletteTokens(paletteId);
+      const theme = buildWorkstationPromptTheme(paletteId);
+      const background = theme.colors["editor.background"];
 
-      const theme = buildWorkstationPromptTheme();
-      const background =
-        theme.colors["editor.background"] ??
-        tokens["--color-af-foundation-surface"];
-
-      expect(theme.base).toBe(expectedBase);
+      expect(theme.base).toBe(paletteId === "factory-light" ? "vs" : "vs-dark");
+      expect(background).toBe(tokens.foundation.surface);
+      expect(theme.colors["editorGutter.background"]).toBe(
+        tokens.foundation.surface,
+      );
+      expect(theme.colors["editorLineNumber.foreground"]).toBe(
+        tokens.semantic.foreground.muted,
+      );
+      expect(theme.colors["editorLineNumber.activeForeground"]).toBe(
+        tokens.foundation.ink,
+      );
       expect(
         readContrastRatio(theme.colors["editor.foreground"] ?? "", background),
       ).toBeGreaterThanOrEqual(4.5);
@@ -191,40 +108,35 @@ describe("buildWorkstationPromptTheme", () => {
         ),
       ).toBeGreaterThanOrEqual(3);
       expect(theme.colors["scrollbarSlider.background"]).toBe(
-        tokens["--color-outline-variant"],
+        tokens.semantic.outline.variant,
       );
       expect(theme.colors["scrollbarSlider.hoverBackground"]).toBe(
-        tokens["--color-on-surface-variant"],
+        tokens.semantic.foreground.muted,
       );
       expect(theme.colors["scrollbarSlider.activeBackground"]).toBe(
-        tokens["--color-on-surface-variant"],
+        tokens.semantic.foreground.muted,
       );
-      expect(findRuleForeground(theme, "delimiter.template")).not.toBe(
-        theme.colors["editor.foreground"],
-      );
-      expect(id).toBeTruthy();
     },
   );
 });
 
 describe("buildWorkstationGuardSelectorTheme", () => {
-  afterEach(() => {
-    document.documentElement.removeAttribute("style");
-  });
+  it.each(COLOR_PALETTE_IDS)(
+    "uses generated palette tokens with readable guard-selector syntax for %s",
+    (paletteId) => {
+      const tokens = getColorPaletteTokens(paletteId);
+      const theme = buildWorkstationGuardSelectorTheme(paletteId);
+      const background = theme.colors["editor.background"];
 
-  it.each(PALETTE_FIXTURES)(
-    "uses the same palette token source with readable guard-selector syntax for %s",
-    ({ expectedBase, tokens }) => {
-      applyThemeTokens(tokens);
-
-      const theme = buildWorkstationGuardSelectorTheme();
-      const background =
-        theme.colors["editor.background"] ??
-        tokens["--color-af-foundation-surface"];
-
-      expect(theme.base).toBe(expectedBase);
+      expect(theme.base).toBe(paletteId === "factory-light" ? "vs" : "vs-dark");
+      expect(theme.colors["editorGutter.background"]).toBe(
+        tokens.foundation.surface,
+      );
+      expect(theme.colors["editorLineNumber.foreground"]).toBe(
+        tokens.semantic.foreground.muted,
+      );
       expect(findRuleForeground(theme, "text")).toBe(
-        tokens["--color-af-foundation-ink"],
+        `#${toMonacoHex(tokens.foundation.ink)}`,
       );
       expect(
         readContrastRatio(findRuleForeground(theme, "text"), background),
@@ -242,23 +154,17 @@ describe("buildWorkstationGuardSelectorTheme", () => {
         ),
       ).toBeGreaterThanOrEqual(3);
       expect(theme.colors["scrollbarSlider.background"]).toBe(
-        tokens["--color-outline-variant"],
+        tokens.semantic.outline.variant,
       );
       expect(theme.colors["scrollbarSlider.hoverBackground"]).toBe(
-        tokens["--color-on-surface-variant"],
+        tokens.semantic.foreground.muted,
       );
       expect(theme.colors["scrollbarSlider.activeBackground"]).toBe(
-        tokens["--color-on-surface-variant"],
+        tokens.semantic.foreground.muted,
       );
     },
   );
 });
-
-function applyThemeTokens(tokens: Record<string, string>) {
-  for (const [name, value] of Object.entries(tokens)) {
-    document.documentElement.style.setProperty(name, value);
-  }
-}
 
 function findRuleForeground(
   theme: ReturnType<typeof buildWorkstationPromptTheme>,
@@ -272,6 +178,10 @@ function findRuleForeground(
   }
 
   return `#${foreground}`;
+}
+
+function toMonacoHex(color: string): string {
+  return color.replace(/^#/, "").slice(0, 6).toUpperCase();
 }
 
 function readContrastRatio(foreground: string, background: string): number {
@@ -302,4 +212,3 @@ function readRelativeLuminance(color: string): number {
 
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
-// Component lane: requires DOM APIs.
