@@ -449,6 +449,76 @@ func TestCloseRuntimeScopeStopsOnlyThatScopesSupervisedRuntimes(t *testing.T) {
 	}
 }
 
+func TestCloseRuntimeScopeRevokesLeasesOwnedByStoppedHost(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	var stopCount atomic.Int32
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "scoped-lease-cleanup")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithLeasesFacts(
+		scopes,
+		mustAssetsService(t, scopes),
+		&fakeProcessLauncher{
+			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
+				process := newFakeManagedProcess(healthServer.URL, nil)
+				process.stopFn = func() error {
+					stopCount.Add(1)
+					return process.defaultStop()
+				}
+				return process
+			},
+		},
+		http.DefaultClient,
+		realHostClock{},
+		nil,
+		nil,
+		leaseReadySlotFacts{capacity: 1},
+		internalservice.HostPolicyTestConfig{},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	leases := internalservice.LeasesService(host)
+	acquired, err := leases.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
+		Scope:  ref,
+		Name:   "OMNIVOICE_Q4_K_M",
+		Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+
+	closer, ok := host.(runtimehost.ScopeCloser)
+	if !ok {
+		t.Fatal("Runtime Host does not expose optional scope cleanup")
+	}
+	if err := closer.CloseRuntimeScope(context.Background(), ref); err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+	if stopCount.Load() != 1 {
+		t.Fatalf("scope close stop count = %d, want 1", stopCount.Load())
+	}
+	got, err := leases.GetModelLease(context.Background(), models.GetModelLeaseRequest{
+		Scope: ref,
+		Lease: acquired.Lease.Lease,
+	})
+	if !errors.Is(err, models.ErrHostLeaseExpired) || got.Lease.Status != models.ModelLeaseStatusExpired {
+		t.Fatalf("GetModelLease after scope close = %#v, %v, want expired lease", got, err)
+	}
+}
+
 func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
 	t.Parallel()
 
