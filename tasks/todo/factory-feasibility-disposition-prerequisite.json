@@ -1,413 +1,238 @@
+
 {
-  "taskId": "factory-feasibility-disposition-prerequisite-001",
+  "taskId": "factory-feasibility-disposition-prerequisite-002",
   "project": "factory-feasibility-disposition-prerequisite",
-  "title": "Establish a ten-minute feasibility preflight with a concrete contradiction witness",
+  "title": "Define the canonical incident disposition and idempotent action contract",
   "status": "complete",
   "parentBehavior": {
-    "id": "BEH-ADMISSION",
-    "description": "Admit only capability-supported slices and turn unknown or contradictory prerequisites into one bounded discovery/design prerequisite."
+    "id": "BEH-INCIDENT",
+    "description": "Escalate only actionable failed-work incidents; unchanged owned or named-hold evidence stays quiet across ticks, restart, and replay."
   },
-  "problem": "Supervisor and Project Lead slicing has no short, explicit map from a criterion to the capability, permitted change, dependency, owner, and witness that would prove it. The known LocalAI artifact mismatch can therefore consume a full dispatch before it is reported.",
-  "outcome": "A reviewer can classify feasible, unknown, and contradictory criteria within a ten-minute no-build preflight, derive a stable discovery-prerequisite identity, detect an equivalent accepted/nonterminal Work before submission, and preserve the LocalAI failure lineage without retry or duplication.",
-  "sourcePlanRef": "factory/docs/operating-policy.md#project-contract-and-autonomy-boundaries; #work-shaping-and-throughput; #failure-classification-and-escalation; requirement: unknown capability yields one short discovery/design prerequisite",
-  "actorAndTrigger": "The Portfolio Supervisor or Project Lead runs the check before admitting an implementation slice or allowing a planner to begin a broad investigation.",
-  "dependencies": [],
-  "sharedSurfaceOwnership": "T001 owns the preflight vocabulary and identity rule. T002 consumes it and must not define a conflicting capability or prerequisite identity. Luna owns this design surface. The LocalAI lead owns immutable LocalAI evidence and LA-05/LA-06 only.",
+  "problem": "The Project reconciler can observe failed Work but has no canonical handled-failure fact or stable action identity, so unchanged owned correction can wake Astra or submit another action on every pass.",
+  "outcome": "A reviewer can classify one incident as handled or actionable before Astra or recovery, append one immutable disposition fact through canonical Factory Events, rebuild the latest view from replay, and fail closed on unsafe or uncertain actions without changing Work state semantics.",
+  "sourcePlanRef": "factory/docs/operating-policy.md#cadence-liveness-and-state; #failure-classification-and-escalation; #no-action-and-hold-policy; #executable-recovery-boundaries; requirement: stable fingerprint, handled check, selective escalation, and safe orphan repair",
+  "actorAndTrigger": "Automations runs after public Factory Session, Work, Worker Session, and Factory Event reads during a scheduled or exception-triggered reconciliation pass.",
+  "dependencies": [
+    "factory-feasibility-disposition-prerequisite-001"
+  ],
+  "sharedSurfaceOwnership": "T002 owns the single Factory Event contract decision and identity/action semantics. Recordings owns append, validation, replay, and the latest projection; Automations owns classification/eligibility; Work and Factory Runtime own Work admission and move controls. T003 owns integrated matrix and rollout evidence.",
   "scope": {
     "in": [
-      "The ten-minute procedure",
-      "Criterion/capability/allowed-change/dependency/owner/witness mapping",
-      "Exact Models and Workers symbols and the LocalAI contradiction",
-      "Feasible, unknown, contradictory, and no-approval outcomes",
-      "Active Work and stable request-identity checks"
+      "Additive INCIDENT_DISPOSITION_RECORDED Factory Event vocabulary and payload proposal",
+      "Event-context requirements and stable fingerprint, event, and action identities",
+      "Disposition transitions, replay reduction, handled checks, selective escalation, external holds, concurrency, and lost-response semantics",
+      "Unowned, overdue, repeated-after-correction, stale-generation, active-execution, invalid-readiness, duplicate, malformed, partial-write, and valid-orphan outcomes"
     ],
     "out": [
-      "Production admission code or test changes",
-      "LocalAI or active Work changes",
-      "Incident-event implementation",
-      "Generated/API files, live settings, provider/model calls, and operator approval for routine design"
+      "Production event or reconciler implementation",
+      "Generated clients, new incident endpoint, WorkRead field, Work state, historical backfill, or live event emission",
+      "Active Work/settings changes, LocalAI changes, provider/model calls, complete T003 matrix, clean-room repair, and rollout"
     ]
   },
   "constraints": [
-    "Use Factory, Factory Session, Work, and Worker Session vocabulary; keep Petri-net mechanics private.",
-    "Read one selected public session and only directly cited symbols; do not build, download, call a provider/model, run broad tests, or perform an architecture survey during preflight.",
-    "Factory Work and Factory Events remain authoritative; docs/temp is not a queue or identity store.",
-    "The LocalAI Project contract, failed lineage, corrective lineage, and recovery Work remain immutable read-only inputs.",
-    "Routine design uses ordinary delivery/review; do not invent HUMAN_APPROVAL without a real authority, immutable-contract, safety, or budget decision."
+    "Factory Work and Factory Events remain authoritative; incident disposition is event metadata and replay projection, never a Work state, filesystem queue, or second store.",
+    "Use the existing Recordings root Service.Append/canonical-ledger seam and public Work request/move controls; do not add a service locator, public root method, or endpoint in this packet.",
+    "Readers/projection precede writers; old recordings replay to an empty incident index; rollback stops new incident emission and preserves all history.",
+    "Reuse T001 normalization, exclude sweep timestamps/ticks/attempt IDs, bound and sanitize causal evidence, and reject malformed identity/context.",
+    "Lost or ambiguous public responses fail closed with a structured partial-write blocker; timer passage, idle capacity, or deterministic failure never justifies retry."
   ],
-  "contractChanges": {
-    "changed": false,
-    "authoredSource": null,
-    "current": "# Not present: no authored bounded-feasibility result shape.",
-    "proposed": "# Design-only handoff shape; no API, generated file, or runtime writer is authorized by T001.",
-    "generatedOutputs": [],
-    "consumers": [
-      "Future preflight implementation",
-      "T002 incident disposition contract",
-      "Independent reviewer and VAL-001"
+  "contractChanges": [
+    {
+      "name": "Factory Event vocabulary",
+      "authoredSource": "api/components/schemas/events/FactoryEventType.yaml",
+      "format": "yaml",
+      "classification": "additive public event enum; reader-before-writer coordination required; proposal only",
+      "current": "x-enum-varnames:\\n  - FactoryEventTypeJavaScriptPhaseChange\\n  - FactoryEventTypeArtifactCreated\\nenum:\\n  - JAVASCRIPT_PHASE_CHANGE\\n  - ARTIFACT_CREATED\\nx-enum-descriptions:\\n  - A JavaScript workflow phase transition was recorded without using Petri marking terminology.\\n  - A customer-visible factory artifact was created without exposing raw artifact bodies.",
+      "proposed": "x-enum-varnames:\\n  - FactoryEventTypeJavaScriptPhaseChange\\n  - FactoryEventTypeArtifactCreated\\n  - FactoryEventTypeIncidentDispositionRecorded\\nenum:\\n  - JAVASCRIPT_PHASE_CHANGE\\n  - ARTIFACT_CREATED\\n  - INCIDENT_DISPOSITION_RECORDED\\nx-enum-descriptions:\\n  - A JavaScript workflow phase transition was recorded without using Petri marking terminology.\\n  - A customer-visible factory artifact was created without exposing raw artifact bodies.\\n  - An incident disposition fact was recorded for replay and handled-failure suppression.",
+      "compatibility": "Existing envelope fields and event values remain unchanged. The new enum value is additive; reader/projection deployment precedes any writer. Old recordings contain no incident event and replay to an empty index.",
+      "generatedOutputs": [
+        "api/openapi.yaml",
+        "pkg/transports/http/generated/server.gen.go",
+        "pkg/transports/http/client/client.gen.go",
+        "ui/src/api/generated/openapi.ts"
+      ],
+      "consumers": [
+        "pkg/services/recordings canonical append/replay/projection",
+        "pkg/services/automations incident eligibility",
+        "GET /factory-sessions/{session_id}/events",
+        "future generated Go/TypeScript event consumers and contract tests"
+      ]
+    },
+    {
+      "name": "Factory Event payload union",
+      "authoredSource": "api/components/schemas/events/FactoryEvent.yaml",
+      "format": "yaml",
+      "classification": "additive public event union and discriminator mapping; envelope version unchanged; proposal only",
+      "current": "properties.payload.oneOf ends with ./payloads/JavaScriptPhaseChangeEventPayload.yaml and ./payloads/ArtifactCreatedEventPayload.yaml; discriminator.mapping contains ARTIFACT_CREATED only in the relevant tail.",
+      "proposed": "Append ./payloads/IncidentDispositionRecordedEventPayload.yaml to properties.payload.oneOf and map INCIDENT_DISPOSITION_RECORDED to that payload; retain every existing variant and mapping unchanged.",
+      "compatibility": "No old payload is migrated or rewritten. Generated clients are refreshed only from authored components in a future implementation gate.",
+      "generatedOutputs": [
+        "api/openapi.yaml",
+        "pkg/transports/http/generated/server.gen.go",
+        "pkg/transports/http/client/client.gen.go",
+        "ui/src/api/generated/openapi.ts"
+      ],
+      "consumers": [
+        "Recordings event decoding and replay",
+        "Factory Event SSE readers",
+        "future HTTP Go and TypeScript generated event types"
+      ]
+    },
+    {
+      "name": "Incident disposition payload",
+      "authoredSource": "api/components/schemas/events/payloads/IncidentDispositionRecordedEventPayload.yaml",
+      "format": "yaml",
+      "classification": "new bounded canonical event payload; no second persistence queue; proposal only",
+      "current": "# Not present",
+      "proposed": "factory.incident-disposition.v1 object with required schemaVersion, fingerprint, workGeneration, failureCategory, causalEvidence, classification, disposition, owner, correctiveWorkId, nextCheckAt, deadlineAt, correctionRevision, verificationWitness, action, actionRequestId, holdCondition, and bounded evidence; enums and field limits are specified in the Markdown packet.",
+      "compatibility": "Absent events remain valid and replay to an empty projection. Context supplies sessionId/workIds/requestId; no WorkRead field, Work state, endpoint, permission change, or historical backfill is implied.",
+      "generatedOutputs": [
+        "api/openapi.yaml",
+        "pkg/transports/http/generated/server.gen.go",
+        "pkg/transports/http/client/client.gen.go",
+        "ui/src/api/generated/openapi.ts"
+      ],
+      "consumers": [
+        "Recordings append validation and latest-by-fingerprint projection",
+        "Automations handled-failure and action eligibility",
+        "Portfolio Supervisor diagnostics",
+        "future contract, replay, and idempotence tests"
+      ]
+    }
+  ],
+  "identity": {
+    "normalization": "Trim values, lowercase ASCII identifiers, reject empty values, control characters, and pipe delimiters; exclude timestamps, ticks, and Worker Session attempts.",
+    "incidentTuple": "sessionId|workId|workGeneration|failureCategory|causalEvidence",
+    "fingerprint": "hex(sha256(normalizedIncidentTuple))",
+    "actionSeed": "factory.incident-action.v1|fingerprint|correctionRevision-or-unrevised|action",
+    "actionRequestId": "incident-action/<action>/<hex(sha256(actionSeed))>",
+    "eventSeed": "factory.incident-event.v1|fingerprint|correctionRevision-or-unrevised|disposition|action|actionRequestId-or-none",
+    "eventId": "incident-disposition/<hex(sha256(eventSeed))>",
+    "collisionRule": "Same ID and equivalent payload is idempotent; same ID with different payload is CONTRACT_CONFLICT and fails closed."
+  },
+  "dispositionProtocol": {
+    "projectionKey": "(sessionId, workId, fingerprint)",
+    "latestOrder": "Canonical Factory Event sequence; retain all historical events and failed Work.",
+    "handled": [
+      "Same fingerprint/generation with correction-in-progress, owned nonterminal corrective Work, and future check.",
+      "Externally-blocked incident with named owner/hold before nextCheckAt/deadlineAt.",
+      "Verified-resolved while current public failure is absent.",
+      "An already recorded identical action/event identity."
+    ],
+    "actionable": [
+      "Unowned or untriaged complete evidence.",
+      "Overdue owner/hold evidence.",
+      "Same causal failure after a new correction revision.",
+      "Valid orphan predicates after all safety checks."
+    ],
+    "failClosed": [
+      "Unknown or contradictory metadata without a complete escalation witness.",
+      "Stale generation, active execution, invalid readiness, malformed metadata, duplicate conflict, or uncertain public readback."
+    ],
+    "transitions": "untriaged -> correction-in-progress|externally-blocked|verified-resolved; correction-in-progress -> itself|externally-blocked|verified-resolved; externally-blocked -> itself|correction-in-progress|verified-resolved; corrected repeat uses a new correction revision and retains prior history."
+  },
+  "actionProtocol": {
+    "dispositionOnly": "Append the deterministic event through Recordings; on lost response reread by eventId and reuse the same event ID.",
+    "actionBearing": [
+      "Reread by actionRequestId/eventId; exact accepted facts are ALREADY_RECORDED.",
+      "Submit one existing public Work Request or Work move with actionRequestId.",
+      "Reread public Work/Event acceptance, then append the exact disposition fact.",
+      "If accepted action is provable, reuse identity; if acceptance is uncertain, return PARTIAL_WRITE_UNCERTAIN and submit nothing more."
+    ],
+    "concurrency": "Concurrent passes converge on one external request ID and one event ID; no filesystem marker or in-memory lock is correctness state.",
+    "currentSeams": [
+      "pkg/services/recordings/internal/contracts/contracts.go:1593-1605 Service.Append",
+      "pkg/services/recordings/internal/services/canonical_ledger/internal/service/service.go AppendWithValidation and retained-event-by-ID path",
+      "factory/scripts/reconcile-projects.py:260-288 stable request ID and public move control"
     ]
   },
-  "preflight": {
-    "schema": "factory.feasibility.preflight.v1",
-    "designOnly": true,
-    "hardMaximum": "10 minutes",
-    "measurement": "Monotonic stopwatch from first criterion read to the bounded result; timeout returns BLOCKED and never authorizes further investigation.",
-    "prohibited": [
-      "Builds",
-      "Broad tests",
-      "Downloads",
-      "Provider/model calls",
-      "Remote calls",
-      "Architecture survey",
-      "Retry of failed Work",
-      "Live Work, Factory, or settings mutation"
+  "orphanRepair": {
+    "requiredPredicates": [
+      "Factory Session public lifecycle RUNNING",
+      "waiting parent, valid authored transition, and matching current generation",
+      "no visible same-name cycle",
+      "no active Worker Session; missing Work identity fails closed",
+      "no matching action/event already visible",
+      "public move accepts stable actionRequestId"
     ],
-    "timebox": [
-      {
-        "window": "0:00-1:00",
-        "action": "Read immutable Project, criterion, contract revision, and permitted scope.",
-        "stop": "Missing immutable identity returns BLOCKED."
-      },
-      {
-        "window": "1:00-3:00",
-        "action": "Inspect the one directly named public capability or file/symbol.",
-        "stop": "Missing capability is recorded as DISCOVERY_REQUIRED."
-      },
-      {
-        "window": "3:00-5:00",
-        "action": "Map permitted change, semantic dependency, owner, and witness.",
-        "stop": "An immutable-contract or authority conflict returns CONTRADICTION."
-      },
-      {
-        "window": "5:00-6:30",
-        "action": "Normalize identity inputs and compute the candidate request ID.",
-        "stop": "Invalid identity returns BLOCKED."
-      },
-      {
-        "window": "6:30-8:00",
-        "action": "Read public Work/Event state for an equivalent accepted/nonterminal prerequisite or corrective Work.",
-        "stop": "A match returns ALREADY_ADMITTED; failed history remains evidence only."
-      },
-      {
-        "window": "8:00-9:00",
-        "action": "Select the bounded decision.",
-        "stop": "Elapsed time never becomes a retry signal."
-      },
-      {
-        "window": "9:00-10:00",
-        "action": "Record owner, witness, exit condition, identity, and no-action/request fields, then stop.",
-        "stop": "No additional source or runtime investigation is allowed."
-      }
-    ],
-    "inputMap": [
-      {
-        "field": "project",
-        "required": true,
-        "evidence": "Immutable Project identity"
-      },
-      {
-        "field": "criterionId",
-        "required": true,
-        "evidence": "Immutable criterion identity"
-      },
-      {
-        "field": "contractRevision",
-        "required": true,
-        "evidence": "Project/source-plan contract boundary"
-      },
-      {
-        "field": "requiredCapability",
-        "required": true,
-        "evidence": "One named public operation or file/symbol"
-      },
-      {
-        "field": "permittedChange",
-        "required": true,
-        "evidence": "Immutable scope and source-plan boundary"
-      },
-      {
-        "field": "dependencies",
-        "required": true,
-        "evidence": "Public Work/Event/Worker Session facts or source-plan requirement"
-      },
-      {
-        "field": "owner",
-        "required": true,
-        "evidence": "Project or Factory role ownership"
-      },
-      {
-        "field": "witness",
-        "required": true,
-        "evidence": "Public read, controlled observation, named symbol, or later gate"
-      }
-    ],
-    "decisionVocabulary": [
-      {
-        "decision": "ADMIT_BOUNDED_SLICE",
-        "condition": "Every capability has direct evidence, the change is permitted, dependencies have owners, and a witness is named.",
-        "action": "Continue ordinary bounded design/delivery; no operator-approval gate."
-      },
-      {
-        "decision": "DISCOVERY_REQUIRED",
-        "condition": "A required capability is unknown or cannot be mapped within the timebox.",
-        "action": "Return one prerequisite with owner, dependency, witness, smallest exit condition, and stable identity; admit no implementation and retry nothing."
-      },
-      {
-        "decision": "CONTRADICTION",
-        "condition": "A visible capability shape cannot satisfy the criterion under the permitted change or immutable contract.",
-        "action": "Name both shapes and the allowed-change boundary; preserve Work/history and submit nothing."
-      },
-      {
-        "decision": "ALREADY_ADMITTED",
-        "condition": "A public Work/Event read finds the same stable prerequisite or corrective identity already accepted and nonterminal.",
-        "action": "Submit no new Work Request and retry no failed Work."
-      },
-      {
-        "decision": "BLOCKED",
-        "condition": "A public read or identity cannot be trusted, or the timebox expires.",
-        "action": "Return a structured blocker with owner and observable exit; perform no guessed mutation."
-      }
+    "acceptanceReadback": "Require canonical WORK_STATE_CHANGE plus Work target-state and next-dispatch reachability readback; failed Work remains failed.",
+    "unsafeOutcomes": [
+      "stale-generation",
+      "active-execution",
+      "invalid-readiness",
+      "duplicate-request",
+      "malformed-metadata",
+      "partial-write-or-readback-uncertain"
     ]
   },
-  "stableIdentity": {
-    "normalization": "Trim whitespace, lowercase ASCII identifiers, and reject empty project, criterionId, contractRevision, or capabilityKey.",
-    "canonicalTuple": "project|criterionId|contractRevision|capabilityKey",
-    "timestampExcluded": true,
-    "localaiTuple": "localai|la-06|localai-project-v1|models.inferenceoutput.artifact",
-    "localaiSha256": "96452494c59c43816af0dd5190602e9876157a2be06e8c09f01e2efd4a23fb1e",
-    "localaiRequestId": "discovery-prerequisite/localai/la-06/localai-project-v1/96452494c59c43816af0dd5190602e9876157a2be06e8c09f01e2efd4a23fb1e",
-    "requestLimit": 180,
-    "matching": [
-      "Read public Work including superseded history as applicable and the canonical Factory Event stream.",
-      "Match request ID first, then the normalized tuple in Work/Event correlation.",
-      "INITIAL or PROCESSING equivalent is ALREADY_ADMITTED.",
-      "FAILED Work or a failed historical event is causal evidence, not an active duplicate.",
-      "A new contract revision or causal capability may produce a new identity only after the owner records genuinely new evidence."
-    ],
-    "lostResponse": "Reuse the same identity on the next public reread; never create a second identity."
-  },
-  "localaiWitness": {
-    "sessionId": "5cd877a9-2674-451d-bcc8-c3bda4d3f9c0",
-    "sessionStatus": "RUNNING",
-    "criterionId": "LA-06",
-    "contractRevision": "localai-project-v1",
-    "requiredCapability": "Artifact-bearing generic inference output with Work artifact identity and size-or-digest lineage",
-    "symbols": [
-      {
-        "path": "pkg/services/models/managed_runtime_contract.go",
-        "lines": "163-166",
-        "symbol": "models.InvocationProtocolResponse",
-        "currentCapability": "Detached response has Text and Usage only.",
-        "gap": "No artifact reference, size, or digest is available at this protocol boundary."
-      },
-      {
-        "path": "pkg/services/models/internal/backends/localai/omni_codec.go",
-        "lines": "118-166",
-        "symbol": "(*localai.OmniCodec).Invoke",
-        "currentCapability": "Predict is called, response.Text is required, text InferenceContent is returned, and optional usage is retained when declared.",
-        "gap": "The pinned OMNI path does not construct an artifact-bearing output."
-      },
-      {
-        "path": "pkg/services/models/wire/wire.go",
-        "lines": "454-462",
-        "symbol": "operationInvocationRuntime.Invoke",
-        "currentCapability": "OMNI requests route to runtime.omni.Invoke; only non-OMNI fallthrough reaches the generic runtime.",
-        "gap": "The artifact-capable generic fallback does not repair the OMNI response shape."
-      },
-      {
-        "path": "pkg/services/workers/internal/services/runners/internal/inference/generic_invocation.go",
-        "lines": "257-273",
-        "symbol": "baseWorkContentPartFromModelOutput",
-        "currentCapability": "WorkContentPart.ArtifactID and metadata are assigned only when InferenceOutput.Artifact is non-nil and non-zero.",
-        "gap": "Text/usage alone cannot prove the immutable Work artifact identity/size-or-digest lineage."
-      }
-    ],
-    "event": {
-      "id": "factory-event/dispatch-completed/96b67964-3721-4d05-afd0-611f4a4f6f8b",
-      "sequence": 70,
-      "eventTime": "2026-09-05T06:31:23.5071553Z",
-      "feedbackCategory": "contract_conflict",
-      "failure": "The required artifact identity/size-or-digest lineage is not available from the Text/Usage OMNI path."
-    },
-    "workerSession": {
-      "attemptId": "96b67964-3721-4d05-afd0-611f4a4f6f8b",
-      "state": "FAILED",
-      "kind": "WORKERS_EXECUTION_FAILURE",
-      "detail": "family=terminal type=unknown"
-    },
-    "publicWorkLineage": [
-      {
-        "workId": "batch-localai-project-cycle-001-e10e3884-localai-factory-llm-lineage",
-        "state": "failed",
-        "role": "preserved historical failure evidence"
-      },
-      {
-        "workId": "batch-localai-project-cycle-002-contract-delta-e10e3884-localai-omni-artifact-contract-delta",
-        "state": "failed",
-        "role": "preserved corrective lineage"
-      },
-      {
-        "workId": "batch-localai-project-cycle-001-e10e3884-localai-recover-real-inference",
-        "state": "to-complete",
-        "role": "preserved recovery dependency"
-      },
-      {
-        "workId": "batch-localai-project-cycle-003-authority-retry-e10e3884-localai-omni-artifact-contract-delta-authority-retry",
-        "state": "init",
-        "role": "existing nonterminal authority-retry lineage; do not duplicate"
-      }
-    ],
-    "result": {
-      "decision": "CONTRADICTION",
-      "allowedExit": "one discovery/design prerequisite; no LocalAI Project, active Work, or production contract mutation",
-      "owner": "Luna for the design packet; LocalAI Project lead for the immutable artifact contract and LA-05/LA-06",
-      "witness": "Factory Event dispatch-completed feedback plus the cited Models/Workers symbols",
-      "candidatePrerequisiteId": "discovery-prerequisite/localai/la-06/localai-project-v1/96452494c59c43816af0dd5190602e9876157a2be06e8c09f01e2efd4a23fb1e",
-      "workRequestSubmitted": false,
-      "retryRequested": false,
-      "operatorApprovalRequired": false
-    }
-  },
-  "tabletop": [
-    {
-      "id": "M-01",
-      "given": "A required capability has no bounded public operation or directly cited symbol.",
-      "when": "The ten-minute preflight runs.",
-      "then": "Return DISCOVERY_REQUIRED with missing capability, owner, dependency, witness, smallest exit condition, and stable identity; submit no implementation Work and retry nothing.",
-      "observer": "Controlled result fields and public request count",
-      "futureGate": "POLICY-UNIT + TABLETOP"
-    },
-    {
-      "id": "M-02",
-      "given": "The LocalAI criterion requires InferenceOutput.Artifact, InvocationProtocolResponse exposes only Text/Usage, and localai-project-v1 cannot be amended by this slice.",
-      "when": "The preflight evaluates the criterion.",
-      "then": "Return CONTRADICTION naming the exact symbols and allowed-change boundary, recognize existing corrective/recovery lineage, submit no duplicate Work Request, and retry no failed Work.",
-      "observer": "Decision, existing Work IDs, event identity, and no-action fields",
-      "futureGate": "POLICY-UNIT + TABLETOP"
-    },
-    {
-      "id": "M-03",
-      "given": "A routine criterion is covered by existing public Work, Factory Event, and Worker Session read controls and has a permitted design change.",
-      "when": "The preflight evaluates the bounded slice.",
-      "then": "Return ADMIT_BOUNDED_SLICE with capability, permitted change, dependency, owner, and witness; add no HUMAN_APPROVAL or operator-approval Work.",
-      "observer": "Complete capability map and absence of approval request",
-      "futureGate": "POLICY-UNIT + TABLETOP"
-    },
-    {
-      "id": "M-18",
-      "given": "Routine design has no authority, budget, safety, or immutable-contract decision.",
-      "when": "The supervisor/lead submits the design path through ordinary delivery/review.",
-      "then": "Continue autonomously; escalate only when a real authority or contract decision appears.",
-      "observer": "Review path and request count",
-      "futureGate": "TABLETOP + REVIEW"
-    }
+  "caseMatrix": [
+    {"id": "M-04", "given": "Same fingerprint is correction-in-progress with owned nonterminal corrective Work and future check.", "when": "Unchanged eligibility pass runs.", "then": "HANDLED; zero new event, Astra request, or retry; failed/history remains visible.", "observer": "Factory Event projection and public Work read.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-05", "given": "M-04 evidence is unchanged on a second tick.", "when": "Eligibility runs again.", "then": "Exact no-op counts; no timestamp-derived identity.", "observer": "Event/action counts and fingerprint.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-06", "given": "M-04 projection is rebuilt after restart/replay.", "when": "Next pass checks handled state.", "then": "Same projection and zero new action/event.", "observer": "Public event replay and history.", "laterGate": "GATE-IMPL-ISOLATED"},
+    {"id": "M-07", "given": "Complete unowned/untriaged failure evidence.", "when": "Eligibility runs.", "then": "One stable revision-scoped escalation and one matching disposition event; unchanged repeat is no-op.", "observer": "Public Work request and Factory Event.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-08", "given": "Named external hold is overdue.", "when": "Eligibility runs.", "then": "One stable escalation; no failed-Work retry; repeat no-op.", "observer": "Escalation request/event and preserved Work.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-09", "given": "Same causal failure remains after correction revision.", "when": "Eligibility runs.", "then": "One new revision-scoped escalation; prior correction and failure history remain.", "observer": "Action IDs, event history, and Work list.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-10", "given": "Named external hold has a future deadline.", "when": "Eligibility runs before deadline.", "then": "HANDLED; zero action/event/retry.", "observer": "Latest disposition projection.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-11", "given": "Captured generation differs from current Work generation.", "when": "Orphan/action selection runs.", "then": "BLOCKED(stale-generation); no move/event/request.", "observer": "Public Work generation and action count.", "laterGate": "GATE-IMPL-ORPHAN"},
+    {"id": "M-12", "given": "Active Worker Session exists, including one without Work identity.", "when": "Orphan/action selection runs.", "then": "BLOCKED(active-execution); no move/event/request.", "observer": "Worker Session read and Work state.", "laterGate": "GATE-IMPL-ORPHAN"},
+    {"id": "M-13", "given": "Factory is not RUNNING or a required read is invalid.", "when": "Orphan/action selection runs.", "then": "BLOCKED(invalid-readiness); no mutation.", "observer": "Session/read error and unchanged history.", "laterGate": "GATE-IMPL-ORPHAN"},
+    {"id": "M-14", "given": "Same action/event identity is already visible.", "when": "Eligibility runs.", "then": "ALREADY_RECORDED; zero new action/event and exact payload equality checked.", "observer": "Public Work/Event IDs.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-15", "given": "Action or event response is lost.", "when": "Next pass rereads public facts.", "then": "Reuse identity on accepted readback; otherwise PARTIAL_WRITE_UNCERTAIN with no second request.", "observer": "Public readback and blocker reason.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "M-16", "given": "Metadata is missing, malformed, contradictory, or fingerprint-invalid.", "when": "Append/action selection runs.", "then": "Reject/fail closed with structured reason; preserve Work/history.", "observer": "Append error and public state.", "laterGate": "CONTRACT-EVENT"},
+    {"id": "M-17", "given": "Waiting parent has matching generation, no cycle/active Worker, valid readiness, and no duplicate.", "when": "Public move runs.", "then": "One stable move, WORK_STATE_CHANGE, and next-dispatch readback; failed Work remains failed.", "observer": "Work/Event public reads.", "laterGate": "GATE-IMPL-ORPHAN"}
   ],
   "acceptanceCriteria": [
-    {
-      "id": "T001-AC-01",
-      "requirement": "Given the LocalAI fixture, the walkthrough reports the exact Text/Usage versus InferenceOutput.Artifact contradiction within ten minutes, names the allowed discovery/design exit, and creates no retry or duplicate corrective Work.",
-      "passes": true,
-      "evidence": "The design contract, exact symbol map, public event/Work/Worker Session witness, stable identity, and M-02 tabletop record the contradiction and no-action outcome.",
-      "laterGate": "GATE-IMPL-PREFLIGHT and LA-05/LA-06"
-    },
-    {
-      "id": "T001-AC-02",
-      "requirement": "Given an existing-capability criterion, the walkthrough returns a complete capability/witness map and no invented operator approval gate.",
-      "passes": true,
-      "evidence": "M-03 and M-18 define the public read capability, permitted design change, dependency, owner, witness, ADMIT_BOUNDED_SLICE result, and no-approval rule.",
-      "laterGate": "GATE-IMPL-PREFLIGHT and REVIEW-CI-MERGE"
-    },
-    {
-      "id": "T001-AC-03",
-      "requirement": "Given an active equivalent prerequisite or corrective Work, the identity check reports already-admitted and submits no new Work Request.",
-      "passes": true,
-      "evidence": "The identity algorithm matches stable request IDs/tuples against public Work/Event state, distinguishes active nonterminal Work from failed history, and records the existing LocalAI authority-retry/recovery lineage without a new request.",
-      "laterGate": "GATE-IMPL-PREFLIGHT and PUBLIC-REPLAY"
-    },
-    {
-      "id": "T001-AC-04",
-      "requirement": "Given an unmappable capability, preflight stops with a structured prerequisite carrying an owner and observable exit rather than an implementation-ready claim.",
-      "passes": true,
-      "evidence": "DISCOVERY_REQUIRED and BLOCKED define the owner, dependency, witness, smallest exit condition, hard stop, and fail-closed behavior; M-01 exercises the unmappable case.",
-      "laterGate": "GATE-IMPL-PREFLIGHT and VAL-001"
-    }
+    {"id": "T002-AC-01", "requirement": "Unchanged owned correction-in-progress evidence across two ticks, restart, and replay produces no new Astra request, retry, or disposition event while failed/history visibility remains.", "passes": true, "evidence": "Handled protocol and M-04/M-05/M-06 specify same-fingerprint projection, zero-action counts, replay reduction, and retained history.", "laterGate": "GATE-IMPL-INCIDENT and GATE-IMPL-ISOLATED"},
+    {"id": "T002-AC-02", "requirement": "Unowned, overdue, or repeated-after-correction evidence produces one stable revision-scoped escalation and unchanged repeats are no-ops.", "passes": true, "evidence": "Revision-scoped action formula, eligibility order, and M-07/M-08/M-09 define one request/event and stable repeat behavior.", "laterGate": "GATE-IMPL-INCIDENT"},
+    {"id": "T002-AC-03", "requirement": "Stale generation, active execution, invalid readiness, duplicate request, partial write, and malformed metadata fail closed with structured reasons while Work/history are preserved.", "passes": true, "evidence": "Fail-closed protocol, lost-response rules, orphan predicates, and M-11 through M-16 define no-mutation outcomes.", "laterGate": "GATE-IMPL-ORPHAN and CONTRACT-EVENT"},
+    {"id": "T002-AC-04", "requirement": "Valid orphan predicates require the public move, WORK_STATE_CHANGE, and next-dispatch readback; failed Work remains failed.", "passes": true, "evidence": "Safe orphan repair section and M-17 require matching generation, no active execution/cycle, stable move identity, and public readback.", "laterGate": "GATE-IMPL-ORPHAN"},
+    {"id": "T002-AC-05", "requirement": "Lost append/action responses reuse the same identity when accepted state is public or return a partial-write blocker instead of creating a second request.", "passes": true, "evidence": "Action protocol defines public reread ordering, deterministic event/action IDs, same-ID conflict handling, and PARTIAL_WRITE_UNCERTAIN.", "laterGate": "GATE-IMPL-INCIDENT and GATE-IMPL-ISOLATED"}
   ],
   "verification": {
-    "behavioralWitness": "Independent reviewer walks M-01, M-02, M-03, and M-18 with the exact LocalAI fixture and records decision, capability map, identity, owner, witness, and no-action/request outcome.",
-    "executableSpineEffect": "establish",
+    "behavioralWitness": "Independent reviewer walks M-04 through M-17 with sanitized public Factory Session, Work, Worker Session, and Factory Event facts plus fake append/action outcomes, recording counts, IDs, replay projection, readback, and preserved failed history.",
+    "executableSpineEffect": "extend",
     "evidence": [
       {
         "scope": "functional",
-        "dependencyFidelity": "local_real",
-        "procedure": "Read-only GET /factory-sessions; selected-session Work and Worker Session reads; bounded Factory Event SSE read beginning after sequence 65; direct inspection of the four cited Models/Workers symbols.",
-        "artifact": "Factory Session 5cd877a9-2674-451d-bcc8-c3bda4d3f9c0, Work IDs and Worker Session 96b67964-3721-4d05-afd0-611f4a4f6f8b, event sequence 70, and current source at HEAD e10e38843a.",
-        "proves": "Current failure identity, preserved corrective/recovery lineage, and concrete capability boundary.",
-        "doesNotProve": "Future preflight runtime code or real LocalAI inference."
-      },
-      {
-        "scope": "functional",
         "dependencyFidelity": "controlled",
-        "procedure": "One reviewer tabletop of M-01, M-02, M-03, and M-18 with a ten-minute stopwatch and no writes.",
-        "artifact": "This task packet's preflight decision table and stable identity rule.",
-        "proves": "Deterministic classification, stable prerequisite identity, and no invented approval/no-retry boundary.",
-        "doesNotProve": "Canonical incident append, replay, or public runtime idempotence."
+        "procedure": "Reviewer-reproducible tabletop over M-04–M-17 with explicit fake public reads, append outcomes, action outcomes, and deterministic clock values.",
+        "artifact": "This task packet's event payload, identity formulas, protocol, and case matrix.",
+        "proves": "Disposition transitions, replay reduction, handled suppression, selective escalation, concurrency identity, lost-response behavior, and fail-closed branches.",
+        "doesNotProve": "Compiled Recordings/Automations runtime, generated API alignment, or real LocalAI behavior."
+      },
+      {
+        "scope": "integration",
+        "dependencyFidelity": "local_real",
+        "procedure": "Future prebuilt YOU_TEST_BINARY followed by python -m unittest tests/factory/scripts/test_factory_recovery_integration.py with one private session and public Work/Event/replay assertions.",
+        "artifact": "Build/release-owned prebuilt YOU_TEST_BINARY and private Factory Session fixture.",
+        "proves": "No duplicate public request/event, failed-history preservation, valid orphan readback, and unrelated Work isolation through production wiring.",
+        "doesNotProve": "Remote/paid provider behavior, broad rollout, or canary safety."
       }
     ],
-    "highestFeasibleLevel": "Functional design review combining local public evidence and controlled tabletop; production runtime is out of scope.",
+    "highestFeasibleLevel": "Controlled functional design review now; prebuilt public integration after implementation.",
     "remainingUnprovenEdges": [
-      {
-        "edge": "Preflight implementation and public admission behavior",
-        "gateId": "GATE-IMPL-PREFLIGHT"
-      },
-      {
-        "edge": "LocalAI contract/artifact acceptance",
-        "gateId": "LA-05/LA-06"
-      },
-      {
-        "edge": "Independent clean-room completeness",
-        "gateId": "VAL-001"
-      }
+      {"edge": "Event/runtime implementation", "gateId": "GATE-IMPL-INCIDENT"},
+      {"edge": "Generated API alignment", "gateId": "CONTRACT-EVENT"},
+      {"edge": "Public replay/isolation", "gateId": "GATE-IMPL-ISOLATED"},
+      {"edge": "Orphan runtime behavior", "gateId": "GATE-IMPL-ORPHAN"},
+      {"edge": "LocalAI artifact acceptance", "gateId": "LA-05/LA-06"},
+      {"edge": "Canary safety", "gateId": "GATE-CANARY"}
     ],
-    "testDesign": "No tests change in T001. Future pure classification branches use POLICY-UNIT with explicit fake public responses, fresh values per case, no root process, no sleeps, and no source-scanning meta-tests. Public admission behavior uses the prebuilt PUBLIC-REPLAY lane."
+    "testDesign": "No tests change in T002. Future pure normalization/validation/eligibility/fake-runner cases belong in tests/factory/scripts/test_reconcile_projects.py without a Factory root or in-test build. Public Work/Event/replay/idempotence/orphan cases belong in test_factory_recovery_integration.py and consume a build/release-owned prebuilt YOU_TEST_BINARY with private session/profile/port/Work identities."
   },
   "paidValidation": {
     "applicable": false,
-    "trigger": "None; customer budget prohibits new provider/model validation.",
+    "trigger": "None; no provider/model validation call is authorized.",
     "maximumCalls": 0,
     "maximumCostUsd": 0,
     "maximumDuration": "0 paid execution minutes",
-    "fixture": "Sanitized local public reads and controlled tabletop.",
-    "evidenceReuseKey": "FACTORY-FEASIBILITY-01/preflight-v1"
+    "fixture": "Sanitized public Work/Event fixtures and controlled append/action outcomes.",
+    "evidenceReuseKey": "FACTORY-FEASIBILITY-01/incident-v1"
   },
-  "operationalAndRollout": {
-    "liveChanges": false,
-    "retryPolicy": "Known contradiction, failed Work, and elapsed timer never authorize retry.",
-    "rollback": "No runtime rollout exists in T001. Preserve event history and Work; any future change stops and returns a reviewed delta on duplicate, stale, malformed, or unreadable identity.",
-    "futureOwner": "Supervisor controls future admission/canary; LocalAI lead owns immutable LocalAI contract evidence; T002 owns incident semantics."
-  },
-  "escalation": {
-    "conditions": [
-      "Criterion cannot be mapped to a concrete capability",
-      "Public Work/Event identity cannot be read",
-      "Ten-minute boundary would be exceeded",
-      "Permitted change conflicts with immutable contract"
-    ],
-    "requiredBlockerFields": [
-      "failed criterion",
-      "exact evidence",
-      "customer/system impact",
-      "safe read-only work completed",
-      "accountable owner",
-      "observable exit",
-      "smallest discovery or contract delta"
-    ],
-    "implementationReadyClaimAllowed": false
-  },
-  "handoffArtifacts": [
-    "Preflight decision vocabulary and timebox",
-    "LocalAI contradiction witness and preserved Work lineage",
-    "Stable prerequisite identity and duplicate-check rule",
-    "M-01/M-02/M-03/M-18 controlled tabletop",
-    "GATE-PREFLIGHT inputs for T002 and clean-room review"
-  ]
+  "operationalAndRollout": "No live Factory settings, active Work, event stream, generated output, or public endpoint changes. Future readers/projection precede writers; same-ID payload conflicts and partial-write uncertainty stop the action; rollback disables new writers and preserves history. Controlled rollout is a later Supervisor-owned gate.",
+  "escalation": "Stop with a structured blocker if Recordings cannot validate reader-before-writer and same-ID conflict semantics, public Work admission/move cannot accept the stable request ID, readback cannot distinguish accepted from uncertain, or metadata requires a new Work state/endpoint. Include failed criterion, exact evidence, impact, safe work, owner, observable exit, and smallest delta.",
+  "handoffArtifacts": "Additive event contract proposal, identity formulas, disposition/handled protocol, replay/lost-response rules, orphan predicates, M-04–M-17 witness rows, test-layer placement, and future gate inputs for incident, orphan, contract, and isolated public replay behavior.",
+  "priority": "P0",
+  "passes": true,
+  "notes": "T002 design packet completed. No production/API/generated/test/live Factory files were changed; future event implementation, generated alignment, public replay/idempotence, LocalAI acceptance, and canary safety remain explicit later gates."
 }
