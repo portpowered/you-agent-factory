@@ -28,6 +28,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	managedbackend "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 	"go.uber.org/zap"
 )
 
@@ -331,6 +332,7 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 		ModelName:       request.ModelName,
 		Revision:        request.Revision,
 		Platform:        request.Platform,
+		ModelPath:       request.ModelPath,
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -368,6 +370,7 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 		ModelName:       request.ModelName,
 		Revision:        request.Revision,
 		Platform:        request.Platform,
+		ModelPath:       request.ModelPath,
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -514,34 +517,30 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 	Wait() error
 	Stop(context.Context) error
 }, error) {
-	if err := ctx.Err(); err != nil {
+	launch, err := managedbackend.ResolveManagedBackendLaunch(ctx, spec)
+	if err != nil {
 		return nil, err
 	}
-	command := strings.TrimSpace(spec.Command)
-	if command == "" {
-		return nil, fmt.Errorf("supervised process command is required")
-	}
-	endpoint := strings.TrimSpace(spec.HealthEndpoint)
-	if endpoint == "" {
-		return nil, fmt.Errorf("supervised process health endpoint is required")
-	}
-	cmd := exec.Command(command, spec.Args...)
+	cmd := exec.Command(launch.Command, launch.Args...)
 	if len(spec.Env) > 0 {
 		cmd.Env = append([]string(nil), spec.Env...)
 	}
-	if spec.WorkDir != "" {
-		cmd.Dir = spec.WorkDir
+	if launch.WorkDir != "" {
+		cmd.Dir = launch.WorkDir
 	}
 	if err := cmd.Start(); err != nil {
+		launch.Cleanup()
 		return nil, err
 	}
 	managed := &modelsManagedProcess{
 		cmd:            cmd,
-		healthEndpoint: endpoint,
+		healthEndpoint: launch.Endpoint,
+		cleanup:        launch.Cleanup,
 		finished:       make(chan struct{}),
 	}
 	go func() {
 		waitErr := cmd.Wait()
+		managed.cleanupResources()
 		managed.mu.Lock()
 		managed.waitErr = waitErr
 		close(managed.finished)
@@ -583,6 +582,9 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 		Env:            spec.Env,
 		WorkDir:        spec.WorkDir,
 		HealthEndpoint: spec.HealthEndpoint,
+		Backend:        spec.Backend,
+		ModelPath:      spec.ModelPath,
+		BackendFiles:   append([]string(nil), spec.BackendFiles...),
 	})
 	if err != nil || process == nil {
 		return modelswire.HostManagedProcess(process), err
@@ -686,12 +688,21 @@ type modelsManagedProcess struct {
 	mu             sync.Mutex
 	cmd            *exec.Cmd
 	healthEndpoint string
+	cleanup        func()
+	cleanupOnce    sync.Once
 	// finished is broadcast to both the supervisor's Wait observer and the
 	// application lifecycle closer; a one-shot error channel would let one
 	// consumer strand the other during normal teardown.
 	finished chan struct{}
 	waitErr  error
 	stopped  bool
+}
+
+func (p *modelsManagedProcess) cleanupResources() {
+	if p == nil || p.cleanup == nil {
+		return
+	}
+	p.cleanupOnce.Do(p.cleanup)
 }
 
 func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }

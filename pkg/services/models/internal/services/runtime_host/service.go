@@ -49,3 +49,10 @@ type Service interface {
 		models.ReleaseModelLeaseRequest,
 	) (models.ReleaseModelLeaseResult, error)
 }
+
+// ScopeCloser releases the supervised host state owned by one Models runtime
+// scope. It is an optional lifecycle capability kept separate from Service so
+// existing host adapters and test doubles only implement request operations.
+type ScopeCloser interface {
+	CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
+}

@@ -331,6 +331,66 @@ func (s *service) Shutdown(ctx context.Context) error {
 	return firstErr
 }
 
+// CloseRuntimeScope releases only the supervised runtimes and lease capacity
+// owned by one scope. Process-wide Models shutdown remains responsible for
+// the final safety net when the root itself is closed.
+func (s *service) CloseRuntimeScope(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+) error {
+	if s == nil {
+		return nil
+	}
+	if scope.IsZero() {
+		return models.ErrRuntimeScopeInvalid
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx = context.WithoutCancel(ctx)
+	prefix := scope.String() + "|"
+
+	s.mu.Lock()
+	slots := make([]*supervisedRuntime, 0)
+	modelNames := make([]string, 0)
+	for key, slot := range s.runtimeSlots {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		delete(s.runtimeSlots, key)
+		s.cancelIdleUnloadLocked(key)
+		slots = append(slots, slot)
+		if modelName := strings.TrimPrefix(key, prefix); modelName != "" {
+			modelNames = append(modelNames, modelName)
+		}
+	}
+	for key := range s.idleUnloadTimers {
+		if strings.HasPrefix(key, prefix) {
+			s.cancelIdleUnloadLocked(key)
+		}
+	}
+	for key := range s.capacityHolders {
+		if strings.HasPrefix(key, prefix) {
+			delete(s.capacityHolders, key)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, modelName := range modelNames {
+		s.revokeHostLeases(scope, modelName)
+	}
+	var firstErr error
+	for _, slot := range slots {
+		if slot == nil {
+			continue
+		}
+		if err := slot.stop(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 func (s *service) unloadRuntime(
 	ctx context.Context,
 	identity supervisedIdentity,

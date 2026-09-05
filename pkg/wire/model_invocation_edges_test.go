@@ -215,13 +215,17 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	gotProcess, err := launcher.Start(context.Background(), modelswire.HostProcessStartSpec{
 		Command: "model-host", Args: []string{"serve"}, Env: []string{"MODEL=seal"},
 		WorkDir: "runtime", HealthEndpoint: process.healthEndpoint,
+		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf",
+		BackendFiles: []string{"runtime/backend.zip"},
 	})
 	if err != nil {
 		t.Fatalf("adapted process launcher: %v", err)
 	}
 	if gotSpec.Command != "model-host" || len(gotSpec.Args) != 1 || gotSpec.Args[0] != "serve" ||
 		len(gotSpec.Env) != 1 || gotSpec.Env[0] != "MODEL=seal" || gotSpec.WorkDir != "runtime" ||
-		gotSpec.HealthEndpoint != process.healthEndpoint {
+		gotSpec.HealthEndpoint != process.healthEndpoint || gotSpec.Backend != "localai-llamacpp" ||
+		gotSpec.ModelPath != "runtime/model.gguf" || len(gotSpec.BackendFiles) != 1 ||
+		gotSpec.BackendFiles[0] != "runtime/backend.zip" {
 		t.Fatalf("adapted process spec = %#v, want exact edge projection", gotSpec)
 	}
 	if gotProcess.HealthEndpoint() != process.healthEndpoint {

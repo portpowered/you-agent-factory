@@ -380,6 +380,75 @@ func TestShutdownStopsSupervisedRuntimesAndCancelsIdleTimers(t *testing.T) {
 	}
 }
 
+func TestCloseRuntimeScopeStopsOnlyThatScopesSupervisedRuntimes(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	var stopCount atomic.Int32
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "scoped-unload")
+	left := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	right := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
+			process := newFakeManagedProcess(healthServer.URL, nil)
+			process.stopFn = func() error {
+				stopCount.Add(1)
+				return process.defaultStop()
+			}
+			return process
+		},
+	}
+	host := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	for _, scope := range []models.RuntimeScopeRef{left, right} {
+		if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+			Scope: scope,
+			Name:  "OMNIVOICE_Q4_K_M",
+		}); err != nil {
+			t.Fatalf("EnsureModelHost(%s): %v", scope, err)
+		}
+	}
+
+	closer, ok := host.(runtimehost.ScopeCloser)
+	if !ok {
+		t.Fatal("Runtime Host does not expose optional scope cleanup")
+	}
+	if err := closer.CloseRuntimeScope(context.Background(), left); err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+	if stopCount.Load() != 1 {
+		t.Fatalf("scope close stop count = %d, want 1", stopCount.Load())
+	}
+
+	retained, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: right,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("EnsureModelHost(retained scope): %v", err)
+	}
+	if retained.Outcome != models.HostEnsureAlreadyReady {
+		t.Fatalf("retained scope outcome = %q, want already ready", retained.Outcome)
+	}
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: left,
+		Name:  "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("EnsureModelHost(reopened scope slot): %v", err)
+	}
+	if launcher.startCount() != 3 {
+		t.Fatalf("host starts after scoped cleanup = %d, want 3", launcher.startCount())
+	}
+}
+
 func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
 	t.Parallel()
 

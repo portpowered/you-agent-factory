@@ -200,7 +200,7 @@ func (r *supervisedRuntime) startLoad(
 		processExit <- process.Wait()
 	}()
 	r.setProcess(process)
-	if err := r.waitForReadiness(ctx, identity, process, processExit); err != nil {
+	if err := r.waitForReadiness(ctx, identity, spec, process, processExit); err != nil {
 		return err
 	}
 	r.markReady(identity, process, processExit)
@@ -217,6 +217,7 @@ func (r *supervisedRuntime) setProcess(process modelseffects.HostManagedProcess)
 func (r *supervisedRuntime) waitForReadiness(
 	ctx context.Context,
 	identity supervisedIdentity,
+	spec modelseffects.HostProcessStartSpec,
 	process modelseffects.HostManagedProcess,
 	processExit <-chan error,
 ) error {
@@ -230,7 +231,7 @@ func (r *supervisedRuntime) waitForReadiness(
 			_ = process.Stop(context.Background())
 			return r.markFailed(identity, hostFailureClassCancelled, cancelHostError(err))
 		}
-		ready, checkErr := r.checkReadiness(ctx, identity, process)
+		ready, checkErr := r.checkReadiness(ctx, identity, spec, process)
 		lastReadinessErr = checkErr
 		if errors.Is(checkErr, models.ErrHostProtocolIncompatible) {
 			_ = process.Stop(context.Background())
@@ -308,6 +309,7 @@ func processExitError(waitErr error) error {
 func (r *supervisedRuntime) checkReadiness(
 	ctx context.Context,
 	identity supervisedIdentity,
+	spec modelseffects.HostProcessStartSpec,
 	process modelseffects.HostManagedProcess,
 ) (bool, error) {
 	if requiresPinnedGRPCBackend(identity.Backend) {
@@ -323,6 +325,7 @@ func (r *supervisedRuntime) checkReadiness(
 				ModelName:       identity.Name,
 				Revision:        identity.Revision,
 				Platform:        r.cfg.Platform,
+				ModelPath:       strings.TrimSpace(spec.ModelPath),
 			},
 		)
 		if err != nil {

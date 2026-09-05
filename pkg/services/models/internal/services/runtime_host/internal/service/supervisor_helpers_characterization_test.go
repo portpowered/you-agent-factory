@@ -1,6 +1,51 @@
 package service
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+)
+
+func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := &models.RuntimeConfig{}
+	worker, err := localWorkerForModel(runtimeConfig, models.BuiltInModelNameLLM)
+	if err != nil {
+		t.Fatalf("localWorkerForModel: %v", err)
+	}
+	if worker.Command != "" {
+		t.Fatalf("built-in worker command = %q, want empty for packaged backend resolution", worker.Command)
+	}
+
+	identity := supervisedIdentityForModel(runtimeConfig, nil, models.BuiltInModelNameLLM)
+	if identity.Backend != "localai-llamacpp" {
+		t.Fatalf("built-in backend = %q, want localai-llamacpp", identity.Backend)
+	}
+	inspection := cacheInspection{
+		CachePath:         `C:\models\llm\revision`,
+		ObservedArtifacts: []models.AssetArtifact{{Name: "model.gguf"}},
+		BackendRequired:   true,
+		BackendFiles:      []string{`C:\models\backend\llama.zip`},
+	}
+	spec, err := defaultGRPCServerStartBuilder(identity, inspection, worker)
+	if err != nil {
+		t.Fatalf("defaultGRPCServerStartBuilder: %v", err)
+	}
+	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
+		t.Fatalf("packaged backend start spec = %#v, want no authored process or endpoint", spec)
+	}
+	if spec.Backend != identity.Backend {
+		t.Fatalf("spec backend = %q, want %q", spec.Backend, identity.Backend)
+	}
+	if spec.ModelPath != filepath.Join(inspection.CachePath, "model.gguf") {
+		t.Fatalf("spec model path = %q, want %q", spec.ModelPath, filepath.Join(inspection.CachePath, "model.gguf"))
+	}
+	if len(spec.BackendFiles) != 1 || spec.BackendFiles[0] != inspection.BackendFiles[0] {
+		t.Fatalf("spec backend files = %#v, want %#v", spec.BackendFiles, inspection.BackendFiles)
+	}
+}
 
 func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) {
 	t.Parallel()
