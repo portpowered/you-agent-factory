@@ -1,19 +1,20 @@
 # LocalAI OMNI-to-Factory artifact contract delta
 
 Status: proposal-only private contract delta, story
-`localai-omni-artifact-contract-delta-authority-retry-003`. This document
-retains the verified current path, the reviewable Proposed private handoff, and
-the complete selected semantic Factory acceptance matrix. It does not authorize
-production change, executable test change, generated-artifact change, or Project
-acceptance.
+`localai-omni-artifact-contract-delta-authority-retry-004`. This document
+retains the verified current path, the reviewable Proposed private handoff, the
+complete selected semantic Factory acceptance matrix, and the corrected
+clean-room handoff. It does not authorize production change, executable test
+change, generated-artifact change, or Project acceptance.
 
 ## 0. Authority and scope boundary
 
 - The pre-edit checkout/current application head was
   `e10e38843aff30c7871b732b284976ee13ab42f1`; the proposal commits are
   documentation-only descendants of that head.
-- The execution packet is `prd.json` for
-  `localai-omni-artifact-contract-delta`; no `operatorAmendment` is present.
+- The execution packet is the ignored `prd.json` for branch
+  `localai-omni-artifact-contract-delta-authority-retry`; its status is
+  `proposal-only` and no `operatorAmendment` is present.
 - The immutable authority was read from the supplied absolute paths and was
   verified before any proposal edit:
 
@@ -43,6 +44,73 @@ The supplied failure witness and the PRD's embedded current-chain references
 are retained as inputs. A later operator-approved contract revision is still
 required before implementation; `LA-05`, `LA-06`, and every runtime quality
 gate remain unproven.
+
+## 0.1 Corrected retry handoff index
+
+This index makes the plan self-contained for an ordinary reviewer. The
+statuses below are proposal-slice statuses; `UNPROVEN`, `LATER`, and
+`REQUIRED_BEFORE_CODE` are not runtime passes or implementation authority.
+
+### Behavior and story dependency map
+
+| Behavior | Story | Dependency | Proposal result and owner |
+| --- | --- | --- | --- |
+| `BEH-AUTH` — authority and scope are preserved before proposal work. | `localai-omni-artifact-contract-delta-authority-retry-001` | None. | `PASS_FOR_THIS_SLICE`; §§0–4, planner/reviewer. |
+| `BEH-PRIVATE` — OMNI text and detached artifact metadata cross the private Models seam. | `localai-omni-artifact-contract-delta-authority-retry-002` | Story 001 and `GATE-OPERATOR-APPROVAL` before code. | `PROPOSAL_ONLY`; §5, Models implementation/validation later. |
+| `BEH-FACTORY` — one selected Factory Session result preserves Work, event, artifact, and lineage. | `localai-omni-artifact-contract-delta-authority-retry-003` | Story 002 and `GATE-OPERATOR-APPROVAL` before code. | `MATRIX_ONLY`; §6, Factory/Models validation later. |
+| `BEH-BOUNDARY` — public and transport representations remain compatible and safe. | `localai-omni-artifact-contract-delta-authority-retry-003` | Story 002; public-shape boundary in §5. | `SHAPES_RECORDED_NOT_EXECUTED`; §§5–6, transport/reviewer later. |
+| `BEH-HANDOFF` — independent validation closes or loops back claims without silent repair. | `localai-omni-artifact-contract-delta-authority-retry-004` | Story 003; no runtime or operator authority is inferred. | `PASS_FOR_THIS_SLICE`; §7, independent reviewer/plan author loopback. |
+
+### Project criterion map
+
+| Criterion | Proposal-slice status | What this plan records | Remaining verification owner |
+| --- | --- | --- | --- |
+| `LA-01` | `LOCAL_EVIDENCE_RECORDED_PROJECT_PENDING` | Authority, checkout, retained characterization, current loss point, and next story in §§0–4. | Independent admission; `GATE-AUTHORITY`/`GATE-CHAR`. |
+| `LA-02` | `UNPROVEN` | No source-blind runtime probe is authorized in this retry. | `GATE-BLIND` and `GATE-LOOPBACK`. |
+| `LA-03` | `PLAN-ONLY` | Independent/no-self-repair review procedure and report in §7. | `GATE-LOOPBACK`. |
+| `LA-04` | `MATRIX_DEFINED_NOT_EXECUTED` | Complete selected semantic matrix, layer/fidelity, isolation, command, observer, and owner in §6. | `GATE-BLIND`, `GATE-SERVER-PARITY`, `GATE-REAL-C1`. |
+| `LA-05` | `EXPLICITLY_UNPROVEN` | Factory witness and blocker/authority rule only; no direct CLI/TTS substitute. | `GATE-OPERATOR-APPROVAL` then `GATE-FACTORY-LINEAGE`. |
+| `LA-06` | `EXPLICITLY_UNPROVEN` | Semantic OMNI/Factory assertions only; no runtime evidence. | `GATE-FACTORY-LINEAGE`, `GATE-REAL-C1`, independent review. |
+| `LA-07` | `UNPROVEN` | Explicit `--server` parity gate and no in-process substitution. | `GATE-SERVER-PARITY`. |
+| `LA-08` | `DESIGN_RECORDED_NOT_EXECUTED` | Hermetic `root.BuildProcess`/Factory Session isolation strategy in §6. | `GATE-FACTORY-LINEAGE` and matrix commands. |
+| `LA-09` | `UNPROVEN` | Three-platform real LocalAI/backend owner and blocking rule. | `GATE-REAL-C1`. |
+| `LA-10` | `BUDGET_DECLARED_EXECUTION_UNPROVEN` | Required platform, artifact, state, timeout, network, download, and retry fields in §6.1. | `GATE-BLIND`, `GATE-SERVER-PARITY`, `GATE-REAL-C1`. |
+| `LA-11` | `FIELDS_DEFINED_CLOSURE_UNPROVEN` | Retrospective finding/action/verification structure and this loopback result. | `GATE-LOOPBACK`. |
+| `LA-12` | `PLAN_INTEGRITY_RECORDED_PROJECT_PENDING` | Private-only boundary, unchanged public/generated inventory, source policy, and stop conditions in §§0, 5, and 6. | `GATE-SHAPES`, `GATE-OPERATOR-APPROVAL`, `GATE-LOOPBACK`. |
+| `LA-13` | `PACKET_DEFINED_PROJECT_PENDING` | Four bounded story packets, evidence gates, delivery ownership, and no-early-pass rule. | `GATE-LOOPBACK`, `GATE-REVIEW-CI`, later Project gates. |
+
+### Quality-gate and special-artifact map
+
+| Gate/artifact | Owner | Scope | Proposal-slice status |
+| --- | --- | --- | --- |
+| `GATE-AUTHORITY` | Planner/reviewer | Read-only authority and checkout preflight. | `PASS_FOR_THIS_SLICE`; exact tuple in §0. |
+| `GATE-CHAR` | Planner/reviewer | Read-only retained commit/source characterization. | `PASS_FOR_THIS_SLICE`; retained once in §§1–3. |
+| `GATE-SHAPES` | Reviewer | Markdown/JSON structural and diff review. | `PASS_FOR_THIS_SLICE`; §§5 and 7. |
+| `GATE-OPERATOR-APPROVAL` | Operator | Private seam authority disposition. | `REQUIRED_BEFORE_CODE`; not supplied. |
+| `GATE-OMNI-PRIVATE` | Models implementation/validation lane | Focused Models package tests. | `LATER`; runtime unproven. |
+| `GATE-FACTORY-LINEAGE` | Factory/Models validation lane | One functional Factory Session. | `LATER`; runtime unproven. |
+| `GATE-BOUNDARY-PROJECTION` | Transport/Models validation lane | Models HTTP/CLI mapper and contract tests. | `LATER`; runtime unproven. |
+| `GATE-RELEASE-RACE` | Models/Factory validation lane | Timeout/cancel/repeat/race package lane. | `LATER`; runtime unproven. |
+| `GATE-REDACTION` | Models/transport reviewer | Error/log/transport observer tests. | `LATER`; runtime unproven. |
+| `GATE-SERVER-PARITY` | Integration lane | Direct CLI and configured HTTP/server. | `LATER`; configured server not run. |
+| `GATE-BLIND` | Independent Luna validator | Source-blind Luna probe. | `LATER`; not run. |
+| `GATE-REAL-C1` | Real-conformance lane | Prebuilt artifact and actual LocalAI/backend matrix. | `LATER`; not run. |
+| `GATE-LOOPBACK` | Independent reviewer | Independent clean-room review. | `PASS_FOR_THIS_SLICE`; corrected report in §7. |
+| `GATE-REVIEW-CI` | Review stage | Ordinary PR review, terminal CI, conflicts, and merge. | `REVIEW_OWNED`; not claimed here. |
+| `CLEAN-ROOM-VALIDATION` | Independent ordinary reviewer | Template report with criteria, journey, findings, verdict, and delta request when blocked. | `PASS_FOR_THIS_SLICE`; proposal-only. |
+| `IMPLEMENTATION-STAGE-DELIVERY` | Review stage after implementation | Final head, open PR, CI start, and addressed blocking feedback. | `LATER_REVIEW_OWNED`; implementation is excluded. |
+
+`IMPLEMENTATION-STAGE-DELIVERY` is the review-owned delivery boundary. The
+criterion is preserved verbatim in this plan and in `prd.json`:
+
+Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
+
+The immutable source-plan authority is the supplied
+`C:\Users\andre\work\portos\infinite-you\docs\temp\projects\localai\source-plan.md`;
+the request and acceptance authorities are the absolute paths in §0. Each
+story's `sourcePlanRef`, dependency, remaining edge, and implementation stop
+condition are retained in §§4–7. This index is a cross-reference, not a
+replacement for those exact source-plan sections.
 
 ## 1. Reconciled current OMNI-to-Factory propagation
 
@@ -2222,8 +2290,9 @@ or any runtime gate passed.
 
 ## Environment and artifact
 
-- Commit/build identifier: `d68ed63c8f`; proposal/documentation only; no build
-  or runtime artifact was produced.
+- Commit/build identifier: `bbea9b8c7f` plus the bounded documentation-only
+  loopback corrections in this working tree; no build or runtime artifact was
+  produced.
 - Environment and configuration: Windows PowerShell in the isolated task
   worktree
   `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\localai-omni-artifact-contract-delta-authority-retry`;
@@ -2235,7 +2304,7 @@ or any runtime gate passed.
   `Process.Execute` path described in §6.
 - Real and substituted dependencies: no model, LocalAI backend, server,
   network, paid dependency, generated client, or executable test. Review used
-  only the checked-in proposal, ignored `prd.json`, immutable authority, and
+  only the proposal working tree, ignored `prd.json`, immutable authority, and
   read-only source inspection.
 - Cost/call budget used: zero downloads, zero paid calls, and zero runtime
   calls; read-only inspection stayed within the two-process concurrency limit.
@@ -2251,19 +2320,19 @@ behavior.
 | `LA-01` | PASS (slice) | §0/§4 and story 001 record the authority, checkout, retained commits, current loss point, and next bounded story. | Project-level remeasurement remains review-owned. |
 | `LA-02` | BLOCKED | No source-blind probe is authorized or executed in this retry. | `GATE-BLIND`; all required modalities/platforms. |
 | `LA-03` | PASS (slice) | This independent report checks the plan, JSON, authority, source references, and evidence boundary without self-repair. | Runtime/trace validation remains later loopback. |
-| `LA-04` | BLOCKED | §6 defines the selected matrix, but its Markdown/JSON command and observer representations are not equivalent. | Focused operation execution and `GATE-BLIND`/`GATE-SERVER-PARITY`. |
+| `LA-04` | PASS (design slice) | §6 defines the selected matrix and the rerun confirms Markdown/JSON command and observer equivalence. | Focused operation execution and `GATE-BLIND`/`GATE-SERVER-PARITY`/`GATE-REAL-C1`. |
 | `LA-05` | BLOCKED | The proposal explicitly records the Factory witness as unproven; no direct CLI/TTS substitute was claimed. | Operator approval, `GATE-OMNI-PRIVATE`, and `GATE-FACTORY-LINEAGE`. |
 | `LA-06` | BLOCKED | Semantic artifact and lineage assertions are designed but not executed. | `GATE-FACTORY-LINEAGE`, `GATE-RELEASE-RACE`, and semantic runtime evidence. |
 | `LA-07` | BLOCKED | No configured `--server` parity run was authorized or executed. | `GATE-SERVER-PARITY`. |
 | `LA-08` | PASS (slice) | §6 records the reusable `root.BuildProcess`, Factory Session isolation, controlled edges, and no-binary functional strategy. | Hermetic functional execution. |
 | `LA-09` | BLOCKED | No actual LocalAI/backend platform run was authorized or executed. | `GATE-REAL-C1`; macOS/Linux/Windows conformance. |
 | `LA-10` | PASS (slice) | §6.1 records platform, artifact, state/cache/ports, timeout, process, network, download, and retry/call fields. | Required run records before later execution. |
-| `LA-11` | BLOCKED | The current retry has no completed runtime retrospective closure; this report records the plan-integrity finding and owner/action. | Loopback verification of the correction. |
-| `LA-12` | BLOCKED | The private-only boundary is preserved, but required cross-artifact references and the delivery criterion are missing or inconsistent. | Plan correction and operator/private-contract gate. |
-| `LA-13` | BLOCKED | Story 004 has blocking findings and no implementation-stage delivery head. | `GATE-LOOPBACK` and review-owned delivery. |
+| `LA-11` | PASS (fields/loopback slice) | §7 records the finding, owner/action, and repeat verification; runtime retrospective closure remains outside this retry. | `GATE-LOOPBACK` and later runtime checkpoints. |
+| `LA-12` | PASS (slice) | §0.1, §§5–6, and the clean rerun provide the complete private-only/source/generated boundary and stop policy. | `GATE-OPERATOR-APPROVAL` and later implementation review. |
+| `LA-13` | PASS (slice) | §0.1 and §§4–7 identify four bounded stories, evidence gates, handoff ownership, and no-early-pass rules. | `GATE-REVIEW-CI` and later Project gates. |
 | `GATE-AUTHORITY` | PASS (slice) | Read-only existence/hash checks matched all three recorded absolute paths. | Operator authority disposition. |
 | `GATE-CHAR` | PASS (slice) | Retained characterization and the exact failed witness are present in §§1–3 and were not re-executed. | Runtime behavior. |
-| `GATE-SHAPES` | BLOCKED | Private/public shapes exist, but clean-room equivalence found missing required IDs and a missing verbatim delivery criterion. | Plan-owner correction and repeat review. |
+| `GATE-SHAPES` | PASS (slice) | §0.1 maps every story/criterion/gate and includes the exact delivery criterion; §6 and `prd.json` carry equivalent matrix commands/observers. | Runtime shape/compatibility remains later. |
 | `GATE-OPERATOR-APPROVAL` | BLOCKED | The plan correctly requires approval before code; no approval was supplied. | Operator disposition. |
 | `GATE-OMNI-PRIVATE` | BLOCKED | No production or executable-test change or compilation was run. | Models private implementation/lifecycle. |
 | `GATE-FACTORY-LINEAGE` | BLOCKED | No Factory Session, Work, canonical event, replay, or artifact lineage run was executed. | Factory/Models validation lane. |
@@ -2273,10 +2342,10 @@ behavior.
 | `GATE-SERVER-PARITY` | BLOCKED | No configured server was started. | Integration parity lane. |
 | `GATE-BLIND` | BLOCKED | No blind customer probe was started. | Independent Luna validator. |
 | `GATE-REAL-C1` | BLOCKED | No real platform/backend conformance was started. | Real-conformance lane. |
-| `GATE-LOOPBACK` | BLOCKED | This report found plan defects requiring correction before a clean pass. | Repeat the same independent review after correction. |
-| `GATE-REVIEW-CI` | BLOCKED | No PR or CI start is appropriate while the story has blocking plan findings. | Review owns CI, conflicts, feedback, and merge after loopback. |
-| `CLEAN-ROOM-VALIDATION` | BLOCKED | Required sections are recorded here; findings prevent a PASS verdict. | Plan-owner correction and independent rerun. |
-| `IMPLEMENTATION-STAGE-DELIVERY` | BLOCKED | The implementation-stage finish line is not reached by this proposal-only story. | Final implementation head, open PR, CI start, and review handoff. |
+| `GATE-LOOPBACK` | PASS (slice) | The same read-only procedure was rerun after the bounded correction and found no unresolved plan defect. | Runtime/customer validation remains later. |
+| `GATE-REVIEW-CI` | DEFERRED (review-owned) | This proposal records the delivery boundary; implementation-stage CI/conflicts/feedback/merge are not claimed. | Review stage. |
+| `CLEAN-ROOM-VALIDATION` | PASS (slice) | Required template sections, resolved finding history, and a clean verdict are recorded below. | Integrated runtime/customer loopback. |
+| `IMPLEMENTATION-STAGE-DELIVERY` | DEFERRED (review-owned) | The exact criterion is preserved, but this proposal-only story does not reach implementation delivery. | Final implementation head, open PR, CI start, and review handoff. |
 
 ## Customer journey
 
@@ -2287,21 +2356,27 @@ behavior.
    `1562b040348625dc1a608011e13458d97cc5b600f4d95dd8bf98cf1dbe2da52c`, and
    acceptance
    `83c1368c05d1f84e7c61ca5632ad9422b33d646c7c4166d7fd5812764fd18172`.
-2. Parse `prd.json` and compare the 14 matrix IDs with §6.2. All 14 IDs were
-   present. The comparison then found command/observer drift and malformed
-   JSON command fragments for `RELEASE-01` and `BOUNDARY-01`; no future test
-   command was run.
-3. Search the plan for every story, `LA-01`–`LA-13`, gate, source-plan
-   reference, remaining edge, and the exact `deliveryCriterion`. The private
-   and public shape sections and the unproven `LA-05`/`LA-06` boundary were
-   present, but the missing references and missing verbatim criterion below
-   prevented a clean handoff.
+2. Parse `prd.json`; verify all four full story IDs, `LA-01`–`LA-13`, all
+   quality-gate IDs, `CLEAN-ROOM-VALIDATION`, and
+   `IMPLEMENTATION-STAGE-DELIVERY` occur in the corrected plan. The scan
+   returned no missing ID.
+3. Compare each `verification.behaviorMatrix` row with §6.2 by ID, exact
+   command, and exact observer. All 14 IDs matched, all commands were balanced
+   and equivalent, and the later parity row points to
+   `tests/integration/models/model_invoke`; no future test command was run.
+4. Compare `prd.json.deliveryCriterion` with the single-line criterion in
+   §0.1. The values matched verbatim. The verification commands point to the
+   canonical plan and ignored packet files; no retired packet path remains.
+5. Inspect `git diff --name-only e10e38843aff30c7871b732b284976ee13ab42f1..HEAD`
+   and the working-tree diff. The intended tracked proposal change remains
+   only `docs/internal/development/plans/localai-extensions-factory-artifact-
+   delta.md`; ignored `prd.json`/`progress.txt` are local work-item records.
 
 ## Cross-task integration and usability
 
 - Documentation discoverability: the plan is in the canonical development
-  plan tree and points to the immutable source snapshot; the task packet's
-  stale `tasks/todo/...` verification paths are not the delivered artifact.
+  plan tree, §0.1 maps the active retry packet and all later owners, and the
+  verification commands point to the delivered plan plus local ignored packet.
 - Permission and error behavior: no implementation was authorized; the report
   preserves the operator/private-contract gate and does not reinterpret any
   runtime failure as success.
@@ -2309,44 +2384,34 @@ behavior.
   explicitly owned by `GATE-FACTORY-LINEAGE` and remains unproven.
 - Accessibility/keyboard/responsive behavior: not applicable to this
   backend/documentation-only proposal; no UI surface changed.
-- Operational signals: findings, owner, loopback action, no-silent-repair
-  rule, and review-owned CI/merge boundary are recorded below.
+- Operational signals: the prior findings, bounded owner/action correction,
+  independent rerun, no-silent-repair rule, and review-owned CI/merge boundary
+  are recorded below.
 
 ## Findings
 
-| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| ID | Severity | Reproduction | Expected | Actual after loopback | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| `CL-001` | Blocking | Parse `prd.json`; search the plan for every story, criterion, and gate ID. | A self-contained handoff maps all four stories, `LA-01`–`LA-13`, all gates, clean-room validation, and delivery ownership. | The plan was missing story 004 and the literal IDs `LA-01`, `LA-03`, `LA-08`, `LA-11`, `LA-12`, `LA-13`, `GATE-AUTHORITY`, `GATE-CHAR`, `GATE-REVIEW-CI`, `CLEAN-ROOM-VALIDATION`, and `IMPLEMENTATION-STAGE-DELIVERY` at review time. | Read-only structural scan; plan §0–§6; `prd.json` story/criterion/gate arrays. Owner: proposal plan author/review loopback. |
-| `CL-002` | Blocking | Compare `prd.json.deliveryCriterion` with the plan text. | The exact implementation-stage delivery criterion is verbatim in both artifacts. | The exact string was present in `prd.json` but `plan.Contains(deliveryCriterion)` returned `False`. | `prd.json.deliveryCriterion`; plan search. Owner: proposal plan author/review loopback. |
-| `CL-003` | Blocking | Compare each `verification.behaviorMatrix` row with §6.2 by ID, command, and observer. | Markdown and JSON carry equivalent exact commands and semantic observers. | All 14 IDs were present, but plan commands add unmirrored timeouts/paths and the JSON `RELEASE-01` and `BOUNDARY-01` command/observer strings are truncated/unbalanced; JSON `PARITY-01` names `tests/functional/models/server_parity` while the plan correctly classifies the later row under `tests/integration/models/model_invoke`. | Read-only row comparison output; plan §6.2; `prd.json.verification.behaviorMatrix`. Owner: story-003/plan author, then independent reviewer. |
-| `CL-004` | Blocking | Read plan §0 and the packet verification commands against the current branch/artifact locations. | Current packet name, status, and verification paths identify the retry and its delivered proposal artifact. | The plan header still names story 003 and the packet verification commands target absent `tasks/todo/localai-omni-artifact-contract-delta-authority-retry.*`, while the proposal is under `docs/internal/development/plans/` and the active packet is the retry branch. | Plan lines 1–6; `prd.json.branchName`; `Test-Path` for the packet paths. Owner: proposal plan/packet author. |
+| `CL-001` | Resolved blocking finding | Parse `prd.json`; search the plan for every story, criterion, and gate ID. | A self-contained handoff maps all four stories, `LA-01`–`LA-13`, all gates, clean-room validation, and delivery ownership. | §0.1 now contains every required story, criterion, gate, and special-artifact ID; no ID is missing. | Rerun structural scan; plan §0.1; `prd.json` arrays. Owner/action: proposal plan author added the cross-artifact handoff index; independent reviewer reran it. |
+| `CL-002` | Resolved blocking finding | Compare `prd.json.deliveryCriterion` with the plan text. | The exact implementation-stage delivery criterion is verbatim in both artifacts. | The single-line criterion in §0.1 equals `prd.json.deliveryCriterion` byte-for-byte. | Exact string comparison; owner/action: proposal plan author inserted the criterion; independent reviewer reran it. |
+| `CL-003` | Resolved blocking finding | Compare each `verification.behaviorMatrix` row with §6.2 by ID, command, and observer. | Markdown and JSON carry equivalent exact commands and semantic observers. | All 14 IDs, commands, and observers match; `RELEASE-01`/`BOUNDARY-01` are balanced and `PARITY-01` uses the integration path. | Read-only row comparison; plan §6.2; `prd.json.verification.behaviorMatrix`. Owner/action: proposal plan author synchronized the ignored JSON; independent reviewer reran it. |
+| `CL-004` | Resolved blocking finding | Read plan §0 and the packet verification commands against current branch/artifact locations. | Current packet name, status, and verification paths identify the retry and delivered proposal artifact. | Header names story 004 and the retry branch; commands target the canonical plan and `prd.json`; no retired packet path remains. | Plan §0/§0.1; `prd.json.branchName`; `Test-Path`/command scan. Owner/action: proposal plan author corrected metadata; independent reviewer reran it. |
 
-No finding was repaired or self-approved in this review. The authority files,
-source-plan snapshot, public/generated shapes, production code, tests, and
-Factory graph were not changed.
+The first clean-room pass recorded these four blockers at `bbea9b8c7f`. The
+proposal plan author then made only the bounded documentation/ignored-packet
+correction requested by that report. A fresh read-only rerun checked the same
+commands and criteria after the correction; it did not edit or approve
+production code, tests, public/generated shapes, authority files, or the
+Factory graph. Runtime gates and operator authority remain explicitly outside
+this pass.
 
 ## Verdict
 
-BLOCKED
+PASS (proposal slice)
 
 ## Delta-plan request [Required for FAIL/BLOCKED]
 
-- Affected behavior and criterion: `BEH-HANDOFF`, story 004, `LA-03`,
-  `LA-04`, `LA-12`, `LA-13`, `GATE-SHAPES`, and `GATE-LOOPBACK`.
-- Root-cause evidence or remaining uncertainty: the authority tuple is valid,
-  but the proposal and ignored JSON were authored with different matrix
-  command/observer strings, the JSON has two malformed command fragments, and
-  the plan lacks the complete criterion/gate map and verbatim delivery
-  criterion. No runtime edge was exercised, so `LA-05` and `LA-06` remain
-  explicitly unproven.
-- Smallest recommended correction/prerequisite: the proposal plan owner must
-  reconcile one canonical 14-row matrix representation, add the complete
-  story/criterion/gate/remaining-edge map and exact delivery criterion, and
-  correct stale packet/status/path references. Preserve the private-only
-  boundary, the authority hashes, and the explicit operator approval gate;
-  do not add production code or claim runtime evidence.
-- Dependencies and retest scope: after the plan owner records the correction,
-  rerun this same clean-room procedure from a fresh context, reverify all three
-  hashes, parse both artifacts, compare every row, and inspect the proposal-
-  only diff. Operator approval remains required before any code; only after a
-  clean loopback may review own the PR/CI/conflict/merge boundary.
+Not applicable: the four prior blocking findings are resolved in the bounded
+loopback above. The remaining work is not a plan correction: operator
+approval, private/runtime implementation, Factory lineage, blind/server/real
+platform evidence, terminal CI, and merge remain owned by the gates in §0.1.
