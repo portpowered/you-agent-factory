@@ -254,8 +254,8 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         def collide_once(*args, **kwargs):
             if args[:2] == ("worktree", "add"):
                 raise RuntimeError(
-                    f"git worktree add {worktree_path} failed (exit 128): "
-                    f"'{branch}' already exists"
+                    f"git worktree add '{worktree_path}' failed (exit 128): "
+                    f"'{worktree_path}' already exists"
                 )
             return original_run_git(*args, **kwargs)
 
