@@ -24,6 +24,7 @@ import (
 type sessionGateway interface {
 	factorysessions.Service
 	factorysessions.LiveControlService
+	factorysessions.LiveLifecycleControlService
 	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 }

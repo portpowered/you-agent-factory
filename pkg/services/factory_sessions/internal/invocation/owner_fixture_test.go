@@ -5,22 +5,24 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 type sessionOwnerFixture struct {
-	FactoryConfig func(string) (*interfaces.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	WaitNext      func(context.Context) error
-	WaitSession   func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
-	Telemetry     SessionInvocationTelemetry
-	SpecialCase   SessionInvocationSpecialCase
-	Interpolation interfaces.InvocationInterpolationService
-	WorkTypes     interfaces.InvocationWorkTypeService
-	InputFiles    fileeffects.InvocationInputReader
-	Work          work.Service
+	FactoryConfig   func(string) (*interfaces.FactoryConfig, error)
+	SubmitWork      func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	Observe         func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	WaitNext        func(context.Context) error
+	WaitSession     func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
+	Telemetry       SessionInvocationTelemetry
+	SpecialCase     SessionInvocationSpecialCase
+	Interpolation   interfaces.InvocationInterpolationService
+	WorkTypes       interfaces.InvocationWorkTypeService
+	InputFiles      fileeffects.InvocationInputReader
+	Work            work.Service
+	CancelOnTimeout func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
 
 func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
@@ -40,7 +42,7 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 	if workService == nil {
 		workService = testInvocationWorkService()
 	}
-	return NewSessionOwner(
+	owner := NewSessionOwner(
 		fixture.FactoryConfig,
 		fixture.SubmitWork,
 		fixture.Observe,
@@ -53,6 +55,8 @@ func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
 		inputFiles,
 		workService,
 	)
+	owner.BindCancelOnTimeout(fixture.CancelOnTimeout)
+	return owner
 }
 
 type staticInvocationWorkType string

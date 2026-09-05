@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -892,4 +893,97 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
+}
+
+func TestFakeServiceCanonicalOwnerMethodsUseDirectOperations(t *testing.T) {
+	t.Parallel()
+
+	const requestID = "canonical-owner-request"
+	const sessionID = "canonical-owner-session"
+	service := newCanonicalFakeOwnerService(t, requestID, sessionID)
+	assertCanonicalFakeOwnerStart(t, service, requestID, sessionID)
+	assertCanonicalFakeOwnerReads(t, service, sessionID)
+	assertCanonicalFakeOwnerControl(t, service, sessionID)
+}
+
+func newCanonicalFakeOwnerService(t *testing.T, requestID, sessionID string) *factorysessionexecution.FakeService {
+	t.Helper()
+	scenario := factorysessionexecution.FakeScenario{
+		ID: requestID, RequestID: requestID,
+		Session:     factorysessionexecution.SessionReadResult{SessionID: sessionID, Status: factorysessionexecution.LifecycleStatusRunning},
+		AsyncStart:  &factorysessionexecution.AsyncStartResult{SessionID: sessionID, Status: "RUNNING"},
+		Result:      factorysessionexecution.ResultReadResult{SessionID: sessionID, ResultStatus: factorysessionexecution.ResultStatusNotReady},
+		Dispatches:  []factorysessionexecution.DispatchSummary{{ID: "canonical-dispatch"}},
+		ListSummary: &factorysessionexecution.DurableSessionListSummary{SessionID: sessionID, Status: factorysessionexecution.LifecycleStatusSucceeded},
+	}
+	service, err := factorysessionexecution.NewFakeService(fixedClock{now: time.Now()}, scenario)
+	if err != nil {
+		t.Fatalf("NewFakeService: %v", err)
+	}
+	return service
+}
+
+func assertCanonicalFakeOwnerStart(t *testing.T, service *factorysessionexecution.FakeService, requestID, sessionID string) {
+	t.Helper()
+	started, err := service.StartCanonical(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: requestID,
+		Source:    factorysessionexecution.Source{Kind: factory.WorkflowSourceKindFactoryID, FactoryID: "factory"},
+	}, false)
+	if err != nil {
+		t.Fatalf("StartCanonical: %v", err)
+	}
+	if started.Async == nil {
+		t.Fatal("StartCanonical async result = nil")
+	}
+	if started.Async.SessionID != sessionID {
+		t.Fatalf("StartCanonical session ID = %q, want %q", started.Async.SessionID, sessionID)
+	}
+}
+
+func assertCanonicalFakeOwnerReads(t *testing.T, service *factorysessionexecution.FakeService, sessionID string) {
+	t.Helper()
+	got, err := service.GetCanonical(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetCanonical: %v", err)
+	}
+	if got.SessionID != sessionID {
+		t.Fatalf("GetCanonical session ID = %q, want %q", got.SessionID, sessionID)
+	}
+	list, err := service.ListCanonical(context.Background(), factorysessionexecution.ListSessionsRequest{Scope: factorysessionexecution.SessionListScopePersisted})
+	if err != nil {
+		t.Fatalf("ListCanonical: %v", err)
+	}
+	if len(list.DurableSessions) != 1 {
+		t.Fatalf("ListCanonical durable sessions = %d, want one", len(list.DurableSessions))
+	}
+	result, err := service.ReadResultCanonical(context.Background(), sessionID, factorysessionexecution.ResultRequest{})
+	if err != nil {
+		t.Fatalf("ReadResultCanonical: %v", err)
+	}
+	if result.SessionID != sessionID {
+		t.Fatalf("ReadResultCanonical session ID = %q, want %q", result.SessionID, sessionID)
+	}
+	dispatches, err := service.QueryDispatchesCanonical(context.Background(), factorysessionexecution.DispatchQueryRequest{SessionID: sessionID})
+	if err != nil {
+		t.Fatalf("QueryDispatchesCanonical: %v", err)
+	}
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("QueryDispatchesCanonical dispatches = %d, want one", len(dispatches.Dispatches))
+	}
+}
+
+func assertCanonicalFakeOwnerControl(t *testing.T, service *factorysessionexecution.FakeService, sessionID string) {
+	t.Helper()
+	control, err := service.ControlCanonical(context.Background(), factorysessions.SessionControlRequest{
+		SessionID: sessionID, Operation: factorysessions.SessionControlPause,
+	})
+	if err != nil {
+		t.Fatalf("ControlCanonical: %v", err)
+	}
+	if control.Lifecycle == nil {
+		t.Fatal("ControlCanonical lifecycle result = nil")
+	}
+	if control.Lifecycle.Status != factorysessions.LifecycleStatusPaused {
+		t.Fatalf("ControlCanonical status = %q, want PAUSED", control.Lifecycle.Status)
+	}
 }

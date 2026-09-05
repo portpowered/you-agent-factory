@@ -45,7 +45,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.Work == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: Work service is required")
 	}
-	return &Service{owner: legacyinvocation.NewSessionOwner(
+	owner := legacyinvocation.NewSessionOwner(
 		deps.FactoryConfig,
 		deps.SubmitWork,
 		deps.Observe,
@@ -57,17 +57,29 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.WorkTypes,
 		deps.InputFiles,
 		deps.Work,
-	)}, nil
+	)
+	owner.BindCancelOnTimeout(deps.CancelOnTimeout)
+	return &Service{owner: owner}, nil
 }
 
-// InvokeFactorySession delegates the complete invocation lifecycle to the
+// Invoke delegates the complete canonical invocation lifecycle to the
 // capability-owned engine.
+func (s *Service) Invoke(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorydefinitions.FactoryInvocationResult, error) {
+	return s.owner.Invoke(ctx, sessionID, request)
+}
+
+// InvokeFactorySession preserves the compatibility-shaped capability while
+// forwarding one-way into the canonical invocation owner.
 func (s *Service) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factorysessions.InvocationRequest,
 ) (factorydefinitions.FactoryInvocationResult, error) {
-	return s.owner.InvokeFactorySession(ctx, sessionID, request)
+	return s.Invoke(ctx, sessionID, request)
 }
 
 // ResolveInvocationInput applies the same normalization policy used by live

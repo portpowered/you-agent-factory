@@ -71,6 +71,14 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	sessionID string,
 	req ResumeSessionRequest,
 ) (AsyncStartResult, error) {
+	return s.resumeInterruptedSession(ctx, sessionID, req)
+}
+
+func (s *JavaScriptRuntimeService) resumeInterruptedSession(
+	ctx context.Context,
+	sessionID string,
+	req ResumeSessionRequest,
+) (AsyncStartResult, error) {
 	id, state, err := s.prepareResumeSession(ctx, sessionID, req)
 	if err != nil {
 		return AsyncStartResult{}, err
@@ -1266,7 +1274,7 @@ func (s *JavaScriptRuntimeService) resumeInterruptedSessionViaLifecycleControl(
 	if requestID == "" {
 		requestID = fmt.Sprintf("lifecycle-resume-%s", id)
 	}
-	started, resumeErr := s.ResumeInterruptedSession(ctx, id, ResumeSessionRequest{
+	started, resumeErr := s.resumeInterruptedSession(ctx, id, ResumeSessionRequest{
 		RequestID: requestID,
 	})
 	if resumeErr != nil {

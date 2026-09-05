@@ -104,6 +104,10 @@ func TestServiceCompletesCancellationExactlyOnce(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	deps := validDependencies(nil)
+	deps.CancelOnTimeout = func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+		t.Fatal("cancel-on-timeout callback invoked for a canceled wait")
+		return factorysessions.LifecycleControlResult{}, nil
+	}
 	observeCalls := 0
 	deps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
 		observeCalls++
@@ -139,6 +143,19 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 	t.Parallel()
 
 	deps := validDependencies(nil)
+	cancelCalls := 0
+	var cancelRequest factorysessions.ControlRequest
+	deps.CancelOnTimeout = func(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+		cancelCalls++
+		if ctx.Err() != nil {
+			t.Fatalf("cancel-on-timeout context error = %v, want detached context", ctx.Err())
+		}
+		if sessionID != "session-1" {
+			t.Fatalf("cancel-on-timeout session ID = %q, want session-1", sessionID)
+		}
+		cancelRequest = request
+		return factorysessions.LifecycleControlResult{Status: factorysessions.LifecycleStatusCanceling}, nil
+	}
 	observeCalls := 0
 	deps.Observe = func(context.Context, string, legacyinvocation.SessionInvocationWaitInput) (legacyinvocation.SessionInvocationObservation, error) {
 		observeCalls++
@@ -158,6 +175,7 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 		ContentProvided: true,
 		SourceKind:      &sourceKind,
 		TimeoutMillis:   &timeoutMillis,
+		CancelOnTimeout: true,
 		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
 	})
 	if err != nil {
@@ -168,6 +186,9 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 	}
 	if observeCalls != 1 {
 		t.Fatalf("observation calls = %d, want 1", observeCalls)
+	}
+	if cancelCalls != 1 || cancelRequest.RequestID != "request-1" || cancelRequest.Reason != "invocation wait timed out" {
+		t.Fatalf("cancel-on-timeout = calls:%d request:%#v, want one request-scoped cancellation", cancelCalls, cancelRequest)
 	}
 }
 

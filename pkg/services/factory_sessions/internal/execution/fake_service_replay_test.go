@@ -449,6 +449,126 @@ func TestChildWorkerExecutor_PublishesExactlyOneDurableTerminalResponseForEveryO
 	}
 }
 
+func TestJavaScriptRuntimeServiceCanonicalOwnerStartsUseDirectMethods(t *testing.T) {
+	t.Parallel()
+
+	service := newDefaultJavaScriptRuntimeService(t, scriptedSuccessfulRuntimeWorkflows(map[string]any{
+		"status": "canonical-start",
+	}))
+	defer service.Close()
+
+	async, err := service.StartCanonical(context.Background(), inlineWorkflowStartRequest(
+		"req-canonical-owner-async-001",
+		simpleFinalWorkflowSource,
+		nil,
+		nil,
+	), false)
+	if err != nil || async.Async == nil || async.Async.SessionID == "" {
+		t.Fatalf("async StartCanonical = %#v, %v", async, err)
+	}
+
+	syncResult, err := service.StartCanonical(context.Background(), inlineWorkflowStartRequest(
+		"req-canonical-owner-sync-001",
+		simpleFinalWorkflowSource,
+		nil,
+		nil,
+	), true)
+	if err != nil || syncResult.Sync == nil || syncResult.Sync.SessionID == "" {
+		t.Fatalf("sync StartCanonical = %#v, %v", syncResult, err)
+	}
+}
+
+func TestFakeServiceCanonicalControlOperationsUseOwnerBranches(t *testing.T) {
+	t.Parallel()
+
+	service := mustNewFakeService(t, FakeScenario{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, operation := range []factorysessions.SessionControlOperation{
+		factorysessions.SessionControlRecover,
+		factorysessions.SessionControlApprove,
+		factorysessions.SessionControlRetryDispatch,
+		factorysessions.SessionControlInterruptDispatch,
+	} {
+		request := factorysessions.SessionControlRequest{
+			SessionID: "canonical-owner-session", Operation: operation,
+			Control: factorysessions.ControlRequest{RequestID: "cancelled-" + string(operation)},
+		}
+		switch operation {
+		case factorysessions.SessionControlRetryDispatch:
+			request.Retry = &factorysessions.RetryDispatchRequest{ControlRequest: request.Control, DispatchID: "dispatch-1"}
+		case factorysessions.SessionControlInterruptDispatch:
+			request.Interrupt = &factorysessions.InterruptDispatchRequest{ControlRequest: request.Control, DispatchID: "dispatch-1"}
+		}
+		if _, err := service.ControlCanonical(ctx, request); !errors.Is(err, context.Canceled) {
+			t.Fatalf("ControlCanonical %s error = %v, want context.Canceled", operation, err)
+		}
+	}
+}
+
+func TestFakeServiceCanonicalResponseSubscriptionReportsUnavailable(t *testing.T) {
+	service := mustNewFakeService(t, FakeScenario{})
+	if _, err := service.SubscribeResponsesCanonical(context.Background(), factorysessions.ResponseEventSubscriptionRequest{SessionID: "canonical-owner-session"}); err != factorysessions.ErrRuntimeNotAvailable {
+		t.Fatalf("SubscribeResponsesCanonical error = %v, want ErrRuntimeNotAvailable", err)
+	}
+}
+
+func seedCanonicalOwnerReadService(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	if err := seedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "canonical"); err != nil {
+		t.Fatalf("seed runtime session: %v", err)
+	}
+	state := service.sessions[sessionID]
+	if err := service.ensureSessionResponseEvents(sessionID, state); err != nil {
+		t.Fatalf("ensure response events: %v", err)
+	}
+	service.sessionProgressPublisher(sessionID, state)(workerexecution.ProgressFragment{CanonicalDraft: validMessageDeltaDraft("dispatch-1")})
+}
+
+func assertCanonicalOwnerResponseRead(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	cursor, err := service.SubscribeResponsesCanonical(context.Background(), factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID})
+	if err != nil {
+		t.Fatalf("SubscribeResponsesCanonical: %v", err)
+	}
+	defer cursor.Detach()
+	events, err := cursor.Next(context.Background())
+	if err != nil || len(events) != 1 || events[0].DispatchID != "dispatch-1" {
+		t.Fatalf("canonical response events = %#v, %v", events, err)
+	}
+}
+
+func assertCanonicalOwnerControlStatus(t *testing.T, service *JavaScriptRuntimeService, sessionID string, operation factorysessions.SessionControlOperation, want LifecycleStatus) {
+	t.Helper()
+	result, err := service.ControlCanonical(context.Background(), factorysessions.SessionControlRequest{
+		SessionID: sessionID, Operation: operation,
+		Control: factorysessions.ControlRequest{RequestID: string(operation) + "-" + sessionID},
+	})
+	if err != nil {
+		t.Fatalf("ControlCanonical %s: %v", operation, err)
+	}
+	if result.Lifecycle == nil || result.Lifecycle.Status != want {
+		t.Fatalf("ControlCanonical %s result = %#v, want %s", operation, result, want)
+	}
+}
+
+func assertCanonicalOwnerControlCanceled(t *testing.T, service *JavaScriptRuntimeService, ctx context.Context, operation factorysessions.SessionControlOperation) {
+	t.Helper()
+	request := factorysessions.SessionControlRequest{
+		SessionID: "dur-sess-canonical-pause", Operation: operation,
+		Control: factorysessions.ControlRequest{RequestID: "canceled-control-" + string(operation)},
+	}
+	switch operation {
+	case factorysessions.SessionControlRetryDispatch:
+		request.Retry = &factorysessions.RetryDispatchRequest{ControlRequest: request.Control, DispatchID: "dispatch-1"}
+	case factorysessions.SessionControlInterruptDispatch:
+		request.Interrupt = &factorysessions.InterruptDispatchRequest{ControlRequest: request.Control, DispatchID: "dispatch-1"}
+	}
+	if _, err := service.ControlCanonical(ctx, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled %s error = %v, want context.Canceled", operation, err)
+	}
+}
+
 func terminalResponseCase(name, behavior string, progress []workerexecution.ProgressFragment, kind responseevents.Kind, phase responseevents.Phase, errorCode string) childTerminalResponseCase {
 	return childTerminalResponseCase{name: name, behavior: behavior, progress: progress, wantKind: kind, wantPhase: phase, wantErrorCode: errorCode}
 }

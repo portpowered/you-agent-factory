@@ -1,6 +1,7 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 // NormalizeStartRequest validates and normalizes one durable execution start request.
@@ -281,4 +284,172 @@ func validateTimeRange(field string, after, before *time.Time) error {
 		return NewValidationError(field, "after must be before or equal to before")
 	}
 	return nil
+}
+
+// StartCanonical is the direct fake durable-owner start operation. It keeps
+// canonical dispatch off the compatibility methods while preserving the fake's
+// deterministic start projections.
+func (s *FakeService) StartCanonical(
+	ctx context.Context,
+	req StartRequest,
+	synchronous bool,
+) (durableexecution.CanonicalStartResult, error) {
+	if synchronous {
+		started, err := s.startSync(ctx, req)
+		if err != nil {
+			return durableexecution.CanonicalStartResult{}, err
+		}
+		return durableexecution.CanonicalStartResult{Sync: &started}, nil
+	}
+	started, err := s.startAsync(ctx, req)
+	if err != nil {
+		return durableexecution.CanonicalStartResult{}, err
+	}
+	return durableexecution.CanonicalStartResult{Async: &started}, nil
+}
+
+func (s *FakeService) GetCanonical(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	return s.getSession(ctx, sessionID)
+}
+
+func (s *FakeService) ListCanonical(ctx context.Context, req factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return s.listSessions(ctx, req)
+}
+
+func (s *FakeService) ControlCanonical(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	control := canonicalControlRequest(request)
+	switch request.Operation {
+	case factorysessions.SessionControlPause:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlPause, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlResume:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlResume, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlCancel:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlCancel, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlTerminate:
+		return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlTerminate, control, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
+	case factorysessions.SessionControlRecover:
+		return s.canonicalRecovery(ctx, request, control)
+	case factorysessions.SessionControlApprove:
+		return s.canonicalApprove(ctx, request, control)
+	case factorysessions.SessionControlRetryDispatch:
+		return s.canonicalRetry(ctx, request, control)
+	case factorysessions.SessionControlInterruptDispatch:
+		return s.canonicalInterrupt(ctx, request, control)
+	default:
+		return durableexecution.CanonicalControlResult{}, fmt.Errorf("unsupported canonical durable control operation %q", request.Operation)
+	}
+}
+
+func (s *FakeService) canonicalLifecycle(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	result, err := s.applyLifecycleControl(ctx, sessionID, operation, control, approve, retry, interrupt)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return durableexecution.CanonicalControlResult{Lifecycle: &result}, nil
+}
+
+func (s *FakeService) canonicalRecovery(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	recovery := factorysessions.ResumeSessionRequest{RequestID: control.RequestID}
+	if request.Recover != nil {
+		recovery = *request.Recover
+		if recovery.RequestID == "" {
+			recovery.RequestID = control.RequestID
+		}
+	}
+	started, err := s.resumeInterruptedSession(ctx, request.SessionID, recovery)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return durableexecution.CanonicalControlResult{Recovery: &started}, nil
+}
+
+func (s *FakeService) canonicalApprove(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	approve := factorysessions.ApproveRequest{ControlRequest: control}
+	if request.Approve != nil {
+		approve = *request.Approve
+		if approve.RequestID == "" {
+			approve.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeApproveRequest(approve)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlApprove, normalized.ControlRequest, normalized, RetryDispatchRequest{}, InterruptDispatchRequest{})
+}
+
+func (s *FakeService) canonicalRetry(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	retry := factorysessions.RetryDispatchRequest{ControlRequest: control}
+	if request.Retry != nil {
+		retry = *request.Retry
+		if retry.RequestID == "" {
+			retry.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeRetryDispatchRequest(retry)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlRetryDispatch, normalized.ControlRequest, ApproveRequest{}, normalized, InterruptDispatchRequest{})
+}
+
+func (s *FakeService) canonicalInterrupt(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+	control ControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	interrupt := factorysessions.InterruptDispatchRequest{ControlRequest: control}
+	if request.Interrupt != nil {
+		interrupt = *request.Interrupt
+		if interrupt.RequestID == "" {
+			interrupt.RequestID = control.RequestID
+		}
+	}
+	normalized, err := NormalizeInterruptDispatchRequest(interrupt)
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return s.canonicalLifecycle(ctx, request.SessionID, LifecycleControlInterruptDispatch, normalized.ControlRequest, ApproveRequest{}, RetryDispatchRequest{}, normalized)
+}
+
+func (s *FakeService) ReadResultCanonical(ctx context.Context, sessionID string, req factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+	return s.getResult(ctx, sessionID, req)
+}
+
+func (s *FakeService) QueryDispatchesCanonical(ctx context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	result, err := s.listDispatches(ctx, request.SessionID)
+	if err != nil {
+		return factorysessions.ListDispatchesResult{}, err
+	}
+	return FilterDispatches(result, request.Filters)
+}
+
+func (s *FakeService) SubscribeResponsesCanonical(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return nil, factorysessions.ErrRuntimeNotAvailable
 }

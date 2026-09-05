@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -190,6 +192,8 @@ type detachedOperationsServiceFake struct {
 	partialResult          factoryruntime.PartialSessionResult
 	subscriptionRequest    ResponseEventSubscriptionRequest
 	subscriptionCursor     *ResponseEventCursor
+	canonicalCalls         []string
+	legacyCalls            []string
 }
 
 func newDetachedOperationsServiceFake() *detachedOperationsServiceFake {
@@ -207,102 +211,296 @@ func newDetachedOperationsServiceFake() *detachedOperationsServiceFake {
 	}
 }
 
+func (fake *detachedOperationsServiceFake) recordCanonical(name string) {
+	fake.canonicalCalls = append(fake.canonicalCalls, name)
+}
+
+func (fake *detachedOperationsServiceFake) recordLegacy(name string) {
+	fake.legacyCalls = append(fake.legacyCalls, name)
+}
+
+func (fake *detachedOperationsServiceFake) Start(_ context.Context, request SessionStartRequest) (SessionStartResult, error) {
+	fake.recordCanonical("Start")
+	switch request.Mode {
+	case SessionOperationModeLive:
+		fake.openRequest = OpenRequest{
+			FolderPath:     strings.TrimSpace(request.FolderPath),
+			Target:         cloneTargetRef(request.Target),
+			ValidateOnly:   request.ValidateOnly,
+			InitNewFactory: request.InitNewFactory,
+		}
+		result := SessionStartResult{
+			SessionID: fake.openResult.SessionID,
+			Mode:      SessionOperationModeLive,
+			Status:    "OPENED",
+		}
+		if fake.openResult.Session != nil {
+			result.Status = fake.openResult.Session.Runtime.Status
+			result.Live = &SessionOpenResult{
+				SessionID: fake.openResult.SessionID,
+				Session: &SessionView{
+					SessionID:        fake.openResult.Session.ID,
+					Mode:             SessionOperationModeLive,
+					Status:           fake.openResult.Session.Runtime.Status,
+					RuntimeAvailable: true,
+				},
+			}
+		}
+		return result, nil
+	case SessionOperationModeDurable:
+		legacy := StartRequest{RequestID: strings.TrimSpace(request.Correlation.RequestID), Args: cloneAnyMap(request.Args)}
+		if len(legacy.Args) == 0 && request.Input != nil && request.Input.NormalizedArguments != nil {
+			legacy.Args = make(map[string]any, len(request.Input.NormalizedArguments.Arguments))
+			for name, argument := range request.Input.NormalizedArguments.Arguments {
+				if len(argument.Values) == 1 {
+					legacy.Args[name] = argument.Values[0]
+				} else {
+					legacy.Args[name] = append([]string(nil), argument.Values...)
+				}
+			}
+		}
+		if request.Synchronous {
+			fake.syncStartRequest = legacy
+			return SessionStartResult{
+				SessionID: fake.syncStartResult.SessionID,
+				Mode:      SessionOperationModeDurable,
+				Status:    string(fake.syncStartResult.SyncOutcome),
+				Sync: &SyncStartResult{
+					AsyncStartResult: fake.syncStartResult.AsyncStartResult,
+					SyncOutcome:      fake.syncStartResult.SyncOutcome,
+				},
+			}, nil
+		}
+		fake.asyncStartRequest = legacy
+		return SessionStartResult{
+			SessionID: fake.asyncStartResult.SessionID,
+			Mode:      SessionOperationModeDurable,
+			Status:    fake.asyncStartResult.Status,
+			Async:     &fake.asyncStartResult,
+		}, nil
+	default:
+		return SessionStartResult{}, nil
+	}
+}
+
+func (fake *detachedOperationsServiceFake) Invoke(_ context.Context, request SessionInvokeRequest) (InvocationResult, error) {
+	fake.recordCanonical("Invoke")
+	fake.invocationSessionID = request.SessionID
+	fake.invocationRequest = InvocationRequest{PreparedInvocationInput: clonePreparedInput(request.Input)}
+	if request.Correlation.RequestID != "" {
+		requestID := request.Correlation.RequestID
+		fake.invocationRequest.RequestID = &requestID
+	}
+	if request.Wait.TimeoutMillis > 0 {
+		timeoutMillis := request.Wait.TimeoutMillis
+		fake.invocationRequest.TimeoutMillis = &timeoutMillis
+	}
+	return fake.invocationResult, nil
+}
+
+func (fake *detachedOperationsServiceFake) Get(_ context.Context, request SessionGetRequest) (SessionGetResult, error) {
+	fake.recordCanonical("Get")
+	status := "RUNNING"
+	if request.Mode == SessionOperationModeDurable {
+		status = string(LifecycleStatusSucceeded)
+	}
+	return SessionGetResult{Session: SessionView{SessionID: request.SessionID, Mode: request.Mode, Status: status, SourceRef: "factory.yaml"}}, nil
+}
+
+func (fake *detachedOperationsServiceFake) List(_ context.Context, request SessionListRequest) (SessionListResult, error) {
+	fake.recordCanonical("List")
+	return SessionListResult{
+		Mode: request.Mode,
+		Sessions: []SessionView{
+			{SessionID: "live-existing", Mode: SessionOperationModeLive, Status: "RUNNING"},
+			{SessionID: "durable-existing", Mode: SessionOperationModeDurable, Status: string(LifecycleStatusSucceeded)},
+		},
+	}, nil
+}
+
+func (fake *detachedOperationsServiceFake) Control(_ context.Context, request SessionControlRequest) (SessionControlResult, error) {
+	fake.recordCanonical("Control")
+	fake.controlRequest = request.Control
+	if fake.controlRequest.RequestID == "" {
+		fake.controlRequest.RequestID = request.Correlation.RequestID
+	}
+	if fake.controlRequest.TurnID == "" {
+		fake.controlRequest.TurnID = request.Correlation.TurnID
+	}
+	if request.Operation == SessionControlClose {
+		fake.closeSessionID = request.SessionID
+		return SessionControlResult{SessionID: request.SessionID, Mode: request.Mode, Operation: request.Operation, Closed: true}, nil
+	}
+	if request.Operation == SessionControlRecover {
+		fake.resumeRequest = ResumeSessionRequest{RequestID: fake.controlRequest.RequestID}
+		return SessionControlResult{
+			SessionID: request.SessionID,
+			Mode:      request.Mode,
+			Operation: request.Operation,
+			Recovery:  &fake.resumeResult,
+		}, nil
+	}
+	return SessionControlResult{
+		SessionID: request.SessionID,
+		Mode:      request.Mode,
+		Operation: request.Operation,
+		Outcome:   fake.controlResult.Outcome,
+		Status:    fake.controlResult.Status,
+	}, nil
+}
+
+func (fake *detachedOperationsServiceFake) ReadResult(_ context.Context, request SessionResultReadRequest) (SessionResultReadResult, error) {
+	fake.recordCanonical("ReadResult")
+	if request.Mode == SessionOperationModeLive {
+		return SessionResultReadResult{
+			SessionID: request.SessionID,
+			Mode:      request.Mode,
+			Status:    "PARTIAL",
+			Live:      &SessionLiveResult{SessionID: request.SessionID, Status: "PARTIAL"},
+		}, nil
+	}
+	return SessionResultReadResult{
+		SessionID: request.SessionID,
+		Mode:      request.Mode,
+		Status:    string(fake.resultRead.ResultStatus),
+		Durable: &SessionDurableResult{
+			SessionID: request.SessionID,
+			Status:    fake.resultRead.ResultStatus,
+		},
+	}, nil
+}
+
+func (fake *detachedOperationsServiceFake) SubscribeResponses(_ context.Context, request SessionResponseSubscriptionRequest) (SessionResponseSubscriptionResult, error) {
+	fake.recordCanonical("SubscribeResponses")
+	fake.subscriptionRequest = ResponseEventSubscriptionRequest{
+		SessionID:     request.SessionID,
+		AfterSequence: request.AfterSequence,
+		DispatchID:    request.DispatchID,
+		Kinds:         append([]ResponseEventKind(nil), request.Kinds...),
+	}
+	return SessionResponseSubscriptionResult{Cursor: fake.subscriptionCursor}, nil
+}
+
 func (fake *detachedOperationsServiceFake) OpenFactorySession(_ context.Context, request OpenRequest) (*OpenResult, error) {
+	fake.recordLegacy("OpenFactorySession")
 	fake.openRequest = request
 	return fake.openResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) StartAsync(_ context.Context, request StartRequest) (AsyncStartResult, error) {
+	fake.recordLegacy("StartAsync")
 	fake.asyncStartRequest = request
 	return fake.asyncStartResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) StartSync(_ context.Context, request StartRequest) (SyncStartResult, error) {
+	fake.recordLegacy("StartSync")
 	fake.syncStartRequest = request
 	return fake.syncStartResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) ResumeInterruptedSession(_ context.Context, _ string, request ResumeSessionRequest) (AsyncStartResult, error) {
+	fake.recordLegacy("ResumeInterruptedSession")
 	fake.resumeRequest = request
 	return fake.resumeResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) InvokeFactorySession(_ context.Context, sessionID string, request InvocationRequest) (InvocationResult, error) {
+	fake.recordLegacy("InvokeFactorySession")
 	fake.invocationSessionID = sessionID
 	fake.invocationRequest = request
 	return fake.invocationResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) ActivateNamedFactory(_ context.Context, name string) error {
+	fake.recordLegacy("ActivateNamedFactory")
 	fake.activatedFactory = name
 	return nil
 }
 
 func (fake *detachedOperationsServiceFake) GetFactorySession(context.Context, string) (SessionProjection, error) {
+	fake.recordLegacy("GetFactorySession")
 	return fake.getLiveProjection, nil
 }
 func (fake *detachedOperationsServiceFake) GetSession(context.Context, string) (SessionReadResult, error) {
+	fake.recordLegacy("GetSession")
 	return fake.getDurableProjection, nil
 }
 func (fake *detachedOperationsServiceFake) ListFactorySessions(context.Context) ([]ReadProjection, error) {
+	fake.recordLegacy("ListFactorySessions")
 	return fake.listLiveProjections, nil
 }
 func (fake *detachedOperationsServiceFake) ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error) {
+	fake.recordLegacy("ListSessions")
 	return ListSessionsResult{DurableSessions: fake.listDurableProjections}, nil
 }
 
 func (fake *detachedOperationsServiceFake) PauseLiveFactorySession(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("PauseLiveFactorySession")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) ResumeLiveFactorySession(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("ResumeLiveFactorySession")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) CloseFactorySession(_ context.Context, sessionID string) error {
+	fake.recordLegacy("CloseFactorySession")
 	fake.closeSessionID = sessionID
 	return nil
 }
 func (fake *detachedOperationsServiceFake) Pause(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("Pause")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) Resume(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("Resume")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) Cancel(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("Cancel")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) Terminate(_ context.Context, _ string, request ControlRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("Terminate")
 	fake.controlRequest = request
 	return fake.controlResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) Approve(_ context.Context, _ string, request ApproveRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("Approve")
 	fake.controlRequest = request.ControlRequest
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) RetryDispatch(_ context.Context, _ string, request RetryDispatchRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("RetryDispatch")
 	fake.controlRequest = request.ControlRequest
 	return fake.controlResult, nil
 }
 func (fake *detachedOperationsServiceFake) InterruptDispatch(_ context.Context, _ string, request InterruptDispatchRequest) (LifecycleControlResult, error) {
+	fake.recordLegacy("InterruptDispatch")
 	fake.controlRequest = request.ControlRequest
 	return fake.controlResult, nil
 }
 
 func (fake *detachedOperationsServiceFake) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {
+	fake.recordLegacy("GetResult")
 	return fake.resultRead, nil
 }
 func (fake *detachedOperationsServiceFake) GetFactorySessionResult(context.Context, string) (factoryruntime.LiveSessionResult, error) {
+	fake.recordLegacy("GetFactorySessionResult")
 	return fake.liveResult, nil
 }
 func (fake *detachedOperationsServiceFake) GetFactorySessionPartialResult(context.Context, string) (factoryruntime.PartialSessionResult, error) {
+	fake.recordLegacy("GetFactorySessionPartialResult")
 	return fake.partialResult, nil
 }
 func (fake *detachedOperationsServiceFake) SubscribeFactoryResponseEvents(_ context.Context, request ResponseEventSubscriptionRequest) (*ResponseEventCursor, error) {
+	fake.recordLegacy("SubscribeFactoryResponseEvents")
 	fake.subscriptionRequest = request
 	return fake.subscriptionCursor, nil
 }
@@ -310,6 +508,52 @@ func (fake *detachedOperationsServiceFake) SubscribeFactoryResponseEvents(_ cont
 func TestDetachedOperationsBindRejectsMissingOwner(t *testing.T) {
 	if operations, err := (&DetachedOperations{}).Bind(nil); operations != nil || !errors.Is(err, ErrDetachedServiceUnavailable) {
 		t.Fatalf("DetachedOperations.Bind(nil) = (%#v, %v), want unavailable error and nil operations", operations, err)
+	}
+}
+
+func TestDetachedOperationsForwardCanonicalCallsWithoutLegacyOwners(t *testing.T) {
+	fake := newDetachedOperationsServiceFake()
+	operations, err := (&DetachedOperations{}).Bind(fake)
+	if err != nil {
+		t.Fatalf("DetachedOperations.Bind() error = %v", err)
+	}
+	ctx := context.Background()
+
+	if _, err := operations.Start(ctx, SessionStartRequest{Mode: SessionOperationModeLive}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if _, err := operations.Invoke(ctx, SessionInvokeRequest{SessionID: "session-a"}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if _, err := operations.Get(ctx, SessionGetRequest{SessionID: "session-a", Mode: SessionOperationModeLive}); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if _, err := operations.List(ctx, SessionListRequest{Mode: SessionOperationModeAll}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if _, err := operations.Control(ctx, SessionControlRequest{
+		SessionID: "session-a",
+		Mode:      SessionOperationModeLive,
+		Operation: SessionControlPause,
+	}); err != nil {
+		t.Fatalf("Control() error = %v", err)
+	}
+	if _, err := operations.ReadResult(ctx, SessionResultReadRequest{
+		SessionID: "session-a",
+		Mode:      SessionOperationModeDurable,
+	}); err != nil {
+		t.Fatalf("ReadResult() error = %v", err)
+	}
+	if _, err := operations.Subscribe(ctx, SessionResponseSubscriptionRequest{SessionID: "session-a"}); err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
+	wantCanonical := []string{"Start", "Invoke", "Get", "List", "Control", "ReadResult", "SubscribeResponses"}
+	if !reflect.DeepEqual(fake.canonicalCalls, wantCanonical) {
+		t.Fatalf("canonical calls = %#v, want %#v", fake.canonicalCalls, wantCanonical)
+	}
+	if len(fake.legacyCalls) != 0 {
+		t.Fatalf("detached operations called legacy owners: %#v", fake.legacyCalls)
 	}
 }
 
@@ -493,6 +737,9 @@ func TestDetachedOperationsActivateAndSubscribe(t *testing.T) {
 	if subscription.Cursor != fake.subscriptionCursor || fake.subscriptionRequest.AfterSequence != 4 || len(fake.subscriptionRequest.Kinds) != 1 {
 		t.Fatalf("Subscribe() = %#v, request = %#v", subscription, fake.subscriptionRequest)
 	}
+	if !reflect.DeepEqual(fake.legacyCalls, []string{"ActivateNamedFactory"}) {
+		t.Fatalf("compatibility calls = %#v, want only named activation", fake.legacyCalls)
+	}
 }
 
 func newDetachedReadOperations(t *testing.T) (*detachedOperationsServiceFake, *DetachedOperations) {
@@ -534,7 +781,7 @@ func newDetachedReadOperations(t *testing.T) (*detachedOperationsServiceFake, *D
 	return fake, operations
 }
 
-func TestDetachedOperationsReadListUsesModeSpecificOwners(t *testing.T) {
+func TestDetachedOperationsReturnsCanonicalReadProjections(t *testing.T) {
 	fake, operations := newDetachedReadOperations(t)
 	ctx := context.Background()
 	live, err := operations.Get(ctx, SessionGetRequest{SessionID: "live-existing", Mode: SessionOperationModeLive})
@@ -554,7 +801,7 @@ func TestDetachedOperationsReadListUsesModeSpecificOwners(t *testing.T) {
 	}
 }
 
-func TestDetachedOperationsControlUsesModeSpecificOwners(t *testing.T) {
+func TestDetachedOperationsReturnsCanonicalControlResults(t *testing.T) {
 	fake, operations := newDetachedReadOperations(t)
 	ctx := context.Background()
 	controlled, err := operations.Control(ctx, SessionControlRequest{
@@ -584,7 +831,7 @@ func TestDetachedOperationsControlUsesModeSpecificOwners(t *testing.T) {
 	}
 }
 
-func TestDetachedOperationsReadResultMapsDetachedValues(t *testing.T) {
+func TestDetachedOperationsReturnsCanonicalResultProjections(t *testing.T) {
 	_, operations := newDetachedReadOperations(t)
 	ctx := context.Background()
 	read, err := operations.ReadResult(ctx, SessionResultReadRequest{SessionID: "durable-existing", Mode: SessionOperationModeDurable, Request: ResultRequest{Mode: ResultModeFinal}})

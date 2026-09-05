@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -279,6 +280,7 @@ type JavaScriptRuntimeService struct {
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)
+var _ canonicaldurable.Service = (*JavaScriptRuntimeService)(nil)
 
 // SetPersistenceWarningLogger binds the session-scoped logger used for safe
 // durable snapshot size warnings. Runtime opening supplies this after it has
@@ -352,6 +354,10 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
+	return s.startAsync(ctx, req)
+}
+
+func (s *JavaScriptRuntimeService) startAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AsyncStartResult{}, err
 	}
@@ -520,6 +526,10 @@ func (s *JavaScriptRuntimeService) startSync(
 }
 
 func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
+	return s.getSession(ctx, sessionID)
+}
+
+func (s *JavaScriptRuntimeService) getSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SessionReadResult{}, err
 	}
@@ -535,6 +545,10 @@ func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID str
 }
 
 func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
+	return s.getResult(ctx, sessionID, req)
+}
+
+func (s *JavaScriptRuntimeService) getResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ResultReadResult{}, err
 	}
@@ -554,6 +568,10 @@ func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID stri
 }
 
 func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
+	return s.listDispatches(ctx, sessionID)
+}
+
+func (s *JavaScriptRuntimeService) listDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListDispatchesResult{}, err
 	}
@@ -674,6 +692,10 @@ func (s *JavaScriptRuntimeService) ReadEvents(ctx context.Context, sessionID str
 }
 
 func (s *JavaScriptRuntimeService) ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
+	return s.listSessions(ctx, req)
+}
+
+func (s *JavaScriptRuntimeService) listSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListSessionsResult{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -20,6 +21,114 @@ import (
 // the established execution contract during the package migration.
 type Service struct {
 	durableexecution.Service
+}
+
+var _ canonicaldurable.Service = (*Service)(nil)
+
+// StartCanonical selects the durable execution wait policy behind the private
+// owner seam. The public Factory Sessions canonical operation supplies the
+// request value and receives a value-only mode-specific projection.
+func (s *Service) StartCanonical(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+	synchronous bool,
+) (durableexecution.CanonicalStartResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return durableexecution.CanonicalStartResult{}, err
+	}
+	return owner.StartCanonical(ctx, request, synchronous)
+}
+
+// GetCanonical forwards one durable session read through the private owner
+// seam. The outer Sessions service performs the mode-neutral projection.
+func (s *Service) GetCanonical(
+	ctx context.Context,
+	sessionID string,
+) (factorysessions.SessionReadResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.SessionReadResult{}, err
+	}
+	return owner.GetCanonical(ctx, sessionID)
+}
+
+// ListCanonical forwards one durable session inventory read through the
+// private owner seam.
+func (s *Service) ListCanonical(
+	ctx context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ListSessionsResult{}, err
+	}
+	return owner.ListCanonical(ctx, request)
+}
+
+// ControlCanonical maps one mode-neutral durable control request to the
+// existing durable owner operation without exposing that operation family to
+// the outer canonical Sessions implementation.
+func (s *Service) ControlCanonical(
+	ctx context.Context,
+	request factorysessions.SessionControlRequest,
+) (durableexecution.CanonicalControlResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return durableexecution.CanonicalControlResult{}, err
+	}
+	return owner.ControlCanonical(ctx, request)
+}
+
+// ReadResultCanonical forwards one durable result read through the private
+// owner seam.
+func (s *Service) ReadResultCanonical(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResultRequest,
+) (factorysessions.ResultReadResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ResultReadResult{}, err
+	}
+	return owner.ReadResultCanonical(ctx, sessionID, request)
+}
+
+// QueryDispatchesCanonical forwards one filtered dispatch query through the
+// private owner seam.
+func (s *Service) QueryDispatchesCanonical(
+	ctx context.Context,
+	request factorysessions.DispatchQueryRequest,
+) (factorysessions.ListDispatchesResult, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return factorysessions.ListDispatchesResult{}, err
+	}
+	return owner.QueryDispatchesCanonical(ctx, request)
+}
+
+// SubscribeResponsesCanonical forwards one durable response subscription
+// through the private owner seam when the underlying runtime supports it.
+func (s *Service) SubscribeResponsesCanonical(
+	ctx context.Context,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	owner, err := s.canonicalOwner()
+	if err != nil {
+		return nil, err
+	}
+	return owner.SubscribeResponsesCanonical(ctx, request)
+}
+
+func (s *Service) canonicalOwner() (canonicaldurable.Service, error) {
+	if s == nil || s.Service == nil {
+		return nil, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	owner, ok := s.Service.(canonicaldurable.Service)
+	if !ok || owner == nil {
+		return nil, fmt.Errorf("%w: canonical durable owner is required", factorysessions.ErrExecutionServiceNotConfigured)
+	}
+	return owner, nil
 }
 
 // SetPersistenceWarningLogger forwards the session-scoped safe diagnostic

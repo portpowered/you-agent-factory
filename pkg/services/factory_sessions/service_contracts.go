@@ -37,6 +37,7 @@ type InvocationRequest struct {
 	RequestID               *string
 	SourceKind              *InvocationInputSourceKind
 	TimeoutMillis           *int64
+	CancelOnTimeout         bool
 }
 
 // ResolvedInvocationInput is the Factory Session-owned normalized invocation
@@ -87,6 +88,17 @@ type ResolvedInvocationInput struct {
 // established combined target behavior. Service remains the singular aggregate
 // authority for callers that genuinely need a combined surface.
 type Service interface {
+	// Canonical Factory Sessions operation vocabulary.
+	Start(context.Context, SessionStartRequest) (SessionStartResult, error)
+	Invoke(context.Context, SessionInvokeRequest) (InvocationResult, error)
+	Get(context.Context, SessionGetRequest) (SessionGetResult, error)
+	List(context.Context, SessionListRequest) (SessionListResult, error)
+	Control(context.Context, SessionControlRequest) (SessionControlResult, error)
+	ReadResult(context.Context, SessionResultReadRequest) (SessionResultReadResult, error)
+	SubscribeResponses(context.Context, SessionResponseSubscriptionRequest) (SessionResponseSubscriptionResult, error)
+	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
+
+	// Legacy compatibility vocabulary retained until its assigned migration story.
 	StartAsync(context.Context, StartRequest) (AsyncStartResult, error)
 	StartSync(context.Context, StartRequest) (SyncStartResult, error)
 	ResumeInterruptedSession(context.Context, string, ResumeSessionRequest) (AsyncStartResult, error)
@@ -100,7 +112,6 @@ type Service interface {
 	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error)
 	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
 	ListDispatches(context.Context, string) (ListDispatchesResult, error)
-	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
 	GetDispatch(context.Context, string, string) (DispatchDetail, error)
 	ListArtifacts(context.Context, string) (ListArtifactsResult, error)
 	GetArtifact(context.Context, string, string) (ArtifactDetail, error)
@@ -513,8 +524,8 @@ type LiveChangeService interface {
 }
 
 // SessionOperationMode identifies the execution mode of one Factory Session.
-// Live and durable sessions share this operation vocabulary; the compatibility
-// implementation decides which existing owner method serves the value.
+// Live and durable sessions share this operation vocabulary; the owner selects
+// the corresponding private execution capability for the value.
 type SessionOperationMode string
 
 const (
@@ -524,7 +535,7 @@ const (
 )
 
 // SessionOperationCorrelation carries stable caller identities across one
-// detached operation. It contains no protocol or runtime handle.
+// canonical operation. It contains no protocol or runtime handle.
 type SessionOperationCorrelation struct {
 	RequestID string
 	TraceID   string
@@ -573,8 +584,8 @@ type SessionStartRequest struct {
 }
 
 // SessionInvokeRequest carries normalized Work input into an existing
-// Factory Session. The compatibility implementation converts it to the legacy
-// invocation request only at the owner boundary.
+// Factory Session. The owner converts it to the private invocation request only
+// at the owner boundary.
 type SessionInvokeRequest struct {
 	SessionID   string
 	Correlation SessionOperationCorrelation
@@ -662,7 +673,7 @@ type SessionResponseSubscriptionRequest struct {
 	Kinds         []ResponseEventKind
 }
 
-// SessionStartResult is the detached start/open outcome. The legacy result is
+// SessionStartResult is the canonical start/open outcome. The legacy result is
 // kept in one mode-specific field only as a compatibility projection.
 type SessionStartResult struct {
 	SessionID string

@@ -149,11 +149,11 @@ func runPackagedGoalBlockedScenario(t *testing.T, fixture *packagedGoalSharedFix
 }
 
 func runPackagedGoalPausedScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
-	runner := newPackagedGoalAcceptedProviderRunner(t)
-	scenario := fixture.openScenario(t, "paused", runner)
-	if err := fixture.provider.setDefaultForWorkSubmission(runner); err != nil {
-		t.Fatal(err)
+	runner := fixture.defaultRunner
+	if runner == nil {
+		t.Fatal("paused Goal default provider runner is not configured")
 	}
+	scenario := fixture.openScenario(t, "paused", runner)
 	sessionPath := "/factory-sessions/" + url.PathEscape(scenario.session)
 	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "pause", factoryapi.FactorySessionLifecycleControlKindPause, "pause")
 	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "pause", factoryapi.FactorySessionLifecycleControlKindPause, "repeat pause")
@@ -202,11 +202,12 @@ func assertPackagedGoalLifecycleControl(
 }
 
 type packagedGoalSharedFixture struct {
-	rootDir    string
-	factoryDir string
-	baseURL    string
-	process    support.ApplicationProcess
-	provider   *packagedGoalSelectorRouter
+	rootDir       string
+	factoryDir    string
+	baseURL       string
+	process       support.ApplicationProcess
+	provider      *packagedGoalSelectorRouter
+	defaultRunner *packagedGoalRepeatingProviderRunner
 }
 
 type packagedGoalSelectorRouter struct {
@@ -296,6 +297,10 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 
 	api := support.NewProcessAPIServer()
 	provider := newPackagedGoalSelectorRouter()
+	defaultRunner := newPackagedGoalAcceptedProviderRunner(t)
+	if err := provider.setDefaultForWorkSubmission(defaultRunner); err != nil {
+		t.Fatalf("configure shared Goal Work-submit provider: %v", err)
+	}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      api.Start,
 		ProviderCommandRunner: provider,
@@ -318,10 +323,11 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 		}},
 	})
 	fixture := &packagedGoalSharedFixture{
-		rootDir:    rootDir,
-		factoryDir: factoryDir,
-		process:    process,
-		provider:   provider,
+		rootDir:       rootDir,
+		factoryDir:    factoryDir,
+		process:       process,
+		provider:      provider,
+		defaultRunner: defaultRunner,
 	}
 	t.Cleanup(func() { fixture.cleanup(t) })
 

@@ -57,6 +57,12 @@ func NewInvocationOwner(
 		WorkTypes:     invocationWorkTypes,
 		InputFiles:    inputFiles,
 		Work:          work.NewInvocationPolicyService(),
+		CancelOnTimeout: func(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			if fs == nil {
+				return factorysessions.LifecycleControlResult{}, fmt.Errorf("Factory Session runtime is required")
+			}
+			return fs.requireSessionGateway().CancelLiveFactorySession(ctx, sessionID, request)
+		},
 	})
 }
 

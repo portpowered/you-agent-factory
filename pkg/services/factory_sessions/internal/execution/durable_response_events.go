@@ -113,6 +113,21 @@ func (s *JavaScriptRuntimeService) SubscribeResponseEvents(
 	sessionID string,
 	request factorysessions.ResponseEventSubscriptionRequest,
 ) (*factorysessions.ResponseEventCursor, error) {
+	return s.subscribeResponseEvents(ctx, sessionID, request)
+}
+
+func (s *JavaScriptRuntimeService) SubscribeResponsesCanonical(
+	ctx context.Context,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	return s.subscribeResponseEvents(ctx, request.SessionID, request)
+}
+
+func (s *JavaScriptRuntimeService) subscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
 	if s == nil || s.responseStreams == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}

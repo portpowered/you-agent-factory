@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -824,4 +825,45 @@ func LifecycleControlLinksForSession(sessionID string, includeEvents bool) Lifec
 
 func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
 	return factorysessions.LiveLifecycleControlLinksForSession(sessionID)
+}
+
+// StartCanonical is the direct durable-owner start operation. It selects the
+// wait shape locally and never re-enters the compatibility start methods.
+func (s *JavaScriptRuntimeService) StartCanonical(
+	ctx context.Context,
+	req StartRequest,
+	synchronous bool,
+) (durableexecution.CanonicalStartResult, error) {
+	if synchronous {
+		started, err := s.startSync(ctx, req)
+		if err != nil {
+			return durableexecution.CanonicalStartResult{}, err
+		}
+		return durableexecution.CanonicalStartResult{Sync: &started}, nil
+	}
+	started, err := s.startAsync(ctx, req)
+	if err != nil {
+		return durableexecution.CanonicalStartResult{}, err
+	}
+	return durableexecution.CanonicalStartResult{Async: &started}, nil
+}
+
+func (s *JavaScriptRuntimeService) GetCanonical(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	return s.getSession(ctx, sessionID)
+}
+
+func (s *JavaScriptRuntimeService) ReadResultCanonical(ctx context.Context, sessionID string, req factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+	return s.getResult(ctx, sessionID, req)
+}
+
+func (s *JavaScriptRuntimeService) QueryDispatchesCanonical(ctx context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	result, err := s.listDispatches(ctx, request.SessionID)
+	if err != nil {
+		return factorysessions.ListDispatchesResult{}, err
+	}
+	return FilterDispatches(result, request.Filters)
+}
+
+func (s *JavaScriptRuntimeService) ListCanonical(ctx context.Context, req factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return s.listSessions(ctx, req)
 }

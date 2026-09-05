@@ -143,6 +143,34 @@ func (fake *hostedLiveSessionsFake) InterruptDurableFactorySessionDispatch(conte
 
 type executionMethodsStub struct{}
 
+func (executionMethodsStub) Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return factorysessions.SessionStartResult{}, factorysessions.ErrDurableSessionNotFound
+}
+
+func (executionMethodsStub) Invoke(context.Context, factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
+	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (executionMethodsStub) Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	return factorysessions.SessionGetResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (executionMethodsStub) List(context.Context, factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
+	return factorysessions.SessionListResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (executionMethodsStub) Control(context.Context, factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	return factorysessions.SessionControlResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (executionMethodsStub) ReadResult(context.Context, factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
+	return factorysessions.SessionResultReadResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (executionMethodsStub) SubscribeResponses(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+	return factorysessions.SessionResponseSubscriptionResult{}, factorysessions.ErrSessionNotFound
+}
+
 func (executionMethodsStub) StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
 	return factorysessions.AsyncStartResult{}, factorysessions.ErrDurableSessionNotFound
 }
