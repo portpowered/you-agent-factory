@@ -2414,12 +2414,16 @@ def main():
     else:
         worktree_dir = selected_candidate["worktree_path"]
     try:
-        reused = create_or_reuse_worktree(
-            repo_root,
-            branch,
-            worktree_dir,
-            fresh_origin_main_sha,
-        )
+        # Git worktree add is not atomic across concurrent admissions. Reuse
+        # the cross-process setup lock so a loser cannot observe the
+        # destination between its directory creation and .git-file write.
+        with root_sync_lock(repo_root):
+            reused = create_or_reuse_worktree(
+                repo_root,
+                branch,
+                worktree_dir,
+                fresh_origin_main_sha,
+            )
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(
             format_stage_failure("Worktree preparation failed", e),
