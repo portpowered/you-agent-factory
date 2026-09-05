@@ -386,6 +386,12 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 		genericResponse.Outputs[0].Content == nil || *genericResponse.Outputs[0].Content != text {
 		t.Fatalf("generic built-in parity response = %#v, want one audio output containing input", genericResponse)
 	}
+	genericEffects := [4]int{
+		rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls(),
+	}
+	if genericEffects != [4]int{0, 1, 1, 2} {
+		t.Fatalf("generic built-in parity effects = %#v; want cache hit with one controlled host lifecycle", genericEffects)
+	}
 
 	namedContent := factoryapi.WorkContent{mustFunctionalTextPart(t, text)}
 	namedRequest := factoryapi.ModelInvocationRequest{
@@ -417,8 +423,8 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 		namedFailure.Family == factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("named built-in parity retained a worker-lookup failure: %#v", namedFailure)
 	}
-	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || protocol.Calls() != 0 || compatibility.Calls() != 0 {
-		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want no external effects for the cache-backed generic attempt or named readiness rejection", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	if [4]int{rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls()} != genericEffects {
+		t.Fatalf("built-in parity effects after named route = network %d, starts %d, protocol %d, compatibility %d; want no named-route side effects", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
 	}
 }
 
@@ -703,6 +709,21 @@ func genericHTTPInvocationEdges(
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
+		// This is an explicit controlled TTS effect. Production nil backends
+		// remain fail-closed; the fixture must opt into its audio behavior.
+		ModelInvocationBackend: func(_ context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			if strings.ToUpper(strings.TrimSpace(request.Operation)) != models.OperationTTS {
+				return nil, nil, fmt.Errorf("unexpected generic fixture operation %q", request.Operation)
+			}
+			input := request.Input
+			if len(request.Inputs) > 0 {
+				input = request.Inputs[0]
+			}
+			return []models.InferenceContent{{
+				Name: "audio", Modality: models.ModalityAudio,
+				ContentType: "audio/wav", MediaType: "audio/wav", Content: input.Content,
+			}}, nil, nil
+		},
 	}
 }
 

@@ -470,6 +470,47 @@ func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T
 	assertPinnedEmbeddingRequest(t, connection)
 }
 
+func TestInferenceRuntimePreservesExplicitGenericBackendOverPinnedEmbedding(t *testing.T) {
+	t.Parallel()
+
+	connection := &embeddingRuntimeConnection{}
+	dialer := &embeddingRuntimeDialer{connection: connection}
+	genericCalls := 0
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			genericCalls++
+			return []models.InferenceContent{{
+				Name: "embedding", Modality: models.ModalityJSON,
+				ContentType: "application/json", MediaType: "application/json", Content: "[0.25]",
+			}}, nil, nil
+		},
+		Dialer: dialer,
+	})
+	if err != nil {
+		t.Fatalf("inferenceRuntime() error = %v", err)
+	}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Operation: models.OperationEMBED,
+			Inputs: []models.InferenceInput{{
+				Name: "text", Modality: models.ModalityText,
+				ContentType: "text/plain", MediaType: "text/plain", Content: "fixture text",
+			}},
+		},
+		Operation: models.Operation{Name: models.OperationEMBED},
+	})
+	if err != nil {
+		t.Fatalf("explicit generic EMBED error = %v", err)
+	}
+	if genericCalls != 1 || len(result.Content) != 1 || result.Content[0].Content != "[0.25]" {
+		t.Fatalf("explicit generic EMBED result = calls:%d content:%#v, want one generic result", genericCalls, result.Content)
+	}
+	if dialer.endpoint != "" || connection.method != "" || connection.closed != 0 {
+		t.Fatalf("pinned EMBED transport = endpoint:%q method:%q closed:%d, want unused", dialer.endpoint, connection.method, connection.closed)
+	}
+}
+
 func assertPinnedEmbeddingResult(t *testing.T, result inference.InvocationRuntimeResult) {
 	t.Helper()
 	if len(result.Content) != 1 || result.Content[0].Name != "embedding" {

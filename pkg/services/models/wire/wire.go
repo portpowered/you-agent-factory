@@ -485,7 +485,10 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		omni:    newInvocationRuntime(options.Client, options.Dialer),
 	}
 	asrBackend := options.ASR
-	if asrBackend == nil {
+	// An explicitly injected generic backend is a complete controlled
+	// operation effect. Keep it authoritative when a typed edge is absent;
+	// pinned typed defaults are production fallbacks, not fixture overrides.
+	if asrBackend == nil && options.Backend == nil {
 		asrBackend = localai.NewPinnedASRBackend(
 			options.Dialer, options.ASRTempDirectory, options.ASRCreateTemp,
 			options.ASRWriteFile, options.ASRRemoveFile,
@@ -499,7 +502,7 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		runtime.asr = asr
 	}
 	embeddingBackend := options.Embedding
-	if embeddingBackend == nil {
+	if embeddingBackend == nil && options.Backend == nil {
 		embeddingBackend = localai.NewPinnedEmbeddingBackend(options.Dialer)
 	}
 	if embeddingBackend != nil {
