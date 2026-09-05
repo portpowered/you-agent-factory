@@ -1,10 +1,11 @@
 # LocalAI OMNI-to-Factory artifact contract delta
 
 Status: proposal-only private contract delta, story
-`localai-omni-artifact-contract-delta-authority-retry-002`. This document
-retains the verified current path and now records a reviewable Proposed private
-handoff. It does not authorize production change, executable test change,
-generated-artifact change, or Project acceptance.
+`localai-omni-artifact-contract-delta-authority-retry-003`. This document
+retains the verified current path, the reviewable Proposed private handoff, and
+the complete selected semantic Factory acceptance matrix. It does not authorize
+production change, executable test change, generated-artifact change, or Project
+acceptance.
 
 ## 0. Authority and scope boundary
 
@@ -404,11 +405,12 @@ From the current worktree, before the proposal edit:
 ### Smallest next step
 
 Story 002 renders the exact private Current/Proposed handoff and unchanged
-public/OpenAPI shapes in §5. The next bounded story is story 003: define the
-semantic Factory acceptance matrix against this preserved private-only
-boundary. No implementation, public field, generated artifact, protobuf
-field, CLI grammar, Factory graph, artifact store, or runtime test is admitted
-without the required operator/private-contract gate.
+public/OpenAPI shapes in §5. Story 003 defines the semantic Factory acceptance
+matrix against this preserved private-only boundary in §6. The next bounded
+story is story 004: independent clean-room proposal validation. No
+implementation, public field, generated artifact, protobuf field, CLI grammar,
+Factory graph, artifact store, or runtime test is admitted without the required
+operator/private-contract gate.
 
 ## 5. Story 002 — render the bounded private OMNI artifact handoff
 
@@ -1958,3 +1960,258 @@ and the progress entry. Story 003 owns the complete semantic matrix; story
 004 owns independent clean-room validation. This story's private Proposed
 shape is not an implementation authorization and cannot mark LA-05/LA-06 or
 any runtime gate passed.
+
+## 6. Story 003 — define the complete semantic Factory acceptance matrix
+
+**Parent behavior:** `BEH-FACTORY` and `BEH-BOUNDARY` — a selected, currently
+supportable non-TTS OMNI operation can be followed from Factory Session
+admission through semantic result, Work materialization, canonical event
+replay, and safe public projection.
+
+**Problem:** Existing characterization proves the component capabilities
+individually, but it does not specify one executable, semantic witness that
+joins OMNI text, artifact metadata, Work identity, Factory Event ordering and
+replay, lineage, failure atomicity, and release behavior.
+
+**Outcome:** The matrix below names every selected happy, unhappy, and public
+boundary behavior, its owning test layer and dependency fidelity, its
+session/process isolation, an exact future command, and the observer that
+decides PASS or FAIL. It is a test-design artifact only: no row is executed or
+marked as runtime evidence in this corrected retry.
+
+**Plan reference:** The immutable source-plan snapshot at
+`C:\Users\andre\work\portos\infinite-you\docs\temp\projects\localai\source-plan.md`,
+“Functional test plan”, “Service interactions”, “Failure modes”, “Bounded
+operator amendments — small factory journey beyond TTS”, and “Admission
+evidence rule”. The authority tuple remains in §0 and `prd.json`.
+
+**Actor and trigger:** A later Models/Factory validation worker selects and
+records one measured, currently supportable non-TTS operation (default `llm`
+text; `embed` or another operation only with an environment-based choice),
+then invokes it through an admitted explicit Factory Session. This story
+defines the proof; it does not select a model, download an asset, start a
+backend, or authorize implementation.
+
+**Dependencies:**
+
+- `localai-omni-artifact-contract-delta-authority-retry-002` — completed exact
+  private handoff and unchanged public-shape record.
+- `GATE-OPERATOR-APPROVAL` — required before any production or executable-test
+  change. A missing private-contract disposition stops the implementation
+  lane; it is not replaced by this matrix.
+
+**Parallel and shared-surface ownership:** Models and Factory validation own
+future test files and fixtures. Work owns Work admission/materialization;
+Recordings owns canonical Factory Event history and replay; Models transport
+owners own HTTP/CLI projection tests; the integration/release lane owns
+configured-server and real-platform tests. Functional scenarios must allocate
+their explicit Factory Session identity before runtime construction, use one
+reusable `root.BuildProcess` when its injected edges are immutable, and run
+independent sessions in parallel with unique IDs, profiles, directories,
+routes, streams, and edge state. No task in this story edits a test or shared
+production surface.
+
+**Scope:**
+
+- In: semantic OMNI text and descriptor checks; Factory Session admission,
+  invocation, selection, Work identity/materialization, canonical event order
+  and replay, artifact identity/media/UTF-8 size semantics, lineage,
+  malformed/missing output, materialization failure, timeout/cancellation,
+  exactly-once lease/host release, redaction, unchanged public projection,
+  configured-server parity, and later real-conformance rows.
+- Out: executing future tests in this retry; changing production, test,
+  generated, OpenAPI, CLI, protobuf, persisted Work/Event, or Factory graph
+  files; direct CLI-only or TTS-only acceptance; unmeasured model feasibility;
+  and exceptions for required modalities or target platforms.
+
+**Implementation constraints:**
+
+- `FACTORY-01` cannot be admitted until the reconciliation record names the
+  selected non-TTS operation and records measured supportability. If the
+  existing Factory/Worker path cannot carry it without a public contract,
+  stop with a characterized blocker and request the smallest new
+  operator-approved Current/Proposed delta.
+- Unit rows remain package-isolated. Functional rows must construct through
+  `root.BuildProcess`, execute through `Process.Execute`, use Factory Sessions,
+  and replace only exact external effects through `edges.Edges`. They must
+  observe public output, session/work state, Factory Events, replay, or a
+  test-owned external-effect boundary; they must not inspect engine snapshots,
+  registries, constructor counts, or package topology.
+- The functional suite must reuse a safe immutable process, not a mutable
+  customer profile. Every parallel scenario gets a test-owned home/profile,
+  temporary config/cache/state, unique session/request/trace IDs, and
+  scenario-scoped cleanup. Channels, event subscriptions, or terminal state
+  are the readiness/completion signals; fixed sleeps and timeout exhaustion
+  are not success evidence.
+- The canonical history observer is Recordings replay, not the process-local
+  Events stream. The observer compares the selected result and public Work
+  projection before and after replay, including artifact metadata and lineage.
+- Artifact identity is opaque and assigned only by the Models Inference
+  registrar. The semantic row asserts `text/plain` and
+  `SizeBytes == int64(len([]byte(text)))`; it asserts that no digest is claimed
+  unless the selected public contract actually supplies one. No row may treat
+  a path, endpoint, cache handle, signed URL, secret, or raw protocol value as
+  an artifact identity.
+- Failure rows must prove typed failure, no successful output/Work/event
+  publication, and cleanup. A test that only sees a nonzero process exit or a
+  field being present is insufficient. Cancellation must also prove that no
+  late completed output is published.
+- Configured-server and actual LocalAI rows are integration/release work. They
+  must consume a prebuilt deliverable supplied by the invoking lane and may
+  not be claimed from the controlled protocol fixture or an in-process
+  loopback.
+
+**Contract and configuration excerpts:** No contract or configuration is
+changed by this story. The exact private Current/Proposed Go shapes and the
+unchanged public/OpenAPI/CLI/protobuf shapes remain in §5; no new authored or
+generated source is introduced here.
+
+Generated outputs and consumers: none in this story. Future implementation
+must continue to regenerate only from authored sources if a separately
+approved contract delta ever changes a public shape.
+
+### 6.1 Run-record contract and evidence status
+
+Before executing any row, the owner must attach one run record containing all
+fields required by `LA-10`. The record is part of the evidence, not a reason to
+convert an unavailable dependency into PASS.
+
+| Required field | Controlled unit/functional declaration | Later parity/real declaration |
+| --- | --- | --- |
+| Platform | Current `GOOS/GOARCH`; unit rows use no external process; functional rows use the declared test runner platform. | Explicit macOS, Linux, or Windows plus architecture and accelerator/hardware class. |
+| Binary/artifact identity | Source commit under test plus controlled fixture identity; no LocalAI/model download and no compiled binary claim. | Prebuilt `you` binary and pinned LocalAI/backend/model manifest identities, with SHA-256 or the source release identity. |
+| State, cache, and ports | `t.TempDir`-owned config/cache/work/recording roots; unique Factory Session, request, trace, route, and in-process fixture state; no real profile. | Separate process-owned profile, cache, work, recording, server, and port locations; all paths recorded without exposing them in customer diagnostics. |
+| Timeout and process lifetime | Exact `-timeout` in the command; context ceiling only; no OS process for unit/functional rows. | Exact test timeout, startup/invoke/shutdown ceilings, and child/server lifetime; terminal readiness and cleanup signals are recorded separately. |
+| Network policy | `none`; protocol and provider effects are controlled at the declared boundary. | Explicit local or remote endpoint policy; server parity and real conformance must record whether network access was expected and bounded. |
+| Model/download budget | `0` model calls and `0` download bytes for controlled rows. | Named model/backend asset, maximum bytes, maximum duration, and provisioning result; an unavailable asset is FAIL/INCONCLUSIVE. |
+| Retry/call budget | One protocol fixture call per happy/failure case, except `RELEASE-01`'s declared `-count=20` repeat; no hidden retry. | Maximum provider/server calls and retry count declared before the run; no extra retry after the bounded executor retry without escalation. |
+
+All rows are `UNPROVEN` in this proposal. The PASS/FAIL observers below are
+the future execution rules. `PARITY-01` and `REAL-01` additionally remain
+owned by `LA-07`/`LA-09`; they are intentionally listed so later work cannot
+silently omit their real dependency fidelity.
+
+### 6.2 Selected semantic matrix
+
+| ID | Kind and given/when/then behavior | Layer and dependency fidelity | Isolation and parallel strategy | Exact command/procedure | PASS/FAIL observer | Current status / owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `OMNI-01` | Happy. Given a controlled OMNI response containing Unicode semantic text and declared usage, when the codec invokes it, then the `text` output has exactly that text, modality `TEXT`, content/media type `text/plain`, and usage remains a separate JSON output when the operation declares `usage`. | Unit; controlled `ProtocolClient` fixture. | Fresh codec and fixture per test; no Factory Session, network, backend, or shared mutable state; `t.Parallel` is safe. | `go test ./pkg/services/models/internal/backends/localai -run '^TestOmniCodecReturnsSemanticTextAndUsage$' -count=1 -timeout=5m` | Assert exact text, exact usage, slot order, modality/media, and no protocol field loss; missing named test, nonzero exit, or mismatch is FAIL. | `UNPROVEN` → `GATE-OMNI-PRIVATE`; Models codec owner. |
+| `OMNI-02` | Happy/boundary. Given the same response, when the proposed private result is inspected before registration, then it has exactly one `text` descriptor with name `text`, media type `text/plain`, `SizeBytes == int64(len([]byte(text)))`, zero private identity, and no path or address. | Unit; controlled protocol fixture. | Fresh codec and detached result; no shared process or registry. | `go test ./pkg/services/models/internal/backends/localai -run '^TestOmniCodecBuildsUTF8TextArtifactDescriptor$' -count=1 -timeout=5m` | Assert descriptor count/name/media/byte size, zero `InferenceArtifactRef`, empty source path, and safe detached fields; rune-count, digest, path, or address substitution is FAIL. | `UNPROVEN` → `GATE-OMNI-PRIVATE`; Models codec owner. |
+| `FACTORY-01` | Happy. Given a measured supportable non-TTS operation (default `llm` text) and an admitted explicit Factory Session, when the caller invokes through the existing Worker path, then admission succeeds, the selected operation is invoked once, and the returned selected result is the exact semantic text. | Functional; controlled protocol fixture through `root.BuildProcess` and `Process.Execute`, with external effects at `edges.Edges`. | Allocate the explicit Factory Session before runtime construction; reuse one immutable process per compatible edge shape; unique profile/session/request IDs; independent scenarios use `t.Parallel` and scenario-owned cleanup. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactJourney$' -count=1 -timeout=10m -v` | Observe public admission/terminal session state, fixture invocation count, selected output/status, and exact text; any missing phase, duplicate invoke, or unmeasured operation choice is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE` and `LA-05`; Factory/Models validation owner. |
+| `FACTORY-02` | Happy. Given `FACTORY-01` completion, when the selected result is materialized, then exactly one canonical Work has a non-empty identity, its artifact-bearing content points to the selected text, and no second Work is created. | Functional; controlled `edges.Edges` and protocol fixture. | Fresh temp config/cache/state and explicit session per scenario; `t.Cleanup` owns session/process lifetime; unique IDs permit parallel execution. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactJourney$' -count=1 -timeout=10m -v` | Read public Work state/history and assert one Work ID, one materialization, selected `ArtifactID`, media/content relation, and no duplicate; field presence without identity/materialization semantics is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE` and `LA-05`; Work/Factory validation owner. |
+| `EVENT-01` | Happy/boundary. Given the artifact-bearing Work, when canonical Factory Event history is read and replayed, then the dispatch response precedes completion projection in canonical order and replay reproduces Work ID, artifact link, content, and lineage exactly. | Functional; controlled `root.BuildProcess` and public Recordings read/replay boundary. | Dedicated recording and Factory Session per scenario; no global history or process-local Events substitution; unique factory/session IDs; independent scenarios parallelize. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactReplayPreservesOrderAndLineage$' -count=1 -timeout=10m -v` | Compare ordered public event IDs/ordinals and replayed public projection; order, event identity, Work/artifact content, or replay equality mismatch is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE` and `LA-06`; Recordings/Factory validation owner. |
+| `ARTIFACT-01` | Happy/boundary. Given a successful selected text output, when Models result and public Work/Event projections are inspected, then artifact identity is opaque and non-empty after registration, media type is `text/plain`, size equals UTF-8 bytes, and neither a path nor an unprovided digest is claimed. | Functional; controlled protocol fixture, public Models result, Work, and Recordings projections. The package-level descriptor rule is already isolated in `OMNI-02`. | Detached result copies; unique artifact registrar/session state; no shared cache; `t.Cleanup` releases the scenario. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactMetadataIsSemantic$' -count=1 -timeout=10m -v` | Assert identity is opaque/non-empty, media and size/content relation are semantic, digest is absent unless contract-provided, and no path/address/secret appears; field-only or leak result is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE`, `GATE-BOUNDARY-PROJECTION`, and `LA-06`; Models/Factory validation owner. |
+| `LINEAGE-01` | Happy. Given source Work and dispatch lineage, when output is materialized and replayed, then request, dispatch, source, parent, current trace, previous chaining trace IDs, and depth remain consistent across Workers, Work, and Recordings. | Functional; controlled Factory Session and `edges.Edges`. | Unique source Work and trace IDs per scenario; dedicated recording/session; parallel-safe temporary state and scenario cleanup. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactLineageIsPreserved$' -count=1 -timeout=10m -v` | Compare each lineage value at the public Worker result, Work, canonical event, and replay boundaries; any dropped, reordered, or re-derived value is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE` and `LA-06`; Work/Recordings owner. |
+| `FAIL-01` | Unhappy/boundary. Given blank text, missing descriptor, invalid reference, mismatched name/media, negative or oversized size, or malformed output, when invocation validation completes, then a typed failure is returned atomically with no successful Outputs/Artifacts and no Work completion. | Unit/package; controlled malformed codec/registrar/lifecycle fixtures. Pure package rules remain below the Factory boundary. | Fresh lifecycle and registrar fixture per subtest; `t.Parallel` only with isolated registries; no network or external process. | `go test ./pkg/services/models/internal/services/inference/... -run '^TestInvocationArtifactFailuresAreAtomic$' -count=1 -timeout=5m` | Assert exact typed failure class/slot, zero successful output/artifact, no partial registration/publication, and no completed Work; any partial result or generic-only error is FAIL. | `UNPROVEN` → `GATE-OMNI-PRIVATE`; Models Inference owner. |
+| `FAIL-02` | Unhappy. Given a valid selected result followed by Work materialization rejection, when Factory Runtime applies the worker proposal, then the attempt is failed, recorded output Work is absent, and no successful completion projection is emitted. | Functional; controlled Work validation failure through `edges.Edges` and a Factory Session. | Dedicated session/recording and scenario-owned fault injection; no cross-test state; no package-wide quiescence assertion; parallel with independent IDs. | `go test ./tests/functional/factory/omni_artifact -run '^TestFactorySessionOmniArtifactMaterializationFailureIsAtomic$' -count=1 -timeout=10m -v` | Observe failed attempt, terminal public state, empty recorded output Work, and absence of a false success event; any completed projection or late Work is FAIL. | `UNPROVEN` → `GATE-FACTORY-LINEAGE`; Factory Runtime/Work owner. |
+| `RELEASE-01` | Unhappy/boundary. Given success, backend error, timeout, and cancellation, when each invocation terminates, then lease and host capacity are released exactly once and cancellation cannot publish a completed output later. | Package plus functional repeat/race; controlled blocking protocol fixture. The repeat/race portion belongs to the dedicated release/race lane, not a load suite. | Unique lease/host/session per case; deterministic fixture channels for start/cancel/terminal signals; `-count=20` and `-race`; serialize only a documented customer-visible capacity invariant. | `go test -race ./pkg/services/models/internal/services/inference/... ./tests/functional/factory/omni_artifact -run '^(TestInvocationLeaseReleaseIsExactlyOnce|TestFactorySessionOmniArtifactReleaseIsExactlyOnce)$' -count=20 -timeout=15m -v` | Assert success/error/timeout/cancel terminal outcomes, one release disposition, one host-capacity release, no leak, and no post-cancel completion; a deadline-only return or duplicate release is FAIL. | `UNPROVEN` → `GATE-RELEASE-RACE` and `GATE-FACTORY-LINEAGE`; Models/Factory validation owner. |
+| `REDACT-01` | Boundary/unhappy. Given unsafe path, address, secret, or raw protocol values in backend and artifact failures, when errors, logs, and HTTP/CLI projections are observed, then safe class/message/IDs remain and forbidden values are absent. | Unit/contract; controlled values and detached mapper/schema inputs. No real server or secret is used. | Fresh logger/mapper/input per test; `t.Parallel` safe; forbidden values are synthetic sentinels and never committed as credentials. | `go test ./pkg/services/models/internal/services/inference/... ./pkg/services/models/transports/http ./pkg/services/models/transports/cli -run '^Test.*Redact' -count=1 -timeout=5m -v` | Inspect observed error/log/transport values for forbidden sentinels and assert typed safe fields, stable opaque IDs, and actionable class/message; any leak or unsafe raw protocol propagation is FAIL. | `UNPROVEN` → `GATE-REDACTION`; Models/transport owner. |
+| `BOUNDARY-01` | Happy/unhappy. Given a detached `InferenceOutput.Artifact` and an existing typed failure, when HTTP and CLI mappers project them, then current output metadata/failure categories remain unchanged, empty refs are omitted, and no new public field is required. | Contract/package; detached result and schema-mock inputs at the existing HTTP/CLI mapper boundary. | Fresh mapper input per test; no server; `t.Parallel`; no source-inventory or generated-file scan is used as behavior evidence. | `go test ./pkg/services/models/transports/http ./pkg/services/models/transports/cli -run '^Test(HTTP|CLI)ProjectionPreservesArtifactAndFailureContract$' -count=1 -timeout=5m -v` | Compare normalized public output, artifact metadata, omitted empty refs, and typed failure class/message with the existing contract; shape or redaction mismatch is FAIL. | `UNPROVEN` → `GATE-BOUNDARY-PROJECTION` and `GATE-SHAPES`; transport owner. |
+| `PARITY-01` | Happy/unhappy. Given equivalent direct CLI and configured HTTP/server requests, including explicit `--server`, when both invoke the selected operation, then normalized success values, output metadata, error category, and lifecycle/release state match. | Integration later; `local_real` or `remote_real` configured server. The suite consumes an already compiled deliverable supplied by the integration lane. | Isolated server/config/cache/profile/ports and separate process lifetime; no in-process substitution; the invoking lane owns one prebuilt artifact. | `go test ./tests/integration/models/model_invoke -run '^TestCLIAndConfiguredServerInvocationParity$' -count=1 -timeout=15m -v` | Compare request/response evidence for direct and explicit `--server` paths, normalized values/metadata/errors, and release status; unavailable or `INCONCLUSIVE` is blocking for `LA-07`, never PASS. | `UNPROVEN` → `GATE-SERVER-PARITY` and `LA-07`; integration owner. |
+| `REAL-01` | Happy/unhappy/boundary. Given each required supported platform and documented prebuilt/small asset, when actual LocalAI/backend conformance runs, then provisioning, load, invoke, semantic output, and release are recorded, or that platform is explicitly FAIL/INCONCLUSIVE. | Integration/release later; `local_real` actual LocalAI/backend and declared artifact. No hermetic fixture substitution. | One declared platform/artifact budget per run; isolated profile/cache/ports/process; no parallel backend startup unless the conformance lane explicitly owns it; cleanup is verified. | `make test-localai-conformance` | The structured platform result must include artifact/model identity, semantic output, and release/cleanup status; an absent asset, unavailable platform, failure, or `INCONCLUSIVE` blocks `LA-09` and is never converted to PASS. | `UNPROVEN` → `GATE-REAL-C1` and `LA-09`; real-conformance owner. |
+
+The selected matrix deliberately does not duplicate the full ASR, TTS,
+embedding, LLM-image, or LLM-video blind/real corpus. Those are distinct
+project behaviors owned by `LA-02`, `LA-04`, `GATE-BLIND`, and `GATE-REAL-C1`.
+Direct CLI-only or TTS-only evidence remains useful characterization but cannot
+substitute for `FACTORY-01`–`EVENT-01` or pass `LA-05`/`LA-06`. Cache/backend
+resolution and configured-server lifecycle remain later fidelity gates; the
+matrix records their ownership rather than implying that a controlled fixture
+proved them.
+
+### 6.3 Acceptance criteria for story 003
+
+- [x] Given each selected matrix precondition, when its future exact command
+  runs, then the row has a named semantic observer that reports PASS/FAIL from
+  meaning, not field presence; zero matched tests is not a pass.
+- [x] Given malformed or missing output, timeout/cancellation, materialization
+  failure, and release-race cases, then the matrix names atomic failure,
+  no-late-success, and cleanup observers with controlled signals and the
+  correct package/functional/race layer.
+- [x] Given Factory Session success, then the matrix compares selected result,
+  one Work identity/materialization, artifact identity/media/UTF-8 size,
+  canonical event order, replay equality, and lineage across public boundaries.
+- [x] Given the existing public boundary, then `BOUNDARY-01` observes unchanged
+  HTTP/CLI/OpenAPI/generated behavior and safe redaction without adding a
+  contract or using a source-inventory test.
+- [x] Later configured-server and real-platform rows are explicitly
+  `UNPROVEN` and owned by `LA-07`/`LA-09`; no row marks `LA-05` or `LA-06`
+  passed, and no platform or modality exception is introduced.
+
+These checkmarks mean that the story's proposal/design outcome is complete.
+They do not report execution evidence for any row or Project acceptance.
+
+### 6.4 Verification and evidence boundary
+
+**Behavioral witness:** The matrix in §6.2 has one row for every selected
+semantic behavior and every row contains given/when/then behavior, layer,
+dependency fidelity, isolation, exact command/procedure, PASS/FAIL observer,
+and an owning later gate. The run-record contract in §6.1 prevents later
+evidence from omitting platform, artifact, state, timeout, network, budget, or
+retry identity.
+
+**Executable-spine effect:** `increase_fidelity` — the plan now defines the
+semantic Factory witness needed to extend the retained OMNI-to-Workers-to-Work-
+to-Recordings path, without changing the executable spine or claiming runtime
+success.
+
+**Required evidence:**
+
+- Scope: test design and proposal/documentation review.
+- Dependency fidelity: controlled for `OMNI-01` through `REDACT-01` and
+  `BOUNDARY-01`; `local_real`/`remote_real` only for the later `PARITY-01` and
+  `REAL-01` rows.
+- Exact procedure: parse `prd.json`; inspect §6.1–§6.2 and confirm all matrix
+  IDs have all six required columns; compare the commands and observers with
+  the story-003 matrix in `prd.json`; re-run the three immutable authority
+  SHA-256 checks; run `git diff --check`; inspect the final diff against the
+  proposal-only allowlist. Do not run the future row commands in this retry.
+- Proves: complete selected-case design, correct test-layer classification,
+  Factory Session/process isolation, semantic observers, explicit budgets,
+  later fidelity ownership, and no silent modality/platform exception.
+- Does not prove: any codec/wire compilation, registrar execution, model
+  feasibility, Factory Session behavior, Work/Event/artifact lineage,
+  configured-server parity, real LocalAI/platform support, `LA-05`, `LA-06`,
+  terminal CI, merge, or operator approval.
+
+Highest feasible level is complete test design with a future functional level:
+the corrected retry is prohibited from production and executable-test changes,
+and the authority permits no model/backend/network calls. Remaining edges are
+`GATE-OPERATOR-APPROVAL`, `GATE-OMNI-PRIVATE`, `GATE-FACTORY-LINEAGE`,
+`GATE-BOUNDARY-PROJECTION`, `GATE-RELEASE-RACE`, `GATE-SERVER-PARITY`,
+`GATE-BLIND`, `GATE-REAL-C1`, and `GATE-LOOPBACK`.
+
+**Test-layer design:** No test source changes in this story. The future unit
+rows remain beside the owning Models codec/Inference/transport packages; the
+Factory rows belong under `tests/functional/factory/omni_artifact` and use the
+public `root.BuildProcess`/`Process.Execute` path with controlled `edges.Edges`;
+the configured-server row belongs under `tests/integration/models/model_invoke`
+and consumes an artifact built once by the integration lane; the real row
+belongs to the dedicated conformance/release lane. `RELEASE-01` uses focused
+normal/repeat/race evidence with deterministic blocking channels rather than
+sleep-based synchronization. No broad inventory, topology, source scan, or
+load test is introduced.
+
+### 6.5 Operational rollout, rollback, and handoff
+
+There is no deployment, migration, cache mutation, backend startup, generated
+regeneration, or test execution in this iteration. The future sequence remains
+`GATE-OPERATOR-APPROVAL` → private codec/wire implementation →
+`GATE-OMNI-PRIVATE` → `FACTORY-01`–`EVENT-01` under
+`GATE-FACTORY-LINEAGE` → boundary/release-race review → configured-server,
+blind, real-platform, loopback, and review-CI gates.
+
+Stop before implementation if the selected operation is not measured as
+supportable, if a public/persisted/CLI/OpenAPI/protobuf/Factory graph shape is
+needed, if a row cannot observe semantic output or atomic failure, if release
+is not exactly once, or if the authority hashes change. Preserve the blocker
+and request the smallest operator-approved plan delta. Rollback of the later
+private implementation is a revert/disable followed by existing host/lease
+shutdown; it must not rewrite recordings, delete caches to conceal failure, or
+leak paths, addresses, protocol payloads, or secrets.
+
+Handoff artifacts for this story are this §6 matrix and run-record contract,
+the story-003 `prd.json` evidence update, and the progress entry. Story 004
+owns independent clean-room validation. This matrix is not an implementation
+authorization and cannot mark `LA-05`, `LA-06`, server parity, real platforms,
+or any runtime gate passed.
