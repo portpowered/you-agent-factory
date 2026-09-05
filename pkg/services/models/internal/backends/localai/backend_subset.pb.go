@@ -308,6 +308,7 @@ func (x *ChatDelta) GetToolCalls() []*ToolCallDelta {
 type PredictOptions struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Prompt        string                 `protobuf:"bytes,1,opt,name=Prompt,proto3" json:"Prompt,omitempty"`
+	Embeddings    string                 `protobuf:"bytes,36,opt,name=Embeddings,proto3" json:"Embeddings,omitempty"`
 	Images        []string               `protobuf:"bytes,42,rep,name=Images,proto3" json:"Images,omitempty"`
 	Videos        []string               `protobuf:"bytes,45,rep,name=Videos,proto3" json:"Videos,omitempty"`
 	Audios        []string               `protobuf:"bytes,46,rep,name=Audios,proto3" json:"Audios,omitempty"`
@@ -349,6 +350,13 @@ func (*PredictOptions) Descriptor() ([]byte, []int) {
 func (x *PredictOptions) GetPrompt() string {
 	if x != nil {
 		return x.Prompt
+	}
+	return ""
+}
+
+func (x *PredictOptions) GetEmbeddings() string {
+	if x != nil {
+		return x.Embeddings
 	}
 	return ""
 }
@@ -760,9 +768,12 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\acontent\x18\x01 \x01(\tR\acontent\x12+\n" +
 	"\x11reasoning_content\x18\x02 \x01(\tR\x10reasoningContent\x125\n" +
 	"\n" +
-	"tool_calls\x18\x03 \x03(\v2\x16.backend.ToolCallDeltaR\ttoolCalls\"\xf0\x01\n" +
+	"tool_calls\x18\x03 \x03(\v2\x16.backend.ToolCallDeltaR\ttoolCalls\"\x90\x02\n" +
 	"\x0ePredictOptions\x12\x16\n" +
-	"\x06Prompt\x18\x01 \x01(\tR\x06Prompt\x12\x16\n" +
+	"\x06Prompt\x18\x01 \x01(\tR\x06Prompt\x12\x1e\n" +
+	"\n" +
+	"Embeddings\x18$ \x01(\tR\n" +
+	"Embeddings\x12\x16\n" +
 	"\x06Images\x18* \x03(\tR\x06Images\x12\x16\n" +
 	"\x06Videos\x18- \x03(\tR\x06Videos\x12\x16\n" +
 	"\x06Audios\x18. \x03(\tR\x06Audios\x12A\n" +

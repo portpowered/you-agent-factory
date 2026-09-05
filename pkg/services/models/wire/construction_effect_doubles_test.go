@@ -482,8 +482,8 @@ func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T
 	if err := proto.Unmarshal(connection.request, &request); err != nil {
 		t.Fatalf("decode embedding request: %v", err)
 	}
-	if request.GetPrompt() != "Find similar work" {
-		t.Fatalf("embedding request prompt = %q, want input text", request.GetPrompt())
+	if request.GetPrompt() != "Find similar work" || request.GetEmbeddings() != "Find similar work" {
+		t.Fatalf("embedding request prompt = %q, embeddings = %q, want input text in both shared and dedicated fields", request.GetPrompt(), request.GetEmbeddings())
 	}
 }
 

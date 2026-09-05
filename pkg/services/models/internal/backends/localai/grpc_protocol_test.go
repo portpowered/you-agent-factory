@@ -130,9 +130,10 @@ func TestPinnedEmbeddingBackendMapsTextParametersAndResponse(t *testing.T) {
 		t.Fatalf("embedding transport facts = method %q, closed %d, want Embedding and one close", connection.method, connection.closed)
 	}
 	if connection.embeddingRequest.GetPrompt() != "Find similar work" ||
+		connection.embeddingRequest.GetEmbeddings() != "Find similar work" ||
 		connection.embeddingRequest.GetMetadata()["normalize"] != "true" ||
 		connection.embeddingRequest.GetMetadata()["dimensions"] != "3" {
-		t.Fatalf("embedding request prompt=%q metadata=%v, want prompt and JSON metadata", connection.embeddingRequest.GetPrompt(), connection.embeddingRequest.GetMetadata())
+		t.Fatalf("embedding request prompt=%q embeddings=%q metadata=%v, want dedicated embedding text and JSON metadata", connection.embeddingRequest.GetPrompt(), connection.embeddingRequest.GetEmbeddings(), connection.embeddingRequest.GetMetadata())
 	}
 }
 

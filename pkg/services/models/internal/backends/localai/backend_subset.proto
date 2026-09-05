@@ -37,6 +37,7 @@ message ChatDelta {
 
 message PredictOptions {
   string Prompt = 1;
+  string Embeddings = 36;
   repeated string Images = 42;
   repeated string Videos = 45;
   repeated string Audios = 46;

@@ -309,7 +309,15 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 	for name, value := range request.Parameters {
 		parameters = append(parameters, models.OperationParameter{Name: name, Value: value})
 	}
-	return predictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters})
+	options, err := predictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters})
+	if err != nil {
+		return nil, err
+	}
+	// The pinned LocalAI Embedding RPC reads the dedicated field 36 rather
+	// than Prompt. Keep Prompt populated for the shared request shape, but make
+	// the operation-specific wire binding explicit.
+	options.Embeddings = request.Text
+	return options, nil
 }
 
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
