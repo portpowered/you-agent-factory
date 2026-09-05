@@ -207,6 +207,35 @@ class PreDispatchAuthorityInputPreflightTest(unittest.TestCase):
             second_head,
         )
 
+    def test_f17_root_feature_packet_is_rejected_against_destination_start(self):
+        prd_name = "root-feature-destination-start"
+        git(["checkout", "-b", "feature-only"], self.repo_path)
+        (self.repo_path / "feature-only.txt").write_text(
+            "feature-only\n", encoding="utf-8",
+        )
+        git(["add", "feature-only.txt"], self.repo_path)
+        git(["commit", "-m", "feature-only"], self.repo_path)
+        required_commit = git(
+            ["rev-parse", "HEAD"], self.repo_path,
+        ).stdout.strip()
+        packet = valid_packet(self.repo_path, prd_name)
+        packet["preflight"]["intendedMainline"]["commit"] = required_commit
+        self.write_valid(prd_name, packet)
+        before = snapshot(self.repo_path)
+
+        result = run_setup(self.repo_path, prd_name)
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("code=non-ancestor", result.stderr)
+        self.assertIn(
+            f'requiredCommit="{required_commit}"', result.stderr,
+        )
+        self.assertEqual(snapshot(self.repo_path), before)
+        self.assertFalse(
+            (self.repo_path / ".claude" / "worktrees" / prd_name).exists()
+        )
+
     def test_f03_missing_authority_is_rejected_before_root_sync(self):
         prd_name = "missing-authority"
         packet_path = self.write_valid(prd_name)
