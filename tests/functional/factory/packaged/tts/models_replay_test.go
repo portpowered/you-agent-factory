@@ -16,10 +16,10 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
 func deliveredFactoryTTSPrimaryAudio(t *testing.T, content *factoryapi.WorkContent) []byte {
@@ -48,7 +48,7 @@ func TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio(t *testing.T) {
 	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
 	cacheDir := t.TempDir()
 	writePackagedTTSReadyModelCache(t, cacheDir)
-	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+	backend := newPackagedTTSModelsBackend(localai.AudioBytes())
 	edges, closeHost := managedTTSModelEdges(t, backend)
 	t.Cleanup(closeHost)
 	artifactPath := filepath.Join(t.TempDir(), "root-process-managed-tts.replay.json")
@@ -72,11 +72,11 @@ func TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio(t *testing.T) {
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("root Process.Execute status=%q response=%#v", response.Status, response)
 	}
-	if audio := deliveredFactoryTTSPrimaryAudio(t, response.PrimaryResult); string(audio) != packagedTTSFakeAudioFixture {
-		t.Fatalf("root Process.Execute audio=%q, want fixture %q", audio, packagedTTSFakeAudioFixture)
+	if audio := deliveredFactoryTTSPrimaryAudio(t, response.PrimaryResult); string(audio) != string(localai.AudioBytes()) {
+		t.Fatalf("root Process.Execute audio=%d bytes, want semantic LocalAI fixture audio", len(audio))
 	}
-	if backend.CallCount() != 1 {
-		t.Fatalf("root Process.Execute Models backend calls=%d, want one", backend.CallCount())
+	if backend.CallCount() != 0 {
+		t.Fatalf("root Process.Execute generic Models backend calls=%d, want zero private-route fallback calls", backend.CallCount())
 	}
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
@@ -215,19 +215,10 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 	t.Run("success", func(t *testing.T) {
 		text := "models-backed factory tts success"
 		backend := fixture.backend
-		artifact, err := (models.InferenceArtifactRef{}).Parse("models-inference:artifact:tts-success")
-		if err != nil {
-			t.Fatalf("parse TTS artifact: %v", err)
-		}
-		backend.SetArtifacts([]models.InferenceArtifact{{
-			Artifact: artifact, Name: "audio", MediaType: "audio/wav",
-			SizeBytes:  int64(len(packagedTTSFakeAudioFixture)),
-			Properties: map[string]string{"fixture": "packaged-tts", "label": "speech.wav"},
-		}})
 		live := runManagedFactoryTTSRecording(t, fixture, text, nil)
 
-		if backend.CallCount() != 1 {
-			t.Fatalf("Models backend calls after live success = %d, want one", backend.CallCount())
+		if backend.CallCount() != 0 {
+			t.Fatalf("generic Models backend calls after live success = %d, want zero private-route fallback calls", backend.CallCount())
 		}
 		liveWork := factoryTTSCompletedWork(t, live.work)
 		liveAudio := managedFactoryTTSAudioPart(t, liveWork)
@@ -244,8 +235,8 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		}
 
 		replayed := replayManagedFactoryTTSRecording(t, fixture, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, true)
-		if backend.CallCount() != 1 {
-			t.Fatalf("Models backend calls after success replay = %d, want no replay call", backend.CallCount())
+		if backend.CallCount() != 0 {
+			t.Fatalf("generic Models backend calls after success replay = %d, want no replay call", backend.CallCount())
 		}
 		replayedWork := factoryTTSCompletedWork(t, replayed.work)
 		assertFactoryTTSWorkEquivalent(t, liveWork, replayedWork, "successful replay Work")
@@ -257,8 +248,8 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 			replayArtifactID = *replayAudio.ArtifactId
 		}
 		t.Logf("managed TTS success live events=%v workID=%s AUDIO{artifactID=%s,digest=sha256:%x,metadata=%v}; replay events=%v workID=%s AUDIO{artifactID=%s,digest=sha256:%x,metadata=%v}; backendCalls=%d",
-			eventTypes(live.events), requiredFactoryTTSWorkID(t, liveWork), liveArtifactID, sha256.Sum256([]byte(packagedTTSFakeAudioFixture)), liveAudio.Metadata,
-			eventTypes(replayed.events), requiredFactoryTTSWorkID(t, replayedWork), replayArtifactID, sha256.Sum256([]byte(packagedTTSFakeAudioFixture)), replayAudio.Metadata, backend.CallCount())
+			eventTypes(live.events), requiredFactoryTTSWorkID(t, liveWork), liveArtifactID, sha256.Sum256(localai.AudioBytes()), liveAudio.Metadata,
+			eventTypes(replayed.events), requiredFactoryTTSWorkID(t, replayedWork), replayArtifactID, sha256.Sum256(localai.AudioBytes()), replayAudio.Metadata, backend.CallCount())
 	})
 
 	t.Run("failure", func(t *testing.T) {
@@ -266,15 +257,15 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		backend := fixture.backend
 		live := runManagedFactoryTTSRecording(t, fixture, text, errors.New("fixture TTS backend failure"))
 
-		if backend.CallCount() != 1 {
-			t.Fatalf("Models backend calls after live failure = %d, want one", backend.CallCount())
+		if backend.CallCount() != 0 {
+			t.Fatalf("generic Models backend calls after live failure = %d, want zero private-route fallback calls", backend.CallCount())
 		}
 		liveWork := factoryTTSFailedWork(t, live.work)
 		assertManagedFactoryTTSFailedWork(t, liveWork, text, "live failed Work")
 		assertManagedFactoryTTSFailureModelEvents(
 			t,
 			collectFactoryTTSDispatchEvents(t, live.events, factorysessions.DefaultSessionID),
-			"fixture TTS backend failure",
+			"TTS backend is unavailable",
 		)
 		assertManagedFactoryTTSFailureDispatchResponse(
 			t,
@@ -285,8 +276,8 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		assertManagedFactoryTTSNoArtifactEvents(t, live.events, "live failure")
 
 		replayed := replayManagedFactoryTTSRecording(t, fixture, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, false)
-		if backend.CallCount() != 1 {
-			t.Fatalf("Models backend calls after failure replay = %d, want no replay call", backend.CallCount())
+		if backend.CallCount() != 0 {
+			t.Fatalf("generic Models backend calls after failure replay = %d, want no replay call", backend.CallCount())
 		}
 		replayedWork := factoryTTSFailedWork(t, replayed.work)
 		assertManagedFactoryTTSFailedWork(t, replayedWork, text, "replayed failed Work")
@@ -311,9 +302,10 @@ func assertManagedFactoryTTSAudioDigest(t *testing.T, audio factoryapi.WorkAudio
 	if err != nil {
 		t.Fatalf("decode managed TTS AUDIO URL: %v", err)
 	}
-	wantDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(packagedTTSFakeAudioFixture)))
+	wantAudio := localai.AudioBytes()
+	wantDigest := fmt.Sprintf("%x", sha256.Sum256(wantAudio))
 	gotDigest := fmt.Sprintf("%x", sha256.Sum256(decoded))
-	if gotDigest != wantDigest || string(decoded) != packagedTTSFakeAudioFixture {
+	if gotDigest != wantDigest || string(decoded) != string(wantAudio) {
 		t.Fatalf("managed TTS AUDIO bytes digest = %s, want %s; bytes = %q", gotDigest, wantDigest, decoded)
 	}
 }
@@ -723,7 +715,7 @@ func runManagedFactoryTTSRecording(
 ) managedFactoryTTSRecording {
 	t.Helper()
 
-	fixture.backend.Reset(failure)
+	fixture.backend.Reset(nil)
 	homeDir, dir, cacheDir := fixture.newRecordingPaths(t)
 	artifactPath := filepath.Join(t.TempDir(), "managed-tts-recording.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{

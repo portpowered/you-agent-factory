@@ -58,6 +58,8 @@ var ErrInvalidMode = errors.New("invalid LocalAI fixture mode")
 type Options struct {
 	Mode                Mode
 	EmbeddingDimensions int
+	TTSAudio            []byte
+	TTSFailureText      string
 }
 
 // FixtureOptions is the descriptive alias used by callers that prefer the
@@ -72,6 +74,7 @@ type Call struct {
 	Model       string
 	Prompt      string
 	Text        string
+	Voice       string
 	Destination string
 	Images      []string
 	Audios      []string
@@ -114,6 +117,9 @@ func New(options Options) (*Fixture, error) {
 	fixture.backend = &backendServer{options: options}
 	fixture.server = grpc.NewServer()
 	localaiproto.RegisterBackendServer(fixture.server, fixture.backend)
+	productionServiceDescription := localaiproto.Backend_ServiceDesc
+	productionServiceDescription.ServiceName = "backend.Backend"
+	fixture.server.RegisterService(&productionServiceDescription, fixture.backend)
 	go fixture.serve()
 	<-fixture.serveReady
 	return fixture, nil
@@ -156,6 +162,11 @@ func normalizeOptions(options Options) (Options, error) {
 	}
 	if options.EmbeddingDimensions < 1 {
 		return Options{}, fmt.Errorf("embedding dimensions must be positive: %d", options.EmbeddingDimensions)
+	}
+	if len(options.TTSAudio) == 0 {
+		options.TTSAudio = AudioBytes()
+	} else {
+		options.TTSAudio = append([]byte(nil), options.TTSAudio...)
 	}
 	return options, nil
 }
@@ -266,8 +277,9 @@ type backendServer struct {
 	localaiproto.UnimplementedBackendServer
 	options Options
 
-	callsMu sync.Mutex
-	calls   []Call
+	calls          []Call
+	callsMu        sync.Mutex
+	ttsFailureUsed bool
 }
 
 var _ localaiproto.BackendServer = (*backendServer)(nil)
@@ -390,15 +402,26 @@ func (backend *backendServer) TTS(ctx context.Context, request *localaiproto.TTS
 	if request == nil {
 		request = &localaiproto.TTSRequest{}
 	}
-	call := Call{Method: "TTS", Model: request.GetModel(), Text: request.GetText(), Destination: request.GetDst()}
+	call := Call{Method: "TTS", Model: request.GetModel(), Text: request.GetText(), Voice: request.GetVoice(), Destination: request.GetDst()}
 	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
+	}
+	backend.callsMu.Lock()
+	transientFailure := !backend.ttsFailureUsed &&
+		backend.options.TTSFailureText != "" &&
+		backend.options.TTSFailureText == request.GetText()
+	if transientFailure {
+		backend.ttsFailureUsed = true
+	}
+	backend.callsMu.Unlock()
+	if transientFailure {
+		return nil, status.Error(codes.Unavailable, "localai fixture TTS failure")
 	}
 	if backend.options.Mode == ModeMalformed {
 		return &localaiproto.Result{}, nil
 	}
 	if destination := request.GetDst(); destination != "" {
-		if err := os.WriteFile(destination, AudioBytes(), 0o644); err != nil {
+		if err := os.WriteFile(destination, append([]byte(nil), backend.options.TTSAudio...), 0o644); err != nil {
 			return nil, status.Error(codes.Internal, "localai fixture could not write audio output")
 		}
 	}
@@ -409,13 +432,24 @@ func (backend *backendServer) TTSStream(request *localaiproto.TTSRequest, stream
 	if request == nil {
 		request = &localaiproto.TTSRequest{}
 	}
-	call := Call{Method: "TTSStream", Model: request.GetModel(), Text: request.GetText(), Destination: request.GetDst()}
+	call := Call{Method: "TTSStream", Model: request.GetModel(), Text: request.GetText(), Voice: request.GetVoice(), Destination: request.GetDst()}
 	if err := backend.begin(stream.Context(), call, true); err != nil {
 		return err
 	}
+	backend.callsMu.Lock()
+	transientFailure := !backend.ttsFailureUsed &&
+		backend.options.TTSFailureText != "" &&
+		backend.options.TTSFailureText == request.GetText()
+	if transientFailure {
+		backend.ttsFailureUsed = true
+	}
+	backend.callsMu.Unlock()
+	if transientFailure {
+		return status.Error(codes.Unavailable, "localai fixture TTS failure")
+	}
 	response := &localaiproto.Reply{}
 	if backend.options.Mode != ModeMalformed {
-		response.Audio = AudioBytes()
+		response.Audio = append([]byte(nil), backend.options.TTSAudio...)
 		response.Message = []byte("LOCALAI_FIXTURE_AUDIO")
 	}
 	return stream.Send(response)

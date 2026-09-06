@@ -4,25 +4,35 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
+	localaiproto "github.com/portpowered/infinite-you/tests/functional/internal/support/localai/protocol"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess proves that the
 // generic text input and legacy --text/--output spellings share one request,
-// one readiness projection, and one lease-backed fixture invocation.
+// one readiness projection, and one private raw-protocol fixture invocation.
 func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 	story := setupTTSStory(t)
@@ -30,20 +40,129 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	wantAudio := localai.AudioBytes()
 	runGenericTTS(t, story, wantAudio)
 	runAliasTTS(t, story, wantAudio)
-	assertEquivalentTTSRequests(t, *story.requests)
-	runFailedAndRecoveredTTS(t, story, wantAudio)
+	assertEquivalentTTSRequests(t, story.protocol.Calls(), story.temp.directory)
+	runTTSFailureMatrix(t, story, wantAudio)
+	assertTTSIsolationAndRelease(t, story)
+}
+
+func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	for _, scenario := range []struct {
+		name string
+		text string
+	}{
+		{name: "scenario-a", text: "isolated-a"},
+		{name: "scenario-b", text: "isolated-b"},
+	} {
+		scenario := scenario
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			// The sequential journey above reuses one root process. Parallel
+			// invocations cannot share it: the public command binds the same
+			// customer-visible ~default runtime scope, so each concurrent scenario
+			// owns a process and its mutable lifecycle edges.
+			story := setupTTSStory(t)
+			assertTTSReady(t, story)
+			directory := story.dir
+			outputPath := filepath.Join(directory, scenario.name+".wav")
+			var stdout, stderr bytes.Buffer
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "models", "invoke", "tts", "--operation", "TTS", "--text", scenario.text, "--output", outputPath,
+			})
+			inputs.Input.Env = story.environment
+			inputs.Input.WorkingDirectory = directory
+			inputs.Input.Stdout = &stdout
+			inputs.Input.Stderr = &stderr
+			if err := story.process.Execute(inputs.Input); err != nil {
+				t.Fatalf("Process.Execute(%s) error = %v", scenario.name, err)
+			}
+			got, err := os.ReadFile(outputPath)
+			if err != nil {
+				t.Fatalf("read %s output: %v", scenario.name, err)
+			}
+			want := story.protocol.audioFor(scenario.text)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("%s audio digest = %s, want %s", scenario.name, ttsDigest(got), ttsDigest(want))
+			}
+			assertSemanticTTSAudio(t, got, scenario.name+" output")
+			if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.Len() != 0 {
+				t.Fatalf("%s streams = stdout %q stderr %q, want isolated status-only output", scenario.name, stdout.String(), stderr.String())
+			}
+			if got := story.generic.Calls(); got != 0 {
+				t.Fatalf("%s generic TTS backend calls = %d, want zero", scenario.name, got)
+			}
+			closeRootProcess(t, story.process, "close concurrent TTS root process")
+			created, removed, duplicateRemoves := story.temp.Snapshot()
+			if created != 1 || removed != created || duplicateRemoves != 0 {
+				t.Fatalf("%s TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one isolated one-shot path", scenario.name, created, removed, duplicateRemoves)
+			}
+			starts, stops, waits, active := story.host.Snapshot()
+			if starts == 0 || starts != stops || stops != waits || active != 0 {
+				t.Fatalf("%s host release = starts:%d stops:%d waits:%d active:%d, want exactly-once release", scenario.name, starts, stops, waits, active)
+			}
+			t.Logf("concurrent isolation command: you models invoke tts --operation TTS --text %s --output %s outputSize=%d outputSHA256=%s cache=%s workingDirectory=%s", scenario.text, outputPath, len(got), ttsDigest(got), filepath.Join(story.home, ".agent-factory", "models"), directory)
+		})
+	}
+}
+
+func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
+	t.Parallel()
+	story := setupTTSStory(t)
+	firstContext, cancelFirst := context.WithCancel(t.Context())
+	defer cancelFirst()
+	firstInputs := support.FakeInputs(firstContext, []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "cancelled", "--output", filepath.Join(story.dir, "blocked.wav"),
+	})
+	firstInputs.Input.Env = story.environment
+	firstInputs.Input.WorkingDirectory = story.dir
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- story.process.Execute(firstInputs.Input) }()
+	select {
+	case <-story.protocol.CancellationStarted():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for first default-scope invocation")
+	}
+
+	secondInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "overlap", "--output", filepath.Join(story.dir, "overlap.wav"),
+	})
+	secondInputs.Input.Env = story.environment
+	secondInputs.Input.WorkingDirectory = story.dir
+	secondErr := story.process.Execute(secondInputs.Input)
+	if secondErr == nil || !strings.Contains(secondErr.Error(), "runtime is already bound") {
+		t.Fatalf("overlapping default-scope invocation error = %v, want bounded already-bound lifecycle failure", secondErr)
+	}
+	cancelFirst()
+	if err := <-firstDone; !errors.Is(err, context.Canceled) && !errors.Is(err, models.ErrInferenceCancelled) {
+		t.Fatalf("first default-scope invocation error = %v, want cancellation after overlap characterization", err)
+	}
+	closeRootProcess(t, story.process, "close non-reentrant TTS root process")
+	created, removed, duplicateRemoves := story.temp.Snapshot()
+	if created != removed || duplicateRemoves != 0 {
+		t.Fatalf("non-reentrant TTS staging release = created:%d removed:%d duplicateRemoves:%d, want exactly-once cleanup", created, removed, duplicateRemoves)
+	}
+	starts, stops, waits, active := story.host.Snapshot()
+	if starts != stops || stops != waits || active != 0 {
+		t.Fatalf("non-reentrant host release = starts:%d stops:%d waits:%d active:%d, want no leaked host lifecycle", starts, stops, waits, active)
+	}
+	t.Logf("lifecycle exception evidence: one root.BuildProcess owns customer scope ~default; overlapping Process.Execute returned bounded runtime-already-bound failure, first invocation canceled, temp/host ledgers released exactly once")
 }
 
 type ttsStory struct {
-	process     support.Process
-	dir         string
-	environment []string
-	requests    *[]models.InvokeModelRequest
+	process           support.Process
+	dir               string
+	environment       []string
+	home              string
+	temp              *ttsTempEffects
+	protocol          *ttsPrivateProtocolFixture
+	generic           *ttsGenericBackendTrap
+	host              *ttsHostLauncher
+	outputFailurePath string
 }
 
 func setupTTSStory(t *testing.T) ttsStory {
 	t.Helper()
-	fixture := functionalStartLocalAI(t)
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -54,29 +173,24 @@ func setupTTSStory(t *testing.T) ttsStory {
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
+	ttsTempDirectory := filepath.Join(home, "tts-runtime-temp")
+	if err := os.MkdirAll(ttsTempDirectory, 0o755); err != nil {
+		t.Fatalf("create TTS runtime temp directory: %v", err)
+	}
+	temp := &ttsTempEffects{directory: ttsTempDirectory}
 	writeGenericBuiltinTTSCache(t, home)
 	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	selection := pinnedTTSBackendSelection()
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
-	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-	protocol := &joinedProtocolNegotiator{}
+	hostProtocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-
-	var requests []models.InvokeModelRequest
-	backend := func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
-		requests = append(requests, request)
-		inputs := request.Inputs
-		if len(inputs) == 0 {
-			inputs = []models.InferenceInput{request.Input}
-		}
-		if len(inputs) == 1 && inputs[0].Content == "backend failure" {
-			return nil, nil, errors.New("fixture TTS backend failure")
-		}
-		return fixture.InvocationBackend(ctx, request)
-	}
+	protocol := newTTSPrivateProtocolFixture(localai.AudioBytes())
+	generic := &ttsGenericBackendTrap{}
+	host := &ttsHostLauncher{endpoint: modelServer.URL}
+	outputFailurePath := filepath.Join(dir, "forced-output-failure.wav")
 	process := functionalBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -85,24 +199,38 @@ func setupTTSStory(t *testing.T) ttsStory {
 		ModelAssetResolveEnvironment:   func(string) string { return "" },
 		ModelAssetWriteFile:            assetFiles.WriteFile,
 		ModelAssetRenamePath:           assetFiles.Rename,
-		ModelAssetRemovePath:           assetFiles.Remove,
 		ModelAssetReadFile:             assetFiles.ReadFile,
 		ModelAssetReadDirectory:        assetFiles.ReadDir,
 		ModelAssetCreateFile:           assetFiles.Create,
 		ModelAssetOpenFile:             assetFiles.Open,
-		ModelHostProcessLauncher:       hostLauncher,
-		ModelHostProtocolNegotiator:    protocol,
+		ModelHostProcessLauncher:       host,
+		ModelHostProtocolNegotiator:    hostProtocol,
 		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelInvocationBackend: backend,
-		ModelHostHTTPClient:    modelServer.Client(),
-		ModelRuntimeHTTPClient: modelServer.Client(),
+		ModelInvocationBackend:     generic.Invoke,
+		ModelInvocationGRPCDialer:  protocol,
+		ModelHostHTTPClient:        modelServer.Client(),
+		ModelRuntimeHTTPClient:     modelServer.Client(),
+		ModelRuntimeTempDirectory:  func() string { return temp.directory },
+		ModelRuntimeCreateTempFile: temp.CreateTemp,
+		ModelRuntimeInspectFile:    os.Stat,
+		ModelAssetRemovePath:       temp.Remove,
+		ModelCLIOutputRenamePath: func(oldPath, newPath string) error {
+			if newPath == outputFailurePath {
+				return errors.New("controlled output publication failure")
+			}
+			return os.Rename(oldPath, newPath)
+		},
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close TTS root process") })
-	return ttsStory{process: process, dir: dir, environment: functionalHomeEnvironment(home), requests: &requests}
+	return ttsStory{
+		process: process, dir: dir, environment: functionalHomeEnvironment(home), home: home,
+		temp: temp, protocol: protocol, generic: generic, host: host,
+		outputFailurePath: outputFailurePath,
+	}
 }
 
 func assertTTSReady(t *testing.T, story ttsStory) {
@@ -144,6 +272,7 @@ func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	if !bytes.Equal(genericStdout.Bytes(), wantAudio) {
 		t.Fatalf("generic TTS stdout = %d bytes, want exact fixture audio %d bytes", genericStdout.Len(), len(wantAudio))
 	}
+	assertSemanticTTSAudio(t, genericStdout.Bytes(), "generic stdout")
 	if genericStderr.Len() != 0 {
 		t.Fatalf("generic TTS stderr = %q, want empty", genericStderr.String())
 	}
@@ -172,6 +301,7 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	if !bytes.Equal(aliasAudio, wantAudio) {
 		t.Fatalf("direct TTS alias audio = %d bytes, want exact fixture audio %d bytes", len(aliasAudio), len(wantAudio))
 	}
+	assertSemanticTTSAudio(t, aliasAudio, "legacy output file")
 	if aliasStdout.String() != "Wrote audio: "+aliasPath+"\n" || aliasStderr.Len() != 0 {
 		t.Fatalf("direct TTS alias streams = stdout %q stderr %q, want status-only stdout and empty stderr", aliasStdout.String(), aliasStderr.String())
 	}
@@ -179,40 +309,130 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", aliasStdout.String(), aliasStderr.String(), len(aliasAudio), ttsDigest(aliasAudio))
 }
 
-func runFailedAndRecoveredTTS(t *testing.T, story ttsStory, wantAudio []byte) {
+func runTTSFailureMatrix(t *testing.T, story ttsStory, wantAudio []byte) {
+	t.Helper()
+
+	story.protocol.FailNextDial()
+	runTTSFailure(t, story, "startup unavailable", models.InvocationFailureClassBackendReadiness)
+	runTTSFailure(t, story, "backend unavailable", models.InvocationFailureClassBackendReadiness)
+	runTTSFailure(t, story, "protocol mismatch", models.InvocationFailureClassBackendProtocol)
+	runTTSFailure(t, story, "malformed response", models.InvocationFailureClassMalformedResponse)
+	runTTSFailure(t, story, "oversized response", models.InvocationFailureClassMalformedResponse)
+	runTTSOutputWriteFailure(t, story)
+	runTTSCancellation(t, story)
+	runTTSRecovery(t, story, wantAudio)
+}
+
+func runTTSFailure(
+	t *testing.T,
+	story ttsStory,
+	text string,
+	wantClass models.InvocationFailureClass,
+) {
 	t.Helper()
 	failurePath := filepath.Join(functionalTempDir(t), "failure.wav")
-	var failureStdout, failureStderr bytes.Buffer
-	failureInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "backend failure", "--output", failurePath,
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", text, "--output", failurePath,
 	})
-	failureInputs.Input.Env = story.environment
-	failureInputs.Input.WorkingDirectory = story.dir
-	failureInputs.Input.Stdout = &failureStdout
-	failureInputs.Input.Stderr = &failureStderr
-	failureErr := story.process.Execute(failureInputs.Input)
-	if failureErr == nil {
-		t.Fatal("Process.Execute(failing direct TTS alias) error = nil, want backend failure")
+	inputs.Input.Env = story.environment
+	inputs.Input.WorkingDirectory = story.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	err := story.process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(TTS %q) error = nil, want typed failure", text)
 	}
-	if _, err := os.Stat(failurePath); !os.IsNotExist(err) {
-		t.Fatalf("failed direct TTS output stat error = %v, want no partial file", err)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != wantClass {
+		t.Fatalf("Process.Execute(TTS %q) error = %v failure = %#v, want class %s", text, err, failure, wantClass)
 	}
-	if failureStdout.Len() != 0 {
-		t.Fatalf("failed direct TTS stdout = %q, want empty", failureStdout.String())
+	if _, statErr := os.Stat(failurePath); !os.IsNotExist(statErr) {
+		t.Fatalf("failed TTS %q output stat error = %v, want no partial file", text, statErr)
 	}
-	t.Logf("runtime proof command: you models invoke tts --operation TTS --text backend-failure --output %s", failurePath)
-	t.Logf("runtime proof exitCode=1 stdout=%q stderr=%q error=%q outputExists=false", failureStdout.String(), failureStderr.String(), failureErr.Error())
+	if stdout.Len() != 0 {
+		t.Fatalf("failed TTS %q stdout = %q, want empty", text, stdout.String())
+	}
+	assertRedactedTTSFailure(t, err, stdout.String(), stderr.String(), failurePath, text)
+	t.Logf("runtime proof command: you models invoke tts --operation TTS --text %q --output %s", text, failurePath)
+	t.Logf("runtime proof exitCode=1 failureClass=%s stdout=%q stderr=%q outputExists=false", failure.Class, stdout.String(), stderr.String())
+}
 
+func runTTSOutputWriteFailure(t *testing.T, story ttsStory) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "output failure", "--output", story.outputFailurePath,
+	})
+	inputs.Input.Env = story.environment
+	inputs.Input.WorkingDirectory = story.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	err := story.process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute(TTS output failure) error = nil, want publication failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("TTS output failure stdout = %q, want empty", stdout.String())
+	}
+	if _, statErr := os.Stat(story.outputFailurePath); !os.IsNotExist(statErr) {
+		t.Fatalf("TTS output failure target stat error = %v, want no published file", statErr)
+	}
+	assertRedactedTTSFailure(t, err, stdout.String(), stderr.String(), story.outputFailurePath, "output failure")
+	t.Logf("runtime proof command: you models invoke tts --operation TTS --text %q --output %s", "output failure", story.outputFailurePath)
+	t.Logf("runtime proof exitCode=1 stdout=%q stderr=%q outputExists=false error=%q", stdout.String(), stderr.String(), err.Error())
+}
+
+func runTTSCancellation(t *testing.T, story ttsStory) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	failurePath := filepath.Join(functionalTempDir(t), "cancelled.wav")
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "cancelled", "--output", failurePath,
+	})
+	inputs.Input.Env = story.environment
+	inputs.Input.WorkingDirectory = story.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	done := make(chan error, 1)
+	go func() { done <- story.process.Execute(inputs.Input) }()
+	select {
+	case <-story.protocol.CancellationStarted():
+		cancel()
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the raw TTS edge to observe cancellation readiness")
+	}
+	err := <-done
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, models.ErrInferenceCancelled) {
+		t.Fatalf("cancelled TTS error = %v, want context cancellation", err)
+	}
+	select {
+	case <-story.protocol.CancellationObserved():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for raw TTS edge cancellation observation")
+	}
+	if _, statErr := os.Stat(failurePath); !os.IsNotExist(statErr) || stdout.Len() != 0 {
+		t.Fatalf("cancelled TTS left output or stdout: output=%v stdout=%q", statErr, stdout.String())
+	}
+	assertRedactedTTSFailure(t, err, stdout.String(), stderr.String(), failurePath, "")
+	t.Logf("runtime proof command: you models invoke tts --operation TTS --text cancelled --output %s", failurePath)
+	t.Logf("runtime proof exitCode=1 cancellationObserved=true stdout=%q stderr=%q outputExists=false", stdout.String(), stderr.String())
+}
+
+func runTTSRecovery(t *testing.T, story ttsStory, wantAudio []byte) {
+	t.Helper()
 	recoveryPath := filepath.Join(functionalTempDir(t), "recovery.wav")
-	var recoveryStdout, recoveryStderr bytes.Buffer
-	recoveryInputs := support.FakeInputs(t.Context(), []string{
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "after failure", "--output", recoveryPath,
 	})
-	recoveryInputs.Input.Env = story.environment
-	recoveryInputs.Input.WorkingDirectory = story.dir
-	recoveryInputs.Input.Stdout = &recoveryStdout
-	recoveryInputs.Input.Stderr = &recoveryStderr
-	if err := story.process.Execute(recoveryInputs.Input); err != nil {
+	inputs.Input.Env = story.environment
+	inputs.Input.WorkingDirectory = story.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	if err := story.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(recovered direct TTS alias) error = %v", err)
 	}
 	recoveryAudio, err := os.ReadFile(recoveryPath)
@@ -222,11 +442,33 @@ func runFailedAndRecoveredTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	if !bytes.Equal(recoveryAudio, wantAudio) {
 		t.Fatalf("recovered direct TTS audio = %d bytes, want exact fixture audio %d bytes", len(recoveryAudio), len(wantAudio))
 	}
-	t.Logf("runtime proof command: you models invoke tts --operation TTS --text after-failure --output %s", recoveryPath)
-	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", recoveryStdout.String(), recoveryStderr.String(), len(recoveryAudio), ttsDigest(recoveryAudio))
-	if len(*story.requests) != 4 {
-		t.Fatalf("fixture-backed TTS request count = %d, want generic, alias, failure, recovery", len(*story.requests))
+	assertSemanticTTSAudio(t, recoveryAudio, "recovered output file")
+	if stdout.String() != "Wrote audio: "+recoveryPath+"\n" || stderr.Len() != 0 {
+		t.Fatalf("recovered direct TTS streams = stdout %q stderr %q, want status-only stdout and empty stderr", stdout.String(), stderr.String())
 	}
+	t.Logf("runtime proof command: you models invoke tts --operation TTS --text after-failure --output %s", recoveryPath)
+	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", stdout.String(), stderr.String(), len(recoveryAudio), ttsDigest(recoveryAudio))
+}
+
+func assertTTSIsolationAndRelease(t *testing.T, story ttsStory) {
+	t.Helper()
+	if got := story.generic.Calls(); got != 0 {
+		t.Fatalf("generic TTS backend calls = %d, want zero private-route fallback calls", got)
+	}
+	closeRootProcess(t, story.process, "close TTS root process for release proof")
+	created, removed, duplicateRemoves := story.temp.Snapshot()
+	if created == 0 || created != removed || duplicateRemoves != 0 {
+		t.Fatalf("TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one removal per staged path", created, removed, duplicateRemoves)
+	}
+	starts, stops, waits, active := story.host.Snapshot()
+	if starts == 0 || starts != stops || stops != waits || active != 0 {
+		t.Fatalf("TTS host release = starts:%d stops:%d waits:%d active:%d, want exactly-once stop/wait and no active host", starts, stops, waits, active)
+	}
+	dials, invokes, closes, doubleCloses := story.protocol.Snapshot()
+	if invokes == 0 || invokes != closes || doubleCloses != 0 {
+		t.Fatalf("TTS protocol release = dials:%d invokes:%d closes:%d doubleCloses:%d, want exactly one close per invoked connection", dials, invokes, closes, doubleCloses)
+	}
+	t.Logf("functional evidence platform=%s root=BuildProcess stateHome=%s cacheState=%s tempState=%s network=asset-rejected/raw-local-edge budgets={modelBytes:0,realCalls:0,retries:0} fixture=private-raw-protobuf method=/backend.Backend/TTS dials=%d invokes=%d closes=%d hostStarts=%d hostStops=%d hostWaits=%d tempCreated=%d tempRemoved=%d genericFallbackCalls=%d", runtime.GOOS, story.home, filepath.Join(story.home, ".agent-factory", "models"), story.temp.directory, dials, invokes, closes, starts, stops, waits, created, removed, story.generic.Calls())
 }
 
 func ttsDigest(data []byte) string {
@@ -234,23 +476,373 @@ func ttsDigest(data []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func assertEquivalentTTSRequests(t *testing.T, requests []models.InvokeModelRequest) {
+func assertEquivalentTTSRequests(t *testing.T, requests []ttsProtocolCall, tempDirectory string) {
 	t.Helper()
 	if len(requests) != 2 {
 		t.Fatalf("TTS requests = %d, want generic and alias", len(requests))
 	}
 	for index, request := range requests {
-		if request.Model.NameOrURI != models.BuiltInModelNameTTS || request.Operation != models.OperationTTS || len(request.Inputs) != 1 {
-			t.Fatalf("TTS request[%d] = %#v, want tts/TTS with one input", index, request)
+		if request.Method != "/backend.Backend/TTS" || request.Model != models.BuiltInModelNameTTS || request.Text != "hello" {
+			t.Fatalf("raw TTS request[%d] = %#v, want pinned method/model/text", index, request)
 		}
-		input := request.Inputs[0]
-		if input.Name != "text" || input.Modality != models.ModalityText || input.ContentType != "text/plain" || input.MediaType != "text/plain" || input.Content != "hello" {
-			t.Fatalf("TTS request[%d] input = %#v, want canonical named text input", index, input)
+		if request.Destination == "" || filepath.Dir(request.Destination) != tempDirectory {
+			t.Fatalf("raw TTS request[%d] destination = %q, want isolated temp directory %q", index, request.Destination, tempDirectory)
 		}
 	}
-	if requests[0].Model != requests[1].Model || requests[0].Operation != requests[1].Operation || requests[0].Inputs[0] != requests[1].Inputs[0] {
+	if requests[0].Model != requests[1].Model || requests[0].Text != requests[1].Text || requests[0].Destination == requests[1].Destination {
 		t.Fatalf("generic and alias TTS requests differ:\ngeneric=%#v\nalias=%#v", requests[0], requests[1])
 	}
+	t.Logf("request baseline generic_alias=equivalent method=%q model=%q text=%q destinations=isolated-and-unique", requests[0].Method, requests[0].Model, requests[0].Text)
+}
+
+type ttsProtocolCall struct {
+	Method      string
+	Endpoint    string
+	Model       string
+	Text        string
+	Destination string
+}
+
+type ttsPrivateProtocolFixture struct {
+	mu                sync.Mutex
+	audio             []byte
+	calls             []ttsProtocolCall
+	dials             int
+	invokes           int
+	closes            int
+	doubleCloses      int
+	failNextDial      bool
+	cancelStarted     chan struct{}
+	cancelObserved    chan struct{}
+	cancelStartOnce   sync.Once
+	cancelObserveOnce sync.Once
+}
+
+func newTTSPrivateProtocolFixture(audio []byte) *ttsPrivateProtocolFixture {
+	return &ttsPrivateProtocolFixture{
+		audio:          append([]byte(nil), audio...),
+		cancelStarted:  make(chan struct{}),
+		cancelObserved: make(chan struct{}),
+	}
+}
+
+func (fixture *ttsPrivateProtocolFixture) FailNextDial() {
+	fixture.mu.Lock()
+	fixture.failNextDial = true
+	fixture.mu.Unlock()
+}
+
+func (fixture *ttsPrivateProtocolFixture) Dial(_ context.Context, endpoint string) (platformgrpc.Connection, error) {
+	fixture.mu.Lock()
+	fixture.dials++
+	fail := fixture.failNextDial
+	fixture.failNextDial = false
+	fixture.mu.Unlock()
+	if fail {
+		return nil, status.Error(codes.Unavailable, "fixture-secret endpoint unavailable")
+	}
+	return &ttsPrivateProtocolConnection{fixture: fixture, endpoint: endpoint}, nil
+}
+
+func (fixture *ttsPrivateProtocolFixture) recordCall(call ttsProtocolCall) {
+	fixture.mu.Lock()
+	fixture.calls = append(fixture.calls, call)
+	fixture.invokes++
+	fixture.mu.Unlock()
+}
+
+func (fixture *ttsPrivateProtocolFixture) Calls() []ttsProtocolCall {
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	return append([]ttsProtocolCall(nil), fixture.calls...)
+}
+
+func (fixture *ttsPrivateProtocolFixture) CancellationStarted() <-chan struct{} {
+	return fixture.cancelStarted
+}
+
+func (fixture *ttsPrivateProtocolFixture) CancellationObserved() <-chan struct{} {
+	return fixture.cancelObserved
+}
+
+func (fixture *ttsPrivateProtocolFixture) Snapshot() (dials, invokes, closes, doubleCloses int) {
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	return fixture.dials, fixture.invokes, fixture.closes, fixture.doubleCloses
+}
+
+type ttsPrivateProtocolConnection struct {
+	fixture  *ttsPrivateProtocolFixture
+	endpoint string
+	closed   bool
+}
+
+func (connection *ttsPrivateProtocolConnection) Invoke(
+	ctx context.Context,
+	method string,
+	payload []byte,
+) ([]byte, error) {
+	if method != "/backend.Backend/TTS" {
+		return nil, status.Error(codes.Unimplemented, "fixture-secret unexpected method")
+	}
+	request := &localaiproto.TTSRequest{}
+	if err := proto.Unmarshal(payload, request); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "fixture-secret malformed request")
+	}
+	connection.fixture.recordCall(ttsProtocolCall{
+		Method: method, Endpoint: connection.endpoint, Model: request.GetModel(),
+		Text: request.GetText(), Destination: request.GetDst(),
+	})
+	switch strings.TrimSpace(request.GetText()) {
+	case "backend unavailable":
+		return nil, status.Error(codes.Unavailable, "fixture-secret prompt=backend unavailable")
+	case "protocol mismatch":
+		return nil, status.Error(codes.FailedPrecondition, "fixture-secret protocol mismatch")
+	case "malformed response":
+		return []byte{0xff, 0x00, 0x7f}, nil
+	case "oversized response":
+		audio := make([]byte, (16<<20)+1)
+		if err := os.WriteFile(request.GetDst(), audio, 0o600); err != nil {
+			return nil, fmt.Errorf("fixture-secret output write failed: %w", err)
+		}
+		return proto.Marshal(&localaiproto.Result{Success: true})
+	case "cancelled":
+		connection.fixture.cancelStartOnce.Do(func() { close(connection.fixture.cancelStarted) })
+		select {
+		case <-ctx.Done():
+			connection.fixture.cancelObserveOnce.Do(func() { close(connection.fixture.cancelObserved) })
+			return nil, ctx.Err()
+		}
+	}
+	audio := connection.fixture.audioFor(request.GetText())
+	if err := os.WriteFile(request.GetDst(), audio, 0o600); err != nil {
+		return nil, fmt.Errorf("fixture-secret output write failed: %w", err)
+	}
+	return proto.Marshal(&localaiproto.Result{Message: "fixture audio written", Success: true})
+}
+
+func (connection *ttsPrivateProtocolConnection) Close() error {
+	connection.fixture.mu.Lock()
+	connection.fixture.closes++
+	if connection.closed {
+		connection.fixture.doubleCloses++
+	}
+	connection.closed = true
+	connection.fixture.mu.Unlock()
+	return nil
+}
+
+func (fixture *ttsPrivateProtocolFixture) audioFor(text string) []byte {
+	audio := append([]byte(nil), fixture.audio...)
+	if len(audio) >= 46 {
+		switch text {
+		case "isolated-a":
+			audio[44], audio[45] = 0x11, 0x22
+		case "isolated-b":
+			audio[44], audio[45] = 0x33, 0x44
+		}
+	}
+	return audio
+}
+
+type ttsGenericBackendTrap struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (trap *ttsGenericBackendTrap) Invoke(
+	context.Context,
+	models.InvokeModelRequest,
+) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	trap.mu.Lock()
+	trap.calls++
+	trap.mu.Unlock()
+	return nil, nil, errors.New("generic TTS fallback trap invoked")
+}
+
+func (trap *ttsGenericBackendTrap) Calls() int {
+	trap.mu.Lock()
+	defer trap.mu.Unlock()
+	return trap.calls
+}
+
+type ttsTempEffects struct {
+	directory  string
+	mu         sync.Mutex
+	created    map[string]struct{}
+	removed    []string
+	duplicates int
+}
+
+func (effects *ttsTempEffects) CreateTemp(
+	directory string,
+	pattern string,
+) (interface {
+	Close() error
+	Name() string
+}, error) {
+	temporary, err := os.CreateTemp(directory, pattern)
+	if err == nil && strings.Contains(pattern, ".you-model-tts-") {
+		effects.mu.Lock()
+		if effects.created == nil {
+			effects.created = make(map[string]struct{})
+		}
+		effects.created[temporary.Name()] = struct{}{}
+		effects.mu.Unlock()
+	}
+	return temporary, err
+}
+
+func (effects *ttsTempEffects) Remove(path string) error {
+	effects.mu.Lock()
+	if _, ok := effects.created[path]; ok {
+		for _, removed := range effects.removed {
+			if removed == path {
+				effects.duplicates++
+				break
+			}
+		}
+		effects.removed = append(effects.removed, path)
+	}
+	effects.mu.Unlock()
+	return os.Remove(path)
+}
+
+func (effects *ttsTempEffects) Snapshot() (created, removed, duplicates int) {
+	effects.mu.Lock()
+	defer effects.mu.Unlock()
+	return len(effects.created), len(effects.removed), effects.duplicates
+}
+
+type ttsHostLauncher struct {
+	mu       sync.Mutex
+	endpoint string
+	starts   int
+	stops    int
+	waits    int
+	active   int
+}
+
+func (launcher *ttsHostLauncher) Start(
+	context.Context,
+	serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
+	launcher.mu.Lock()
+	launcher.starts++
+	launcher.active++
+	endpoint := launcher.endpoint
+	launcher.mu.Unlock()
+	return &ttsHostProcess{launcher: launcher, endpoint: endpoint, stopped: make(chan struct{})}, nil
+}
+
+func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.starts, launcher.stops, launcher.waits, launcher.active
+}
+
+type ttsHostProcess struct {
+	launcher *ttsHostLauncher
+	endpoint string
+	stopped  chan struct{}
+	once     sync.Once
+}
+
+func (process *ttsHostProcess) HealthEndpoint() string { return process.endpoint }
+
+func (process *ttsHostProcess) Wait() error {
+	process.launcher.mu.Lock()
+	process.launcher.waits++
+	process.launcher.mu.Unlock()
+	<-process.stopped
+	return nil
+}
+
+func (process *ttsHostProcess) Stop(context.Context) error {
+	process.once.Do(func() {
+		process.launcher.mu.Lock()
+		process.launcher.stops++
+		process.launcher.active--
+		process.launcher.mu.Unlock()
+		close(process.stopped)
+	})
+	return nil
+}
+
+func assertRedactedTTSFailure(
+	t *testing.T,
+	err error,
+	stdout string,
+	stderr string,
+	destination string,
+	prompt string,
+) {
+	t.Helper()
+	haystack := strings.Join([]string{err.Error(), stdout, stderr}, "\n")
+	for _, secret := range []string{"fixture-secret", "prompt=", "raw-audio"} {
+		if strings.Contains(haystack, secret) {
+			t.Fatalf("TTS failure leaked %q: %q", secret, haystack)
+		}
+	}
+	if destination != "" && strings.Contains(haystack, destination) {
+		t.Fatalf("TTS failure leaked staged/output path %q: %q", destination, haystack)
+	}
+	if prompt != "" && strings.Contains(err.Error(), prompt) {
+		t.Fatalf("TTS failure leaked prompt %q: %q", prompt, err.Error())
+	}
+}
+
+func assertSemanticTTSAudio(t *testing.T, audio []byte, label string) {
+	t.Helper()
+	const (
+		wavHeaderSize  = 44
+		pcmFormat      = 1
+		monoChannels   = 1
+		bitsPerSample  = 16
+		minimumSamples = 1
+	)
+	if len(audio) < wavHeaderSize {
+		t.Fatalf("%s audio length = %d, want at least %d-byte WAV header", label, len(audio), wavHeaderSize)
+	}
+	if string(audio[0:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[12:16]) != "fmt " || string(audio[36:40]) != "data" {
+		t.Fatalf("%s audio has invalid RIFF/WAVE PCM chunk markers", label)
+	}
+	if got := uint64(binary.LittleEndian.Uint32(audio[4:8])) + 8; got != uint64(len(audio)) {
+		t.Fatalf("%s RIFF size = %d, want payload length %d", label, got, len(audio))
+	}
+	if got := binary.LittleEndian.Uint32(audio[16:20]); got != 16 {
+		t.Fatalf("%s fmt chunk size = %d, want PCM fmt size 16", label, got)
+	}
+	if got := binary.LittleEndian.Uint16(audio[20:22]); got != pcmFormat {
+		t.Fatalf("%s audio format = %d, want PCM format %d", label, got, pcmFormat)
+	}
+	channels := binary.LittleEndian.Uint16(audio[22:24])
+	if channels != monoChannels {
+		t.Fatalf("%s channels = %d, want %d", label, channels, monoChannels)
+	}
+	sampleRate := binary.LittleEndian.Uint32(audio[24:28])
+	byteRate := binary.LittleEndian.Uint32(audio[28:32])
+	blockAlign := binary.LittleEndian.Uint16(audio[32:34])
+	bits := binary.LittleEndian.Uint16(audio[34:36])
+	if sampleRate == 0 || blockAlign == 0 || bits != bitsPerSample {
+		t.Fatalf("%s PCM format = sampleRate:%d blockAlign:%d bits:%d, want nonzero/16-bit PCM", label, sampleRate, blockAlign, bits)
+	}
+	if want := sampleRate * uint32(blockAlign); byteRate != want {
+		t.Fatalf("%s byte rate = %d, want %d from sample rate and block alignment", label, byteRate, want)
+	}
+	dataSize := binary.LittleEndian.Uint32(audio[40:44])
+	if uint64(dataSize)+wavHeaderSize != uint64(len(audio)) || dataSize < minimumSamples*uint32(blockAlign) || dataSize%uint32(blockAlign) != 0 {
+		t.Fatalf("%s data chunk size = %d, want aligned nonempty payload for %d-byte samples", label, dataSize, blockAlign)
+	}
+	duration := time.Second * time.Duration(dataSize/uint32(blockAlign)) / time.Duration(sampleRate)
+	if duration <= 0 {
+		t.Fatalf("%s duration = %s, want nonzero duration", label, duration)
+	}
+	t.Logf("semantic audio baseline label=%s mediaType=audio/wav codec=PCM channels=%d sampleRate=%d bits=%d bytes=%d sha256=%s duration=%s", label, channels, sampleRate, bits, len(audio), ttsDigest(audio), duration)
 }
 
 func jsonUnmarshalFunctional(data string, target any) error {

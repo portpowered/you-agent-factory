@@ -245,11 +245,15 @@ func TestInferenceRuntimeRoutesOmniBeforeGenericBackend(t *testing.T) {
 		Request:   models.InvokeModelRequest{Scope: scope, Holder: "routing-test", Model: models.ModelReference{NameOrURI: "tts"}, Operation: models.OperationTTS, Inputs: []models.InferenceInput{{Name: "text", Modality: models.ModalityText, Content: "speak"}}},
 		Operation: tts,
 	})
-	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "generic answer" {
-		t.Fatalf("generic route = result:%#v error:%v", result, err)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration || !errors.Is(err, models.ErrUnavailable) {
+		t.Fatalf("TTS route = result:%#v error:%v failure:%#v, want fail-closed configuration failure", result, err, failure)
 	}
-	if genericCalls != 1 {
-		t.Fatalf("generic calls = %d, want 1", genericCalls)
+	if len(result.Content) != 0 || len(result.Artifacts) != 0 {
+		t.Fatalf("TTS route = result:%#v, want no output", result)
+	}
+	if genericCalls != 0 {
+		t.Fatalf("generic calls after TTS = %d, want 0", genericCalls)
 	}
 }
 

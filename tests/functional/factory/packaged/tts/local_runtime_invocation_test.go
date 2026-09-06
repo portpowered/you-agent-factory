@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
 // TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText proves the
@@ -45,7 +46,8 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	}))
 	t.Cleanup(modelServer.Close)
 	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
-	launcher := &packagedTTSModelHostLauncher{endpoint: modelServer.URL}
+	privateFixture := localai.Start(t)
+	launcher := &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()}
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedTTSFactoryName,
@@ -92,20 +94,17 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	if response.RequestId == "" || response.TraceId == "" {
 		t.Fatalf("local TTS invocation identity = request %q trace %q, want non-empty values", response.RequestId, response.TraceId)
 	}
-	if backend.CallCount() != 1 {
-		t.Fatalf("Models TTS invocation count = %d, want one local-runtime attempt", backend.CallCount())
+	if backend.CallCount() != 0 {
+		t.Fatalf("generic Models TTS invocation count = %d, want zero private-route fallback calls", backend.CallCount())
 	}
 
-	request := backend.LastRequest(t)
-	if request.Operation != models.OperationTTS || request.Model.NameOrURI != factorydefinitions.DefaultTTSModelName {
-		t.Fatalf("joined TTS request identity = %#v, want TTS/%s", request, factorydefinitions.DefaultTTSModelName)
-	}
-	if len(request.Inputs) != 1 || request.Inputs[0].Name != "text" || request.Inputs[0].Content != text {
-		t.Fatalf("joined TTS text input = %#v, want one exact text input %q", request.Inputs, text)
-	}
 	audio := packagedTTSPrimaryAudio(t, response.PrimaryResult)
-	if string(audio) != packagedTTSFakeAudioFixture {
-		t.Fatalf("joined audio Work = %q; want fixture", audio)
+	if string(audio) != string(localai.AudioBytes()) {
+		t.Fatalf("joined audio Work = %d bytes; want semantic LocalAI fixture audio", len(audio))
+	}
+	ttsCalls := privateFixture.Calls()
+	if len(ttsCalls) != 1 || ttsCalls[0].Method != "TTS" || ttsCalls[0].Text != text {
+		t.Fatalf("private TTS calls = %#v, want one exact text request", ttsCalls)
 	}
 }
 

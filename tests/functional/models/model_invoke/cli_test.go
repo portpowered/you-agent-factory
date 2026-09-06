@@ -20,6 +20,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
@@ -38,7 +39,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
 	var backendRequests []models.InvokeModelRequest
-	boundaries := newProcessTTSBoundaries(home, modelServer, func(
+	boundaries := newProcessTTSBoundaries(home, modelServer, fixture, func(
 		ctx context.Context,
 		request models.InvokeModelRequest,
 	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
@@ -99,13 +100,12 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	if diagnostics.Len() != 0 {
 		t.Fatalf("models invoke stderr = %q, want empty", diagnostics.String())
 	}
-	if len(backendRequests) != 1 {
-		t.Fatalf("backend invocation count = %d, want only the file invocation", len(backendRequests))
+	if len(backendRequests) != 0 {
+		t.Fatalf("generic backend invocation count = %d, want zero private-route fallback calls", len(backendRequests))
 	}
-	request := backendRequests[0]
-	if request.ModelName != "tts" || request.Operation != models.OperationTTS ||
-		len(request.Inputs) != 1 || request.Inputs[0].Content != "write audio from the process" {
-		t.Fatalf("backend TTS request = %#v, want canonical tts/TTS text request", request)
+	ttsCalls := fixture.Calls()
+	if len(ttsCalls) != 1 || ttsCalls[0].Method != "TTS" || ttsCalls[0].Model != "tts" || ttsCalls[0].Text != "write audio from the process" {
+		t.Fatalf("private TTS calls = %#v, want one canonical tts/TTS text request", ttsCalls)
 	}
 
 	wantAudio := localai.AudioBytes()
@@ -168,13 +168,13 @@ func TestProcessLegacyModelsInvokeMissingFactoryLayoutReportsFailure(t *testing.
 func TestProcessLegacyNamedModelInvokeUsesInvocationOperation(t *testing.T) {
 	t.Parallel()
 
-	audio := []byte("RIFF....WAVE")
+	audio := localai.AudioBytes()
 	modelServer := processLegacyModelServer(t, audio)
 	home := t.TempDir()
 	writeReadyOmniVoiceCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	factoryDir := support.ScaffoldFactory(t, legacyModelFactoryConfig(modelServer.URL))
-	boundaries := newProcessTTSBoundaries(home, modelServer, nil)
+	boundaries := newProcessTTSBoundaries(home, modelServer, nil, nil)
 	process, err := root.BuildProcess(context.Background(), boundaries.edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -223,26 +223,18 @@ func executeLegacyModelTTS(
 func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testing.T) {
 	t.Parallel()
 
-	fixture := localai.Start(t)
+	fixture := localai.Start(t, localai.Options{TTSFailureText: "failed invocation"})
 	modelServer := processModelHealthServer(t)
 	home := t.TempDir()
 	writeGenericBuiltinTTSCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	var backendMu sync.Mutex
-	failBackend := false
 	backendInvocations := 0
-	boundaries := newProcessTTSBoundaries(home, modelServer, func(
+	boundaries := newProcessTTSBoundaries(home, modelServer, fixture, func(
 		ctx context.Context,
 		request models.InvokeModelRequest,
 	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
-		backendMu.Lock()
 		backendInvocations++
-		shouldFail := failBackend
-		backendMu.Unlock()
-		if shouldFail {
-			return nil, nil, errors.New("deterministic TTS backend failure")
-		}
 		return fixture.InvocationBackend(ctx, request)
 	})
 	process, err := root.BuildProcess(context.Background(), boundaries.edges)
@@ -269,9 +261,6 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	}
 	assertSuccessfulProcessTTS(t, stdout, stderr, secondAudioPath, localai.AudioBytes())
 
-	backendMu.Lock()
-	failBackend = true
-	backendMu.Unlock()
 	failedAudioPath := filepath.Join(t.TempDir(), "failed.wav")
 	stdout, stderr, err = executeProcessTTS(t, process, home, factoryDir, failedAudioPath, "failed invocation")
 	if err == nil {
@@ -280,14 +269,17 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	if stdout != "" {
 		t.Fatalf("failed models invoke stdout = %q, want empty", stdout)
 	}
-	support.RequireSafeCLIDiagnostic(t, stderr)
+	var diagnostic factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal([]byte(stderr), &diagnostic); decodeErr != nil {
+		t.Fatalf("decode failed models invoke diagnostic: %v\nstderr=%q", decodeErr, stderr)
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_BACKEND_NOT_READY") || diagnostic.Message != "TTS backend is unavailable" {
+		t.Fatalf("failed models invoke diagnostic = %#v, want typed backend-readiness response", diagnostic)
+	}
 	if _, statErr := os.Stat(failedAudioPath); !os.IsNotExist(statErr) {
 		t.Fatalf("failed models invoke artifact stat error = %v, want no customer audio artifact", statErr)
 	}
 
-	backendMu.Lock()
-	failBackend = false
-	backendMu.Unlock()
 	finalAudioPath := filepath.Join(t.TempDir(), "after-failure.wav")
 	stdout, stderr, err = executeProcessTTS(t, process, home, factoryDir, finalAudioPath, "follow-up after failure")
 	if err != nil {
@@ -295,11 +287,12 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	}
 	assertSuccessfulProcessTTS(t, stdout, stderr, finalAudioPath, localai.AudioBytes())
 
-	backendMu.Lock()
-	gotBackendInvocations := backendInvocations
-	backendMu.Unlock()
-	if gotBackendInvocations != 4 {
-		t.Fatalf("backend invocation count = %d, want four success/success/failure/success attempts", gotBackendInvocations)
+	if backendInvocations != 0 {
+		t.Fatalf("generic backend invocation count = %d, want zero private-route fallback calls", backendInvocations)
+	}
+	ttsCalls := fixture.Calls()
+	if len(ttsCalls) != 4 {
+		t.Fatalf("private TTS invocation count = %d, want four success/success/failure/success attempts", len(ttsCalls))
 	}
 }
 
@@ -363,11 +356,16 @@ type processTTSBoundaries struct {
 func newProcessTTSBoundaries(
 	home string,
 	modelServer *httptest.Server,
+	privateFixture *localai.Fixture,
 	backend serviceedges.ModelInvocationBackend,
 ) processTTSBoundaries {
 	assetFiles := processModelAssetFileSystem{home: home}
 	assetNetwork := &processRejectingAssetHTTP{}
-	launcher := &processModelLauncher{endpoint: modelServer.URL}
+	launcherEndpoint := modelServer.URL
+	if privateFixture != nil {
+		launcherEndpoint = privateFixture.Endpoint()
+	}
+	launcher := &processModelLauncher{endpoint: launcherEndpoint}
 	protocol := &processProtocolNegotiator{}
 	compatibility := &processCompatibilityChecker{}
 	hostHTTP := &processRecordingHTTPClient{delegate: modelServer.Client()}
