@@ -59,6 +59,7 @@ type Options struct {
 	Mode                Mode
 	EmbeddingDimensions int
 	TTSAudio            []byte
+	TTSFailureText      string
 }
 
 // FixtureOptions is the descriptive alias used by callers that prefer the
@@ -116,7 +117,9 @@ func New(options Options) (*Fixture, error) {
 	fixture.backend = &backendServer{options: options}
 	fixture.server = grpc.NewServer()
 	localaiproto.RegisterBackendServer(fixture.server, fixture.backend)
-	localaiproto.RegisterBackendServerAtProductionPath(fixture.server, fixture.backend)
+	productionServiceDescription := localaiproto.Backend_ServiceDesc
+	productionServiceDescription.ServiceName = "backend.Backend"
+	fixture.server.RegisterService(&productionServiceDescription, fixture.backend)
 	go fixture.serve()
 	<-fixture.serveReady
 	return fixture, nil
@@ -206,17 +209,6 @@ func (fixture *Fixture) Calls() []Call {
 	return fixture.backend.callsSnapshot()
 }
 
-// FailNextTTS makes exactly one subsequent TTS request return an unavailable
-// backend result. It is scenario-owned fault injection for recovery tests.
-func (fixture *Fixture) FailNextTTS() {
-	if fixture == nil || fixture.backend == nil {
-		return
-	}
-	fixture.backend.callsMu.Lock()
-	fixture.backend.failNextTTS = true
-	fixture.backend.callsMu.Unlock()
-}
-
 // ExpectedOmniText returns the exact deterministic text emitted by Predict.
 // It deliberately includes indexed repeated media so callers can assert that
 // order was preserved across the managed backend boundary.
@@ -285,9 +277,9 @@ type backendServer struct {
 	localaiproto.UnimplementedBackendServer
 	options Options
 
-	callsMu     sync.Mutex
-	calls       []Call
-	failNextTTS bool
+	calls          []Call
+	callsMu        sync.Mutex
+	ttsFailureUsed bool
 }
 
 var _ localaiproto.BackendServer = (*backendServer)(nil)
@@ -303,20 +295,6 @@ func (backend *backendServer) callsSnapshot() []Call {
 		calls[index].Videos = append([]string(nil), call.Videos...)
 	}
 	return calls
-}
-
-func (backend *backendServer) consumeTTSFailure() bool {
-	backend.callsMu.Lock()
-	defer backend.callsMu.Unlock()
-	if !backend.failNextTTS {
-		return false
-	}
-	backend.failNextTTS = false
-	return true
-}
-
-func (backend *backendServer) ttsAudio() []byte {
-	return append([]byte(nil), backend.options.TTSAudio...)
 }
 
 func (backend *backendServer) begin(ctx context.Context, call Call, failMode bool) error {
@@ -428,14 +406,22 @@ func (backend *backendServer) TTS(ctx context.Context, request *localaiproto.TTS
 	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
-	if backend.consumeTTSFailure() {
+	backend.callsMu.Lock()
+	transientFailure := !backend.ttsFailureUsed &&
+		backend.options.TTSFailureText != "" &&
+		backend.options.TTSFailureText == request.GetText()
+	if transientFailure {
+		backend.ttsFailureUsed = true
+	}
+	backend.callsMu.Unlock()
+	if transientFailure {
 		return nil, status.Error(codes.Unavailable, "localai fixture TTS failure")
 	}
 	if backend.options.Mode == ModeMalformed {
 		return &localaiproto.Result{}, nil
 	}
 	if destination := request.GetDst(); destination != "" {
-		if err := os.WriteFile(destination, backend.ttsAudio(), 0o644); err != nil {
+		if err := os.WriteFile(destination, append([]byte(nil), backend.options.TTSAudio...), 0o644); err != nil {
 			return nil, status.Error(codes.Internal, "localai fixture could not write audio output")
 		}
 	}
@@ -450,12 +436,20 @@ func (backend *backendServer) TTSStream(request *localaiproto.TTSRequest, stream
 	if err := backend.begin(stream.Context(), call, true); err != nil {
 		return err
 	}
-	if backend.consumeTTSFailure() {
+	backend.callsMu.Lock()
+	transientFailure := !backend.ttsFailureUsed &&
+		backend.options.TTSFailureText != "" &&
+		backend.options.TTSFailureText == request.GetText()
+	if transientFailure {
+		backend.ttsFailureUsed = true
+	}
+	backend.callsMu.Unlock()
+	if transientFailure {
 		return status.Error(codes.Unavailable, "localai fixture TTS failure")
 	}
 	response := &localaiproto.Reply{}
 	if backend.options.Mode != ModeMalformed {
-		response.Audio = backend.ttsAudio()
+		response.Audio = append([]byte(nil), backend.options.TTSAudio...)
 		response.Message = []byte("LOCALAI_FIXTURE_AUDIO")
 	}
 	return stream.Send(response)

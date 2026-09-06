@@ -223,7 +223,7 @@ func executeLegacyModelTTS(
 func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testing.T) {
 	t.Parallel()
 
-	fixture := localai.Start(t)
+	fixture := localai.Start(t, localai.Options{TTSFailureText: "failed invocation"})
 	modelServer := processModelHealthServer(t)
 	home := t.TempDir()
 	writeGenericBuiltinTTSCache(t, home)
@@ -261,7 +261,6 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	}
 	assertSuccessfulProcessTTS(t, stdout, stderr, secondAudioPath, localai.AudioBytes())
 
-	fixture.FailNextTTS()
 	failedAudioPath := filepath.Join(t.TempDir(), "failed.wav")
 	stdout, stderr, err = executeProcessTTS(t, process, home, factoryDir, failedAudioPath, "failed invocation")
 	if err == nil {

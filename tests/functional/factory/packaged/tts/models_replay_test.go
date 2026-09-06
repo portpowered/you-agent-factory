@@ -716,9 +716,6 @@ func runManagedFactoryTTSRecording(
 	t.Helper()
 
 	fixture.backend.Reset(nil)
-	if failure != nil {
-		fixture.privateFixture.FailNextTTS()
-	}
 	homeDir, dir, cacheDir := fixture.newRecordingPaths(t)
 	artifactPath := filepath.Join(t.TempDir(), "managed-tts-recording.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{

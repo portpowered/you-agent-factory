@@ -33,6 +33,12 @@ func TestTTSInvocationRuntimeMapsOneDetachedAudioOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TTS invocation error = %v", err)
 	}
+	assertDetachedTTSResult(t, result)
+	assertDetachedTTSRequest(t, got)
+}
+
+func assertDetachedTTSResult(t *testing.T, result inference.InvocationRuntimeResult) {
+	t.Helper()
 	if len(result.Content) != 1 || len(result.Artifacts) != 1 {
 		t.Fatalf("TTS invocation result = %#v, want one content and one artifact", result)
 	}
@@ -40,14 +46,16 @@ func TestTTSInvocationRuntimeMapsOneDetachedAudioOutput(t *testing.T) {
 	if content.Name != "audio" || content.Modality != models.ModalityAudio || content.MediaType != "audio/wav" || content.Content != string(ttsRuntimeWAV()) {
 		t.Fatalf("TTS content = %#v, want one canonical detached WAV output", content)
 	}
-	if result.Artifacts[0].Name != "audio" || result.Artifacts[0].MediaType != "audio/wav" ||
-		result.Artifacts[0].SizeBytes != int64(len(ttsRuntimeWAV())) ||
-		result.Artifacts[0].Properties["label"] != "speech.wav" ||
-		!strings.HasPrefix(result.Artifacts[0].Properties["digest"], "sha256:") {
-		t.Fatalf("TTS artifact = %#v, want semantic audio metadata", result.Artifacts[0])
+	artifact := result.Artifacts[0]
+	if artifact.Name != "audio" || artifact.MediaType != "audio/wav" || artifact.SizeBytes != int64(len(ttsRuntimeWAV())) || artifact.Properties["label"] != "speech.wav" || !strings.HasPrefix(artifact.Properties["digest"], "sha256:") {
+		t.Fatalf("TTS artifact = %#v, want semantic audio metadata", artifact)
 	}
-	if got.Text != "hello" || got.Model != "vibevoice" || got.Parameters["language"] != "en" {
-		t.Fatalf("TTS backend request = %#v, want normalized text/model/parameters", got)
+}
+
+func assertDetachedTTSRequest(t *testing.T, request codecs.TTSRequest) {
+	t.Helper()
+	if request.Text != "hello" || request.Model != "vibevoice" || request.Parameters["language"] != "en" {
+		t.Fatalf("TTS backend request = %#v, want normalized text/model/parameters", request)
 	}
 }
 

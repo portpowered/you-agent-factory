@@ -28,7 +28,6 @@ import (
 type managedFactoryTTSFixture struct {
 	process        support.ApplicationProcess
 	backend        *packagedTTSModelsBackend
-	privateFixture *localai.Fixture
 	factorySeedDir string
 	configSeed     []byte
 	cacheSeedDir   string
@@ -48,7 +47,7 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 	t.Helper()
 
 	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
-	privateFixture := localai.Start(t)
+	privateFixture := localai.Start(t, localai.Options{TTSFailureText: "models-backed factory tts failure"})
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -96,7 +95,6 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 	fixture := &managedFactoryTTSFixture{
 		process:         process,
 		backend:         backend,
-		privateFixture:  privateFixture,
 		factorySeedDir:  seedFactoryDir,
 		configSeed:      configSeed,
 		cacheSeedDir:    cacheSeedDir,
