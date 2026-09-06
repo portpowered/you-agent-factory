@@ -49,7 +49,18 @@ message Reply {
   bytes message = 1;
   int32 tokens = 2;
   int32 prompt_tokens = 3;
+  bytes audio = 6;
   repeated ChatDelta chat_deltas = 8;
+}
+
+message TTSRequest {
+  string text = 1;
+  string model = 2;
+  string dst = 3;
+  string voice = 4;
+  optional string language = 5;
+  optional string instructions = 6;
+  map<string, string> params = 7;
 }
 
 message EmbeddingResult {

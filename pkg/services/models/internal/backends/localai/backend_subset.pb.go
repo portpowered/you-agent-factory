@@ -402,6 +402,7 @@ type Reply struct {
 	Message       []byte                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	Tokens        int32                  `protobuf:"varint,2,opt,name=tokens,proto3" json:"tokens,omitempty"`
 	PromptTokens  int32                  `protobuf:"varint,3,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	Audio         []byte                 `protobuf:"bytes,6,opt,name=audio,proto3" json:"audio,omitempty"`
 	ChatDeltas    []*ChatDelta           `protobuf:"bytes,8,rep,name=chat_deltas,json=chatDeltas,proto3" json:"chat_deltas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -458,9 +459,108 @@ func (x *Reply) GetPromptTokens() int32 {
 	return 0
 }
 
+func (x *Reply) GetAudio() []byte {
+	if x != nil {
+		return x.Audio
+	}
+	return nil
+}
+
 func (x *Reply) GetChatDeltas() []*ChatDelta {
 	if x != nil {
 		return x.ChatDeltas
+	}
+	return nil
+}
+
+type TTSRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	Dst           string                 `protobuf:"bytes,3,opt,name=dst,proto3" json:"dst,omitempty"`
+	Voice         string                 `protobuf:"bytes,4,opt,name=voice,proto3" json:"voice,omitempty"`
+	Language      *string                `protobuf:"bytes,5,opt,name=language,proto3,oneof" json:"language,omitempty"`
+	Instructions  *string                `protobuf:"bytes,6,opt,name=instructions,proto3,oneof" json:"instructions,omitempty"`
+	Params        map[string]string      `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TTSRequest) Reset() {
+	*x = TTSRequest{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TTSRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TTSRequest) ProtoMessage() {}
+
+func (x *TTSRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TTSRequest.ProtoReflect.Descriptor instead.
+func (*TTSRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TTSRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetDst() string {
+	if x != nil {
+		return x.Dst
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetVoice() string {
+	if x != nil {
+		return x.Voice
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetLanguage() string {
+	if x != nil && x.Language != nil {
+		return *x.Language
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetInstructions() string {
+	if x != nil && x.Instructions != nil {
+		return *x.Instructions
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
 	}
 	return nil
 }
@@ -474,7 +574,7 @@ type EmbeddingResult struct {
 
 func (x *EmbeddingResult) Reset() {
 	*x = EmbeddingResult{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +586,7 @@ func (x *EmbeddingResult) String() string {
 func (*EmbeddingResult) ProtoMessage() {}
 
 func (x *EmbeddingResult) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -499,7 +599,7 @@ func (x *EmbeddingResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmbeddingResult.ProtoReflect.Descriptor instead.
 func (*EmbeddingResult) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{7}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EmbeddingResult) GetEmbeddings() []float32 {
@@ -526,7 +626,7 @@ type TranscriptRequest struct {
 
 func (x *TranscriptRequest) Reset() {
 	*x = TranscriptRequest{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +638,7 @@ func (x *TranscriptRequest) String() string {
 func (*TranscriptRequest) ProtoMessage() {}
 
 func (x *TranscriptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +651,7 @@ func (x *TranscriptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptRequest.ProtoReflect.Descriptor instead.
 func (*TranscriptRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{8}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TranscriptRequest) GetDst() string {
@@ -629,7 +729,7 @@ type TranscriptResult struct {
 
 func (x *TranscriptResult) Reset() {
 	*x = TranscriptResult{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +741,7 @@ func (x *TranscriptResult) String() string {
 func (*TranscriptResult) ProtoMessage() {}
 
 func (x *TranscriptResult) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +754,7 @@ func (x *TranscriptResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptResult.ProtoReflect.Descriptor instead.
 func (*TranscriptResult) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{9}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *TranscriptResult) GetSegments() []*TranscriptSegment {
@@ -697,7 +797,7 @@ type TranscriptSegment struct {
 
 func (x *TranscriptSegment) Reset() {
 	*x = TranscriptSegment{}
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[10]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +809,7 @@ func (x *TranscriptSegment) String() string {
 func (*TranscriptSegment) ProtoMessage() {}
 
 func (x *TranscriptSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[10]
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +822,7 @@ func (x *TranscriptSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptSegment.ProtoReflect.Descriptor instead.
 func (*TranscriptSegment) Descriptor() ([]byte, []int) {
-	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{10}
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TranscriptSegment) GetId() int32 {
@@ -792,13 +892,28 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\bMetadata\x184 \x03(\v2%.backend.PredictOptions.MetadataEntryR\bMetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa9\x01\n" +
 	"\x05Reply\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\fR\amessage\x12\x16\n" +
 	"\x06tokens\x18\x02 \x01(\x05R\x06tokens\x12#\n" +
-	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokens\x123\n" +
+	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokens\x12\x14\n" +
+	"\x05audio\x18\x06 \x01(\fR\x05audio\x123\n" +
 	"\vchat_deltas\x18\b \x03(\v2\x12.backend.ChatDeltaR\n" +
-	"chatDeltas\"1\n" +
+	"chatDeltas\"\xba\x02\n" +
+	"\n" +
+	"TTSRequest\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x10\n" +
+	"\x03dst\x18\x03 \x01(\tR\x03dst\x12\x14\n" +
+	"\x05voice\x18\x04 \x01(\tR\x05voice\x12\x1f\n" +
+	"\blanguage\x18\x05 \x01(\tH\x00R\blanguage\x88\x01\x01\x12'\n" +
+	"\finstructions\x18\x06 \x01(\tH\x01R\finstructions\x88\x01\x01\x127\n" +
+	"\x06params\x18\a \x03(\v2\x1f.backend.TTSRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\v\n" +
+	"\t_languageB\x0f\n" +
+	"\r_instructions\"1\n" +
 	"\x0fEmbeddingResult\x12\x1e\n" +
 	"\n" +
 	"embeddings\x18\x01 \x03(\x02R\n" +
@@ -837,7 +952,7 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_raw
 	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescData
 }
 
-var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_goTypes = []any{
 	(*HealthMessage)(nil),     // 0: backend.HealthMessage
 	(*ModelOptions)(nil),      // 1: backend.ModelOptions
@@ -846,22 +961,25 @@ var file_pkg_services_models_internal_backends_localai_backend_subset_proto_goTy
 	(*ChatDelta)(nil),         // 4: backend.ChatDelta
 	(*PredictOptions)(nil),    // 5: backend.PredictOptions
 	(*Reply)(nil),             // 6: backend.Reply
-	(*EmbeddingResult)(nil),   // 7: backend.EmbeddingResult
-	(*TranscriptRequest)(nil), // 8: backend.TranscriptRequest
-	(*TranscriptResult)(nil),  // 9: backend.TranscriptResult
-	(*TranscriptSegment)(nil), // 10: backend.TranscriptSegment
-	nil,                       // 11: backend.PredictOptions.MetadataEntry
+	(*TTSRequest)(nil),        // 7: backend.TTSRequest
+	(*EmbeddingResult)(nil),   // 8: backend.EmbeddingResult
+	(*TranscriptRequest)(nil), // 9: backend.TranscriptRequest
+	(*TranscriptResult)(nil),  // 10: backend.TranscriptResult
+	(*TranscriptSegment)(nil), // 11: backend.TranscriptSegment
+	nil,                       // 12: backend.PredictOptions.MetadataEntry
+	nil,                       // 13: backend.TTSRequest.ParamsEntry
 }
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_depIdxs = []int32{
 	3,  // 0: backend.ChatDelta.tool_calls:type_name -> backend.ToolCallDelta
-	11, // 1: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
+	12, // 1: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
 	4,  // 2: backend.Reply.chat_deltas:type_name -> backend.ChatDelta
-	10, // 3: backend.TranscriptResult.segments:type_name -> backend.TranscriptSegment
-	4,  // [4:4] is the sub-list for method output_type
-	4,  // [4:4] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	13, // 3: backend.TTSRequest.params:type_name -> backend.TTSRequest.ParamsEntry
+	11, // 4: backend.TranscriptResult.segments:type_name -> backend.TranscriptSegment
+	5,  // [5:5] is the sub-list for method output_type
+	5,  // [5:5] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_pkg_services_models_internal_backends_localai_backend_subset_proto_init() }
@@ -869,13 +987,14 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_ini
 	if File_pkg_services_models_internal_backends_localai_backend_subset_proto != nil {
 		return
 	}
+	file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc), len(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
