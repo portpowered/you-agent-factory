@@ -124,6 +124,7 @@ func (edges constructionEdges) newServiceWithInvocationProtocol(
 		nil,
 		edges.assetCoordination,
 		nil,
+		nil,
 		client,
 		nil,
 		nil,

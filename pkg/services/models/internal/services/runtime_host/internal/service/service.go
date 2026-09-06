@@ -70,6 +70,7 @@ func New(
 		HealthChecker:        HTTPHealthChecker{Client: hostHTTP, Path: DefaultHealthCheckPath},
 		ProtocolNegotiator:   hostOptions.ProtocolNegotiator,
 		CompatibilityChecker: hostOptions.CompatibilityChecker,
+		ResolveSymlinks:      hostOptions.ResolveSymlinks,
 		Platform:             hostOptions.Platform,
 		Clock:                hostClock,
 		ServerStartBuilder:   defaultServerStartBuilder,
@@ -197,7 +198,9 @@ func (s *service) EnsureModelHost(
 		if err := s.validatePinnedBackend(ctx, identity); err != nil {
 			return models.EnsureModelHostResult{}, err
 		}
-		spec, err = defaultGRPCServerStartBuilder(identity, cacheInspection, worker)
+		spec, err = defaultGRPCServerStartBuilderWithSymlinkResolver(
+			identity, cacheInspection, worker, s.supervisor.ResolveSymlinks,
+		)
 	} else {
 		if !workerDeclaresSupervisedHealthEndpoint(worker) {
 			return models.EnsureModelHostResult{

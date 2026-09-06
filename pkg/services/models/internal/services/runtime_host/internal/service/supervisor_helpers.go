@@ -238,6 +238,15 @@ func defaultGRPCServerStartBuilder(
 	inspection cacheInspection,
 	worker *models.RuntimeWorker,
 ) (modelseffects.HostProcessStartSpec, error) {
+	return defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
+}
+
+func defaultGRPCServerStartBuilderWithSymlinkResolver(
+	identity supervisedIdentity,
+	inspection cacheInspection,
+	worker *models.RuntimeWorker,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (modelseffects.HostProcessStartSpec, error) {
 	if worker == nil {
 		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"local model worker is required for supervised backend %q",
@@ -252,7 +261,7 @@ func defaultGRPCServerStartBuilder(
 				models.ErrHostMissingAssets, identity.Name,
 			)
 		}
-		modelFiles, err := modelArtifactPaths(inspection)
+		modelFiles, err := modelArtifactPaths(inspection, resolveSymlinks)
 		if err != nil {
 			return modelseffects.HostProcessStartSpec{}, err
 		}
@@ -293,7 +302,10 @@ func defaultGRPCServerStartBuilder(
 	}, nil
 }
 
-func modelArtifactPaths(inspection cacheInspection) ([]string, error) {
+func modelArtifactPaths(
+	inspection cacheInspection,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) ([]string, error) {
 	cachePath := strings.TrimSpace(inspection.CachePath)
 	if cachePath == "" {
 		return nil, fmt.Errorf(
@@ -314,7 +326,7 @@ func modelArtifactPaths(inspection cacheInspection) ([]string, error) {
 			return nil, invalidModelArtifactLayout()
 		}
 		candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(name)))
-		if !pathWithinRoot(root, candidate) || !resolvedPathWithinRoot(root, candidate) {
+		if !pathWithinRoot(root, candidate) || !resolvedPathWithinRoot(resolveSymlinks, root, candidate) {
 			return nil, invalidModelArtifactLayout()
 		}
 		if _, duplicate := seen[candidate]; duplicate {
@@ -347,8 +359,14 @@ func pathWithinRoot(root, candidate string) bool {
 	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func resolvedPathWithinRoot(root, candidate string) bool {
-	resolvedRoot, rootErr := filepath.EvalSymlinks(root)
+func resolvedPathWithinRoot(
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	root, candidate string,
+) bool {
+	if resolveSymlinks == nil {
+		return true
+	}
+	resolvedRoot, rootErr := resolveSymlinks(root)
 	if rootErr != nil {
 		if os.IsNotExist(rootErr) {
 			return true
@@ -357,7 +375,7 @@ func resolvedPathWithinRoot(root, candidate string) bool {
 	}
 	for current := candidate; ; current = filepath.Dir(current) {
 		if _, err := os.Lstat(current); err == nil {
-			resolvedCandidate, candidateErr := filepath.EvalSymlinks(current)
+			resolvedCandidate, candidateErr := resolveSymlinks(current)
 			if candidateErr != nil {
 				return false
 			}

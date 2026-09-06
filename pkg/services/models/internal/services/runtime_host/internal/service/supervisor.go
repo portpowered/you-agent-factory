@@ -29,6 +29,7 @@ type supervisorSettings struct {
 	HealthChecker        healthChecker
 	ProtocolNegotiator   modelseffects.HostProtocolNegotiator
 	CompatibilityChecker modelseffects.HostCompatibilityChecker
+	ResolveSymlinks      modelseffects.HostResolveSymlinks
 	Platform             models.AssetHostPlatform
 	Clock                modelseffects.HostClock
 	ServerStartBuilder   func(

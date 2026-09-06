@@ -20,19 +20,24 @@ var errVibeVoiceLayout = errors.New("vibevoice tokenizer layout is invalid")
 
 func vibeVoiceLoadOptions(
 	request modelseffects.HostProtocolNegotiationRequest,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 ) ([]string, error) {
 	if !strings.EqualFold(strings.TrimSpace(request.Backend), vibeVoiceBackendID) ||
 		!strings.EqualFold(strings.TrimSpace(request.ModelName), models.BuiltInModelNameTTS) {
 		return nil, nil
 	}
-	tokenizer, err := confinedVibeVoiceTokenizer(request.ModelPath, request.ModelFiles)
+	tokenizer, err := confinedVibeVoiceTokenizer(request.ModelPath, request.ModelFiles, resolveSymlinks)
 	if err != nil {
 		return nil, errVibeVoiceLayout
 	}
 	return []string{vibeVoiceTokenizerKey + "=" + tokenizer}, nil
 }
 
-func confinedVibeVoiceTokenizer(modelPath string, modelFiles []string) (string, error) {
+func confinedVibeVoiceTokenizer(
+	modelPath string,
+	modelFiles []string,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (string, error) {
 	modelFile := strings.TrimSpace(modelPath)
 	if modelFile == "" || len(modelFiles) == 0 {
 		return "", errVibeVoiceLayout
@@ -47,26 +52,10 @@ func confinedVibeVoiceTokenizer(modelPath string, modelFiles []string) (string, 
 
 	candidates := make([]string, 0, 1)
 	for _, raw := range modelFiles {
-		value := strings.TrimSpace(raw)
-		if value == "" {
-			return "", errVibeVoiceLayout
-		}
-		candidate := filepath.Clean(filepath.FromSlash(value))
-		if !filepath.IsAbs(candidate) {
-			if filepath.ToSlash(filepath.Clean(filepath.FromSlash(value))) != filepath.ToSlash(value) {
-				return "", errVibeVoiceLayout
-			}
-			valueName := filepath.ToSlash(value)
-			if modelRootName != "." &&
-				(valueName == modelRootName || strings.HasPrefix(valueName, modelRootName+"/")) {
-				candidate = filepath.Clean(filepath.FromSlash(value))
-			} else {
-				candidate = filepath.Clean(filepath.Join(root, candidate))
-			}
-		}
-		absoluteCandidate, err := filepath.Abs(candidate)
-		if err != nil || !pathWithinVibeVoiceRoot(absoluteRoot, absoluteCandidate) ||
-			!resolvedVibeVoicePathWithinRoot(absoluteRoot, absoluteCandidate) {
+		candidate, err := confinedVibeVoiceCandidate(
+			raw, root, absoluteRoot, modelRootName, resolveSymlinks,
+		)
+		if err != nil {
 			return "", errVibeVoiceLayout
 		}
 		if filepath.Base(candidate) == vibeVoiceTokenizerName {
@@ -79,6 +68,35 @@ func confinedVibeVoiceTokenizer(modelPath string, modelFiles []string) (string, 
 	return candidates[0], nil
 }
 
+func confinedVibeVoiceCandidate(
+	raw, root, absoluteRoot, modelRootName string,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", errVibeVoiceLayout
+	}
+	candidate := filepath.Clean(filepath.FromSlash(value))
+	if !filepath.IsAbs(candidate) {
+		if filepath.ToSlash(candidate) != filepath.ToSlash(value) {
+			return "", errVibeVoiceLayout
+		}
+		valueName := filepath.ToSlash(value)
+		if modelRootName != "." &&
+			(valueName == modelRootName || strings.HasPrefix(valueName, modelRootName+"/")) {
+			candidate = filepath.Clean(filepath.FromSlash(value))
+		} else {
+			candidate = filepath.Clean(filepath.Join(root, candidate))
+		}
+	}
+	absoluteCandidate, err := filepath.Abs(candidate)
+	if err != nil || !pathWithinVibeVoiceRoot(absoluteRoot, absoluteCandidate) ||
+		!resolvedVibeVoicePathWithinRoot(resolveSymlinks, absoluteRoot, absoluteCandidate) {
+		return "", errVibeVoiceLayout
+	}
+	return candidate, nil
+}
+
 func pathWithinVibeVoiceRoot(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	if err != nil || filepath.IsAbs(relative) {
@@ -87,8 +105,14 @@ func pathWithinVibeVoiceRoot(root, candidate string) bool {
 	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func resolvedVibeVoicePathWithinRoot(root, candidate string) bool {
-	resolvedRoot, rootErr := filepath.EvalSymlinks(root)
+func resolvedVibeVoicePathWithinRoot(
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	root, candidate string,
+) bool {
+	if resolveSymlinks == nil {
+		return true
+	}
+	resolvedRoot, rootErr := resolveSymlinks(root)
 	if rootErr != nil {
 		if os.IsNotExist(rootErr) {
 			return true
@@ -97,7 +121,7 @@ func resolvedVibeVoicePathWithinRoot(root, candidate string) bool {
 	}
 	for current := candidate; ; current = filepath.Dir(current) {
 		if _, err := os.Lstat(current); err == nil {
-			resolvedCandidate, candidateErr := filepath.EvalSymlinks(current)
+			resolvedCandidate, candidateErr := resolveSymlinks(current)
 			if candidateErr != nil {
 				return false
 			}

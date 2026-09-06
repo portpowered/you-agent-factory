@@ -16,6 +16,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
@@ -135,7 +136,9 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 	if protocolNegotiator == nil {
-		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(protocolDialer)
+		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(
+			protocolDialer, platformfilesystem.Local{}.EvalSymlinks,
+		)
 	}
 	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges)
 	if compatibilityErr != nil {
@@ -212,6 +215,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		assetCoordination,
+		platformfilesystem.Local{}.EvalSymlinks,
 		backendArtifactResolver,
 		edges.ModelInvocationProtocolClient,
 		protocolDialer,

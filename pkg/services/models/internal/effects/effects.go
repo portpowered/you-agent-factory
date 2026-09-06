@@ -168,6 +168,10 @@ type HostHTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// HostResolveSymlinks is the exact filesystem effect used to verify that
+// model artifacts remain inside their selected cache root.
+type HostResolveSymlinks func(string) (string, error)
+
 type HostTimer interface {
 	C() <-chan time.Time
 	Stop() bool

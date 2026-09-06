@@ -63,7 +63,7 @@ func TestConfinedVibeVoiceTokenizerAcceptsOnlyOneVerifiedLayoutEntry(t *testing.
 	for _, testCase := range tests {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := confinedVibeVoiceTokenizer(modelFile, testCase.files)
+			got, err := confinedVibeVoiceTokenizer(modelFile, testCase.files, nil)
 			if testCase.wantError {
 				if !errors.Is(err, errVibeVoiceLayout) {
 					t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want typed layout error", err)
@@ -92,7 +92,7 @@ func TestConfinedVibeVoiceTokenizerRejectsSymlinkEscape(t *testing.T) {
 	}
 	_, err := confinedVibeVoiceTokenizer(filepath.Join(root, "model.gguf"), []string{
 		filepath.Join(root, "model.gguf"), linkedTokenizer,
-	})
+	}, filepath.EvalSymlinks)
 	if !errors.Is(err, errVibeVoiceLayout) {
 		t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want symlink escape rejection", err)
 	}
