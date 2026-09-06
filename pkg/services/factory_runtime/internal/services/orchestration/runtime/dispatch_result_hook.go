@@ -778,9 +778,33 @@ func mergeLiveObservation(recorded *workersessions.Observation, live workersessi
 	if recorded == nil {
 		return
 	}
+	if recorded.PredecessorWorkerSessionID == "" {
+		recorded.PredecessorWorkerSessionID = live.PredecessorWorkerSessionID
+	}
+	if recorded.SuccessorWorkerSessionID == "" {
+		recorded.SuccessorWorkerSessionID = live.SuccessorWorkerSessionID
+	}
+	if recorded.FactorySessionID == "" {
+		recorded.FactorySessionID = live.FactorySessionID
+	}
+	recorded.Direct = live.Direct
+	if len(recorded.WorkIDs) == 0 && len(live.WorkIDs) > 0 {
+		recorded.WorkIDs = append([]string(nil), live.WorkIDs...)
+	}
 	if live.StartedAt != nil {
 		started := *live.StartedAt
 		recorded.StartedAt = &started
+	}
+	if recorded.EndedAt == nil && live.EndedAt != nil {
+		ended := *live.EndedAt
+		recorded.EndedAt = &ended
+	}
+	if recorded.Duration == nil && live.Duration != nil {
+		duration := *live.Duration
+		recorded.Duration = &duration
+		if recorded.DurationBasis == workersessions.DurationBasisUnavailable {
+			recorded.DurationBasis = live.DurationBasis
+		}
 	}
 	if live.Model != nil && strings.TrimSpace(*live.Model) != "" {
 		recorded.Model = cloneRecordedString(live.Model)

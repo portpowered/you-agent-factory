@@ -11,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -283,7 +284,7 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 	result := make([]workersessions.Observation, 0, len(associations))
 	for dispatchID, association := range associations {
 		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered))
-		if !containsRecordedWorkID(fact.workIDs, workID) {
+		if workID != "" && !containsRecordedWorkID(fact.workIDs, workID) {
 			continue
 		}
 		observation := recordedObservationFromFact(fact, s.clock)
@@ -302,13 +303,37 @@ func (s *recordedWorkerSessionObservation) canonicalEvents() []interfaces.Factor
 	if s == nil {
 		return nil
 	}
+	var events []interfaces.FactoryEvent
 	if len(s.replayEvents) > 0 {
-		return cloneAndSortFactoryEvents(s.replayEvents)
+		events = cloneAndSortFactoryEvents(s.replayEvents)
+	} else {
+		if s.ledger == nil {
+			return nil
+		}
+		events = cloneAndSortFactoryEvents(s.ledger.CanonicalEvents())
 	}
-	if s.ledger == nil {
-		return nil
+	return filterFactorySessionEvents(events, s.factorySessionID)
+}
+
+func filterFactorySessionEvents(events []interfaces.FactoryEvent, factorySessionID string) []interfaces.FactoryEvent {
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" || len(events) == 0 {
+		return events
 	}
-	return s.ledger.CanonicalEvents()
+	scoped := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if event.Context.SessionID == nil {
+			if factorySessionID == factory_context.DefaultSessionID {
+				scoped = append(scoped, event)
+			}
+			continue
+		}
+		if strings.TrimSpace(*event.Context.SessionID) != factorySessionID {
+			continue
+		}
+		scoped = append(scoped, event)
+	}
+	return scoped
 }
 
 func latestFactoryEventTick(events []interfaces.FactoryEvent) int {
@@ -470,10 +495,83 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
-	if err == nil {
-		s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
+	if err != nil {
+		return result, err
 	}
+	// The process-local fleet projection can contain the live identity while
+	// the canonical Factory ledger already has the authoritative lifecycle,
+	// timing, and provider facts. Overlay those facts onto the page returned by
+	// the service so pagination and scope filtering remain service-owned while
+	// fleet reads retain the same durable semantics as Work-scoped reads.
+	recorded, _, projectionErr := s.projectRecorded(ctx, s.canonicalEvents(), "")
+	if s.factorySessionID != "" {
+		result.Observations = filterObservationPageForFactorySession(result.Observations, s.factorySessionID, recorded)
+	}
+	if projectionErr == nil {
+		result.Observations = overlayRecordedObservationPage(result.Observations, recorded)
+	}
+	if err := s.applyRecordingHealth(ctx, result.Observations); err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
+	s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
 	return result, err
+}
+
+func filterObservationPageForFactorySession(
+	page []workersessions.Observation,
+	factorySessionID string,
+	recorded []workersessions.Observation,
+) []workersessions.Observation {
+	factorySessionID = strings.TrimSpace(factorySessionID)
+	if factorySessionID == "" || len(page) == 0 {
+		return page
+	}
+	recordedIDs := make(map[string]struct{}, len(recorded))
+	for _, observation := range recorded {
+		recordedIDs[observation.WorkerSessionID] = struct{}{}
+	}
+	filtered := make([]workersessions.Observation, 0, len(page))
+	for _, observation := range page {
+		if strings.TrimSpace(observation.FactorySessionID) == factorySessionID {
+			filtered = append(filtered, observation)
+			continue
+		}
+		if strings.TrimSpace(observation.FactorySessionID) == "" && factorySessionID == factory_context.DefaultSessionID {
+			// Direct Worker Session admissions have no Factory Session identity.
+			// Keep them in the process default view so the fleet endpoint does
+			// not hide provider-neutral/direct execution history.
+			filtered = append(filtered, observation)
+			continue
+		}
+		if _, recorded := recordedIDs[observation.WorkerSessionID]; recorded {
+			filtered = append(filtered, observation)
+		}
+	}
+	return filtered
+}
+
+func overlayRecordedObservationPage(
+	page []workersessions.Observation,
+	recorded []workersessions.Observation,
+) []workersessions.Observation {
+	if len(page) == 0 || len(recorded) == 0 {
+		return page
+	}
+	recordedByID := make(map[string]workersessions.Observation, len(recorded))
+	for _, observation := range recorded {
+		recordedByID[observation.WorkerSessionID] = observation
+	}
+	overlaid := make([]workersessions.Observation, len(page))
+	for index, live := range page {
+		recordedObservation, ok := recordedByID[live.WorkerSessionID]
+		if !ok {
+			overlaid[index] = live.Clone()
+			continue
+		}
+		overlaid[index] = recordedObservation.Clone()
+		mergeLiveObservation(&overlaid[index], live)
+	}
+	return overlaid
 }
 
 // hasDurableWorkerHistory reports whether the embedded per-runtime Worker

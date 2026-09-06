@@ -581,6 +581,9 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 			ProviderSessionResolveHomeDirectory: func() (string, error) {
 				return homeDir, nil
 			},
+			WorkerSessionResolveHomeDirectory: func() (string, error) {
+				return homeDir, nil
+			},
 		},
 	})
 	workID := submitWSRFT011Work(t, server.URL(), factorySession, "provider-reference")

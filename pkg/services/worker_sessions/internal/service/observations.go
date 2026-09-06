@@ -526,6 +526,18 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	// Work-scoped and fleet observations retain the live process facts while a
+	// Worker Session is still registered. The durable projection remains the
+	// identity/health fallback (and the Worker-ID surface remains strictly
+	// provider-neutral), but an active live session must not lose its current
+	// clock, provider association, or transcript availability merely because
+	// its opening has already been persisted.
+	if session, metadata, ok := r.loadObservationState(id); ok {
+		live := baseObservation(id, session, metadata)
+		applyObservationTiming(&live, session, metadata, r.clock)
+		live.Failure = observedTerminalCause(session)
+		projected = mergeLiveObservation(projected, live)
+	}
 
 	if !projected.ProviderSessionAvailable {
 		return projected, nil
@@ -599,6 +611,73 @@ func (r *registry) attachLiveProviderAssociation(
 		projected.AttemptID = association.AttemptID
 	}
 	return projected
+}
+
+func mergeLiveObservation(
+	durable workersessions.Observation,
+	live workersessions.Observation,
+) workersessions.Observation {
+	if live.PredecessorWorkerSessionID != "" {
+		durable.PredecessorWorkerSessionID = live.PredecessorWorkerSessionID
+	}
+	if live.SuccessorWorkerSessionID != "" {
+		durable.SuccessorWorkerSessionID = live.SuccessorWorkerSessionID
+	}
+	if live.Model != nil {
+		durable.Model = live.Model
+	}
+	if live.ReasoningEffort != nil {
+		durable.ReasoningEffort = live.ReasoningEffort
+	}
+	if live.TokenUsage != nil {
+		durable.TokenUsage = live.TokenUsage
+	}
+	if live.Direct {
+		durable.Direct = true
+	}
+	if strings.TrimSpace(live.FactorySessionID) != "" {
+		durable.FactorySessionID = live.FactorySessionID
+	}
+	if len(live.WorkIDs) > 0 {
+		durable.WorkIDs = append([]string(nil), live.WorkIDs...)
+	}
+	if live.TurnID != "" {
+		durable.TurnID = live.TurnID
+	}
+	if live.AttemptID != "" {
+		durable.AttemptID = live.AttemptID
+	}
+	if live.State != "" {
+		durable.State = live.State
+	}
+	if live.StartedAt != nil {
+		durable.StartedAt = live.StartedAt
+	}
+	if live.EndedAt != nil {
+		durable.EndedAt = live.EndedAt
+	}
+	if live.Duration != nil {
+		durable.Duration = live.Duration
+	}
+	if live.DurationBasis != "" && live.DurationBasis != workersessions.DurationBasisUnavailable {
+		durable.DurationBasis = live.DurationBasis
+	}
+	if live.Failure != nil {
+		durable.Failure = live.Failure
+	}
+	if live.ProviderSessionAvailable {
+		durable.ProviderSession = live.ProviderSession.Clone()
+		durable.ProviderSessionAvailable = true
+	}
+	if live.TurnUsage != nil {
+		usage := live.TurnUsage.Clone()
+		durable.TurnUsage = &usage
+	}
+	if live.Transcript == workersessions.TranscriptAvailabilityAvailable {
+		durable.Transcript = live.Transcript
+		durable.Parse = live.Parse.Clone()
+	}
+	return durable
 }
 
 func (r *registry) attachLiveProviderTranscript(

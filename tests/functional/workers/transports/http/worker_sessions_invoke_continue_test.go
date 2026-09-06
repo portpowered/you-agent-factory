@@ -55,6 +55,9 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 			ProviderSessionResolveHomeDirectory: func() (string, error) {
 				return homeDir, nil
 			},
+			WorkerSessionResolveHomeDirectory: func() (string, error) {
+				return homeDir, nil
+			},
 		},
 	})
 	recordingReader := server.WorkerRecordingReader()

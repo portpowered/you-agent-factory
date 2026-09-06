@@ -542,9 +542,17 @@ func providerIdentityForExecution(request workers.WorkstationExecutionRequest) s
 		!strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
 		return executorProvider
 	}
-	if modelProvider := strings.TrimSpace(request.ModelProvider); modelProvider != "" {
-		return modelProvider
+	if strings.EqualFold(executorProvider, workers.ExecutorProviderACP) {
+		if modelProvider := strings.TrimSpace(request.ModelProvider); modelProvider != "" {
+			return modelProvider
+		}
 	}
+	// ModelProvider alone identifies the selected model catalog, not a
+	// provider-authored Worker Session identity. Keep the opening lifecycle
+	// provider-neutral until a resolved runner, explicit execution provider, or
+	// provider-authored record establishes that identity. ACP is the one
+	// execution-mechanism marker whose model provider is its concrete session
+	// provider, so it remains the explicit fallback above.
 	if request.Continuation != nil {
 		return strings.TrimSpace(request.Continuation.Provider)
 	}

@@ -276,10 +276,10 @@ func workerSessionObservationSources(
 	opened factorysessionwire.OpenedApplicationRuntime,
 ) ([]workersessions.Service, error) {
 	sources := make([]workersessions.Service, 0, 1)
-	if opened.WorkerSessions != nil {
-		sources = append(sources, opened.WorkerSessions)
-	}
 	if opened.FactorySessions == nil {
+		if opened.WorkerSessions != nil {
+			sources = append(sources, opened.WorkerSessions)
+		}
 		return sources, nil
 	}
 	projections, err := opened.FactorySessions.ListFactorySessions(ctx)
@@ -308,6 +308,13 @@ func workerSessionObservationSources(
 		if observation := provider.WorkerSessionsObservationForSession(id); observation != nil {
 			sources = append(sources, observation)
 		}
+	}
+	// The per-Factory-Session decorators carry canonical dispatch projection
+	// and durable recording health. Add the broad process-local service only
+	// after them so FleetObservationService's duplicate merge starts from the
+	// stronger Factory-scoped identity facts.
+	if opened.WorkerSessions != nil {
+		sources = append(sources, opened.WorkerSessions)
 	}
 	return sources, nil
 }

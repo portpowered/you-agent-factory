@@ -170,6 +170,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		WorkerSessionResolveHomeDirectory:   func() (string, error) { return homeDir, nil },
 	})
 	if err != nil {
 		t.Fatalf("build Provider Sessions CLI shared process: %v", err)
