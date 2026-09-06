@@ -615,7 +615,7 @@ test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 worker-recording-stress:
-	$(GO) test ./tests/stress -run '^$(WORKER_RECORDING_STRESS_TEST)$$' -count=1 -timeout $(WORKER_RECORDING_STRESS_TIMEOUT)
+	$(GO) test ./pkg/services/recordings/internal/services/worker_capture/internal/service -run '^$(WORKER_RECORDING_STRESS_TEST)$$' -count=1 -timeout $(WORKER_RECORDING_STRESS_TIMEOUT)
 
 test-release:
 	$(GO) test -short $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)

@@ -1,6 +1,9 @@
 package runtime
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,7 +13,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -535,4 +542,212 @@ func sortedRestoredApprovalIDs(approvals map[string]interfaces.FactoryWorldHuman
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+func recordedDispatchStateMaps(
+	world interfaces.FactoryWorldState,
+) map[string]interfaces.FactoryWorldDispatchCompletion {
+	completed := make(map[string]interfaces.FactoryWorldDispatchCompletion, len(world.CompletedDispatches))
+	for _, dispatch := range world.CompletedDispatches {
+		completed[dispatch.DispatchID] = dispatch
+	}
+	for _, dispatch := range world.FailedDispatches {
+		completed[dispatch.DispatchID] = dispatch
+	}
+	return completed
+}
+
+func recordedDispatchEnd(
+	dispatch interfaces.FactoryWorldDispatchCompletion,
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) *time.Time {
+	ended := dispatch.CompletedAt
+	if ended.IsZero() {
+		ended = eventTimeForDispatch(events, dispatchID)
+	}
+	if ended.IsZero() {
+		return nil
+	}
+	ended = ended.UTC()
+	return &ended
+}
+
+func withRecordedWorkerStreamGeneration(
+	subscription workersessions.ObservationSubscription,
+	workerSessionID string,
+) workersessions.ObservationSubscription {
+	if subscription.NextFunc == nil {
+		return subscription
+	}
+	next := subscription.NextFunc
+	generationID := recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	subscription.NextFunc = func(ctx context.Context) workersessions.ObservationDelivery {
+		delivery := next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminal ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
+			delivery.Event.Cursor.StreamGenerationID = generationID
+		}
+		return delivery
+	}
+	return subscription
+}
+
+func recordedObservationGeneration(ledger recordings.RuntimeLedger, workerSessionID string, durableHistory bool) string {
+	if durableHistory {
+		return recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	}
+	generationID := ""
+	if ledger != nil {
+		generationID = strings.TrimSpace(ledger.StreamGenerationID())
+	}
+	return generationID
+}
+
+func recordedWorkerStreamGenerationForIdentity(workerSessionID string) string {
+	return "worker-recording/" + strings.TrimSpace(workerSessionID)
+}
+
+func recordedObservationReplaySummary(
+	fact recordedDispatchObservation,
+	health workerRecordingHealth,
+) *workersessions.ReplaySummary {
+	status := health.status
+	if status == "" {
+		if fact.state.Terminal() {
+			status = recordings.WorkerRecordingStatusComplete
+		} else {
+			status = recordings.WorkerRecordingStatusIncomplete
+		}
+	}
+	reason := "recording-" + strings.ToLower(string(status))
+	if health.reason != "" {
+		reason = health.reason
+	}
+	return &workersessions.ReplaySummary{Complete: status == recordings.WorkerRecordingStatusComplete, Reason: reason}
+}
+
+func recordedObservationHistoryHasTerminal(events []interfaces.FactoryEvent, dispatchID string) bool {
+	for _, event := range events {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID && recordedWorkerSessionTerminalEvent(event) {
+			return true
+		}
+	}
+	return false
+}
+
+type recordedDispatchInterruptionFact struct {
+	workIDs       []string
+	interruptedAt time.Time
+	eventTime     time.Time
+	reason        string
+}
+
+func recordedDispatchInterruption(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) (recordedDispatchInterruptionFact, bool) {
+	var fact recordedDispatchInterruptionFact
+	found := false
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
+			stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		var payload interfaces.DispatchInterruptedEventPayload
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			continue
+		}
+		fact = recordedDispatchInterruptionFact{
+			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
+			interruptedAt: payload.InterruptedAt,
+			eventTime:     event.Context.EventTime,
+			reason:        payload.Reason,
+		}
+		found = true
+	}
+	return fact, found
+}
+
+func durableWorkerCursor(cursor *workersessions.ObservationCursor) bool {
+	return cursor != nil && strings.HasPrefix(strings.TrimSpace(cursor.StreamGenerationID), "worker-recording/")
+}
+
+func recordedObservationHistory(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+	cursor *workersessions.ObservationCursor,
+) []interfaces.FactoryEvent {
+	ordered := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range cloneAndSortFactoryEvents(events) {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID &&
+			(cursor == nil || (event.Context.Sequence > 0 && uint64(event.Context.Sequence) > cursor.Position)) {
+			ordered = append(ordered, event)
+		}
+	}
+	return ordered
+}
+
+func observationStreamLimit(limit int) int {
+	if limit <= 0 {
+		return workersessions.DefaultObservationStreamLimit
+	}
+	return limit
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedTranscript(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+	fact recordedDispatchObservation,
+) (workersessions.ReadTranscriptResult, error) {
+	if fact.provider == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+	}
+	if s.Service != nil {
+		live, err := s.Service.ReadTranscript(ctx, req)
+		if err == nil {
+			return historicalTranscriptResult(fact, live.Entries, req.ProviderSession)
+		}
+		if errors.Is(err, workersessions.ErrObservationCanceled) {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+	}
+	if s.providerSessions == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
+	}
+	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
+		Session: req.ProviderSession.Clone(),
+		Context: ctx,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
+		}
+		if recordedTranscriptSourceUnavailable(err) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+		}
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, err)
+	}
+	return historicalTranscriptResult(fact, recordedTranscriptEntries(projected.Detail.Transcript), req.ProviderSession)
+}
+
+func historicalTranscriptResult(
+	fact recordedDispatchObservation,
+	entries []workersessions.TranscriptEntry,
+	ref providers.SessionRef,
+) (workersessions.ReadTranscriptResult, error) {
+	result := workersessions.ReadTranscriptResult{
+		WorkerSessionID: fact.workerSessionID,
+		ProviderSession: ref.Clone(),
+		WorkIDs:         append([]string(nil), fact.workIDs...),
+		TurnID:          fact.turnID,
+		AttemptID:       fact.dispatchID,
+		State:           fact.state,
+		Entries:         entries,
+	}
+	if err := result.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
+	}
+	return result, nil
 }

@@ -5,9 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	durablehistory "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/durable"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -583,4 +588,245 @@ func startReplayOutcome(err error) string {
 		return "accepted"
 	}
 	return "rejected"
+}
+
+// The durable history adapter stays behind the Worker Sessions root while its
+// provider-neutral projection and replay policy lives in a focused child
+// package. These wrappers keep callers on the service-owned vocabulary.
+func (r *registry) durableWorkerProjection(ctx context.Context, workerSessionID string) (recordings.WorkerRecordingProjection, bool, error) {
+	return durablehistory.WorkerProjection(r.recording, ctx, workerSessionID)
+}
+
+func (r *registry) workerRecordingHistoryReader() recordings.WorkerRecordingHistoryReader {
+	if r == nil {
+		return nil
+	}
+	return durablehistory.WorkerRecordingHistoryReader(r.recording)
+}
+
+func (r *registry) ListWorkerRecordingProjections(
+	ctx context.Context,
+	request recordings.WorkerRecordingListRequest,
+) (recordings.WorkerRecordingListResult, error) {
+	if r == nil {
+		return recordings.WorkerRecordingListResult{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return durablehistory.ListWorkerRecordingProjections(r.recording, ctx, request)
+}
+
+func (r *registry) LoadWorkerRecordingByWorkerSessionID(
+	ctx context.Context,
+	workerSessionID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	if r == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return durablehistory.LoadWorkerRecordingByWorkerSessionID(r.recording, ctx, workerSessionID)
+}
+
+func (r *registry) durableWorkerProjections(ctx context.Context, request recordings.WorkerRecordingListRequest) ([]recordings.WorkerRecordingProjection, error) {
+	return durablehistory.WorkerProjections(r.recording, ctx, request)
+}
+
+func durableWorkerState(projection recordings.WorkerRecordingProjection) (workersessions.State, error) {
+	return durablehistory.WorkerState(projection)
+}
+
+func durableObservation(projection recordings.WorkerRecordingProjection) (workersessions.Observation, error) {
+	return durablehistory.Observation(projection)
+}
+
+func durableObservationStartedAt(projection recordings.WorkerRecordingProjection) time.Time {
+	return durablehistory.ObservationStartedAt(projection)
+}
+
+func durableTranscript(projection recordings.WorkerRecordingProjection) (workersessions.ReadTranscriptResult, error) {
+	return durablehistory.Transcript(projection)
+}
+
+func durableObservationStream(
+	ctx context.Context,
+	projection recordings.WorkerRecordingProjection,
+	limit int,
+	cursor *workersessions.ObservationCursor,
+) (workersessions.ObservationSubscription, error) {
+	return durablehistory.ObservationStream(ctx, projection, limit, cursor, durableRecordDelivery)
+}
+
+func durableRecordDelivery(record events.Record, terminalReplay bool, workerSessionID string) workersessions.ObservationDelivery {
+	return observationRecordDelivery(record, terminalReplay, workerSessionID)
+}
+
+func durableWorkerStreamGeneration(projection recordings.WorkerRecordingProjection) string {
+	return durablehistory.WorkerStreamGenerationForIdentity(projection.WorkerSessionID)
+}
+
+func durableWorkerStreamGenerationForIdentity(workerSessionID string) string {
+	return durablehistory.WorkerStreamGenerationForIdentity(workerSessionID)
+}
+
+// observationSubscription adapts the canonical Events subscription to the
+// Worker Sessions outcome vocabulary and closes itself immediately after the
+// lifecycle terminal record.
+type observationSubscription struct {
+	source             events.Subscription
+	replay             *replayObservationSubscription
+	workerSessionID    string
+	streamGenerationID string
+
+	mu             sync.Mutex
+	closed         bool
+	terminalReplay bool
+	cursorProvided bool
+	delivered      bool
+	activeCancel   context.CancelFunc
+}
+
+func (s *observationSubscription) Next(ctx context.Context) workersessions.ObservationDelivery {
+	if s.replay != nil {
+		return s.replay.Next(ctx)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+	}
+	nextContext, cancel := context.WithCancel(ctx)
+	s.activeCancel = cancel
+	s.mu.Unlock()
+	delivery := s.source.Next(nextContext)
+	cancel()
+
+	s.mu.Lock()
+	s.activeCancel = nil
+	closed := s.closed
+	s.mu.Unlock()
+	if closed && delivery.Kind != events.DeliveryCanceled {
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+	}
+	return s.projectSourceDelivery(delivery)
+}
+
+func (s *observationSubscription) projectSourceDelivery(delivery events.Delivery) workersessions.ObservationDelivery {
+	switch delivery.Kind {
+	case events.DeliveryRecord:
+		event := projectObservationEvent(delivery.Record, s.workerSessionID)
+		event.Cursor.StreamGenerationID = s.streamGenerationID
+		s.mu.Lock()
+		s.delivered = true
+		s.mu.Unlock()
+		if isTerminalLifecycleRecord(delivery.Record) {
+			s.closeSource()
+			s.mu.Lock()
+			terminalReplay := s.terminalReplay
+			s.mu.Unlock()
+			kind := workersessions.ObservationDeliveryTerminal
+			if terminalReplay {
+				kind = workersessions.ObservationDeliveryTerminalReplay
+			}
+			return workersessions.ObservationDelivery{Kind: kind, Event: event}
+		}
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: event}
+	case events.DeliveryCanceled:
+		s.closeSource()
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+	case events.DeliveryGap:
+		s.closeSource()
+		s.mu.Lock()
+		cursorProvided, delivered := s.cursorProvided, s.delivered
+		s.mu.Unlock()
+		if cursorProvided && !delivered {
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationCursorStale}
+		}
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap}
+	case events.DeliveryBackpressure:
+		s.closeSource()
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
+	case events.DeliveryClosed:
+		s.closeSource()
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceClosed}
+	default:
+		s.closeSource()
+		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
+	}
+}
+
+func (s *observationSubscription) Close() {
+	if s.replay != nil {
+		s.replay.Close()
+		return
+	}
+	s.closeSource()
+}
+
+func (s *observationSubscription) closeSource() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	activeCancel := s.activeCancel
+	s.mu.Unlock()
+	if activeCancel != nil {
+		activeCancel()
+		return
+	}
+	// Events has no separate Close method. A canceled Next is its explicit
+	// unregister operation, and it is non-blocking because the context is
+	// already canceled.
+	if s.source != nil {
+		cancelled, cancel := context.WithCancel(context.Background())
+		cancel()
+		s.source.Next(cancelled)
+	}
+}
+
+func validateObservationCursorWorkerSessionID(
+	cursor *workersessions.ObservationCursor,
+	workerSessionID string,
+) error {
+	if cursor == nil || strings.TrimSpace(cursor.WorkerSessionID) == "" {
+		return nil
+	}
+	if strings.TrimSpace(cursor.WorkerSessionID) != strings.TrimSpace(workerSessionID) {
+		return workersessions.ErrObservationCursorForeign
+	}
+	return nil
+}
+
+func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
+	r.mu.RLock()
+	workerSessionID := ""
+	alreadyTerminal := false
+	workerSessionState := workersessions.StateReserved
+	for id, session := range r.sessions {
+		if session.ProviderSessionAssociation != nil &&
+			session.ProviderSessionAssociation.Reference == ref {
+			workerSessionID = id
+			alreadyTerminal = session.Terminal()
+			workerSessionState = session.State
+			break
+		}
+	}
+	r.mu.RUnlock()
+	if workerSessionID == "" {
+		r.logger.Info("worker session observation stream", "outcome", "not_found")
+		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
+	}
+	return workerSessionID, alreadyTerminal, workerSessionState, nil
+}
+
+func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
+	r.mu.RLock()
+	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+	if !exists {
+		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
+		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
+	}
+	return id, session.Terminal(), session.State, nil
 }

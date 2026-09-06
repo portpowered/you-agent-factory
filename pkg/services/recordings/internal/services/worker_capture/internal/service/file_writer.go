@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 
@@ -36,6 +36,7 @@ const (
 // the v2 cutover.
 type FileWriter struct {
 	storage platformreplay.Storage
+	readDir func(string) ([]fs.DirEntry, error)
 	root    string
 
 	mu        sync.Mutex
@@ -51,6 +52,17 @@ var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 // The storage port owns atomic replacement and append/sync filesystem
 // mechanics; construction itself does not touch the configured home.
 func NewFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingWriter, error) {
+	return NewFileWriterWithDirectoryReader(storage, root, nil)
+}
+
+// NewFileWriterWithDirectoryReader constructs the durable Worker sidecar with
+// the exact directory-listing effect selected by Wire. The plain constructor
+// remains useful for callers that only load or append a known artifact.
+func NewFileWriterWithDirectoryReader(
+	storage platformreplay.Storage,
+	root string,
+	readDir func(string) ([]fs.DirEntry, error),
+) (recordings.WorkerRecordingWriter, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("Worker recording file writer: storage is required")
 	}
@@ -59,6 +71,7 @@ func NewFileWriter(storage platformreplay.Storage, root string) (recordings.Work
 	}
 	return &FileWriter{
 		storage:   storage,
+		readDir:   readDir,
 		root:      root,
 		snapshots: make(map[string]recordings.WorkerRecordingSnapshot),
 	}, nil
@@ -275,72 +288,13 @@ func (writer *FileWriter) ListWorkerRecordingProjections(ctx context.Context, re
 	if err != nil {
 		return recordings.WorkerRecordingListResult{}, err
 	}
-
-	entries, err := os.ReadDir(writer.root)
+	all, diagnostics, err := writer.scanWorkerRecordingCatalog(ctx, request, cursor)
 	if errors.Is(err, os.ErrNotExist) {
 		return recordings.WorkerRecordingListResult{MaxResults: limit}, nil
 	}
 	if err != nil {
-		return recordings.WorkerRecordingListResult{}, fmt.Errorf("list Worker recording home: %w", err)
+		return recordings.WorkerRecordingListResult{}, err
 	}
-
-	all := make([]recordingCatalogEntry, 0)
-	diagnostics := make([]recordings.WorkerRecordingCatalogDiagnostic, 0)
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return recordings.WorkerRecordingListResult{}, err
-		}
-		name := entry.Name()
-		if entry.IsDir() || (!strings.HasSuffix(name, workerRecordingV2Suffix) && !strings.HasSuffix(name, ".worker.json")) {
-			continue
-		}
-		path := filepath.Join(writer.root, name)
-		snapshot, readErr := writer.readArtifactPath(ctx, path, "")
-		if readErr != nil {
-			if len(diagnostics) < maxWorkerRecordingDiagnostics {
-				diagnostics = append(diagnostics, recordings.WorkerRecordingCatalogDiagnostic{
-					Path:    path,
-					Code:    catalogDiagnosticCode(readErr),
-					Message: catalogDiagnosticMessage(readErr),
-				})
-			}
-			continue
-		}
-		for _, session := range snapshot.Sessions {
-			result, replayErr := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
-				Snapshot:        snapshot,
-				WorkerSessionID: session.WorkerSessionID,
-			})
-			if replayErr != nil {
-				if len(diagnostics) < maxWorkerRecordingDiagnostics {
-					diagnostics = append(diagnostics, recordings.WorkerRecordingCatalogDiagnostic{
-						RecordingID: snapshot.RecordingID,
-						Path:        path,
-						Code:        catalogDiagnosticCode(replayErr),
-						Message:     catalogDiagnosticMessage(replayErr),
-					})
-				}
-				continue
-			}
-			value := result.Projection
-			if diagnostic, ok := catalogProjectionDiagnostic(value, path); ok && len(diagnostics) < maxWorkerRecordingDiagnostics {
-				diagnostics = append(diagnostics, diagnostic)
-			}
-			if request.FactorySessionID != "" && value.FactorySessionID != request.FactorySessionID {
-				continue
-			}
-			if request.WorkID != "" && !containsString(value.WorkIDs, request.WorkID) {
-				continue
-			}
-			key := recordingCatalogKey(value)
-			if key <= cursor {
-				continue
-			}
-			all = append(all, recordingCatalogEntry{key: key, projection: value})
-		}
-	}
-
-	sort.SliceStable(all, func(i, j int) bool { return all[i].key < all[j].key })
 	if len(all) > limit {
 		page := all[:limit]
 		return recordings.WorkerRecordingListResult{
@@ -472,230 +426,6 @@ func (writer *FileWriter) readV1Snapshot(data []byte, recordingID string) (recor
 			return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("classify Worker recording snapshot: %w", err)
 		}
 		applyProjectionToSession(session, result.Projection)
-	}
-	return snapshot, nil
-}
-
-type workerRecordingV2Header struct {
-	SchemaVersion    string                           `json:"schemaVersion"`
-	Kind             string                           `json:"kind"`
-	RecordingID      string                           `json:"recordingId"`
-	WorkerSessionID  string                           `json:"workerSessionId"`
-	FactorySessionID string                           `json:"factorySessionId,omitempty"`
-	Topic            events.Topic                     `json:"topic"`
-	WorkIDs          []string                         `json:"workIds,omitempty"`
-	AttemptID        string                           `json:"attemptId,omitempty"`
-	Status           recordings.WorkerRecordingStatus `json:"status"`
-}
-
-type workerRecordingV2Record struct {
-	SchemaVersion   string        `json:"schemaVersion"`
-	Kind            string        `json:"kind"`
-	WorkerSessionID string        `json:"workerSessionId,omitempty"`
-	Record          events.Record `json:"record"`
-}
-
-type workerRecordingV2Health struct {
-	SchemaVersion     string                              `json:"schemaVersion"`
-	Kind              string                              `json:"kind"`
-	WorkerSessionID   string                              `json:"workerSessionId,omitempty"`
-	Status            recordings.WorkerRecordingStatus    `json:"status"`
-	Reason            string                              `json:"reason,omitempty"`
-	LastPosition      events.AggregateSequence            `json:"lastPosition"`
-	ExecutionTerminal *recordings.WorkerRecordingTerminal `json:"executionTerminal,omitempty"`
-}
-
-type workerRecordingSessionReadState struct {
-	session      *recordings.WorkerSessionRecordingSnapshot
-	healthStatus recordings.WorkerRecordingStatus
-	healthReason string
-	tailReason   string
-}
-
-func (writer *FileWriter) readV2Snapshot(data []byte, expectedRecordingID string) (recordings.WorkerRecordingSnapshot, error) {
-	var snapshot recordings.WorkerRecordingSnapshot
-	states := make(map[string]*workerRecordingSessionReadState)
-	currentSessionID := ""
-	var tailReason string
-	var tailSessionID string
-	lineNumber := 0
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 64<<10), workerRecordingV2MaxLineBytes)
-	for scanner.Scan() {
-		lineNumber++
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			tailReason, tailSessionID = "EMPTY_TAIL", currentSessionID
-			break
-		}
-		var envelope struct {
-			SchemaVersion   string `json:"schemaVersion"`
-			Kind            string `json:"kind"`
-			WorkerSessionID string `json:"workerSessionId"`
-		}
-		if err := json.Unmarshal(line, &envelope); err != nil {
-			tailReason, tailSessionID = "MALFORMED_TAIL", currentSessionID
-			break
-		}
-		if envelope.SchemaVersion != workerRecordingV2SchemaVersion {
-			if lineNumber == 1 {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: schema %q is not %q", recordings.ErrWorkerRecordingCompatibility, envelope.SchemaVersion, workerRecordingV2SchemaVersion)
-			}
-			tailReason, tailSessionID = "UNSUPPORTED_SCHEMA", currentSessionID
-			break
-		}
-		switch envelope.Kind {
-		case "header":
-			var header workerRecordingV2Header
-			if err := json.Unmarshal(line, &header); err != nil || strings.TrimSpace(header.RecordingID) == "" || strings.TrimSpace(header.WorkerSessionID) == "" {
-				tailReason, tailSessionID = "INVALID_HEADER", envelope.WorkerSessionID
-				break
-			}
-			if expectedRecordingID != "" && header.RecordingID != expectedRecordingID {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: artifact recording identity %q does not match %q", recordings.ErrWorkerRecordingReplay, header.RecordingID, expectedRecordingID)
-			}
-			if snapshot.RecordingID == "" {
-				snapshot.RecordingID = header.RecordingID
-			} else if snapshot.RecordingID != header.RecordingID {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: v2 artifact contains multiple recording identities", recordings.ErrWorkerRecordingDuplicate)
-			}
-			if _, exists := states[header.WorkerSessionID]; exists {
-				tailReason, tailSessionID = "DUPLICATE_HEADER", header.WorkerSessionID
-				break
-			}
-			topic := header.Topic
-			if topic == "" {
-				topic = events.Topic("worker-session/" + header.WorkerSessionID + "/events")
-			}
-			snapshot.Sessions = append(snapshot.Sessions, recordings.WorkerSessionRecordingSnapshot{
-				WorkerSessionID:  header.WorkerSessionID,
-				FactorySessionID: header.FactorySessionID,
-				WorkIDs:          append([]string(nil), header.WorkIDs...),
-				AttemptID:        header.AttemptID,
-				Topic:            topic,
-				Records:          []events.Record{},
-			})
-			session := &snapshot.Sessions[len(snapshot.Sessions)-1]
-			states[session.WorkerSessionID] = &workerRecordingSessionReadState{session: session, healthStatus: header.Status}
-			currentSessionID = header.WorkerSessionID
-		case "record":
-			var recordLine workerRecordingV2Record
-			if err := json.Unmarshal(line, &recordLine); err != nil || recordLine.Record.IsZero() {
-				tailReason, tailSessionID = "MALFORMED_TAIL", recordLine.WorkerSessionID
-				if tailSessionID == "" {
-					tailSessionID = currentSessionID
-				}
-				break
-			}
-			if err := recordLine.Record.Validate(); err != nil {
-				tailReason, tailSessionID = "INVALID_RECORD", recordLine.WorkerSessionID
-				if tailSessionID == "" {
-					tailSessionID = currentSessionID
-				}
-				break
-			}
-			sessionID := recordLine.WorkerSessionID
-			if sessionID == "" {
-				sessionID = findSessionByTopic(snapshot.Sessions, recordLine.Record.ID.Topic, currentSessionID)
-			}
-			state := states[sessionID]
-			if state == nil {
-				tailReason, tailSessionID = "RECORD_WITHOUT_HEADER", sessionID
-				break
-			}
-			state.session.Records = append(state.session.Records, recordLine.Record.Detached())
-			currentSessionID = sessionID
-		case "health":
-			var health workerRecordingV2Health
-			if err := json.Unmarshal(line, &health); err != nil {
-				tailReason, tailSessionID = "MALFORMED_TAIL", envelope.WorkerSessionID
-				break
-			}
-			sessionID := health.WorkerSessionID
-			if sessionID == "" {
-				sessionID = currentSessionID
-			}
-			state := states[sessionID]
-			if state == nil {
-				tailReason, tailSessionID = "HEALTH_WITHOUT_HEADER", sessionID
-				break
-			}
-			if !validWorkerRecordingHealthStatus(health.Status) {
-				tailReason, tailSessionID = "INVALID_HEALTH", sessionID
-				break
-			}
-			state.healthStatus = health.Status
-			state.healthReason = strings.TrimSpace(health.Reason)
-			if health.ExecutionTerminal != nil {
-				state.session.ExecutionTerminal = cloneWorkerRecordingTerminal(health.ExecutionTerminal)
-			}
-			currentSessionID = sessionID
-		default:
-			tailReason, tailSessionID = "UNKNOWN_ENVELOPE", envelope.WorkerSessionID
-			if tailSessionID == "" {
-				tailSessionID = currentSessionID
-			}
-		}
-		if tailReason != "" {
-			break
-		}
-	}
-	if scanner.Err() != nil {
-		tailReason = "OVERSIZE_LINE"
-		if tailSessionID == "" {
-			tailSessionID = currentSessionID
-		}
-	}
-	if snapshot.RecordingID == "" {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: v2 recording header is missing", recordings.ErrWorkerRecordingReplay)
-	}
-	if len(snapshot.Sessions) == 0 {
-		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: v2 Worker Session header is missing", recordings.ErrWorkerRecordingReplay)
-	}
-	for _, state := range states {
-		if state.session == nil {
-			continue
-		}
-		if state.session.FactorySessionID == "" || state.session.AttemptID == "" || len(state.session.WorkIDs) == 0 {
-			mergeSessionMetadata(state.session, metadataFromRecords(state.session.Records))
-		}
-		if state.session.WorkerSessionID == tailSessionID && tailReason != "" {
-			state.tailReason = tailReason
-		}
-		if state.healthReason != "" {
-			switch state.healthStatus {
-			case recordings.WorkerRecordingStatusDegraded:
-				state.session.Failure = state.healthReason
-			case recordings.WorkerRecordingStatusIncomplete:
-				state.session.InterruptionReason = state.healthReason
-			}
-		}
-		if state.healthReason == "" && (state.healthStatus == "" || state.healthStatus == recordings.WorkerRecordingStatusActive) {
-			base, err := reduceWorkerSession(snapshot.RecordingID, *state.session, state.session.Records)
-			if err != nil {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: reduce v2 Worker Session prefix: %v", recordings.ErrWorkerRecordingReplay, err)
-			}
-			if base.Terminal == nil && state.session.InterruptionReason == "" {
-				state.session.InterruptionReason = recordings.WorkerRecordingInterruptionProcessStopped
-			}
-		}
-		if state.tailReason != "" {
-			base, err := reduceWorkerSession(snapshot.RecordingID, *state.session, state.session.Records)
-			if err != nil {
-				return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: reduce v2 valid prefix: %v", recordings.ErrWorkerRecordingCorruptTail, err)
-			}
-			if base.Terminal != nil {
-				state.session.Failure = state.tailReason
-				state.session.InterruptionReason = ""
-			} else if state.session.Failure == "" {
-				state.session.InterruptionReason = state.tailReason
-			}
-		}
-		projection, err := reduceWorkerSession(snapshot.RecordingID, *state.session, state.session.Records)
-		if err != nil {
-			return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("%w: reduce v2 Worker Session %q: %v", recordings.ErrWorkerRecordingReplay, state.session.WorkerSessionID, err)
-		}
-		applyProjectionToSession(state.session, projection)
 	}
 	return snapshot, nil
 }
@@ -924,23 +654,6 @@ func findSessionByTopic(sessions []recordings.WorkerSessionRecordingSnapshot, to
 	return ""
 }
 
-type recordingCatalogEntry struct {
-	key        string
-	projection recordings.WorkerRecordingProjection
-}
-
-func recordingCatalogKey(projection recordings.WorkerRecordingProjection) string {
-	return projection.WorkerSessionID + "\x00" + projection.RecordingID
-}
-
-func catalogProjectionPage(entries []recordingCatalogEntry) []recordings.WorkerRecordingProjection {
-	values := make([]recordings.WorkerRecordingProjection, len(entries))
-	for index, entry := range entries {
-		values[index] = cloneProjection(entry.projection)
-	}
-	return values
-}
-
 func encodeRecordingCatalogCursor(value string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(value))
 }
@@ -955,58 +668,6 @@ func decodeRecordingCatalogCursor(value string) (string, error) {
 		return "", recordings.ErrWorkerRecordingCursor
 	}
 	return string(decoded), nil
-}
-
-func catalogDiagnosticCode(err error) recordings.WorkerRecordingCatalogDiagnosticCode {
-	switch {
-	case errors.Is(err, recordings.ErrWorkerRecordingCorruptTail):
-		return recordings.WorkerRecordingCatalogMalformedTail
-	case errors.Is(err, recordings.ErrWorkerRecordingCompatibility):
-		return recordings.WorkerRecordingCatalogUnsupported
-	case errors.Is(err, recordings.ErrWorkerRecordingRetention):
-		return recordings.WorkerRecordingCatalogRetention
-	default:
-		return recordings.WorkerRecordingCatalogUnreadable
-	}
-}
-
-func catalogDiagnosticMessage(err error) string {
-	if errors.Is(err, recordings.ErrWorkerRecordingCorruptTail) {
-		return "valid Worker recording prefix retained; tail is not readable"
-	}
-	if errors.Is(err, recordings.ErrWorkerRecordingCompatibility) {
-		return "Worker recording schema is not supported"
-	}
-	return "Worker recording artifact could not be read"
-}
-
-func catalogProjectionDiagnostic(
-	projection recordings.WorkerRecordingProjection,
-	path string,
-) (recordings.WorkerRecordingCatalogDiagnostic, bool) {
-	reason := strings.TrimSpace(projection.Degradation)
-	if reason == "" {
-		reason = strings.TrimSpace(projection.InterruptionReason)
-	}
-	code := recordings.WorkerRecordingCatalogDiagnosticCode(reason)
-	switch code {
-	case recordings.WorkerRecordingCatalogMalformedTail:
-		return recordings.WorkerRecordingCatalogDiagnostic{
-			RecordingID: projection.RecordingID,
-			Path:        path,
-			Code:        recordings.WorkerRecordingCatalogMalformedTail,
-			Message:     "valid Worker recording prefix retained; tail is not readable",
-		}, true
-	case recordings.WorkerRecordingCatalogUnsupported:
-		return recordings.WorkerRecordingCatalogDiagnostic{
-			RecordingID: projection.RecordingID,
-			Path:        path,
-			Code:        recordings.WorkerRecordingCatalogUnsupported,
-			Message:     "Worker recording schema is not supported",
-		}, true
-	default:
-		return recordings.WorkerRecordingCatalogDiagnostic{}, false
-	}
 }
 
 func cloneSnapshot(snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerRecordingSnapshot {

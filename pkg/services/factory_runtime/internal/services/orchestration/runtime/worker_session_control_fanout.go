@@ -246,26 +246,8 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	if s.hasDurableWorkerHistory() && s.Service != nil {
-		// Preserve provider-reference parity while the live registry still
-		// owns an association: the canonical Factory ledger carries the same
-		// normalized projection as the provider route. A provider-neutral
-		// Worker-ID falls through to the source-native Worker stream, whose
-		// stable generation is decorated below.
-		if observation, observationErr := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
-			WorkerSessionID: req.WorkerSessionID,
-		}); observationErr == nil && observation.ProviderSessionAvailable && !durableWorkerCursor(req.Cursor) {
-			if subscription, handled, err := s.streamRecordedByWorkerSessionID(ctx, req); handled {
-				return subscription, err
-			}
-		}
-		subscription, err := s.Service.StreamObservationsByWorkerSessionID(ctx, req)
-		if err == nil {
-			return withRecordedWorkerStreamGeneration(subscription, req.WorkerSessionID), nil
-		}
-		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-			return workersessions.ObservationSubscription{}, err
-		}
+	if subscription, handled, err := s.streamDurableWorkerSession(ctx, req); handled {
+		return subscription, err
 	}
 	if subscription, handled, err := s.streamRecordedByWorkerSessionID(ctx, req); handled {
 		return subscription, err
@@ -283,29 +265,29 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	return subscription, nil
 }
 
-func durableWorkerCursor(cursor *workersessions.ObservationCursor) bool {
-	return cursor != nil && strings.HasPrefix(strings.TrimSpace(cursor.StreamGenerationID), "worker-recording/")
-}
-
-func withRecordedWorkerStreamGeneration(
-	subscription workersessions.ObservationSubscription,
-	workerSessionID string,
-) workersessions.ObservationSubscription {
-	if subscription.NextFunc == nil {
-		return subscription
+func (s *recordedWorkerSessionObservation) streamDurableWorkerSession(
+	ctx context.Context,
+	req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, bool, error) {
+	if !s.hasDurableWorkerHistory() || s.Service == nil {
+		return workersessions.ObservationSubscription{}, false, nil
 	}
-	next := subscription.NextFunc
-	generationID := recordedWorkerStreamGenerationForIdentity(workerSessionID)
-	subscription.NextFunc = func(ctx context.Context) workersessions.ObservationDelivery {
-		delivery := next(ctx)
-		if delivery.Kind == workersessions.ObservationDeliveryRecord ||
-			delivery.Kind == workersessions.ObservationDeliveryTerminal ||
-			delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
-			delivery.Event.Cursor.StreamGenerationID = generationID
+	observation, err := s.Service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: req.WorkerSessionID,
+	})
+	if err == nil && observation.ProviderSessionAvailable && !durableWorkerCursor(req.Cursor) {
+		if subscription, handled, streamErr := s.streamRecordedByWorkerSessionID(ctx, req); handled {
+			return subscription, true, streamErr
 		}
-		return delivery
 	}
-	return subscription
+	subscription, err := s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+	if err == nil {
+		return withRecordedWorkerStreamGeneration(subscription, req.WorkerSessionID), true, nil
+	}
+	if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		return workersessions.ObservationSubscription{}, true, err
+	}
+	return workersessions.ObservationSubscription{}, false, nil
 }
 
 func (s *recordedWorkerSessionObservation) streamRecorded(
@@ -445,28 +427,6 @@ func (s *recordedWorkerSessionObservation) subscribeReplayObservationEvents(
 	return source, nil
 }
 
-func observationStreamLimit(limit int) int {
-	if limit <= 0 {
-		return workersessions.DefaultObservationStreamLimit
-	}
-	return limit
-}
-
-func recordedObservationHistory(
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-	cursor *workersessions.ObservationCursor,
-) []interfaces.FactoryEvent {
-	ordered := make([]interfaces.FactoryEvent, 0, len(events))
-	for _, event := range cloneAndSortFactoryEvents(events) {
-		if stringPointerValue(event.Context.DispatchID) == dispatchID &&
-			(cursor == nil || (event.Context.Sequence > 0 && uint64(event.Context.Sequence) > cursor.Position)) {
-			ordered = append(ordered, event)
-		}
-	}
-	return ordered
-}
-
 func validateRecordedObservationCursor(
 	ledger recordings.RuntimeLedger,
 	events []interfaces.FactoryEvent,
@@ -480,18 +440,38 @@ func validateRecordedObservationCursor(
 	if err := cursor.Validate(); err != nil {
 		return err
 	}
+	if err := validateRecordedCursorIdentity(ledger, fact, cursor, durableHistory); err != nil {
+		return err
+	}
+	return validateRecordedCursorPosition(events, fact, cursor)
+}
+
+func validateRecordedCursorIdentity(
+	ledger recordings.RuntimeLedger,
+	fact recordedDispatchObservation,
+	cursor *workersessions.ObservationCursor,
+	durableHistory bool,
+) error {
 	if workerSessionID := strings.TrimSpace(cursor.WorkerSessionID); workerSessionID != "" &&
 		workerSessionID != strings.TrimSpace(fact.workerSessionID) {
 		return workersessions.ErrObservationCursorForeign
 	}
-	if generationID := strings.TrimSpace(cursor.StreamGenerationID); generationID != "" &&
-		generationID != recordedObservationGeneration(ledger, fact.workerSessionID, durableHistory) {
-		if strings.HasPrefix(generationID, "worker-recording/") &&
-			strings.TrimPrefix(generationID, "worker-recording/") != strings.TrimSpace(fact.workerSessionID) {
-			return workersessions.ErrObservationCursorForeign
-		}
-		return workersessions.ErrObservationCursorUnavailable
+	generationID := strings.TrimSpace(cursor.StreamGenerationID)
+	if generationID == "" || generationID == recordedObservationGeneration(ledger, fact.workerSessionID, durableHistory) {
+		return nil
 	}
+	if strings.HasPrefix(generationID, "worker-recording/") &&
+		strings.TrimPrefix(generationID, "worker-recording/") != strings.TrimSpace(fact.workerSessionID) {
+		return workersessions.ErrObservationCursorForeign
+	}
+	return workersessions.ErrObservationCursorUnavailable
+}
+
+func validateRecordedCursorPosition(
+	events []interfaces.FactoryEvent,
+	fact recordedDispatchObservation,
+	cursor *workersessions.ObservationCursor,
+) error {
 	var highest uint64
 	var acknowledged *interfaces.FactoryEvent
 	for _, event := range events {
@@ -514,55 +494,6 @@ func validateRecordedObservationCursor(
 		return workersessions.ErrObservationCursorForeign
 	}
 	return nil
-}
-
-func recordedObservationGeneration(ledger recordings.RuntimeLedger, workerSessionID string, durableHistory bool) string {
-	if durableHistory {
-		return recordedWorkerStreamGenerationForIdentity(workerSessionID)
-	}
-	generationID := ""
-	if ledger != nil {
-		generationID = strings.TrimSpace(ledger.StreamGenerationID())
-	}
-	if generationID == "" && durableHistory {
-		generationID = recordedWorkerStreamGenerationForIdentity(workerSessionID)
-	}
-	return generationID
-}
-
-func recordedWorkerStreamGenerationForIdentity(workerSessionID string) string {
-	return "worker-recording/" + strings.TrimSpace(workerSessionID)
-}
-
-func recordedObservationReplaySummary(
-	fact recordedDispatchObservation,
-	health workerRecordingHealth,
-) *workersessions.ReplaySummary {
-	status := health.status
-	if status == "" {
-		if fact.state.Terminal() {
-			status = recordings.WorkerRecordingStatusComplete
-		} else {
-			status = recordings.WorkerRecordingStatusIncomplete
-		}
-	}
-	reason := "recording-" + strings.ToLower(string(status))
-	if health.reason != "" {
-		reason = health.reason
-	}
-	return &workersessions.ReplaySummary{
-		Complete: status == recordings.WorkerRecordingStatusComplete,
-		Reason:   reason,
-	}
-}
-
-func recordedObservationHistoryHasTerminal(events []interfaces.FactoryEvent, dispatchID string) bool {
-	for _, event := range events {
-		if stringPointerValue(event.Context.DispatchID) == dispatchID && recordedWorkerSessionTerminalEvent(event) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *recordedWorkerSessionObservation) recordedObservationForProvider(

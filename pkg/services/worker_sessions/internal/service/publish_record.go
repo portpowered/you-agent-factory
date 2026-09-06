@@ -862,52 +862,6 @@ func (r *registry) streamObservationTopic(
 	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal, cursor)
 }
 
-func validateObservationCursorWorkerSessionID(
-	cursor *workersessions.ObservationCursor,
-	workerSessionID string,
-) error {
-	if cursor == nil || strings.TrimSpace(cursor.WorkerSessionID) == "" {
-		return nil
-	}
-	if strings.TrimSpace(cursor.WorkerSessionID) != strings.TrimSpace(workerSessionID) {
-		return workersessions.ErrObservationCursorForeign
-	}
-	return nil
-}
-
-func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
-	r.mu.RLock()
-	workerSessionID := ""
-	alreadyTerminal := false
-	workerSessionState := workersessions.StateReserved
-	for id, session := range r.sessions {
-		if session.ProviderSessionAssociation != nil &&
-			session.ProviderSessionAssociation.Reference == ref {
-			workerSessionID = id
-			alreadyTerminal = session.Terminal()
-			workerSessionState = session.State
-			break
-		}
-	}
-	r.mu.RUnlock()
-	if workerSessionID == "" {
-		r.logger.Info("worker session observation stream", "outcome", "not_found")
-		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
-	}
-	return workerSessionID, alreadyTerminal, workerSessionState, nil
-}
-
-func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
-	r.mu.RLock()
-	session, exists := r.sessions[id]
-	r.mu.RUnlock()
-	if !exists {
-		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
-		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
-	}
-	return id, session.Terminal(), session.State, nil
-}
-
 func (r *registry) replayObservationStream(
 	ctx context.Context,
 	topic events.Topic,

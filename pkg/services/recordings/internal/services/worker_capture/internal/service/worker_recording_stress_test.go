@@ -1,4 +1,4 @@
-package stress_test
+package service
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -14,11 +15,22 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const workerRecordingV2StressRecordCount = 10_000
+
+type workerRecordingV2StressCase struct {
+	recordingID      string
+	workerSessionID  string
+	factorySessionID string
+	workID           string
+	attemptID        string
+	schemaVersion    string
+	topic            events.Topic
+	root             string
+	storage          platformreplay.Storage
+}
 
 type workerRecordingV2StressHeader struct {
 	SchemaVersion    string                           `json:"schemaVersion"`
@@ -56,59 +68,68 @@ func TestWorkerRecordingV2TenThousandRecords(t *testing.T) {
 		t.Skip("skipping 10k Worker recording stress test in short mode")
 	}
 
-	const (
-		recordingID      = "recording-v2-10k"
-		workerSessionID  = "worker-v2-10k"
-		factorySessionID = "factory-v2-10k"
-		workID           = "work-v2-10k"
-		attemptID        = "attempt-v2-10k"
-		schemaVersion    = "worker-session-recording.v2"
-	)
-	topic := events.Topic("worker-session/" + workerSessionID + "/events")
-	root := t.TempDir()
-	storage := platformreplay.NewLocal(runtime.GOOS)
-	artifact := filepath.Join(root, workerRecordingV2StressPath(recordingID))
+	fixture := workerRecordingV2StressCase{
+		recordingID:      "recording-v2-10k",
+		workerSessionID:  "worker-v2-10k",
+		factorySessionID: "factory-v2-10k",
+		workID:           "work-v2-10k",
+		attemptID:        "attempt-v2-10k",
+		schemaVersion:    workerRecordingV2SchemaVersion,
+		topic:            events.Topic("worker-session/worker-v2-10k/events"),
+		root:             t.TempDir(),
+		storage:          platformreplay.NewLocal(runtime.GOOS),
+	}
+	writeWorkerRecordingV2StressArtifact(t, fixture)
+	historyReader := openWorkerRecordingV2StressHistory(t, fixture)
+	assertWorkerRecordingV2StressHistory(t, historyReader, fixture)
+}
 
+func writeWorkerRecordingV2StressArtifact(t *testing.T, fixture workerRecordingV2StressCase) {
+	t.Helper()
 	var data bytes.Buffer
 	encoder := json.NewEncoder(&data)
 	if err := encoder.Encode(workerRecordingV2StressHeader{
-		SchemaVersion:    schemaVersion,
+		SchemaVersion:    fixture.schemaVersion,
 		Kind:             "header",
-		RecordingID:      recordingID,
-		WorkerSessionID:  workerSessionID,
-		FactorySessionID: factorySessionID,
-		Topic:            topic,
-		WorkIDs:          []string{workID},
-		AttemptID:        attemptID,
+		RecordingID:      fixture.recordingID,
+		WorkerSessionID:  fixture.workerSessionID,
+		FactorySessionID: fixture.factorySessionID,
+		Topic:            fixture.topic,
+		WorkIDs:          []string{fixture.workID},
+		AttemptID:        fixture.attemptID,
 		Status:           recordings.WorkerRecordingStatusActive,
 	}); err != nil {
 		t.Fatalf("encode v2 header: %v", err)
 	}
 	for position := 1; position <= workerRecordingV2StressRecordCount; position++ {
 		record := workerRecordingV2StressRecord{
-			SchemaVersion:   schemaVersion,
+			SchemaVersion:   fixture.schemaVersion,
 			Kind:            "record",
-			WorkerSessionID: workerSessionID,
-			Record:          workerRecordingV2StressRecordAt(topic, workerSessionID, position),
+			WorkerSessionID: fixture.workerSessionID,
+			Record:          workerRecordingV2StressRecordAt(fixture.topic, fixture.workerSessionID, position),
 		}
 		if err := encoder.Encode(record); err != nil {
 			t.Fatalf("encode v2 record %d: %v", position, err)
 		}
 	}
 	if err := encoder.Encode(workerRecordingV2StressHealth{
-		SchemaVersion:   schemaVersion,
+		SchemaVersion:   fixture.schemaVersion,
 		Kind:            "health",
-		WorkerSessionID: workerSessionID,
+		WorkerSessionID: fixture.workerSessionID,
 		Status:          recordings.WorkerRecordingStatusComplete,
 		LastPosition:    workerRecordingV2StressRecordCount,
 	}); err != nil {
 		t.Fatalf("encode v2 health: %v", err)
 	}
-	if err := storage.WriteFile(artifact, data.Bytes()); err != nil {
+	artifact := filepath.Join(fixture.root, workerRecordingV2StressPath(fixture.recordingID))
+	if err := fixture.storage.WriteFile(artifact, data.Bytes()); err != nil {
 		t.Fatalf("write v2 artifact: %v", err)
 	}
+}
 
-	writer, err := recordingswire.NewWorkerRecordingFileWriter(storage, root)
+func openWorkerRecordingV2StressHistory(t *testing.T, fixture workerRecordingV2StressCase) recordings.WorkerRecordingHistoryReader {
+	t.Helper()
+	writer, err := NewFileWriterWithDirectoryReader(fixture.storage, fixture.root, os.ReadDir)
 	if err != nil {
 		t.Fatalf("construct Worker recording writer: %v", err)
 	}
@@ -116,7 +137,16 @@ func TestWorkerRecordingV2TenThousandRecords(t *testing.T) {
 	if !ok {
 		t.Fatal("Worker recording writer does not expose history reads")
 	}
-	snapshot, err := historyReader.LoadWorkerRecordingByWorkerSessionID(context.Background(), workerSessionID)
+	return historyReader
+}
+
+func assertWorkerRecordingV2StressHistory(
+	t *testing.T,
+	historyReader recordings.WorkerRecordingHistoryReader,
+	fixture workerRecordingV2StressCase,
+) {
+	t.Helper()
+	snapshot, err := historyReader.LoadWorkerRecordingByWorkerSessionID(context.Background(), fixture.workerSessionID)
 	if err != nil {
 		t.Fatalf("load 10k Worker-ID history: %v", err)
 	}
@@ -124,23 +154,29 @@ func TestWorkerRecordingV2TenThousandRecords(t *testing.T) {
 		t.Fatalf("loaded sessions = %d, want one", len(snapshot.Sessions))
 	}
 	session := snapshot.Sessions[0]
-	if session.WorkerSessionID != workerSessionID || session.Status != recordings.WorkerRecordingStatusComplete ||
+	if session.WorkerSessionID != fixture.workerSessionID || session.Status != recordings.WorkerRecordingStatusComplete ||
 		len(session.Records) != workerRecordingV2StressRecordCount || session.LastPosition != workerRecordingV2StressRecordCount {
 		t.Fatalf("loaded 10k session = id=%q status=%q records=%d last=%d", session.WorkerSessionID, session.Status, len(session.Records), session.LastPosition)
 	}
-	for index, record := range session.Records {
-		wantPosition := events.AggregateSequence(index + 1)
-		if record.ID.Position != wantPosition {
-			t.Fatalf("record %d position = %d, want %d", index+1, record.ID.Position, wantPosition)
-		}
-	}
+	assertWorkerRecordingV2StressPositions(t, session.Records)
+
 	page, err := historyReader.ListWorkerRecordingProjections(context.Background(), recordings.WorkerRecordingListRequest{MaxResults: 1})
 	if err != nil {
 		t.Fatalf("catalog 10k Worker-ID history: %v", err)
 	}
-	if len(page.Projections) != 1 || page.Projections[0].WorkerSessionID != workerSessionID ||
+	if len(page.Projections) != 1 || page.Projections[0].WorkerSessionID != fixture.workerSessionID ||
 		page.Projections[0].Status != recordings.WorkerRecordingStatusComplete || len(page.Diagnostics) != 0 {
 		t.Fatalf("catalog projection = %#v, want one complete projection without diagnostics", page)
+	}
+}
+
+func assertWorkerRecordingV2StressPositions(t *testing.T, records []events.Record) {
+	t.Helper()
+	for index, record := range records {
+		wantPosition := events.AggregateSequence(index + 1)
+		if record.ID.Position != wantPosition {
+			t.Fatalf("record %d position = %d, want %d", index+1, record.ID.Position, wantPosition)
+		}
 	}
 }
 

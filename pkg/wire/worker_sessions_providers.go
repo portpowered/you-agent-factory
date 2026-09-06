@@ -11,6 +11,7 @@ import (
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -85,9 +86,14 @@ func provideWorkerRecordingWriter(
 		if err != nil {
 			return nil, err
 		}
-		writer, err = recordingswire.NewWorkerRecordingFileWriter(
+		readDir := edges.RecordingReadDirectory
+		if readDir == nil {
+			readDir = platformfilesystem.Local{}.ReadDir
+		}
+		writer, err = recordingswire.NewWorkerRecordingFileWriterWithDirectoryReader(
 			platformreplay.NewLocal(runtime.GOOS),
 			root,
+			readDir,
 		)
 		if err != nil {
 			return nil, err

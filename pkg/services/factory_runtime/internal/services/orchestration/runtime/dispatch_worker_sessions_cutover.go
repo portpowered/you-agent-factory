@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -322,35 +321,6 @@ func latestFactoryEventTick(events []interfaces.FactoryEvent) int {
 	return selectedTick
 }
 
-func recordedDispatchStateMaps(
-	world interfaces.FactoryWorldState,
-) map[string]interfaces.FactoryWorldDispatchCompletion {
-	completed := make(map[string]interfaces.FactoryWorldDispatchCompletion, len(world.CompletedDispatches))
-	for _, dispatch := range world.CompletedDispatches {
-		completed[dispatch.DispatchID] = dispatch
-	}
-	for _, dispatch := range world.FailedDispatches {
-		completed[dispatch.DispatchID] = dispatch
-	}
-	return completed
-}
-
-func recordedDispatchEnd(
-	dispatch interfaces.FactoryWorldDispatchCompletion,
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-) *time.Time {
-	ended := dispatch.CompletedAt
-	if ended.IsZero() {
-		ended = eventTimeForDispatch(events, dispatchID)
-	}
-	if ended.IsZero() {
-		return nil
-	}
-	ended = ended.UTC()
-	return &ended
-}
-
 func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recordedDispatchAssociation, map[string]recordedDispatchRequest) {
 	associations := make(map[string]recordedDispatchAssociation)
 	requests := make(map[string]recordedDispatchRequest)
@@ -401,38 +371,6 @@ func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recorde
 	return associations, requests
 }
 
-type recordedDispatchInterruptionFact struct {
-	workIDs       []string
-	interruptedAt time.Time
-	eventTime     time.Time
-	reason        string
-}
-
-func recordedDispatchInterruption(
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-) (recordedDispatchInterruptionFact, bool) {
-	var fact recordedDispatchInterruptionFact
-	found := false
-	for _, event := range events {
-		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
-			stringPointerValue(event.Context.DispatchID) != dispatchID {
-			continue
-		}
-		var payload interfaces.DispatchInterruptedEventPayload
-		if json.Unmarshal(event.Payload, &payload) != nil {
-			continue
-		}
-		fact = recordedDispatchInterruptionFact{
-			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
-			interruptedAt: payload.InterruptedAt,
-			eventTime:     event.Context.EventTime,
-			reason:        payload.Reason,
-		}
-		found = true
-	}
-	return fact, found
-}
 func newRecordedWorkerSessionObservation(
 	live workersessions.Service,
 	ledger recordings.RuntimeLedger,
@@ -770,42 +708,67 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
-	if s.hasDurableWorkerHistory() && s.Service != nil {
-		observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
-		if err == nil {
-			// A live process may still have the exact provider association. In
-			// that case preserve the existing provider-backed projection parity;
-			// the durable result remains the fallback after restart or provider
-			// loss.
-			if observation.ProviderSessionAvailable && s.ledger != nil && s.projector != nil {
-				if recorded, found, recordedErr := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID); recordedErr != nil {
-					return workersessions.Observation{}, recordedErr
-				} else if found {
-					return recorded, nil
-				}
-			}
-			return observation, nil
-		}
-		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-			return workersessions.Observation{}, err
-		}
-	}
-	if s != nil && s.ledger != nil && s.projector != nil {
-		observation, found, err := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID)
-		if err != nil {
-			return workersessions.Observation{}, err
-		}
-		if found {
-			return observation, nil
-		}
-		if s.Service == nil {
-			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
-		}
+	if observation, handled, err := s.readWorkerSessionHistory(ctx, req); handled {
+		return observation, err
 	}
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return s.readLiveWorkerSessionByID(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) readWorkerSessionHistory(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, bool, error) {
+	if s.hasDurableWorkerHistory() && s.Service != nil {
+		observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
+		if err == nil {
+			if recorded, handled, recordedErr := s.recordedWorkerObservationIfAvailable(ctx, observation, req.WorkerSessionID); handled {
+				return recorded, true, recordedErr
+			}
+			return observation, true, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, true, err
+		}
+	}
+	if observation, handled, err := s.readRecordedWorkerHistory(ctx, req.WorkerSessionID); handled {
+		return observation, true, err
+	}
+	return workersessions.Observation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedWorkerHistory(
+	ctx context.Context,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	if s == nil || s.ledger == nil || s.projector == nil {
+		return workersessions.Observation{}, false, nil
+	}
+	observation, found, err := s.readRecordedWorkerSessionByID(ctx, workerSessionID)
+	if err != nil || found {
+		return observation, true, err
+	}
+	if s.Service == nil {
+		return workersessions.Observation{}, true, workersessions.ErrObservationSessionNotFound
+	}
+	return workersessions.Observation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedWorkerObservationIfAvailable(
+	ctx context.Context,
+	observation workersessions.Observation,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	if !observation.ProviderSessionAvailable || s.ledger == nil || s.projector == nil {
+		return workersessions.Observation{}, false, nil
+	}
+	recorded, found, err := s.readRecordedWorkerSessionByID(ctx, workerSessionID)
+	if err != nil || found {
+		return recorded, true, err
+	}
+	return workersessions.Observation{}, false, nil
 }
 
 func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
@@ -856,27 +819,8 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	if req.WorkerSessionID != "" && s.hasDurableWorkerHistory() && s.Service != nil {
-		result, err := s.Service.ReadTranscript(ctx, req)
-		if err == nil {
-			if transcriptProviderSessionAvailable(result) && s.ledger != nil && s.projector != nil {
-				if recorded, handled, recordedErr := s.readRecordedTranscriptForRequest(ctx, req); recordedErr != nil {
-					return workersessions.ReadTranscriptResult{}, recordedErr
-				} else if handled {
-					return recorded, nil
-				}
-			}
-			return result, nil
-		}
-		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-			return workersessions.ReadTranscriptResult{}, err
-		}
-	}
-	if s != nil && s.ledger != nil && s.projector != nil {
-		result, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
-		if handled || err != nil {
-			return result, err
-		}
+	if result, handled, err := s.readTranscriptHistory(ctx, req); handled {
+		return result, err
 	}
 	if s == nil || s.Service == nil {
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
@@ -889,6 +833,57 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 		return workersessions.ReadTranscriptResult{}, err
 	}
 	return result, nil
+}
+
+func (s *recordedWorkerSessionObservation) readTranscriptHistory(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if req.WorkerSessionID != "" && s.hasDurableWorkerHistory() && s.Service != nil {
+		result, err := s.Service.ReadTranscript(ctx, req)
+		if err == nil {
+			if recorded, handled, recordedErr := s.recordedTranscriptIfAvailable(ctx, req, result); handled {
+				return recorded, true, recordedErr
+			}
+			return result, true, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ReadTranscriptResult{}, true, err
+		}
+	}
+	if result, handled, err := s.readRecordedTranscriptHistory(ctx, req); handled {
+		return result, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedTranscriptHistory(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if s == nil || s.ledger == nil || s.projector == nil {
+		return workersessions.ReadTranscriptResult{}, false, nil
+	}
+	result, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
+	if handled || err != nil {
+		return result, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedTranscriptIfAvailable(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+	result workersessions.ReadTranscriptResult,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if !transcriptProviderSessionAvailable(result) || s.ledger == nil || s.projector == nil {
+		return workersessions.ReadTranscriptResult{}, false, nil
+	}
+	recorded, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
+	if err != nil || handled {
+		return recorded, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
 }
 
 func transcriptProviderSessionAvailable(result workersessions.ReadTranscriptResult) bool {
@@ -967,60 +962,4 @@ func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
 	}
 	applyRecordedProviderDetail(&observation, projected.Detail)
 	return observation, nil
-}
-
-func (s *recordedWorkerSessionObservation) readRecordedTranscript(
-	ctx context.Context,
-	req workersessions.ReadTranscriptRequest,
-	fact recordedDispatchObservation,
-) (workersessions.ReadTranscriptResult, error) {
-	if fact.provider == nil {
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
-	}
-	if s.Service != nil {
-		live, err := s.Service.ReadTranscript(ctx, req)
-		if err == nil {
-			return historicalTranscriptResult(fact, live.Entries, req.ProviderSession)
-		}
-		if errors.Is(err, workersessions.ErrObservationCanceled) {
-			return workersessions.ReadTranscriptResult{}, err
-		}
-	}
-	if s.providerSessions == nil {
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
-	}
-	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
-		Session: req.ProviderSession.Clone(),
-		Context: ctx,
-	})
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
-		}
-		if recordedTranscriptSourceUnavailable(err) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
-		}
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, err)
-	}
-	return historicalTranscriptResult(fact, recordedTranscriptEntries(projected.Detail.Transcript), req.ProviderSession)
-}
-
-func historicalTranscriptResult(
-	fact recordedDispatchObservation,
-	entries []workersessions.TranscriptEntry,
-	ref providers.SessionRef,
-) (workersessions.ReadTranscriptResult, error) {
-	result := workersessions.ReadTranscriptResult{
-		WorkerSessionID: fact.workerSessionID,
-		ProviderSession: ref.Clone(),
-		WorkIDs:         append([]string(nil), fact.workIDs...),
-		TurnID:          fact.turnID,
-		AttemptID:       fact.dispatchID,
-		State:           fact.state,
-		Entries:         entries,
-	}
-	if err := result.Validate(); err != nil {
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
-	}
-	return result, nil
 }
