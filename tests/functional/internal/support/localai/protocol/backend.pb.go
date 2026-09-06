@@ -638,6 +638,7 @@ type TTSRequest struct {
 	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
 	Dst           string                 `protobuf:"bytes,3,opt,name=dst,proto3" json:"dst,omitempty"`
+	Voice         string                 `protobuf:"bytes,4,opt,name=voice,proto3" json:"voice,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -689,6 +690,13 @@ func (x *TTSRequest) GetModel() string {
 func (x *TTSRequest) GetDst() string {
 	if x != nil {
 		return x.Dst
+	}
+	return ""
+}
+
+func (x *TTSRequest) GetVoice() string {
+	if x != nil {
+		return x.Voice
 	}
 	return ""
 }
@@ -781,12 +789,13 @@ const file_tests_functional_internal_support_localai_protocol_backend_proto_rawD
 	"\bduration\x18\x04 \x01(\x02R\bduration\"y\n" +
 	"\x18TranscriptStreamResponse\x12\x14\n" +
 	"\x05delta\x18\x01 \x01(\tR\x05delta\x12G\n" +
-	"\ffinal_result\x18\x02 \x01(\v2$.functional_backend.TranscriptResultR\vfinalResult\"H\n" +
+	"\ffinal_result\x18\x02 \x01(\v2$.functional_backend.TranscriptResultR\vfinalResult\"^\n" +
 	"\n" +
 	"TTSRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x10\n" +
-	"\x03dst\x18\x03 \x01(\tR\x03dst\"\x95\x01\n" +
+	"\x03dst\x18\x03 \x01(\tR\x03dst\x12\x14\n" +
+	"\x05voice\x18\x04 \x01(\tR\x05voice\"\x95\x01\n" +
 	"\x0eStatusResponse\x12>\n" +
 	"\x05state\x18\x01 \x01(\x0e2(.functional_backend.StatusResponse.StateR\x05state\"C\n" +
 	"\x05State\x12\x11\n" +
