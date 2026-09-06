@@ -219,42 +219,6 @@ func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
 	return &factorysessions.DefinitionRuntimeRouter{}
 }
 
-// RuntimeAssemblyFromService narrows the one Wire-constructed Factory
-// Sessions root to its owner-private runtime capability. The assertion is
-// performed once during process composition; runtime operations never ask the
-// public root to construct or discover another service.
-func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembly, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Sessions runtime assembly requires the service root")
-	}
-	assembly, ok := service.(RuntimeAssembly)
-	if !ok || assembly == nil {
-		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
-	}
-	return assembly, nil
-}
-
-// RuntimeOpeningFromService retrieves the one owner-private opening
-// capability retained by the canonical Factory Sessions root. The lookup is a
-// construction-time assertion only; callers cannot replace the capability or
-// construct another root through it.
-func RuntimeOpeningFromService(service factorysessions.Service) (RuntimeOpeningCapability, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Sessions runtime opening requires the service root")
-	}
-	provider, ok := service.(interface {
-		RuntimeOpening() RuntimeOpeningCapability
-	})
-	if !ok || provider == nil {
-		return nil, fmt.Errorf("Factory Sessions service root does not retain its runtime opening")
-	}
-	opening := provider.RuntimeOpening()
-	if opening == nil {
-		return nil, fmt.Errorf("Factory Sessions service root has no runtime opening")
-	}
-	return opening, nil
-}
-
 var (
 	NewCursorFileStore         = persistence.NewFileStore
 	NewRuntimeProjectStore     = runtimepersist.NewProjectStore

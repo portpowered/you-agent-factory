@@ -30,24 +30,58 @@ const (
 // overlap and cancellation windows deterministic without a real provider.
 func TestFSCP03CanonicalSessionGraph(t *testing.T) {
 	t.Parallel()
+	var scenarioFailed atomic.Bool
+	t.Cleanup(func() {
+		if scenarioFailed.Load() || t.Failed() {
+			return
+		}
+		logFSCP03RetrospectiveEvidence(t)
+	})
 
 	t.Run("durable identity, concurrency, and failed-start recovery", func(t *testing.T) {
+		t.Parallel()
+		t.Cleanup(func() {
+			if t.Failed() {
+				scenarioFailed.Store(true)
+			}
+		})
 		acquireExecutionFixtureSlot(t)
 		runFSCP03DurableIdentityScenario(t)
 	})
 	t.Run("durable controls and timeout branches", func(t *testing.T) {
+		t.Parallel()
+		t.Cleanup(func() {
+			if t.Failed() {
+				scenarioFailed.Store(true)
+			}
+		})
 		acquireExecutionFixtureSlot(t)
 		runFSCP03DurableControlScenario(t)
 	})
 	t.Run("live work and response isolation", func(t *testing.T) {
+		t.Parallel()
+		t.Cleanup(func() {
+			if t.Failed() {
+				scenarioFailed.Store(true)
+			}
+		})
 		acquireExecutionFixtureSlot(t)
 		runFSCP03LiveIsolationScenario(t)
 	})
 	t.Run("process close and inert construction", func(t *testing.T) {
+		t.Parallel()
+		t.Cleanup(func() {
+			if t.Failed() {
+				scenarioFailed.Store(true)
+			}
+		})
 		acquireExecutionFixtureSlot(t)
 		runFSCP03ProcessLifecycleScenario(t)
 	})
+}
 
+func logFSCP03RetrospectiveEvidence(t *testing.T) {
+	t.Helper()
 	// These are deliberately four raw retrospective assertions. Keep their
 	// names stable: the implementation-stage handoff checks this output rather
 	// than inferring closure from the presence of a route or a constructor.

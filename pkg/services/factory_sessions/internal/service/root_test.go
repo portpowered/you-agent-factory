@@ -26,19 +26,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
+func TestNewRootFromAssemblyRetainsLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
 	coordinator := livechange.NewCoordinator()
 	root, err := newRootForTest(coordinator)
 	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
+		t.Fatalf("NewRootFromAssembly() error = %v", err)
 	}
 	if root == nil {
-		t.Fatal("NewRoot() returned nil root")
+		t.Fatal("NewRootFromAssembly() returned nil root")
 	}
 	if root.DetachedOperations() == nil {
-		t.Fatal("NewRoot() did not publish detached operations")
+		t.Fatal("NewRootFromAssembly() did not publish detached operations")
 	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
@@ -92,7 +92,7 @@ func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
 	}
 }
 
-func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewRootFromAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -117,7 +117,7 @@ func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
 			test.mutate(&inputs)
 			root, err := inputs.call()
 			if root != nil || err == nil {
-				t.Fatalf("NewRoot() = (%#v, %v), want nil root and dependency error", root, err)
+				t.Fatalf("NewRootFromAssembly() = (%#v, %v), want nil root and dependency error", root, err)
 			}
 		})
 	}
@@ -128,7 +128,7 @@ func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 
 	root, err := newRootForTest(nil)
 	if root != nil || err == nil {
-		t.Fatalf("NewRoot() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
+		t.Fatalf("NewRootFromAssembly() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.
 	inputs.recordedSessionInventory = inventory
 	root, err := inputs.call()
 	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
+		t.Fatalf("NewRootFromAssembly: %v", err)
 	}
 
 	result, err := root.ListSessions(context.Background(), factorysessions.ListSessionsRequest{
@@ -208,25 +208,11 @@ func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) 
 }
 
 func (in rootTestInputs) call() (*Root, error) {
-	return NewRoot(
-		in.newJavaScriptCheckpointStore,
-		in.sessionResultProjection,
-		in.interpolation,
-		in.invocationWorkTypes,
-		in.ttsObservability,
-		in.eventIDs,
-		in.sessionIDs,
-		in.resolveHome,
-		in.directoryInspection,
-		in.namedPaths,
-		in.invocationInputFiles,
-		in.initialWorkFiles,
-		in.identity,
-		in.responseStreams,
-		in.clock,
-		in.liveChangeCoordinator,
-		in.recordedSessionInventory,
-	)
+	assembly, err := in.callAssembly()
+	if err != nil {
+		return nil, err
+	}
+	return NewRootFromAssembly(assembly, &rootRuntimeOpeningStub{}, in.liveChangeCoordinator)
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {

@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewRuntimeAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
 	valid := validNewServiceInputs()
@@ -40,26 +40,31 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			inputs := valid
 			test.mutate(&inputs)
-			service, err := inputs.callNewService()
+			assembly, err := inputs.callNewRuntimeAssembly()
 			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
+				t.Fatalf("NewRuntimeAssembly() error = nil, want missing %s dependency", test.name)
 			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
+			if assembly != nil {
+				t.Fatalf("NewRuntimeAssembly() = %#v, want nil assembly", assembly)
 			}
 		})
 	}
 }
 
-func TestNewServiceConstructsPublishedRoot(t *testing.T) {
+func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := validNewServiceInputs().callNewService()
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
 	var root factorysessions.Service = service
 	if root == nil {
@@ -84,19 +89,24 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
+func TestNewServiceFromAssemblyRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := validNewServiceInputs().callNewService()
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	assembly, err := RuntimeAssemblyFromService(service)
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("RuntimeAssemblyFromService() error = %v", err)
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
-	if any(assembly) != any(service) {
-		t.Fatalf("runtime assembly = %T(%[1]v), want the same process root %T(%[2]v)", assembly, service)
+	retained, ok := service.(RuntimeAssembly)
+	if !ok || retained == nil {
+		t.Fatalf("published service = %T, want the retained runtime assembly capability", service)
+	}
+	if any(retained) != any(service) {
+		t.Fatalf("runtime assembly = %T(%[1]v), want the same published process root %T", retained, service)
 	}
 }
 
@@ -116,12 +126,14 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
-	retained, err := RuntimeOpeningFromService(service)
-	if err != nil {
-		t.Fatalf("RuntimeOpeningFromService() error = %v", err)
+	retained, ok := service.(interface {
+		RuntimeOpening() RuntimeOpeningCapability
+	})
+	if !ok || retained == nil {
+		t.Fatal("published service does not expose the owner-private runtime opening")
 	}
-	if any(retained) != any(opening) {
-		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", retained, opening)
+	if got := retained.RuntimeOpening(); any(got) != any(opening) {
+		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
 	}
 }
 
@@ -188,7 +200,7 @@ func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testin
 	}
 }
 
-func TestNewServiceConstructsInertRoot(t *testing.T) {
+func TestNewServiceFromAssemblyConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	directories := &recordingDirectoryInspection{}
@@ -229,12 +241,16 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := inputs.callNewService()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
 	var root factorysessions.Service = service
 	if root == nil {
@@ -305,29 +321,6 @@ func validNewServiceInputs() newServiceInputs {
 		clock:                   &recordingClock{},
 		liveChangeCoordinator:   NewLiveChangeCoordinator(),
 	}
-}
-
-func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
-	return NewService(
-		in.newJavaScriptCheckpointStore,
-		in.sessionResultProjection,
-		in.interpolation,
-		in.invocationWorkTypes,
-		in.ttsObservability,
-		in.eventIDs,
-		in.responseEventRetentionLimits,
-		in.sessionIDs,
-		in.resolveHome,
-		in.directoryInspection,
-		in.namedPaths,
-		in.invocationInputFiles,
-		in.initialWorkFiles,
-		in.resolveSymlinks,
-		in.eventsService,
-		in.clock,
-		in.liveChangeCoordinator,
-		nil,
-	)
 }
 
 func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {

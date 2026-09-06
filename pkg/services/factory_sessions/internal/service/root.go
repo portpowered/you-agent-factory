@@ -29,56 +29,6 @@ type Root struct {
 var _ factorysessions.Service = (*Root)(nil)
 var _ roles.RuntimeAssembly = (*Root)(nil)
 
-// NewRoot constructs the process-scoped Factory Sessions service without
-// starting runtimes, listeners, or background work.
-func NewRoot(
-	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
-	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
-	eventIDs factorysessions.ResponseEventIDGenerator,
-	sessionIDs factorysessions.SessionIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	directoryInspection roles.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
-	invocationInputFiles fileeffects.InvocationInputReader,
-	initialWorkFiles fileeffects.InitialWorkReader,
-	identityService identity.Service,
-	responseStreams responsestreamservice.Service,
-	clock factoryruntime.Clock,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-	recordedSessionInventory recordings.RecordedSessionInventory,
-) (*Root, error) {
-	assembly, err := NewAssembly(
-		newJavaScriptCheckpointStore,
-		sessionResultProjection,
-		interpolation,
-		invocationWorkTypes,
-		ttsObservability,
-		eventIDs,
-		sessionIDs,
-		resolveHome,
-		directoryInspection,
-		namedPaths,
-		invocationInputFiles,
-		initialWorkFiles,
-		identityService,
-		responseStreams,
-		clock,
-		liveChangeCoordinator,
-		recordedSessionInventory,
-	)
-	if err != nil {
-		return nil, err
-	}
-	concrete, ok := assembly.(*legacyservice.Assembly)
-	if !ok || concrete == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
-	}
-	return newRoot(concrete, nil, liveChangeCoordinator)
-}
-
 // NewAssembly constructs the single process-scoped Factory Sessions assembly
 // used as the runtime resolver while the remaining peer roots are composed.
 // It returns the existing assembly capability rather than a second product
