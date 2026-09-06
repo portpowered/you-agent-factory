@@ -151,6 +151,7 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		WorkerSessionResolveHomeDirectory:   func() (string, error) { return homeDir, nil },
 	})
 	fixture := &codexSharedProcessFixture{
 		rootDir: rootDir, homeDir: homeDir,

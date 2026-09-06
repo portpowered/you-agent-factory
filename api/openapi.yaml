@@ -3679,11 +3679,11 @@ components:
       additionalProperties: false
       required:
         - workerSessionId
-        - providerSession
         - workIds
         - attemptId
         - state
         - entries
+        - recordingHealth
       properties:
         workerSessionId:
           type: string
@@ -3693,6 +3693,7 @@ components:
           description: Explicit Factory Session scope used for this transcript read.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+          nullable: true
         workIds:
           type: array
           items:
@@ -3710,9 +3711,24 @@ components:
           description: Terminal Worker Session lifecycle state at transcript read time.
         entries:
           type: array
-          description: Ordered normalized transcript entries projected by Provider Sessions.
+          description: Ordered normalized transcript entries projected by Provider Sessions or durable Worker history.
           items:
             $ref: '#/components/schemas/ProviderSessionTranscriptEntry'
+        recordingHealth:
+          type: string
+          enum:
+            - COMPLETE
+            - DEGRADED
+            - INCOMPLETE
+          x-enum-varnames:
+            - WorkerSessionTranscriptRecordingHealthComplete
+            - WorkerSessionTranscriptRecordingHealthDegraded
+            - WorkerSessionTranscriptRecordingHealthIncomplete
+          description: Recordings-owned capture health, independent of Worker execution outcome.
+        recordingHealthReason:
+          type: string
+          nullable: true
+          description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
     WorkerSessionObservation:
       type: object
       additionalProperties: false
@@ -3874,7 +3890,6 @@ components:
       required:
         - delivery
         - workerSessionId
-        - providerSession
         - workIds
         - event
         - errorCode
@@ -3890,6 +3905,7 @@ components:
           description: Explicit Factory Session scope used for this event stream.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+          nullable: true
         workIds:
           type: array
           items:
@@ -3924,6 +3940,7 @@ components:
           description: Recordings-owned capture health, independent of Worker execution outcome.
         recordingHealthReason:
           type: string
+          nullable: true
           description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
     WorkerSessionReplaySummary:
       type: object

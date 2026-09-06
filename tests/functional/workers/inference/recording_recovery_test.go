@@ -168,9 +168,9 @@ func newWSRFT009DurableWriter(
 	storage platformreplay.Storage,
 ) *wsrFT009DurableWriter {
 	t.Helper()
-	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, sidecarRoot)
+	delegate, err := recordingswire.NewWorkerRecordingFileWriterWithDirectoryReader(storage, sidecarRoot, nil)
 	if err != nil {
-		t.Fatalf("NewWorkerRecordingFileWriter(): %v", err)
+		t.Fatalf("NewWorkerRecordingFileWriterWithDirectoryReader(): %v", err)
 	}
 	reader, ok := delegate.(recordings.WorkerRecordingReader)
 	if !ok {
@@ -273,6 +273,14 @@ func (storage *wsrFT009StripCompletionMetadataStorage) ReadFile(path string) ([]
 	return storage.delegate.ReadFile(path)
 }
 
+func (storage *wsrFT009StripCompletionMetadataStorage) AppendFile(path string, data []byte) error {
+	appender, ok := storage.delegate.(platformreplay.Appender)
+	if !ok {
+		return errors.New("delegate does not support append-and-sync")
+	}
+	return appender.AppendFile(path, data)
+}
+
 func loadWSRFT009AfterRestart(
 	t *testing.T,
 	sidecarRoot string,
@@ -343,3 +351,4 @@ var _ recordings.WorkerRecordingWriter = (*wsrFT009DurableWriter)(nil)
 var _ recordings.WorkerRecordingReader = (*wsrFT009DurableWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*wsrFT009DurableWriter)(nil)
 var _ platformreplay.Storage = (*wsrFT009StripCompletionMetadataStorage)(nil)
+var _ platformreplay.Appender = (*wsrFT009StripCompletionMetadataStorage)(nil)

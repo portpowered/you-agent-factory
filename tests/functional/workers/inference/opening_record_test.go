@@ -320,6 +320,9 @@ func workerEventProvenanceString(event factoryapi.WorkerSessionEvent, key string
 }
 
 func hasProviderSession(event factoryapi.WorkerSessionEvent) bool {
+	if event.ProviderSession == nil {
+		return false
+	}
 	return event.ProviderSession.Provider != "" || event.ProviderSession.Kind != "" || event.ProviderSession.Id != ""
 }
 
@@ -378,6 +381,17 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 	if opening.WorkerSessionId == "" || len(opening.WorkIds) == 0 {
 		t.Fatalf("%s Worker Session opening correlation = %#v, want Worker Session and Work identities", provider, opening)
 	}
+	assertProviderWorkerSessionFrames(t, records, opening, provider, providerSessionExpected)
+}
+
+func assertProviderWorkerSessionFrames(
+	t *testing.T,
+	records []factoryapi.WorkerSessionEvent,
+	opening factoryapi.WorkerSessionEvent,
+	provider string,
+	providerSessionExpected bool,
+) {
+	t.Helper()
 	providerBindingIndex := -1
 	firstProviderOutputIndex := -1
 	terminalIndex := -1
@@ -405,11 +419,13 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 		if !legalAgyWorkerEvent(kind, phase) {
 			t.Fatalf("%s Worker Session frame[%d] has illegal normalized pair %s/%s: %#v", provider, index, kind, phase, event.Event.Payload)
 		}
-		if hasProviderSession(event) {
-			if !providerSessionExpected || event.ProviderSession.Provider != provider || event.ProviderSession.Id == "" {
+		if providerSessionExpected {
+			if event.ProviderSession == nil || event.ProviderSession.Provider != provider || event.ProviderSession.Id == "" {
 				t.Fatalf("%s Worker Session provider reference = %#v, expected=%t", provider, event.ProviderSession, providerSessionExpected)
 			}
 			providerReferenceSeen = true
+		} else if hasProviderSession(event) {
+			t.Fatalf("%s Worker Session provider reference = %#v, expected=%t", provider, event.ProviderSession, providerSessionExpected)
 		}
 		if event.Event.SourceType == "worker_session_lifecycle" && phase == "UPDATED" && workerEventProvider(event) == provider {
 			if providerBindingIndex != -1 {
@@ -484,7 +500,7 @@ func assertCanonicalFactoryWorkerSessionHistory(
 			t.Fatalf("%s canonical Worker Session source type = %q, want factory_event", provider, event.Event.SourceType)
 		}
 		if providerSessionExpected {
-			if event.ProviderSession.Provider != provider || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
+			if event.ProviderSession == nil || event.ProviderSession.Provider != provider || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
 				t.Fatalf("%s canonical Worker Session provider reference = %#v, want exact provider session", provider, event.ProviderSession)
 			}
 		} else if hasProviderSession(event) {

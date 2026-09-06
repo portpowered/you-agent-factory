@@ -135,12 +135,26 @@ describe("WorkerSessionTimelineContent details", () => {
         toolName: "command_execution",
       }),
       draftRecord(5, "USAGE", "UPDATED", {
+        cacheWriteTokens: 3,
         inputTokens: 10,
         model: "gpt-5",
         outputTokens: 8,
+        reasoningOutputTokens: 2,
         totalTokens: 18,
       }),
-      draftRecord(6, "SESSION", "COMPLETED", {
+      draftRecord(6, "PROGRESS", "UPDATED", {
+        label: "compile",
+        message: "building the package",
+        percentComplete: 42,
+      }),
+      draftRecord(7, "ERROR", "FAILED", {
+        code: "TIMEOUT",
+        message: "provider timed out",
+        retryAfterSeconds: 3,
+        retryAttempt: 2,
+        retryable: true,
+      }),
+      draftRecord(8, "SESSION", "COMPLETED", {
         continuation: {
           kind: "session_id",
           id: "provider-thread-1",
@@ -182,6 +196,14 @@ describe("WorkerSessionTimelineContent details", () => {
     expect(screen.getByText("command_execution")).toBeTruthy();
     expect(screen.getByText(/"exitCode"/)).toBeTruthy();
     expect(screen.getByText("18")).toBeTruthy();
+    expect(screen.getAllByText("building the package").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText(messages.cacheWriteTokensLabel)).toBeTruthy();
+    expect(screen.getByText(messages.reasoningOutputTokensLabel)).toBeTruthy();
+    expect(screen.getByText(messages.retryableLabel)).toBeTruthy();
+    expect(screen.getByText(messages.retryAfterSecondsLabel)).toBeTruthy();
+    expect(screen.getByText("provider timed out")).toBeTruthy();
     expect(screen.getByText("worker-session-ui-2")).toBeTruthy();
     expect(
       screen.getByText("codex / session_id / provider-thread-1"),
@@ -428,6 +450,13 @@ describe("WorkerSessionTimelineWidget target selection", () => {
   it("renders every observation and opens the exact selected Worker Session timeline", async () => {
     const loadWorkerSessionTargets = async () => [
       observation("worker-1", "attempt-1", {
+        durationBasis: "RECORDED_TIMESTAMPS",
+        durationMillis: 1250,
+        model: "gpt-5",
+        reasoningEffort: "medium",
+        recordingHealth: "COMPLETE",
+        workId: "work-1",
+        workName: "Build dashboard",
         providerSession: {
           id: "provider-session-1",
           kind: "session_id",
@@ -436,7 +465,10 @@ describe("WorkerSessionTimelineWidget target selection", () => {
         providerSessionAvailable: true,
         state: "COMPLETED",
       }),
-      observation("worker-2", "attempt-2", { state: "FAILED" }),
+      observation("worker-2", "attempt-2", {
+        providerSession: null,
+        state: "FAILED",
+      }),
     ];
 
     render(
@@ -461,6 +493,12 @@ describe("WorkerSessionTimelineWidget target selection", () => {
     });
     expect(screen.getByText("worker-1")).toBeTruthy();
     expect(screen.getByText("attempt-1")).toBeTruthy();
+    expect(screen.getByText("Build dashboard")).toBeTruthy();
+    expect(screen.getByText("gpt-5")).toBeTruthy();
+    expect(screen.getByText(messages.durationValue(1250))).toBeTruthy();
+    expect(
+      screen.getByText(messages.recordingHealthLabel("COMPLETE")),
+    ).toBeTruthy();
     expect(
       screen.getByText(messages.sessionLifecycleStateLabel("COMPLETED")),
     ).toBeTruthy();

@@ -9,13 +9,13 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -30,7 +30,10 @@ func (r *registry) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	idCollectionStartedAt := r.clock.Now()
-	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	ids, err := r.observationListIDsWithDurable(ctx, query.cursor, query.scope, req.States)
+	if err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
 	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
@@ -119,6 +122,38 @@ func (r *registry) observationListIDs(cursor string, scope workersessions.Observ
 	return ids
 }
 
+func (r *registry) observationListIDsWithDurable(
+	ctx context.Context,
+	cursor string,
+	scope workersessions.ObservationScope,
+	states []workersessions.State,
+) ([]string, error) {
+	ids := make(map[string]struct{})
+	for _, id := range r.observationListIDs(cursor, scope, states) {
+		ids[id] = struct{}{}
+	}
+	durable, err := r.durableWorkerProjections(ctx, recordings.WorkerRecordingListRequest{})
+	if err != nil {
+		return nil, err
+	}
+	for _, projection := range durable {
+		if projection.WorkerSessionID <= cursor || !observationScopeMatches(projection.FactorySessionID == "", scope) {
+			continue
+		}
+		state, stateErr := durableWorkerState(projection)
+		if stateErr != nil || !observationStateMatches(state, states) {
+			continue
+		}
+		ids[projection.WorkerSessionID] = struct{}{}
+	}
+	result := make([]string, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
 func observationListPage(ids []string, limit int) []string {
 	if len(ids) <= limit {
 		return ids
@@ -185,7 +220,23 @@ func (r *registry) ReadTranscriptByWorkerSessionID(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	// A retained Worker recording is the provider-neutral identity boundary.
+	// Prefer it even when this process still has a provider association so a
+	// restarted or provider-degraded read cannot change the Worker-ID contract.
+	if projection, found, err := r.durableWorkerProjection(ctx, req.WorkerSessionID); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	} else if found {
+		result, err := durableTranscript(projection)
+		if err != nil {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+		return r.attachLiveProviderTranscript(req.WorkerSessionID, result), nil
+	}
 	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	if ok && session.ProviderSessionAssociation != nil {
+		providerSession := session.ProviderSessionAssociation.Reference
+		return r.projectTranscript(ctx, session, metadata, providerSession)
+	}
 	if !ok {
 		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
@@ -262,6 +313,20 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
+	}
+	if req.WorkerSessionID != "" {
+		// Worker-ID transcript reads are backed by the durable source-native
+		// history whenever it is present. Provider-reference reads retain the
+		// existing Provider Sessions projection below.
+		if projection, found, durableErr := r.durableWorkerProjection(ctx, req.WorkerSessionID); durableErr != nil {
+			return workersessions.ReadTranscriptResult{}, durableErr
+		} else if found {
+			result, err := durableTranscript(projection)
+			if err != nil {
+				return workersessions.ReadTranscriptResult{}, err
+			}
+			return r.attachLiveProviderTranscript(req.WorkerSessionID, result), nil
+		}
 	}
 
 	session, metadata, err := r.transcriptSession(req)
@@ -350,6 +415,25 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		}
 	}
 	r.mu.RUnlock()
+	durable, durableErr := r.durableWorkerProjections(ctx, recordings.WorkerRecordingListRequest{WorkID: req.WorkID})
+	if durableErr != nil {
+		return workersessions.ListObservationsResult{}, durableErr
+	}
+	seen := make(map[string]struct{}, len(ids)+len(durable))
+	for _, item := range ids {
+		seen[item.id] = struct{}{}
+	}
+	for _, projection := range durable {
+		if _, exists := seen[projection.WorkerSessionID]; exists {
+			continue
+		}
+		ids = append(ids, observationOrder{
+			id:        projection.WorkerSessionID,
+			startedAt: durableObservationStartedAt(projection),
+			attemptID: projection.AttemptID,
+		})
+		seen[projection.WorkerSessionID] = struct{}{}
+	}
 	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
@@ -442,6 +526,18 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
+	// Work-scoped and fleet observations retain the live process facts while a
+	// Worker Session is still registered. The durable projection remains the
+	// identity/health fallback (and the Worker-ID surface remains strictly
+	// provider-neutral), but an active live session must not lose its current
+	// clock, provider association, or transcript availability merely because
+	// its opening has already been persisted.
+	if session, metadata, ok := r.loadObservationState(id); ok {
+		live := baseObservation(id, session, metadata)
+		applyObservationTiming(&live, session, metadata, r.clock)
+		live.Failure = observedTerminalCause(session)
+		projected = mergeLiveObservation(projected, live)
+	}
 
 	if !projected.ProviderSessionAvailable {
 		return projected, nil
@@ -457,10 +553,33 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) 
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
+	// Durable Worker history is provider-neutral and authoritative for the
+	// canonical Worker-ID read. This also prevents a provider association in
+	// an in-memory registry from leaking into a restarted-history response.
+	if projection, found, err := r.durableWorkerProjection(ctx, id); err != nil {
+		return workersessions.Observation{}, err
+	} else if found {
+		projected, err := durableObservation(projection)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		return r.attachLiveProviderAssociation(id, projected), nil
+	}
 
 	session, metadata, ok := r.loadObservationState(id)
 	if !ok {
-		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		projection, found, err := r.durableWorkerProjection(ctx, id)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		if !found {
+			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		}
+		projected, err := durableObservation(projection)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		return r.attachLiveProviderAssociation(id, projected), nil
 	}
 
 	projected := baseObservation(id, session, metadata)
@@ -641,6 +760,93 @@ func int64PointerToInt(value *int64) *int {
 	return &converted
 }
 
+func cloneInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func observationTokenUsage(source *providersessions.TokenUsage) *workersessions.TokenUsage {
+	if source == nil {
+		return nil
+	}
+	return &workersessions.TokenUsage{
+		CacheWriteTokens:      cloneInt(source.CacheWriteTokens),
+		CachedInputTokens:     cloneInt(source.CachedInputTokens),
+		InputTokens:           cloneInt(source.InputTokens),
+		OutputTokens:          cloneInt(source.OutputTokens),
+		ReasoningOutputTokens: cloneInt(source.ReasoningOutputTokens),
+		TotalTokens:           cloneInt(source.TotalTokens),
+	}
+}
+
+// observationTurnUsage derives per-turn input context from cumulative usage
+// counters already retained by Provider Sessions. A decreasing counter makes
+// the sequence unsupported because its baseline cannot be interpreted as a
+// cumulative total, so the optional projection is omitted.
+func observationTurnUsage(cumulativeInputTokens []int) *workersessions.TurnUsage {
+	if len(cumulativeInputTokens) == 0 {
+		return nil
+	}
+
+	previous := 0
+	final := 0
+	peak := 0
+	for _, cumulative := range cumulativeInputTokens {
+		if cumulative < previous {
+			return nil
+		}
+		perTurn := cumulative - previous
+		if perTurn > peak {
+			peak = perTurn
+		}
+		final = perTurn
+		previous = cumulative
+	}
+
+	return &workersessions.TurnUsage{
+		TurnCount:          len(cumulativeInputTokens),
+		FinalContextTokens: final,
+		PeakContextTokens:  peak,
+	}
+}
+
+func observationParseDiagnostics(source providersessions.ParseSummary) workersessions.ParseDiagnostics {
+	result := workersessions.ParseDiagnostics{
+		EventCount:         source.EventCount,
+		MalformedLineCount: source.MalformedLineCount,
+		UnknownEventCount:  source.UnknownEventCount,
+		Errors:             make([]workersessions.ParseDiagnostic, 0, len(source.ParseErrors)),
+	}
+	for _, item := range source.ParseErrors {
+		result.Errors = append(result.Errors, workersessions.ParseDiagnostic{
+			Code:       "provider_session_parse_error",
+			LineNumber: item.LineNumber,
+			Message:    safeDiagnosticMessage(item.Message),
+		})
+	}
+	return result
+}
+
+func safeDiagnosticMessage(message string) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if message == "" || strings.ContainsAny(message, `/\`) {
+		return "provider session parse error"
+	}
+	lower := strings.ToLower(message)
+	for _, sensitive := range []string{"password", "authorization", "bearer ", "secret", "prompt"} {
+		if strings.Contains(lower, sensitive) {
+			return "provider session parse error"
+		}
+	}
+	if len(message) > 256 {
+		message = message[:256]
+	}
+	return message
+}
+
 // enrichWithProviderSessionsProjection adds transcript availability, token
 // usage, and parse diagnostics from the Provider Sessions root. It is only
 // called when projected already carries an available Provider Session
@@ -753,209 +959,4 @@ func sortObservationAttempts(observations []workersessions.Observation) {
 			return left.WorkerSessionID < right.WorkerSessionID
 		}
 	})
-}
-
-func cloneInt(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func observationTokenUsage(source *providersessions.TokenUsage) *workersessions.TokenUsage {
-	if source == nil {
-		return nil
-	}
-	return &workersessions.TokenUsage{
-		CacheWriteTokens:      cloneInt(source.CacheWriteTokens),
-		CachedInputTokens:     cloneInt(source.CachedInputTokens),
-		InputTokens:           cloneInt(source.InputTokens),
-		OutputTokens:          cloneInt(source.OutputTokens),
-		ReasoningOutputTokens: cloneInt(source.ReasoningOutputTokens),
-		TotalTokens:           cloneInt(source.TotalTokens),
-	}
-}
-
-// observationTurnUsage derives per-turn input context from cumulative usage
-// counters already retained by Provider Sessions. A decreasing counter makes
-// the sequence unsupported because its baseline cannot be interpreted as a
-// cumulative total, so the optional projection is omitted.
-func observationTurnUsage(cumulativeInputTokens []int) *workersessions.TurnUsage {
-	if len(cumulativeInputTokens) == 0 {
-		return nil
-	}
-
-	previous := 0
-	final := 0
-	peak := 0
-	for _, cumulative := range cumulativeInputTokens {
-		if cumulative < previous {
-			return nil
-		}
-		perTurn := cumulative - previous
-		if perTurn > peak {
-			peak = perTurn
-		}
-		final = perTurn
-		previous = cumulative
-	}
-
-	return &workersessions.TurnUsage{
-		TurnCount:          len(cumulativeInputTokens),
-		FinalContextTokens: final,
-		PeakContextTokens:  peak,
-	}
-}
-
-func observationParseDiagnostics(source providersessions.ParseSummary) workersessions.ParseDiagnostics {
-	result := workersessions.ParseDiagnostics{
-		EventCount:         source.EventCount,
-		MalformedLineCount: source.MalformedLineCount,
-		UnknownEventCount:  source.UnknownEventCount,
-		Errors:             make([]workersessions.ParseDiagnostic, 0, len(source.ParseErrors)),
-	}
-	for _, item := range source.ParseErrors {
-		result.Errors = append(result.Errors, workersessions.ParseDiagnostic{
-			Code:       "provider_session_parse_error",
-			LineNumber: item.LineNumber,
-			Message:    safeDiagnosticMessage(item.Message),
-		})
-	}
-	return result
-}
-
-func safeDiagnosticMessage(message string) string {
-	message = strings.Join(strings.Fields(message), " ")
-	if message == "" || strings.ContainsAny(message, `/\`) {
-		return "provider session parse error"
-	}
-	lower := strings.ToLower(message)
-	for _, sensitive := range []string{"password", "authorization", "bearer ", "secret", "prompt"} {
-		if strings.Contains(lower, sensitive) {
-			return "provider session parse error"
-		}
-	}
-	if len(message) > 256 {
-		message = message[:256]
-	}
-	return message
-}
-
-// observationSubscription adapts the canonical Events subscription to the
-// Worker Sessions outcome vocabulary and closes itself immediately after the
-// lifecycle terminal record.
-type observationSubscription struct {
-	source          events.Subscription
-	replay          *replayObservationSubscription
-	workerSessionID string
-
-	mu             sync.Mutex
-	closed         bool
-	terminalReplay bool
-	cursorProvided bool
-	delivered      bool
-	activeCancel   context.CancelFunc
-}
-
-func (s *observationSubscription) Next(ctx context.Context) workersessions.ObservationDelivery {
-	if s.replay != nil {
-		return s.replay.Next(ctx)
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
-	}
-	nextContext, cancel := context.WithCancel(ctx)
-	s.activeCancel = cancel
-	s.mu.Unlock()
-	delivery := s.source.Next(nextContext)
-	cancel()
-
-	s.mu.Lock()
-	s.activeCancel = nil
-	closed := s.closed
-	s.mu.Unlock()
-	if closed && delivery.Kind != events.DeliveryCanceled {
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
-	}
-	return s.projectSourceDelivery(delivery)
-}
-
-func (s *observationSubscription) projectSourceDelivery(delivery events.Delivery) workersessions.ObservationDelivery {
-	switch delivery.Kind {
-	case events.DeliveryRecord:
-		event := projectObservationEvent(delivery.Record, s.workerSessionID)
-		s.mu.Lock()
-		s.delivered = true
-		s.mu.Unlock()
-		if isTerminalLifecycleRecord(delivery.Record) {
-			s.closeSource()
-			s.mu.Lock()
-			terminalReplay := s.terminalReplay
-			s.mu.Unlock()
-			kind := workersessions.ObservationDeliveryTerminal
-			if terminalReplay {
-				kind = workersessions.ObservationDeliveryTerminalReplay
-			}
-			return workersessions.ObservationDelivery{Kind: kind, Event: event}
-		}
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: event}
-	case events.DeliveryCanceled:
-		s.closeSource()
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
-	case events.DeliveryGap:
-		s.closeSource()
-		s.mu.Lock()
-		cursorProvided, delivered := s.cursorProvided, s.delivered
-		s.mu.Unlock()
-		if cursorProvided && !delivered {
-			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationCursorStale}
-		}
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap}
-	case events.DeliveryBackpressure:
-		s.closeSource()
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
-	case events.DeliveryClosed:
-		s.closeSource()
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceClosed}
-	default:
-		s.closeSource()
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
-	}
-}
-
-func (s *observationSubscription) Close() {
-	if s.replay != nil {
-		s.replay.Close()
-		return
-	}
-	s.closeSource()
-}
-
-func (s *observationSubscription) closeSource() {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return
-	}
-	s.closed = true
-	activeCancel := s.activeCancel
-	s.mu.Unlock()
-	if activeCancel != nil {
-		activeCancel()
-		return
-	}
-	// Events has no separate Close method. A canceled Next is its explicit
-	// unregister operation, and it is non-blocking because the context is
-	// already canceled.
-	if s.source != nil {
-		cancelled, cancel := context.WithCancel(context.Background())
-		cancel()
-		s.source.Next(cancelled)
-	}
 }

@@ -88,6 +88,9 @@ func TestReadWorkerSessionTranscriptByWorkerSessionIDUsesCanonicalIdentity(t *te
 	if response.FactorySessionId == nil || *response.FactorySessionId != "session-1" {
 		t.Fatalf("transcript factory session scope = %#v, want session-1", response.FactorySessionId)
 	}
+	if response.RecordingHealth != factoryapi.WorkerSessionTranscriptRecordingHealthComplete {
+		t.Fatalf("provider-backed recording health = %q, want COMPLETE", response.RecordingHealth)
+	}
 	if !service.readCalled || service.readWorkerSessionID != "worker-1" || service.readProviderSession != (providers.SessionRef{}) {
 		t.Fatalf("read request = called=%t worker=%q provider=%#v, want Worker-ID-only request", service.readCalled, service.readWorkerSessionID, service.readProviderSession)
 	}

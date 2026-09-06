@@ -93,6 +93,15 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	if cfg.ResponseEventRetentionLimits != nil {
 		edges.FactorySessionResponseEventRetentionLimits = cfg.ResponseEventRetentionLimits
 	}
+	if edges.WorkerSessionResolveHomeDirectory == nil {
+		workerHome := t.TempDir()
+		if configuredHome := environmentHome(cfg.Env); configuredHome != "" {
+			workerHome = configuredHome
+		}
+		edges.WorkerSessionResolveHomeDirectory = func() (string, error) {
+			return workerHome, nil
+		}
+	}
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start

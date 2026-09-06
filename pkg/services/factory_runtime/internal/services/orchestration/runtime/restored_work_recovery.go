@@ -1,6 +1,9 @@
 package runtime
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,7 +13,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -535,4 +542,425 @@ func sortedRestoredApprovalIDs(approvals map[string]interfaces.FactoryWorldHuman
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+func recordedDispatchStateMaps(
+	world interfaces.FactoryWorldState,
+) map[string]interfaces.FactoryWorldDispatchCompletion {
+	completed := make(map[string]interfaces.FactoryWorldDispatchCompletion, len(world.CompletedDispatches))
+	for _, dispatch := range world.CompletedDispatches {
+		completed[dispatch.DispatchID] = dispatch
+	}
+	for _, dispatch := range world.FailedDispatches {
+		completed[dispatch.DispatchID] = dispatch
+	}
+	return completed
+}
+
+func recordedDispatchEnd(
+	dispatch interfaces.FactoryWorldDispatchCompletion,
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) *time.Time {
+	ended := dispatch.CompletedAt
+	if ended.IsZero() {
+		ended = eventTimeForDispatch(events, dispatchID)
+	}
+	if ended.IsZero() {
+		return nil
+	}
+	ended = ended.UTC()
+	return &ended
+}
+
+func withRecordedWorkerStreamGeneration(
+	subscription workersessions.ObservationSubscription,
+	workerSessionID string,
+) workersessions.ObservationSubscription {
+	if subscription.NextFunc == nil {
+		return subscription
+	}
+	next := subscription.NextFunc
+	generationID := recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	subscription.NextFunc = func(ctx context.Context) workersessions.ObservationDelivery {
+		delivery := next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminal ||
+			delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
+			delivery.Event.Cursor.StreamGenerationID = generationID
+		}
+		return delivery
+	}
+	return subscription
+}
+
+func recordedObservationGeneration(ledger recordings.RuntimeLedger, workerSessionID string, durableHistory bool) string {
+	if durableHistory {
+		return recordedWorkerStreamGenerationForIdentity(workerSessionID)
+	}
+	generationID := ""
+	if ledger != nil {
+		generationID = strings.TrimSpace(ledger.StreamGenerationID())
+	}
+	return generationID
+}
+
+func recordedWorkerStreamGenerationForIdentity(workerSessionID string) string {
+	return "worker-recording/" + strings.TrimSpace(workerSessionID)
+}
+
+func recordedObservationReplaySummary(
+	fact recordedDispatchObservation,
+	health workerRecordingHealth,
+) *workersessions.ReplaySummary {
+	status := health.status
+	if status == "" {
+		if fact.state.Terminal() {
+			status = recordings.WorkerRecordingStatusComplete
+		} else {
+			status = recordings.WorkerRecordingStatusIncomplete
+		}
+	}
+	reason := "recording-" + strings.ToLower(string(status))
+	if health.reason != "" {
+		reason = health.reason
+	}
+	return &workersessions.ReplaySummary{Complete: status == recordings.WorkerRecordingStatusComplete, Reason: reason}
+}
+
+func recordedObservationHistoryHasTerminal(events []interfaces.FactoryEvent, dispatchID string) bool {
+	for _, event := range events {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID && recordedWorkerSessionTerminalEvent(event) {
+			return true
+		}
+	}
+	return false
+}
+
+type recordedDispatchInterruptionFact struct {
+	workIDs       []string
+	interruptedAt time.Time
+	eventTime     time.Time
+	reason        string
+}
+
+func recordedDispatchInterruption(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) (recordedDispatchInterruptionFact, bool) {
+	var fact recordedDispatchInterruptionFact
+	found := false
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
+			stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		var payload interfaces.DispatchInterruptedEventPayload
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			continue
+		}
+		fact = recordedDispatchInterruptionFact{
+			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
+			interruptedAt: payload.InterruptedAt,
+			eventTime:     event.Context.EventTime,
+			reason:        payload.Reason,
+		}
+		found = true
+	}
+	return fact, found
+}
+
+func durableWorkerCursor(cursor *workersessions.ObservationCursor) bool {
+	return cursor != nil && strings.HasPrefix(strings.TrimSpace(cursor.StreamGenerationID), "worker-recording/")
+}
+
+func recordedObservationHistory(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+	cursor *workersessions.ObservationCursor,
+) []interfaces.FactoryEvent {
+	ordered := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range cloneAndSortFactoryEvents(events) {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID &&
+			(cursor == nil || (event.Context.Sequence > 0 && uint64(event.Context.Sequence) > cursor.Position)) {
+			ordered = append(ordered, event)
+		}
+	}
+	return ordered
+}
+
+func observationStreamLimit(limit int) int {
+	if limit <= 0 {
+		return workersessions.DefaultObservationStreamLimit
+	}
+	return limit
+}
+
+// GetObservationByWorkerSessionID resolves the Worker Session against this
+// Factory Session's durable history before consulting the process-local registry.
+func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if observation, handled, err := s.readWorkerSessionHistory(ctx, req); handled {
+		return observation, err
+	}
+	if s == nil || s.Service == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	return s.readLiveWorkerSessionByID(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) readWorkerSessionHistory(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, bool, error) {
+	if s.hasDurableWorkerHistory() && s.Service != nil {
+		observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
+		if err == nil {
+			if recorded, handled, recordedErr := s.recordedWorkerObservationIfAvailable(ctx, observation, req.WorkerSessionID); handled {
+				return recorded, true, recordedErr
+			}
+			return observation, true, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, true, err
+		}
+	}
+	if observation, handled, err := s.readRecordedWorkerHistory(ctx, req.WorkerSessionID); handled {
+		return observation, true, err
+	}
+	return workersessions.Observation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedWorkerHistory(
+	ctx context.Context,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	if s == nil || s.ledger == nil || s.projector == nil {
+		return workersessions.Observation{}, false, nil
+	}
+	observation, found, err := s.readRecordedWorkerSessionByID(ctx, workerSessionID)
+	if err != nil || found {
+		return observation, true, err
+	}
+	if s.Service == nil {
+		return workersessions.Observation{}, true, workersessions.ErrObservationSessionNotFound
+	}
+	return workersessions.Observation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedWorkerObservationIfAvailable(
+	ctx context.Context,
+	observation workersessions.Observation,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	if !observation.ProviderSessionAvailable || s.ledger == nil || s.projector == nil {
+		return workersessions.Observation{}, false, nil
+	}
+	recorded, found, err := s.readRecordedWorkerSessionByID(ctx, workerSessionID)
+	if err != nil || found {
+		return recorded, true, err
+	}
+	return workersessions.Observation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
+	ctx context.Context,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, workerSessionID)
+	if err != nil || !found {
+		return workersessions.Observation{}, found, err
+	}
+	observation := recordedObservationFromFact(fact, s.clock)
+	if fact.provider != nil {
+		observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+		if err != nil {
+			return workersessions.Observation{}, false, err
+		}
+	}
+	observation, err = s.withRecordingHealth(ctx, observation)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	return s.confirmedObservation(observation), true, nil
+}
+
+func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	observation, err = s.withRecordingHealth(ctx, observation)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return s.confirmedObservation(observation), nil
+}
+
+func (s *recordedWorkerSessionObservation) ReadTranscript(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if result, handled, err := s.readTranscriptHistory(ctx, req); handled {
+		return result, err
+	}
+	if s == nil || s.Service == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	result, err := s.Service.ReadTranscript(ctx, req)
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	return result, nil
+}
+
+func (s *recordedWorkerSessionObservation) readTranscriptHistory(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if req.WorkerSessionID != "" && s.hasDurableWorkerHistory() && s.Service != nil {
+		result, err := s.Service.ReadTranscript(ctx, req)
+		if err == nil {
+			if recorded, handled, recordedErr := s.recordedTranscriptIfAvailable(ctx, req, result); handled {
+				return recorded, true, recordedErr
+			}
+			return result, true, nil
+		}
+		if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ReadTranscriptResult{}, true, err
+		}
+	}
+	if result, handled, err := s.readRecordedTranscriptHistory(ctx, req); handled {
+		return result, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedTranscriptHistory(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if s == nil || s.ledger == nil || s.projector == nil {
+		return workersessions.ReadTranscriptResult{}, false, nil
+	}
+	result, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
+	if handled || err != nil {
+		return result, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedTranscriptIfAvailable(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+	result workersessions.ReadTranscriptResult,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	if !transcriptProviderSessionAvailable(result) || s.ledger == nil || s.projector == nil {
+		return workersessions.ReadTranscriptResult{}, false, nil
+	}
+	recorded, handled, err := s.readRecordedTranscriptForRequest(ctx, req)
+	if err != nil || handled {
+		return recorded, true, err
+	}
+	return workersessions.ReadTranscriptResult{}, false, nil
+}
+
+func transcriptProviderSessionAvailable(result workersessions.ReadTranscriptResult) bool {
+	return strings.TrimSpace(string(result.ProviderSession.Provider)) != "" ||
+		strings.TrimSpace(result.ProviderSession.Kind) != "" ||
+		strings.TrimSpace(result.ProviderSession.ID) != ""
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedTranscriptForRequest(
+	ctx context.Context,
+	req workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, bool, error) {
+	var fact recordedDispatchObservation
+	var found bool
+	var err error
+	if req.WorkerSessionID != "" {
+		fact, found, err = s.recordedObservationForWorkerSessionID(ctx, req.WorkerSessionID)
+	} else {
+		fact, found, err = s.recordedObservationForProvider(ctx, req.ProviderSession)
+	}
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, true, err
+	}
+	if !found {
+		if s.Service == nil {
+			return workersessions.ReadTranscriptResult{}, true, workersessions.ErrObservationSessionNotFound
+		}
+		return workersessions.ReadTranscriptResult{}, false, nil
+	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, true, err
+	}
+	if !fact.state.Terminal() {
+		return workersessions.ReadTranscriptResult{}, true, workersessions.ErrObservationTranscriptActive
+	}
+	if fact.provider == nil {
+		return workersessions.ReadTranscriptResult{}, true, workersessions.ErrObservationTranscriptUnavailable
+	}
+	readRequest := req
+	if readRequest.WorkerSessionID != "" {
+		readRequest = workersessions.ReadTranscriptRequest{ProviderSession: providerSessionRef(*fact.provider)}
+	}
+	result, err := s.readRecordedTranscript(ctx, readRequest, fact)
+	return result, true, err
+}
+
+func (s *recordedWorkerSessionObservation) enrichRecordedObservation(
+	ctx context.Context,
+	observation workersessions.Observation,
+	ref providers.SessionRef,
+) (workersessions.Observation, error) {
+	if s.Service != nil {
+		live, err := s.Service.GetObservation(ctx, workersessions.GetObservationRequest{ProviderSession: ref})
+		if err == nil {
+			merged := mergeRecordedObservations([]workersessions.Observation{observation}, []workersessions.Observation{live})
+			if len(merged) == 1 {
+				return merged[0], nil
+			}
+		}
+		if errors.Is(err, workersessions.ErrObservationCanceled) {
+			return workersessions.Observation{}, err
+		}
+	}
+	if s.providerSessions == nil || !observation.ProviderSessionAvailable {
+		return observation, nil
+	}
+	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
+		Session: ref.Clone(),
+		Context: ctx,
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
+			return workersessions.Observation{}, workersessions.ErrObservationCanceled
+		}
+		return observation, nil
+	}
+	applyRecordedProviderDetail(&observation, projected.Detail)
+	return observation, nil
 }

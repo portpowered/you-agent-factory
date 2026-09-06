@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
 import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
@@ -25,6 +26,7 @@ export interface WorkerSessionTimelineMessages {
   attemptIDLabel: string;
   attemptLabel: (number: number | undefined, id: string | undefined) => string;
   ariaLabel: string;
+  cacheWriteTokensLabel: string;
   cachedInputTokensLabel: string;
   collapseDetailsLabel: string;
   collapseContentAction: string;
@@ -60,6 +62,7 @@ export interface WorkerSessionTimelineMessages {
   providerSessionLabel: string;
   reasoningDeltaLabel: string;
   reasoningLabel: string;
+  reasoningOutputTokensLabel: string;
   reasoningSnapshotLabel: string;
   reconnectingState: string;
   recordingHealthLabel: (
@@ -71,6 +74,8 @@ export interface WorkerSessionTimelineMessages {
     reason?: string | null,
   ) => string;
   retryAction: string;
+  retryAfterSecondsLabel: string;
+  retryableLabel: string;
   retryReasonLabel: string;
   openWorkerSessionAction: string;
   openWorkerSessionTargetLabel: (
@@ -78,10 +83,24 @@ export interface WorkerSessionTimelineMessages {
     workID: string | null,
   ) => string;
   providerSessionUnavailable: string;
+  recordingHealthReasonLabel: string;
+  recordingHealthTargetLabel: string;
+  progressLabel: string;
+  progressMessageLabel: string;
+  progressPercentLabel: string;
   selectedWorkerSessionAction: string;
   sessionLifecycleLabel: string;
   sessionLifecycleStateLabel: (state: string) => string;
   workerSessionIDLabel: string;
+  attemptDispatchIDLabel: string;
+  durationLabel: string;
+  durationBasisLabel: string;
+  durationValue: (durationMillis: number | null) => string;
+  failureSummaryLabel: string;
+  modelUnavailable: string;
+  workIDsLabel: string;
+  workLabel: string;
+  reasoningEffortLabel: string;
   sourceErrorHeading: string;
   sourceLabel: string;
   sourceSequenceLabel: (sequence: number) => string;
@@ -118,11 +137,13 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
   {
     en: {
       attemptIDLabel: "Attempt ID",
+      attemptDispatchIDLabel: "Attempt / dispatch ID",
       attemptLabel: (number, id) =>
         number === undefined && id === undefined
           ? "Attempt"
           : `Attempt ${number ?? "unknown"}${id ? ` (${id})` : ""}`,
       ariaLabel: "Worker Session timeline",
+      cacheWriteTokensLabel: "Cache write tokens",
       cachedInputTokensLabel: "Cached input tokens",
       collapseDetailsLabel: "Collapse details",
       collapseContentAction: "Hide full content",
@@ -168,8 +189,15 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       providerLabel: "Provider",
       providerSessionLabel: "Provider Session",
       providerSessionUnavailable: "Provider Session unavailable",
+      recordingHealthReasonLabel: "Recording health reason",
+      recordingHealthTargetLabel: "Recording health",
+      progressLabel: "Progress",
+      progressMessageLabel: "Progress message",
+      progressPercentLabel: "Progress percent",
       reasoningDeltaLabel: "Reasoning delta",
       reasoningLabel: "Reasoning",
+      reasoningEffortLabel: "Reasoning effort",
+      reasoningOutputTokensLabel: "Reasoning output tokens",
       reasoningSnapshotLabel: "Reasoning snapshot",
       reconnectingState: "Worker Session activity is reconnecting.",
       recordingHealthLabel: (health) => `Recording: ${health}`,
@@ -185,6 +213,8 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
               ? `Recording is incomplete; some history may be missing. Reason: ${reason}.`
               : "Recording is incomplete; some history may be missing.",
       retryAction: "Retry",
+      retryAfterSecondsLabel: "Retry after seconds",
+      retryableLabel: "Retryable",
       retryReasonLabel: "Retry reason",
       selectedWorkerSessionAction: "Worker Session selected",
       sessionLifecycleLabel: "Lifecycle outcome",
@@ -240,6 +270,14 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       unknownCategoryLabel: "Canonical event",
       usageLabel: "Usage",
       usageModelLabel: "Usage model",
+      durationLabel: "Duration",
+      durationBasisLabel: "Duration basis",
+      durationValue: (durationMillis) =>
+        durationMillis === null ? "Unknown" : `${durationMillis} ms`,
+      failureSummaryLabel: "Failure summary",
+      modelUnavailable: "Model unavailable",
+      workIDsLabel: "Work IDs",
+      workLabel: "Work",
       workSelectionRequired:
         "Select a Work item to inspect its Worker Session timeline.",
       categoryLabel: {
@@ -261,11 +299,13 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
     },
     "zh-CN": {
       attemptIDLabel: "尝试 ID",
+      attemptDispatchIDLabel: "尝试 / 分派 ID",
       attemptLabel: (number, id) =>
         number === undefined && id === undefined
           ? "尝试"
           : `尝试 ${number ?? "未知"}${id ? `（${id}）` : ""}`,
       ariaLabel: "Worker 会话时间线",
+      cacheWriteTokensLabel: "缓存写入令牌",
       cachedInputTokensLabel: "缓存输入令牌",
       collapseDetailsLabel: "折叠详情",
       collapseContentAction: "隐藏完整内容",
@@ -309,8 +349,15 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       providerLabel: "提供方",
       providerSessionLabel: "提供方会话",
       providerSessionUnavailable: "提供方会话不可用",
+      recordingHealthReasonLabel: "记录健康原因",
+      recordingHealthTargetLabel: "记录健康状态",
+      progressLabel: "进度",
+      progressMessageLabel: "进度消息",
+      progressPercentLabel: "进度百分比",
       reasoningDeltaLabel: "推理增量",
       reasoningLabel: "推理",
+      reasoningEffortLabel: "推理强度",
+      reasoningOutputTokensLabel: "推理输出令牌",
       reasoningSnapshotLabel: "推理快照",
       reconnectingState: "Worker 会话活动正在重新连接。",
       recordingHealthLabel: (health) => `记录：${health}`,
@@ -326,6 +373,8 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
               ? `记录不完整，部分历史可能缺失。原因：${reason}。`
               : "记录不完整，部分历史可能缺失。",
       retryAction: "重试",
+      retryAfterSecondsLabel: "重试等待秒数",
+      retryableLabel: "可重试",
       retryReasonLabel: "重试原因",
       selectedWorkerSessionAction: "Worker 会话已选择",
       sessionLifecycleLabel: "生命周期结果",
@@ -380,6 +429,14 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       unknownCategoryLabel: "规范事件",
       usageLabel: "用量",
       usageModelLabel: "用量模型",
+      durationLabel: "时长",
+      durationBasisLabel: "时长依据",
+      durationValue: (durationMillis) =>
+        durationMillis === null ? "未知" : `${durationMillis} 毫秒`,
+      failureSummaryLabel: "失败摘要",
+      modelUnavailable: "模型不可用",
+      workIDsLabel: "工作 ID",
+      workLabel: "工作",
       workSelectionRequired: "选择一个工作项以查看其 Worker 会话时间线。",
       categoryLabel: {
         error: "错误",

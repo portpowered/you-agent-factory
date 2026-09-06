@@ -3,9 +3,11 @@ package wire
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestModelsManagedProcessStopAfterNaturalExitIsClean(t *testing.T) {
@@ -536,4 +539,93 @@ func (connection *modelEdgeGRPCConnection) Negotiate(
 func (connection *modelEdgeGRPCConnection) Close() error {
 	connection.closed = true
 	return nil
+}
+
+func TestWorkerRecordingRootUsesCanonicalHomeAndScenarioHome(t *testing.T) {
+	t.Parallel()
+
+	defaultRoot, err := workerRecordingRoot(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("workerRecordingRoot(default) error = %v", err)
+	}
+	defaultHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() error = %v", err)
+	}
+	if want := filepath.Join(defaultHome, workerRecordingHomeDirectory, workerRecordingStoreDirectory); defaultRoot != want {
+		t.Fatalf("workerRecordingRoot(default) = %q, want %q", defaultRoot, want)
+	}
+
+	home := t.TempDir()
+	resolvedRoot, err := workerRecordingRoot(serviceedges.Edges{
+		WorkerSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+	})
+	if err != nil {
+		t.Fatalf("workerRecordingRoot(scenario) error = %v", err)
+	}
+	want := filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory)
+	if resolvedRoot != want {
+		t.Fatalf("workerRecordingRoot(scenario) = %q, want %q", resolvedRoot, want)
+	}
+	if filepath.Dir(resolvedRoot) == filepath.Dir(defaultRoot) {
+		t.Fatalf("scenario recording root %q unexpectedly shares the temporary parent %q", resolvedRoot, defaultRoot)
+	}
+}
+
+func TestProvideWorkerRecordingWriterPersistsUnderResolvedHome(t *testing.T) {
+	t.Parallel()
+
+	for _, home := range []string{t.TempDir(), t.TempDir()} {
+		writer, err := provideWorkerRecordingWriter(serviceedges.Edges{
+			WorkerSessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		})
+		if err != nil {
+			t.Fatalf("provideWorkerRecordingWriter() error = %v", err)
+		}
+		failureWriter, ok := writer.(recordings.WorkerRecordingFailureWriter)
+		if !ok || failureWriter == nil {
+			t.Fatalf("worker recording writer type %T does not expose failure persistence", writer)
+		}
+		if err := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
+			RecordingID:     "recording-home-seam",
+			WorkerSessionID: "worker-home-seam",
+			Topic:           "worker-session/worker-home-seam/events",
+			Code:            "PERSISTENCE_FAILED",
+		}); err != nil {
+			t.Fatalf("PersistWorkerRecordingFailure() error = %v", err)
+		}
+
+		root := filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory)
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatalf("read resolved Worker recording root %q: %v", root, err)
+		}
+		if len(entries) != 1 || entries[0].IsDir() {
+			t.Fatalf("resolved Worker recording entries = %#v, want one artifact", entries)
+		}
+		reader, ok := writer.(recordings.WorkerRecordingReader)
+		if !ok || reader == nil {
+			t.Fatalf("worker recording type %T does not expose reading", writer)
+		}
+		snapshot, err := reader.LoadWorkerRecording(context.Background(), "recording-home-seam")
+		if err != nil || snapshot.RecordingID != "recording-home-seam" {
+			t.Fatalf("LoadWorkerRecording() = (%#v, %v), want persisted scenario identity", snapshot, err)
+		}
+	}
+}
+
+func TestWorkerRecordingRootReportsResolverFailures(t *testing.T) {
+	t.Parallel()
+
+	resolverErr := errors.New("home unavailable")
+	if root, err := workerRecordingRoot(serviceedges.Edges{
+		WorkerSessionResolveHomeDirectory: func() (string, error) { return "", resolverErr },
+	}); root != "" || !errors.Is(err, resolverErr) {
+		t.Fatalf("workerRecordingRoot(failing resolver) = (%q, %v), want wrapped resolver error", root, err)
+	}
+	if root, err := workerRecordingRoot(serviceedges.Edges{
+		WorkerSessionResolveHomeDirectory: func() (string, error) { return "  ", nil },
+	}); root != "" || err == nil {
+		t.Fatalf("workerRecordingRoot(empty resolver) = (%q, %v), want empty-path error", root, err)
+	}
 }

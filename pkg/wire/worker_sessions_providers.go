@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	runtime "runtime"
+	"strings"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -80,16 +82,52 @@ func provideWorkerRecordingWriter(
 ) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
 	if writer == nil {
-		var err error
-		writer, err = recordingswire.NewWorkerRecordingFileWriter(
+		root, err := workerRecordingRoot(edges)
+		if err != nil {
+			return nil, err
+		}
+		readDir := edges.RecordingReadDirectory
+		if readDir == nil {
+			readDir = platformfilesystem.Local{}.ReadDir
+		}
+		writer, err = recordingswire.NewWorkerRecordingFileWriterWithDirectoryReader(
 			platformreplay.NewLocal(runtime.GOOS),
-			filepath.Join(os.TempDir(), "you-worker-recordings"),
+			root,
+			readDir,
 		)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return writer, nil
+}
+
+const (
+	workerRecordingHomeDirectory  = ".you-agent-factory"
+	workerRecordingStoreDirectory = "worker-sessions"
+)
+
+// workerRecordingRoot places durable Worker history under the operator home.
+// An explicitly supplied resolver remains the isolated scenario seam used by
+// functional callers and embedding applications.
+func workerRecordingRoot(edges serviceedges.Edges) (string, error) {
+	if edges.WorkerSessionResolveHomeDirectory == nil {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve Worker Session recording home directory: %w", err)
+		}
+		return filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory), nil
+	}
+
+	home, err := edges.WorkerSessionResolveHomeDirectory()
+	if err != nil {
+		return "", fmt.Errorf("resolve Worker Session recording home directory: %w", err)
+	}
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return "", fmt.Errorf("resolve Worker Session recording home directory: empty path")
+	}
+	return filepath.Join(home, workerRecordingHomeDirectory, workerRecordingStoreDirectory), nil
 }
 
 func provideWorkerSessionsFactoryWithRecorder(

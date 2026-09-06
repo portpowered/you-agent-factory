@@ -270,6 +270,9 @@ func startInvokeContinuePackageProcess(
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return homeDir, nil
 		},
+		WorkerSessionResolveHomeDirectory: func() (string, error) {
+			return homeDir, nil
+		},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
 			err := api.Start(ctx, request)

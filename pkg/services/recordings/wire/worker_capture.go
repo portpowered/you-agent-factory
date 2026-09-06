@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"io/fs"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -19,11 +21,12 @@ func NewWorkerSessionRecorder(
 	return workerrecordingwire.New(eventService, writer, logger)
 }
 
-// NewWorkerRecordingFileWriter constructs the default durable Worker sidecar
-// writer from the policy-free replay storage effect selected by Wire.
-func NewWorkerRecordingFileWriter(
+// NewWorkerRecordingFileWriterWithDirectoryReader constructs the default
+// durable Worker sidecar with the directory-listing effect selected by Wire.
+func NewWorkerRecordingFileWriterWithDirectoryReader(
 	storage platformreplay.Storage,
 	root string,
+	readDir func(string) ([]fs.DirEntry, error),
 ) (recordings.WorkerRecordingWriter, error) {
-	return workerrecordingwire.NewFileWriter(storage, root)
+	return workerrecordingwire.NewFileWriterWithDirectoryReader(storage, root, readDir)
 }

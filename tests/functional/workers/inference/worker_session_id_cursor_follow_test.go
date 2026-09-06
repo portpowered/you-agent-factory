@@ -93,6 +93,7 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 	}
 	assertWSRFT011SameRecords(t, resumedRecords, firstRecords[1:])
 
+	firstGeneration := wsrft011StringPointer(firstRecords[0].Event.Cursor.StreamGenerationId)
 	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"after_position": []string{"0"},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORINVALID))
@@ -100,7 +101,8 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 		"after_position": []string{"9223372036854775807"},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE))
 	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, secondWorkerID, url.Values{
-		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
+		"after_position":       []string{strconv.FormatInt(acknowledged, 10)},
+		"stream_generation_id": []string{firstGeneration},
 	}), string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFOREIGN))
 	assertWSRFT011CursorError(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"after_position":       []string{strconv.FormatInt(acknowledged, 10)},
@@ -423,8 +425,8 @@ func assertWSRFT011RecordOrder(t *testing.T, records []factoryapi.WorkerSessionE
 		if index > 0 && event.Event.Position <= records[index-1].Event.Position {
 			t.Fatalf("Worker Session positions are not strictly increasing: record[%d]=%d previous=%d", index, event.Event.Position, records[index-1].Event.Position)
 		}
-		if event.Event.SourceSequence != event.Event.Position {
-			t.Fatalf("Worker Session record[%d] source sequence = %d, want position %d", index, event.Event.SourceSequence, event.Event.Position)
+		if event.Event.SourceSequence == 0 {
+			t.Fatalf("Worker Session record[%d] source sequence = %d, want a positive source-native sequence", index, event.Event.SourceSequence)
 		}
 		key := fmt.Sprintf("%s|%s|%d|%s", event.Event.SourceType, event.Event.SourceId, event.Event.SourceSequence, event.Event.SourceEventId)
 		if _, exists := seen[key]; exists {
@@ -577,6 +579,9 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
 			ProviderSessionResolveHomeDirectory: func() (string, error) {
+				return homeDir, nil
+			},
+			WorkerSessionResolveHomeDirectory: func() (string, error) {
 				return homeDir, nil
 			},
 		},

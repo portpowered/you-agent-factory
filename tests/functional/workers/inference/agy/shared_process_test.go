@@ -429,6 +429,9 @@ func (fixture *agyProcessFixture) startProcess() error {
 		ProviderSessionResolveHomeDirectory: func() (string, error) {
 			return fixture.homeDir, nil
 		},
+		WorkerSessionResolveHomeDirectory: func() (string, error) {
+			return fixture.homeDir, nil
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("BuildProcess: %w", err)

@@ -3131,6 +3131,29 @@ func assertListPreservesBaseFactsWithoutProviderProjection(t *testing.T, registr
 	}
 }
 
+func TestMergeLiveObservationPreservesDurableIdentityWhenLiveFactIsMissing(t *testing.T) {
+	durable := workersessions.Observation{
+		WorkerSessionID:  "worker-merge",
+		FactorySessionID: "factory-session-1",
+		WorkIDs:          []string{"work-durable"},
+		State:            workersessions.StateCompleted,
+		Transcript:       workersessions.TranscriptAvailabilityAvailable,
+		DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
+	}
+	live := workersessions.Observation{
+		WorkerSessionID: "worker-merge",
+		State:           workersessions.StateRunning,
+	}
+
+	merged := mergeLiveObservation(durable, live)
+	if merged.FactorySessionID != "factory-session-1" || len(merged.WorkIDs) != 1 || merged.WorkIDs[0] != "work-durable" {
+		t.Fatalf("merged durable identity = %#v, want Factory Session and Work facts retained", merged)
+	}
+	if merged.State != workersessions.StateRunning || merged.Transcript != workersessions.TranscriptAvailabilityAvailable || merged.DurationBasis != workersessions.DurationBasisRecordedTimestamps {
+		t.Fatalf("merged live lifecycle = %#v, want live state with durable optional facts", merged)
+	}
+}
+
 func TestStartLifecycleClassificationHelpers(t *testing.T) {
 	noCause := startNotAccepted(nil)
 	if noCause.Error() != workersessions.ErrStartNotAccepted.Error() {

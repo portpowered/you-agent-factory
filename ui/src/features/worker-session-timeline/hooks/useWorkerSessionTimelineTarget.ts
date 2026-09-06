@@ -1,11 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkerSessionObservation } from "../../../api/worker-sessions";
 import {
   type ListWorkerSessionsForWorkOptions,
   listWorkerSessionsForWork,
   type WorkerSessionObservationAPIError,
 } from "../../../api/worker-sessions";
+import {
+  getWorkerSessionTimelineSelectionStorageKey,
+  readWorkerSessionTimelineSelection,
+  writeWorkerSessionTimelineSelection,
+} from "../lib/worker-session-timeline-selection";
 
 export type WorkerSessionTimelineTargetLoader = (
   options: ListWorkerSessionsForWorkOptions,
@@ -55,20 +60,52 @@ export function useWorkerSessionTimelineTarget({
   const [selectedWorkerSessionID, setSelectedWorkerSessionID] = useState<
     string | null
   >(null);
+  const selectionStorageKey = getWorkerSessionTimelineSelectionStorageKey(
+    factorySessionID,
+    workID,
+  );
+  const previousSelectionStorageKey = useRef<string | null>(null);
 
   useEffect(() => {
-    const firstObservation = query.data?.[0];
-    if (
-      firstObservation === undefined ||
-      query.data?.some(
-        (observation) =>
-          observation.workerSessionId === selectedWorkerSessionID,
-      )
-    ) {
+    if (!targetIsReady || query.data === undefined) {
       return;
     }
-    setSelectedWorkerSessionID(firstObservation.workerSessionId);
-  }, [query.data, selectedWorkerSessionID]);
+    const scopeChanged =
+      previousSelectionStorageKey.current !== selectionStorageKey;
+    previousSelectionStorageKey.current = selectionStorageKey;
+    const persistedWorkerSessionID =
+      readWorkerSessionTimelineSelection(selectionStorageKey);
+    const selectedFromCurrentState = scopeChanged
+      ? undefined
+      : query.data.find(
+          (observation) =>
+            observation.workerSessionId === selectedWorkerSessionID,
+        )?.workerSessionId;
+    const nextWorkerSessionID =
+      selectedFromCurrentState ??
+      query.data.find(
+        (observation) =>
+          observation.workerSessionId === persistedWorkerSessionID,
+      )?.workerSessionId ??
+      query.data[0]?.workerSessionId ??
+      null;
+
+    if (nextWorkerSessionID !== selectedWorkerSessionID) {
+      setSelectedWorkerSessionID(nextWorkerSessionID);
+    }
+    writeWorkerSessionTimelineSelection(
+      selectionStorageKey,
+      nextWorkerSessionID,
+    );
+  }, [query.data, selectedWorkerSessionID, selectionStorageKey, targetIsReady]);
+
+  const selectWorkerSession = useCallback(
+    (workerSessionID: string) => {
+      setSelectedWorkerSessionID(workerSessionID);
+      writeWorkerSessionTimelineSelection(selectionStorageKey, workerSessionID);
+    },
+    [selectionStorageKey],
+  );
 
   const status: WorkerSessionTimelineTargetStatus = !targetIsReady
     ? "idle"
@@ -96,7 +133,7 @@ export function useWorkerSessionTimelineTarget({
       void query.refetch();
     },
     selectedWorkerSessionID: resolvedSelectedWorkerSessionID,
-    setSelectedWorkerSessionID,
+    setSelectedWorkerSessionID: selectWorkerSession,
     status,
   };
 }

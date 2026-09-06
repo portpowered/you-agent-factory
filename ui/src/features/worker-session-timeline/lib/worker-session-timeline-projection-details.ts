@@ -17,6 +17,7 @@ import type {
   WorkerTimelineJSONObject,
   WorkerTimelineMessage,
   WorkerTimelineMessageDelta,
+  WorkerTimelineProgress,
   WorkerTimelineProviderSession,
   WorkerTimelineReasoning,
   WorkerTimelineTerminalOutcome,
@@ -251,6 +252,20 @@ export function projectReasoning(
         : {}),
   };
   return hasKeys(reasoning) ? reasoning : undefined;
+}
+
+export function projectProgress(
+  payload: WorkerTimelineJSONObject,
+): WorkerTimelineProgress | undefined {
+  const label = optionalString(payload.label);
+  const message = optionalString(payload.message);
+  const percentComplete = finiteNumber(payload.percentComplete);
+  const progress: WorkerTimelineProgress = {
+    ...(label !== undefined ? { label } : {}),
+    ...(message !== undefined ? { message } : {}),
+    ...(percentComplete !== undefined ? { percentComplete } : {}),
+  };
+  return hasKeys(progress) ? progress : undefined;
 }
 
 export function projectTool(

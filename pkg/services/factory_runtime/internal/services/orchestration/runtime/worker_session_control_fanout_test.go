@@ -9,6 +9,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -58,6 +60,215 @@ func TestFanOutWorkerSessionControl_AttemptsEveryCapturedChildInStableOrder(t *t
 		t.Fatal("Worker Sessions received canceled fan-out context")
 	}
 }
+
+func TestRecordedWorkerStreamGenerationAndCursorHelpers(t *testing.T) {
+	workerSessionID := "worker-generation"
+	wantGeneration := "worker-recording/" + workerSessionID
+	if got := recordedWorkerStreamGenerationForIdentity(" " + workerSessionID + " "); got != wantGeneration {
+		t.Fatalf("recordedWorkerStreamGenerationForIdentity() = %q, want %q", got, wantGeneration)
+	}
+	if !durableWorkerCursor(&workersessions.ObservationCursor{StreamGenerationID: wantGeneration}) {
+		t.Fatal("durableWorkerCursor() = false for durable generation")
+	}
+	if durableWorkerCursor(&workersessions.ObservationCursor{StreamGenerationID: "events/generation"}) {
+		t.Fatal("durableWorkerCursor() = true for live generation")
+	}
+
+	wrapped := withRecordedWorkerStreamGeneration(workersessions.ObservationSubscription{
+		NextFunc: func(context.Context) workersessions.ObservationDelivery {
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord}
+		},
+	}, workerSessionID)
+	delivery := wrapped.Next(context.Background())
+	if delivery.Event.Cursor.StreamGenerationID != wantGeneration {
+		t.Fatalf("recorded stream cursor = %q, want %q", delivery.Event.Cursor.StreamGenerationID, wantGeneration)
+	}
+	if unchanged := withRecordedWorkerStreamGeneration(workersessions.ObservationSubscription{}, workerSessionID); unchanged.NextFunc != nil {
+		t.Fatal("empty subscription unexpectedly gained a Next function")
+	}
+}
+
+func TestRecordedWorkerSessionObservationUsesDurableWorkerIDFallback(t *testing.T) {
+	adapter, service, workerSessionID := newDurableWorkerIDFallbackFixture()
+	subscription, err := adapter.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID() error = %v", err)
+	}
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryRecord || got.Event.Cursor.StreamGenerationID != "worker-recording/"+workerSessionID {
+		t.Fatalf("durable fallback delivery = %#v, want record with durable generation", got)
+	}
+
+	service.observation.ProviderSessionAvailable = false
+	service.subscription = workersessions.ObservationSubscription{}
+	service.streamErr = nil
+	if _, err := adapter.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	}); err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID(provider-neutral fallback) error = %v", err)
+	}
+	show, err := adapter.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+	if err != nil || show.WorkerSessionID != workerSessionID {
+		t.Fatalf("GetObservationByWorkerSessionID(durable fallback) = %#v, %v", show, err)
+	}
+}
+
+func TestRecordedWorkerSessionObservationDurableReadRoutes(t *testing.T) {
+	adapter, service, workerSessionID := newDurableWorkerIDFallbackFixture()
+	show, err := adapter.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
+	if err != nil || show.WorkerSessionID != workerSessionID {
+		t.Fatalf("GetObservationByWorkerSessionID(durable fallback) = %#v, %v", show, err)
+	}
+	service.getErr = workersessions.ErrObservationSessionNotFound
+	if _, err := adapter.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("GetObservationByWorkerSessionID(missing) error = %v", err)
+	}
+	service.getErr = nil
+	service.transcript = workersessions.ReadTranscriptResult{WorkerSessionID: workerSessionID, AttemptID: "attempt", State: workersessions.StateCompleted}
+	transcript, err := adapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID})
+	if err != nil || transcript.WorkerSessionID != workerSessionID {
+		t.Fatalf("ReadTranscript(durable fallback) = %#v, %v", transcript, err)
+	}
+	service.transcriptErr = errors.New("transcript unavailable")
+	if _, err := adapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID}); !errors.Is(err, service.transcriptErr) {
+		t.Fatalf("ReadTranscript(failed durable fallback) error = %v", err)
+	}
+}
+
+func TestRecordedWorkerSessionObservationDurableHelperBranches(t *testing.T) {
+	adapter, _, workerSessionID := newDurableWorkerIDFallbackFixture()
+	if _, handled, err := adapter.recordedWorkerObservationIfAvailable(context.Background(), workersessions.Observation{}, workerSessionID); handled || err != nil {
+		t.Fatalf("recordedWorkerObservationIfAvailable(no provider) = handled %v, error %v", handled, err)
+	}
+	if _, handled, err := adapter.recordedTranscriptIfAvailable(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID}, workersessions.ReadTranscriptResult{}); handled || err != nil {
+		t.Fatalf("recordedTranscriptIfAvailable(no provider) = handled %v, error %v", handled, err)
+	}
+}
+
+func TestRecordedTranscriptProviderIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		ref  workersessions.ReadTranscriptResult
+		want bool
+	}{
+		{name: "provider", ref: workersessions.ReadTranscriptResult{ProviderSession: providers.SessionRef{Provider: "codex"}}, want: true},
+		{name: "kind", ref: workersessions.ReadTranscriptResult{ProviderSession: providers.SessionRef{Kind: "session_id"}}, want: true},
+		{name: "id", ref: workersessions.ReadTranscriptResult{ProviderSession: providers.SessionRef{ID: "opaque"}}, want: true},
+		{name: "empty", ref: workersessions.ReadTranscriptResult{}, want: false},
+	} {
+		t.Run("transcript identity "+test.name, func(t *testing.T) {
+			if got := transcriptProviderSessionAvailable(test.ref); got != test.want {
+				t.Fatalf("transcriptProviderSessionAvailable() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRecordedObservationReplaySummaryHelpers(t *testing.T) {
+	workerSessionID := "worker-durable-fallback"
+	if got := recordedObservationGeneration(nil, workerSessionID, false); got != "" {
+		t.Fatalf("recordedObservationGeneration(no ledger) = %q, want empty", got)
+	}
+	if got := recordedObservationReplaySummary(recordedDispatchObservation{state: workersessions.StateRunning}, workerRecordingHealth{}); got == nil || got.Complete || got.Reason != "recording-incomplete" {
+		t.Fatalf("recordedObservationReplaySummary(active) = %#v", got)
+	}
+	if got := recordedObservationReplaySummary(recordedDispatchObservation{state: workersessions.StateCompleted}, workerRecordingHealth{}); got == nil || !got.Complete || got.Reason != "recording-complete" {
+		t.Fatalf("recordedObservationReplaySummary(completed) = %#v", got)
+	}
+	if got := recordedObservationReplaySummary(recordedDispatchObservation{state: workersessions.StateCompleted}, workerRecordingHealth{status: recordings.WorkerRecordingStatusDegraded, reason: "capture lost"}); got == nil || got.Complete || got.Reason != "capture lost" {
+		t.Fatalf("recordedObservationReplaySummary(health) = %#v", got)
+	}
+	if got := observationStreamLimit(0); got != workersessions.DefaultObservationStreamLimit || observationStreamLimit(3) != 3 {
+		t.Fatalf("observationStreamLimit() = %d/%d", got, observationStreamLimit(3))
+	}
+}
+
+func TestRecordedWorkerSessionObservationDurableStreamErrors(t *testing.T) {
+	adapter, service, workerSessionID := newDurableWorkerIDFallbackFixture()
+
+	var nilAdapter *recordedWorkerSessionObservation
+	if _, handled, err := nilAdapter.streamDurableWorkerSession(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}); handled || err != nil {
+		t.Fatalf("nil streamDurableWorkerSession() = handled %v, error %v, want false/nil", handled, err)
+	}
+	service.getErr = workersessions.ErrObservationSessionNotFound
+	service.streamErr = workersessions.ErrObservationSessionNotFound
+	if _, handled, err := adapter.streamDurableWorkerSession(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}); handled || err != nil {
+		t.Fatalf("missing durable stream = handled %v, error %v, want false/nil", handled, err)
+	}
+	service.streamErr = errors.New("stream unavailable")
+	if _, handled, err := adapter.streamDurableWorkerSession(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}); !handled || !errors.Is(err, service.streamErr) {
+		t.Fatalf("failed durable stream = handled %v, error %v, want true/stream error", handled, err)
+	}
+}
+
+func newDurableWorkerIDFallbackFixture() (*recordedWorkerSessionObservation, *durableWorkerSessionsService, string) {
+	const workerSessionID = "worker-durable-fallback"
+	deliveries := []workersessions.ObservationDelivery{{Kind: workersessions.ObservationDeliveryRecord}}
+	service := &durableWorkerSessionsService{
+		fakeWorkerSessionsService: &fakeWorkerSessionsService{},
+		observation: workersessions.Observation{
+			WorkerSessionID:          workerSessionID,
+			State:                    workersessions.StateCompleted,
+			ProviderSessionAvailable: true,
+		},
+		subscription: workersessions.ObservationSubscription{
+			NextFunc: func(context.Context) workersessions.ObservationDelivery {
+				value := deliveries[0]
+				deliveries = deliveries[1:]
+				return value
+			},
+		},
+	}
+	return &recordedWorkerSessionObservation{Service: service}, service, workerSessionID
+}
+
+type durableWorkerSessionsService struct {
+	*fakeWorkerSessionsService
+	observation   workersessions.Observation
+	subscription  workersessions.ObservationSubscription
+	getErr        error
+	streamErr     error
+	transcript    workersessions.ReadTranscriptResult
+	transcriptErr error
+}
+
+func (s *durableWorkerSessionsService) GetObservationByWorkerSessionID(
+	context.Context,
+	workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return s.observation, s.getErr
+}
+
+func (s *durableWorkerSessionsService) StreamObservationsByWorkerSessionID(
+	context.Context,
+	workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	return s.subscription, s.streamErr
+}
+
+func (s *durableWorkerSessionsService) ReadTranscript(
+	context.Context,
+	workersessions.ReadTranscriptRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	return s.transcript, s.transcriptErr
+}
+
+func (*durableWorkerSessionsService) ListWorkerRecordingProjections(
+	context.Context,
+	recordings.WorkerRecordingListRequest,
+) (recordings.WorkerRecordingListResult, error) {
+	return recordings.WorkerRecordingListResult{}, nil
+}
+
+func (*durableWorkerSessionsService) LoadWorkerRecordingByWorkerSessionID(
+	context.Context,
+	string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
+}
+
+var _ recordings.WorkerRecordingHistoryReader = (*durableWorkerSessionsService)(nil)
 
 func TestFanOutWorkerSessionControl_PropagatesParentControlID(t *testing.T) {
 	service := newWorkerSessionControlSpy(map[workerSessionControlCall]workerSessionControlResponse{

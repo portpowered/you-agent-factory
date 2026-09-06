@@ -80,6 +80,20 @@ func (s *Service) GetWork(
 			return item, nil
 		}
 	}
+	// An admitted Work can be temporarily absent from the current token
+	// projection while its dispatch owns the consumed token. The admission
+	// ledger still carries the stable public identity and name, so an exact
+	// Work-ID read must not report a false not-found during that interval.
+	for _, admission := range snapshot.Admissions {
+		if admission.WorkID != id {
+			continue
+		}
+		return work.ReadModel{
+			CursorID: admission.WorkID,
+			WorkID:   admission.WorkID,
+			Name:     admission.Name,
+		}, nil
+	}
 	return work.ReadModel{}, work.ErrWorkNotFound
 }
 

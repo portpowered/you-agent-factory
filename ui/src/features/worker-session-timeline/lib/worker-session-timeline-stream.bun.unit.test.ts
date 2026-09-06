@@ -44,7 +44,7 @@ function frame(
     errorCode: null,
     errorMessage: null,
     event,
-    providerSession: { provider: "", kind: "", id: "" },
+    providerSession: null,
     workIds: [],
     workerSessionId: "worker-1",
     ...overrides,

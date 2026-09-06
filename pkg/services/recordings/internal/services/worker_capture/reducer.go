@@ -25,6 +25,9 @@ type WorkerRecordingSnapshot struct {
 // in aggregate order.
 type WorkerSessionRecordingSnapshot struct {
 	WorkerSessionID    string                   `json:"workerSessionId"`
+	FactorySessionID   string                   `json:"factorySessionId,omitempty"`
+	WorkIDs            []string                 `json:"workIds,omitempty"`
+	AttemptID          string                   `json:"attemptId,omitempty"`
 	Topic              events.Topic             `json:"topic,omitempty"`
 	Status             WorkerRecordingStatus    `json:"status,omitempty"`
 	LastPosition       events.AggregateSequence `json:"lastPosition,omitempty"`
@@ -63,6 +66,9 @@ const (
 type WorkerRecordingHistory struct {
 	RecordingID        string
 	WorkerSessionID    string
+	FactorySessionID   string
+	WorkIDs            []string
+	AttemptID          string
 	Topic              events.Topic
 	Failure            string
 	InterruptionReason string
@@ -85,6 +91,9 @@ type WorkerRecordingTerminal struct {
 type WorkerRecordingProjection struct {
 	RecordingID        string
 	WorkerSessionID    string
+	FactorySessionID   string
+	WorkIDs            []string
+	AttemptID          string
 	Topic              events.Topic
 	Status             WorkerRecordingStatus
 	Complete           bool
@@ -110,6 +119,48 @@ type WorkerRecordingReplayResult struct {
 	Projection WorkerRecordingProjection
 }
 
+// WorkerRecordingListRequest is the bounded catalog query used by the
+// Worker-ID inspection surface. Continuation tokens are process-local read
+// cursors; they are intentionally not persisted in the artifact.
+type WorkerRecordingListRequest struct {
+	FactorySessionID string
+	WorkID           string
+	MaxResults       int
+	NextToken        string
+}
+
+// WorkerRecordingCatalogDiagnostic describes a file that could not be fully
+// projected without hiding the other valid catalog entries.
+type WorkerRecordingCatalogDiagnostic struct {
+	RecordingID string
+	Path        string
+	Code        WorkerRecordingCatalogDiagnosticCode
+	Message     string
+}
+
+// WorkerRecordingCatalogDiagnosticCode is a stable, safe catalog diagnostic
+// classification. Raw decoder and filesystem details stay out of public
+// responses.
+type WorkerRecordingCatalogDiagnosticCode string
+
+const (
+	WorkerRecordingCatalogMalformedTail   WorkerRecordingCatalogDiagnosticCode = "MALFORMED_TAIL"
+	WorkerRecordingCatalogUnsupported     WorkerRecordingCatalogDiagnosticCode = "UNSUPPORTED_SCHEMA"
+	WorkerRecordingCatalogUnreadable      WorkerRecordingCatalogDiagnosticCode = "UNREADABLE"
+	WorkerRecordingCatalogRetention       WorkerRecordingCatalogDiagnosticCode = "RETENTION_REMOVED"
+	WorkerRecordingCatalogInvalidIdentity WorkerRecordingCatalogDiagnosticCode = "INVALID_IDENTITY"
+)
+
+// WorkerRecordingListResult is a bounded catalog page. Diagnostics are
+// returned alongside readable projections so one damaged tail cannot erase a
+// valid Worker from list results.
+type WorkerRecordingListResult struct {
+	Projections []WorkerRecordingProjection
+	MaxResults  int
+	NextToken   string
+	Diagnostics []WorkerRecordingCatalogDiagnostic
+}
+
 var (
 	ErrInvalidWorkerRecordingRequest = errors.New("recordings: invalid Worker recording request")
 	ErrWorkerRecordingOpening        = errors.New("recordings: Worker recording opening is invalid")
@@ -120,6 +171,10 @@ var (
 	ErrWorkerRecordingIncomplete     = errors.New("recordings: Worker recording is incomplete")
 	ErrWorkerRecordingCompatibility  = errors.New("recordings: Worker recording compatibility is unsupported")
 	ErrWorkerRecordingReplay         = errors.New("recordings: Worker recording replay failed")
+	ErrWorkerRecordingCorruptTail    = errors.New("recordings: Worker recording has a corrupt tail")
+	ErrWorkerRecordingAppend         = errors.New("recordings: Worker recording append is unavailable")
+	ErrWorkerRecordingRetention      = errors.New("recordings: Worker recording retention removed history")
+	ErrWorkerRecordingCursor         = errors.New("recordings: Worker recording cursor is unavailable")
 )
 
 const (
@@ -154,6 +209,9 @@ func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory
 	projection := WorkerRecordingProjection{
 		RecordingID:        history.RecordingID,
 		WorkerSessionID:    history.WorkerSessionID,
+		FactorySessionID:   history.FactorySessionID,
+		WorkIDs:            append([]string(nil), history.WorkIDs...),
+		AttemptID:          history.AttemptID,
 		Topic:              topic,
 		Status:             WorkerRecordingStatusIncomplete,
 		Degradation:        strings.TrimSpace(history.Failure),
@@ -309,6 +367,9 @@ func (codec WorkerRecordingCodec) replayWorkerRecordingSession(
 	projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
 		RecordingID:        snapshot.RecordingID,
 		WorkerSessionID:    session.WorkerSessionID,
+		FactorySessionID:   session.FactorySessionID,
+		WorkIDs:            session.WorkIDs,
+		AttemptID:          session.AttemptID,
 		Topic:              session.Topic,
 		Failure:            failure,
 		InterruptionReason: session.InterruptionReason,

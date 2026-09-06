@@ -32,6 +32,8 @@ type WorkerSessionRecordingRequest struct {
 	FactorySessionID string
 	WorkerSessionID  string
 	Topic            events.Topic
+	WorkIDs          []string
+	AttemptID        string
 }
 
 // Validate reports whether the request names one concrete Worker topic.
@@ -56,6 +58,8 @@ type WorkerRecordingRecord struct {
 	RecordingID      string
 	FactorySessionID string
 	WorkerSessionID  string
+	WorkIDs          []string
+	AttemptID        string
 	Record           events.Record
 }
 
@@ -64,7 +68,10 @@ type WorkerRecordingRecord struct {
 // provider payload or implementation error text.
 type WorkerRecordingFailure struct {
 	RecordingID       string
+	FactorySessionID  string
 	WorkerSessionID   string
+	WorkIDs           []string
+	AttemptID         string
 	Topic             events.Topic
 	Code              string
 	ExecutionTerminal *WorkerRecordingTerminal

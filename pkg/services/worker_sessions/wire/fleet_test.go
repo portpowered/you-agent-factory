@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -73,6 +75,54 @@ func TestFleetObservationServicePreservesOptionalProjectionFacts(t *testing.T) {
 		t.Fatalf("fleet list with unavailable optional projection: %v", err)
 	}
 	assertFleetObservationIDs(t, result.Observations, []string{"worker-base"})
+}
+
+func TestFleetObservationServiceMergesDuplicateProjectionFacts(t *testing.T) {
+	started := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	duration := 2 * time.Second
+	weak := &fleetObservationSource{result: workersessions.ListWorkerSessionObservationsResult{
+		Observations: []workersessions.Observation{{
+			WorkerSessionID:  "worker-duplicate",
+			FactorySessionID: "factory-session-1",
+			State:            workersessions.StateCompleted,
+			DurationBasis:    workersessions.DurationBasisUnavailable,
+		}}}}
+	rich := &fleetObservationSource{result: workersessions.ListWorkerSessionObservationsResult{
+		Observations: []workersessions.Observation{{
+			WorkerSessionID:          "worker-duplicate",
+			ProviderSession:          providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-1"},
+			ProviderSessionAvailable: true,
+			WorkIDs:                  []string{"work-1"},
+			StartedAt:                &started,
+			Duration:                 &duration,
+			DurationBasis:            workersessions.DurationBasisRecordedTimestamps,
+			Transcript:               workersessions.TranscriptAvailabilityAvailable,
+			ConfirmationState:        workersessions.ConfirmationStateConfirmed,
+		}}}}
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{weak, rich}, nil
+	})
+
+	result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
+	if err != nil {
+		t.Fatalf("fleet duplicate merge: %v", err)
+	}
+	if len(result.Observations) != 1 {
+		t.Fatalf("fleet duplicate count = %d, want 1", len(result.Observations))
+	}
+	observation := result.Observations[0]
+	if !observation.ProviderSessionAvailable || observation.ProviderSession.ID != "provider-1" {
+		t.Fatalf("fleet duplicate provider = %#v, want provider-1", observation.ProviderSession)
+	}
+	if len(observation.WorkIDs) != 1 || observation.WorkIDs[0] != "work-1" || observation.StartedAt == nil {
+		t.Fatalf("fleet duplicate attribution/timing = %#v", observation)
+	}
+	if observation.Duration == nil || *observation.Duration != duration || observation.DurationBasis != workersessions.DurationBasisRecordedTimestamps {
+		t.Fatalf("fleet duplicate duration = %v/%q, want %s/RECORDED_TIMESTAMPS", observation.Duration, observation.DurationBasis, duration)
+	}
+	if observation.Transcript != workersessions.TranscriptAvailabilityAvailable || observation.ConfirmationState != workersessions.ConfirmationStateConfirmed {
+		t.Fatalf("fleet duplicate optional facts = %#v", observation)
+	}
 }
 
 func TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput(t *testing.T) {

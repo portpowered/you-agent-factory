@@ -105,6 +105,12 @@ export interface WorkerTimelineReasoning {
   summaryDelta?: string;
 }
 
+export interface WorkerTimelineProgress {
+  label?: string;
+  message?: string;
+  percentComplete?: number;
+}
+
 export interface WorkerTimelineTool {
   toolCallId?: string;
   toolName?: string;
@@ -163,6 +169,7 @@ export interface WorkerSessionTimelineEntry {
   continuation?: WorkerTimelineContinuation;
   message?: WorkerTimelineMessage;
   reasoning?: WorkerTimelineReasoning;
+  progress?: WorkerTimelineProgress;
   tool?: WorkerTimelineTool;
   usage?: WorkerTimelineUsage;
   failure?: WorkerTimelineFailure;

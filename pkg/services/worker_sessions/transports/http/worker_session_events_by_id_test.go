@@ -215,8 +215,8 @@ func assertProviderNeutralReplayFrames(t *testing.T, frames []sseTestFrame) {
 	if frames[0].RecordingHealth == nil || *frames[0].RecordingHealth != string(recordings.WorkerRecordingStatusDegraded) || frames[0].RecordingHealthReason == nil || *frames[0].RecordingHealthReason != "PERSISTENCE_FAILED" {
 		t.Fatalf("provider-neutral frame recording health = %#v/%#v, want DEGRADED/PERSISTENCE_FAILED", frames[0].RecordingHealth, frames[0].RecordingHealthReason)
 	}
-	if frames[0].ProviderSession == nil {
-		t.Fatalf("provider-neutral frame = %#v, want empty provider envelope", frames[0])
+	if frames[0].ProviderSession != nil {
+		t.Fatalf("provider-neutral frame = %#v, want null provider session", frames[0])
 	}
 	if frames[1].ReplaySummary == nil {
 		t.Fatalf("replay summary = %#v, want complete one-event summary", frames[1].ReplaySummary)

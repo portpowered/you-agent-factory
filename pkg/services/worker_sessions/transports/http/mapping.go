@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -594,15 +595,25 @@ func WorkerSessionTranscriptToAPI(result workersessions.ReadTranscriptResult) fa
 			Type:             factoryapi.ProviderSessionTranscriptEntryType(entry.Type),
 		}
 	}
+	health := result.RecordingHealth
+	if health == "" && (result.ProviderSession.Provider != "" || result.ProviderSession.Kind != "" || result.ProviderSession.ID != "") {
+		health = recordings.WorkerRecordingStatusComplete
+	}
 	response := factoryapi.WorkerSessionTranscriptResponse{
 		WorkerSessionId: result.WorkerSessionID,
-		ProviderSession: factoryapi.WorkerSessionProviderSessionRef{
+		WorkIds:         append([]string(nil), result.WorkIDs...),
+		AttemptId:       result.AttemptID,
+		State:           string(result.State),
+		Entries:         entries,
+		RecordingHealth: factoryapi.WorkerSessionTranscriptResponseRecordingHealth(health),
+	}
+	if result.ProviderSession.Provider != "" || result.ProviderSession.Kind != "" || result.ProviderSession.ID != "" {
+		response.ProviderSession = &factoryapi.WorkerSessionProviderSessionRef{
 			Provider: string(result.ProviderSession.Provider), Kind: result.ProviderSession.Kind, Id: result.ProviderSession.ID,
-		},
-		WorkIds:   append([]string(nil), result.WorkIDs...),
-		AttemptId: result.AttemptID,
-		State:     string(result.State),
-		Entries:   entries,
+		}
+	}
+	if result.RecordingHealthReason != "" {
+		response.RecordingHealthReason = stringPtr(result.RecordingHealthReason)
 	}
 	if result.TurnID != "" {
 		response.TurnId = stringPtr(result.TurnID)

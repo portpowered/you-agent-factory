@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: structured timeline detail renderers stay colocated so every provider-neutral fact shares one disclosure contract.
 import type {
   WorkerSessionTimelineEntry,
   WorkerTimelineContentBlock,
@@ -43,6 +44,9 @@ export function EntryStructuredDetails({
       ) : null}
       {entry.reasoning ? (
         <ReasoningDetails messages={messages} reasoning={entry.reasoning} />
+      ) : null}
+      {entry.progress ? (
+        <ProgressDetails messages={messages} progress={entry.progress} />
       ) : null}
       {entry.tool ? (
         <ToolDetails messages={messages} tool={entry.tool} />
@@ -308,6 +312,40 @@ function ToolDetails({
   );
 }
 
+function ProgressDetails({
+  messages,
+  progress,
+}: {
+  messages: WorkerSessionTimelineMessages;
+  progress: NonNullable<WorkerSessionTimelineEntry["progress"]>;
+}) {
+  return (
+    <DetailSection heading={messages.progressLabel}>
+      <DetailList
+        items={[
+          progress.label
+            ? { label: messages.progressLabel, value: progress.label }
+            : null,
+          progress.percentComplete === undefined
+            ? null
+            : {
+                label: messages.progressPercentLabel,
+                value: String(progress.percentComplete),
+              },
+        ]}
+      />
+      {progress.message ? (
+        <BoundedText
+          collapseLabel={messages.collapseContentAction}
+          expandLabel={messages.expandContentAction}
+          label={messages.progressMessageLabel}
+          value={progress.message}
+        />
+      ) : null}
+    </DetailSection>
+  );
+}
+
 function UsageDetails({
   messages,
   usage,
@@ -331,11 +369,23 @@ function UsageDetails({
                 label: messages.cachedInputTokensLabel,
                 value: String(usage.cachedInputTokens),
               },
+          usage.cacheWriteTokens === undefined
+            ? null
+            : {
+                label: messages.cacheWriteTokensLabel,
+                value: String(usage.cacheWriteTokens),
+              },
           usage.outputTokens === undefined
             ? null
             : {
                 label: messages.outputTokensLabel,
                 value: String(usage.outputTokens),
+              },
+          usage.reasoningOutputTokens === undefined
+            ? null
+            : {
+                label: messages.reasoningOutputTokensLabel,
+                value: String(usage.reasoningOutputTokens),
               },
           usage.totalTokens === undefined
             ? null
@@ -372,8 +422,14 @@ function FailureDetails({
           failure.retryable === undefined
             ? null
             : {
-                label: messages.retryReasonLabel,
+                label: messages.retryableLabel,
                 value: String(failure.retryable),
+              },
+          failure.retryAfterSeconds === undefined
+            ? null
+            : {
+                label: messages.retryAfterSecondsLabel,
+                value: String(failure.retryAfterSeconds),
               },
           failure.retryAttempt === undefined
             ? null

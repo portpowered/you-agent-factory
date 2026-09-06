@@ -320,6 +320,24 @@ func TestGetWorkByCursorOrWorkIDAndNotFound(t *testing.T) {
 	}
 }
 
+func TestGetWorkReturnsAdmittedIdentityWhenTokenIsInFlight(t *testing.T) {
+	t.Parallel()
+
+	service := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+		snapshot: work.ReadSnapshot{
+			Admissions: []work.WorkAdmission{{WorkID: "work-in-flight", Name: "Deploy service"}},
+		},
+	}}, nil)
+
+	got, err := service.GetWork(context.Background(), "session-1", "work-in-flight")
+	if err != nil {
+		t.Fatalf("GetWork(in-flight): %v", err)
+	}
+	if got.WorkID != "work-in-flight" || got.Name != "Deploy service" {
+		t.Fatalf("GetWork(in-flight) = %#v, want admitted identity and name", got)
+	}
+}
+
 func TestWorkReadConfirmationUsesOneWatermarkSamplePerResponse(t *testing.T) {
 	t.Parallel()
 
