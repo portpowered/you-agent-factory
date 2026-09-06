@@ -298,6 +298,8 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	privateTTS := newTTSPrivateProtocolFixture(localai.AudioBytes())
+	genericTTS := &ttsGenericBackendTrap{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
 	resources := config["resources"].([]map[string]any)
@@ -312,7 +314,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
-		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer),
+		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer, privateTTS, genericTTS),
 	})
 
 	inputs := []factoryapi.ModelInvocationInput{{
@@ -328,8 +330,12 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 		},
 		"POST /models/invocations",
 	)
-	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio || response.Outputs[0].Content == nil || *response.Outputs[0].Content != "generic HTTP input" {
+	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio || response.Outputs[0].Content == nil {
 		t.Fatalf("generic HTTP response = %#v, want one named audio output", response)
+	}
+	assertSemanticTTSAudio(t, []byte(*response.Outputs[0].Content), "generic HTTP audio")
+	if genericTTS.Calls() != 0 || len(privateTTS.Calls()) != 1 {
+		t.Fatalf("generic HTTP TTS routing = generic calls:%d private calls:%d, want 0/1", genericTTS.Calls(), len(privateTTS.Calls()))
 	}
 	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 1 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
 		t.Fatalf("generic HTTP effects = network %d, starts %d, protocol %d, compatibility %d; want cache hit and joined lifecycle", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
@@ -360,13 +366,15 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	privateTTS := newTTSPrivateProtocolFixture(localai.AudioBytes())
+	genericTTS := &ttsGenericBackendTrap{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
-		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer),
+		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer, privateTTS, genericTTS),
 	})
 
 	text := "builtin parity input"
@@ -386,8 +394,12 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	)
 	if len(genericResponse.Outputs) != 1 || genericResponse.Outputs[0].Name != "audio" ||
 		genericResponse.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio ||
-		genericResponse.Outputs[0].Content == nil || *genericResponse.Outputs[0].Content != text {
+		genericResponse.Outputs[0].Content == nil {
 		t.Fatalf("generic built-in parity response = %#v, want one audio output containing input", genericResponse)
+	}
+	assertSemanticTTSAudio(t, []byte(*genericResponse.Outputs[0].Content), "generic built-in parity audio")
+	if genericTTS.Calls() != 0 || len(privateTTS.Calls()) != 1 {
+		t.Fatalf("generic built-in parity TTS routing = generic calls:%d private calls:%d, want 0/1", genericTTS.Calls(), len(privateTTS.Calls()))
 	}
 	genericEffects := [4]int{
 		rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls(),
@@ -428,6 +440,9 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	}
 	if [4]int{rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls()} != genericEffects {
 		t.Fatalf("built-in parity effects after named route = network %d, starts %d, protocol %d, compatibility %d; want no named-route side effects", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+	if len(privateTTS.Calls()) != 1 || genericTTS.Calls() != 0 {
+		t.Fatalf("built-in parity TTS effects after named route = private:%d generic:%d, want unchanged 1/0", len(privateTTS.Calls()), genericTTS.Calls())
 	}
 }
 
@@ -682,8 +697,10 @@ func genericHTTPInvocationEdges(
 	protocol *joinedProtocolNegotiator,
 	compatibility *joinedCompatibilityChecker,
 	modelServer *httptest.Server,
+	privateTTS *ttsPrivateProtocolFixture,
+	genericTTS *ttsGenericBackendTrap,
 ) serviceedges.Edges {
-	return serviceedges.Edges{
+	edges := serviceedges.Edges{
 		ModelAssetHTTPClient: rejectingNetwork,
 		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			switch request.Backend {
@@ -712,22 +729,16 @@ func genericHTTPInvocationEdges(
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
-		// This is an explicit controlled TTS effect. Production nil backends
-		// remain fail-closed; the fixture must opt into its audio behavior.
-		ModelInvocationBackend: func(_ context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
-			if strings.ToUpper(strings.TrimSpace(request.Operation)) != models.OperationTTS {
-				return nil, nil, fmt.Errorf("unexpected generic fixture operation %q", request.Operation)
-			}
-			input := request.Input
-			if len(request.Inputs) > 0 {
-				input = request.Inputs[0]
-			}
-			return []models.InferenceContent{{
-				Name: "audio", Modality: models.ModalityAudio,
-				ContentType: "audio/wav", MediaType: "audio/wav", Content: input.Content,
-			}}, nil, nil
-		},
 	}
+	if privateTTS != nil && genericTTS != nil {
+		// This is an explicit controlled TTS effect. Production nil backends
+		// remain fail-closed; the fixture must opt into its private audio path.
+		edges.ModelInvocationBackend = genericTTS.Invoke
+		edges.ModelInvocationGRPCDialer = privateTTS
+		edges.ModelRuntimeTempDirectory = func() string { return assetFiles.home }
+		edges.ModelRuntimeInspectFile = os.Stat
+	}
+	return edges
 }
 
 func multiOutputModelFactoryConfig(endpoint string) map[string]any {

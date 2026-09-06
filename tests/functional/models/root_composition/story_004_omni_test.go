@@ -95,7 +95,7 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 	// same pinned artifact/platform default as the shipped CLI.
 	edges := genericHTTPInvocationEdges(
 		rejectingNetwork, assetFiles, hostLauncher,
-		&joinedProtocolNegotiator{}, nil, modelServer,
+		&joinedProtocolNegotiator{}, nil, modelServer, nil, nil,
 	)
 	edges.ModelCLIInputReadFile = func(_ context.Context, path string, _ int64) ([]byte, error) {
 		data, ok := inputFiles[path]
