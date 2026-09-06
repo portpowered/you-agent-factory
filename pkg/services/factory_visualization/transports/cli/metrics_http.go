@@ -254,7 +254,7 @@ func readMetricsSessionEvents(ctx context.Context, config MetricsConfig) ([]fact
 	events := make([]factoryapi.FactoryEvent, 0)
 	for len(events) < maxMetricsSessionEvents {
 		event, nextErr := stream.Next(ctx)
-		if errors.Is(nextErr, io.EOF) {
+		if nextErr == io.EOF {
 			break
 		}
 		if nextErr != nil {

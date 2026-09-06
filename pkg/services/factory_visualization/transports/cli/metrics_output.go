@@ -904,12 +904,12 @@ func renderHumanMetricsSession(document metricsSessionDocument, costHumanReport 
 	if len(document.ByWorker) > 0 {
 		fmt.Fprintln(&output)
 		fmt.Fprintln(&output, "WORKER DETAILS")
-		fmt.Fprintln(&output, "WORKER                 WORKER SESSION            ATTEMPTS  PROVIDER/MODEL")
+		fmt.Fprintln(&output, "WORKER                 SESSIONS  ATTEMPTS  PROVIDER/MODEL")
 		for _, worker := range document.ByWorker {
 			provider := metricsSessionDisplayPointer(worker.Provider)
 			model := metricsSessionDisplayPointer(worker.Model)
-			fmt.Fprintf(&output, "%-22s %-25s %8d  %s/%s\n",
-				worker.Worker, metricsSessionDisplayPointer(worker.WorkerSessionID), worker.Attempts, provider, model)
+			fmt.Fprintf(&output, "%-22s %8d %8d  %s/%s\n",
+				worker.Worker, worker.Sessions, worker.Attempts, provider, model)
 		}
 	}
 	if len(document.ByDispatch) > 0 {

@@ -73,6 +73,9 @@ func (a *Adapter) GetMetricsCosts(ctx context.Context, sessionID string) (factor
 					Message: "query runtime costs: retained Factory Session scope is empty",
 				}
 			}
+			if !containsFactorySessionID(retainedIDs, requestedID) {
+				retainedIDs = append(retainedIDs, requestedID)
+			}
 			request.RetainedFactorySessionIDs = retainedIDs
 		}
 	}

@@ -251,6 +251,92 @@ func TestMetricsSessionCostLensThroughRootProcessComposesCostsAndDetail(t *testi
 	)
 }
 
+func TestMetricsSessionByWorkerAggregatesAuthoredWorkerAcrossSessions(t *testing.T) {
+	t.Parallel()
+	const sessionID = "worker-detail-session"
+	base := time.Date(2026, 9, 5, 21, 0, 0, 0, time.UTC)
+	dispatchOne, dispatchTwo := "worker-detail-dispatch-1", "worker-detail-dispatch-2"
+	workOne, workTwo := "worker-detail-work-1", "worker-detail-work-2"
+	workerSessionOne, workerSessionTwo := "worker-detail-session-1", "worker-detail-session-2"
+	retryOf := dispatchOne
+	events := []factoryapi.FactoryEvent{
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeSessionStarted, "worker-detail-start", "", sessionID, 1, base,
+			factoryapi.SessionStartedEventPayload{StartedAt: base}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeWorkRequest, "worker-detail-work-request", "", sessionID, 2, base.Add(time.Millisecond),
+			factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{
+				{WorkId: stringPointer(workOne)}, {WorkId: stringPointer(workTwo)},
+			}}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchQueued, "worker-detail-queued-1", dispatchOne, sessionID, 3, base.Add(10*time.Millisecond),
+			factoryapi.DispatchQueuedEventPayload{InputWorkIds: &[]string{workOne}, Provider: stringPointer("codex"), Model: stringPointer("gpt-5-codex")}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "worker-detail-request-1", dispatchOne, sessionID, 4, base.Add(20*time.Millisecond),
+			factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{{WorkId: workOne}}}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeModelRequest, "worker-detail-model-1", dispatchOne, sessionID, 5, base.Add(21*time.Millisecond),
+			factoryapi.ModelRequestEventPayload{Attempt: 1, Model: "gpt-5-codex", ModelRequestId: "model-request-1", Operation: "TEXT", ProviderLocality: "CLOUD", Worker: "reviewer"}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation, "worker-detail-association-1", dispatchOne, sessionID, 6, base.Add(22*time.Millisecond),
+			factoryapi.DispatchWorkerSessionAssociationEventPayload{WorkerSessionId: workerSessionOne}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "worker-detail-response-1", dispatchOne, sessionID, 7, base.Add(40*time.Millisecond),
+			factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeAccepted, DurationMillis: int64Pointer(18)}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchQueued, "worker-detail-queued-2", dispatchTwo, sessionID, 8, base.Add(50*time.Millisecond),
+			factoryapi.DispatchQueuedEventPayload{InputWorkIds: &[]string{workTwo}, Provider: stringPointer("codex"), Model: stringPointer("gpt-5-codex"), RetryOfDispatchId: &retryOf}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "worker-detail-request-2", dispatchTwo, sessionID, 9, base.Add(60*time.Millisecond),
+			factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{{WorkId: workTwo}}}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeModelRequest, "worker-detail-model-2", dispatchTwo, sessionID, 10, base.Add(61*time.Millisecond),
+			factoryapi.ModelRequestEventPayload{Attempt: 1, Model: "gpt-5-codex", ModelRequestId: "model-request-2", Operation: "TEXT", ProviderLocality: "CLOUD", Worker: "reviewer"}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation, "worker-detail-association-2", dispatchTwo, sessionID, 11, base.Add(62*time.Millisecond),
+			factoryapi.DispatchWorkerSessionAssociationEventPayload{WorkerSessionId: workerSessionTwo}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "worker-detail-response-2", dispatchTwo, sessionID, 12, base.Add(90*time.Millisecond),
+			factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeFailed, DurationMillis: int64Pointer(28)}),
+		functionalMetricsSessionEvent(t, factoryapi.FactoryEventTypeSessionCompleted, "worker-detail-complete", "", sessionID, 13, base.Add(100*time.Millisecond),
+			factoryapi.SessionCompletedEventPayload{CompletedAt: base.Add(100 * time.Millisecond), FinalStatus: factoryapi.FactorySessionDurableLifecycleStatusFailed}),
+	}
+	server := newBoundaryServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/metrics":
+			writeBoundaryJSON(writer, http.StatusOK, map[string]any{
+				"cost": map[string]any{"availability": "UNAVAILABLE"}, "providers": []any{},
+				"scope":  map[string]any{"kind": "FACTORY_SESSION", "factory_session_id": sessionID},
+				"totals": map[string]any{"completed_dispatches": 2, "dispatch_latency": map[string]any{"unit": "milliseconds", "samples": 0, "p50": nil, "p95": nil}, "failures_by_reason": map[string]any{}, "input_tokens": 0, "output_tokens": 0, "provider_latency": map[string]any{"unit": "milliseconds", "samples": 0, "p50": nil, "p95": nil}},
+				"usage_rows": []any{
+					map[string]any{"dispatch_id": dispatchOne, "factory_session_id": sessionID, "work_id": workOne, "worker_session_id": workerSessionOne, "provider": "codex", "model": "gpt-5-codex"},
+					map[string]any{"dispatch_id": dispatchTwo, "factory_session_id": sessionID, "work_id": workTwo, "worker_session_id": workerSessionTwo, "provider": "codex", "model": "gpt-5-codex"},
+				},
+				"worker_types": []any{}, "workstations": []any{},
+			})
+		case "/factory-sessions/" + sessionID + "/events":
+			writeBoundaryEvents(writer, events)
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	})
+	inputs := boundaryInputs(t, t.Context(), "you", "--json", "--server", server.URL(), "metrics", "session", sessionID, "--by-worker")
+	if err := runtimeMetricsCLIProcess.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(metrics session by worker) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var document struct {
+		ByWorker []struct {
+			Worker           string   `json:"worker"`
+			WorkerSessionID  *string  `json:"worker_session_id"`
+			WorkerSessionIDs []string `json:"worker_session_ids"`
+			Sessions         int      `json:"sessions"`
+			Attempts         int      `json:"attempts"`
+		} `json:"by_worker"`
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &document); err != nil {
+		t.Fatalf("decode worker detail JSON: %v\n%s", err, inputs.Stdout())
+	}
+	if len(document.ByWorker) != 1 {
+		t.Fatalf("worker detail rows = %#v, want one authored Worker row", document.ByWorker)
+	}
+	row := document.ByWorker[0]
+	if row.Worker != "reviewer" || row.Sessions != 2 || row.Attempts != 2 || row.WorkerSessionID != nil ||
+		len(row.WorkerSessionIDs) != 2 || row.WorkerSessionIDs[0] != workerSessionOne || row.WorkerSessionIDs[1] != workerSessionTwo {
+		t.Fatalf("worker detail row = %#v, want reviewer with two distinct sessions and two attempts", row)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("worker detail stderr = %q, want empty", inputs.Stderr())
+	}
+}
+
 func functionalMetricsSessionEvent(
 	t *testing.T,
 	eventType factoryapi.FactoryEventType,
@@ -275,6 +361,8 @@ func functionalMetricsSessionEvent(
 		err = eventPayload.FromDispatchRequestEventPayload(typed)
 	case factoryapi.DispatchWorkerSessionAssociationEventPayload:
 		err = eventPayload.FromDispatchWorkerSessionAssociationEventPayload(typed)
+	case factoryapi.ModelRequestEventPayload:
+		err = eventPayload.FromModelRequestEventPayload(typed)
 	case factoryapi.DispatchResponseEventPayload:
 		err = eventPayload.FromDispatchResponseEventPayload(typed)
 	default:

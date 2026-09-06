@@ -15,6 +15,8 @@ type metricsSessionWorkerDocument struct {
 	Worker            string                      `json:"worker"`
 	WorkerIdentity    string                      `json:"worker_identity"`
 	WorkerSessionID   *string                     `json:"worker_session_id"`
+	WorkerSessionIDs  []string                    `json:"worker_session_ids"`
+	Sessions          int                         `json:"sessions"`
 	DispatchIDs       []string                    `json:"dispatch_ids"`
 	WorkIDs           []string                    `json:"work_ids"`
 	WorkIdentity      string                      `json:"work_identity"`
@@ -88,7 +90,7 @@ type metricsSessionAttemptFacts struct {
 }
 
 type metricsSessionDetailAccumulator struct {
-	workerSessionID    *string
+	workerSessionIDs   map[string]struct{}
 	worker             string
 	workerConflict     bool
 	provider           string
@@ -283,53 +285,45 @@ func buildMetricsSessionWorkerDetails(
 	costIndex *metricsSessionCostIndex,
 	costReport *generatedclient.CostsReport,
 ) []metricsSessionWorkerDocument {
+	workerGroupsBySession := metricsSessionWorkerGroupsBySession(facts)
 	groups := make(map[string]*metricsSessionDetailAccumulator)
 	for _, fact := range facts {
-		key := metricStringFromAPI(fact.WorkerSessionID)
-		if key == "" {
-			key = "unavailable"
-		}
+		key := metricsSessionWorkerGroupKey(fact, workerGroupsBySession)
 		group := groups[key]
 		if group == nil {
-			group = newMetricsSessionDetailAccumulator(fact.WorkerSessionID)
+			group = newMetricsSessionDetailAccumulator()
 			groups[key] = group
 		}
 		group.add(fact)
 	}
-	if costIndex != nil {
-		for workerSessionID := range costIndex.byWorkerSession {
-			if _, exists := groups[workerSessionID]; exists {
-				continue
-			}
-			id := workerSessionID
-			groups[workerSessionID] = newMetricsSessionDetailAccumulator(&id)
+	costItemsByWorker := metricsSessionCostItemsByWorkerGroup(costIndex, workerGroupsBySession)
+	for key := range costItemsByWorker {
+		if _, exists := groups[key]; !exists {
+			groups[key] = newMetricsSessionDetailAccumulator()
 		}
-		if len(costIndex.unknownWorker) > 0 {
-			if _, exists := groups["unavailable"]; !exists {
-				groups["unavailable"] = newMetricsSessionDetailAccumulator(nil)
-			}
+		for _, item := range costItemsByWorker[key] {
+			groups[key].addWorkerSessionID(metricStringFromAPI(item.WorkerSessionId))
 		}
 	}
 	keys := sortedMetricsSessionDetailKeys(groups)
 	result := make([]metricsSessionWorkerDocument, 0, len(keys))
 	for _, key := range keys {
 		group := groups[key]
-		items := []generatedclient.CostsLineItem(nil)
-		if costIndex != nil {
-			if key == "unavailable" {
-				items = costIndex.unknownWorker
-			} else {
-				items = costIndex.byWorkerSession[key]
-			}
-		}
+		items := costItemsByWorker[key]
 		provider := metricsSessionIdentityWithItems(group.providerValue(), items, true)
 		model := metricsSessionIdentityWithItems(group.modelValue(), items, false)
 		worker := group.workerValue()
+		if key != "unavailable" {
+			worker = optionalMetricsSessionString(key)
+		}
 		workIDs := sortedMetricsSessionSet(group.workIDs)
+		workerSessionIDs := sortedMetricsSessionSet(group.workerSessionIDs)
 		row := metricsSessionWorkerDocument{
 			Worker:            metricsSessionDisplayIdentity(worker),
 			WorkerIdentity:    metricsSessionIdentityLabel(worker != nil),
-			WorkerSessionID:   group.workerSessionID,
+			WorkerSessionID:   group.workerSessionID(),
+			WorkerSessionIDs:  workerSessionIDs,
+			Sessions:          len(workerSessionIDs),
 			DispatchIDs:       sortedMetricsSessionSet(group.dispatchIDs),
 			WorkIDs:           workIDs,
 			WorkIdentity:      metricsSessionIdentityLabel(len(workIDs) > 0),
@@ -348,6 +342,75 @@ func buildMetricsSessionWorkerDetails(
 		result = append(result, row)
 	}
 	return result
+}
+
+type metricsSessionWorkerGroup struct {
+	key      string
+	conflict bool
+}
+
+func metricsSessionWorkerGroupsBySession(facts []metricsSessionAttemptFacts) map[string]metricsSessionWorkerGroup {
+	groups := make(map[string]metricsSessionWorkerGroup)
+	for _, fact := range facts {
+		sessionID := metricStringFromAPI(fact.WorkerSessionID)
+		worker := metricStringFromAPI(fact.Worker)
+		if sessionID == "" || worker == "" {
+			continue
+		}
+		group, exists := groups[sessionID]
+		if !exists {
+			groups[sessionID] = metricsSessionWorkerGroup{key: worker}
+			continue
+		}
+		if group.conflict || group.key == worker {
+			continue
+		}
+		group.key = ""
+		group.conflict = true
+		groups[sessionID] = group
+	}
+	return groups
+}
+
+func metricsSessionWorkerGroupKey(
+	fact metricsSessionAttemptFacts,
+	groupsBySession map[string]metricsSessionWorkerGroup,
+) string {
+	sessionID := metricStringFromAPI(fact.WorkerSessionID)
+	if group, ok := groupsBySession[sessionID]; ok && group.conflict {
+		return "unavailable"
+	}
+	worker := metricStringFromAPI(fact.Worker)
+	if worker == "" {
+		if group, ok := groupsBySession[sessionID]; ok {
+			worker = group.key
+		}
+	}
+	if worker == "" {
+		return "unavailable"
+	}
+	return worker
+}
+
+func metricsSessionCostItemsByWorkerGroup(
+	costIndex *metricsSessionCostIndex,
+	groupsBySession map[string]metricsSessionWorkerGroup,
+) map[string][]generatedclient.CostsLineItem {
+	itemsByGroup := make(map[string][]generatedclient.CostsLineItem)
+	if costIndex == nil {
+		return itemsByGroup
+	}
+	for workerSessionID, items := range costIndex.byWorkerSession {
+		key := "unavailable"
+		if group, ok := groupsBySession[workerSessionID]; ok && !group.conflict && group.key != "" {
+			key = group.key
+		}
+		itemsByGroup[key] = append(itemsByGroup[key], items...)
+	}
+	if len(costIndex.unknownWorker) > 0 {
+		itemsByGroup["unavailable"] = append(itemsByGroup["unavailable"], costIndex.unknownWorker...)
+	}
+	return itemsByGroup
 }
 
 type metricsSessionAttemptState struct {
@@ -643,11 +706,11 @@ func appendMetricsSessionCostOnlyDispatches(
 	return result
 }
 
-func newMetricsSessionDetailAccumulator(workerSessionID *string) *metricsSessionDetailAccumulator {
+func newMetricsSessionDetailAccumulator() *metricsSessionDetailAccumulator {
 	return &metricsSessionDetailAccumulator{
-		workerSessionID: workerSessionID,
-		dispatchIDs:     make(map[string]struct{}),
-		workIDs:         make(map[string]struct{}),
+		workerSessionIDs: make(map[string]struct{}),
+		dispatchIDs:      make(map[string]struct{}),
+		workIDs:          make(map[string]struct{}),
 	}
 }
 
@@ -656,6 +719,7 @@ func (group *metricsSessionDetailAccumulator) add(fact metricsSessionAttemptFact
 	if fact.DispatchID != nil {
 		group.dispatchIDs[*fact.DispatchID] = struct{}{}
 	}
+	group.addWorkerSessionID(metricStringFromAPI(fact.WorkerSessionID))
 	for _, workID := range fact.WorkIDs {
 		if workID != "" {
 			group.workIDs[workID] = struct{}{}
@@ -675,6 +739,22 @@ func (group *metricsSessionDetailAccumulator) add(fact metricsSessionAttemptFact
 	} else {
 		incrementMetricsSessionOutcome(&group.outcomes, *fact.Outcome)
 	}
+}
+
+func (group *metricsSessionDetailAccumulator) addWorkerSessionID(workerSessionID string) {
+	if workerSessionID != "" {
+		group.workerSessionIDs[workerSessionID] = struct{}{}
+	}
+}
+
+func (group *metricsSessionDetailAccumulator) workerSessionID() *string {
+	if len(group.workerSessionIDs) != 1 {
+		return nil
+	}
+	for value := range group.workerSessionIDs {
+		return optionalMetricsSessionString(value)
+	}
+	return nil
 }
 
 func (group *metricsSessionDetailAccumulator) workerValue() *string {

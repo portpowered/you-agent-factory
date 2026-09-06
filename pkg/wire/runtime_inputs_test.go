@@ -69,7 +69,7 @@ func (stub *metricsSessionProjectionReaderStub) GetFactorySession(
 	return stub.projection, stub.err
 }
 
-func TestRuntimeMetricsScopeResolverRetainsCanonicalIdentityAndPublicSelector(t *testing.T) {
+func TestRuntimeMetricsScopeResolverUsesOnlyCanonicalProjectionIdentity(t *testing.T) {
 	reader := &metricsSessionProjectionReaderStub{
 		projection: factorysessions.SessionProjection{
 			Context: factorysessions.ProjectionContext{
@@ -95,7 +95,7 @@ func TestRuntimeMetricsScopeResolverRetainsCanonicalIdentityAndPublicSelector(t 
 	if reader.gotID != "public-live-id" {
 		t.Fatalf("reader selector = %q, want trimmed selector", reader.gotID)
 	}
-	want := []string{"retained-runtime-id", "public-live-id"}
+	want := []string{"retained-runtime-id"}
 	if got.RequestedFactorySessionID != "public-live-id" {
 		t.Fatalf("requested Factory Session ID = %q, want public-live-id", got.RequestedFactorySessionID)
 	}
@@ -104,7 +104,7 @@ func TestRuntimeMetricsScopeResolverRetainsCanonicalIdentityAndPublicSelector(t 
 	}
 }
 
-func TestRuntimeMetricsScopeResolverRetainsOrderedSuccessorLineageAndPublicSelector(t *testing.T) {
+func TestRuntimeMetricsScopeResolverRetainsOrderedSuccessorLineage(t *testing.T) {
 	reader := &metricsSessionProjectionReaderStub{
 		projection: factorysessions.SessionProjection{
 			Runtime: factorysessions.RuntimeProjection{
@@ -122,7 +122,7 @@ func TestRuntimeMetricsScopeResolverRetainsOrderedSuccessorLineageAndPublicSelec
 	if err != nil {
 		t.Fatalf("ResolveRuntimeMetricsScope() error = %v", err)
 	}
-	want := []string{"successor-runtime-id", "source-runtime-id", "~default"}
+	want := []string{"successor-runtime-id", "source-runtime-id"}
 	if !reflect.DeepEqual(got.RetainedFactorySessionIDs, want) {
 		t.Fatalf("retained IDs = %#v, want ordered deduplicated lineage %#v", got.RetainedFactorySessionIDs, want)
 	}

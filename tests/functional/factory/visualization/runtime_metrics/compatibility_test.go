@@ -92,6 +92,7 @@ func TestExistingMetricsCommandsMatchSelectedPublicAPIs(t *testing.T) {
 }
 
 func TestExistingCostsCommandFailureRemainsCodedAndAtomic(t *testing.T) {
+	t.Parallel()
 	server := newBoundaryServer(t, func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/metrics/costs" {
 			writeBoundaryError(writer, http.StatusInternalServerError, factoryapi.ErrorResponseCode("COST_FIXTURE_FAILED"), factoryapi.ErrorFamilyInternalServerError, "the selected cost fixture is unavailable")

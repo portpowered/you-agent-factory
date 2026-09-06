@@ -50,8 +50,7 @@ type InvocationMetricsRecorder interface {
 
 // RuntimeMetricsScope is the Factory Sessions-owned identity set used to
 // select one live or resumed runtime metrics lineage. The requested ID is the
-// public selector; retained IDs are the canonical persisted lineage plus any
-// public selector needed to read a legacy metric envelope for that session.
+// public selector; retained IDs are canonical persisted identities only.
 type RuntimeMetricsScope struct {
 	RequestedFactorySessionID string
 	RetainedFactorySessionIDs []string

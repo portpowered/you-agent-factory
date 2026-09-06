@@ -76,27 +76,10 @@ func (resolver runtimeMetricsScopeResolver) ResolveRuntimeMetricsScope(
 	if len(retainedIDs) == 0 {
 		retainedIDs = append(retainedIDs, strings.TrimSpace(identity.FactorySessionID))
 	}
-	// Keep the public selector alongside the canonical lineage. Older replay
-	// artifacts can legitimately retain the selector (notably ~default) in
-	// their runtime metric envelope even when the live session now exposes a
-	// generated canonical identity. The resolved session is authoritative, so
-	// this compatibility identity cannot broaden an unknown-session query.
-	if !containsRuntimeMetricsSessionID(retainedIDs, requestedID) {
-		retainedIDs = append(retainedIDs, requestedID)
-	}
 	return factorysessions.RuntimeMetricsScope{
 		RequestedFactorySessionID: requestedID,
 		RetainedFactorySessionIDs: retainedIDs,
 	}, nil
-}
-
-func containsRuntimeMetricsSessionID(values []string, wanted string) bool {
-	for _, value := range values {
-		if value == wanted {
-			return true
-		}
-	}
-	return false
 }
 
 var _ factorysessions.RuntimeMetricsScopeResolver = runtimeMetricsScopeResolver{}

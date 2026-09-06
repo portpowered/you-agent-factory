@@ -217,6 +217,36 @@ func TestRemoteInvocationClientFactoryEventReplayStopsAtCapturedRetainedHead(t *
 	}
 }
 
+func TestRemoteInvocationClientFactoryEventReplayRejectsTruncatedRetainedHead(t *testing.T) {
+	events := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents()[:1])
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "2")
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", mustJSON(events[0]))
+	}))
+	defer server.Close()
+	transport, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+	if err != nil {
+		t.Fatalf("NewProtocol: %v", err)
+	}
+	operation := NewRemoteInvocation(transport).(RemoteInvocationEventOperation)
+	stream, err := operation.OpenFactorySessionEvents(context.Background(), RemoteInvocationEventRequest{
+		Server: server.URL, SessionID: "session-1", ReplayOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionEvents: %v", err)
+	}
+	defer stream.Close()
+	if _, err := stream.Next(context.Background()); err != nil {
+		t.Fatalf("first retained event = %v", err)
+	}
+	_, err = stream.Next(context.Background())
+	var truncated *remoteFactoryEventReplayTruncatedError
+	if !errors.As(err, &truncated) || truncated.remaining != 1 {
+		t.Fatalf("truncated replay error = %v, want one remaining retained event", err)
+	}
+}
+
 func TestRemoteInvocationClientFactoryEventsRejectsInvalidResponses(t *testing.T) {
 	request := RemoteInvocationEventRequest{Server: "https://selected.test", SessionID: "durable-remote"}
 	client := remoteInvocationClient{}

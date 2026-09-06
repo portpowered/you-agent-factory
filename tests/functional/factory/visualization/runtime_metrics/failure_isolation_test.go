@@ -19,6 +19,7 @@ import (
 )
 
 func TestMetricsSessionSelectedServerFailuresFailClosed(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		sessionID  string
@@ -136,6 +137,7 @@ func TestMetricsSessionSelectedServerKeepsDisjointFacts(t *testing.T) {
 }
 
 func TestMetricsSessionInvalidLensDoesNotContactServer(t *testing.T) {
+	t.Parallel()
 	server := newBoundaryServer(t, func(writer http.ResponseWriter, _ *http.Request) {
 		writeBoundaryError(writer, http.StatusInternalServerError, factoryapi.ErrorResponseCode("UNEXPECTED_REQUEST"), factoryapi.ErrorFamilyInternalServerError, "unexpected request")
 	})
@@ -148,14 +150,15 @@ func TestMetricsSessionInvalidLensDoesNotContactServer(t *testing.T) {
 }
 
 func TestMetricsSessionReplayFaultsFailClosed(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		sessionID  string
-		writeEvent func(http.ResponseWriter)
+		writeEvent func(http.ResponseWriter, boundarySessionFixture)
 	}{
 		{
 			name: "malformed SSE", sessionID: "malformed-replay-session",
-			writeEvent: func(writer http.ResponseWriter) {
+			writeEvent: func(writer http.ResponseWriter, _ boundarySessionFixture) {
 				writer.Header().Set("Content-Type", "text/event-stream")
 				writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "1")
 				_, _ = fmt.Fprint(writer, "data: {not-json}\n\n")
@@ -163,9 +166,28 @@ func TestMetricsSessionReplayFaultsFailClosed(t *testing.T) {
 		},
 		{
 			name: "invalid retained count", sessionID: "invalid-retained-session",
-			writeEvent: func(writer http.ResponseWriter) {
+			writeEvent: func(writer http.ResponseWriter, _ boundarySessionFixture) {
 				writer.Header().Set("Content-Type", "text/event-stream")
 				writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "not-a-count")
+			},
+		},
+		{
+			name: "truncated replay after one event", sessionID: "truncated-one-event-session",
+			writeEvent: func(writer http.ResponseWriter, fixture boundarySessionFixture) {
+				writer.Header().Set("Content-Type", "text/event-stream")
+				writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "2")
+				encoded, err := json.Marshal(fixture.events[0])
+				if err != nil {
+					return
+				}
+				_, _ = fmt.Fprintf(writer, "data: %s\n\n", encoded)
+			},
+		},
+		{
+			name: "truncated replay with zero events", sessionID: "truncated-zero-event-session",
+			writeEvent: func(writer http.ResponseWriter, _ boundarySessionFixture) {
+				writer.Header().Set("Content-Type", "text/event-stream")
+				writer.Header().Set(factorysessions.SessionEventStreamRetainedCountHeader, "2")
 			},
 		},
 	}
@@ -178,7 +200,7 @@ func TestMetricsSessionReplayFaultsFailClosed(t *testing.T) {
 				case "/metrics":
 					writeBoundaryMetricsReport(writer, fixture)
 				case "/factory-sessions/" + test.sessionID + "/events":
-					test.writeEvent(writer)
+					test.writeEvent(writer, fixture)
 				default:
 					writer.WriteHeader(http.StatusNotFound)
 				}
@@ -192,6 +214,7 @@ func TestMetricsSessionReplayFaultsFailClosed(t *testing.T) {
 }
 
 func TestMetricsSessionTimeoutReturnsNoPartialReport(t *testing.T) {
+	t.Parallel()
 	fixture := newBoundarySessionFixture(t, "timeout", "timeout-session", "0.0100")
 	eventsStarted := make(chan struct{})
 	server := newBoundaryServer(t, func(writer http.ResponseWriter, request *http.Request) {
@@ -236,6 +259,7 @@ func TestMetricsSessionTimeoutReturnsNoPartialReport(t *testing.T) {
 }
 
 func TestMetricsSessionCancellationReturnsNoPartialReport(t *testing.T) {
+	t.Parallel()
 	fixture := newBoundarySessionFixture(t, "cancel", "canceled-session", "0.0100")
 	eventsStarted := make(chan struct{})
 	server := newBoundaryServer(t, func(writer http.ResponseWriter, request *http.Request) {
@@ -268,6 +292,7 @@ func TestMetricsSessionCancellationReturnsNoPartialReport(t *testing.T) {
 }
 
 func TestMetricsSessionCostReadFailureDoesNotWritePartialReport(t *testing.T) {
+	t.Parallel()
 	fixture := newBoundarySessionFixture(t, "cost-failure", "cost-failure-session", "0.0100")
 	server := newBoundaryServer(t, func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -298,6 +323,7 @@ func TestMetricsSessionCostReadFailureDoesNotWritePartialReport(t *testing.T) {
 }
 
 func TestMetricsSessionCancellationDoesNotCorruptConcurrentReport(t *testing.T) {
+	t.Parallel()
 	survivor := newBoundarySessionFixture(t, "survivor", "survivor-session", "0.0110")
 	canceled := newBoundarySessionFixture(t, "canceled", "canceled-session", "0.0220")
 	survivorStarted := make(chan struct{})

@@ -384,6 +384,12 @@ func (stream *remoteFactoryEventStream) Next(ctx context.Context) (factoryapi.Fa
 		return factoryapi.FactoryEvent{}, io.EOF
 	}
 	event, err := readRemoteFactoryEventSSE(stream.reader)
+	if err != nil && stream.retainedRemaining != nil && *stream.retainedRemaining > 0 && errors.Is(err, io.EOF) {
+		return factoryapi.FactoryEvent{}, &remoteFactoryEventReplayTruncatedError{
+			remaining: *stream.retainedRemaining,
+			cause:     err,
+		}
+	}
 	if err == nil && stream.retainedRemaining != nil {
 		(*stream.retainedRemaining)--
 	}
@@ -472,6 +478,21 @@ func (err *remoteInvocationEventTransportError) retryable() bool {
 
 type remoteMalformedFactoryEventError struct {
 	cause error
+}
+
+type remoteFactoryEventReplayTruncatedError struct {
+	remaining int
+	cause     error
+}
+
+func (err *remoteFactoryEventReplayTruncatedError) Error() string {
+	if err == nil {
+		return "remote Factory Event replay ended before the retained event count"
+	}
+	return fmt.Sprintf(
+		"remote Factory Event replay ended before the retained event count (%d remaining)",
+		err.remaining,
+	)
 }
 
 func (err *remoteMalformedFactoryEventError) Error() string {

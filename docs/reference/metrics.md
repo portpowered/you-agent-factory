@@ -125,6 +125,9 @@ canonical attempts, outcomes, queue and execution samples, and exclusions.
 Running, unavailable, and unpriced values remain explicit. `--lens cost`
 composes the existing exact `GET /metrics/costs` report for the same session.
 `--by-worker` and `--by-dispatch` show only proven canonical identities.
+Worker detail rows are grouped by authored Worker. Each row reports the
+distinct `sessions` count and deterministic `worker_session_ids`; when an
+authored Worker or session cannot be proven, the row is labeled `unavailable`.
 
 Unknown sessions, unavailable scope, timeout, cancellation, malformed replay,
 or any requested read failure return a coded error with empty stdout. The
