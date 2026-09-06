@@ -34,8 +34,9 @@ const (
 	// The replay server uses --continuously so the customer-facing query can
 	// run after replay reaches terminal state. This is the bounded cleanup
 	// grace period before terminating that deliberately long-lived process.
-	probeCostProcessStopWait = 5 * time.Second
-	probeCostArtifactEnv     = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	probeCostProcessStopWait    = 5 * time.Second
+	probeCostArtifactEnv        = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	probeCostRequireArtifactEnv = "INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT"
 )
 
 const probeCostFalsifier = "reject UNPRICED, NO_USAGE, zero/null known_cost, missing measured row, or provider/model drift"
@@ -409,6 +410,9 @@ func prebuiltProbeCostArtifact(t *testing.T) string {
 	t.Helper()
 	binaryPath := strings.TrimSpace(os.Getenv(probeCostArtifactEnv))
 	if binaryPath == "" {
+		if os.Getenv(probeCostRequireArtifactEnv) == "1" {
+			t.Fatalf("required compiled-artifact integration evidence did not receive %s", probeCostArtifactEnv)
+		}
 		t.Skipf("PROBE-COST requires a pinned prebuilt artifact; set %s to its path", probeCostArtifactEnv)
 	}
 	info, err := os.Stat(binaryPath)

@@ -2444,11 +2444,11 @@ pkg/transports/cli/run/factory_invocation_input.go: unreachable func: resolveFac
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: responseStreamOutputCancelOnWriteError
 pkg/transports/cli/run/factory_invocation_input.go: unreachable func: runFactoryInvocation
 pkg/transports/cli/run/invocation_hosted_runtime.go: unreachable func: emitStartupMessages
-pkg/transports/cli/run/invocation_observability.go: unreachable func: invocationSourceLabels
-pkg/transports/cli/run/invocation_observability.go: unreachable func: recordCLIInvocationFailure
-pkg/transports/cli/run/invocation_observability.go: unreachable func: recordInvocationMetric
-pkg/transports/cli/run/invocation_observability.go: unreachable func: resetCleanInvocationMetricsForTest
-pkg/transports/cli/run/invocation_observability.go: unreachable func: snapshotCleanInvocationMetrics
+pkg/transports/cli/run/remote_invocation_output.go: unreachable func: invocationSourceLabels
+pkg/transports/cli/run/remote_invocation_output.go: unreachable func: recordCLIInvocationFailure
+pkg/transports/cli/run/remote_invocation_output.go: unreachable func: recordInvocationMetric
+pkg/transports/cli/run/remote_invocation_output.go: unreachable func: resetCleanInvocationMetricsForTest
+pkg/transports/cli/run/remote_invocation_output.go: unreachable func: snapshotCleanInvocationMetrics
 pkg/transports/cli/run/remote_invocation_run.go: unreachable func: RunRemoteInvocation
 pkg/transports/cli/run/run.go: unreachable func: APIServerStarterWithListener
 pkg/transports/cli/run/run.go: unreachable func: CountTokenStates
