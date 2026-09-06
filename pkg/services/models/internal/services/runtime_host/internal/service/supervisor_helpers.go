@@ -467,7 +467,21 @@ func typedHostReadinessFailure(
 			LifecycleState: lifecycle,
 			FailureClass:   publicHostFailureClass(class),
 		},
-		Cause: cause,
+		Cause: modelseffects.WrapRuntimeFailure(
+			runtimeStageForHostFailure(class),
+			cause,
+		),
+	}
+}
+
+func runtimeStageForHostFailure(class hostFailureClass) modelseffects.RuntimeStage {
+	switch class {
+	case hostFailureClassProtocol:
+		return modelseffects.RuntimeStageProtocolLoad
+	case hostFailureClassProcessCrash, hostFailureClassUnsupportedPlatform:
+		return modelseffects.RuntimeStageBackendStart
+	default:
+		return modelseffects.RuntimeStageBackendStart
 	}
 }
 

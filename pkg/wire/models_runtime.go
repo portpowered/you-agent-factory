@@ -532,7 +532,7 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 	}
 	if err := cmd.Start(); err != nil {
 		launch.Cleanup()
-		return nil, err
+		return nil, managedbackend.WrapBackendStartFailure(err)
 	}
 	managed := &modelsManagedProcess{
 		cmd:            cmd,

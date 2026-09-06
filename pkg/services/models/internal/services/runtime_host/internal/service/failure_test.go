@@ -244,8 +244,8 @@ func TestEnsureModelHostDiagnosticsReadinessTimeoutEmitsFailureLogAndMetric(t *t
 	if entry.fields["backend"] != "LLAMACPP" {
 		t.Fatalf("backend = %q, want LLAMACPP", entry.fields["backend"])
 	}
-	if entry.fields["failure_class"] != "loading_timeout" {
-		t.Fatalf("failure_class = %q, want loading_timeout", entry.fields["failure_class"])
+	if entry.fields["failure_class"] != "TIMED_OUT" {
+		t.Fatalf("failure_class = %q, want TIMED_OUT", entry.fields["failure_class"])
 	}
 	if !metrics.contains("model_host.load.failure", map[string]string{
 		"managed_runtime_identity": "OMNIVOICE_Q4_K_M",
@@ -301,8 +301,8 @@ func TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric(t *testi
 	for {
 		entry, ok := logger.findWarn("model host process crashed")
 		if ok {
-			if entry.fields["failure_class"] != "process_crash" {
-				t.Fatalf("failure_class = %q, want process_crash", entry.fields["failure_class"])
+			if entry.fields["failure_class"] != "PROCESS_EXITED" {
+				t.Fatalf("failure_class = %q, want PROCESS_EXITED", entry.fields["failure_class"])
 			}
 			if !metrics.contains("model_host.process.crash", map[string]string{
 				"managed_runtime_identity": "OMNIVOICE_Q4_K_M",

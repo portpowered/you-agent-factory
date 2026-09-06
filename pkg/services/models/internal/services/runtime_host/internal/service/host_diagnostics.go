@@ -2,6 +2,9 @@ package service
 
 import (
 	"strings"
+	"time"
+
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 const (
@@ -69,30 +72,47 @@ func (d hostDiagnostics) logLoadReady(identity supervisedIdentity) {
 	d.record(metricLoadSuccess, fields)
 }
 
-func (d hostDiagnostics) logLoadFailed(identity supervisedIdentity, class hostFailureClass, err error) {
-	fields := identityDiagnosticFields(identity)
-	fields["failure_class"] = string(class)
-	if err != nil {
-		fields["error"] = err.Error()
-	}
+func (d hostDiagnostics) logLoadFailed(
+	identity supervisedIdentity,
+	class hostFailureClass,
+	err error,
+	elapsed time.Duration,
+) {
+	fields := safeRuntimeDiagnosticFields(identity, err, elapsed)
 	d.warn("model host load failed", fields)
-	d.record(metricLoadFailure, fields)
+	metricFields := identityDiagnosticFields(identity)
+	metricFields["failure_class"] = string(class)
+	d.record(metricLoadFailure, metricFields)
 	switch class {
 	case hostFailureClassLoadingTimeout:
-		d.record(metricReadinessTimeout, fields)
+		d.record(metricReadinessTimeout, metricFields)
 	case hostFailureClassProcessCrash:
-		d.record(metricProcessCrash, fields)
+		d.record(metricProcessCrash, metricFields)
 	}
 }
 
-func (d hostDiagnostics) logProcessCrash(identity supervisedIdentity, err error) {
-	fields := identityDiagnosticFields(identity)
-	fields["failure_class"] = string(hostFailureClassProcessCrash)
-	if err != nil {
-		fields["error"] = err.Error()
-	}
+func (d hostDiagnostics) logProcessCrash(
+	identity supervisedIdentity,
+	err error,
+	elapsed time.Duration,
+) {
+	fields := safeRuntimeDiagnosticFields(identity, err, elapsed)
 	d.warn("model host process crashed", fields)
-	d.record(metricProcessCrash, fields)
+	metricFields := identityDiagnosticFields(identity)
+	metricFields["failure_class"] = string(hostFailureClassProcessCrash)
+	d.record(metricProcessCrash, metricFields)
+}
+
+func safeRuntimeDiagnosticFields(
+	identity supervisedIdentity,
+	err error,
+	elapsed time.Duration,
+) map[string]string {
+	fields := identityDiagnosticFields(identity)
+	for key, value := range modelseffects.ProjectRuntimeFailure(err, elapsed).DiagnosticFields() {
+		fields[key] = value
+	}
+	return fields
 }
 
 func (d hostDiagnostics) logUnload(identity supervisedIdentity, reason string) {

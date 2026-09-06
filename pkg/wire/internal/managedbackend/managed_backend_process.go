@@ -56,12 +56,12 @@ func ResolveManagedBackendLaunch(
 	}
 	root, executable, cleanup, err := materializeManagedBackend(ctx, backend, spec.BackendFiles)
 	if err != nil {
-		return ManagedBackendLaunch{}, err
+		return ManagedBackendLaunch{}, WrapBackendExtractFailure(err)
 	}
 	endpoint, address, err := managedBackendEndpoint(spec.HealthEndpoint)
 	if err != nil {
 		cleanup()
-		return ManagedBackendLaunch{}, err
+		return ManagedBackendLaunch{}, WrapBackendExtractFailure(err)
 	}
 	args := append([]string(nil), spec.Args...)
 	args = append(args, "--addr="+address)

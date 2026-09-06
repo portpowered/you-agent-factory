@@ -76,6 +76,19 @@ type pinnedTTSStreams struct {
 	RawAudioLogged bool `json:"rawAudioLogged"`
 }
 
+type pinnedTTSStageEvidence struct {
+	Stage          string `json:"stage"`
+	Outcome        string `json:"outcome"`
+	FailureClass   string `json:"failureClass,omitempty"`
+	DurationMillis int64  `json:"durationMillis"`
+}
+
+type pinnedTTSFailureEvidence struct {
+	Stage       string `json:"stage"`
+	Class       string `json:"class"`
+	CauseSHA256 string `json:"causeSha256"`
+}
+
 type pinnedTTSCacheEvidence struct {
 	TTSModel     string `json:"ttsModel"`
 	TTSBackend   string `json:"ttsBackend"`
@@ -85,29 +98,31 @@ type pinnedTTSCacheEvidence struct {
 }
 
 type pinnedTTSEvidence struct {
-	Outcome        string                   `json:"outcome"`
-	Blocker        string                   `json:"blocker,omitempty"`
-	Platform       string                   `json:"platform"`
-	Arch           string                   `json:"architecture"`
-	Command        string                   `json:"command"`
-	Binary         pinnedTTSFileIdentity    `json:"binary"`
-	Model          pinnedTTSModelIdentity   `json:"model"`
-	Backend        pinnedTTSBackendIdentity `json:"backend"`
-	Isolation      pinnedTTSIsolation       `json:"isolation"`
-	Budgets        pinnedTTSBudgets         `json:"budgets"`
-	ReuseDownload  pinnedTTSReuseDownload   `json:"reuseDownload"`
-	Execution      *pinnedTTSExecution      `json:"execution,omitempty"`
-	ReuseExecution *pinnedTTSExecution      `json:"reuseExecution,omitempty"`
-	ASRExecution   *pinnedTTSExecution      `json:"asrExecution,omitempty"`
-	Output         *pinnedTTSOutput         `json:"output,omitempty"`
-	ReuseOutput    *pinnedTTSOutput         `json:"reuseOutput,omitempty"`
-	ASR            *pinnedASROutput         `json:"asr,omitempty"`
-	ASRModel       pinnedTTSModelIdentity   `json:"asrModel"`
-	ASRBackend     pinnedTTSBackendIdentity `json:"asrBackend"`
-	Cleanup        pinnedTTSCleanup         `json:"cleanup"`
-	Streams        pinnedTTSStreams         `json:"streams"`
-	Caches         pinnedTTSCacheEvidence   `json:"caches"`
-	Unproven       []string                 `json:"unproven"`
+	Outcome        string                    `json:"outcome"`
+	Blocker        string                    `json:"blocker,omitempty"`
+	Platform       string                    `json:"platform"`
+	Arch           string                    `json:"architecture"`
+	Command        string                    `json:"command"`
+	Binary         pinnedTTSFileIdentity     `json:"binary"`
+	Model          pinnedTTSModelIdentity    `json:"model"`
+	Backend        pinnedTTSBackendIdentity  `json:"backend"`
+	Isolation      pinnedTTSIsolation        `json:"isolation"`
+	Budgets        pinnedTTSBudgets          `json:"budgets"`
+	ReuseDownload  pinnedTTSReuseDownload    `json:"reuseDownload"`
+	Execution      *pinnedTTSExecution       `json:"execution,omitempty"`
+	ReuseExecution *pinnedTTSExecution       `json:"reuseExecution,omitempty"`
+	ASRExecution   *pinnedTTSExecution       `json:"asrExecution,omitempty"`
+	Output         *pinnedTTSOutput          `json:"output,omitempty"`
+	ReuseOutput    *pinnedTTSOutput          `json:"reuseOutput,omitempty"`
+	ASR            *pinnedASROutput          `json:"asr,omitempty"`
+	ASRModel       pinnedTTSModelIdentity    `json:"asrModel"`
+	ASRBackend     pinnedTTSBackendIdentity  `json:"asrBackend"`
+	Cleanup        pinnedTTSCleanup          `json:"cleanup"`
+	Streams        pinnedTTSStreams          `json:"streams"`
+	Caches         pinnedTTSCacheEvidence    `json:"caches"`
+	StageTrace     []pinnedTTSStageEvidence  `json:"stageTrace"`
+	Failure        *pinnedTTSFailureEvidence `json:"failure,omitempty"`
+	Unproven       []string                  `json:"unproven"`
 }
 
 type pinnedCommandResult struct {

@@ -480,7 +480,7 @@ func (o *Root) InvokeModel(
 		ctx = context.Background()
 	}
 	started := joinedInvocationStart(o)
-	stage := "validate"
+	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
 	var invocation models.ModelInvocationRef
@@ -496,6 +496,7 @@ func (o *Root) InvokeModel(
 		}
 		if err != nil {
 			result = joinedInvocationFailureResult(result)
+			err = modelseffects.WrapRuntimeFailure(stage, err)
 		}
 		joinedInvocationRecord(
 			o, modelName, operationName, invocation, stage, err,
@@ -530,23 +531,23 @@ func validateJoinedRoot(o *Root) error {
 func (o *Root) prepareJoinedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
-) (joinedInvocationPlan, string, error) {
+) (joinedInvocationPlan, modelseffects.RuntimeStage, error) {
 	plan := joinedInvocationPlan{}
 	if err := request.ValidateGeneric(); err != nil {
-		return plan, "validate", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 
 	resolution, err := o.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
 		Scope: request.Scope, Reference: request.Model,
 	})
 	if err != nil {
-		return plan, "resolve", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	resolved := resolution.Resolved
 	plan.modelName = resolved.Definition.Name
 	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
 	if err != nil {
-		return plan, "resolve", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	plan.prepared.ModelName = plan.modelName
 	plan.prepared.Operation = plan.operation.Name
@@ -556,38 +557,55 @@ func (o *Root) prepareJoinedInvocation(
 
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
 	if err != nil {
-		return plan, "resolve_backend", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	assetRequest, err := joinedAssetPreparationRequestWithBackend(
 		request, plan.modelName, resolved, backendArtifact,
 	)
 	if err != nil {
-		return plan, "resolve_assets", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	if _, err := o.PreflightModelAssets(ctx, assetRequest); err != nil {
-		return plan, "preflight_assets", joinedInvocationAssetError(request, err)
+		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
 	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
-		return plan, "acquire_assets", joinedInvocationAssetError(request, err)
+		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
 	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
 		Scope: request.Scope,
 		Name:  plan.modelName,
 	}); err != nil {
-		return plan, "ensure_host", err
+		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
 	leaseResult, err := o.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
 		Scope: request.Scope, Name: plan.modelName, Holder: request.Holder,
 	})
 	if err != nil {
-		return plan, "acquire_lease", err
+		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
 	plan.lease = leaseResult.Lease.Lease
 	if plan.lease.IsZero() {
-		return plan, "acquire_lease", models.ErrHostLeaseNotFound
+		return plan, modelseffects.RuntimeStageBackendStart, models.ErrHostLeaseNotFound
 	}
 	plan.prepared.Lease = plan.lease
-	return plan, "invoke", nil
+	return plan, modelseffects.RuntimeStageInvoke, nil
+}
+
+func joinedAssetRuntimeStage(err error) modelseffects.RuntimeStage {
+	switch {
+	case errors.Is(err, models.ErrAssetIntegrityFailed):
+		return modelseffects.RuntimeStageArtifactDigest
+	case errors.Is(err, models.ErrInferenceArtifactInvalid):
+		return modelseffects.RuntimeStageArtifactDigest
+	case errors.Is(err, models.ErrAssetSourceMissing),
+		errors.Is(err, models.ErrAssetSourceUnsupported),
+		errors.Is(err, models.ErrAssetOffline),
+		errors.Is(err, models.ErrAssetUnavailable),
+		errors.Is(err, models.ErrAssetBackendNotReady):
+		return modelseffects.RuntimeStageArtifactDownload
+	default:
+		return modelseffects.RuntimeStageArtifactResolve
+	}
 }
 
 func (o *Root) resolveJoinedBackendArtifact(
@@ -629,11 +647,11 @@ func (o *Root) resolveJoinedBackendArtifact(
 func (o *Root) executeJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	result, err := o.InvokeModelWithLease(ctx, plan.prepared)
 	result = joinedInvocationResultIdentity(result, plan)
 	if err != nil {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 	}
 	if result.Status == models.ModelInvocationStatusCompleted {
 		result.Outputs, err = models.NormalizeGenericInvocationOutputs(
@@ -641,25 +659,25 @@ func (o *Root) executeJoinedInvocation(
 		)
 		if err != nil {
 			result.Status = models.ModelInvocationStatusFailed
-			return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+			return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 		}
 	}
 	if result.Status == models.ModelInvocationStatusAccepted {
 		result.Status = models.ModelInvocationStatusFailed
 		return o.finishJoinedFailure(
-			ctx, plan, result, "invoke",
+			ctx, plan, result, modelseffects.RuntimeStageInvoke,
 			fmt.Errorf("%w: joined invocation did not complete", models.ErrInferenceFailed),
 		)
 	}
 	if result.Status == models.ModelInvocationStatusFailed {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
 	if result.Status == models.ModelInvocationStatusCancelled {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceCancelled)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceCancelled)
 	}
 	if result.Status != models.ModelInvocationStatusCompleted {
 		result.Status = models.ModelInvocationStatusFailed
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
 	return o.releaseJoinedInvocation(ctx, plan, result)
 }
@@ -668,9 +686,9 @@ func (o *Root) finishJoinedFailure(
 	ctx context.Context,
 	plan joinedInvocationPlan,
 	result models.InvokeModelResult,
-	stage string,
+	stage modelseffects.RuntimeStage,
 	invokeErr error,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	if !joinedInvocationLeaseReleased(result) {
 		releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 		if releaseErr == nil {
@@ -685,9 +703,9 @@ func (o *Root) releaseJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
 	result models.InvokeModelResult,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	if joinedInvocationLeaseReleased(result) {
-		return result, "release", nil
+		return result, modelseffects.RuntimeStageInvoke, nil
 	}
 	releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 	if releaseErr == nil {
@@ -695,7 +713,7 @@ func (o *Root) releaseJoinedInvocation(
 	} else {
 		result.Status = models.ModelInvocationStatusFailed
 	}
-	return result, "release", releaseErr
+	return result, modelseffects.RuntimeStageInvoke, releaseErr
 }
 
 func joinedInvocationResultIdentity(
@@ -924,7 +942,7 @@ func joinedInvocationRecord(
 	modelName string,
 	operation string,
 	invocation models.ModelInvocationRef,
-	stage string,
+	stage modelseffects.RuntimeStage,
 	err error,
 	elapsed time.Duration,
 ) {
@@ -935,13 +953,17 @@ func joinedInvocationRecord(
 		zap.String("model_name", modelName),
 		zap.String("operation", operation),
 		zap.String("invocation", invocation.String()),
-		zap.String("stage", stage),
+		zap.String("runtime_stage", string(stage)),
 		zap.Duration("duration", elapsed),
+		zap.Int64("duration_millis", elapsed.Milliseconds()),
 	}
 	if err != nil {
+		diagnostic := modelseffects.ProjectRuntimeFailure(err, elapsed)
 		fields = append(fields,
 			zap.String("outcome", "FAILED"),
-			zap.String("failure_class", joinedInvocationFailureClass(err)),
+			zap.String("runtime_stage", string(diagnostic.Stage)),
+			zap.String("failure_class", string(diagnostic.Class)),
+			zap.String("cause_sha256", diagnostic.CauseSHA256),
 		)
 		o.process.Logger.Warn("models invocation completed", fields...)
 		return

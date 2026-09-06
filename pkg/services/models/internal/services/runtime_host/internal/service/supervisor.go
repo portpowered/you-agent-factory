@@ -64,6 +64,7 @@ type supervisedRuntime struct {
 	process      modelseffects.HostManagedProcess
 	loadDone     chan struct{}
 	loadCancel   context.CancelFunc
+	loadStarted  time.Time
 	cfg          supervisorSettings
 	identity     supervisedIdentity
 }
@@ -172,6 +173,10 @@ func (r *supervisedRuntime) beginLoad(
 	r.state = supervisedStateLoading
 	r.failureClass = hostFailureClassNone
 	r.failureErr = nil
+	r.loadStarted = time.Time{}
+	if r.cfg.Clock != nil {
+		r.loadStarted = r.cfg.Clock.Now()
+	}
 	r.loadDone = make(chan struct{})
 	r.loadCancel = loadCancel
 	return r.loadDone, nil, false
@@ -422,11 +427,12 @@ func (r *supervisedRuntime) markFailed(
 	r.state = supervisedStateFailed
 	r.failureClass = class
 	r.failureErr = typedHostReadinessFailure(identity, class, err)
+	loadStarted := r.loadStarted
 	r.endpoint = ""
 	r.process = nil
 	failure := r.failureOutcomeLocked()
 	r.mu.Unlock()
-	r.cfg.Diagnostics.logLoadFailed(identity, class, err)
+	r.cfg.Diagnostics.logLoadFailed(identity, class, err, runtimeLoadElapsed(r.cfg.Clock, loadStarted))
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
 	}
@@ -488,14 +494,26 @@ func (r *supervisedRuntime) watchProcessExit(
 		hostFailureClassProcessCrash,
 		processExitError(waitErr),
 	)
+	loadStarted := r.loadStarted
 	r.endpoint = ""
 	r.process = nil
 	failureErr := r.failureErr
 	r.mu.Unlock()
-	r.cfg.Diagnostics.logProcessCrash(identity, failureErr)
+	r.cfg.Diagnostics.logProcessCrash(identity, failureErr, runtimeLoadElapsed(r.cfg.Clock, loadStarted))
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
 	}
+}
+
+func runtimeLoadElapsed(clock modelseffects.HostClock, started time.Time) time.Duration {
+	if clock == nil || started.IsZero() {
+		return 0
+	}
+	ended := clock.Now()
+	if ended.Before(started) {
+		return 0
+	}
+	return ended.Sub(started)
 }
 
 func (r *supervisedRuntime) isReady() bool {
