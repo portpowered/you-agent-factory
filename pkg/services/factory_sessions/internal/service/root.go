@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -22,6 +23,7 @@ type Root struct {
 	*legacyservice.Assembly
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 	detachedOperations    factorysessions.DetachedService
+	runtimeOpening        roles.RuntimeOpening
 }
 
 var _ factorysessions.Service = (*Root)(nil)
@@ -48,6 +50,59 @@ func NewRoot(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (*Root, error) {
+	assembly, err := NewAssembly(
+		newJavaScriptCheckpointStore,
+		sessionResultProjection,
+		interpolation,
+		invocationWorkTypes,
+		ttsObservability,
+		eventIDs,
+		sessionIDs,
+		resolveHome,
+		directoryInspection,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		identityService,
+		responseStreams,
+		clock,
+		liveChangeCoordinator,
+		recordedSessionInventory,
+	)
+	if err != nil {
+		return nil, err
+	}
+	concrete, ok := assembly.(*legacyservice.Assembly)
+	if !ok || concrete == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
+	}
+	return newRoot(concrete, nil, liveChangeCoordinator)
+}
+
+// NewAssembly constructs the single process-scoped Factory Sessions assembly
+// used as the runtime resolver while the remaining peer roots are composed.
+// It returns the existing assembly capability rather than a second product
+// service. The canonical public root is wrapped around this same assembly only
+// after its process-scoped opening capability has been built.
+func NewAssembly(
+	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	interpolation factorydefinitions.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
+	ttsObservability factorydefinitions.TTSObservabilityService,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	sessionIDs factorysessions.SessionIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection roles.DirectoryInspection,
+	namedPaths factorydefinitions.NamedPathResolver,
+	invocationInputFiles fileeffects.InvocationInputReader,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
+	responseStreams responsestreamservice.Service,
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
+) (roles.RuntimeAssembly, error) {
 	if err := validateRootDependencies(
 		sessionResultProjection,
 		eventIDs,
@@ -88,9 +143,46 @@ func NewRoot(
 	if !ok || assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
+	return assembly, nil
+}
+
+// NewRootFromAssembly wraps the already-composed assembly in the one
+// process-scoped Factory Sessions root. The opening capability is required at
+// this boundary so the root cannot be returned with an incomplete data-plane
+// graph.
+func NewRootFromAssembly(
+	assembly roles.RuntimeAssembly,
+	runtimeOpening roles.RuntimeOpening,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (*Root, error) {
+	if assembly == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: runtime assembly is required")
+	}
+	if runtimeOpening == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: runtime opening is required")
+	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
+	concrete, ok := assembly.(*legacyservice.Assembly)
+	if !ok || concrete == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: runtime assembly implementation rejected")
+	}
+	return newRoot(concrete, runtimeOpening, liveChangeCoordinator)
+}
+
+func newRoot(
+	assembly *legacyservice.Assembly,
+	runtimeOpening roles.RuntimeOpening,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (*Root, error) {
+	if assembly == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
+	}
 	root := &Root{
 		Assembly:              assembly,
 		liveChangeCoordinator: liveChangeCoordinator,
+		runtimeOpening:        runtimeOpening,
 	}
 	detachedOperations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
 	if err != nil {
@@ -98,6 +190,48 @@ func NewRoot(
 	}
 	root.detachedOperations = detachedOperations
 	return root, nil
+}
+
+// RuntimeOpening returns the owner-private opening capability retained by the
+// canonical root. It is intentionally not part of factorysessions.Service.
+func (r *Root) RuntimeOpening() roles.RuntimeOpening {
+	if r == nil {
+		return nil
+	}
+	return r.runtimeOpening
+}
+
+// OpenApplicationRuntime delegates through the retained process-scoped
+// opening capability. These methods keep the compatibility opening direction
+// one-way without allowing callers to construct another Factory Sessions root.
+func (r *Root) OpenApplicationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedApplicationRuntime, error) {
+	if r == nil || r.runtimeOpening == nil {
+		return roles.OpenedApplicationRuntime{}, fmt.Errorf("Factory Sessions runtime opening is required")
+	}
+	return r.runtimeOpening.OpenApplicationRuntime(ctx, request)
+}
+
+func (r *Root) OpenInvocationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedInvocationRuntime, error) {
+	if r == nil || r.runtimeOpening == nil {
+		return roles.OpenedInvocationRuntime{}, fmt.Errorf("Factory Sessions runtime opening is required")
+	}
+	return r.runtimeOpening.OpenInvocationRuntime(ctx, request)
+}
+
+func (r *Root) OpenExecutionRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedExecutionRuntime, error) {
+	if r == nil || r.runtimeOpening == nil {
+		return roles.OpenedExecutionRuntime{}, fmt.Errorf("Factory Sessions runtime opening is required")
+	}
+	return r.runtimeOpening.OpenExecutionRuntime(ctx, request)
 }
 
 // DetachedOperations returns the one process-scoped operation view bound to

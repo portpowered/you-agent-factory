@@ -77,6 +77,7 @@ type (
 	OpenedProcessApplication             = roles.OpenedProcessApplication
 	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
 	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
+	RuntimeOpeningCapability             = roles.RuntimeOpening
 
 	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
 	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
@@ -149,6 +150,27 @@ func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembl
 		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
 	}
 	return assembly, nil
+}
+
+// RuntimeOpeningFromService retrieves the one owner-private opening
+// capability retained by the canonical Factory Sessions root. The lookup is a
+// construction-time assertion only; callers cannot replace the capability or
+// construct another root through it.
+func RuntimeOpeningFromService(service factorysessions.Service) (RuntimeOpeningCapability, error) {
+	if service == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime opening requires the service root")
+	}
+	provider, ok := service.(interface {
+		RuntimeOpening() RuntimeOpeningCapability
+	})
+	if !ok || provider == nil {
+		return nil, fmt.Errorf("Factory Sessions service root does not retain its runtime opening")
+	}
+	opening := provider.RuntimeOpening()
+	if opening == nil {
+		return nil, fmt.Errorf("Factory Sessions service root has no runtime opening")
+	}
+	return opening, nil
 }
 
 var (

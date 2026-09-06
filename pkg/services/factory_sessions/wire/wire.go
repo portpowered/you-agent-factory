@@ -20,7 +20,9 @@ import (
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
@@ -77,41 +79,21 @@ func NewService(
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessions.Service, error) {
-	if sessionResultProjection == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
-	}
-	if eventIDs == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
-	}
-	if sessionIDs == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
-	}
-	if resolveHome == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: home directory resolver is required")
-	}
-	if directoryInspection == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: directory inspection is required")
-	}
-	if namedPaths == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: named path resolver is required")
-	}
-	if invocationInputFiles == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: invocation input reader is required")
-	}
-	if initialWorkFiles == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
-	}
-	if liveChangeCoordinator == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
-	}
-	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
-	if err != nil {
-		return nil, err
-	}
-	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits, eventsService)
+	identityService, responseStreams, err := newOwnerServices(
+		eventIDs,
+		responseEventRetentionLimits,
+		resolveHome,
+		directoryInspection,
+		resolveSymlinks,
+		eventsService,
+		sessionResultProjection,
+		sessionIDs,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		clock,
+		liveChangeCoordinator,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +124,153 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+// NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
+// used by peer roots while canonical Wire completes the rest of the process
+// graph. It is an assembly capability, not a second published Service root.
+func NewRuntimeAssembly(
+	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	interpolation factorydefinitions.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
+	ttsObservability factorydefinitions.TTSObservabilityService,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
+	sessionIDs factorysessions.SessionIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection DirectoryInspection,
+	namedPaths factorydefinitions.NamedPathResolver,
+	invocationInputFiles fileeffects.InvocationInputReader,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
+) (RuntimeAssembly, error) {
+	identityService, responseStreams, err := newOwnerServices(
+		eventIDs,
+		responseEventRetentionLimits,
+		resolveHome,
+		directoryInspection,
+		resolveSymlinks,
+		eventsService,
+		sessionResultProjection,
+		sessionIDs,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		clock,
+		liveChangeCoordinator,
+	)
+	if err != nil {
+		return nil, err
+	}
+	assembly, err := factorysessionroot.NewAssembly(
+		newJavaScriptCheckpointStore,
+		sessionResultProjection,
+		interpolation,
+		invocationWorkTypes,
+		ttsObservability,
+		eventIDs,
+		sessionIDs,
+		resolveHome,
+		directoryInspection,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		identityService,
+		responseStreams,
+		clock,
+		liveChangeCoordinator,
+		recordedSessionInventory,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if assembly == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
+	}
+	return assembly, nil
+}
+
+// NewServiceFromAssembly seals the already-composed owner assembly with the
+// process-scoped opening capability. The wrapper is the only published
+// Factory Sessions root and retains the exact assembly supplied to its peers.
+func NewServiceFromAssembly(
+	assembly RuntimeAssembly,
+	runtimeOpening RuntimeOpeningCapability,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (factorysessions.Service, error) {
+	service, err := factorysessionroot.NewRootFromAssembly(
+		assembly,
+		runtimeOpening,
+		liveChangeCoordinator,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if service == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
+	}
+	return service, nil
+}
+
+func newOwnerServices(
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection DirectoryInspection,
+	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	sessionIDs factorysessions.SessionIDGenerator,
+	namedPaths factorydefinitions.NamedPathResolver,
+	invocationInputFiles fileeffects.InvocationInputReader,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (identity.Service, responsestreamservice.Service, error) {
+	if sessionResultProjection == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
+	}
+	if eventIDs == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
+	}
+	if sessionIDs == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
+	}
+	if resolveHome == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: home directory resolver is required")
+	}
+	if directoryInspection == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: directory inspection is required")
+	}
+	if namedPaths == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: named path resolver is required")
+	}
+	if invocationInputFiles == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: invocation input reader is required")
+	}
+	if initialWorkFiles == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if clock == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return nil, nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
+	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
+	if err != nil {
+		return nil, nil, err
+	}
+	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits, eventsService)
+	if err != nil {
+		return nil, nil, err
+	}
+	return identityService, responseStreams, nil
 }
 
 // NewDetachedOperations binds the build-first Sessions operation view to the

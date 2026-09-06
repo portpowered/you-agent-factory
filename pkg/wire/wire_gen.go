@@ -163,11 +163,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v15 := provideRecordingOpenFile(edges2)
 	replayInputLoader := provideFactorySessionReplayInputs(v13, v14, v15, loggingLogger)
 	recordedSessionInventory := provideRecordedSessionInventory(edges2, replayInputLoader, loggingLogger)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v8, homeDirectoryResolver, v9, namedPathResolver, v10, v11, logicalTargetResolveSymlinks, eventsService, clock, v12, recordedSessionInventory)
-	if err != nil {
-		return nil, err
-	}
-	v16, err := provideFactorySessionsRuntimeAssembly(factorysessionsService)
+	v16, err := provideFactorySessionsAssembly(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v8, homeDirectoryResolver, v9, namedPathResolver, v10, v11, logicalTargetResolveSymlinks, eventsService, clock, v12, recordedSessionInventory)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +364,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(service)
 	v54 := provideFactorySessionInvocationMetricsRecorder(edges2)
 	v55 := &wire.FactorySessionsRuntimeOpeningPorts{
-		Service:                        factorysessionsService,
 		RuntimeAssembly:                v16,
 		DurableExecutionFactory:        durableExecutionFactory,
 		FactorySessionExecutionFactory: v50,
@@ -474,6 +469,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	service2 := provideProvidersCLIService(service)
 	v72 := wire.NewRequestPreparation()
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v72)
+	factorysessionsService, err := provideFactorySessionsService(v16, v64, v12)
+	if err != nil {
+		return nil, err
+	}
 	localSessionsCLIService := provideLocalSessionsCLIService(factorysessionsService)
 	payloadFileReader := provideSubmitPayloadReader()
 	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
@@ -755,7 +754,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processExecutionRuntimeOpeningCapability, err := provideFactorySessionExecutionRuntimeOpening(v64)
+	processExecutionRuntimeOpeningCapability, err := provideFactorySessionExecutionRuntimeOpening(factorysessionsService)
 	if err != nil {
 		return nil, err
 	}
@@ -954,7 +953,7 @@ var servicesSet = wire5.NewSet(
 	provideTTSObservabilityService,
 	provideAutomationHostedSourceInputs,
 	provideAutomationsCommandRunner,
-	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsService,
+	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsAssembly,
 	provideFactorySessionDetachedOperations,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
@@ -962,7 +961,6 @@ var servicesSet = wire5.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
@@ -1034,7 +1032,7 @@ var servicesSet = wire5.NewSet(
 	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, provideFactoryRuntimeRootFactory, wire5.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire5.Struct(new(wire.ProviderSessionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactoryRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactoryDefinitionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactorySessionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WorkRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.AutomationsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.ModelsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.RecordingsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WebhooksRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WorkersRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.OperatorSettingsRuntimeOpeningPorts), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpening,
+	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpening, provideFactorySessionsService,
 )
 
 var providerSessionServiceSet = wire5.NewSet(

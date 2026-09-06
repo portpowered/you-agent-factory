@@ -151,7 +151,7 @@ var servicesSet = wire.NewSet(
 	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
-	provideFactorySessionsService,
+	provideFactorySessionsAssembly,
 	provideFactorySessionDetachedOperations,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
@@ -159,7 +159,6 @@ var servicesSet = wire.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
@@ -249,6 +248,7 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRuntimeOpening,
+	provideFactorySessionsService,
 )
 
 var providerSessionServiceSet = wire.NewSet(

@@ -83,7 +83,7 @@ func (*wireTestClock) Now() time.Time {
 	return time.Time{}
 }
 
-func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
+func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	t.Parallel()
 	namedPathResolver, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
@@ -94,7 +94,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		t.Fatalf("construct events service: %v", err)
 	}
 
-	service, err := provideFactorySessionsService(
+	assembly, err := provideFactorySessionsAssembly(
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,
@@ -114,10 +114,10 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("provide Factory Sessions service: %v", err)
+		t.Fatalf("provide Factory Sessions assembly: %v", err)
 	}
-	if service == nil {
-		t.Fatal("Factory Sessions service is nil")
+	if assembly == nil {
+		t.Fatal("Factory Sessions assembly is nil")
 	}
 }
 

@@ -283,7 +283,6 @@ func assertFactoryDefinitionsPortsRetained(t *testing.T, factory *Factory, depen
 func assertFactorySessionsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
 	t.Helper()
 	group := dependencies.FactorySessions
-	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions service", factory.factorySessionsService, group.Service)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime assembly", factory.factorySessionsRuntimeAssembly, group.RuntimeAssembly)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions durable execution", factory.durableExecutionFactory, group.DurableExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions execution", factory.factorySessionExecutionFactory, group.FactorySessionExecutionFactory)
@@ -399,7 +398,6 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Definitions loaded factory source factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NewLoadedFactory = nil }},
 		{"Factory Definitions replay runtime config decoder", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
 		{"Factory Definitions loaded factory snapshot capturer", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.CaptureLoadedFactorySnapshot = nil }},
-		{"Factory Sessions service", func(d *runtimeOpeningFixture) { d.FactorySessions.Service = nil }},
 		{"Factory Sessions runtime assembly", func(d *runtimeOpeningFixture) { d.FactorySessions.RuntimeAssembly = nil }},
 		{"Factory Sessions durable execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.DurableExecutionFactory = nil }},
 		{"Factory Sessions session execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.FactorySessionExecutionFactory = nil }},
@@ -452,7 +450,6 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			CaptureLoadedFactorySnapshot:  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		},
 		FactorySessions: &FactorySessionsPorts{
-			Service:                        factorySessionsRoot,
 			RuntimeAssembly:                factorySessionsRoot,
 			DurableExecutionFactory:        inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
 			FactorySessionExecutionFactory: inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),

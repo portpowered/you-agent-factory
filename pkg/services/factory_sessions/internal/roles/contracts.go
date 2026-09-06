@@ -126,6 +126,26 @@ type OpenedExecutionRuntime struct {
 	Resources       RuntimeResources
 }
 
+// RuntimeOpening is the owner-private, process-scoped opening capability
+// retained by the canonical Factory Sessions root. It is deliberately kept
+// separate from the public Service contract: opening a runtime is a
+// construction/lifecycle role, while callers consume the resulting customer
+// values and operations through Factory Sessions.
+type RuntimeOpening interface {
+	OpenApplicationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (OpenedApplicationRuntime, error)
+	OpenInvocationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (OpenedInvocationRuntime, error)
+	OpenExecutionRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (OpenedExecutionRuntime, error)
+}
+
 type RuntimeResolver interface {
 	Resolve(sessionID string) *livesession.LiveSession
 }

@@ -594,7 +594,7 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
-func provideFactorySessionsService(
+func provideFactorySessionsAssembly(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -612,10 +612,18 @@ func provideFactorySessionsService(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
-) (factorysessions.Service, error) {
-	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
+) (factorysessionwire.RuntimeAssembly, error) {
+	return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator, recordedSessionInventory)
+}
+
+func provideFactorySessionsService(
+	assembly factorysessionwire.RuntimeAssembly,
+	opening *factorysessionwire.RuntimeOpening,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+) (factorysessions.Service, error) {
+	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
 }
 
 // provideFactorySessionDetachedOperations publishes the one detached value
@@ -710,8 +718,12 @@ func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 }
 
 func provideFactorySessionExecutionRuntimeOpening(
-	opening factorysessionwire.ExecutionRuntimeOpening,
+	service factorysessions.Service,
 ) (processcontract.ExecutionRuntimeOpeningCapability, error) {
+	opening, err := factorysessionwire.RuntimeOpeningFromService(service)
+	if err != nil {
+		return nil, err
+	}
 	if opening == nil {
 		return nil, errors.New("construct execution runtime opening capability: opening is required")
 	}
@@ -756,12 +768,6 @@ type executionRuntimeOpeningCapability struct {
 
 func (capability executionRuntimeOpeningCapability) ExecutionRuntimeOpening() any {
 	return capability.opening
-}
-
-func provideFactorySessionsRuntimeAssembly(
-	service factorysessions.Service,
-) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.RuntimeAssemblyFromService(service)
 }
 
 func provideOrchestrationJavaScriptExecution(

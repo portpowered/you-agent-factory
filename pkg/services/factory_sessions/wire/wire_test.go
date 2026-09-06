@@ -99,6 +99,31 @@ func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
+	t.Parallel()
+
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
+	if err != nil {
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	opening := &RuntimeOpening{}
+	service, err := NewServiceFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewServiceFromAssembly() returned nil service")
+	}
+	retained, err := RuntimeOpeningFromService(service)
+	if err != nil {
+		t.Fatalf("RuntimeOpeningFromService() error = %v", err)
+	}
+	if any(retained) != any(opening) {
+		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", retained, opening)
+	}
+}
+
 func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -244,6 +269,29 @@ func validNewServiceInputs() newServiceInputs {
 
 func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 	return NewService(
+		in.newJavaScriptCheckpointStore,
+		in.sessionResultProjection,
+		in.interpolation,
+		in.invocationWorkTypes,
+		in.ttsObservability,
+		in.eventIDs,
+		in.responseEventRetentionLimits,
+		in.sessionIDs,
+		in.resolveHome,
+		in.directoryInspection,
+		in.namedPaths,
+		in.invocationInputFiles,
+		in.initialWorkFiles,
+		in.resolveSymlinks,
+		in.eventsService,
+		in.clock,
+		in.liveChangeCoordinator,
+		nil,
+	)
+}
+
+func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
+	return NewRuntimeAssembly(
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,
