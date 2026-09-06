@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -14,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewRuntimeAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
 	valid := validNewServiceInputs()
@@ -39,26 +40,31 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			inputs := valid
 			test.mutate(&inputs)
-			service, err := inputs.callNewService()
+			assembly, err := inputs.callNewRuntimeAssembly()
 			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
+				t.Fatalf("NewRuntimeAssembly() error = nil, want missing %s dependency", test.name)
 			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
+			if assembly != nil {
+				t.Fatalf("NewRuntimeAssembly() = %#v, want nil assembly", assembly)
 			}
 		})
 	}
 }
 
-func TestNewServiceConstructsPublishedRoot(t *testing.T) {
+func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := validNewServiceInputs().callNewService()
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
 	var root factorysessions.Service = service
 	if root == nil {
@@ -83,19 +89,90 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
+func TestNewServiceFromAssemblyRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := validNewServiceInputs().callNewService()
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	assembly, err := RuntimeAssemblyFromService(service)
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
 	if err != nil {
-		t.Fatalf("RuntimeAssemblyFromService() error = %v", err)
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
-	if any(assembly) != any(service) {
-		t.Fatalf("runtime assembly = %T(%[1]v), want the same process root %T(%[2]v)", assembly, service)
+	retained, ok := service.(RuntimeAssembly)
+	if !ok || retained == nil {
+		t.Fatalf("published service = %T, want the retained runtime assembly capability", service)
+	}
+	if any(retained) != any(service) {
+		t.Fatalf("runtime assembly = %T(%[1]v), want the same published process root %T", retained, service)
+	}
+}
+
+func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
+	t.Parallel()
+
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
+	if err != nil {
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	opening := &RuntimeOpening{}
+	service, err := NewServiceFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewServiceFromAssembly() returned nil service")
+	}
+	retained, ok := service.(interface {
+		RuntimeOpening() RuntimeOpeningCapability
+	})
+	if !ok || retained == nil {
+		t.Fatal("published service does not expose the owner-private runtime opening")
+	}
+	if got := retained.RuntimeOpening(); any(got) != any(opening) {
+		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
+	}
+}
+
+func TestNewRuntimeOpeningAdapterDelegatesThroughThePublishedServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	owner := &runtimeOpeningOwnerService{}
+	adapter, err := NewRuntimeOpeningAdapter(owner)
+	if err != nil {
+		t.Fatalf("NewRuntimeOpeningAdapter() error = %v", err)
+	}
+	if adapter == nil {
+		t.Fatal("NewRuntimeOpeningAdapter() returned nil adapter")
+	}
+	if any(adapter.owner) != any(owner) {
+		t.Fatalf("adapter owner = %T(%[1]v), want the published Service root %T(%[2]v)", adapter.owner, owner)
+	}
+
+	request := &factorysessions.RuntimeOpeningRequest{}
+	if _, err := adapter.OpenApplicationRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenApplicationRuntime() error = %v", err)
+	}
+	if _, err := adapter.OpenInvocationRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenInvocationRuntime() error = %v", err)
+	}
+	if _, err := adapter.OpenExecutionRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	if owner.applicationCalls != 1 || owner.invocationCalls != 1 || owner.executionCalls != 1 {
+		t.Fatalf("root opening calls = application:%d invocation:%d execution:%d, want one delegated call each", owner.applicationCalls, owner.invocationCalls, owner.executionCalls)
+	}
+}
+
+func TestNewRuntimeOpeningAdapterRejectsAnIncompleteServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewRuntimeOpeningAdapter(&incompleteRuntimeOpeningOwnerService{})
+	if adapter != nil || err == nil {
+		t.Fatalf("NewRuntimeOpeningAdapter(incomplete root) = (%#v, %v), want nil adapter and error", adapter, err)
 	}
 }
 
@@ -123,7 +200,7 @@ func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testin
 	}
 }
 
-func TestNewServiceConstructsInertRoot(t *testing.T) {
+func TestNewServiceFromAssemblyConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	directories := &recordingDirectoryInspection{}
@@ -164,12 +241,16 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := inputs.callNewService()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+	}
+	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	if service == nil {
-		t.Fatal("NewService() returned nil service")
+		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
 	var root factorysessions.Service = service
 	if root == nil {
@@ -242,8 +323,8 @@ func validNewServiceInputs() newServiceInputs {
 	}
 }
 
-func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
-	return NewService(
+func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
+	return NewRuntimeAssembly(
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,
@@ -266,6 +347,30 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 }
 
 type recordingClock struct{ calls int }
+
+type runtimeOpeningOwnerService struct {
+	factorysessions.Service
+	applicationCalls int
+	invocationCalls  int
+	executionCalls   int
+}
+
+func (service *runtimeOpeningOwnerService) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedApplicationRuntime, error) {
+	service.applicationCalls++
+	return OpenedApplicationRuntime{}, nil
+}
+
+func (service *runtimeOpeningOwnerService) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedInvocationRuntime, error) {
+	service.invocationCalls++
+	return OpenedInvocationRuntime{}, nil
+}
+
+func (service *runtimeOpeningOwnerService) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedExecutionRuntime, error) {
+	service.executionCalls++
+	return OpenedExecutionRuntime{}, nil
+}
+
+type incompleteRuntimeOpeningOwnerService struct{ factorysessions.Service }
 
 func (c *recordingClock) Now() time.Time {
 	c.calls++

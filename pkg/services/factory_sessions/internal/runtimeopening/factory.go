@@ -111,7 +111,6 @@ type FactoryDefinitionsPorts struct {
 
 // FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
 type FactorySessionsPorts struct {
-	Service                        factorysessions.Service
 	RuntimeAssembly                roles.RuntimeAssembly
 	DurableExecutionFactory        DurableExecutionFactory
 	FactorySessionExecutionFactory FactorySessionExecutionFactory
@@ -188,7 +187,6 @@ type Factory struct {
 	workerService                    workers.Service
 	modelService                     models.Service
 	automationService                automations.Service
-	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsService                recordings.Service
 	recordingsRuntime                recordings.RuntimeOpening
@@ -272,7 +270,6 @@ func NewFactory(
 		workerService:                    workersPorts.Service,
 		modelService:                     modelsPorts.Service,
 		automationService:                automationsPorts.Service,
-		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsService:                recordingsPorts.Service,
@@ -407,7 +404,6 @@ func validateFactorySessions(group *FactorySessionsPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Sessions",
-		runtimeOpeningRequirement{"service", group.Service},
 		runtimeOpeningRequirement{"runtime assembly", group.RuntimeAssembly},
 		runtimeOpeningRequirement{"durable execution factory", group.DurableExecutionFactory},
 		runtimeOpeningRequirement{"session execution factory", group.FactorySessionExecutionFactory},

@@ -151,7 +151,7 @@ var servicesSet = wire.NewSet(
 	provideAutomationsCommandRunner,
 	provideAutomationsRoot,
 	wire.Bind(new(automations.Service), new(automations.Root)),
-	provideFactorySessionsService,
+	provideFactorySessionsAssembly,
 	provideFactorySessionDetachedOperations,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
@@ -159,7 +159,6 @@ var servicesSet = wire.NewSet(
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
-	provideFactorySessionsRuntimeAssembly,
 	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
@@ -249,6 +248,8 @@ var servicesSet = wire.NewSet(
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
 	factorysessionwire.NewRuntimeOpening,
+	provideFactorySessionsService,
+	provideFactorySessionRuntimeOpeningAdapter,
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -421,9 +422,9 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
 	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
-	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
-	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
-	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpeningAdapter)),
+	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpeningAdapter)),
+	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpeningAdapter)),
 	wire.Bind(new(factorysessionwire.WorkerExecution), new(workers.Service)),
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,

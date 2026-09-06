@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	"github.com/google/uuid"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
@@ -62,19 +63,25 @@ type providerOverrideService = factorysessionwire.ProviderOverrideService
 // teardown failure never masks or skips another's.
 type compositeProcessLifecycle struct {
 	closers []func(context.Context) error
+	once    sync.Once
+	err     error
 }
 
-func (c compositeProcessLifecycle) Close(ctx context.Context) error {
-	var result error
-	for _, closeFn := range c.closers {
-		if closeFn == nil {
-			continue
-		}
-		if err := closeFn(ctx); err != nil {
-			result = errors.Join(result, err)
-		}
+func (c *compositeProcessLifecycle) Close(ctx context.Context) error {
+	if c == nil {
+		return nil
 	}
-	return result
+	c.once.Do(func() {
+		for _, closeFn := range c.closers {
+			if closeFn == nil {
+				continue
+			}
+			if err := closeFn(ctx); err != nil {
+				c.err = errors.Join(c.err, err)
+			}
+		}
+	})
+	return c.err
 }
 
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
@@ -132,7 +139,7 @@ func provideApplicationProcessLifecycle(
 		}
 		closeMetrics = metricsLifecycle.Close
 	}
-	return compositeProcessLifecycle{closers: []func(context.Context) error{
+	return &compositeProcessLifecycle{closers: []func(context.Context) error{
 		func(ctx context.Context) error {
 			// Wire treats the process-scoped direct Worker Sessions boundary as
 			// required: construction returns an error before this lifecycle is
@@ -594,7 +601,7 @@ func provideFactorySessionResponseEventRetentionLimits(
 	return edges.FactorySessionResponseEventRetentionLimits
 }
 
-func provideFactorySessionsService(
+func provideFactorySessionsAssembly(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -612,10 +619,27 @@ func provideFactorySessionsService(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
-) (factorysessions.Service, error) {
-	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
+) (factorysessionwire.RuntimeAssembly, error) {
+	return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator, recordedSessionInventory)
+}
+
+func provideFactorySessionsService(
+	assembly factorysessionwire.RuntimeAssembly,
+	opening *factorysessionwire.RuntimeOpening,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+) (factorysessions.Service, error) {
+	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
+}
+
+// provideFactorySessionRuntimeOpeningAdapter binds the temporary opening
+// seams to the already-published Factory Sessions root. The adapter is a
+// value-only compatibility view and does not own another graph or lifecycle.
+func provideFactorySessionRuntimeOpeningAdapter(
+	service factorysessions.Service,
+) (*factorysessionwire.RuntimeOpeningAdapter, error) {
+	return factorysessionwire.NewRuntimeOpeningAdapter(service)
 }
 
 // provideFactorySessionDetachedOperations publishes the one detached value
@@ -710,7 +734,7 @@ func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 }
 
 func provideFactorySessionExecutionRuntimeOpening(
-	opening factorysessionwire.ExecutionRuntimeOpening,
+	opening *factorysessionwire.RuntimeOpeningAdapter,
 ) (processcontract.ExecutionRuntimeOpeningCapability, error) {
 	if opening == nil {
 		return nil, errors.New("construct execution runtime opening capability: opening is required")
@@ -756,12 +780,6 @@ type executionRuntimeOpeningCapability struct {
 
 func (capability executionRuntimeOpeningCapability) ExecutionRuntimeOpening() any {
 	return capability.opening
-}
-
-func provideFactorySessionsRuntimeAssembly(
-	service factorysessions.Service,
-) (factorysessionwire.RuntimeAssembly, error) {
-	return factorysessionwire.RuntimeAssemblyFromService(service)
 }
 
 func provideOrchestrationJavaScriptExecution(

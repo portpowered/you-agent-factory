@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -77,6 +78,7 @@ type (
 	OpenedProcessApplication             = roles.OpenedProcessApplication
 	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
 	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
+	RuntimeOpeningCapability             = roles.RuntimeOpening
 
 	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
 	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
@@ -130,25 +132,91 @@ type (
 	StdioOpeningService                 = executionopening.StdioOpeningService
 )
 
+// RuntimeOpeningAdapter is the temporary compatibility view used by the old
+// application, invocation, and execution opening seams. It retains only the
+// already-composed Factory Sessions root and delegates every opening through
+// that root; it owns no registry, runtime, or lifecycle.
+type RuntimeOpeningAdapter struct {
+	owner runtimeOpeningOwner
+}
+
+type runtimeOpeningOwner interface {
+	OpenApplicationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedApplicationRuntime, error)
+	OpenInvocationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedInvocationRuntime, error)
+	OpenExecutionRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedExecutionRuntime, error)
+}
+
+// NewRuntimeOpeningAdapter binds the temporary opening view to the one
+// process-scoped Factory Sessions root. Binding is construction-only and does
+// not discover, construct, or activate another service.
+func NewRuntimeOpeningAdapter(service factorysessions.Service) (*RuntimeOpeningAdapter, error) {
+	if service == nil {
+		return nil, fmt.Errorf("construct Factory Sessions runtime opening adapter: service root is required")
+	}
+	owner, ok := service.(runtimeOpeningOwner)
+	if !ok || owner == nil {
+		return nil, fmt.Errorf("construct Factory Sessions runtime opening adapter: service root does not expose opening operations")
+	}
+	return &RuntimeOpeningAdapter{owner: owner}, nil
+}
+
+func (adapter *RuntimeOpeningAdapter) ownerService() (runtimeOpeningOwner, error) {
+	if adapter == nil || adapter.owner == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime opening adapter is unavailable")
+	}
+	return adapter.owner, nil
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenApplicationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedApplicationRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedApplicationRuntime{}, err
+	}
+	return owner.OpenApplicationRuntime(ctx, request)
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenInvocationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedInvocationRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedInvocationRuntime{}, err
+	}
+	return owner.OpenInvocationRuntime(ctx, request)
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenExecutionRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedExecutionRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedExecutionRuntime{}, err
+	}
+	return owner.OpenExecutionRuntime(ctx, request)
+}
+
+var _ ApplicationRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
+var _ InvocationRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
+var _ ExecutionRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
+
 // NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
 // routing capability used by the canonical process graph.
 func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
 	return &factorysessions.DefinitionRuntimeRouter{}
-}
-
-// RuntimeAssemblyFromService narrows the one Wire-constructed Factory
-// Sessions root to its owner-private runtime capability. The assertion is
-// performed once during process composition; runtime operations never ask the
-// public root to construct or discover another service.
-func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembly, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Sessions runtime assembly requires the service root")
-	}
-	assembly, ok := service.(RuntimeAssembly)
-	if !ok || assembly == nil {
-		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
-	}
-	return assembly, nil
 }
 
 var (

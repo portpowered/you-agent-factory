@@ -26,26 +26,73 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
+func TestNewRootFromAssemblyRetainsLiveChangeCoordinator(t *testing.T) {
 	t.Parallel()
 
 	coordinator := livechange.NewCoordinator()
 	root, err := newRootForTest(coordinator)
 	if err != nil {
-		t.Fatalf("NewRoot() error = %v", err)
+		t.Fatalf("NewRootFromAssembly() error = %v", err)
 	}
 	if root == nil {
-		t.Fatal("NewRoot() returned nil root")
+		t.Fatal("NewRootFromAssembly() returned nil root")
 	}
 	if root.DetachedOperations() == nil {
-		t.Fatal("NewRoot() did not publish detached operations")
+		t.Fatal("NewRootFromAssembly() did not publish detached operations")
 	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
 	}
 }
 
-func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
+func TestNewRootFromAssemblyRequiresRetainedRuntimeOpening(t *testing.T) {
+	t.Parallel()
+
+	inputs := validRootInputs(livechange.NewCoordinator())
+	assembly, err := inputs.callAssembly()
+	if err != nil {
+		t.Fatalf("NewAssembly() error = %v", err)
+	}
+	root, err := NewRootFromAssembly(assembly, nil, inputs.liveChangeCoordinator)
+	if root != nil || err == nil {
+		t.Fatalf("NewRootFromAssembly(nil opening) = (%#v, %v), want nil root and stable error", root, err)
+	}
+	if got, want := err.Error(), "construct Factory Sessions: runtime opening is required"; got != want {
+		t.Fatalf("NewRootFromAssembly(nil opening) error = %q, want %q", got, want)
+	}
+}
+
+func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
+	t.Parallel()
+
+	inputs := validRootInputs(livechange.NewCoordinator())
+	assembly, err := inputs.callAssembly()
+	if err != nil {
+		t.Fatalf("NewAssembly() error = %v", err)
+	}
+	opening := &rootRuntimeOpeningStub{}
+	root, err := NewRootFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewRootFromAssembly() error = %v", err)
+	}
+	if root == nil {
+		t.Fatal("NewRootFromAssembly() returned nil root")
+	}
+	if any(root.Assembly) != any(assembly) {
+		t.Fatalf("root assembly = %T(%[1]v), want injected assembly %T(%[2]v)", root.Assembly, assembly)
+	}
+	if got := root.RuntimeOpening(); got != opening {
+		t.Fatalf("root runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
+	}
+	if _, err := root.OpenExecutionRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{}); err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	if opening.executionCalls != 1 {
+		t.Fatalf("OpenExecutionRuntime() calls = %d, want 1", opening.executionCalls)
+	}
+}
+
+func TestNewRootFromAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -70,7 +117,7 @@ func TestNewRootRejectsMissingRequiredDependencies(t *testing.T) {
 			test.mutate(&inputs)
 			root, err := inputs.call()
 			if root != nil || err == nil {
-				t.Fatalf("NewRoot() = (%#v, %v), want nil root and dependency error", root, err)
+				t.Fatalf("NewRootFromAssembly() = (%#v, %v), want nil root and dependency error", root, err)
 			}
 		})
 	}
@@ -81,7 +128,7 @@ func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 
 	root, err := newRootForTest(nil)
 	if root != nil || err == nil {
-		t.Fatalf("NewRoot() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
+		t.Fatalf("NewRootFromAssembly() with missing live-change coordinator = (%#v, %v), want nil root and error", root, err)
 	}
 }
 
@@ -98,7 +145,7 @@ func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.
 	inputs.recordedSessionInventory = inventory
 	root, err := inputs.call()
 	if err != nil {
-		t.Fatalf("NewRoot: %v", err)
+		t.Fatalf("NewRootFromAssembly: %v", err)
 	}
 
 	result, err := root.ListSessions(context.Background(), factorysessions.ListSessionsRequest{
@@ -161,7 +208,15 @@ func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) 
 }
 
 func (in rootTestInputs) call() (*Root, error) {
-	return NewRoot(
+	assembly, err := in.callAssembly()
+	if err != nil {
+		return nil, err
+	}
+	return NewRootFromAssembly(assembly, &rootRuntimeOpeningStub{}, in.liveChangeCoordinator)
+}
+
+func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
+	return NewAssembly(
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
 		in.interpolation,
@@ -245,6 +300,25 @@ func (rootTestIdentityService) ResolveLogical(sessionregistry.Service, string, s
 }
 
 type rootTestResponseStreams struct{}
+
+type rootRuntimeOpeningStub struct {
+	executionCalls int
+}
+
+func (s *rootRuntimeOpeningStub) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+	return roles.OpenedApplicationRuntime{}, nil
+}
+
+func (s *rootRuntimeOpeningStub) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
+	return roles.OpenedInvocationRuntime{}, nil
+}
+
+func (s *rootRuntimeOpeningStub) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedExecutionRuntime, error) {
+	s.executionCalls++
+	return roles.OpenedExecutionRuntime{}, nil
+}
+
+var _ roles.RuntimeOpening = (*rootRuntimeOpeningStub)(nil)
 
 func (rootTestResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
 	return nil, nil
