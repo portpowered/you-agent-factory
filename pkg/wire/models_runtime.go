@@ -2,6 +2,8 @@ package wire
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,11 +48,18 @@ const (
 	modelHostHTTPTimeout            = 2 * time.Second
 	modelRuntimeHTTPTimeout         = 5 * time.Minute
 	modelRuntimeEvidenceEnvironment = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
+	managedChildEvidenceKind        = "MANAGED_CHILD"
+	managedChildPhaseStarted        = "PROCESS_STARTED"
+	managedChildPhaseExited         = "PROCESS_EXITED"
+	managedChildExitClassExited     = "EXITED"
+	managedChildExitClassNonzero    = "NONZERO_EXIT"
+	managedChildExitClassWaitFailed = "WAIT_FAILED"
 )
 
 type modelRuntimeEvidenceFileRecorder struct {
-	mu   sync.Mutex
-	path string
+	mu       sync.Mutex
+	path     string
+	sequence uint64
 }
 
 func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
@@ -59,14 +68,54 @@ func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
 	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
 		return
 	}
-	payload, err := json.Marshal(record)
-	if err != nil {
-		return
-	}
-	payload = append(payload, '\n')
-
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
+	recorder.appendJSONLineLocked(func(sequence uint64) any {
+		record.Sequence = sequence
+		return record
+	})
+}
+
+type managedChildEnvironmentEvidence struct {
+	Sequence    uint64                   `json:"sequence"`
+	Kind        string                   `json:"kind"`
+	Backend     string                   `json:"backend"`
+	ProcessID   int                      `json:"process_id"`
+	Phase       string                   `json:"phase"`
+	Environment []managedEnvironmentFact `json:"environment,omitempty"`
+	ExitClass   string                   `json:"exit_class,omitempty"`
+}
+
+type managedEnvironmentFact struct {
+	Name        string `json:"name"`
+	Present     bool   `json:"present"`
+	ValueSHA256 string `json:"value_sha256,omitempty"`
+}
+
+type managedChildEnvironmentRecorder interface {
+	RecordManagedChildEnvironment(managedChildEnvironmentEvidence)
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) RecordManagedChildEnvironment(
+	record managedChildEnvironmentEvidence,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.appendJSONLineLocked(func(sequence uint64) any {
+		record.Sequence = sequence
+		return record
+	})
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) appendJSONLineLocked(
+	value func(uint64) any,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
 	file, err := os.OpenFile(
 		recorder.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600,
 	)
@@ -75,6 +124,12 @@ func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
 	}
 	defer file.Close()
 	_ = file.Chmod(0o600)
+	recorder.sequence++
+	payload, err := json.Marshal(value(recorder.sequence))
+	if err != nil {
+		return
+	}
+	payload = append(payload, '\n')
 	_, _ = file.Write(payload)
 }
 
@@ -98,9 +153,7 @@ func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, 
 	if err := file.Close(); err != nil {
 		return nil, fmt.Errorf("close model runtime evidence path: %w", err)
 	}
-	return modelswire.NewOrderedRuntimeEvidenceRecorder(
-		&modelRuntimeEvidenceFileRecorder{path: path},
-	), nil
+	return &modelRuntimeEvidenceFileRecorder{path: path}, nil
 }
 
 // TODO: this should be decomposed, we should inject these independently.
@@ -174,10 +227,6 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		return nil, fmt.Errorf("construct Models asset staging coordination: %w", coordinationErr)
 	}
 
-	launcher := edges.ModelHostProcessLauncher
-	if launcher == nil {
-		launcher = modelsProcessLauncher{}
-	}
 	hostHTTP := edges.ModelHostHTTPClient
 	if hostHTTP == nil {
 		hostHTTP = &http.Client{Timeout: modelHostHTTPTimeout}
@@ -242,6 +291,14 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	runtimeEvidence, err := provideModelRuntimeEvidenceRecorder()
 	if err != nil {
 		return nil, fmt.Errorf("construct Models runtime evidence recorder: %w", err)
+	}
+	launcher := edges.ModelHostProcessLauncher
+	if launcher == nil {
+		var childRecorder managedChildEnvironmentRecorder
+		if candidate, ok := runtimeEvidence.(managedChildEnvironmentRecorder); ok {
+			childRecorder = candidate
+		}
+		launcher = modelsProcessLauncher{recorder: childRecorder}
 	}
 
 	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
@@ -575,9 +632,11 @@ type modelsTimer struct{ *time.Timer }
 
 func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 
-type modelsProcessLauncher struct{}
+type modelsProcessLauncher struct {
+	recorder managedChildEnvironmentRecorder
+}
 
-func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
+func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
 	HealthEndpoint() string
 	Wait() error
 	Stop(context.Context) error
@@ -597,14 +656,34 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 		launch.Cleanup()
 		return nil, managedbackend.WrapBackendStartFailure(err)
 	}
+	processID := 0
+	if cmd.Process != nil {
+		processID = cmd.Process.Pid
+	}
+	if processID > 0 {
+		recorder := launcher.recorder
+		if recorder != nil {
+			recorder.RecordManagedChildEnvironment(managedChildEnvironmentEvidence{
+				Kind:        managedChildEvidenceKind,
+				Backend:     boundedManagedBackendID(spec.Backend),
+				ProcessID:   processID,
+				Phase:       managedChildPhaseStarted,
+				Environment: managedEnvironmentFacts(effectiveManagedBackendEnvironment(cmd.Env)),
+			})
+		}
+	}
 	managed := &modelsManagedProcess{
 		cmd:            cmd,
 		healthEndpoint: launch.Endpoint,
 		cleanup:        launch.Cleanup,
 		finished:       make(chan struct{}),
+		processID:      processID,
+		backend:        boundedManagedBackendID(spec.Backend),
+		recorder:       launcher.recorder,
 	}
 	go func() {
 		waitErr := cmd.Wait()
+		managed.recordProcessExit(waitErr)
 		managed.cleanupResources()
 		managed.mu.Lock()
 		managed.waitErr = waitErr
@@ -627,20 +706,74 @@ func appendManagedBackendEnvironment(base, additions []string) []string {
 		if !ok || strings.TrimSpace(key) == "" {
 			continue
 		}
-		replaced := false
-		for index, existing := range environment {
-			existingKey, _, hasValue := strings.Cut(existing, "=")
-			if hasValue && strings.EqualFold(existingKey, key) {
-				environment[index] = addition
-				replaced = true
+		environment = replaceManagedBackendEnvironmentKey(environment, key, addition)
+	}
+	return environment
+}
+
+func replaceManagedBackendEnvironmentKey(environment []string, key, replacement string) []string {
+	first := -1
+	for index, existing := range environment {
+		existingKey, _, hasValue := strings.Cut(existing, "=")
+		if !hasValue || !strings.EqualFold(existingKey, key) {
+			continue
+		}
+		if first == -1 {
+			first = index
+		}
+	}
+	if first == -1 {
+		return append(environment, replacement)
+	}
+	merged := make([]string, 0, len(environment))
+	for index, existing := range environment {
+		existingKey, _, hasValue := strings.Cut(existing, "=")
+		if hasValue && strings.EqualFold(existingKey, key) {
+			if index == first {
+				merged = append(merged, replacement)
+			}
+			continue
+		}
+		merged = append(merged, existing)
+	}
+	return merged
+}
+
+func effectiveManagedBackendEnvironment(environment []string) []string {
+	if environment != nil {
+		return environment
+	}
+	return os.Environ()
+}
+
+var managedEnvironmentAllowlist = []string{"PATH", "TEMP", "TMP", "VIBEVOICECPP_LIBRARY"}
+
+func managedEnvironmentFacts(environment []string) []managedEnvironmentFact {
+	values := make(map[string]string, len(managedEnvironmentAllowlist))
+	present := make(map[string]bool, len(managedEnvironmentAllowlist))
+	for _, entry := range environment {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		for _, allowed := range managedEnvironmentAllowlist {
+			if strings.EqualFold(key, allowed) {
+				present[allowed] = true
+				values[allowed] = value
 				break
 			}
 		}
-		if !replaced {
-			environment = append(environment, addition)
-		}
 	}
-	return environment
+	facts := make([]managedEnvironmentFact, 0, len(managedEnvironmentAllowlist))
+	for _, name := range managedEnvironmentAllowlist {
+		fact := managedEnvironmentFact{Name: name, Present: present[name]}
+		if fact.Present {
+			digest := sha256.Sum256([]byte(values[name]))
+			fact.ValueSHA256 = hex.EncodeToString(digest[:])
+		}
+		facts = append(facts, fact)
+	}
+	return facts
 }
 
 type modelHostProcessLauncherAdapter struct {
@@ -785,12 +918,52 @@ type modelsManagedProcess struct {
 	healthEndpoint string
 	cleanup        func()
 	cleanupOnce    sync.Once
+	processID      int
+	backend        string
+	recorder       managedChildEnvironmentRecorder
 	// finished is broadcast to both the supervisor's Wait observer and the
 	// application lifecycle closer; a one-shot error channel would let one
 	// consumer strand the other during normal teardown.
 	finished chan struct{}
 	waitErr  error
 	stopped  bool
+}
+
+func (p *modelsManagedProcess) recordProcessExit(waitErr error) {
+	if p == nil || p.processID <= 0 || p.recorder == nil {
+		return
+	}
+	p.recorder.RecordManagedChildEnvironment(managedChildEnvironmentEvidence{
+		Kind:      managedChildEvidenceKind,
+		Backend:   p.backend,
+		ProcessID: p.processID,
+		Phase:     managedChildPhaseExited,
+		ExitClass: managedChildExitClass(waitErr),
+	})
+}
+
+func managedChildExitClass(waitErr error) string {
+	if waitErr == nil {
+		return managedChildExitClassExited
+	}
+	var exitError *exec.ExitError
+	if errors.As(waitErr, &exitError) {
+		return managedChildExitClassNonzero
+	}
+	return managedChildExitClassWaitFailed
+}
+
+func boundedManagedBackendID(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "localai-llamacpp":
+		return "localai-llamacpp"
+	case "localai-vibevoice":
+		return "localai-vibevoice"
+	case "localai-whisper":
+		return "localai-whisper"
+	default:
+		return "UNKNOWN"
+	}
 }
 
 func (p *modelsManagedProcess) cleanupResources() {
