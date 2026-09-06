@@ -68,6 +68,73 @@ func TestProbeCostReplaysTheInstalledCodexFixture(t *testing.T) {
 	}
 }
 
+// TestProbeMetricsSessionUsesInstalledArtifact proves the restored session
+// command crosses the delivered executable boundary from a blank query
+// directory. The replay server owns the fixture; the customer query does not
+// read that workspace or any local metrics artifact.
+func TestProbeMetricsSessionUsesInstalledArtifact(t *testing.T) {
+	binaryPath := prebuiltProbeCostArtifact(t)
+	fixturePath := testutil.MustRepoPath(t,
+		"tests/functional/factory/visualization/runtime_metrics/testdata/codex-gpt-5-codex.factory-recording.v1.json",
+	)
+	fixture, err := prepareProbeCostFixture(t, fixturePath, nil)
+	if err != nil {
+		t.Fatalf("prepare installed session fixture: %v", err)
+	}
+	replay, err := startProbeCostReplay(t, binaryPath, fixture)
+	if err != nil {
+		t.Fatalf("start installed session replay: %v", err)
+	}
+	defer replay.stop()
+
+	status, err := waitForProbeCostTerminal(replay.ctx, &http.Client{Timeout: 2 * time.Second}, replay.serverURL, replay.process)
+	if err != nil {
+		t.Fatalf("installed session replay did not reach terminal status: %v", err)
+	}
+	if status.Categories.Terminal == 0 || status.Categories.Failed != 0 {
+		t.Fatalf("installed session replay status terminal=%d failed=%d", status.Categories.Terminal, status.Categories.Failed)
+	}
+
+	queryDirectory := t.TempDir()
+	stdout, stderr, exitStatus, err := runProbeInstalledCLI(replay, binaryPath, queryDirectory, []string{
+		"--json", "--server", replay.serverURL, "metrics", "session", "~default",
+		"--lens", "cost", "--by-worker", "--by-dispatch",
+	})
+	if err != nil || exitStatus != 0 {
+		t.Fatalf("installed metrics session command failed: exit=%d err=%v\nstdout=%s\nstderr=%s", exitStatus, err, stdout, stderr)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("installed metrics session stderr = %q, want empty", stderr)
+	}
+	var report struct {
+		FactorySessionID string `json:"factory_session_id"`
+		Attempts         []struct {
+			DispatchID      string `json:"dispatch_id"`
+			WorkID          string `json:"work_id"`
+			WorkerSessionID string `json:"worker_session_id"`
+		} `json:"attempts"`
+		Cost struct {
+			Status    string  `json:"status"`
+			KnownCost *string `json:"known_cost"`
+		} `json:"cost"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &report); err != nil {
+		t.Fatalf("decode installed metrics session JSON: %v\nstdout=%s", err, stdout)
+	}
+	if report.FactorySessionID != "~default" || len(report.Attempts) != 1 || report.Cost.Status != "PRICED" || report.Cost.KnownCost == nil || *report.Cost.KnownCost != probeCostExpectedAmount {
+		t.Fatalf("installed metrics session report = %#v, want one selected priced attempt", report)
+	}
+	attempt := report.Attempts[0]
+	if attempt.DispatchID != "cost-replay-priced-dispatch" || attempt.WorkID != "cost-replay-priced-work" || attempt.WorkerSessionID != "cost-replay-priced-worker-session" {
+		t.Fatalf("installed metrics session attempt = %#v, want canonical replay identities", attempt)
+	}
+	if entries, err := os.ReadDir(queryDirectory); err != nil {
+		t.Fatalf("read blank query directory: %v", err)
+	} else if len(entries) != 0 {
+		t.Fatalf("blank query directory contains %d entries, want none", len(entries))
+	}
+}
+
 // TestProbeCostValidatorRejectsFalsePositiveReports keeps the adversarial
 // assertions independent from the production valuation implementation. The
 // runtime probe above proves the customer-facing process path; these cases
@@ -297,6 +364,27 @@ func queryProbeCostReport(replay *probeCostReplay, binaryPath string) (generated
 		return generatedclient.CostsReport{}, stdout.String(), stderr.String(), fmt.Errorf("decode metrics costs JSON: %v", err)
 	}
 	return report, stdout.String(), stderr.String(), nil
+}
+
+func runProbeInstalledCLI(replay *probeCostReplay, binaryPath, workingDirectory string, args []string) (stdout, stderr string, exitStatus int, err error) {
+	command := exec.CommandContext(replay.ctx, binaryPath, args...)
+	command.Dir = workingDirectory
+	command.Env = append([]string(nil), replay.environment...)
+	stdoutBuffer := &bytes.Buffer{}
+	stderrBuffer := &bytes.Buffer{}
+	command.Stdout = stdoutBuffer
+	command.Stderr = stderrBuffer
+	err = command.Run()
+	stdout = stdoutBuffer.String()
+	stderr = stderrBuffer.String()
+	if err == nil {
+		return stdout, stderr, 0, nil
+	}
+	exitStatus = 1
+	if exitError, ok := err.(*exec.ExitError); ok {
+		exitStatus = exitError.ExitCode()
+	}
+	return stdout, stderr, exitStatus, err
 }
 
 func logProbeCostVerdict(t *testing.T, result probeCostResult) {
