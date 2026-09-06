@@ -18,6 +18,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
 // managedFactoryTTSFixture reuses the immutable process and model edge for
@@ -27,6 +28,7 @@ import (
 type managedFactoryTTSFixture struct {
 	process        support.ApplicationProcess
 	backend        *packagedTTSModelsBackend
+	privateFixture *localai.Fixture
 	factorySeedDir string
 	configSeed     []byte
 	cacheSeedDir   string
@@ -46,6 +48,7 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 	t.Helper()
 
 	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+	privateFixture := localai.Start(t)
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -53,7 +56,7 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 		}
 		http.NotFound(writer, request)
 	}))
-	launcher := &packagedTTSModelHostLauncher{endpoint: modelServer.URL}
+	launcher := &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()}
 	edges := serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(
@@ -93,6 +96,7 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 	fixture := &managedFactoryTTSFixture{
 		process:         process,
 		backend:         backend,
+		privateFixture:  privateFixture,
 		factorySeedDir:  seedFactoryDir,
 		configSeed:      configSeed,
 		cacheSeedDir:    cacheSeedDir,
@@ -220,6 +224,7 @@ func managedTTSModelEdges(
 		}
 		http.NotFound(writer, request)
 	}))
+	privateFixture := localai.Start(t)
 	edges := serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(
@@ -228,7 +233,7 @@ func managedTTSModelEdges(
 		) (serviceedges.ModelBackendArtifactSelection, error) {
 			return packagedTTSPinnedBackendSelection(), nil
 		},
-		ModelHostProcessLauncher:      &packagedTTSModelHostLauncher{endpoint: modelServer.URL},
+		ModelHostProcessLauncher:      &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()},
 		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),

@@ -61,8 +61,8 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 
 func assertPrivateTTSRouteResult(t *testing.T, genericCalls int, result inference.InvocationRuntimeResult) {
 	t.Helper()
-	if genericCalls != 0 || len(result.Content) != 1 || result.Content[0].Name != "audio" || result.Content[0].MediaType != "audio/wav" {
-		t.Fatalf("TTS route = genericCalls:%d content:%#v, want private one-audio route", genericCalls, result.Content)
+	if genericCalls != 0 || len(result.Content) != 1 || result.Content[0].Name != "audio" || result.Content[0].MediaType != "audio/wav" || len(result.Artifacts) != 1 || result.Artifacts[0].Name != "audio" {
+		t.Fatalf("TTS route = genericCalls:%d content:%#v artifacts:%#v, want private semantic audio route", genericCalls, result.Content, result.Artifacts)
 	}
 }
 

@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -79,7 +81,21 @@ func (runtime tts) Invoke(
 	}
 	return inference.InvocationRuntimeResult{
 		Content: []models.InferenceContent{content},
+		Artifacts: []inference.InvocationArtifactSource{{
+			Name:      content.Name,
+			MediaType: content.MediaType,
+			SizeBytes: int64(len([]byte(content.Content))),
+			Properties: map[string]string{
+				"digest": "sha256:" + ttsContentDigest(content.Content),
+				"label":  "speech.wav",
+			},
+		}},
 	}, nil
+}
+
+func ttsContentDigest(content string) string {
+	digest := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(digest[:])
 }
 
 func invocationOperation(request inference.InvocationRuntimeRequest) string {
