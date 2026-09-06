@@ -206,13 +206,15 @@ func runPinnedTTSCommandWithNetwork(
 
 func pinnedTTSEnvironment(dirs pinnedTTSDirs, networkProxy string) []string {
 	environment := story001Environment(dirs.home, dirs.modelCache, "")
-	environment = withoutEnvironmentKeys(
-		environment,
+	keys := []string{
 		"HF_HOME", "HUGGINGFACE_HUB_CACHE", run.ModelCacheDirEnvironment,
 		"TEMP", "TMP", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME",
 		"HF_TOKEN", "HUGGINGFACE_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HF_ENDPOINT",
-		"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
-	)
+	}
+	if networkProxy != "" {
+		keys = append(keys, "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
+	}
+	environment = withoutEnvironmentKeys(environment, keys...)
 	environment = append(environment,
 		"HF_HOME="+dirs.hfHome,
 		"HUGGINGFACE_HUB_CACHE="+dirs.hfCache,
