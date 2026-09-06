@@ -5,6 +5,7 @@ package codecs
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
@@ -196,16 +197,41 @@ func (codec ASRCodec) DecodeResponse(payload []byte) ([]models.InferenceContent,
 // DecodeResponseValue validates an already decoded backend response and
 // emits canonical transcript and JSON segments content in declared order.
 func (ASRCodec) DecodeResponseValue(response ASRResponse) ([]models.InferenceContent, error) {
+	return decodeASRResponse(response, nil)
+}
+
+// DecodeResponseValueWithinAudio applies the response invariants and, when
+// the request is a PCM WAV, bounds every segment by the decoded input
+// duration. LocalAI reports segment timestamps in milliseconds; keeping this
+// check at the private codec boundary prevents an otherwise valid-looking
+// transcript from publishing impossible media coordinates.
+func (ASRCodec) DecodeResponseValueWithinAudio(response ASRResponse, audio []byte) ([]models.InferenceContent, error) {
+	durationMilliseconds, hasDuration := pcmWAVDurationMilliseconds(audio)
+	if !hasDuration {
+		return decodeASRResponse(response, nil)
+	}
+	return decodeASRResponse(response, &durationMilliseconds)
+}
+
+func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]models.InferenceContent, error) {
 	if strings.TrimSpace(response.Text) == "" {
 		return nil, asrMalformedResponseFailure("transcript")
 	}
 	if len(response.Segments) == 0 || len(response.Segments) > maxASRSegments {
 		return nil, asrMalformedResponseFailure("segments")
 	}
-	for _, segment := range response.Segments {
+	var previousStart, previousEnd int64
+	for index, segment := range response.Segments {
 		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || strings.TrimSpace(segment.Text) == "" {
 			return nil, asrMalformedResponseFailure("segments")
 		}
+		if index > 0 && (segment.Start < previousStart || segment.End < previousEnd) {
+			return nil, asrMalformedResponseFailure("segments")
+		}
+		if durationMilliseconds != nil && float64(segment.End) > *durationMilliseconds {
+			return nil, asrMalformedResponseFailure("segments")
+		}
+		previousStart, previousEnd = segment.Start, segment.End
 	}
 	segments, err := json.Marshal(response.Segments)
 	if err != nil || int64(len(segments)) > MaxASRResponseBytes {
@@ -221,6 +247,54 @@ func (ASRCodec) DecodeResponseValue(response ASRResponse) ([]models.InferenceCon
 			ContentType: "application/json", MediaType: "application/json", Content: string(segments),
 		},
 	}, nil
+}
+
+func pcmWAVDurationMilliseconds(audio []byte) (float64, bool) {
+	if len(audio) < 12 || string(audio[0:4]) != "RIFF" || string(audio[8:12]) != "WAVE" ||
+		uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 != uint64(len(audio)) {
+		return 0, false
+	}
+	var sampleRate uint32
+	var blockAlign uint16
+	var dataBytes uint64
+	formatFound, dataFound := false, false
+	position := 12
+	for position+8 <= len(audio) {
+		chunkSize := uint64(binary.LittleEndian.Uint32(audio[position+4 : position+8]))
+		chunkStart := position + 8
+		chunkEnd := uint64(chunkStart) + chunkSize
+		next := chunkEnd + chunkSize%2
+		if chunkEnd > uint64(len(audio)) || next > uint64(len(audio)) {
+			return 0, false
+		}
+		switch string(audio[position : position+4]) {
+		case "fmt ":
+			if formatFound || chunkSize < 16 {
+				return 0, false
+			}
+			chunk := audio[chunkStart:int(chunkEnd)]
+			format := binary.LittleEndian.Uint16(chunk[0:2])
+			channels := binary.LittleEndian.Uint16(chunk[2:4])
+			sampleRate = binary.LittleEndian.Uint32(chunk[4:8])
+			blockAlign = binary.LittleEndian.Uint16(chunk[12:14])
+			bits := binary.LittleEndian.Uint16(chunk[14:16])
+			if format != 1 || channels == 0 || sampleRate == 0 || blockAlign == 0 || bits == 0 {
+				return 0, false
+			}
+			formatFound = true
+		case "data":
+			if dataFound {
+				return 0, false
+			}
+			dataBytes = chunkSize
+			dataFound = true
+		}
+		position = int(next)
+	}
+	if !formatFound || !dataFound || dataBytes == 0 || dataBytes%uint64(blockAlign) != 0 {
+		return 0, false
+	}
+	return float64(dataBytes/uint64(blockAlign)) * 1000 / float64(sampleRate), true
 }
 
 func asrHasInput(input models.InferenceInput) bool {

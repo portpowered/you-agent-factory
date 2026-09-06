@@ -42,6 +42,7 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	assertTTSRoleBundleReads(t, story)
 	runAliasTTS(t, story, wantAudio)
 	assertEquivalentTTSRequests(t, story.protocol.Calls(), story.temp.directory)
+	runExactTTSToASRChain(t, story)
 	runTTSFailureMatrix(t, story, wantAudio)
 	assertTTSIsolationAndRelease(t, story)
 }
@@ -210,6 +211,13 @@ func setupTTSStory(t *testing.T) ttsStory {
 	temp := &ttsTempEffects{directory: ttsTempDirectory}
 	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
+	asrDefinition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	if !ok {
+		t.Fatal("built-in catalog did not publish the ASR model definition")
+	}
+	writeGenericBuiltinModelCache(t, home, asrDefinition.Source)
+	asrSelection, asrBackendBody := fixtureBackendSelection(asrDefinition.Backend)
+	writeGenericBackendCache(t, home, asrDefinition.Backend, asrSelection, asrBackendBody)
 	selection := pinnedTTSBackendSelection()
 	assetTrace := &functionalModelAssetTrace{}
 	assetFiles := functionalModelAssetFileSystem{home: home, trace: assetTrace}
@@ -238,7 +246,13 @@ func setupTTSStory(t *testing.T) ttsStory {
 		ModelHostProtocolNegotiator:        hostProtocol,
 		ModelHostCompatibilityChecker:      compatibility,
 		ModelAssetHostPlatform:             models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			// Both built-in operations share this isolated cache. The resolver is
+			// still explicit so a cache miss cannot accidentally select the TTS
+			// backend for ASR.
+			if request.Backend == asrDefinition.Backend {
+				return asrSelection, nil
+			}
 			return selection, nil
 		},
 		ModelInvocationBackend:     generic.Invoke,
@@ -249,6 +263,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 		ModelRuntimeCreateTempFile: temp.CreateTemp,
 		ModelRuntimeInspectFile:    os.Stat,
 		ModelAssetRemovePath:       temp.Remove,
+		ModelASRBackend:            protocol.ASRBackend,
 		ModelCLIOutputRenamePath: func(oldPath, newPath string) error {
 			if newPath == outputFailurePath {
 				return errors.New("controlled output publication failure")
@@ -334,6 +349,123 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --text hello --output %s", aliasPath)
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", aliasStdout.String(), aliasStderr.String(), len(aliasAudio), ttsDigest(aliasAudio))
+}
+
+func runExactTTSToASRChain(t *testing.T, story ttsStory) {
+	t.Helper()
+	const phrase = "Local AI works on this machine"
+
+	ttsPath := filepath.Join(story.dir, "exact-chain.wav")
+	var ttsStdout, ttsStderr bytes.Buffer
+	ttsInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", models.BuiltInModelNameTTS, "--operation", "TTS", "--text", phrase, "--output", ttsPath,
+	})
+	ttsInputs.Input.Env = story.environment
+	ttsInputs.Input.WorkingDirectory = story.dir
+	ttsInputs.Input.Stdout = &ttsStdout
+	ttsInputs.Input.Stderr = &ttsStderr
+	if err := story.process.Execute(ttsInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(exact-chain TTS) error = %v", err)
+	}
+	audio, err := os.ReadFile(ttsPath)
+	if err != nil {
+		t.Fatalf("read exact-chain TTS output: %v", err)
+	}
+	if want := story.protocol.audioFor(phrase); !bytes.Equal(audio, want) {
+		t.Fatalf("exact-chain TTS bytes = %d/%s, want fixture bytes %d/%s", len(audio), ttsDigest(audio), len(want), ttsDigest(want))
+	}
+	assertSemanticTTSAudio(t, audio, "exact-chain TTS output")
+	if ttsStdout.String() != "Wrote audio: "+ttsPath+"\n" || ttsStderr.Len() != 0 {
+		t.Fatalf("exact-chain TTS streams = stdout %q stderr %q, want cache-hit status only", ttsStdout.String(), ttsStderr.String())
+	}
+
+	transcriptPath := filepath.Join(story.dir, "exact-chain-transcript.txt")
+	segmentsPath := filepath.Join(story.dir, "exact-chain-segments.json")
+	var asrStdout, asrStderr bytes.Buffer
+	asrInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+		"--output", "transcript=" + transcriptPath, "--output", "segments=" + segmentsPath,
+	})
+	asrInputs.Input.Env = story.environment
+	asrInputs.Input.WorkingDirectory = story.dir
+	asrInputs.Input.Stdout = &asrStdout
+	asrInputs.Input.Stderr = &asrStderr
+	if err := story.process.Execute(asrInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(exact-chain ASR) error = %v", err)
+	}
+	transcript, err := os.ReadFile(transcriptPath)
+	if err != nil {
+		t.Fatalf("read exact-chain transcript: %v", err)
+	}
+	if string(transcript) != phrase {
+		t.Fatalf("exact-chain transcript = %q, want semantic phrase %q", transcript, phrase)
+	}
+	segments, err := os.ReadFile(segmentsPath)
+	if err != nil {
+		t.Fatalf("read exact-chain segments: %v", err)
+	}
+	var decoded []struct {
+		ID    int32  `json:"id"`
+		Start int64  `json:"start"`
+		End   int64  `json:"end"`
+		Text  string `json:"text"`
+	}
+	if err := json.Unmarshal(segments, &decoded); err != nil {
+		t.Fatalf("decode exact-chain segments: %v", err)
+	}
+	if len(decoded) == 0 || decoded[0].Text != phrase {
+		t.Fatalf("exact-chain segments = %#v, want one semantic segment", decoded)
+	}
+	duration := wavDurationMilliseconds(audio)
+	var previousStart, previousEnd int64
+	for index, segment := range decoded {
+		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || segment.End > int64(duration) ||
+			(index > 0 && (segment.Start < previousStart || segment.End < previousEnd)) {
+			t.Fatalf("exact-chain segment[%d] = %#v, want finite nonnegative monotonic timestamps within %.3fms", index, segment, duration)
+		}
+		previousStart, previousEnd = segment.Start, segment.End
+	}
+	asrCalls := story.protocol.ASRCalls()
+	if len(asrCalls) == 0 || !bytes.Equal(asrCalls[len(asrCalls)-1].Audio, audio) || asrCalls[len(asrCalls)-1].MediaType != "audio/wav" {
+		t.Fatalf("exact-chain ASR calls = %#v, want exact TTS bytes with audio/wav", asrCalls)
+	}
+	if story.network.Calls() != 0 {
+		t.Fatalf("exact-chain cache reuse network calls = %d, want zero", story.network.Calls())
+	}
+	if entries, readErr := os.ReadDir(story.temp.directory); readErr != nil || len(entries) != 0 {
+		t.Fatalf("exact-chain staging entries = %v, read error = %v; want no owned temporary files", entries, readErr)
+	}
+	t.Logf("runtime proof TTS->ASR command chain: tts text=%q output=%s; asr input=%s transcript=%s segments=%s", phrase, ttsPath, ttsPath, transcriptPath, segmentsPath)
+	t.Logf("runtime proof exact-byte lineage ttsSHA256=%s asrSHA256=%s mediaType=audio/wav transcript=%q segmentBytes=%d durationMs=%.3f stdout=%q stderr=%q", ttsDigest(audio), ttsDigest(asrCalls[len(asrCalls)-1].Audio), phrase, len(segments), duration, asrStdout.String(), asrStderr.String())
+
+	var jsonOutput, jsonStderr bytes.Buffer
+	jsonInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+	})
+	jsonInputs.Input.Env = story.environment
+	jsonInputs.Input.WorkingDirectory = story.dir
+	jsonInputs.Input.Stdout = &jsonOutput
+	jsonInputs.Input.Stderr = &jsonStderr
+	if err := story.process.Execute(jsonInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(exact-chain ASR JSON) error = %v", err)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(jsonOutput.Bytes(), &response); err != nil {
+		t.Fatalf("decode exact-chain ASR JSON: %v\n%s", err, jsonOutput.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" ||
+		response.Outputs[0].MediaType == nil || *response.Outputs[0].MediaType != "text/plain" ||
+		response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("exact-chain ASR JSON outputs = %#v, want transcript/text/plain then segments/application/json", response.Outputs)
+	}
+	t.Logf("runtime proof ASR JSON output identities transcript=text/plain segments=application/json stdout=%s stderr=%q", jsonOutput.String(), jsonStderr.String())
+}
+
+func wavDurationMilliseconds(audio []byte) float64 {
+	dataSize := binary.LittleEndian.Uint32(audio[40:44])
+	blockAlign := binary.LittleEndian.Uint16(audio[32:34])
+	sampleRate := binary.LittleEndian.Uint32(audio[24:28])
+	return float64(dataSize/uint32(blockAlign)) * 1000 / float64(sampleRate)
 }
 
 func runTTSFailureMatrix(t *testing.T, story ttsStory, wantAudio []byte) {
@@ -530,10 +662,16 @@ type ttsProtocolCall struct {
 	Destination string
 }
 
+type asrInvocationCall struct {
+	Audio     []byte
+	MediaType string
+}
+
 type ttsPrivateProtocolFixture struct {
 	mu                sync.Mutex
 	audio             []byte
 	calls             []ttsProtocolCall
+	asrCalls          []asrInvocationCall
 	dials             int
 	invokes           int
 	closes            int
@@ -582,6 +720,34 @@ func (fixture *ttsPrivateProtocolFixture) Calls() []ttsProtocolCall {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	return append([]ttsProtocolCall(nil), fixture.calls...)
+}
+
+func (fixture *ttsPrivateProtocolFixture) ASRBackend(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return models.ASRBackendResponse{}, err
+	}
+	fixture.mu.Lock()
+	fixture.asrCalls = append(fixture.asrCalls, asrInvocationCall{
+		Audio: append([]byte(nil), request.Audio...), MediaType: request.MediaType,
+	})
+	fixture.mu.Unlock()
+	if !bytes.Equal(request.Audio, fixture.audioFor("Local AI works on this machine")) {
+		return models.ASRBackendResponse{}, errors.New("fixture-secret ASR received unexpected audio")
+	}
+	return models.ASRBackendResponse{
+		Text:     "Local AI works on this machine",
+		Segments: []models.ASRBackendSegment{{ID: 0, Start: 0, End: 10, Text: "Local AI works on this machine"}},
+	}, nil
+}
+
+func (fixture *ttsPrivateProtocolFixture) ASRCalls() []asrInvocationCall {
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	result := make([]asrInvocationCall, len(fixture.asrCalls))
+	for index, call := range fixture.asrCalls {
+		result[index] = asrInvocationCall{Audio: append([]byte(nil), call.Audio...), MediaType: call.MediaType}
+	}
+	return result
 }
 
 func (fixture *ttsPrivateProtocolFixture) CancellationStarted() <-chan struct{} {
