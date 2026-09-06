@@ -1,0 +1,240 @@
+{
+  "schemaVersion": "agent-factory.replay.v1",
+  "recordedAt": "2026-08-30T13:00:00Z",
+  "events": [
+    {
+      "id": "factory-event/run-started",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_REQUEST",
+      "context": {
+        "eventTime": "2026-08-30T13:00:00Z",
+        "sequence": 0,
+        "tick": 0
+      },
+      "payload": {
+        "factory": {
+          "name": "board-occupancy-resume",
+          "workTypes": [
+            {
+              "name": "idea",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "to-complete", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ],
+          "workers": [
+            {"name": "worker-a"}
+          ],
+          "workstations": [
+            {
+              "name": "process-idea",
+              "worker": "worker-a",
+              "inputs": [
+                {"workType": "idea", "state": "to-complete"}
+              ],
+              "outputs": [
+                {"workType": "idea", "state": "complete"}
+              ],
+              "onFailure": [
+                {"workType": "idea", "state": "failed"}
+              ]
+            }
+          ]
+        },
+        "recordedAt": "2026-08-30T13:00:00Z"
+      }
+    },
+    {
+      "id": "factory-event/initial-structure/0",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "INITIAL_STRUCTURE_REQUEST",
+      "context": {
+        "eventTime": "2026-08-30T13:00:00.001Z",
+        "sequence": 1,
+        "tick": 0
+      },
+      "payload": {
+        "factory": {
+          "name": "board-occupancy-resume",
+          "workTypes": [
+            {
+              "name": "idea",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "to-complete", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ],
+          "workers": [
+            {"name": "worker-a"}
+          ],
+          "workstations": [
+            {
+              "name": "process-idea",
+              "worker": "worker-a",
+              "inputs": [
+                {"workType": "idea", "state": "to-complete"}
+              ],
+              "outputs": [
+                {"workType": "idea", "state": "complete"}
+              ],
+              "onFailure": [
+                {"workType": "idea", "state": "failed"}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "factory-event/session-started",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "SESSION_STARTED",
+      "context": {
+        "eventTime": "2026-08-30T13:00:00.002Z",
+        "orchestratorKind": "PETRI",
+        "sequence": 2,
+        "sessionId": "~default",
+        "sessionSequence": 0,
+        "source": "runtime",
+        "tick": 0
+      },
+      "payload": {
+        "factoryId": "board-occupancy-resume",
+        "startedAt": "2026-08-30T13:00:00.002Z"
+      }
+    },
+    {
+      "id": "factory-event/factory-state-change/0/RUNNING",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "FACTORY_STATE_RESPONSE",
+      "context": {
+        "eventTime": "2026-08-30T13:00:00.003Z",
+        "sequence": 3,
+        "tick": 0
+      },
+      "payload": {
+        "previousState": "IDLE",
+        "state": "RUNNING"
+      }
+    },
+    {
+      "id": "factory-event/work-request/board-occupancy",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_REQUEST",
+      "context": {
+        "eventTime": "2026-08-30T13:01:00Z",
+        "requestId": "request-board-occupancy",
+        "sequence": 4,
+        "source": "external-submit",
+        "tick": 1,
+        "traceIds": [
+          "trace-current-terminal-after-move",
+          "trace-unaffected"
+        ],
+        "workIds": [
+          "idea-work-current-terminal-after-move",
+          "idea-work-unaffected"
+        ]
+      },
+      "payload": {
+        "source": "external-submit",
+        "type": "FACTORY_REQUEST_BATCH",
+        "relations": [],
+        "works": [
+          {
+            "name": "current-terminal-after-move",
+            "workId": "idea-work-current-terminal-after-move",
+            "requestId": "request-board-occupancy",
+            "workTypeName": "idea",
+            "traceId": "trace-current-terminal-after-move",
+            "state": {"name": "init", "type": "INITIAL"}
+          },
+          {
+            "name": "unaffected-work",
+            "workId": "idea-work-unaffected",
+            "requestId": "request-board-occupancy",
+            "workTypeName": "idea",
+            "traceId": "trace-unaffected",
+            "state": {"name": "init", "type": "INITIAL"}
+          }
+        ]
+      }
+    },
+    {
+      "id": "factory-event/work-state-change/idea-work-current-terminal-after-move/to-complete",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_STATE_CHANGE",
+      "context": {
+        "eventTime": "2026-08-30T13:02:00Z",
+        "requestId": "request-work-state-change",
+        "sequence": 5,
+        "source": "api",
+        "tick": 2,
+        "traceIds": ["trace-current-terminal-after-move"],
+        "workIds": ["idea-work-current-terminal-after-move"]
+      },
+      "payload": {
+        "fromPlaceId": "idea:init",
+        "fromState": "init",
+        "source": "api",
+        "toPlaceId": "idea:to-complete",
+        "toState": "to-complete",
+        "workId": "idea-work-current-terminal-after-move",
+        "workTypeName": "idea"
+      }
+    },
+    {
+      "id": "factory-event/dispatch-created/dispatch-current-terminal-after-move",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_REQUEST",
+      "context": {
+        "dispatchId": "dispatch-current-terminal-after-move",
+        "eventTime": "2026-08-30T13:03:00Z",
+        "sequence": 6,
+        "tick": 3,
+        "traceIds": ["trace-current-terminal-after-move"],
+        "workIds": ["idea-work-current-terminal-after-move"]
+      },
+      "payload": {
+        "transitionId": "process-idea",
+        "inputs": [
+          {"workId": "idea-work-current-terminal-after-move"}
+        ]
+      }
+    },
+    {
+      "id": "factory-event/dispatch-completed/dispatch-current-terminal-after-move",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_RESPONSE",
+      "context": {
+        "dispatchId": "dispatch-current-terminal-after-move",
+        "eventTime": "2026-08-30T13:04:00Z",
+        "sequence": 7,
+        "tick": 4,
+        "traceIds": ["trace-current-terminal-after-move"],
+        "workIds": ["idea-work-current-terminal-after-move"]
+      },
+      "payload": {
+        "durationMillis": 1000,
+        "outcome": "ACCEPTED",
+        "transitionId": "process-idea",
+        "output": "redacted",
+        "outputWork": [
+          {
+            "name": "current-terminal-after-move",
+            "workId": "idea-work-current-terminal-after-move",
+            "workTypeName": "idea",
+            "traceId": "trace-current-terminal-after-move",
+            "state": {"name": "complete", "type": "TERMINAL"}
+          }
+        ]
+      }
+    }
+  ]
+}

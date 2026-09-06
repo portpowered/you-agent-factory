@@ -839,18 +839,33 @@ func seedRestoredWork(
 	resourcePlaceIDs map[string]struct{},
 	excludedWorkIDs map[string]struct{},
 	toleratedWorkIDs map[string]struct{},
-) (map[string]struct{}, error) {
+) (map[string]struct{}, []restoredWorkPlacementReconciliation, error) {
 	seededWorkIDs := make(map[string]struct{})
 	if marking == nil || net == nil || restored == nil {
-		return seededWorkIDs, nil
+		return seededWorkIDs, nil, nil
 	}
 	items := restoredWorkItems(restored)
-	placements, err := restoredWorkPlacements(restored, items)
+	resolution, err := resolveRestoredWorkPlacements(restored, items)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := validateRestoredWorkState(restored, net, items, placements, resourcePlaceIDs, toleratedWorkIDs); err != nil {
-		return nil, err
+	if err := validateRestoredHistoricalMoveReferences(
+		resolution.historicalMovePlacements,
+		net,
+		items,
+		resourcePlaceIDs,
+	); err != nil {
+		return nil, nil, err
+	}
+	if err := validateRestoredWorkState(
+		restored,
+		net,
+		items,
+		resolution.placements,
+		resourcePlaceIDs,
+		toleratedWorkIDs,
+	); err != nil {
+		return nil, nil, err
 	}
 	requestIDs := restoredWorkRequestIDs(restored)
 	parentIDs := make(map[string]struct{})
@@ -867,7 +882,7 @@ func seedRestoredWork(
 			// not let the detached seed dispatch one tick before that hook.
 			continue
 		}
-		placeID, hasPlacement := placements[workID]
+		placeID, hasPlacement := resolution.placements[workID]
 		if !hasPlacement {
 			// WorkItemsByID is the durable historical index. Only current
 			// occupancy becomes a live runtime token.
@@ -885,10 +900,10 @@ func seedRestoredWork(
 			resourcePlaceIDs,
 		)
 		if !ok {
-			return nil, fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"restore Work %q at %q: placement cannot be represented by the current Factory topology",
 				workID,
-				placements[workID],
+				resolution.placements[workID],
 			)
 		}
 		marking.AddToken(token)
@@ -899,7 +914,7 @@ func seedRestoredWork(
 	for _, parentID := range sortedStringKeys(parentIDs) {
 		marking.CompleteParentChildRegistration(parentID)
 	}
-	return seededWorkIDs, nil
+	return seededWorkIDs, resolution.supersededHistoricalMoves, nil
 }
 
 // restoredWorkIDsWithRecordedDispatch returns the Work identities whose

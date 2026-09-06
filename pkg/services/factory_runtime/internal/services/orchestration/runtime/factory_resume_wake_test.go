@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -214,6 +215,139 @@ func TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement(t
 	}
 }
 
+func TestNew_RestoredCurrentOccupancySupersedesStaleWorkStateChange(t *testing.T) {
+	item := work.FactoryWorkItem{ID: "work-current-terminal-after-move", WorkTypeID: "task", State: "done"}
+	history := []interfaces.FactoryWorldWorkStateChangeRecord{
+		{
+			WorkID: item.ID, WorkTypeName: "task", FromState: "done", ToState: "init",
+			FromPlaceID: "task:done", ToPlaceID: "task:init", Source: work.WorkStateChangeSourceAPI, Sequence: 1,
+		},
+		{
+			WorkID: item.ID, WorkTypeName: "task", FromState: "done", ToState: "init",
+			FromPlaceID: "task:done", ToPlaceID: "task:init", Source: work.WorkStateChangeSourceAPI, Sequence: 2,
+		},
+	}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{item.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{item.ID: history},
+	}
+	logger := &recordingLogger{}
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withLogger(logger),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:done") {
+		t.Fatalf("restored Work marking = %#v, want task:done from current occupancy", snapshot.Marking.PlaceTokens)
+	}
+	if markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:init") {
+		t.Fatalf("stale move history created a second Work placement: %#v", snapshot.Marking.PlaceTokens)
+	}
+	if got := restored.WorkStateChangesByWorkID[item.ID]; !reflect.DeepEqual(got, history) {
+		t.Fatalf("move history = %#v, want unchanged %#v", got, history)
+	}
+	warnings := restoredPlacementWarnings(logger)
+	if len(warnings) != 1 {
+		t.Fatalf("placement reconciliation warnings = %d, want one: %#v", len(warnings), logger.entries)
+	}
+	warning := warnings[0]
+	if warning.fields["work_id"] != item.ID || warning.fields["authoritative_place_id"] != "task:done" ||
+		warning.fields["historical_move_place_id"] != "task:init" ||
+		warning.fields["disposition"] != restoredHistoricalMoveSupersededDisposition {
+		t.Fatalf("placement reconciliation fields = %#v, want safe authoritative/history disposition", warning.fields)
+	}
+}
+
+func TestNew_RestoredCurrentOccupancyMatchingWorkStateChangeNeedsNoReconciliation(t *testing.T) {
+	item := work.FactoryWorkItem{ID: "work-current-done", WorkTypeID: "task", State: "done"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{item.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			item.ID: {{WorkID: item.ID, ToPlaceID: "task:done", Sequence: 1}},
+		},
+	}
+	logger := &recordingLogger{}
+	_, err := newTestFactory(withNet(buildSimpleNet()), withLogger(logger), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := len(restoredPlacementWarnings(logger)); got != 0 {
+		t.Fatalf("matching current/history reconciliation warnings = %d, want none", got)
+	}
+}
+
+func TestNew_RestoresLatestWorkStateChangeWhenOccupancyIsAbsent(t *testing.T) {
+	item := work.FactoryWorkItem{ID: "work-history-fallback", WorkTypeID: "task", State: "done"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID:      map[string]work.FactoryWorkItem{item.ID: item},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			item.ID: {
+				{WorkID: item.ID, ToPlaceID: "task:init", Sequence: 1},
+				{WorkID: item.ID, ToPlaceID: "task:done", Sequence: 2},
+			},
+		},
+	}
+	f, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:done") ||
+		markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:init") {
+		t.Fatalf("fallback Work marking = %#v, want exactly task:done", snapshot.Marking.PlaceTokens)
+	}
+}
+
+func TestNew_RestoredActiveDispatchSupersedesStaleWorkStateChange(t *testing.T) {
+	item := work.FactoryWorkItem{ID: "work-active-after-move", WorkTypeID: "task", State: "init"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID:      map[string]work.FactoryWorkItem{item.ID: item},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-active-after-move": {
+				DispatchID: "dispatch-active-after-move", WorkItemIDs: []string{item.ID},
+				Inputs: []interfaces.WorkstationInput{{TokenID: item.ID, PlaceID: "task:init", WorkItem: &item}},
+			},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			item.ID: {{WorkID: item.ID, ToPlaceID: "task:done", Sequence: 1}},
+		},
+	}
+	logger := &recordingLogger{}
+	f, err := newTestFactory(withNet(buildSimpleNet()), withLogger(logger), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:init") ||
+		markingContainsWorkAtPlace(&snapshot.Marking, item.ID, "task:done") {
+		t.Fatalf("active-dispatch Work marking = %#v, want exactly task:init", snapshot.Marking.PlaceTokens)
+	}
+	if got := len(restoredPlacementWarnings(logger)); got != 1 {
+		t.Fatalf("active-dispatch reconciliation warnings = %d, want one", got)
+	}
+}
+
 func TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement(t *testing.T) {
 	cronWork := work.FactoryWorkItem{
 		ID: "completed-cron-with-recovered-place", WorkTypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState,
@@ -285,17 +419,29 @@ func TestNew_RejectsConflictingCurrentWorkPlacements(t *testing.T) {
 		WorkItemsByID: map[string]work.FactoryWorkItem{workItem.ID: workItem},
 		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
 			"task:init": {PlaceID: "task:init", WorkItemIDs: []string{workItem.ID}},
-		},
-		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
-			workItem.ID: {{
-				WorkID: workItem.ID, WorkTypeName: "task", ToState: "done",
-				FromPlaceID: "task:init", ToPlaceID: "task:done", Source: work.WorkStateChangeSourceAPI,
-			}},
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{workItem.ID}},
 		},
 	}
 	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
 	if err == nil || !strings.Contains(err.Error(), "conflicting current places") {
 		t.Fatalf("New error = %v, want fail-closed conflicting-current-places error", err)
+	}
+}
+
+func TestNew_RejectsInvalidSupersededWorkStateChangeReference(t *testing.T) {
+	item := work.FactoryWorkItem{ID: "work-invalid-stale-move", WorkTypeID: "task", State: "done"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{item.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			item.ID: {{WorkID: item.ID, ToPlaceID: "task:not-in-topology", Sequence: 1}},
+		},
+	}
+	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err == nil || !strings.Contains(err.Error(), `Work "work-invalid-stale-move" references place "task:not-in-topology"`) {
+		t.Fatalf("New error = %v, want invalid superseded historical place", err)
 	}
 }
 
@@ -499,6 +645,19 @@ func restoreWarnings(logger *recordingLogger) []logEntry {
 	warnings := make([]logEntry, 0)
 	for _, entry := range logger.entries {
 		if entry.level == "warn" && strings.Contains(entry.message, "skipping completed automation Work") {
+			warnings = append(warnings, entry)
+		}
+	}
+	return warnings
+}
+
+func restoredPlacementWarnings(logger *recordingLogger) []logEntry {
+	if logger == nil {
+		return nil
+	}
+	warnings := make([]logEntry, 0)
+	for _, entry := range logger.entries {
+		if entry.level == "warn" && strings.Contains(entry.message, "historical move superseded by authoritative placement") {
 			warnings = append(warnings, entry)
 		}
 	}

@@ -652,38 +652,11 @@ func restoredWorkPlacements(
 	restored *interfaces.FactoryWorldState,
 	items map[string]work.FactoryWorkItem,
 ) (map[string]string, error) {
-	placements := make(map[string]string)
-	if restored == nil {
-		return placements, nil
-	}
-	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID); err != nil {
-		return nil, err
-	}
-	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches); err != nil {
-		return nil, err
-	}
-	if err := addRestoredWorkStateChangePlacements(placements, restored.WorkStateChangesByWorkID); err != nil {
-		return nil, err
-	}
-	completedDispatchPlacements, err := restoredCompletedDispatchPlacements(restored.CompletedDispatches, items)
+	resolution, err := resolveRestoredWorkPlacements(restored, items)
 	if err != nil {
 		return nil, err
 	}
-	for _, workID := range sortedRestoredKeys(completedDispatchPlacements) {
-		placeID := completedDispatchPlacements[workID]
-		// Completed dispatch output is a historical snapshot. A later canonical
-		// Work state change or current occupancy is the authoritative placement
-		// when the output describes an intermediate state.
-		if _, exists := placements[workID]; !exists {
-			placements[workID] = placeID
-		}
-	}
-	if restored.PlaceOccupancyByID == nil {
-		if err := addRestoredItemPlacements(placements, items); err != nil {
-			return nil, err
-		}
-	}
-	return placements, nil
+	return resolution.placements, nil
 }
 
 func restoredDispatchWorkID(input interfaces.WorkstationInput) (string, bool) {

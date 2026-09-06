@@ -1060,6 +1060,63 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 	}
 }
 
+func TestReconstructFactoryWorldState_CurrentOccupancySupersedesHistoricalMoveWithoutRewritingHistory(t *testing.T) {
+	t0 := time.Date(2026, 8, 30, 13, 0, 0, 0, time.UTC)
+	item := work.FactoryWorkItem{
+		ID: "work-current-terminal-after-move", WorkTypeID: "task", DisplayName: "Current terminal Work",
+		TraceID: "trace-current-terminal-after-move", State: "init",
+	}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), item),
+		workStateChangeEvent(
+			2, t0.Add(2*time.Second), item.ID, "init", "review", "task:init", "task:review",
+			factoryapi.WorkStateChangeSourceAPI,
+		),
+		workstationRequestEvent(3, t0.Add(3*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID: "dispatch-current-terminal-after-move", TransitionID: "t-review",
+			Workstation: interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID: item.ID, PlaceID: "task:review",
+				WorkItem: &work.FactoryWorkItem{
+					ID: item.ID, WorkTypeID: item.WorkTypeID, DisplayName: item.DisplayName,
+					TraceID: item.TraceID, State: "review",
+				},
+			}},
+		}),
+		workstationResponseEvent(4, t0.Add(4*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID: "dispatch-current-terminal-after-move", TransitionID: "t-review",
+			Workstation: interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Result:      interfaces.WorkstationResult{Outcome: "ACCEPTED"},
+			Outputs: []interfaces.WorkstationOutput{{
+				Type: string(interfaces.MutationMove), TokenID: item.ID, ToPlace: "task:complete",
+				WorkItem: &work.FactoryWorkItem{
+					ID: item.ID, WorkTypeID: item.WorkTypeID, DisplayName: item.DisplayName,
+					TraceID: item.TraceID, State: "complete",
+				},
+			}},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 4)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if got := state.PlaceOccupancyByID["task:complete"].WorkItemIDs; len(got) != 1 || got[0] != item.ID {
+		t.Fatalf("task:complete occupancy = %#v, want current terminal Work", got)
+	}
+	if got := state.PlaceOccupancyByID["task:review"].WorkItemIDs; len(got) != 0 {
+		t.Fatalf("task:review occupancy = %#v, want empty after dispatch response", got)
+	}
+	if got := state.WorkItemsByID[item.ID]; got.WorkTypeID+":"+got.State != "task:complete" {
+		t.Fatalf("current Work = %#v, want task:complete", got)
+	}
+	assertWorkStateChangeRecord(t, state.WorkStateChangesByWorkID[item.ID], interfaces.FactoryWorldWorkStateChangeRecord{
+		WorkID: item.ID, WorkTypeName: "task", FromState: "init", ToState: "review",
+		Source: work.WorkStateChangeSourceAPI, Tick: 2,
+	})
+}
+
 func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata(t *testing.T) {
 	t0 := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
 	workstationKind := factoryapi.WorkstationKindCron

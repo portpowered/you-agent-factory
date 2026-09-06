@@ -1,0 +1,32 @@
+{
+  "name": "board-occupancy-repro",
+  "workTypes": [
+    {
+      "name": "idea",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "to-complete", "type": "PROCESSING" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "worker-a" }
+  ],
+  "workstations": [
+    {
+      "name": "process-idea",
+      "worker": "worker-a",
+      "inputs": [
+        { "workType": "idea", "state": "to-complete" }
+      ],
+      "outputs": [
+        { "workType": "idea", "state": "complete" }
+      ],
+      "onFailure": [
+        { "workType": "idea", "state": "failed" }
+      ]
+    }
+  ]
+}

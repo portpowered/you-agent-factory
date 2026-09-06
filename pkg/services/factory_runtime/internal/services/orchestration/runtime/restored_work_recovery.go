@@ -42,7 +42,7 @@ func restoreRestoredWorkMarking(
 			excludedWorkIDs[workID] = struct{}{}
 		}
 	}
-	seededWorkIDs, err := seedRestoredWork(
+	seededWorkIDs, supersededHistoricalMoves, err := seedRestoredWork(
 		marking,
 		cfg.net,
 		cfg.restoredWorldState,
@@ -54,6 +54,7 @@ func restoreRestoredWorkMarking(
 	if err != nil {
 		return nil, err
 	}
+	logRestoredWorkPlacementReconciliations(cfg, supersededHistoricalMoves)
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
 }
@@ -163,6 +164,79 @@ func cloneRestoredWorkIDSet(source map[string]struct{}) map[string]struct{} {
 	return clone
 }
 
+type restoredWorkPlacementResolution struct {
+	placements                map[string]string
+	historicalMovePlacements  map[string]string
+	supersededHistoricalMoves []restoredWorkPlacementReconciliation
+}
+
+type restoredWorkPlacementReconciliation struct {
+	workID              string
+	authoritativePlace  string
+	historicalMovePlace string
+}
+
+func resolveRestoredWorkPlacements(
+	restored *interfaces.FactoryWorldState,
+	items map[string]work.FactoryWorkItem,
+) (restoredWorkPlacementResolution, error) {
+	resolution := restoredWorkPlacementResolution{placements: make(map[string]string)}
+	if restored == nil {
+		return resolution, nil
+	}
+	if err := addRestoredOccupancyPlacements(resolution.placements, restored.PlaceOccupancyByID); err != nil {
+		return restoredWorkPlacementResolution{}, err
+	}
+	if err := addRestoredDispatchPlacements(resolution.placements, restored.ActiveDispatches); err != nil {
+		return restoredWorkPlacementResolution{}, err
+	}
+	authoritativePlacements := cloneRestoredPlacements(resolution.placements)
+	resolution.historicalMovePlacements = latestRestoredWorkStateChangePlacements(restored.WorkStateChangesByWorkID)
+	if err := addRestoredWorkStateChangePlacements(resolution.placements, restored.WorkStateChangesByWorkID); err != nil {
+		return restoredWorkPlacementResolution{}, err
+	}
+	for _, workID := range sortedRestoredKeys(resolution.historicalMovePlacements) {
+		historicalPlace := resolution.historicalMovePlacements[workID]
+		if authoritativePlace, exists := authoritativePlacements[workID]; exists && authoritativePlace != historicalPlace {
+			resolution.supersededHistoricalMoves = append(
+				resolution.supersededHistoricalMoves,
+				restoredWorkPlacementReconciliation{
+					workID:              workID,
+					authoritativePlace:  authoritativePlace,
+					historicalMovePlace: historicalPlace,
+				},
+			)
+		}
+	}
+	completedDispatchPlacements, err := restoredCompletedDispatchPlacements(restored.CompletedDispatches, items)
+	if err != nil {
+		return restoredWorkPlacementResolution{}, err
+	}
+	for _, workID := range sortedRestoredKeys(completedDispatchPlacements) {
+		placeID := completedDispatchPlacements[workID]
+		// Completed dispatch output is a historical snapshot. A later canonical
+		// Work state change or current occupancy is the authoritative placement
+		// when the output describes an intermediate state.
+		if _, exists := resolution.placements[workID]; !exists {
+			resolution.placements[workID] = placeID
+		}
+	}
+	if restored.PlaceOccupancyByID == nil {
+		if err := addRestoredItemPlacements(resolution.placements, items); err != nil {
+			return restoredWorkPlacementResolution{}, err
+		}
+	}
+	return resolution, nil
+}
+
+func cloneRestoredPlacements(source map[string]string) map[string]string {
+	clone := make(map[string]string, len(source))
+	for workID, placeID := range source {
+		clone[workID] = placeID
+	}
+	return clone
+}
+
 func addRestoredOccupancyPlacements(
 	placements map[string]string,
 	occupancy map[string]interfaces.FactoryPlaceOccupancy,
@@ -249,16 +323,72 @@ func addRestoredWorkStateChangePlacements(
 	changes map[string][]interfaces.FactoryWorldWorkStateChangeRecord,
 ) error {
 	for _, workID := range sortedRestoredKeys(changes) {
-		records := changes[workID]
-		for index := len(records) - 1; index >= 0; index-- {
-			placeID := strings.TrimSpace(records[index].ToPlaceID)
-			if placeID == "" {
-				continue
-			}
-			if err := addRestoredPlacement(placements, workID, placeID); err != nil {
-				return err
-			}
-			break
+		placeID := latestRestoredWorkStateChangePlace(changes[workID])
+		if placeID == "" {
+			continue
+		}
+		// Work-state changes are immutable audit history. A current occupancy or
+		// active dispatch already supplied the authoritative placement, so an
+		// older move must not become a second current placement.
+		if _, exists := placements[workID]; exists {
+			continue
+		}
+		placements[workID] = placeID
+	}
+	return nil
+}
+
+func latestRestoredWorkStateChangePlacements(
+	changes map[string][]interfaces.FactoryWorldWorkStateChangeRecord,
+) map[string]string {
+	placements := make(map[string]string, len(changes))
+	for workID, records := range changes {
+		if placeID := latestRestoredWorkStateChangePlace(records); placeID != "" {
+			placements[workID] = placeID
+		}
+	}
+	return placements
+}
+
+func latestRestoredWorkStateChangePlace(
+	records []interfaces.FactoryWorldWorkStateChangeRecord,
+) string {
+	for index := len(records) - 1; index >= 0; index-- {
+		if placeID := strings.TrimSpace(records[index].ToPlaceID); placeID != "" {
+			return placeID
+		}
+	}
+	return ""
+}
+
+func validateRestoredHistoricalMoveReferences(
+	placements map[string]string,
+	net *state.Net,
+	items map[string]work.FactoryWorkItem,
+	resourcePlaceIDs map[string]struct{},
+) error {
+	for _, workID := range sortedRestoredKeys(placements) {
+		placeID := placements[workID]
+		item, exists := items[workID]
+		if !exists {
+			return fmt.Errorf("restore Work board: placement references unknown Work %q", workID)
+		}
+		if item.ID != workID {
+			return fmt.Errorf(
+				"restore Work board: Work index key %q does not match Work identity %q",
+				workID,
+				item.ID,
+			)
+		}
+		if _, isResourcePlace := resourcePlaceIDs[placeID]; isResourcePlace {
+			return fmt.Errorf("restore Work board: Work %q references resource place %q", workID, placeID)
+		}
+		if place, exists := net.Places[placeID]; !exists || place == nil {
+			return fmt.Errorf(
+				"restore Work board: Work %q references place %q, which is not present in the current Factory topology",
+				workID,
+				placeID,
+			)
 		}
 	}
 	return nil
@@ -393,6 +523,29 @@ func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) 
 			"recording_id", strings.TrimSpace(cfg.recordingID),
 			"work_id", workID,
 			"disposition", restoredLegacyAutomationDisposition,
+		)
+	}
+}
+
+const restoredHistoricalMoveSupersededDisposition = "historical_move_superseded_by_authoritative_placement"
+
+func logRestoredWorkPlacementReconciliations(
+	cfg *runtimeConfig,
+	reconciliations []restoredWorkPlacementReconciliation,
+) {
+	if cfg == nil || len(reconciliations) == 0 {
+		return
+	}
+	logger := logging.EnsureLogger(cfg.logger)
+	for _, reconciliation := range reconciliations {
+		logger.Warn(
+			"restore Factory Runtime Work board: historical move superseded by authoritative placement",
+			"session_id", sessionIDFromFactoryConfig(cfg),
+			"recording_id", strings.TrimSpace(cfg.recordingID),
+			"work_id", reconciliation.workID,
+			"authoritative_place_id", reconciliation.authoritativePlace,
+			"historical_move_place_id", reconciliation.historicalMovePlace,
+			"disposition", restoredHistoricalMoveSupersededDisposition,
 		)
 	}
 }
