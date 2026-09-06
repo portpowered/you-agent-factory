@@ -127,7 +127,7 @@ func TestFileWriterCatalogReportsMalformedTailWithValidPrefix(t *testing.T) {
 	)
 	root := t.TempDir()
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := NewFileWriter(storage, root)
+	writer, err := NewFileWriterWithDirectoryReader(storage, root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestFileWriterLoadsContinuationLineageAppendedAfterExecutionTerminal(t *tes
 		sessionID   = "worker-post-terminal-lineage"
 	)
 	root := t.TempDir()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestFileWriterLoadsContinuationLineageAppendedAfterExecutionTerminal(t *tes
 	}, 3)
 	persistWorkerRecoveryPrefix(t, writer, recordingID, sessionID, opening, terminal, lineage)
 
-	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	reopened, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestWorkerRecordingRecoveryAfterRestartPreservesDurablePrefix(t *testing.T)
 		sessionID   = "worker-interrupted-recovery"
 	)
 	root := t.TempDir()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestWorkerRecordingRecoveryAfterRestartPreservesDurablePrefix(t *testing.T)
 	output := mustRecord(t, workerOutputAppend(topic, sessionID, 1, "message-before-stop"), 2)
 	persistWorkerRecoveryPrefix(t, writer, recordingID, sessionID, opening, output)
 
-	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	reopened, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,13 +309,13 @@ func TestWorkerRecordingRecoveryDerivesCompleteWithoutStoredCompletionMetadata(t
 	)
 	root := t.TempDir()
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	writer, err := NewFileWriter(storage, root)
+	writer, err := NewFileWriterWithDirectoryReader(storage, root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fileWriter, ok := writer.(*FileWriter)
 	if !ok {
-		t.Fatal("NewFileWriter() did not return FileWriter")
+		t.Fatal("NewFileWriterWithDirectoryReader() did not return FileWriter")
 	}
 	topic := events.Topic("worker-session/" + sessionID + "/events")
 	snapshot := recordings.WorkerRecordingSnapshot{
@@ -337,7 +337,7 @@ func TestWorkerRecordingRecoveryDerivesCompleteWithoutStoredCompletionMetadata(t
 		t.Fatalf("seed durable terminal snapshot: %v", err)
 	}
 
-	reopened, err := NewFileWriter(storage, root)
+	reopened, err := NewFileWriterWithDirectoryReader(storage, root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestWorkerRecordingRecoveryDerivesCompleteWithoutStoredCompletionMetadata(t
 func TestWorkerCaptureAbortPersistsIncompleteSnapshot(t *testing.T) {
 	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), recordingRoot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func startCompletedWorkerCapture(t *testing.T) (recordings.WorkerSessionRecordin
 	t.Helper()
 	eventService := newRecordingEventsService()
 	recordingRoot := t.TempDir()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), recordingRoot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +435,7 @@ func startCompletedWorkerCapture(t *testing.T) (recordings.WorkerSessionRecordin
 
 func loadWorkerRecording(t *testing.T, recordingRoot, recordingID string) recordings.WorkerRecordingSnapshot {
 	t.Helper()
-	reopenedWriter, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	reopenedWriter, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), recordingRoot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func loadWorkerRecording(t *testing.T, recordingRoot, recordingID string) record
 
 func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T) {
 	eventService := newRecordingEventsService()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,7 +500,7 @@ func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T
 
 func TestWorkerCaptureCloseCancellationIsNotCompletion(t *testing.T) {
 	eventService := newRecordingEventsService()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +542,7 @@ func TestWorkerRecordingDurableLossWithAuthoritativeTerminalReopensAsDegraded(t 
 	)
 	topic := events.Topic("worker-session/worker-degraded/events")
 	recordingRoot := t.TempDir()
-	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	writer, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), recordingRoot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +563,7 @@ func TestWorkerRecordingDurableLossWithAuthoritativeTerminalReopensAsDegraded(t 
 		t.Fatal("FileWriter does not expose the failure writer contract")
 	}
 
-	reopened, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	reopened, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), recordingRoot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +617,7 @@ func TestWorkerCapturePostOpeningPersistenceFailureRetainsTerminalTruth(t *testi
 
 func newPostOpeningFailureService(t *testing.T, eventService events.Service, root string) recordings.WorkerSessionRecordingService {
 	t.Helper()
-	baseWriter, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), root)
+	baseWriter, err := NewFileWriterWithDirectoryReader(platformreplay.NewLocal(runtime.GOOS), root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

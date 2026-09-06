@@ -21,15 +21,6 @@ func NewWorkerSessionRecorder(
 	return workerrecordingwire.New(eventService, writer, logger)
 }
 
-// NewWorkerRecordingFileWriter constructs the default durable Worker sidecar
-// writer from the policy-free replay storage effect selected by Wire.
-func NewWorkerRecordingFileWriter(
-	storage platformreplay.Storage,
-	root string,
-) (recordings.WorkerRecordingWriter, error) {
-	return workerrecordingwire.NewFileWriter(storage, root)
-}
-
 // NewWorkerRecordingFileWriterWithDirectoryReader constructs the default
 // durable Worker sidecar with the directory-listing effect selected by Wire.
 func NewWorkerRecordingFileWriterWithDirectoryReader(

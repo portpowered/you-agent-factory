@@ -20,12 +20,6 @@ func New(
 	return workerrecording.New(eventService, writer, logger)
 }
 
-// NewFileWriter selects the durable local sidecar writer used by production
-// composition when no external Worker-recording writer override is supplied.
-func NewFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingWriter, error) {
-	return workerrecording.NewFileWriter(storage, root)
-}
-
 // NewFileWriterWithDirectoryReader binds the catalog to the exact directory
 // listing effect selected by the composition boundary.
 func NewFileWriterWithDirectoryReader(

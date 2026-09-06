@@ -48,16 +48,8 @@ var _ recordings.WorkerRecordingReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingHistoryReader = (*FileWriter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*FileWriter)(nil)
 
-// NewFileWriter constructs the default local durable Worker-record writer.
-// The storage port owns atomic replacement and append/sync filesystem
-// mechanics; construction itself does not touch the configured home.
-func NewFileWriter(storage platformreplay.Storage, root string) (recordings.WorkerRecordingWriter, error) {
-	return NewFileWriterWithDirectoryReader(storage, root, nil)
-}
-
 // NewFileWriterWithDirectoryReader constructs the durable Worker sidecar with
-// the exact directory-listing effect selected by Wire. The plain constructor
-// remains useful for callers that only load or append a known artifact.
+// the exact directory-listing effect selected by Wire.
 func NewFileWriterWithDirectoryReader(
 	storage platformreplay.Storage,
 	root string,

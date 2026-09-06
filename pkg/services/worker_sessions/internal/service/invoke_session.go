@@ -657,10 +657,6 @@ func durableRecordDelivery(record events.Record, terminalReplay bool, workerSess
 	return observationRecordDelivery(record, terminalReplay, workerSessionID)
 }
 
-func durableWorkerStreamGeneration(projection recordings.WorkerRecordingProjection) string {
-	return durablehistory.WorkerStreamGenerationForIdentity(projection.WorkerSessionID)
-}
-
 func durableWorkerStreamGenerationForIdentity(workerSessionID string) string {
 	return durablehistory.WorkerStreamGenerationForIdentity(workerSessionID)
 }

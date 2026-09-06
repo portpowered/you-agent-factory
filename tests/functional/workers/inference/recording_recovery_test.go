@@ -168,9 +168,9 @@ func newWSRFT009DurableWriter(
 	storage platformreplay.Storage,
 ) *wsrFT009DurableWriter {
 	t.Helper()
-	delegate, err := recordingswire.NewWorkerRecordingFileWriter(storage, sidecarRoot)
+	delegate, err := recordingswire.NewWorkerRecordingFileWriterWithDirectoryReader(storage, sidecarRoot, nil)
 	if err != nil {
-		t.Fatalf("NewWorkerRecordingFileWriter(): %v", err)
+		t.Fatalf("NewWorkerRecordingFileWriterWithDirectoryReader(): %v", err)
 	}
 	reader, ok := delegate.(recordings.WorkerRecordingReader)
 	if !ok {
