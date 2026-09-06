@@ -97,3 +97,29 @@ func TestConfinedVibeVoiceTokenizerRejectsSymlinkEscape(t *testing.T) {
 		t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want symlink escape rejection", err)
 	}
 }
+
+func TestConfinedVibeVoiceTokenizerRejectsInjectedResolvedEscape(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	modelFile := filepath.Join(root, "model.gguf")
+	tokenizerFile := filepath.Join(root, vibeVoiceTokenizerName)
+	if err := os.WriteFile(modelFile, []byte("model"), 0o600); err != nil {
+		t.Fatalf("write model fixture: %v", err)
+	}
+	if err := os.WriteFile(tokenizerFile, []byte("tokenizer"), 0o600); err != nil {
+		t.Fatalf("write tokenizer fixture: %v", err)
+	}
+	outside := filepath.Join(filepath.Dir(root), "outside", vibeVoiceTokenizerName)
+	resolve := func(path string) (string, error) {
+		if filepath.Clean(path) == filepath.Clean(tokenizerFile) {
+			return outside, nil
+		}
+		return path, nil
+	}
+
+	_, err := confinedVibeVoiceTokenizer(modelFile, []string{modelFile, tokenizerFile}, resolve)
+	if !errors.Is(err, errVibeVoiceLayout) {
+		t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want injected resolved escape rejection", err)
+	}
+}
