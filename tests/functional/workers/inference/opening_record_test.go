@@ -381,6 +381,17 @@ func assertProviderWorkerSessionHistory(t *testing.T, events []factoryapi.Worker
 	if opening.WorkerSessionId == "" || len(opening.WorkIds) == 0 {
 		t.Fatalf("%s Worker Session opening correlation = %#v, want Worker Session and Work identities", provider, opening)
 	}
+	assertProviderWorkerSessionFrames(t, records, opening, provider, providerSessionExpected)
+}
+
+func assertProviderWorkerSessionFrames(
+	t *testing.T,
+	records []factoryapi.WorkerSessionEvent,
+	opening factoryapi.WorkerSessionEvent,
+	provider string,
+	providerSessionExpected bool,
+) {
+	t.Helper()
 	providerBindingIndex := -1
 	firstProviderOutputIndex := -1
 	terminalIndex := -1
