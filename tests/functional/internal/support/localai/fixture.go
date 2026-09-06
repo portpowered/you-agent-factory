@@ -114,6 +114,7 @@ func New(options Options) (*Fixture, error) {
 	fixture.backend = &backendServer{options: options}
 	fixture.server = grpc.NewServer()
 	localaiproto.RegisterBackendServer(fixture.server, fixture.backend)
+	localaiproto.RegisterBackendServerAtProductionPath(fixture.server, fixture.backend)
 	go fixture.serve()
 	<-fixture.serveReady
 	return fixture, nil
