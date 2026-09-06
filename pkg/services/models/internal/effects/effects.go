@@ -85,6 +85,7 @@ type ProcessDependencies struct {
 	Logger                     *zap.Logger
 	Clock                      func() time.Time
 	PullMetrics                PullMetricsRecorder
+	RuntimeEvidence            RuntimeEvidenceRecorder
 	HostLogger                 HostDiagnosticLogger
 	HostMetrics                HostMetricsRecorder
 	LocalHooks                 LocalRuntimeHooks

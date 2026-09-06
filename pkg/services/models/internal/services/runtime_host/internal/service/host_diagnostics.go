@@ -16,8 +16,9 @@ const (
 )
 
 type hostDiagnostics struct {
-	logger  modelsHostDiagnosticLogger
-	metrics modelsHostMetricsRecorder
+	logger   modelsHostDiagnosticLogger
+	metrics  modelsHostMetricsRecorder
+	evidence modelseffects.RuntimeEvidenceRecorder
 }
 
 type modelsHostDiagnosticLogger interface {
@@ -78,8 +79,12 @@ func (d hostDiagnostics) logLoadFailed(
 	err error,
 	elapsed time.Duration,
 ) {
-	fields := safeRuntimeDiagnosticFields(identity, err, elapsed)
+	runtimeErr := modelseffects.WrapRuntimeFailure(
+		runtimeStageForHostFailure(class), err,
+	)
+	fields := safeRuntimeDiagnosticFields(identity, runtimeErr, elapsed)
 	d.warn("model host load failed", fields)
+	d.recordRuntimeStage(class, runtimeErr, elapsed)
 	metricFields := identityDiagnosticFields(identity)
 	metricFields["failure_class"] = string(class)
 	d.record(metricLoadFailure, metricFields)
@@ -96,11 +101,31 @@ func (d hostDiagnostics) logProcessCrash(
 	err error,
 	elapsed time.Duration,
 ) {
-	fields := safeRuntimeDiagnosticFields(identity, err, elapsed)
+	runtimeErr := modelseffects.WrapRuntimeFailure(
+		runtimeStageForHostFailure(hostFailureClassProcessCrash), err,
+	)
+	fields := safeRuntimeDiagnosticFields(identity, runtimeErr, elapsed)
 	d.warn("model host process crashed", fields)
+	d.recordRuntimeStage(hostFailureClassProcessCrash, runtimeErr, elapsed)
 	metricFields := identityDiagnosticFields(identity)
 	metricFields["failure_class"] = string(hostFailureClassProcessCrash)
 	d.record(metricProcessCrash, metricFields)
+}
+
+func (d hostDiagnostics) recordRuntimeStage(
+	class hostFailureClass,
+	err error,
+	elapsed time.Duration,
+) {
+	if err == nil {
+		return
+	}
+	modelseffects.RecordRuntimeEvidenceStage(
+		d.evidence,
+		runtimeStageForHostFailure(class),
+		err,
+		elapsed,
+	)
 }
 
 func safeRuntimeDiagnosticFields(

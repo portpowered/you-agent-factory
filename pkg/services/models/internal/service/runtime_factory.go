@@ -113,6 +113,9 @@ func NewRoot(
 	if process.Logger == nil {
 		process.Logger = zap.NewNop()
 	}
+	process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(
+		process.RuntimeEvidence,
+	)
 	if process.Clock == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
@@ -498,9 +501,20 @@ func (o *Root) InvokeModel(
 			result = joinedInvocationFailureResult(result)
 			err = modelseffects.WrapRuntimeFailure(stage, err)
 		}
+		elapsed := joinedInvocationElapsed(o, started)
+		if o != nil && (err == nil || !runtimeHostEvidenceAlreadyRecorded(err)) {
+			modelseffects.RecordRuntimeEvidenceStage(
+				o.process.RuntimeEvidence, stage, err, elapsed,
+			)
+		}
+		if o != nil {
+			modelseffects.RecordRuntimeEvidenceTerminal(
+				o.process.RuntimeEvidence, stage, err, elapsed,
+			)
+		}
 		joinedInvocationRecord(
 			o, modelName, operationName, invocation, stage, err,
-			joinedInvocationElapsed(o, started),
+			elapsed,
 		)
 		return result.Clone(), err
 	}
@@ -519,6 +533,21 @@ func (o *Root) InvokeModel(
 	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan)
 	stage = invokeStage
 	return finish(result, joinedInvocationContextError(ctx, err))
+}
+
+func runtimeHostEvidenceAlreadyRecorded(err error) bool {
+	stage, _, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok {
+		return false
+	}
+	switch stage {
+	case modelseffects.RuntimeStageBackendExtract,
+		modelseffects.RuntimeStageBackendStart,
+		modelseffects.RuntimeStageProtocolLoad:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateJoinedRoot(o *Root) error {

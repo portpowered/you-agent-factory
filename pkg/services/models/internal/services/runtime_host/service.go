@@ -17,6 +17,7 @@ type Options struct {
 	ProtocolNegotiator   modelseffects.HostProtocolNegotiator
 	CompatibilityChecker modelseffects.HostCompatibilityChecker
 	ResolveSymlinks      modelseffects.HostResolveSymlinks
+	RuntimeEvidence      modelseffects.RuntimeEvidenceRecorder
 	IdleUnloadAfter      time.Duration
 	MaxLoadedRuntimes    int
 }

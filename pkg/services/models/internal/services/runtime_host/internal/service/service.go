@@ -61,7 +61,10 @@ func New(
 	if len(options) > 0 {
 		hostOptions = options[0]
 	}
-	diagnostics := hostDiagnostics{logger: hostLogger, metrics: hostMetrics}
+	diagnostics := hostDiagnostics{
+		logger: hostLogger, metrics: hostMetrics,
+		evidence: hostOptions.RuntimeEvidence,
+	}
 	supervisor := supervisorSettings{
 		ReadinessTimeout:     DefaultReadinessTimeout,
 		HealthCheckInterval:  DefaultHealthCheckInterval,
@@ -556,16 +559,16 @@ func (s *service) validatePinnedBackend(
 	platform := s.supervisor.Platform
 	if strings.TrimSpace(platform.OperatingSystem) == "" ||
 		strings.TrimSpace(platform.Architecture) == "" {
-		return hostReadinessFailure(
+		return s.pinnedBackendFailure(
 			identity,
-			models.HostFailureClassUnsupportedPlatform,
+			hostFailureClassUnsupportedPlatform,
 			models.ErrHostUnsupportedPlatform,
 		)
 	}
 	if s.supervisor.CompatibilityChecker == nil {
-		return hostReadinessFailure(
+		return s.pinnedBackendFailure(
 			identity,
-			models.HostFailureClassUnsupportedPlatform,
+			hostFailureClassUnsupportedPlatform,
 			models.ErrHostUnsupportedPlatform,
 		)
 	}
@@ -575,20 +578,30 @@ func (s *service) validatePinnedBackend(
 		Revision:  identity.Revision,
 		Platform:  platform,
 	}); err != nil {
-		return hostReadinessFailure(
+		return s.pinnedBackendFailure(
 			identity,
-			models.HostFailureClassUnsupportedPlatform,
+			hostFailureClassUnsupportedPlatform,
 			errors.Join(models.ErrHostUnsupportedPlatform, err),
 		)
 	}
 	if s.supervisor.ProtocolNegotiator == nil {
-		return hostReadinessFailure(
+		return s.pinnedBackendFailure(
 			identity,
-			models.HostFailureClassProtocol,
+			hostFailureClassProtocol,
 			models.ErrHostProtocolIncompatible,
 		)
 	}
 	return nil
+}
+
+func (s *service) pinnedBackendFailure(
+	identity supervisedIdentity,
+	class hostFailureClass,
+	cause error,
+) error {
+	failure := hostReadinessFailure(identity, publicHostFailureClass(class), cause)
+	s.supervisor.Diagnostics.recordRuntimeStage(class, failure, 0)
+	return failure
 }
 
 func hostReadinessFailure(
@@ -607,8 +620,19 @@ func hostReadinessFailure(
 			LifecycleState: models.LifecycleStateInstalled,
 			FailureClass:   class,
 		},
-		Cause: cause,
+		Cause: modelseffects.WrapRuntimeFailure(
+			runtimeStageForPublicHostFailure(class), cause,
+		),
 	}
+}
+
+func runtimeStageForPublicHostFailure(
+	class models.HostFailureClass,
+) modelseffects.RuntimeStage {
+	if class == models.HostFailureClassProtocol {
+		return modelseffects.RuntimeStageProtocolLoad
+	}
+	return modelseffects.RuntimeStageBackendStart
 }
 
 func hostSnapshotFromAssets(

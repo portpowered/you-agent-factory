@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -43,7 +45,63 @@ const (
 	modelAssetResponseHeaderTimeout = 30 * time.Second
 	modelHostHTTPTimeout            = 2 * time.Second
 	modelRuntimeHTTPTimeout         = 5 * time.Minute
+	modelRuntimeEvidenceEnvironment = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
 )
+
+type modelRuntimeEvidenceFileRecorder struct {
+	mu   sync.Mutex
+	path string
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
+	record modelswire.RuntimeEvidenceRecord,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return
+	}
+	payload = append(payload, '\n')
+
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	file, err := os.OpenFile(
+		recorder.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600,
+	)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_ = file.Chmod(0o600)
+	_, _ = file.Write(payload)
+}
+
+func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, error) {
+	path := strings.TrimSpace(os.Getenv(modelRuntimeEvidenceEnvironment))
+	if path == "" {
+		return nil, nil
+	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("%s must be an absolute path", modelRuntimeEvidenceEnvironment)
+	}
+	path = filepath.Clean(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open model runtime evidence path: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("set model runtime evidence permissions: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return nil, fmt.Errorf("close model runtime evidence path: %w", err)
+	}
+	return modelswire.NewOrderedRuntimeEvidenceRecorder(
+		&modelRuntimeEvidenceFileRecorder{path: path},
+	), nil
+}
 
 // TODO: this should be decomposed, we should inject these independently.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -181,8 +239,12 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
+	runtimeEvidence, err := provideModelRuntimeEvidenceRecorder()
+	if err != nil {
+		return nil, fmt.Errorf("construct Models runtime evidence recorder: %w", err)
+	}
 
-	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -222,6 +284,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		adaptModelInvocationBackend(edges.ModelInvocationBackend),
 		adaptModelASRBackend(edges.ModelASRBackend),
 		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
+		runtimeEvidence,
 		edges.ModelResolveHuggingFaceRevision,
 	)
 }

@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -199,6 +202,206 @@ type RuntimeFailureDiagnostic struct {
 	Outcome        string              `json:"outcome"`
 	DurationMillis int64               `json:"duration_millis"`
 	CauseSHA256    string              `json:"cause_sha256,omitempty"`
+}
+
+const (
+	// RuntimeEvidenceKindStage identifies an observation of one bounded
+	// runtime stage. A failed stage is followed by one terminal record by the
+	// Models invocation owner.
+	RuntimeEvidenceKindStage = "STAGE"
+	// RuntimeEvidenceKindTerminal identifies the one terminal decision for a
+	// diagnostic invocation.
+	RuntimeEvidenceKindTerminal     = "TERMINAL"
+	RuntimeEvidenceOutcomeCompleted = "COMPLETED"
+	RuntimeEvidenceOutcomeFailed    = "FAILED"
+)
+
+// RuntimeEvidenceRecord is the private, ordered representation shared by the
+// Models runtime and its integration witness. It deliberately contains only
+// bounded enums, elapsed time, and a cause digest; callers never publish a
+// raw error, endpoint, path, prompt, token, or media payload through it.
+type RuntimeEvidenceRecord struct {
+	Sequence       uint64              `json:"sequence"`
+	Kind           string              `json:"kind"`
+	Stage          RuntimeStage        `json:"stage,omitempty"`
+	Outcome        string              `json:"outcome"`
+	Class          RuntimeFailureClass `json:"failure_class,omitempty"`
+	DurationMillis int64               `json:"duration_millis"`
+	CauseSHA256    string              `json:"cause_sha256,omitempty"`
+}
+
+// RuntimeEvidenceRecorder accepts one private runtime observation. The
+// recorder is optional: a nil recorder preserves normal product behavior.
+type RuntimeEvidenceRecorder interface {
+	RecordRuntimeEvidence(RuntimeEvidenceRecord)
+}
+
+// orderedRuntimeEvidenceRecorder assigns a process-local order to otherwise
+// detached records before forwarding them to the owner sink. Sequence is
+// deliberately assigned at this boundary so concurrent runtime components do
+// not race on evidence ordering.
+type orderedRuntimeEvidenceRecorder struct {
+	mu               sync.Mutex
+	next             uint64
+	terminalRecorded bool
+	recorder         RuntimeEvidenceRecorder
+}
+
+// NewOrderedRuntimeEvidenceRecorder wraps an optional sink with validation and
+// sequence assignment. Passing nil returns nil so normal runtime construction
+// remains unchanged when integration evidence is not requested.
+func NewOrderedRuntimeEvidenceRecorder(
+	recorder RuntimeEvidenceRecorder,
+) RuntimeEvidenceRecorder {
+	if isNilRuntimeEvidenceRecorder(recorder) {
+		return nil
+	}
+	if ordered, ok := recorder.(*orderedRuntimeEvidenceRecorder); ok {
+		return ordered
+	}
+	return &orderedRuntimeEvidenceRecorder{recorder: recorder}
+}
+
+func (recorder *orderedRuntimeEvidenceRecorder) RecordRuntimeEvidence(
+	record RuntimeEvidenceRecord,
+) {
+	if recorder == nil || isNilRuntimeEvidenceRecorder(recorder.recorder) {
+		return
+	}
+	normalized, ok := normalizeRuntimeEvidenceRecord(record)
+	if !ok {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if normalized.Kind == RuntimeEvidenceKindTerminal {
+		if recorder.terminalRecorded {
+			return
+		}
+		recorder.terminalRecorded = true
+	}
+	recorder.next++
+	normalized.Sequence = recorder.next
+	recorder.recorder.RecordRuntimeEvidence(normalized)
+}
+
+// RecordRuntimeEvidenceStage emits one bounded stage observation. For a
+// failure, an existing lower-level classification is retained through the
+// normal error chain; otherwise the supplied stage is used as the fallback.
+func RecordRuntimeEvidenceStage(
+	recorder RuntimeEvidenceRecorder,
+	stage RuntimeStage,
+	err error,
+	elapsed time.Duration,
+) {
+	if isNilRuntimeEvidenceRecorder(recorder) {
+		return
+	}
+	if err == nil {
+		recorder.RecordRuntimeEvidence(RuntimeEvidenceRecord{
+			Kind:           RuntimeEvidenceKindStage,
+			Stage:          normalizeRuntimeStage(stage),
+			Outcome:        RuntimeEvidenceOutcomeCompleted,
+			DurationMillis: durationMillis(elapsed),
+		})
+		return
+	}
+	diagnostic := ProjectRuntimeFailure(WrapRuntimeFailure(stage, err), elapsed)
+	recorder.RecordRuntimeEvidence(runtimeEvidenceRecordFromDiagnostic(
+		RuntimeEvidenceKindStage,
+		diagnostic,
+	))
+}
+
+// RecordRuntimeEvidenceTerminal emits the single bounded terminal decision
+// owned by one Models invocation. The invocation owner calls this exactly once
+// after it has classified the final result.
+func RecordRuntimeEvidenceTerminal(
+	recorder RuntimeEvidenceRecorder,
+	stage RuntimeStage,
+	err error,
+	elapsed time.Duration,
+) {
+	if isNilRuntimeEvidenceRecorder(recorder) {
+		return
+	}
+	if err == nil {
+		recorder.RecordRuntimeEvidence(RuntimeEvidenceRecord{
+			Kind:           RuntimeEvidenceKindTerminal,
+			Stage:          normalizeRuntimeStage(stage),
+			Outcome:        RuntimeEvidenceOutcomeCompleted,
+			DurationMillis: durationMillis(elapsed),
+		})
+		return
+	}
+	diagnostic := ProjectRuntimeFailure(WrapRuntimeFailure(stage, err), elapsed)
+	recorder.RecordRuntimeEvidence(runtimeEvidenceRecordFromDiagnostic(
+		RuntimeEvidenceKindTerminal,
+		diagnostic,
+	))
+}
+
+func runtimeEvidenceRecordFromDiagnostic(
+	kind string,
+	diagnostic RuntimeFailureDiagnostic,
+) RuntimeEvidenceRecord {
+	return RuntimeEvidenceRecord{
+		Kind:           kind,
+		Stage:          diagnostic.Stage,
+		Outcome:        diagnostic.Outcome,
+		Class:          diagnostic.Class,
+		DurationMillis: diagnostic.DurationMillis,
+		CauseSHA256:    diagnostic.CauseSHA256,
+	}
+}
+
+func normalizeRuntimeEvidenceRecord(
+	record RuntimeEvidenceRecord,
+) (RuntimeEvidenceRecord, bool) {
+	if record.Kind != RuntimeEvidenceKindStage && record.Kind != RuntimeEvidenceKindTerminal {
+		return RuntimeEvidenceRecord{}, false
+	}
+	if !isRuntimeStage(record.Stage) {
+		return RuntimeEvidenceRecord{}, false
+	}
+	if record.Outcome != RuntimeEvidenceOutcomeCompleted && record.Outcome != RuntimeEvidenceOutcomeFailed {
+		return RuntimeEvidenceRecord{}, false
+	}
+	if record.DurationMillis < 0 {
+		record.DurationMillis = 0
+	}
+	if record.Outcome == RuntimeEvidenceOutcomeCompleted {
+		record.Class = ""
+		record.CauseSHA256 = ""
+		return record, true
+	}
+	if !isRuntimeFailureClass(record.Class) || !validRuntimeCauseSHA256(record.CauseSHA256) {
+		return RuntimeEvidenceRecord{}, false
+	}
+	record.CauseSHA256 = strings.ToLower(record.CauseSHA256)
+	return record, true
+}
+
+func validRuntimeCauseSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size
+}
+
+func isNilRuntimeEvidenceRecorder(recorder RuntimeEvidenceRecorder) bool {
+	if recorder == nil {
+		return true
+	}
+	value := reflect.ValueOf(recorder)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map,
+		reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // ProjectRuntimeFailure creates a bounded projection. An unclassified error

@@ -199,7 +199,7 @@ func (r *supervisedRuntime) startLoad(
 			loadDone,
 			identity,
 			hostFailureClassProcessCrash,
-			fmt.Errorf("%w: %v", models.ErrHostProcessCrash, err),
+			fmt.Errorf("%w: %w", models.ErrHostProcessCrash, err),
 		)
 	}
 	if process == nil {
@@ -343,7 +343,7 @@ func processExitError(waitErr error) error {
 	if waitErr == nil {
 		return models.ErrHostProcessCrash
 	}
-	return fmt.Errorf("%w: %v", models.ErrHostProcessCrash, waitErr)
+	return fmt.Errorf("%w: %w", models.ErrHostProcessCrash, waitErr)
 }
 
 func (r *supervisedRuntime) checkReadiness(
