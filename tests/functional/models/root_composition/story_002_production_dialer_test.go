@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -100,7 +101,7 @@ func TestModelsUnavailableProductionDialerCleansAndRecovers(t *testing.T) {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
-	if err := jsonUnmarshalFunctional(stderr.String(), &diagnostic); err != nil {
+	if err := jsonUnmarshalFunctional(strings.TrimPrefix(stderr.String(), controlledTTSAssetEstimate), &diagnostic); err != nil {
 		t.Fatalf("decode unavailable production dialer diagnostic: %v\nstderr=%q", err, stderr.String())
 	}
 	if diagnostic.Code != "MODEL_BACKEND_NOT_READY" || diagnostic.Message != "TTS backend is unavailable" {
@@ -153,8 +154,7 @@ func setupProductionDialerTTSScenario(
 	if err := os.MkdirAll(tempDirectory, 0o755); err != nil {
 		t.Fatalf("create TTS runtime temp directory: %v", err)
 	}
-	writeGenericBuiltinTTSCache(t, home)
-	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 
 	temp := &ttsTempEffects{directory: tempDirectory}
@@ -223,8 +223,8 @@ func executeProductionDialerTTS(
 	if err := scenario.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(production TTS %q) error = %v\nstdout=%q\nstderr=%q", text, err, stdout.String(), stderr.String())
 	}
-	if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.Len() != 0 {
-		t.Fatalf("production TTS streams = stdout:%q stderr:%q, want status-only success", stdout.String(), stderr.String())
+	if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.String() != controlledTTSAssetEstimate {
+		t.Fatalf("production TTS streams = stdout:%q stderr:%q, want first-use status and controlled asset estimate", stdout.String(), stderr.String())
 	}
 	audio, err := os.ReadFile(outputPath)
 	if err != nil {

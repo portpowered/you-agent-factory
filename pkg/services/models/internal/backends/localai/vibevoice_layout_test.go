@@ -4,113 +4,155 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 )
 
-func TestConfinedVibeVoiceTokenizerAcceptsOnlyOneVerifiedLayoutEntry(t *testing.T) {
+func TestConfinedVibeVoiceRolePathsAcceptsExactManifestLayout(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	modelFile := filepath.Join(root, "model.gguf")
-	tokenizerFile := filepath.Join(root, vibeVoiceTokenizerName)
-	tests := []struct {
-		name      string
-		files     []string
-		want      string
-		wantError bool
-	}{
-		{
-			name:  "unique absolute entry",
-			files: []string{modelFile, tokenizerFile},
-			want:  tokenizerFile,
-		},
-		{
-			name:  "unique relative entry",
-			files: []string{modelFile, vibeVoiceTokenizerName},
-			want:  tokenizerFile,
-		},
-		{
-			name:      "missing",
-			files:     []string{modelFile},
-			wantError: true,
-		},
-		{
-			name:      "ambiguous",
-			files:     []string{modelFile, tokenizerFile, filepath.Join(root, "voices", vibeVoiceTokenizerName)},
-			wantError: true,
-		},
-		{
-			name:      "absolute escape",
-			files:     []string{modelFile, filepath.Join(filepath.Dir(root), "outside", vibeVoiceTokenizerName)},
-			wantError: true,
-		},
-		{
-			name:      "traversal escape",
-			files:     []string{modelFile, filepath.FromSlash("../" + vibeVoiceTokenizerName)},
-			wantError: true,
-		},
-		{
-			name:      "malformed blank",
-			files:     []string{modelFile, ""},
-			wantError: true,
-		},
-		{
-			name:      "wrong tokenizer name",
-			files:     []string{modelFile, filepath.Join(root, "tokenizer.json")},
-			wantError: true,
-		},
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
 	}
-	for _, testCase := range tests {
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	absoluteFiles := make([]string, 0, len(definition.Artifacts))
+	relativeFiles := make([]string, 0, len(definition.Artifacts))
+	for _, artifact := range definition.Artifacts {
+		path := filepath.Join(root, artifact.Path)
+		if err := os.WriteFile(path, []byte(artifact.Role), 0o600); err != nil {
+			t.Fatalf("write %s fixture: %v", artifact.Role, err)
+		}
+		absoluteFiles = append(absoluteFiles, path)
+		relativeFiles = append(relativeFiles, artifact.Path)
+	}
+
+	for _, testCase := range []struct {
+		name  string
+		files []string
+	}{
+		{name: "absolute entries", files: absoluteFiles},
+		{name: "relative entries", files: relativeFiles},
+	} {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			got, err := confinedVibeVoiceTokenizer(modelFile, testCase.files, nil)
-			if testCase.wantError {
-				if !errors.Is(err, errVibeVoiceLayout) {
-					t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want typed layout error", err)
-				}
-				return
+			paths, err := confinedVibeVoiceRolePaths(modelFile, testCase.files, definition, filepath.EvalSymlinks)
+			if err != nil {
+				t.Fatalf("confinedVibeVoiceRolePaths: %v", err)
 			}
-			if err != nil || got != testCase.want {
-				t.Fatalf("confinedVibeVoiceTokenizer() = %q, %v, want %q", got, err, testCase.want)
+			want := map[string]string{}
+			for _, artifact := range definition.Artifacts {
+				want[artifact.Role] = filepath.Join(root, artifact.Path)
+			}
+			if !reflect.DeepEqual(paths, want) {
+				t.Fatalf("role paths = %#v, want %#v", paths, want)
 			}
 		})
 	}
 }
 
-func TestConfinedVibeVoiceTokenizerRejectsSymlinkEscape(t *testing.T) {
+func TestConfinedVibeVoiceRolePathsRejectsMissingDuplicateMismatchAndTraversal(t *testing.T) {
 	t.Parallel()
 
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
 	root := t.TempDir()
-	outside := t.TempDir()
-	outsideTokenizer := filepath.Join(outside, vibeVoiceTokenizerName)
-	if err := os.WriteFile(outsideTokenizer, []byte("outside"), 0o600); err != nil {
-		t.Fatalf("write outside tokenizer fixture: %v", err)
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	validFiles := []string{
+		modelFile,
+		filepath.Join(root, definition.Artifacts[1].Path),
+		filepath.Join(root, definition.Artifacts[2].Path),
 	}
-	linkedTokenizer := filepath.Join(root, vibeVoiceTokenizerName)
-	if err := os.Symlink(outsideTokenizer, linkedTokenizer); err != nil {
-		t.Skipf("symlink creation unavailable: %v", err)
+	tests := []struct {
+		name  string
+		files []string
+	}{
+		{name: "missing", files: validFiles[:2]},
+		{name: "duplicate", files: []string{validFiles[0], validFiles[1], validFiles[1]}},
+		{name: "mismatched role", files: []string{validFiles[0], validFiles[1], filepath.Join(root, "voice.bin")}},
+		{name: "traversal", files: []string{validFiles[0], validFiles[1], filepath.Join(root, "..", definition.Artifacts[2].Path)}},
 	}
-	_, err := confinedVibeVoiceTokenizer(filepath.Join(root, "model.gguf"), []string{
-		filepath.Join(root, "model.gguf"), linkedTokenizer,
-	}, filepath.EvalSymlinks)
-	if !errors.Is(err, errVibeVoiceLayout) {
-		t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want symlink escape rejection", err)
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := confinedVibeVoiceRolePaths(modelFile, testCase.files, definition, nil)
+			if !errors.Is(err, errVibeVoiceLayout) {
+				t.Fatalf("confinedVibeVoiceRolePaths error = %v, want typed layout error", err)
+			}
+		})
 	}
 }
 
-func TestConfinedVibeVoiceTokenizerRejectsInjectedResolvedEscape(t *testing.T) {
+func TestConfinedVibeVoiceRolePathsRejectsSymlinkEscape(t *testing.T) {
 	t.Parallel()
 
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
 	root := t.TempDir()
-	modelFile := filepath.Join(root, "model.gguf")
-	tokenizerFile := filepath.Join(root, vibeVoiceTokenizerName)
+	outside := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(root, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(root, definition.Artifacts[2].Path)
 	if err := os.WriteFile(modelFile, []byte("model"), 0o600); err != nil {
 		t.Fatalf("write model fixture: %v", err)
 	}
 	if err := os.WriteFile(tokenizerFile, []byte("tokenizer"), 0o600); err != nil {
 		t.Fatalf("write tokenizer fixture: %v", err)
 	}
-	outside := filepath.Join(filepath.Dir(root), "outside", vibeVoiceTokenizerName)
+	outsideVoice := filepath.Join(outside, definition.Artifacts[2].Path)
+	if err := os.WriteFile(outsideVoice, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write outside voice fixture: %v", err)
+	}
+	if err := os.Symlink(outsideVoice, voiceFile); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+
+	_, err = confinedVibeVoiceRolePaths(modelFile, []string{modelFile, tokenizerFile, voiceFile}, definition, filepath.EvalSymlinks)
+	if !errors.Is(err, errVibeVoiceLayout) {
+		t.Fatalf("confinedVibeVoiceRolePaths error = %v, want symlink escape rejection", err)
+	}
+}
+
+func TestConfinedVibeVoiceRolePathsRejectsInjectedResolvedEscape(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(root, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(root, definition.Artifacts[2].Path)
+	for _, path := range []string{modelFile, tokenizerFile, voiceFile} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o600); err != nil {
+			t.Fatalf("write fixture %s: %v", path, err)
+		}
+	}
+	outside := filepath.Join(filepath.Dir(root), "outside", definition.Artifacts[1].Path)
 	resolve := func(path string) (string, error) {
 		if filepath.Clean(path) == filepath.Clean(tokenizerFile) {
 			return outside, nil
@@ -118,8 +160,8 @@ func TestConfinedVibeVoiceTokenizerRejectsInjectedResolvedEscape(t *testing.T) {
 		return path, nil
 	}
 
-	_, err := confinedVibeVoiceTokenizer(modelFile, []string{modelFile, tokenizerFile}, resolve)
+	_, err = confinedVibeVoiceRolePaths(modelFile, []string{modelFile, tokenizerFile, voiceFile}, definition, resolve)
 	if !errors.Is(err, errVibeVoiceLayout) {
-		t.Fatalf("confinedVibeVoiceTokenizer() error = %v, want injected resolved escape rejection", err)
+		t.Fatalf("confinedVibeVoiceRolePaths error = %v, want injected resolved escape rejection", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -54,6 +55,7 @@ type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (Factory
 type DurableExecution struct {
 	Service         durableexecution.Service
 	ACPIntegrations []operatorsettings.ACPIntegration
+	OperatorModels  map[string]models.ModelOverlay
 }
 
 type DurableExecutionFactory func(

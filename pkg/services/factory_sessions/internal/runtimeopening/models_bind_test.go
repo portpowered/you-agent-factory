@@ -223,6 +223,7 @@ func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 		fake,
 		"/cache/models",
 		func() *models.RuntimeConfig { return runtimeConfig },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("bindModelsRuntimeScope() error = %v, want nil", err)
@@ -392,6 +393,7 @@ func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *te
 		root,
 		"/cache/models",
 		func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("bindModelsRuntimeScope() error = %v, want nil", err)

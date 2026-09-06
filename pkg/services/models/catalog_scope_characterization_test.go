@@ -436,7 +436,7 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		},
 		{
 			name:      "tts",
-			source:    "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187",
+			source:    "hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9",
 			backend:   "localai-vibevoice",
 			operation: models.OperationTTS,
 		},

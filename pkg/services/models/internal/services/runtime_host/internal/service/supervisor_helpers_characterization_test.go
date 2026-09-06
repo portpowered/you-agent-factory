@@ -65,7 +65,7 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 	inspection := cacheInspection{
 		CachePath: `C:\models\tts\revision`,
 		ObservedArtifacts: []models.AssetArtifact{
-			{Name: "model.gguf"}, {Name: "tokenizer.gguf"},
+			{Name: "model.gguf"}, {Name: "tokenizer.gguf"}, {Name: "voice-en-Carter_man.gguf"},
 		},
 		BackendRequired: true,
 		BackendFiles:    []string{`C:\models\backend\vibevoice.zip`},
@@ -77,9 +77,10 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 	wantFiles := []string{
 		filepath.Join(inspection.CachePath, "model.gguf"),
 		filepath.Join(inspection.CachePath, "tokenizer.gguf"),
+		filepath.Join(inspection.CachePath, "voice-en-Carter_man.gguf"),
 	}
 	if spec.ModelPath != wantFiles[0] || len(spec.ModelFiles) != len(wantFiles) ||
-		spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] {
+		spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] || spec.ModelFiles[2] != wantFiles[2] {
 		t.Fatalf("TTS model layout = path %q files %#v, want path %q files %#v", spec.ModelPath, spec.ModelFiles, wantFiles[0], wantFiles)
 	}
 }

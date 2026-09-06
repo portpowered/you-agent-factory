@@ -12,6 +12,7 @@ import (
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	grpcgo "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -311,27 +312,38 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 	}
 }
 
-func TestPinnedGRPCHostProtocolNegotiatorSerializesOneConfinedVibeVoiceTokenizerOption(t *testing.T) {
+func TestPinnedGRPCHostProtocolNegotiatorSerializesConfinedVibeVoiceRoleOptions(t *testing.T) {
 	t.Parallel()
 
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
 	connection := &recordingGRPCConnection{}
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 	modelRoot := t.TempDir()
-	modelFile := filepath.Join(modelRoot, "model.gguf")
-	tokenizerFile := filepath.Join(modelRoot, "tokenizer.gguf")
-	_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+	modelFile := filepath.Join(modelRoot, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(modelRoot, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(modelRoot, definition.Artifacts[2].Path)
+	_, err = negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         "localai-vibevoice",
 		ModelName:       models.BuiltInModelNameTTS,
+		Revision:        definition.Publication.Revision,
 		ModelPath:       modelFile,
-		ModelFiles:      []string{modelFile, tokenizerFile},
+		ModelFiles:      []string{modelFile, tokenizerFile, voiceFile},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
 	}
-	if !equalStrings(connection.loadRequest.GetOptions(), []string{"tokenizer=" + tokenizerFile}) {
-		t.Fatalf("VibeVoice options = %#v, want one confined tokenizer option", connection.loadRequest.GetOptions())
+	wantOptions := []string{"tokenizer=" + tokenizerFile, "voice=" + voiceFile}
+	if !equalStrings(connection.loadRequest.GetOptions(), wantOptions) {
+		t.Fatalf("VibeVoice options = %#v, want confined tokenizer and voice options", connection.loadRequest.GetOptions())
 	}
 
 	expected := appendStringField(nil, 1, models.BuiltInModelNameTTS)
@@ -339,6 +351,7 @@ func TestPinnedGRPCHostProtocolNegotiatorSerializesOneConfinedVibeVoiceTokenizer
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	expected = appendStringField(expected, 62, "tokenizer="+tokenizerFile)
+	expected = appendStringField(expected, 62, "voice="+voiceFile)
 	if !bytes.Equal(connection.loadPayload, expected) {
 		t.Fatalf("LoadModel wire bytes = %x, want exact pinned bytes %x", connection.loadPayload, expected)
 	}
@@ -347,17 +360,25 @@ func TestPinnedGRPCHostProtocolNegotiatorSerializesOneConfinedVibeVoiceTokenizer
 func TestPinnedGRPCHostProtocolNegotiatorRejectsInvalidVibeVoiceLayoutBeforeLoadRPC(t *testing.T) {
 	t.Parallel()
 
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
 	modelRoot := t.TempDir()
-	modelFile := filepath.Join(modelRoot, "model.gguf")
-	tokenizerFile := filepath.Join(modelRoot, "tokenizer.gguf")
+	modelFile := filepath.Join(modelRoot, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(modelRoot, definition.Artifacts[1].Path)
 	for _, testCase := range []struct {
 		name  string
 		files []string
 	}{
 		{name: "missing", files: nil},
-		{name: "ambiguous", files: []string{modelFile, tokenizerFile, filepath.Join("models", "tts", "voices", "tokenizer.gguf")}},
-		{name: "traversal", files: []string{modelFile, filepath.Join(modelRoot, "..", "tokenizer.gguf")}},
-		{name: "absolute escape", files: []string{modelFile, filepath.Join(filepath.Dir(modelRoot), "outside", "tokenizer.gguf")}},
+		{name: "ambiguous", files: []string{modelFile, tokenizerFile, tokenizerFile}},
+		{name: "traversal", files: []string{modelFile, tokenizerFile, filepath.Join(modelRoot, "..", definition.Artifacts[2].Path)}},
+		{name: "absolute escape", files: []string{modelFile, tokenizerFile, filepath.Join(filepath.Dir(modelRoot), "outside", definition.Artifacts[2].Path)}},
 		{name: "malformed", files: []string{modelFile, ""}},
 	} {
 		testCase := testCase
@@ -369,14 +390,15 @@ func TestPinnedGRPCHostProtocolNegotiatorRejectsInvalidVibeVoiceLayoutBeforeLoad
 				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 				Backend:         "localai-vibevoice",
 				ModelName:       models.BuiltInModelNameTTS,
+				Revision:        definition.Publication.Revision,
 				ModelPath:       modelFile,
 				ModelFiles:      testCase.files,
 			})
 			if !errors.Is(err, models.ErrHostProtocolIncompatible) {
 				t.Fatalf("Negotiate() error = %v, want typed protocol incompatibility", err)
 			}
-			if strings.Contains(err.Error(), "tokenizer.gguf") {
-				t.Fatalf("layout error leaked a path or tokenizer name: %v", err)
+			if strings.Contains(err.Error(), definition.Artifacts[1].Path) || strings.Contains(err.Error(), definition.Artifacts[2].Path) {
+				t.Fatalf("layout error leaked a path or role artifact name: %v", err)
 			}
 			if !equalStrings(connection.methods, []string{localAIHealthMethod}) || connection.closed != 1 {
 				t.Fatalf("invalid layout transport facts = methods %#v closed %d, want health only and one close", connection.methods, connection.closed)

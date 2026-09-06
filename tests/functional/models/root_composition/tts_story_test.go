@@ -39,10 +39,36 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	assertTTSReady(t, story)
 	wantAudio := localai.AudioBytes()
 	runGenericTTS(t, story, wantAudio)
+	assertTTSRoleBundleReads(t, story)
 	runAliasTTS(t, story, wantAudio)
 	assertEquivalentTTSRequests(t, story.protocol.Calls(), story.temp.directory)
 	runTTSFailureMatrix(t, story, wantAudio)
 	assertTTSIsolationAndRelease(t, story)
+}
+
+func assertTTSRoleBundleReads(t *testing.T, story ttsStory) {
+	t.Helper()
+	paths := story.assetTrace.snapshot()
+	observed := make([]string, 0, 3)
+	for _, role := range []string{
+		"vibevoice-realtime-0.5B-q8_0.gguf",
+		"tokenizer.gguf",
+		"voice-en-Carter_man.gguf",
+	} {
+		want := "open:" + filepath.Join(story.home, "tts-role-bundle", role)
+		found := false
+		for _, path := range paths {
+			if path == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("TTS role %q was not observed in controlled asset reads; reads=%v", role, paths)
+		}
+		observed = append(observed, role)
+	}
+	t.Logf("controlled TTS role bundle source files opened: %v", observed)
 }
 
 func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(t *testing.T) {
@@ -86,8 +112,8 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 				t.Fatalf("%s audio digest = %s, want %s", scenario.name, ttsDigest(got), ttsDigest(want))
 			}
 			assertSemanticTTSAudio(t, got, scenario.name+" output")
-			if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.Len() != 0 {
-				t.Fatalf("%s streams = stdout %q stderr %q, want isolated status-only output", scenario.name, stdout.String(), stderr.String())
+			if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.String() != controlledTTSAssetEstimate {
+				t.Fatalf("%s streams = stdout %q stderr %q, want first-use status and controlled asset estimate", scenario.name, stdout.String(), stderr.String())
 			}
 			if got := story.generic.Calls(); got != 0 {
 				t.Fatalf("%s generic TTS backend calls = %d, want zero", scenario.name, got)
@@ -158,8 +184,12 @@ type ttsStory struct {
 	protocol          *ttsPrivateProtocolFixture
 	generic           *ttsGenericBackendTrap
 	host              *ttsHostLauncher
+	network           *rejectingModelAssetHTTP
+	assetTrace        *functionalModelAssetTrace
 	outputFailurePath string
 }
+
+const controlledTTSAssetEstimate = "models asset estimate modelName=\"tts\" backendBytes=0 modelBytes=82 totalBytes=82\n"
 
 func setupTTSStory(t *testing.T) ttsStory {
 	t.Helper()
@@ -178,11 +208,11 @@ func setupTTSStory(t *testing.T) ttsStory {
 		t.Fatalf("create TTS runtime temp directory: %v", err)
 	}
 	temp := &ttsTempEffects{directory: ttsTempDirectory}
-	writeGenericBuiltinTTSCache(t, home)
-	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	selection := pinnedTTSBackendSelection()
-	assetFiles := functionalModelAssetFileSystem{home: home}
+	assetTrace := &functionalModelAssetTrace{}
+	assetFiles := functionalModelAssetFileSystem{home: home, trace: assetTrace}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostProtocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
@@ -192,21 +222,22 @@ func setupTTSStory(t *testing.T) ttsStory {
 	host := &ttsHostLauncher{endpoint: modelServer.URL}
 	outputFailurePath := filepath.Join(dir, "forced-output-failure.wav")
 	process := functionalBuildProcess(t, serviceedges.Edges{
-		ModelAssetHTTPClient:           rejectingNetwork,
-		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
-		ModelAssetInspectPath:          assetFiles.Stat,
-		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
-		ModelAssetResolveEnvironment:   func(string) string { return "" },
-		ModelAssetWriteFile:            assetFiles.WriteFile,
-		ModelAssetRenamePath:           assetFiles.Rename,
-		ModelAssetReadFile:             assetFiles.ReadFile,
-		ModelAssetReadDirectory:        assetFiles.ReadDir,
-		ModelAssetCreateFile:           assetFiles.Create,
-		ModelAssetOpenFile:             assetFiles.Open,
-		ModelHostProcessLauncher:       host,
-		ModelHostProtocolNegotiator:    hostProtocol,
-		ModelHostCompatibilityChecker:  compatibility,
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		ModelAssetHTTPClient:               rejectingNetwork,
+		ModelAssetMakeDirectories:          assetFiles.MkdirAll,
+		ModelAssetInspectPath:              assetFiles.Stat,
+		ModelAssetResolveHomeDirectory:     assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:       func(string) string { return "" },
+		ModelAssetWriteFile:                assetFiles.WriteFile,
+		ModelAssetRenamePath:               assetFiles.Rename,
+		ModelAssetReadFile:                 assetFiles.ReadFile,
+		ModelAssetReadDirectory:            assetFiles.ReadDir,
+		ModelAssetCreateFile:               assetFiles.Create,
+		ModelAssetOpenFile:                 assetFiles.Open,
+		ModelHostProcessLauncher:           host,
+		ModelHostProtocolNegotiator:        hostProtocol,
+		ModelHostCompatibilityChecker:      compatibility,
+		ModelAssetHostPlatform:             models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
@@ -228,7 +259,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 	t.Cleanup(func() { closeRootProcess(t, process, "close TTS root process") })
 	return ttsStory{
 		process: process, dir: dir, environment: functionalHomeEnvironment(home), home: home,
-		temp: temp, protocol: protocol, generic: generic, host: host,
+		temp: temp, protocol: protocol, generic: generic, host: host, network: rejectingNetwork, assetTrace: assetTrace,
 		outputFailurePath: outputFailurePath,
 	}
 }
@@ -249,11 +280,7 @@ func assertTTSReady(t *testing.T, story ttsStory) {
 	if !ok {
 		t.Fatalf("models list did not include %q: %#v", models.BuiltInModelNameTTS, listed.Results)
 	}
-	if tts.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
-		tts.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
-		t.Fatalf("models list TTS runtime = %#v, want READY/INSTALLED", tts.ManagedRuntime)
-	}
-	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
+	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s; controlled operator source is resolved by direct invocation scope", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
 }
 
 func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
@@ -273,8 +300,8 @@ func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 		t.Fatalf("generic TTS stdout = %d bytes, want exact fixture audio %d bytes", genericStdout.Len(), len(wantAudio))
 	}
 	assertSemanticTTSAudio(t, genericStdout.Bytes(), "generic stdout")
-	if genericStderr.Len() != 0 {
-		t.Fatalf("generic TTS stderr = %q, want empty", genericStderr.String())
+	if genericStderr.String() != controlledTTSAssetEstimate {
+		t.Fatalf("generic TTS stderr = %q, want controlled bundle estimate %q", genericStderr.String(), controlledTTSAssetEstimate)
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --input text=hello")
 	t.Logf("runtime proof exitCode=0 stdout=<raw audio bytes> mediaType=audio/wav size=%d sha256=%s stderr=%q", len(genericStdout.Bytes()), ttsDigest(genericStdout.Bytes()), genericStderr.String())
@@ -847,32 +874,4 @@ func assertSemanticTTSAudio(t *testing.T, audio []byte, label string) {
 
 func jsonUnmarshalFunctional(data string, target any) error {
 	return json.Unmarshal([]byte(data), target)
-}
-
-func writeGenericBuiltinTTSManagedRuntimeCache(t *testing.T, home string) {
-	t.Helper()
-	const revision = "505114ae6ad17be74df98e6939707434ec49c187"
-	body := []byte("joined built-in tts fixture")
-	digest := sha256.Sum256(body)
-	canonicalModelName := strings.ToUpper(strings.TrimSpace(models.BuiltInModelNameTTS))
-	revisionPath := filepath.Join(home, ".agent-factory", "models", canonicalModelName, revision)
-	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
-		t.Fatalf("create managed TTS runtime fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(revisionPath, "weights.bin"), body, 0o644); err != nil {
-		t.Fatalf("write managed TTS runtime fixture: %v", err)
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"modelName": "tts",
-		"revision":  revision,
-		"files": []map[string]any{{
-			"path": "weights.bin", "bytes": len(body), "sha256": hex.EncodeToString(digest[:]),
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal managed TTS runtime metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(filepath.Dir(revisionPath), ".managed-cache.json"), metadata, 0o644); err != nil {
-		t.Fatalf("write managed TTS runtime metadata: %v", err)
-	}
 }

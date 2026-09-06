@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,7 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	}))
 	t.Cleanup(modelServer.Close)
 	home := functionalTempDir(t)
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 
 	rejectingNetwork := &rejectingModelAssetHTTP{}
@@ -179,7 +180,7 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
@@ -291,7 +292,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
@@ -358,7 +359,7 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
@@ -778,7 +779,7 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
@@ -836,9 +837,38 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 	}
 }
 
-func writeGenericBuiltinTTSCache(t *testing.T, home string) {
+func writeControlledBuiltinTTSSource(t *testing.T, home string) {
 	t.Helper()
-	writeGenericBuiltinModelCache(t, home, "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187")
+	bundle := filepath.Join(home, "tts-role-bundle")
+	artifacts := map[string][]byte{
+		"vibevoice-realtime-0.5B-q8_0.gguf": []byte("controlled-vibevoice-model"),
+		"tokenizer.gguf":                    []byte("controlled-vibevoice-tokenizer"),
+		"voice-en-Carter_man.gguf":          []byte("controlled-vibevoice-voice"),
+	}
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("create controlled TTS role bundle: %v", err)
+	}
+	for name, body := range artifacts {
+		if err := os.WriteFile(filepath.Join(bundle, name), body, 0o644); err != nil {
+			t.Fatalf("write controlled TTS role %q: %v", name, err)
+		}
+	}
+	source := (&url.URL{Scheme: "file", Path: filepath.ToSlash(bundle)}).String()
+	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create controlled TTS operator config directory: %v", err)
+	}
+	config, err := json.Marshal(map[string]any{
+		"models": map[string]any{
+			"tts": map[string]any{"source": source},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal controlled TTS operator config: %v", err)
+	}
+	if err := os.WriteFile(configPath, config, 0o644); err != nil {
+		t.Fatalf("write controlled TTS operator config: %v", err)
+	}
 }
 
 func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
