@@ -31,6 +31,7 @@ var supportedTTSParameters = []string{"instructions", "language"}
 // credential, or backend-native handle.
 type TTSRequest struct {
 	Text       string         `json:"text"`
+	Voice      string         `json:"voice,omitempty"`
 	Model      string         `json:"model,omitempty"`
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
@@ -53,10 +54,9 @@ type TextToSpeechCodec = TTSCodec
 // NewTTSCodec constructs the TTS codec.
 func NewTTSCodec() TTSCodec { return TTSCodec{} }
 
-// EncodeRequest validates and maps one generic Models TTS request. The voice
-// slot is intentionally rejected: the current provider-neutral seam has no
-// safe way to turn arbitrary audio content into the backend's path-like voice
-// field without introducing a new staging contract.
+// EncodeRequest validates and maps one generic Models TTS request. Voice is
+// carried as detached audio content at this boundary and is mapped to the
+// pinned protocol's provider-neutral voice field without exposing paths.
 func (TTSCodec) EncodeRequest(request models.InvokeModelRequest) (TTSRequest, error) {
 	if operation := strings.TrimSpace(request.Operation); operation != "" && !strings.EqualFold(operation, models.OperationTTS) {
 		return TTSRequest{}, ttsInvalidOperationFailure()
@@ -90,6 +90,7 @@ func (TTSCodec) EncodeRequest(request models.InvokeModelRequest) (TTSRequest, er
 	}
 	return TTSRequest{
 		Text:       builder.text,
+		Voice:      builder.voice,
 		Model:      modelName,
 		Parameters: cloneTTSObject(builder.parameters),
 	}, nil
@@ -130,6 +131,8 @@ func (TTSCodec) DecodeResponse(response TTSResponse) (models.InferenceContent, e
 type ttsRequestBuilder struct {
 	text       string
 	textSeen   bool
+	voice      string
+	voiceSeen  bool
 	parameters map[string]any
 }
 
@@ -162,7 +165,14 @@ func (builder *ttsRequestBuilder) addInput(input models.InferenceInput) error {
 			}
 		}
 	case "voice":
-		return ttsUnsupportedVoiceFailure()
+		if builder.voiceSeen {
+			return ttsRepeatedSlotFailure("voice")
+		}
+		if err := ttsValidateVoiceInput(input); err != nil {
+			return err
+		}
+		builder.voice = input.Content
+		builder.voiceSeen = true
 	default:
 		return ttsUnknownSlotFailure(input.Name)
 	}
@@ -180,6 +190,18 @@ func ttsValidateTextInput(input models.InferenceInput) error {
 		(input.MediaType != "" && !strings.EqualFold(strings.TrimSpace(input.MediaType), "text/plain")) ||
 		strings.TrimSpace(input.Content) == "" {
 		return ttsInvalidTextFailure()
+	}
+	return nil
+}
+
+func ttsValidateVoiceInput(input models.InferenceInput) error {
+	mediaType := strings.ToLower(strings.TrimSpace(input.MediaType))
+	contentType := strings.ToLower(strings.TrimSpace(input.ContentType))
+	if input.Modality != models.ModalityAudio || input.Artifact != nil ||
+		(mediaType != "" && !strings.HasPrefix(mediaType, "audio/")) ||
+		(contentType != "" && !strings.HasPrefix(contentType, "audio/")) ||
+		strings.TrimSpace(input.Content) == "" {
+		return ttsInvalidVoiceFailure()
 	}
 	return nil
 }
@@ -286,53 +308,78 @@ func canonicalWAVMediaType(mediaType string) string {
 }
 
 func validPCMWAV(audio []byte) bool {
-	if len(audio) < 12 || string(audio[0:4]) != "RIFF" || string(audio[8:12]) != "WAVE" {
+	if !validWAVHeader(audio) {
 		return false
 	}
-	if uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 != uint64(len(audio)) {
-		return false
-	}
-	var formatFound, dataFound bool
+	formatFound, dataFound, position := scanWAVChunks(audio)
+	return formatFound && dataFound && position == len(audio)
+}
+
+func validWAVHeader(audio []byte) bool {
+	return len(audio) >= 12 && string(audio[0:4]) == "RIFF" &&
+		string(audio[8:12]) == "WAVE" &&
+		uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 == uint64(len(audio))
+}
+
+func scanWAVChunks(audio []byte) (formatFound, dataFound bool, position int) {
 	var blockAlign uint16
-	position := 12
+	position = 12
 	for position+8 <= len(audio) {
-		chunkSize := uint64(binary.LittleEndian.Uint32(audio[position+4 : position+8]))
-		chunkStart := position + 8
-		chunkEnd := uint64(chunkStart) + chunkSize
-		if chunkEnd > uint64(len(audio)) {
-			return false
+		chunkName, chunk, next, ok := readWAVChunk(audio, position)
+		if !ok {
+			return false, false, 0
 		}
-		switch string(audio[position : position+4]) {
+		switch chunkName {
 		case "fmt ":
-			if formatFound || chunkSize < 16 {
-				return false
+			if formatFound {
+				return false, false, 0
 			}
-			format := binary.LittleEndian.Uint16(audio[chunkStart : chunkStart+2])
-			channels := binary.LittleEndian.Uint16(audio[chunkStart+2 : chunkStart+4])
-			sampleRate := binary.LittleEndian.Uint32(audio[chunkStart+4 : chunkStart+8])
-			byteRate := binary.LittleEndian.Uint32(audio[chunkStart+8 : chunkStart+12])
-			blockAlign = binary.LittleEndian.Uint16(audio[chunkStart+12 : chunkStart+14])
-			bits := binary.LittleEndian.Uint16(audio[chunkStart+14 : chunkStart+16])
-			if format != 1 || channels == 0 || sampleRate == 0 || blockAlign == 0 || bits == 0 ||
-				uint64(sampleRate)*uint64(blockAlign) != uint64(byteRate) {
-				return false
+			blockAlign, ok = pcmFormatBlockAlign(chunk)
+			if !ok {
+				return false, false, 0
 			}
 			formatFound = true
 		case "data":
-			if dataFound || chunkSize == 0 || blockAlign == 0 || chunkSize%uint64(blockAlign) != 0 {
-				return false
+			if dataFound || !validPCMDataChunk(chunk, blockAlign) {
+				return false, false, 0
 			}
 			dataFound = true
 		}
-		position = int(chunkEnd)
-		if chunkSize%2 != 0 {
-			position++
-		}
-		if position > len(audio) {
-			return false
-		}
+		position = next
 	}
-	return formatFound && dataFound && position == len(audio)
+	return formatFound, dataFound, position
+}
+
+func readWAVChunk(audio []byte, position int) (string, []byte, int, bool) {
+	chunkSize := uint64(binary.LittleEndian.Uint32(audio[position+4 : position+8]))
+	chunkStart := position + 8
+	chunkEnd := uint64(chunkStart) + chunkSize
+	next := chunkEnd + chunkSize%2
+	if chunkEnd > uint64(len(audio)) || next > uint64(len(audio)) {
+		return "", nil, 0, false
+	}
+	return string(audio[position : position+4]), audio[chunkStart:int(chunkEnd)], int(next), true
+}
+
+func pcmFormatBlockAlign(chunk []byte) (uint16, bool) {
+	if len(chunk) < 16 {
+		return 0, false
+	}
+	format := binary.LittleEndian.Uint16(chunk[0:2])
+	channels := binary.LittleEndian.Uint16(chunk[2:4])
+	sampleRate := binary.LittleEndian.Uint32(chunk[4:8])
+	byteRate := binary.LittleEndian.Uint32(chunk[8:12])
+	blockAlign := binary.LittleEndian.Uint16(chunk[12:14])
+	bits := binary.LittleEndian.Uint16(chunk[14:16])
+	if format != 1 || channels == 0 || sampleRate == 0 || blockAlign == 0 || bits == 0 ||
+		uint64(sampleRate)*uint64(blockAlign) != uint64(byteRate) {
+		return 0, false
+	}
+	return blockAlign, true
+}
+
+func validPCMDataChunk(chunk []byte, blockAlign uint16) bool {
+	return len(chunk) > 0 && blockAlign > 0 && len(chunk)%int(blockAlign) == 0
 }
 
 func ttsInvalidOperationFailure() error {
@@ -372,10 +419,10 @@ func ttsInvalidTextFailure() error {
 	}
 }
 
-func ttsUnsupportedVoiceFailure() error {
+func ttsInvalidVoiceFailure() error {
 	return &models.InvocationFailure{
 		Class: models.InvocationFailureClassMediaCapability, Operation: models.OperationTTS,
-		Slot: "voice", Message: "TTS voice input is not supported by the pinned runtime",
+		Slot: "voice", Message: "TTS voice input must be non-empty audio content",
 	}
 }
 

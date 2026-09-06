@@ -16,7 +16,6 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
@@ -129,9 +128,6 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		hostClock = modelsClock{source: processClock}
 	}
 	protocolDialer := edges.ModelInvocationGRPCDialer
-	if isNilModelEdgeDependency(protocolDialer) {
-		protocolDialer = platformgrpc.NetworkDialer{}
-	}
 	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
 	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
 		protocolNegotiator = modelswire.PinnedGRPCNegotiator{

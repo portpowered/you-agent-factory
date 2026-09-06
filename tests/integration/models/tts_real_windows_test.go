@@ -323,17 +323,98 @@ func inspectPinnedTTSModelCache(cacheRoot string) (pinnedTTSModelIdentity, bool)
 		metadata.Revision != pinnedTTSModelRevision || len(metadata.Files) == 0 {
 		return identity, false
 	}
+	modelRoot := filepath.Join(cacheRoot, pinnedTTSManagedModelDir)
+	revisionRoot, ok := pinnedTTSResolvedChild(modelRoot, metadata.Revision)
+	if !ok {
+		return identity, false
+	}
 	var totalBytes int64
 	for _, file := range metadata.Files {
-		if file.Bytes <= 0 || !pinnedTTSHexDigest(file.SHA256) || strings.TrimSpace(file.Path) == "" {
+		artifactPath, pathOK := pinnedTTSResolvedChild(revisionRoot, file.Path)
+		if !pathOK || file.Bytes <= 0 || !pinnedTTSHexDigest(file.SHA256) {
 			return identity, false
 		}
-		totalBytes += file.Bytes
+		observed, fileOK := readPinnedTTSFileIdentity(artifactPath)
+		if !fileOK || observed.Bytes != file.Bytes || !strings.EqualFold(observed.SHA256, file.SHA256) {
+			return identity, false
+		}
+		totalBytes += observed.Bytes
 	}
 	identity.Verified = true
 	identity.ArtifactCount = len(metadata.Files)
 	identity.ArtifactBytes = totalBytes
 	return identity, true
+}
+
+func pinnedTTSResolvedChild(root, relative string) (string, bool) {
+	relative = strings.TrimSpace(relative)
+	if relative == "" || filepath.IsAbs(relative) {
+		return "", false
+	}
+	clean := filepath.Clean(filepath.FromSlash(relative))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	rootResolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", false
+	}
+	path := filepath.Join(root, clean)
+	pathResolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", false
+	}
+	relativeResolved, err := filepath.Rel(rootResolved, pathResolved)
+	if err != nil || relativeResolved == ".." || strings.HasPrefix(relativeResolved, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return path, true
+}
+
+func TestPinnedTTSModelCacheRejectsForgedMetadata(t *testing.T) {
+	t.Parallel()
+
+	cacheRoot := t.TempDir()
+	revisionRoot := filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSModelRevision)
+	if err := os.MkdirAll(revisionRoot, 0o755); err != nil {
+		t.Fatalf("create model cache fixture: %v", err)
+	}
+	body := []byte("actual pinned model bytes")
+	artifactPath := filepath.Join(revisionRoot, "weights.bin")
+	if err := os.WriteFile(artifactPath, body, 0o644); err != nil {
+		t.Fatalf("write model cache artifact: %v", err)
+	}
+	actualDigest := sha256.Sum256(body)
+	metadata := pinnedTTSManagedMetadata{
+		ModelName: pinnedTTSModelName,
+		Revision:  pinnedTTSModelRevision,
+		Files: []pinnedTTSMetadataFile{{
+			Path: "weights.bin", Bytes: int64(len(body)),
+			SHA256: hex.EncodeToString(actualDigest[:]),
+		}},
+	}
+	metadataBody, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("marshal forged model metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSManagedMetadataName), metadataBody, 0o644); err != nil {
+		t.Fatalf("write model metadata: %v", err)
+	}
+	if _, ok := inspectPinnedTTSModelCache(cacheRoot); !ok {
+		t.Fatal("inspectPinnedTTSModelCache() rejected metadata matching the actual revision artifact")
+	}
+
+	metadata.Files[0].Bytes++
+	metadataBody, err = json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("marshal forged model metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSManagedMetadataName), metadataBody, 0o644); err != nil {
+		t.Fatalf("write forged model metadata: %v", err)
+	}
+	if _, ok := inspectPinnedTTSModelCache(cacheRoot); ok {
+		t.Fatal("inspectPinnedTTSModelCache() accepted metadata whose declared size differs from the actual artifact")
+	}
 }
 
 type pinnedTTSAssetMetadata struct {

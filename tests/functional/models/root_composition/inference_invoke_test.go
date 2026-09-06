@@ -22,6 +22,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
@@ -37,7 +38,7 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	audio := []byte("RIFF....WAVE")
+	audio := localai.AudioBytes()
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -56,6 +57,7 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	hostHTTP := &recordingModelHTTPClient{delegate: modelServer.Client()}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	privateTTS := newTTSPrivateProtocolFixture(audio)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 
 	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
@@ -92,7 +94,8 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 				ContentType: "audio/wav", MediaType: "audio/wav", Content: string(audio),
 			}}, nil, nil
 		},
-		ModelRuntimeHTTPClient: modelServer.Client(),
+		ModelInvocationGRPCDialer: privateTTS,
+		ModelRuntimeHTTPClient:    modelServer.Client(),
 	})
 	support.CleanupProcess(t, process)
 

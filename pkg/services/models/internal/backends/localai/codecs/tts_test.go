@@ -19,6 +19,7 @@ func TestTTSCodecEncodesTextModelAndConfirmedParameters(t *testing.T) {
 		Operation: models.OperationTTS,
 		Inputs: []models.InferenceInput{
 			{Name: "text", Modality: models.ModalityText, ContentType: "text/plain", Content: "hello"},
+			{Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", Content: "voice-bytes"},
 			{Name: "parameters", Modality: models.ModalityJSON, ContentType: "application/json", Content: `{"language":"en"}`},
 		},
 		Parameters: []models.OperationParameter{{Name: "instructions", Value: "speak clearly"}},
@@ -26,7 +27,7 @@ func TestTTSCodecEncodesTextModelAndConfirmedParameters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeRequest() error = %v", err)
 	}
-	if request.Text != "hello" || request.Model != "tts" || request.Parameters["language"] != "en" || request.Parameters["instructions"] != "speak clearly" {
+	if request.Text != "hello" || request.Voice != "voice-bytes" || request.Model != "tts" || request.Parameters["language"] != "en" || request.Parameters["instructions"] != "speak clearly" {
 		t.Fatalf("encoded TTS request = %#v, want detached text/model/parameters", request)
 	}
 
@@ -51,7 +52,8 @@ func TestTTSCodecRejectsInvalidInputsWithoutProviderValues(t *testing.T) {
 		{name: "wrong text media", inputs: []models.InferenceInput{{Name: "text", Modality: models.ModalityAudio, Content: "audio"}}, want: models.InvocationFailureClassMediaCapability},
 		{name: "repeated text", inputs: []models.InferenceInput{validText, validText}, want: models.InvocationFailureClassSlotArity},
 		{name: "unsupported parameter", inputs: []models.InferenceInput{validText}, params: []models.OperationParameter{{Name: "temperature", Value: 0.2}}, want: models.InvocationFailureClassInvalidParameter},
-		{name: "voice is not a path", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityAudio, Content: `C:\private\voice.wav`}}, want: models.InvocationFailureClassMediaCapability, safe: `C:\private\voice.wav`},
+		{name: "voice requires audio content", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav"}}, want: models.InvocationFailureClassMediaCapability},
+		{name: "voice rejects text media", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityText, Content: "not-audio"}}, want: models.InvocationFailureClassMediaCapability},
 		{name: "repeated parameter", inputs: []models.InferenceInput{validText, {Name: "parameters", Modality: models.ModalityJSON, Content: `{"language":"en"}`}}, params: []models.OperationParameter{{Name: "language", Value: "fr"}}, want: models.InvocationFailureClassInvalidParameter},
 	}
 	for _, test := range cases {

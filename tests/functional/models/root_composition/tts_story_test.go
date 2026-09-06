@@ -58,10 +58,10 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 		scenario := scenario
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
-			// Each scenario owns its root process because the public CLI currently
-			// reserves the ~default runtime scope during invocation. Distinct
-			// process edges keep that mutable scope and all test state isolated
-			// while the subtests still execute concurrently.
+			// The sequential journey above reuses one root process. Parallel
+			// invocations cannot share it: the public command binds the same
+			// customer-visible ~default runtime scope, so each concurrent scenario
+			// owns a process and its mutable lifecycle edges.
 			story := setupTTSStory(t)
 			assertTTSReady(t, story)
 			directory := story.dir
@@ -104,7 +104,49 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 			t.Logf("concurrent isolation command: you models invoke tts --operation TTS --text %s --output %s outputSize=%d outputSHA256=%s cache=%s workingDirectory=%s", scenario.text, outputPath, len(got), ttsDigest(got), filepath.Join(story.home, ".agent-factory", "models"), directory)
 		})
 	}
+}
 
+func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
+	t.Parallel()
+	story := setupTTSStory(t)
+	firstContext, cancelFirst := context.WithCancel(t.Context())
+	defer cancelFirst()
+	firstInputs := support.FakeInputs(firstContext, []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "cancelled", "--output", filepath.Join(story.dir, "blocked.wav"),
+	})
+	firstInputs.Input.Env = story.environment
+	firstInputs.Input.WorkingDirectory = story.dir
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- story.process.Execute(firstInputs.Input) }()
+	select {
+	case <-story.protocol.CancellationStarted():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for first default-scope invocation")
+	}
+
+	secondInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "overlap", "--output", filepath.Join(story.dir, "overlap.wav"),
+	})
+	secondInputs.Input.Env = story.environment
+	secondInputs.Input.WorkingDirectory = story.dir
+	secondErr := story.process.Execute(secondInputs.Input)
+	if secondErr == nil || !strings.Contains(secondErr.Error(), "runtime is already bound") {
+		t.Fatalf("overlapping default-scope invocation error = %v, want bounded already-bound lifecycle failure", secondErr)
+	}
+	cancelFirst()
+	if err := <-firstDone; !errors.Is(err, context.Canceled) && !errors.Is(err, models.ErrInferenceCancelled) {
+		t.Fatalf("first default-scope invocation error = %v, want cancellation after overlap characterization", err)
+	}
+	closeRootProcess(t, story.process, "close non-reentrant TTS root process")
+	created, removed, duplicateRemoves := story.temp.Snapshot()
+	if created != removed || duplicateRemoves != 0 {
+		t.Fatalf("non-reentrant TTS staging release = created:%d removed:%d duplicateRemoves:%d, want exactly-once cleanup", created, removed, duplicateRemoves)
+	}
+	starts, stops, waits, active := story.host.Snapshot()
+	if starts != stops || stops != waits || active != 0 {
+		t.Fatalf("non-reentrant host release = starts:%d stops:%d waits:%d active:%d, want no leaked host lifecycle", starts, stops, waits, active)
+	}
+	t.Logf("lifecycle exception evidence: one root.BuildProcess owns customer scope ~default; overlapping Process.Execute returned bounded runtime-already-bound failure, first invocation canceled, temp/host ledgers released exactly once")
 }
 
 type ttsStory struct {

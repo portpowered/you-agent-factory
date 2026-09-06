@@ -60,11 +60,8 @@ func (client grpcProtocolClient) synthesize(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := ctx.Err(); err != nil {
+	if err := validateTTSProtocolRequest(ctx, request); err != nil {
 		return codecs.TTSResponse{}, err
-	}
-	if strings.TrimSpace(request.Text) == "" {
-		return codecs.TTSResponse{}, ttsProtocolFailure("TTS request is invalid", models.ErrInferenceFailed)
 	}
 	path, err := reserveTTSOutput(ctx, tempDirectory, createTempFile, removeFile)
 	if err != nil {
@@ -76,44 +73,85 @@ func (client grpcProtocolClient) synthesize(
 	if err != nil {
 		return codecs.TTSResponse{}, err
 	}
+	connection, err := client.connect(ctx)
+	if err != nil {
+		return codecs.TTSResponse{}, err
+	}
+	defer func() { _ = connection.Close() }()
+
+	if err := invokeTTSProtocol(ctx, connection, protocolRequest); err != nil {
+		return codecs.TTSResponse{}, err
+	}
+	response, err := readTTSResponse(ctx, path, inspectFile, readFile)
+	if err != nil {
+		return codecs.TTSResponse{}, err
+	}
+	if _, err := codecs.NewTTSCodec().DecodeResponse(response); err != nil {
+		return codecs.TTSResponse{}, err
+	}
+	return response, nil
+}
+
+func validateTTSProtocolRequest(ctx context.Context, request codecs.TTSRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(request.Text) == "" {
+		return ttsProtocolFailure("TTS request is invalid", models.ErrInferenceFailed)
+	}
+	return nil
+}
+
+func (client grpcProtocolClient) connect(ctx context.Context) (platformgrpc.Connection, error) {
 	endpoint, _ := ctx.Value(invocationEndpointContextKey{}).(string)
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		return codecs.TTSResponse{}, ttsReadinessFailure("TTS backend endpoint is unavailable")
+	if strings.TrimSpace(endpoint) == "" {
+		return nil, ttsReadinessFailure("TTS backend endpoint is unavailable")
 	}
 	if client.dialer == nil {
-		return codecs.TTSResponse{}, ttsReadinessFailure("TTS backend dialer is unavailable")
+		return nil, ttsReadinessFailure("TTS backend dialer is unavailable")
 	}
-	connection, err := client.dialer.Dial(ctx, endpoint)
+	connection, err := client.dialer.Dial(ctx, strings.TrimSpace(endpoint))
 	if err != nil {
 		if connection != nil {
 			_ = connection.Close()
 		}
-		return codecs.TTSResponse{}, ttsTransportFailure(ctx, "TTS backend connection failed", err)
+		return nil, ttsTransportFailure(ctx, "TTS backend connection failed", err)
 	}
 	if connection == nil {
-		return codecs.TTSResponse{}, ttsReadinessFailure("TTS backend connection is unavailable")
+		return nil, ttsReadinessFailure("TTS backend connection is unavailable")
 	}
-	defer func() { _ = connection.Close() }()
+	return connection, nil
+}
 
-	payload, err := proto.Marshal(protocolRequest)
+func invokeTTSProtocol(
+	ctx context.Context,
+	connection platformgrpc.Connection,
+	request *TTSRequest,
+) error {
+	payload, err := proto.Marshal(request)
 	if err != nil {
-		return codecs.TTSResponse{}, ttsProtocolFailure(ttsProtocolErrorMessage, models.ErrInferenceFailed)
+		return ttsProtocolFailure(ttsProtocolErrorMessage, models.ErrInferenceFailed)
 	}
 	responsePayload, err := connection.Invoke(ctx, localAITTSMethod, payload)
 	if err != nil {
-		return codecs.TTSResponse{}, ttsTransportFailure(ctx, "TTS backend request failed", err)
+		return ttsTransportFailure(ctx, "TTS backend request failed", err)
 	}
 	result := &Result{}
 	if err := proto.Unmarshal(responsePayload, result); err != nil {
-		return codecs.TTSResponse{}, ttsMalformedResultFailure()
+		return ttsMalformedResultFailure()
 	}
 	if !result.GetSuccess() {
-		return codecs.TTSResponse{}, ttsProtocolFailure("TTS backend did not produce audio", models.ErrInferenceFailed)
+		return ttsProtocolFailure("TTS backend did not produce audio", models.ErrInferenceFailed)
 	}
-	if err := ctx.Err(); err != nil {
-		return codecs.TTSResponse{}, err
-	}
+	return ctx.Err()
+}
+
+func readTTSResponse(
+	ctx context.Context,
+	path string,
+	inspectFile TTSOutputInspector,
+	readFile TTSOutputReader,
+) (codecs.TTSResponse, error) {
 	audio, err := readTTSOutput(path, inspectFile, readFile)
 	if err != nil {
 		return codecs.TTSResponse{}, err
@@ -121,11 +159,7 @@ func (client grpcProtocolClient) synthesize(
 	if err := ctx.Err(); err != nil {
 		return codecs.TTSResponse{}, err
 	}
-	response := codecs.TTSResponse{Audio: audio, MediaType: ttsAudioMediaType}
-	if _, err := codecs.NewTTSCodec().DecodeResponse(response); err != nil {
-		return codecs.TTSResponse{}, err
-	}
-	return response, nil
+	return codecs.TTSResponse{Audio: audio, MediaType: ttsAudioMediaType}, nil
 }
 
 func reserveTTSOutput(
@@ -166,6 +200,7 @@ func ttsProtocolRequest(path string, request codecs.TTSRequest) (*TTSRequest, er
 	result := &TTSRequest{
 		Text:  request.Text,
 		Model: request.Model,
+		Voice: request.Voice,
 		Dst:   path,
 	}
 	for name, value := range request.Parameters {

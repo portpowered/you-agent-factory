@@ -54,16 +54,31 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("private TTS invocation error = %v", err)
 	}
+	assertPrivateTTSRouteResult(t, genericCalls, result)
+	assertPrivateTTSRouteTransport(t, transport)
+	assertPrivateTTSRouteOutputRemoved(t, transport.request.GetDst())
+}
+
+func assertPrivateTTSRouteResult(t *testing.T, genericCalls int, result inference.InvocationRuntimeResult) {
+	t.Helper()
 	if genericCalls != 0 || len(result.Content) != 1 || result.Content[0].Name != "audio" || result.Content[0].MediaType != "audio/wav" {
 		t.Fatalf("TTS route = genericCalls:%d content:%#v, want private one-audio route", genericCalls, result.Content)
 	}
+}
+
+func assertPrivateTTSRouteTransport(t *testing.T, transport *ttsRouteTransport) {
+	t.Helper()
 	if transport.invokes != 1 || transport.closes != 1 || transport.method != "/backend.Backend/TTS" || transport.request.GetText() != "hello" || transport.request.GetModel() != "vibevoice" {
 		t.Fatalf("TTS transport = %#v, want one pinned request and close", transport)
 	}
 	if transport.request.GetDst() == "" || transport.request.GetDst() == "grpc://tts-fixture" {
 		t.Fatalf("TTS destination = %q, want private staged path", transport.request.GetDst())
 	}
-	if _, err := os.Stat(transport.request.GetDst()); !errors.Is(err, os.ErrNotExist) {
+}
+
+func assertPrivateTTSRouteOutputRemoved(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("TTS staged output stat error = %v, want removed output", err)
 	}
 }

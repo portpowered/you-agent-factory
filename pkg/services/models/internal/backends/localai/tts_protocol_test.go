@@ -70,23 +70,51 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 		WithInvocationEndpoint(context.Background(), "127.0.0.1:45906"),
 		codecs.TTSRequest{
 			Text: "hello", Model: "tts",
+			Voice:      "voice-bytes",
 			Parameters: map[string]any{"language": "en", "instructions": "speak clearly"},
 		},
 	)
+	assertTTSProtocolResponse(t, err, response, audio)
+	assertTTSProtocolOutputLifecycle(t, temporary, createdDirectory, createdPattern, inspectedPath, readPath, removedPath)
+	assertTTSProtocolTransport(t, connection, dialer)
+	assertTTSProtocolRequest(t, &connection.request, temporary.path)
+}
+
+func assertTTSProtocolResponse(t *testing.T, err error, response codecs.TTSResponse, audio []byte) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("TTS backend error = %v", err)
 	}
 	if string(response.Audio) != string(audio) || response.MediaType != "audio/wav" {
 		t.Fatalf("TTS response = %#v, want detached WAV response", response)
 	}
+}
+
+func assertTTSProtocolOutputLifecycle(
+	t *testing.T,
+	temporary *ttsProtocolTempFile,
+	createdDirectory, createdPattern, inspectedPath, readPath, removedPath string,
+) {
+	t.Helper()
 	if createdDirectory != `C:\private` || createdPattern != ttsOutputFilePattern || inspectedPath != temporary.path || readPath != temporary.path || removedPath != temporary.path {
 		t.Fatalf("private output lifecycle = directory:%q pattern:%q inspect:%q read:%q remove:%q, want exact private destination", createdDirectory, createdPattern, inspectedPath, readPath, removedPath)
 	}
-	if temporary.closeCalls != 1 || connection.closed != 1 || dialer.endpoint != "127.0.0.1:45906" || connection.method != localAITTSMethod {
-		t.Fatalf("transport lifecycle = tempClose:%d connectionClose:%d endpoint:%q method:%q, want one close and TTS method", temporary.closeCalls, connection.closed, dialer.endpoint, connection.method)
+	if temporary.closeCalls != 1 {
+		t.Fatalf("temporary close calls = %d, want one", temporary.closeCalls)
 	}
-	if connection.request.GetText() != "hello" || connection.request.GetModel() != "tts" || connection.request.GetDst() != temporary.path || connection.request.GetLanguage() != "en" || connection.request.GetInstructions() != "speak clearly" || len(connection.request.GetParams()) != 0 {
-		t.Fatalf("private TTS request = %s, want exact text/model/destination/confirmed fields", connection.request.String())
+}
+
+func assertTTSProtocolTransport(t *testing.T, connection *ttsProtocolConnection, dialer *ttsProtocolDialer) {
+	t.Helper()
+	if connection.closed != 1 || dialer.endpoint != "127.0.0.1:45906" || connection.method != localAITTSMethod {
+		t.Fatalf("transport lifecycle = connectionClose:%d endpoint:%q method:%q, want one close and TTS method", connection.closed, dialer.endpoint, connection.method)
+	}
+}
+
+func assertTTSProtocolRequest(t *testing.T, request *TTSRequest, destination string) {
+	t.Helper()
+	if request.GetText() != "hello" || request.GetModel() != "tts" || request.GetVoice() != "voice-bytes" || request.GetDst() != destination || request.GetLanguage() != "en" || request.GetInstructions() != "speak clearly" || len(request.GetParams()) != 0 {
+		t.Fatalf("private TTS request = %s, want exact text/model/voice/destination/confirmed fields", request.String())
 	}
 }
 
