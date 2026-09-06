@@ -329,6 +329,7 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -367,6 +368,7 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -580,6 +582,7 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 		HealthEndpoint: spec.HealthEndpoint,
 		Backend:        spec.Backend,
 		ModelPath:      spec.ModelPath,
+		ModelFiles:     append([]string(nil), spec.ModelFiles...),
 		BackendFiles:   append([]string(nil), spec.BackendFiles...),
 	})
 	if err != nil || process == nil {

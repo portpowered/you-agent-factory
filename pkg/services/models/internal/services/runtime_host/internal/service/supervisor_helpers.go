@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -251,13 +252,14 @@ func defaultGRPCServerStartBuilder(
 				models.ErrHostMissingAssets, identity.Name,
 			)
 		}
-		modelPath, err := firstModelArtifactPath(inspection)
+		modelFiles, err := modelArtifactPaths(inspection)
 		if err != nil {
 			return modelseffects.HostProcessStartSpec{}, err
 		}
 		return modelseffects.HostProcessStartSpec{
 			Backend:      identity.Backend,
-			ModelPath:    modelPath,
+			ModelPath:    modelFiles[0],
+			ModelFiles:   modelFiles,
 			BackendFiles: append([]string(nil), inspection.BackendFiles...),
 		}, nil
 	}
@@ -291,25 +293,83 @@ func defaultGRPCServerStartBuilder(
 	}, nil
 }
 
-func firstModelArtifactPath(inspection cacheInspection) (string, error) {
+func modelArtifactPaths(inspection cacheInspection) ([]string, error) {
 	cachePath := strings.TrimSpace(inspection.CachePath)
 	if cachePath == "" {
-		return "", fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: model cache path is required for supervised runtime",
 			models.ErrHostMissingAssets,
 		)
 	}
+	root := filepath.Clean(filepath.FromSlash(cachePath))
+	paths := make([]string, 0, len(inspection.ObservedArtifacts))
+	seen := make(map[string]struct{}, len(inspection.ObservedArtifacts))
 	for _, artifact := range inspection.ObservedArtifacts {
-		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
-		if name == "" || name == "." || name == ".." || filepath.IsAbs(name) {
-			continue
+		name := strings.TrimSpace(artifact.Name)
+		normalized := filepath.ToSlash(filepath.Clean(filepath.FromSlash(name)))
+		if name == "" || name == "." || name == ".." ||
+			name != normalized || strings.Contains(name, "\\") ||
+			filepath.IsAbs(name) || filepath.IsAbs(filepath.FromSlash(name)) ||
+			filepath.VolumeName(name) != "" {
+			return nil, invalidModelArtifactLayout()
 		}
-		return filepath.Join(cachePath, filepath.FromSlash(name)), nil
+		candidate := filepath.Clean(filepath.Join(root, filepath.FromSlash(name)))
+		if !pathWithinRoot(root, candidate) || !resolvedPathWithinRoot(root, candidate) {
+			return nil, invalidModelArtifactLayout()
+		}
+		if _, duplicate := seen[candidate]; duplicate {
+			return nil, invalidModelArtifactLayout()
+		}
+		seen[candidate] = struct{}{}
+		paths = append(paths, candidate)
 	}
-	return "", fmt.Errorf(
-		"%w: model artifact is not installed for supervised runtime",
+	if len(paths) == 0 {
+		return nil, fmt.Errorf(
+			"%w: model artifact is not installed for supervised runtime",
+			models.ErrHostMissingAssets,
+		)
+	}
+	return paths, nil
+}
+
+func invalidModelArtifactLayout() error {
+	return fmt.Errorf(
+		"%w: verified model layout contains invalid artifact metadata",
 		models.ErrHostMissingAssets,
 	)
+}
+
+func pathWithinRoot(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func resolvedPathWithinRoot(root, candidate string) bool {
+	resolvedRoot, rootErr := filepath.EvalSymlinks(root)
+	if rootErr != nil {
+		if os.IsNotExist(rootErr) {
+			return true
+		}
+		return false
+	}
+	for current := candidate; ; current = filepath.Dir(current) {
+		if _, err := os.Lstat(current); err == nil {
+			resolvedCandidate, candidateErr := filepath.EvalSymlinks(current)
+			if candidateErr != nil {
+				return false
+			}
+			return pathWithinRoot(resolvedRoot, resolvedCandidate)
+		} else if !os.IsNotExist(err) {
+			return false
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return false
+		}
+	}
 }
 
 func supervisedGRPCEndpointAndArgs(workerArgs []string) (string, []string, error) {

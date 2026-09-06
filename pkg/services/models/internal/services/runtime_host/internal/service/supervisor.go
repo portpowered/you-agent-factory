@@ -360,6 +360,7 @@ func (r *supervisedRuntime) checkReadiness(
 				Revision:        identity.Revision,
 				Platform:        r.cfg.Platform,
 				ModelPath:       strings.TrimSpace(spec.ModelPath),
+				ModelFiles:      append([]string(nil), spec.ModelFiles...),
 			},
 		)
 		if err != nil {

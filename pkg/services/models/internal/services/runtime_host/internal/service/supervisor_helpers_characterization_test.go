@@ -42,8 +42,45 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 	if spec.ModelPath != filepath.Join(inspection.CachePath, "model.gguf") {
 		t.Fatalf("spec model path = %q, want %q", spec.ModelPath, filepath.Join(inspection.CachePath, "model.gguf"))
 	}
+	if len(spec.ModelFiles) != 1 || spec.ModelFiles[0] != spec.ModelPath {
+		t.Fatalf("spec model files = %#v, want the verified model layout", spec.ModelFiles)
+	}
 	if len(spec.BackendFiles) != 1 || spec.BackendFiles[0] != inspection.BackendFiles[0] {
 		t.Fatalf("spec backend files = %#v, want %#v", spec.BackendFiles, inspection.BackendFiles)
+	}
+}
+
+func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := &models.RuntimeConfig{}
+	worker, err := localWorkerForModel(runtimeConfig, models.BuiltInModelNameTTS)
+	if err != nil {
+		t.Fatalf("localWorkerForModel: %v", err)
+	}
+	identity := supervisedIdentityForModel(runtimeConfig, nil, models.BuiltInModelNameTTS)
+	if identity.Backend != "localai-vibevoice" {
+		t.Fatalf("built-in TTS backend = %q, want localai-vibevoice", identity.Backend)
+	}
+	inspection := cacheInspection{
+		CachePath: `C:\models\tts\revision`,
+		ObservedArtifacts: []models.AssetArtifact{
+			{Name: "model.gguf"}, {Name: "tokenizer.gguf"},
+		},
+		BackendRequired: true,
+		BackendFiles:    []string{`C:\models\backend\vibevoice.zip`},
+	}
+	spec, err := defaultGRPCServerStartBuilder(identity, inspection, worker)
+	if err != nil {
+		t.Fatalf("defaultGRPCServerStartBuilder: %v", err)
+	}
+	wantFiles := []string{
+		filepath.Join(inspection.CachePath, "model.gguf"),
+		filepath.Join(inspection.CachePath, "tokenizer.gguf"),
+	}
+	if spec.ModelPath != wantFiles[0] || len(spec.ModelFiles) != len(wantFiles) ||
+		spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] {
+		t.Fatalf("TTS model layout = path %q files %#v, want path %q files %#v", spec.ModelPath, spec.ModelFiles, wantFiles[0], wantFiles)
 	}
 }
 

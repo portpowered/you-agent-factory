@@ -331,8 +331,9 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 	return modelswire.HostProtocolNegotiationRequest{
 		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
-		Revision: "revision-1",
-		Platform: models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+		Revision:  "revision-1",
+		Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+		ModelPath: "runtime/model.gguf", ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
 	}
 }
 
@@ -346,7 +347,8 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 	}
 	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
 		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
-		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform {
+		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform ||
+		protocol.request.ModelPath != request.ModelPath || !equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
 		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
 	}
 	if result != (modelswire.HostProtocolNegotiationResult{
@@ -384,9 +386,22 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 	if err := adaptedConnection.Close(); err != nil {
 		t.Fatalf("close model host connection: %v", err)
 	}
-	if connection.request.Backend != request.Backend || !connection.closed {
+	if connection.request.Backend != request.Backend || connection.request.ModelPath != request.ModelPath ||
+		!equalStringSlices(connection.request.ModelFiles, request.ModelFiles) || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func assertAdaptedOptionalPorts(t *testing.T) {

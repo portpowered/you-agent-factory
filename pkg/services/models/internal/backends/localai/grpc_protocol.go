@@ -135,12 +135,20 @@ func loadModel(
 	request modelseffects.HostProtocolNegotiationRequest,
 ) error {
 	modelFile := strings.TrimSpace(request.ModelPath)
+	options, err := vibeVoiceLoadOptions(request)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI VibeVoice model layout is invalid",
+			models.ErrHostProtocolIncompatible,
+		)
+	}
 	payload, err := proto.Marshal(&ModelOptions{
 		Model:      request.ModelName,
 		NBatch:     localAIModelBatchSize,
 		Embeddings: strings.EqualFold(request.ModelName, models.BuiltInModelNameEmbed),
 		ModelFile:  modelFile,
 		ModelPath:  filepath.Dir(modelFile),
+		Options:    options,
 	})
 	if err != nil {
 		return fmt.Errorf(

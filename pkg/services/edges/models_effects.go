@@ -109,6 +109,7 @@ type HostProcessStartSpec struct {
 	WorkDir, HealthEndpoint string
 	Backend                 string
 	ModelPath               string
+	ModelFiles              []string
 	BackendFiles            []string
 }
 
@@ -126,6 +127,7 @@ type ModelHostProtocolNegotiationRequest struct {
 	Revision        string
 	Platform        models.AssetHostPlatform
 	ModelPath       string
+	ModelFiles      []string
 }
 
 type ModelHostProtocolNegotiationResult struct {
