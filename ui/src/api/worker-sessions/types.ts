@@ -27,14 +27,14 @@ export interface WorkerSessionEventFrame {
   delivery: WorkerSessionEventDelivery;
   workerSessionId: string;
   factorySessionId?: string;
-  providerSession: WorkerSessionProviderSessionRef;
+  providerSession: WorkerSessionProviderSessionRef | null;
   workIds: string[];
   event: WorkerSessionEventRecord | null;
   errorCode: string | null;
   errorMessage: string | null;
   replaySummary?: WorkerSessionReplaySummary | null;
   recordingHealth?: WorkerSessionEventRecordingHealth;
-  recordingHealthReason?: string;
+  recordingHealthReason?: string | null;
 }
 
 export interface WorkerSessionEventSourceLike {

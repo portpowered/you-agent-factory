@@ -70,33 +70,10 @@ export function WorkerSessionTimelineTarget({
             className="grid min-w-0 gap-3 rounded-lg border border-outline bg-surface-container-low p-3"
             key={observation.workerSessionId}
           >
-            <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-              <TargetDetail
-                label={messages.workerSessionIDLabel}
-                value={observation.workerSessionId}
-              />
-              <TargetDetail
-                label={messages.attemptIDLabel}
-                value={observation.attemptId}
-              />
-              <TargetDetail
-                label={messages.sessionLifecycleLabel}
-                value={messages.sessionLifecycleStateLabel(observation.state)}
-              />
-              <TargetDetail
-                label={messages.providerSessionLabel}
-                value={providerSessionOrigin(messages, observation)}
-              />
-              <TargetDetail
-                label={messages.durabilityConfirmationLabel}
-                value={
-                  <DurabilityConfirmationState
-                    label={messages.durabilityConfirmationLabel}
-                    state={observation.confirmationState}
-                  />
-                }
-              />
-            </dl>
+            <TargetObservationDetails
+              messages={messages}
+              observation={observation}
+            />
             <DashboardActionButton
               aria-label={messages.openWorkerSessionTargetLabel(
                 observation.workerSessionId,
@@ -117,6 +94,95 @@ export function WorkerSessionTimelineTarget({
         );
       })}
     </ul>
+  );
+}
+
+function TargetObservationDetails({
+  messages,
+  observation,
+}: {
+  messages: WorkerSessionTimelineMessages;
+  observation: WorkerSessionObservation;
+}) {
+  return (
+    <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+      <TargetDetail
+        label={messages.workLabel}
+        value={workOrigin(messages, observation)}
+      />
+      <TargetDetail
+        label={messages.workIDsLabel}
+        value={
+          observation.workIds.length > 0
+            ? observation.workIds.join(", ")
+            : messages.unknownValueLabel
+        }
+      />
+      <TargetDetail
+        label={messages.workerSessionIDLabel}
+        value={observation.workerSessionId}
+      />
+      <TargetDetail
+        label={messages.attemptDispatchIDLabel}
+        value={observation.attemptId}
+      />
+      <TargetDetail
+        label={messages.modelLabel}
+        value={firstNonEmpty(observation.model) ?? messages.modelUnavailable}
+      />
+      {observation.reasoningEffort ? (
+        <TargetDetail
+          label={messages.reasoningEffortLabel}
+          value={observation.reasoningEffort}
+        />
+      ) : null}
+      <TargetDetail
+        label={messages.sessionLifecycleLabel}
+        value={messages.sessionLifecycleStateLabel(observation.state)}
+      />
+      <TargetDetail
+        label={messages.durationLabel}
+        value={messages.durationValue(observation.durationMillis)}
+      />
+      <TargetDetail
+        label={messages.durationBasisLabel}
+        value={observation.durationBasis}
+      />
+      <TargetDetail
+        label={messages.providerSessionLabel}
+        value={providerSessionOrigin(messages, observation)}
+      />
+      {observation.failure ? (
+        <TargetDetail
+          label={messages.failureSummaryLabel}
+          value={
+            firstNonEmpty(
+              observation.failure.detail,
+              observation.failure.kind,
+            ) ?? messages.unknownValueLabel
+          }
+        />
+      ) : null}
+      <TargetDetail
+        label={messages.recordingHealthTargetLabel}
+        value={recordingHealthValue(messages, observation)}
+      />
+      {observation.recordingHealthReason ? (
+        <TargetDetail
+          label={messages.recordingHealthReasonLabel}
+          value={observation.recordingHealthReason}
+        />
+      ) : null}
+      <TargetDetail
+        label={messages.durabilityConfirmationLabel}
+        value={
+          <DurabilityConfirmationState
+            label={messages.durabilityConfirmationLabel}
+            state={observation.confirmationState}
+          />
+        }
+      />
+    </dl>
   );
 }
 
@@ -145,4 +211,37 @@ function providerSessionOrigin(
   }
 
   return `${providerSession.provider} / ${providerSession.kind} / ${providerSession.id}`;
+}
+
+function workOrigin(
+  messages: WorkerSessionTimelineMessages,
+  observation: WorkerSessionObservation,
+): string {
+  return (
+    firstNonEmpty(
+      observation.workName,
+      observation.workId,
+      observation.workIds[0],
+    ) ?? messages.unknownValueLabel
+  );
+}
+
+function recordingHealthValue(
+  messages: WorkerSessionTimelineMessages,
+  observation: WorkerSessionObservation,
+): string {
+  return observation.recordingHealth
+    ? messages.recordingHealthLabel(observation.recordingHealth)
+    : messages.recordingHealthPending;
+}
+
+function firstNonEmpty(
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  return (
+    values.find(
+      (value) =>
+        value !== undefined && value !== null && value.trim().length > 0,
+    ) ?? undefined
+  );
 }

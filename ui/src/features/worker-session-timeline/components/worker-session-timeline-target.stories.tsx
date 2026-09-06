@@ -24,15 +24,34 @@ const queryClient = new QueryClient({
 
 const observations: WorkerSessionObservation[] = [
   observation("worker-session-story-1", "attempt-story-1", {
+    durationBasis: "RECORDED_TIMESTAMPS",
+    durationMillis: 1842,
+    model: "gpt-5",
     providerSession: {
       id: "provider-story-1",
       kind: "session_id",
       provider: "codex",
     },
     providerSessionAvailable: true,
+    reasoningEffort: "medium",
+    recordingHealth: "COMPLETE",
     state: "COMPLETED",
+    workId: "work-terminal-story",
+    workName: "Terminal story",
   }),
   observation("worker-session-story-2", "attempt-story-2", {
+    durationBasis: "UNAVAILABLE",
+    failure: {
+      agentRunFailureClass: null,
+      detail: "Provider stopped responding.",
+      kind: "PROVIDER_FAILURE",
+      providerContinuationFailureKind: null,
+      providerContinuationOutcome: null,
+      providerFailureKind: "TIMEOUT",
+    },
+    providerSession: null,
+    recordingHealth: "INCOMPLETE",
+    recordingHealthReason: "CORRUPT_TAIL",
     state: "FAILED",
   }),
 ];
@@ -67,6 +86,16 @@ export const MultipleObservations: Story = {
     await expect(
       await within(secondTargetCard as HTMLElement).findByText(
         "Durability confirmation: UNCONFIRMED",
+      ),
+    ).toBeVisible();
+    await expect(
+      await within(secondTargetCard as HTMLElement).findByText(
+        "Recording: INCOMPLETE",
+      ),
+    ).toBeVisible();
+    await expect(
+      await within(secondTargetCard as HTMLElement).findByText(
+        "Provider stopped responding.",
       ),
     ).toBeVisible();
 

@@ -5,6 +5,7 @@ import {
   projectFailure,
   projectIdentity,
   projectMessage,
+  projectProgress,
   projectReasoning,
   projectTool,
   projectUsage,
@@ -151,6 +152,13 @@ export function projectWorkerSessionTimelineEntry(
       const reasoning = projectReasoning(phase, payload);
       if (reasoning !== undefined) {
         entry.reasoning = reasoning;
+      }
+      break;
+    }
+    case "PROGRESS": {
+      const progress = projectProgress(payload);
+      if (progress !== undefined) {
+        entry.progress = progress;
       }
       break;
     }

@@ -162,6 +162,7 @@ function entryHasDetail(entry: WorkerSessionTimelineEntry): boolean {
       entry.continuation ||
       entry.message ||
       entry.reasoning ||
+      entry.progress ||
       entry.tool ||
       entry.usage ||
       entry.failure ||

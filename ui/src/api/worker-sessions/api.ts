@@ -210,8 +210,12 @@ export function parseWorkerSessionEventFrame(
   ) {
     throw invalidFrame();
   }
-  if (!isProviderSessionRef(value.providerSession)) {
-    throw invalidFrame();
+  let providerSession: WorkerSessionEventFrame["providerSession"] = null;
+  if (value.providerSession !== null && value.providerSession !== undefined) {
+    if (!isProviderSessionRef(value.providerSession)) {
+      throw invalidFrame();
+    }
+    providerSession = value.providerSession;
   }
   if (!Array.isArray(value.workIds) || !value.workIds.every(isString)) {
     throw invalidFrame();
@@ -229,6 +233,7 @@ export function parseWorkerSessionEventFrame(
   const recordingHealth = parseRecordingHealth(value.recordingHealth);
   if (
     value.recordingHealthReason !== undefined &&
+    value.recordingHealthReason !== null &&
     typeof value.recordingHealthReason !== "string"
   ) {
     throw invalidFrame();
@@ -250,7 +255,7 @@ export function parseWorkerSessionEventFrame(
     ...(value.factorySessionId !== undefined
       ? { factorySessionId: value.factorySessionId }
       : {}),
-    providerSession: value.providerSession,
+    providerSession,
     workIds: value.workIds,
     event,
     errorCode: value.errorCode,

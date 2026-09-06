@@ -9,6 +9,7 @@ import type {
   WorkerSessionEventSourceLike,
   WorkerSessionObservation,
 } from "../../../api/worker-sessions";
+import { getWorkerSessionTimelineSelectionStorageKey } from "../lib/worker-session-timeline-selection";
 import { useWorkerSessionTimeline } from "./useWorkerSessionTimeline";
 import { useWorkerSessionTimelineTarget } from "./useWorkerSessionTimelineTarget";
 
@@ -88,7 +89,7 @@ function frame(
     errorCode: null,
     errorMessage: null,
     event,
-    providerSession: { provider: "", kind: "", id: "" },
+    providerSession: null,
     workIds: [],
     workerSessionId: "worker-1",
     ...overrides,
@@ -98,6 +99,7 @@ function frame(
 afterEach(() => {
   streams.length = 0;
   pendingReconnect = null;
+  window.sessionStorage.clear();
 });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: stream cases share one deterministic source harness.
@@ -311,6 +313,74 @@ describe("useWorkerSessionTimelineTarget", () => {
       result.current.setSelectedWorkerSessionID("worker-2");
     });
     expect(result.current.selectedWorkerSessionID).toBe("worker-2");
+    const selectionKey = getWorkerSessionTimelineSelectionStorageKey(
+      "factory-1",
+      "work-1",
+    );
+    expect(selectionKey).not.toBeNull();
+    expect(window.sessionStorage.getItem(selectionKey as string)).toBe(
+      "worker-2",
+    );
+  });
+
+  it("restores a valid selection after remount and scopes it to Factory Session and Work", async () => {
+    const selectionKey = getWorkerSessionTimelineSelectionStorageKey(
+      "factory-1",
+      "work-1",
+    );
+    if (selectionKey === null) {
+      throw new Error("expected a scoped selection key");
+    }
+    window.sessionStorage.setItem(selectionKey, "worker-2");
+    const loadTargets = vi
+      .fn()
+      .mockResolvedValue([
+        observation("worker-1", "attempt-1"),
+        observation("worker-2", "attempt-2"),
+      ]);
+
+    const first = renderHook(
+      () =>
+        useWorkerSessionTimelineTarget({
+          factorySessionID: "factory-1",
+          loadTargets,
+          workID: "work-1",
+        }),
+      { wrapper: createQueryWrapper() },
+    );
+    await waitFor(() => {
+      expect(first.result.current.selectedWorkerSessionID).toBe("worker-2");
+    });
+    first.unmount();
+
+    const second = renderHook(
+      () =>
+        useWorkerSessionTimelineTarget({
+          factorySessionID: "factory-1",
+          loadTargets,
+          workID: "work-1",
+        }),
+      { wrapper: createQueryWrapper() },
+    );
+    await waitFor(() => {
+      expect(second.result.current.selectedWorkerSessionID).toBe("worker-2");
+    });
+    second.unmount();
+
+    const otherScope = renderHook(
+      () =>
+        useWorkerSessionTimelineTarget({
+          factorySessionID: "factory-1",
+          loadTargets,
+          workID: "work-2",
+        }),
+      { wrapper: createQueryWrapper() },
+    );
+    await waitFor(() => {
+      expect(otherScope.result.current.selectedWorkerSessionID).toBe(
+        "worker-1",
+      );
+    });
   });
 
   it("does not query until both the Factory Session and Work are selected", () => {

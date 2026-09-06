@@ -30,13 +30,29 @@ describe("Worker Session event stream API", () => {
       errorCode: "WORKER_SESSION_STREAM_UNAVAILABLE",
       errorMessage: "retained Worker Session history is unavailable",
       event: null,
-      providerSession: { provider: "", kind: "", id: "" },
+      providerSession: null,
+      recordingHealthReason: null,
       workIds: [],
       workerSessionId: "worker-1",
     });
 
     expect(frame.event).toBeNull();
     expect(frame.errorCode).toBe("WORKER_SESSION_STREAM_UNAVAILABLE");
+    expect(frame.providerSession).toBeNull();
+    expect(frame.recordingHealthReason).toBeNull();
+  });
+
+  it("normalizes an omitted provider identity to the explicit null state", () => {
+    const frame = parseWorkerSessionEventFrame({
+      delivery: "SOURCE_FAILURE",
+      errorCode: "WORKER_SESSION_STREAM_UNAVAILABLE",
+      errorMessage: "retained Worker Session history is unavailable",
+      event: null,
+      workIds: [],
+      workerSessionId: "worker-1",
+    });
+
+    expect(frame.providerSession).toBeNull();
   });
 
   it("rejects malformed frames with a safe typed parse error", () => {
@@ -44,7 +60,7 @@ describe("Worker Session event stream API", () => {
       parseWorkerSessionEventFrame({
         delivery: "RECORD",
         event: null,
-        providerSession: { provider: "", kind: "", id: "" },
+        providerSession: null,
         workIds: [],
         workerSessionId: "worker-1",
       }),

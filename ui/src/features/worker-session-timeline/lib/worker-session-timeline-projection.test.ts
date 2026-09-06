@@ -257,11 +257,20 @@ describe("Worker Session tool projection", () => {
       record(
         9,
         draft("USAGE", "UPDATED", {
+          cacheWriteTokens: 3,
           inputTokens: 10,
           outputTokens: 8,
           reasoningOutputTokens: 2,
           totalTokens: 20,
           model: "gpt-5",
+        }),
+      ),
+      record(
+        10,
+        draft("PROGRESS", "UPDATED", {
+          label: "compile",
+          message: "building the package",
+          percentComplete: 42,
         }),
       ),
     ]);
@@ -271,6 +280,7 @@ describe("Worker Session tool projection", () => {
       "tool",
       "tool",
       "usage",
+      "progress",
     ]);
     expect(entries[0]?.tool?.argumentsSummary).toEqual({
       command: "go test ./...",
@@ -284,6 +294,7 @@ describe("Worker Session tool projection", () => {
       output: "ok",
     });
     expect(entries[3]?.usage).toEqual({
+      cacheWriteTokens: 3,
       inputTokens: 10,
       outputTokens: 8,
       reasoningOutputTokens: 2,
@@ -291,6 +302,11 @@ describe("Worker Session tool projection", () => {
       model: "gpt-5",
     });
     expect(entries[3]?.identity?.model).toBe("gpt-5");
+    expect(entries[4]?.progress).toEqual({
+      label: "compile",
+      message: "building the package",
+      percentComplete: 42,
+    });
   });
 });
 
