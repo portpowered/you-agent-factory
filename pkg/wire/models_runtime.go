@@ -524,8 +524,8 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 		return nil, err
 	}
 	cmd := exec.Command(launch.Command, launch.Args...)
-	if len(spec.Env) > 0 {
-		cmd.Env = append([]string(nil), spec.Env...)
+	if env := appendManagedBackendEnvironment(spec.Env, launch.Env); len(env) > 0 {
+		cmd.Env = env
 	}
 	if launch.WorkDir != "" {
 		cmd.Dir = launch.WorkDir
@@ -549,6 +549,35 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 		managed.mu.Unlock()
 	}()
 	return managed, nil
+}
+
+func appendManagedBackendEnvironment(base, additions []string) []string {
+	if len(additions) == 0 {
+		return append([]string(nil), base...)
+	}
+	environment := append([]string(nil), base...)
+	if len(environment) == 0 {
+		environment = os.Environ()
+	}
+	for _, addition := range additions {
+		key, _, ok := strings.Cut(addition, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		replaced := false
+		for index, existing := range environment {
+			existingKey, _, hasValue := strings.Cut(existing, "=")
+			if hasValue && strings.EqualFold(existingKey, key) {
+				environment[index] = addition
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			environment = append(environment, addition)
+		}
+	}
+	return environment
 }
 
 type modelHostProcessLauncherAdapter struct {
