@@ -631,6 +631,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v95)
 	operation := provideMetricsCLI()
+	costReportOperation := provideCostsReportCLI()
 	cliOperation := provideCostsCLI()
 	serverstopOperation := provideServerStopCLI()
 	commandOperations := cli.CommandOperations{
@@ -701,6 +702,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ACPServer:                         server,
 		RuntimeMetricsQuery:               runtimeMetricsQuery,
 		MetricsCLI:                        operation,
+		MetricsCostReportCLI:              costReportOperation,
 		CostsCLI:                          cliOperation,
 		ServerStopCLI:                     serverstopOperation,
 	}
@@ -1133,6 +1135,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideModelsPullCLIHTTPProtocol,
 	provideMetricsCLI,
 	provideCostsCLI,
+	provideCostsReportCLI,
 	provideServerStopCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,

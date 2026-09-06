@@ -143,6 +143,24 @@ test("pinned real ACP evidence belongs to backend integration, not functional co
 	assert.match(integrationJob, /uses: actions\/setup-node@v4/);
 	assert.match(integrationJob, /name: Build shared CLI artifact for compiled integration evidence/);
 	assert.match(integrationJob, /go build -o \.artifacts\/integration\/bin\/you \.\/cmd\/factory/);
+	assert.match(integrationJob, /name: Run backend integration tests with shared CLI artifact/);
+	assert.match(integrationJob, /run: make test-integration/);
+	assert.match(integrationJob, /INFINITE_YOU_PREBUILT_ARTIFACT: \$\{\{ github\.workspace \}\}\/\.artifacts\/integration\/bin\/you/);
+	assert.match(integrationJob, /INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"/);
+	assert.match(integrationJob, /name: Run required runtime metrics session probe/);
+	assert.match(integrationJob, /TestProbeMetricsSessionUsesInstalledArtifact/);
+	assert.match(integrationJob, /name: Upload runtime metrics session probe evidence/);
+	assert.match(integrationJob, /runtime-metrics-session-probe\.log/);
+	assert.ok(
+		integrationJob.indexOf("name: Build shared CLI artifact for compiled integration evidence") <
+			integrationJob.indexOf("name: Run backend integration tests with shared CLI artifact"),
+		"the compiled artifact must be built before backend integration tests",
+	);
+	assert.ok(
+		integrationJob.indexOf("name: Run backend integration tests with shared CLI artifact") <
+			integrationJob.indexOf("name: Run required runtime metrics session probe"),
+		"the required session probe must run after the shared artifact is supplied to the integration lane",
+	);
 	assert.match(integrationJob, /name: Run pinned real ACP integration/);
 	assert.match(integrationJob, /INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"/);
 	assert.match(integrationJob, /INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"/);

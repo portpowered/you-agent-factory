@@ -46,6 +46,22 @@ func provideCostsCLI() costscli.Operation {
 	})
 }
 
+func provideCostsReportCLI() visualizationcli.CostReportOperation {
+	readReport := costscli.NewReportOperation(func(server string) (costscli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: costscli.DefaultRequestTimeout}),
+		)
+	})
+	return func(ctx context.Context, request visualizationcli.MetricsCostReportRequest) (generatedhttpclient.CostsReport, error) {
+		return readReport(ctx, costscli.CostsConfig{
+			Server:         request.Server,
+			SessionID:      request.SessionID,
+			RequestTimeout: costscli.DefaultRequestTimeout,
+		})
+	}
+}
+
 func provideMetricsCLI() visualizationcli.Operation {
 	return provideMetricsCLIWithHTTPTransport(nil)
 }

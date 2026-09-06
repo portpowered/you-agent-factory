@@ -348,6 +348,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideModelsPullCLIHTTPProtocol,
 	provideMetricsCLI,
 	provideCostsCLI,
+	provideCostsReportCLI,
 	provideServerStopCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,

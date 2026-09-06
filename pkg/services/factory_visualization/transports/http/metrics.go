@@ -125,6 +125,14 @@ func (adapter *MetricsAdapter) GetMetrics(
 		if len(retainedIDs) == 0 {
 			return factoryapi.MetricsReport{}, NewMetricsScopeUnavailableError(requestedID, nil)
 		}
+		// The Factory Sessions resolver has already verified the public selector.
+		// Keep it in the owned metrics query set as well as the canonical lineage
+		// because legacy runtime envelopes may still be labeled with that
+		// selector. This cannot broaden an unknown query: resolution happened
+		// before the alias is added.
+		if !containsRetainedMetricsID(retainedIDs, requestedID) {
+			retainedIDs = append(retainedIDs, requestedID)
+		}
 		// SessionID is the effective canonical filter for compatibility with
 		// existing query consumers; SessionIDs retains the complete resolved set
 		// for source generations that contribute to one selected session.

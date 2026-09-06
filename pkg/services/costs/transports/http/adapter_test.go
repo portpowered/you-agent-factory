@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 	assertMappedReport(t, got, inputTokens, outputTokens)
 }
 
-func TestAdapterPassesExactResolvedScopeToCostsQuery(t *testing.T) {
+func TestAdapterPassesResolvedScopeAndPublicSelectorToCostsQuery(t *testing.T) {
 	t.Parallel()
 
 	var gotRequest costs.QueryRequest
@@ -85,8 +86,9 @@ func TestAdapterPassesExactResolvedScopeToCostsQuery(t *testing.T) {
 	if gotRequest.FactorySessionID != "~default" {
 		t.Fatalf("requested Factory Session ID = %q, want ~default", gotRequest.FactorySessionID)
 	}
-	if len(gotRequest.RetainedFactorySessionIDs) != 1 || gotRequest.RetainedFactorySessionIDs[0] != "canonical-live-id" {
-		t.Fatalf("retained Factory Session IDs = %#v, want one canonical ID", gotRequest.RetainedFactorySessionIDs)
+	wantRetainedIDs := []string{"canonical-live-id", "~default"}
+	if !reflect.DeepEqual(gotRequest.RetainedFactorySessionIDs, wantRetainedIDs) {
+		t.Fatalf("retained Factory Session IDs = %#v, want %#v", gotRequest.RetainedFactorySessionIDs, wantRetainedIDs)
 	}
 	if got.Scope.FactorySessionId == nil || *got.Scope.FactorySessionId != "~default" || got.Status != factoryapi.CostsReportStatusNOUSAGE {
 		t.Fatalf("mapped scope/status = %#v/%q, want ~default/NO_USAGE", got.Scope, got.Status)

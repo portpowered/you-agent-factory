@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -22,9 +23,56 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
+
+type metricsSessionEventOperation struct {
+	operation runcli.RemoteInvocationEventOperation
+}
+
+type metricsSessionEventStream struct {
+	stream runcli.RemoteInvocationEventStream
+}
+
+func newMetricsSessionEventOperation(
+	operation runcli.RemoteInvocationOperation,
+) visualizationcli.SessionEventOperation {
+	events, ok := operation.(runcli.RemoteInvocationEventOperation)
+	if !ok || events == nil {
+		return nil
+	}
+	return metricsSessionEventOperation{operation: events}
+}
+
+func (operation metricsSessionEventOperation) OpenFactorySessionEvents(
+	ctx context.Context,
+	request visualizationcli.SessionEventRequest,
+) (visualizationcli.SessionEventStream, error) {
+	stream, err := operation.operation.OpenFactorySessionEvents(ctx, runcli.RemoteInvocationEventRequest{
+		Server:      request.Server,
+		SessionID:   request.SessionID,
+		ReplayOnly:  true,
+		Diagnostics: request.Diagnostics,
+		Verbose:     request.Verbose,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if stream == nil {
+		return nil, fmt.Errorf("open Factory Session events: remote operation returned an empty stream")
+	}
+	return metricsSessionEventStream{stream: stream}, nil
+}
+
+func (stream metricsSessionEventStream) Next(ctx context.Context) (factoryapi.FactoryEvent, error) {
+	return stream.stream.Next(ctx)
+}
+
+func (stream metricsSessionEventStream) Close() error {
+	return stream.stream.Close()
+}
 
 func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
 	globals := &cliGlobalOptions{
@@ -72,15 +120,19 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 		panic(fmt.Sprintf("build providers command: %v", err))
 	}
 	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
-		Operation: options.metricsCLI,
-		Server:    func() string { return globals.server },
-		Query:     options.runtimeMetricsQuery, HomeDir: options.homeDir,
-		JSON: func() bool { return globals != nil && globals.json },
+		Operation:     options.metricsCLI,
+		SessionEvents: newMetricsSessionEventOperation(options.remoteInvocation),
+		CostReport:    options.metricsCostReportCLI,
+		Server:        func() string { return globals.server },
+		Query:         options.runtimeMetricsQuery, HomeDir: options.homeDir,
+		JSON:    func() bool { return globals != nil && globals.json },
+		Verbose: func() bool { return diagnostics.verboseEnabled() },
 		Costs: costscli.NewCostsCommand(costscli.CostsCommandConfig{
 			Operation: options.costsCLI,
 			Server:    func() string { return globals.server },
 			JSON:      func() bool { return globals != nil && globals.json },
 		}),
+		CostHumanReport: costscli.RenderHumanReport,
 	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {

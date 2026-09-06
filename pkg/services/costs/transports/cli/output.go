@@ -21,6 +21,12 @@ func renderCostsOutput(report generatedclient.CostsReport, jsonOutput bool) (str
 	return string(append(encoded, '\n')), nil
 }
 
+// RenderHumanReport exposes the Costs-owned human representation to composed
+// commands while keeping the standalone `you metrics costs` output unchanged.
+func RenderHumanReport(report generatedclient.CostsReport) string {
+	return renderHumanCosts(report)
+}
+
 func renderHumanCosts(report generatedclient.CostsReport) string {
 	var output strings.Builder
 	renderCostsScope(&output, report.Scope)

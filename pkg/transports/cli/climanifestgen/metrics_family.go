@@ -4,5 +4,6 @@ package climanifestgen
 // runtime-metrics inspection family.
 var MetricsFamilyCommandIDs = []string{
 	"you.metrics",
+	"you.metrics.session",
 	"you.metrics.costs",
 }

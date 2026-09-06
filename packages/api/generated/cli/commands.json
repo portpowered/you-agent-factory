@@ -14161,6 +14161,243 @@
         "id": "you.metrics.handler"
       }
     },
+    "you.metrics.session": {
+      "id": "you.metrics.session",
+      "name": "session",
+      "path": "you metrics session",
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics.session",
+        "documentation": {
+          "title": {
+            "id": "you.metrics.session.title",
+            "canonicalEnglish": "Inspect one Factory Session metrics report"
+          },
+          "description": {
+            "id": "you.metrics.session.description",
+            "canonicalEnglish": "Read the selected remote Factory Session's lifecycle, dispatch-attempt, Worker Session, outcome, queue, and execution metrics from a bounded canonical event replay. Use --json for deterministic machine-readable output. Cost and attribution lenses are additive options on this command."
+          }
+        },
+        "examples": [
+          "you metrics session session-123",
+          "you --json metrics session session-123",
+          "you --server http://localhost:7437 metrics session session-123"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.metrics.session",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "remote-only",
+      "usage": {
+        "line": "metrics session <session-id>",
+        "example": "  # Inspect one remote Factory Session metrics report.\n  you metrics session session-123\n\n  # Emit deterministic JSON.\n  you --json metrics session session-123"
+      },
+      "arguments": {
+        "you.metrics.session.arg.0": {
+          "id": "you.metrics.session.arg.0",
+          "name": "session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": ["cli"],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.metrics.session.flag.lens": {
+          "id": "you.metrics.session.flag.lens",
+          "long": "lens",
+          "usage": "select the session metrics lens",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.lens", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.by-worker": {
+          "id": "you.metrics.session.flag.by-worker",
+          "long": "by-worker",
+          "usage": "group session attempts by worker",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.by-worker", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.by-dispatch": {
+          "id": "you.metrics.session.flag.by-dispatch",
+          "long": "by-dispatch",
+          "usage": "show session attempts by dispatch",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.by-dispatch", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.debug": {
+          "id": "you.metrics.session.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.debug", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.json": {
+          "id": "you.metrics.session.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.json", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.remote": {
+          "id": "you.metrics.session.flag.remote",
+          "long": "remote",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.remote", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.server": {
+          "id": "you.metrics.session.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.server", "state": "active", "since": "1.0.0"}
+        },
+        "you.metrics.session.flag.verbose": {
+          "id": "you.metrics.session.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.metrics.session.flag.verbose", "state": "active", "since": "1.0.0"}
+        }
+      },
+      "handler": {"id": "you.metrics.session.handler"},
+      "precedence": {"order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"], "withinTier": {"scalar": "last", "repeated": "append"}, "acrossTiers": "replace", "multipleBindings": "reject"},
+      "channels": {"input": ["cli", "env", "config", "stdin"], "output": ["stdout", "stderr"]},
+      "outputs": {
+        "you.metrics.session.output.human": {"id": "you.metrics.session.output.human", "channel": "stdout", "format": "text"},
+        "you.metrics.session.output.json": {"id": "you.metrics.session.output.json", "channel": "stdout", "format": "json"}
+      },
+      "errors": {
+        "you.metrics.session.error.scope": {"id": "you.metrics.session.error.scope", "code": "METRICS_SESSION_SCOPE_UNAVAILABLE"},
+        "you.metrics.session.error.events": {"id": "you.metrics.session.error.events", "code": "METRICS_SESSION_EVENTS_FAILED"},
+        "you.metrics.session.error.unsupported": {"id": "you.metrics.session.error.unsupported", "code": "METRICS_UNSUPPORTED_SESSION_OPTION"}
+      },
+      "exits": {
+        "you.metrics.session.exit.success": {"id": "you.metrics.session.exit.success", "code": 0, "kind": "success"},
+        "you.metrics.session.exit.failure": {"id": "you.metrics.session.exit.failure", "code": 1, "kind": "failure"},
+        "you.metrics.session.exit.usage": {"id": "you.metrics.session.exit.usage", "code": 1, "kind": "usage"}
+      },
+      "sideEffects": {
+        "you.metrics.session.side-effect.network": {"id": "you.metrics.session.side-effect.network", "kind": "network"}
+      },
+      "constraints": {
+        "runtime": ["local"],
+        "platforms": ["linux", "darwin", "windows"]
+      }
+    },
     "you.metrics.costs": {
       "id": "you.metrics.costs",
       "name": "costs",

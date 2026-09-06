@@ -579,12 +579,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Run backend integration tests
-        run: make test-integration
       - name: Build shared CLI artifact for compiled integration evidence
         run: |
           mkdir -p .artifacts/integration/bin
           go build -o .artifacts/integration/bin/you ./cmd/factory
+      - name: Run backend integration tests with shared CLI artifact
+        run: make test-integration
+        env:
+          INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
+          INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+      - name: Run required runtime metrics session probe
+        if: always()
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./tests/integration/factory/visualization/runtime_metrics \
+            -run '^TestProbeMetricsSessionUsesInstalledArtifact$' \
+            -count=1 -v -timeout=5m 2>&1 | tee .artifacts/integration/runtime-metrics-session-probe.log
+        env:
+          INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
+          INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+      - name: Upload runtime metrics session probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-metrics-session-probe-evidence
+          path: .artifacts/integration/runtime-metrics-session-probe.log
+          if-no-files-found: error
+          retention-days: 14
       - name: Run pinned real ACP integration
         run: go test ./tests/integration/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=15m
         env:

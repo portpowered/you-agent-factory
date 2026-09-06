@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -165,8 +166,9 @@ func TestMetricsHandlerResolvesPublicSessionBeforeQueryAndPreservesEmptyReport(t
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 	}
-	if gotRequest.SessionID != "runtime-scope-id" || len(gotRequest.SessionIDs) != 2 || gotRequest.SessionIDs[1] != "logical-scope-id" {
-		t.Fatalf("metrics query request = %#v, want resolved retained IDs", gotRequest)
+	wantSessionIDs := []string{"runtime-scope-id", "logical-scope-id", "public-live-id"}
+	if gotRequest.SessionID != "runtime-scope-id" || !reflect.DeepEqual(gotRequest.SessionIDs, wantSessionIDs) {
+		t.Fatalf("metrics query request = %#v, want resolved retained IDs plus public selector %#v", gotRequest, wantSessionIDs)
 	}
 	var report factoryapi.MetricsReport
 	if err := json.Unmarshal(recorder.Body.Bytes(), &report); err != nil {

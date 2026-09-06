@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -35,23 +34,20 @@ const (
 	// The replay server uses --continuously so the customer-facing query can
 	// run after replay reaches terminal state. This is the bounded cleanup
 	// grace period before terminating that deliberately long-lived process.
-	probeCostProcessStopWait = 5 * time.Second
-	probeCostEnableEnv       = "INFINITE_YOU_ENABLE_PROBE_COST"
+	probeCostProcessStopWait    = 5 * time.Second
+	probeCostArtifactEnv        = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	probeCostRequireArtifactEnv = "INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT"
 )
 
 const probeCostFalsifier = "reject UNPRICED, NO_USAGE, zero/null known_cost, missing measured row, or provider/model drift"
 
 // TestProbeCostReplaysTheInstalledCodexFixture is the PROBE-COST cell from
 // the program verification plan. It intentionally crosses the OS process
-// boundary: the checked-in recording is copied into a blank workspace, an
-// installed-style binary is run with a blank operator home, and the result is
-// read back through the customer-facing metrics costs command.
+// boundary: the checked-in recording is copied into a blank workspace, a pinned
+// prebuilt artifact is run with a blank operator home, and the result is read
+// back through the customer-facing metrics costs command.
 func TestProbeCostReplaysTheInstalledCodexFixture(t *testing.T) {
-	if os.Getenv(probeCostEnableEnv) != "1" {
-		t.Skipf("PROBE-COST is non-blocking until Integration Story 0 (#2191) merges; set %s=1 to run it", probeCostEnableEnv)
-	}
-
-	binaryPath := buildProbeCostBinary(t)
+	binaryPath := prebuiltProbeCostArtifact(t)
 	fixturePath := testutil.MustRepoPath(t,
 		"tests/functional/factory/visualization/runtime_metrics/testdata/codex-gpt-5-codex.factory-recording.v1.json",
 	)
@@ -70,6 +66,73 @@ func TestProbeCostReplaysTheInstalledCodexFixture(t *testing.T) {
 	logProbeCostVerdict(t, broken)
 	if broken.Verdict != "FAIL" {
 		t.Fatalf("PROBE-COST deliberate unpriced-model verdict = %s, want FAIL: %s\nstdout=%s\nstderr=%s", broken.Verdict, broken.Falsifier, broken.Stdout, broken.Stderr)
+	}
+}
+
+// TestProbeMetricsSessionUsesInstalledArtifact proves the restored session
+// command crosses the delivered executable boundary from a blank query
+// directory. The replay server owns the fixture; the customer query does not
+// read that workspace or any local metrics artifact.
+func TestProbeMetricsSessionUsesInstalledArtifact(t *testing.T) {
+	binaryPath := prebuiltProbeCostArtifact(t)
+	fixturePath := testutil.MustRepoPath(t,
+		"tests/functional/factory/visualization/runtime_metrics/testdata/codex-gpt-5-codex.factory-recording.v1.json",
+	)
+	fixture, err := prepareProbeCostFixture(t, fixturePath, nil)
+	if err != nil {
+		t.Fatalf("prepare installed session fixture: %v", err)
+	}
+	replay, err := startProbeCostReplay(t, binaryPath, fixture)
+	if err != nil {
+		t.Fatalf("start installed session replay: %v", err)
+	}
+	defer replay.stop()
+
+	status, err := waitForProbeCostTerminal(replay.ctx, &http.Client{Timeout: 2 * time.Second}, replay.serverURL, replay.process)
+	if err != nil {
+		t.Fatalf("installed session replay did not reach terminal status: %v", err)
+	}
+	if status.Categories.Terminal == 0 || status.Categories.Failed != 0 {
+		t.Fatalf("installed session replay status terminal=%d failed=%d", status.Categories.Terminal, status.Categories.Failed)
+	}
+
+	queryDirectory := t.TempDir()
+	stdout, stderr, exitStatus, err := runProbeInstalledCLI(replay, binaryPath, queryDirectory, []string{
+		"--json", "--server", replay.serverURL, "metrics", "session", "~default",
+		"--lens", "cost", "--by-worker", "--by-dispatch",
+	})
+	if err != nil || exitStatus != 0 {
+		t.Fatalf("installed metrics session command failed: exit=%d err=%v\nstdout=%s\nstderr=%s", exitStatus, err, stdout, stderr)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("installed metrics session stderr = %q, want empty", stderr)
+	}
+	var report struct {
+		FactorySessionID string `json:"factory_session_id"`
+		Attempts         []struct {
+			DispatchID      string `json:"dispatch_id"`
+			WorkID          string `json:"work_id"`
+			WorkerSessionID string `json:"worker_session_id"`
+		} `json:"attempts"`
+		Cost struct {
+			Status    string  `json:"status"`
+			KnownCost *string `json:"known_cost"`
+		} `json:"cost"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &report); err != nil {
+		t.Fatalf("decode installed metrics session JSON: %v\nstdout=%s", err, stdout)
+	}
+	if report.FactorySessionID != "~default" || len(report.Attempts) != 1 || report.Cost.Status != "PRICED" || report.Cost.KnownCost == nil || *report.Cost.KnownCost != probeCostExpectedAmount {
+		t.Fatalf("installed metrics session report = %#v, want one selected priced attempt", report)
+	}
+	attempt := report.Attempts[0]
+	if attempt.DispatchID != "cost-replay-priced-dispatch" || attempt.WorkID != "cost-replay-priced-work" || attempt.WorkerSessionID != "cost-replay-priced-worker-session" {
+		t.Fatalf("installed metrics session attempt = %#v, want canonical replay identities", attempt)
+	}
+	if entries, err := os.ReadDir(queryDirectory); err != nil {
+		t.Fatalf("read blank query directory: %v", err)
+	} else if len(entries) != 0 {
+		t.Fatalf("blank query directory contains %d entries, want none", len(entries))
 	}
 }
 
@@ -304,6 +367,27 @@ func queryProbeCostReport(replay *probeCostReplay, binaryPath string) (generated
 	return report, stdout.String(), stderr.String(), nil
 }
 
+func runProbeInstalledCLI(replay *probeCostReplay, binaryPath, workingDirectory string, args []string) (stdout, stderr string, exitStatus int, err error) {
+	command := exec.CommandContext(replay.ctx, binaryPath, args...)
+	command.Dir = workingDirectory
+	command.Env = append([]string(nil), replay.environment...)
+	stdoutBuffer := &bytes.Buffer{}
+	stderrBuffer := &bytes.Buffer{}
+	command.Stdout = stdoutBuffer
+	command.Stderr = stderrBuffer
+	err = command.Run()
+	stdout = stdoutBuffer.String()
+	stderr = stderrBuffer.String()
+	if err == nil {
+		return stdout, stderr, 0, nil
+	}
+	exitStatus = 1
+	if exitError, ok := err.(*exec.ExitError); ok {
+		exitStatus = exitError.ExitCode()
+	}
+	return stdout, stderr, exitStatus, err
+}
+
 func logProbeCostVerdict(t *testing.T, result probeCostResult) {
 	t.Helper()
 	knownCost := result.ObservedKnownCost
@@ -322,18 +406,21 @@ func logProbeCostVerdict(t *testing.T, result probeCostResult) {
 	)
 }
 
-func buildProbeCostBinary(t *testing.T) string {
+func prebuiltProbeCostArtifact(t *testing.T) string {
 	t.Helper()
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
+	binaryPath := strings.TrimSpace(os.Getenv(probeCostArtifactEnv))
+	if binaryPath == "" {
+		if os.Getenv(probeCostRequireArtifactEnv) == "1" {
+			t.Fatalf("required compiled-artifact integration evidence did not receive %s", probeCostArtifactEnv)
+		}
+		t.Skipf("PROBE-COST requires a pinned prebuilt artifact; set %s to its path", probeCostArtifactEnv)
 	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	output, err := build.CombinedOutput()
+	info, err := os.Stat(binaryPath)
 	if err != nil {
-		t.Fatalf("build installed-style you binary: %v\n%s", err, output)
+		t.Fatalf("stat pinned PROBE-COST artifact %q: %v", binaryPath, err)
+	}
+	if info.IsDir() {
+		t.Fatalf("pinned PROBE-COST artifact %q is a directory", binaryPath)
 	}
 	return binaryPath
 }
