@@ -376,7 +376,7 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 	eventsCloseErr := errors.New("close Events")
 	targetCloseErr := errors.New("close ACP Factory target")
 	var closed []string
-	lifecycle := compositeProcessLifecycle{closers: []func(context.Context) error{
+	lifecycle := &compositeProcessLifecycle{closers: []func(context.Context) error{
 		func(context.Context) error {
 			closed = append(closed, "providers")
 			return providersCloseErr
@@ -403,6 +403,12 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 	}
 	if !slices.Equal(closed, []string{"providers", "events", "factory-target"}) {
 		t.Fatalf("Process.Close() closer calls = %v, want every process lifecycle owner in order", closed)
+	}
+	if err := process.Close(context.Background()); !errors.Is(err, providersCloseErr) || !errors.Is(err, eventsCloseErr) || !errors.Is(err, targetCloseErr) {
+		t.Fatalf("repeated Process.Close() error = %v, want the cached joined lifecycle errors", err)
+	}
+	if !slices.Equal(closed, []string{"providers", "events", "factory-target"}) {
+		t.Fatalf("repeated Process.Close() closer calls = %v, want exact-once lifecycle attempts", closed)
 	}
 }
 
@@ -445,6 +451,12 @@ func TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceA
 			"composed ProcessLifecycle.Close() closer calls = %v, want Factory Sessions then Providers then Events exactly once each",
 			closed,
 		)
+	}
+	if repeated := lifecycle.Close(context.Background()); !errors.Is(repeated, providersCloseErr) || !errors.Is(repeated, eventsCloseErr) {
+		t.Fatalf("repeated composed ProcessLifecycle.Close() error = %v, want cached provider/events failures", repeated)
+	}
+	if !slices.Equal(closed, []string{"factory-sessions", "providers", "events"}) {
+		t.Fatalf("repeated composed lifecycle calls = %v, want exact-once provider/session/event attempts", closed)
 	}
 }
 

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -121,6 +122,45 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	}
 	if any(retained) != any(opening) {
 		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", retained, opening)
+	}
+}
+
+func TestNewRuntimeOpeningAdapterDelegatesThroughThePublishedServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	owner := &runtimeOpeningOwnerService{}
+	adapter, err := NewRuntimeOpeningAdapter(owner)
+	if err != nil {
+		t.Fatalf("NewRuntimeOpeningAdapter() error = %v", err)
+	}
+	if adapter == nil {
+		t.Fatal("NewRuntimeOpeningAdapter() returned nil adapter")
+	}
+	if any(adapter.owner) != any(owner) {
+		t.Fatalf("adapter owner = %T(%[1]v), want the published Service root %T(%[2]v)", adapter.owner, owner)
+	}
+
+	request := &factorysessions.RuntimeOpeningRequest{}
+	if _, err := adapter.OpenApplicationRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenApplicationRuntime() error = %v", err)
+	}
+	if _, err := adapter.OpenInvocationRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenInvocationRuntime() error = %v", err)
+	}
+	if _, err := adapter.OpenExecutionRuntime(context.Background(), request); err != nil {
+		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+	}
+	if owner.applicationCalls != 1 || owner.invocationCalls != 1 || owner.executionCalls != 1 {
+		t.Fatalf("root opening calls = application:%d invocation:%d execution:%d, want one delegated call each", owner.applicationCalls, owner.invocationCalls, owner.executionCalls)
+	}
+}
+
+func TestNewRuntimeOpeningAdapterRejectsAnIncompleteServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	adapter, err := NewRuntimeOpeningAdapter(&incompleteRuntimeOpeningOwnerService{})
+	if adapter != nil || err == nil {
+		t.Fatalf("NewRuntimeOpeningAdapter(incomplete root) = (%#v, %v), want nil adapter and error", adapter, err)
 	}
 }
 
@@ -314,6 +354,30 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 }
 
 type recordingClock struct{ calls int }
+
+type runtimeOpeningOwnerService struct {
+	factorysessions.Service
+	applicationCalls int
+	invocationCalls  int
+	executionCalls   int
+}
+
+func (service *runtimeOpeningOwnerService) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedApplicationRuntime, error) {
+	service.applicationCalls++
+	return OpenedApplicationRuntime{}, nil
+}
+
+func (service *runtimeOpeningOwnerService) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedInvocationRuntime, error) {
+	service.invocationCalls++
+	return OpenedInvocationRuntime{}, nil
+}
+
+func (service *runtimeOpeningOwnerService) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedExecutionRuntime, error) {
+	service.executionCalls++
+	return OpenedExecutionRuntime{}, nil
+}
+
+type incompleteRuntimeOpeningOwnerService struct{ factorysessions.Service }
 
 func (c *recordingClock) Now() time.Time {
 	c.calls++

@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -130,6 +131,87 @@ type (
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
 )
+
+// RuntimeOpeningAdapter is the temporary compatibility view used by the old
+// application, invocation, and execution opening seams. It retains only the
+// already-composed Factory Sessions root and delegates every opening through
+// that root; it owns no registry, runtime, or lifecycle.
+type RuntimeOpeningAdapter struct {
+	owner runtimeOpeningOwner
+}
+
+type runtimeOpeningOwner interface {
+	OpenApplicationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedApplicationRuntime, error)
+	OpenInvocationRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedInvocationRuntime, error)
+	OpenExecutionRuntime(
+		context.Context,
+		*factorysessions.RuntimeOpeningRequest,
+	) (roles.OpenedExecutionRuntime, error)
+}
+
+// NewRuntimeOpeningAdapter binds the temporary opening view to the one
+// process-scoped Factory Sessions root. Binding is construction-only and does
+// not discover, construct, or activate another service.
+func NewRuntimeOpeningAdapter(service factorysessions.Service) (*RuntimeOpeningAdapter, error) {
+	if service == nil {
+		return nil, fmt.Errorf("construct Factory Sessions runtime opening adapter: service root is required")
+	}
+	owner, ok := service.(runtimeOpeningOwner)
+	if !ok || owner == nil {
+		return nil, fmt.Errorf("construct Factory Sessions runtime opening adapter: service root does not expose opening operations")
+	}
+	return &RuntimeOpeningAdapter{owner: owner}, nil
+}
+
+func (adapter *RuntimeOpeningAdapter) ownerService() (runtimeOpeningOwner, error) {
+	if adapter == nil || adapter.owner == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime opening adapter is unavailable")
+	}
+	return adapter.owner, nil
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenApplicationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedApplicationRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedApplicationRuntime{}, err
+	}
+	return owner.OpenApplicationRuntime(ctx, request)
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenInvocationRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedInvocationRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedInvocationRuntime{}, err
+	}
+	return owner.OpenInvocationRuntime(ctx, request)
+}
+
+func (adapter *RuntimeOpeningAdapter) OpenExecutionRuntime(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+) (roles.OpenedExecutionRuntime, error) {
+	owner, err := adapter.ownerService()
+	if err != nil {
+		return roles.OpenedExecutionRuntime{}, err
+	}
+	return owner.OpenExecutionRuntime(ctx, request)
+}
+
+var _ ApplicationRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
+var _ InvocationRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
+var _ ExecutionRuntimeOpening = (*RuntimeOpeningAdapter)(nil)
 
 // NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
 // routing capability used by the canonical process graph.
