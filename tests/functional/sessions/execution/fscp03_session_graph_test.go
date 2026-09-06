@@ -1,33 +1,27 @@
 package execution_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const fscp03ObservationTimeout = 15 * time.Second
+const (
+	fscp03ObservationTimeout = 15 * time.Second
+	fscp03InlineWorkflowKind = "INLINE_WORKFLOW"
+)
 
 // TestFSCP03CanonicalSessionGraph is the current-head functional witness for
 // the retained FSCP-02 action. Every scenario constructs one root process and
@@ -95,170 +89,15 @@ func runFSCP03DurableIdentityScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	opened, canonical := openFSCP03Execution(t, process, factoryDir, home, "fscp03-durable-identity-owner")
+	opened, canonical := openFSCP03Execution(t, process, process.ExecutionRuntimeOpening(), factoryDir, home, "fscp03-durable-identity-owner")
 	legacy, ok := opened.Execution.(factorysessions.DurableExecutionService)
 	if !ok {
 		t.Fatalf("execution type = %T, want public DurableExecutionService", opened.Execution)
 	}
 
-	first := fscp03StartSynchronous(t, canonical, "fscp03-sequential-first", fscp03ChildSource("sequential-first"))
-	second := fscp03StartSynchronous(t, canonical, "fscp03-sequential-second", fscp03ChildSource("sequential-second"))
-	if first.SessionID == second.SessionID {
-		t.Fatalf("sequential session ids = %q and %q, want distinct", first.SessionID, second.SessionID)
-	}
-	assertFSCP03SuccessfulStart(t, first)
-	assertFSCP03SuccessfulStart(t, second)
-	assertFSCP03DurableLineage(t, canonical, first.SessionID)
-	assertFSCP03DurableLineage(t, canonical, second.SessionID)
-	assertFSCP03DisjointDurableObservations(t, canonical, first.SessionID, second.SessionID)
-
-	canonicalDirection := fscp03StartSynchronous(t, canonical, "fscp03-canonical-direction", fscp03InlineSource(`return "fscp03 direction COMPLETE";`))
-	legacyDirection, err := legacy.StartSync(t.Context(), factorysessions.StartRequest{
-		RequestID: "fscp03-legacy-direction",
-		Source:    fscp03InlineSource(`return "fscp03 direction COMPLETE";`),
-	})
-	if err != nil {
-		t.Fatalf("legacy durable StartSync() error = %v", err)
-	}
-	if canonicalDirection.SessionID == legacyDirection.SessionID {
-		t.Fatalf("canonical/legacy session id = %q, want distinct executions", canonicalDirection.SessionID)
-	}
-	assertFSCP03SuccessfulStart(t, canonicalDirection)
-	if legacyDirection.Status != string(factorysessions.LifecycleStatusSucceeded) ||
-		legacyDirection.SyncOutcome != factorysessions.SyncOutcome("COMPLETED") {
-		t.Fatalf("legacy direction result = %#v, want SUCCEEDED/COMPLETED", legacyDirection)
-	}
-	legacyView, err := legacy.GetSession(t.Context(), legacyDirection.SessionID)
-	if err != nil {
-		t.Fatalf("legacy direction GetSession() error = %v", err)
-	}
-	if legacyView.Status != factorysessions.LifecycleStatusSucceeded ||
-		legacyView.OrchestratorKind != "JAVASCRIPT" ||
-		legacyView.ResolvedSource.SourceRef != "inline" ||
-		legacyView.ResultSummary == nil || legacyView.ResultSummary.ResultStatus != string(factorysessions.ResultStatusFinal) {
-		t.Fatalf("legacy direction view = %#v, want equivalent durable success semantics", legacyView)
-	}
-	canonicalView, err := legacy.GetSession(t.Context(), canonicalDirection.SessionID)
-	if err != nil {
-		t.Fatalf("canonical direction GetSession() error = %v", err)
-	}
-	if canonicalView.Status != legacyView.Status ||
-		canonicalView.OrchestratorKind != legacyView.OrchestratorKind ||
-		canonicalView.ResolvedSource.SourceRef != legacyView.ResolvedSource.SourceRef ||
-		canonicalView.ResultSummary == nil || legacyView.ResultSummary == nil ||
-		canonicalView.ResultSummary.ResultStatus != legacyView.ResultSummary.ResultStatus {
-		t.Fatalf("canonical view = %#v, legacy view = %#v, want equivalent public projections", canonicalView, legacyView)
-	}
-
-	barrier := newFSCP03BarrierRunner()
-	concurrentProcess, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		BrowserOpener:         func(context.Context, string) error { return nil },
-		ProviderCommandRunner: barrier,
-	})
-	if err != nil {
-		t.Fatalf("concurrent root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, concurrentProcess)
-	concurrentOpened, concurrentCanonical := openFSCP03Execution(t, concurrentProcess, factoryDir, t.TempDir(), "fscp03-concurrent-owner")
-	concurrentResults := make(chan fscp03StartOutcome, 2)
-	for _, label := range []string{"concurrent-a", "concurrent-b"} {
-		label := label
-		go func() {
-			result, startErr := concurrentCanonical.Start(t.Context(), factorysessions.SessionStartRequest{
-				Mode:        factorysessions.SessionOperationModeDurable,
-				Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp03-" + label},
-				Source:      fscp03ChildSource(label),
-				Synchronous: true,
-			})
-			concurrentResults <- fscp03StartOutcome{result: result, err: startErr}
-		}()
-	}
-	if err := barrier.WaitStarted(t.Context(), 2); err != nil {
-		t.Fatalf("concurrent starts did not overlap at provider edge: %v", err)
-	}
-	barrier.Release()
-	concurrent := make([]factorysessions.SessionStartResult, 0, 2)
-	for range 2 {
-		select {
-		case outcome := <-concurrentResults:
-			if outcome.err != nil {
-				t.Fatalf("concurrent canonical Start() error = %v", outcome.err)
-			}
-			concurrent = append(concurrent, outcome.result)
-		case <-time.After(fscp03ObservationTimeout):
-			t.Fatal("concurrent canonical starts did not complete after provider release")
-		}
-	}
-	if concurrentOpened.Execution == nil {
-		t.Fatal("concurrent opening lost its retained execution root")
-	}
-	if concurrent[0].SessionID == concurrent[1].SessionID {
-		t.Fatalf("concurrent session ids = %q and %q, want distinct", concurrent[0].SessionID, concurrent[1].SessionID)
-	}
-	for _, result := range concurrent {
-		assertFSCP03SuccessfulStart(t, result)
-		assertFSCP03DurableLineage(t, concurrentCanonical, result.SessionID)
-	}
-	assertFSCP03DisjointDurableObservations(t, concurrentCanonical, concurrent[0].SessionID, concurrent[1].SessionID)
-
-	barrier.Reset()
-	activeResults := make(chan fscp03StartOutcome, 1)
-	go func() {
-		result, startErr := concurrentCanonical.Start(t.Context(), factorysessions.SessionStartRequest{
-			Mode:        factorysessions.SessionOperationModeDurable,
-			Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp03-failure-peer"},
-			Source:      fscp03ChildSource("failure-peer"),
-			Synchronous: true,
-		})
-		activeResults <- fscp03StartOutcome{result: result, err: startErr}
-	}()
-	if err := barrier.WaitStarted(t.Context(), 1); err != nil {
-		t.Fatalf("active peer did not reach controlled provider: %v", err)
-	}
-	failed, err := concurrentCanonical.Start(t.Context(), factorysessions.SessionStartRequest{
-		Mode:        factorysessions.SessionOperationModeDurable,
-		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp03-controlled-failure"},
-		Source:      fscp03InlineSource(`throw new Error("fscp03 controlled failure");`),
-		Synchronous: true,
-	})
-	if err != nil {
-		t.Fatalf("controlled failed Start() error = %v, want terminal failed projection", err)
-	}
-	if failed.Status != string(factorysessions.LifecycleStatusFailed) {
-		t.Fatalf("failed start status = %q, want FAILED", failed.Status)
-	}
-	failedView, err := concurrentOpened.Execution.(factorysessions.DurableExecutionService).GetSession(t.Context(), failed.SessionID)
-	if err != nil {
-		t.Fatalf("failed GetSession() error = %v", err)
-	}
-	if failedView.Status != factorysessions.LifecycleStatusFailed || failedView.Failure == nil ||
-		!strings.Contains(failedView.Failure.Message, "fscp03 controlled failure") {
-		t.Fatalf("failed durable view = %#v, want original typed failure", failedView)
-	}
-	failedResult, err := concurrentCanonical.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{
-		SessionID: failed.SessionID,
-		Mode:      factorysessions.SessionOperationModeDurable,
-		Request:   factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal},
-	})
-	if err != nil {
-		t.Fatalf("failed ReadResult() error = %v", err)
-	}
-	if failedResult.Status != string(factorysessions.ResultStatusUnavailable) || failedResult.Durable == nil ||
-		failedResult.Durable.SessionStatus != factorysessions.LifecycleStatusFailed {
-		t.Fatalf("failed result = %#v durable=%#v, want unavailable result with original failure", failedResult, failedResult.Durable)
-	}
-	barrier.Release()
-	active := <-activeResults
-	if active.err != nil {
-		t.Fatalf("active peer after failed start error = %v", active.err)
-	}
-	assertFSCP03SuccessfulStart(t, active.result)
-	recovery := fscp03StartSynchronous(t, concurrentCanonical, "fscp03-after-failure", fscp03ChildSource("after-failure"))
-	assertFSCP03SuccessfulStart(t, recovery)
-	if recovery.SessionID == failed.SessionID || recovery.SessionID == active.result.SessionID {
-		t.Fatalf("recovery session id = %q, want a fresh usable session", recovery.SessionID)
-	}
-	assertFSCP03DurableLineage(t, concurrentCanonical, recovery.SessionID)
+	runFSCP03SequentialDurableIdentity(t, canonical)
+	runFSCP03DurableDirection(t, canonical, legacy)
+	runFSCP03ConcurrentDurableIdentity(t, factoryDir)
 }
 
 func runFSCP03DurableControlScenario(t *testing.T) {
@@ -276,119 +115,12 @@ func runFSCP03DurableControlScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	_, canonical := openFSCP03Execution(t, process, factoryDir, home, "fscp03-control-owner")
+	_, canonical := openFSCP03Execution(t, process, process.ExecutionRuntimeOpening(), factoryDir, home, "fscp03-control-owner")
 
-	canceled := fscp03StartBlockedAsync(t, canonical, controlRunner.started, "fscp03-cancel")
-	cancelControl, err := canonical.Control(t.Context(), factorysessions.SessionControlRequest{
-		SessionID: canceled.SessionID,
-		Mode:      factorysessions.SessionOperationModeDurable,
-		Operation: factorysessions.SessionControlCancel,
-		Control:   factorysessions.ControlRequest{RequestID: "fscp03-cancel-control"},
-	})
-	if err != nil {
-		t.Fatalf("canonical CANCEL error = %v", err)
-	}
-	if cancelControl.Operation != factorysessions.SessionControlCancel ||
-		cancelControl.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
-		cancelControl.Status != factorysessions.LifecycleStatusCanceling {
-		t.Fatalf("CANCEL result = %#v, want accepted CANCEL/CANCELING", cancelControl)
-	}
-	assertFSCP03DurableStatus(t, canonical, canceled.SessionID, factorysessions.LifecycleStatusCanceled)
-
-	terminated := fscp03StartBlockedAsync(t, canonical, controlRunner.started, "fscp03-terminate")
-	terminateControl, err := canonical.Control(t.Context(), factorysessions.SessionControlRequest{
-		SessionID: terminated.SessionID,
-		Mode:      factorysessions.SessionOperationModeDurable,
-		Operation: factorysessions.SessionControlTerminate,
-		Control:   factorysessions.ControlRequest{RequestID: "fscp03-terminate-control"},
-	})
-	if err != nil {
-		t.Fatalf("canonical TERMINATE error = %v", err)
-	}
-	if terminateControl.Operation != factorysessions.SessionControlTerminate ||
-		terminateControl.Outcome != factorysessions.LifecycleControlOutcomeAccepted ||
-		terminateControl.Status != factorysessions.LifecycleStatusTerminated {
-		t.Fatalf("TERMINATE result = %#v, want accepted TERMINATE/TERMINATED", terminateControl)
-	}
-	assertFSCP03DurableTerminalStatus(t, canonical, terminated.SessionID)
-
-	live, err := canonical.Start(t.Context(), factorysessions.SessionStartRequest{
-		Mode:       factorysessions.SessionOperationModeLive,
-		FolderPath: factoryDir,
-	})
-	if err != nil {
-		t.Fatalf("live Start() for CLOSE error = %v", err)
-	}
-	closed, err := canonical.Control(t.Context(), factorysessions.SessionControlRequest{
-		SessionID: live.SessionID,
-		Mode:      factorysessions.SessionOperationModeLive,
-		Operation: factorysessions.SessionControlClose,
-		Control:   factorysessions.ControlRequest{RequestID: "fscp03-close-control"},
-	})
-	if err != nil {
-		t.Fatalf("canonical CLOSE error = %v", err)
-	}
-	if closed.Operation != factorysessions.SessionControlClose || !closed.Closed {
-		t.Fatalf("CLOSE result = %#v, want closed live session", closed)
-	}
-
-	for _, cancelOnTimeout := range []bool{false, true} {
-		requestID := fmt.Sprintf("fscp03-timeout-%t", cancelOnTimeout)
-		started := make(chan fscp03StartOutcome, 1)
-		go func() {
-			result, startErr := canonical.Start(t.Context(), factorysessions.SessionStartRequest{
-				Mode:        factorysessions.SessionOperationModeDurable,
-				Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
-				Source:      fscp03ChildSource(requestID),
-				Synchronous: true,
-				Wait: factorysessions.SessionOperationWait{
-					TimeoutMillis:   25,
-					CancelOnTimeout: cancelOnTimeout,
-				},
-			})
-			started <- fscp03StartOutcome{result: result, err: startErr}
-		}()
-		select {
-		case <-controlRunner.started:
-		case <-time.After(fscp03ObservationTimeout):
-			t.Fatalf("timeout branch cancel=%t did not reach provider", cancelOnTimeout)
-		}
-		var outcome fscp03StartOutcome
-		select {
-		case outcome = <-started:
-		case <-time.After(fscp03ObservationTimeout):
-			t.Fatalf("timeout branch cancel=%t did not return", cancelOnTimeout)
-		}
-		if outcome.err != nil {
-			t.Fatalf("timeout branch cancel=%t error = %v", cancelOnTimeout, outcome.err)
-		}
-		if outcome.result.Sync == nil || outcome.result.Sync.SyncOutcome != factorysessions.SyncOutcome("TIMED_OUT") || !outcome.result.Sync.TimedOut {
-			t.Fatalf("timeout branch cancel=%t result = %#v, want timed-out sync outcome", cancelOnTimeout, outcome.result)
-		}
-		if outcome.result.Sync.SessionCanceledByTimeout != cancelOnTimeout {
-			t.Fatalf("timeout branch cancel=%t canceledByTimeout = %t, want %t", cancelOnTimeout, outcome.result.Sync.SessionCanceledByTimeout, cancelOnTimeout)
-		}
-		if cancelOnTimeout {
-			assertFSCP03DurableStatus(t, canonical, outcome.result.SessionID, factorysessions.LifecycleStatusCanceled)
-			continue
-		}
-		if outcome.result.Status != string(factorysessions.LifecycleStatusRunning) {
-			t.Fatalf("timeout branch cancel=false status = %q, want RUNNING", outcome.result.Status)
-		}
-		control, controlErr := canonical.Control(t.Context(), factorysessions.SessionControlRequest{
-			SessionID: outcome.result.SessionID,
-			Mode:      factorysessions.SessionOperationModeDurable,
-			Operation: factorysessions.SessionControlCancel,
-			Control:   factorysessions.ControlRequest{RequestID: requestID + "-cleanup"},
-		})
-		if controlErr != nil {
-			t.Fatalf("timeout false cleanup CANCEL error = %v", controlErr)
-		}
-		if control.Operation != factorysessions.SessionControlCancel {
-			t.Fatalf("timeout false cleanup control = %#v, want CANCEL", control)
-		}
-		assertFSCP03DurableStatus(t, canonical, outcome.result.SessionID, factorysessions.LifecycleStatusCanceled)
-	}
+	runFSCP03Cancel(t, canonical, controlRunner)
+	runFSCP03Terminate(t, canonical, controlRunner)
+	runFSCP03Close(t, canonical, factoryDir)
+	runFSCP03TimeoutBranches(t, canonical, controlRunner)
 }
 
 func runFSCP03LiveIsolationScenario(t *testing.T) {
@@ -534,7 +266,11 @@ type fscp03StartOutcome struct {
 	err    error
 }
 
-func fscp03ExecuteHelp(t *testing.T, process *initializerapplication.Process, factoryDir, home string) {
+type fscp03Process interface {
+	Execute(root.Input) error
+}
+
+func fscp03ExecuteHelp(t *testing.T, process fscp03Process, factoryDir, home string) {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--help"})
 	inputs.Input.Env = isolatedEnvironment(home)
@@ -549,11 +285,11 @@ func fscp03ExecuteHelp(t *testing.T, process *initializerapplication.Process, fa
 
 func openFSCP03Execution(
 	t *testing.T,
-	process *initializerapplication.Process,
+	process fscp03Process,
+	capability executionRuntimeOpeningCapability,
 	factoryDir, home, sessionID string,
 ) (factorysessions.OpenedExecutionRuntime, fscp03CanonicalOperations) {
 	t.Helper()
-	capability := process.ExecutionRuntimeOpening()
 	if capability == nil {
 		t.Fatal("root process returned no execution opening")
 	}
@@ -806,365 +542,10 @@ func assertFSCP03ResponseEvents(t *testing.T, sessionID string, events []factory
 
 func fscp03InlineSource(source string) factorysessions.Source {
 	return factorysessions.Source{
-		Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
+		Kind: fscp03InlineWorkflowKind,
 		InlineWorkflow: &factorysessions.InlineWorkflowSource{
 			Dialect:      "you-workflow-v1",
 			InlineSource: source,
 		},
 	}
-}
-
-func fscp03ChildSource(label string) factorysessions.Source {
-	return fscp03InlineSource(fmt.Sprintf(`return (async function () {
-  return await agent.run({
-    prompt: %q,
-    label: %q,
-    modelProvider: "codex",
-    model: "gpt-5-codex"
-  });
-})();`, label, label))
-}
-
-type fscp03BarrierRunner struct {
-	gate    chan struct{}
-	started chan struct{}
-}
-
-func newFSCP03BarrierRunner() *fscp03BarrierRunner {
-	return &fscp03BarrierRunner{gate: make(chan struct{}), started: make(chan struct{}, 32)}
-}
-
-func (runner *fscp03BarrierRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	select {
-	case runner.started <- struct{}{}:
-	default:
-	}
-	select {
-	case <-runner.gate:
-		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("fscp03 barrier COMPLETE")}, nil
-	case <-ctx.Done():
-		return platformprocess.CommandResult{}, ctx.Err()
-	}
-}
-
-func (runner *fscp03BarrierRunner) WaitStarted(ctx context.Context, count int) error {
-	for range count {
-		select {
-		case <-runner.started:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(fscp03ObservationTimeout):
-			return fmt.Errorf("waiting for provider dispatch %d", count)
-		}
-	}
-	return nil
-}
-
-func (runner *fscp03BarrierRunner) Release() { close(runner.gate) }
-
-func (runner *fscp03BarrierRunner) Reset() {
-	runner.gate = make(chan struct{})
-}
-
-var _ platformprocess.CommandRunner = (*fscp03BarrierRunner)(nil)
-
-type fscp03ControlRunner struct {
-	started chan struct{}
-}
-
-func newFSCP03ControlRunner() *fscp03ControlRunner {
-	return &fscp03ControlRunner{started: make(chan struct{}, 32)}
-}
-
-func (runner *fscp03ControlRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	select {
-	case runner.started <- struct{}{}:
-	default:
-	}
-	<-ctx.Done()
-	return platformprocess.CommandResult{}, ctx.Err()
-}
-
-var _ platformprocess.CommandRunner = (*fscp03ControlRunner)(nil)
-
-type fscp03LiveRunner struct {
-	mu      sync.Mutex
-	gate    chan struct{}
-	started chan struct{}
-}
-
-func newFSCP03LiveRunner() *fscp03LiveRunner {
-	return &fscp03LiveRunner{started: make(chan struct{}, 32)}
-}
-
-func (runner *fscp03LiveRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	runner.mu.Lock()
-	gate := runner.gate
-	runner.mu.Unlock()
-	if gate != nil {
-		select {
-		case runner.started <- struct{}{}:
-		default:
-		}
-		select {
-		case <-gate:
-		case <-ctx.Done():
-			return platformprocess.CommandResult{}, ctx.Err()
-		}
-	}
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("fscp03 live COMPLETE")}, nil
-}
-
-func (runner *fscp03LiveRunner) Hold() {
-	runner.mu.Lock()
-	defer runner.mu.Unlock()
-	runner.gate = make(chan struct{})
-}
-
-func (runner *fscp03LiveRunner) Release() {
-	runner.mu.Lock()
-	gate := runner.gate
-	runner.gate = nil
-	runner.mu.Unlock()
-	if gate != nil {
-		close(gate)
-	}
-}
-
-func (runner *fscp03LiveRunner) WaitStarted(ctx context.Context, count int) error {
-	for range count {
-		select {
-		case <-runner.started:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(fscp03ObservationTimeout):
-			return fmt.Errorf("waiting for live provider dispatch %d", count)
-		}
-	}
-	return nil
-}
-
-var _ platformprocess.CommandRunner = (*fscp03LiveRunner)(nil)
-
-type fscp03HTTPInvocationOutcome struct {
-	response factoryapi.InvocationResponse
-	err      error
-}
-
-func postFSCP03Invocation(ctx context.Context, baseURL, sessionID, text string) (factoryapi.InvocationResponse, error) {
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: text,
-	}); err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	payload, err := json.Marshal(factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    ptr(factoryapi.WorkContent{part}),
-	})
-	if err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return factoryapi.InvocationResponse{}, fmt.Errorf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return factoryapi.InvocationResponse{}, err
-	}
-	return decoded, nil
-}
-
-func ptr[T any](value T) *T { return &value }
-
-func assertFSCP03HTTPInvocation(t *testing.T, response factoryapi.InvocationResponse) {
-	t.Helper()
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted || strings.TrimSpace(response.RequestId) == "" || strings.TrimSpace(response.TraceId) == "" {
-		t.Fatalf("HTTP invocation response = %#v, want COMPLETED request/trace identity", response)
-	}
-	if response.PrimaryResult == nil || len(*response.PrimaryResult) == 0 {
-		t.Fatalf("HTTP invocation primary result = %#v, want result content", response.PrimaryResult)
-	}
-}
-
-func assertFSCP03LiveFactoryEvents(t *testing.T, baseURL, firstID, secondID string) {
-	t.Helper()
-	first := support.GetFactoryEventsForSessionAt(t, baseURL, firstID)
-	second := support.GetFactoryEventsForSessionAt(t, baseURL, secondID)
-	if len(first) == 0 || len(second) == 0 {
-		t.Fatalf("live Factory Events first=%d second=%d, want events for both sessions", len(first), len(second))
-	}
-	firstWorkIDs := make(map[string]struct{})
-	firstSessionEvents := 0
-	for _, event := range first {
-		if event.Context.SessionId != nil {
-			firstSessionEvents++
-		}
-		if event.Context.SessionId != nil && *event.Context.SessionId != firstID && *event.Context.SessionId != factorysessions.DefaultSessionID {
-			t.Fatalf("first Factory Event context = %#v, want session %q", event.Context, firstID)
-		}
-		if event.Context.WorkIds != nil {
-			for _, workID := range *event.Context.WorkIds {
-				firstWorkIDs[workID] = struct{}{}
-			}
-		}
-	}
-	if len(firstWorkIDs) == 0 {
-		t.Fatalf("first Factory Events = %#v, want Work lineage", first)
-	}
-	if firstSessionEvents == 0 {
-		t.Fatalf("first Factory Events = %#v, want at least one session-correlated event", first)
-	}
-	secondSessionEvents := 0
-	for _, event := range second {
-		if event.Context.SessionId != nil {
-			secondSessionEvents++
-		}
-		if event.Context.SessionId != nil && *event.Context.SessionId != secondID {
-			t.Fatalf("second Factory Event context = %#v, want session %q", event.Context, secondID)
-		}
-		if event.Context.WorkIds != nil {
-			for _, workID := range *event.Context.WorkIds {
-				if _, shared := firstWorkIDs[workID]; shared {
-					t.Fatalf("Work identity %q crossed live sessions", workID)
-				}
-			}
-		}
-	}
-	if secondSessionEvents == 0 {
-		t.Fatalf("second Factory Events = %#v, want at least one session-correlated event", second)
-	}
-}
-
-func assertFSCP03LiveResponseEvents(t *testing.T, baseURL, firstID, secondID string) {
-	t.Helper()
-	first := support.GetFactoryResponseEventsAt(t, baseURL, firstID)
-	second := support.GetFactoryResponseEventsAt(t, baseURL, secondID)
-	if len(first) == 0 || len(second) == 0 {
-		t.Fatalf("live Response Events first=%d second=%d, want events for both sessions", len(first), len(second))
-	}
-	firstEventIDs := make(map[string]struct{}, len(first))
-	firstDispatchIDs := make(map[string]struct{}, len(first))
-	for _, event := range first {
-		if event.FactorySessionId != firstID || strings.TrimSpace(event.EventId) == "" {
-			t.Fatalf("first Response Event = %#v, want session-scoped identity", event)
-		}
-		firstEventIDs[event.EventId] = struct{}{}
-		if event.DispatchId != nil {
-			firstDispatchIDs[*event.DispatchId] = struct{}{}
-		}
-	}
-	if len(firstDispatchIDs) == 0 {
-		t.Fatalf("first Response Events = %#v, want dispatch identity", first)
-	}
-	for _, event := range second {
-		if event.FactorySessionId != secondID {
-			t.Fatalf("second Response Event = %#v, want session %q", event, secondID)
-		}
-		if _, shared := firstEventIDs[event.EventId]; shared {
-			t.Fatalf("Response Event identity %q crossed live sessions", event.EventId)
-		}
-		if event.DispatchId != nil {
-			if _, shared := firstDispatchIDs[*event.DispatchId]; shared {
-				t.Fatalf("dispatch identity %q crossed live sessions", *event.DispatchId)
-			}
-		}
-	}
-}
-
-func collectFSCP03ResponseFrames(
-	t *testing.T,
-	stream *support.FactoryResponseEventStream,
-	sessionID string,
-) []support.FactoryResponseEventFrame {
-	t.Helper()
-	var frames []support.FactoryResponseEventFrame
-	deadline := time.NewTimer(fscp03ObservationTimeout)
-	defer deadline.Stop()
-	for {
-		select {
-		case <-deadline.C:
-			t.Fatalf("timed out collecting response events for session %q; got %d frames", sessionID, len(frames))
-		default:
-		}
-		frame, ok := stream.TryNextFrame(time.Second)
-		if !ok {
-			t.Fatalf("response event stream for session %q closed before MESSAGE completion; got %d frames", sessionID, len(frames))
-		}
-		if frame.Event.FactorySessionId != sessionID {
-			t.Fatalf("response frame session = %q, want %q", frame.Event.FactorySessionId, sessionID)
-		}
-		frames = append(frames, frame)
-		if frame.Event.Kind == factoryapi.FactoryResponseEventKindMessage && frame.Event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
-			return frames
-		}
-	}
-}
-
-func assertFSCP03DisjointHTTPResponseFrames(t *testing.T, first, second []support.FactoryResponseEventFrame) {
-	t.Helper()
-	firstEventIDs := make(map[string]struct{}, len(first))
-	firstDispatchIDs := make(map[string]struct{}, len(first))
-	for _, frame := range first {
-		firstEventIDs[frame.Event.EventId] = struct{}{}
-		if frame.Event.DispatchId != nil {
-			firstDispatchIDs[*frame.Event.DispatchId] = struct{}{}
-		}
-	}
-	if len(firstDispatchIDs) == 0 {
-		t.Fatal("first concurrent response stream had no dispatch identity")
-	}
-	for _, frame := range second {
-		if _, shared := firstEventIDs[frame.Event.EventId]; shared {
-			t.Fatalf("concurrent Response Event identity %q crossed streams", frame.Event.EventId)
-		}
-		if frame.Event.DispatchId != nil {
-			if _, shared := firstDispatchIDs[*frame.Event.DispatchId]; shared {
-				t.Fatalf("concurrent dispatch identity %q crossed streams", *frame.Event.DispatchId)
-			}
-		}
-	}
-}
-
-func scaffoldFSCP03ProbeFactory(t *testing.T) string {
-	t.Helper()
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "fscp03-probe",
-		"workTypes": []map[string]any{{
-			"name":             "task",
-			"handlingBehavior": []string{"DEFAULT"},
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	})
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	return dir
 }
