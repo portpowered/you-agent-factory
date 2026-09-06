@@ -18,6 +18,9 @@ import (
 type pinnedTTSFileIdentity struct {
 	Configured  bool   `json:"configured"`
 	RegularFile bool   `json:"regularFile"`
+	Path        string `json:"path,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	Tree        string `json:"tree,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	SHA256      string `json:"sha256,omitempty"`
 }

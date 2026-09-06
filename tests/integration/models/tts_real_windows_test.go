@@ -36,10 +36,11 @@ const (
 	pinnedTTSManagedModelDir     = "TTS"
 	pinnedASRManagedModelDir     = "ASR"
 	pinnedTTSModelName           = "tts"
-	pinnedTTSCommandDescription  = "you.exe --json models invoke tts --operation TTS --input text=Local AI works on this machine --output audio=<isolated-tts.wav>; then --json models invoke asr --operation ASR --input audio=@<isolated-tts.wav> --output transcript=<isolated-transcript.txt> --output segments=<isolated-segments.json>"
+	pinnedTTSCommandDescription  = "you.exe --json models invoke tts --operation TTS --input text=Local AI works on this machine --output audio=<isolated-tts.wav>"
 	pinnedTTSMaxAudioBytes       = int64(512 << 20)
 	pinnedTTSMaxDuration         = 5 * time.Minute
-	pinnedTTSWitnessTimeout      = 3 * time.Hour
+	pinnedTTSWitnessTimeout      = 90 * time.Minute
+	pinnedTTSRuntimeEvidenceEnv  = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
 )
 
 var (
@@ -63,24 +64,22 @@ func TestPinnedLocalAITTSASRWindowsWitness(t *testing.T) {
 	if !ok {
 		return
 	}
-	runPinnedTTSASRChain(t, &evidence, dirs, binaryPath)
+	runPinnedTTSDiagnostic(t, &evidence, dirs, binaryPath)
 }
 
 type pinnedTTSDirs struct {
-	root            string
-	work            string
-	home            string
-	state           string
-	modelCache      string
-	hfHome          string
-	hfCache         string
-	temp            string
-	output          string
-	outputPath      string
-	reuseOutputPath string
-	transcriptPath  string
-	segmentsPath    string
-	streams         string
+	root                string
+	work                string
+	home                string
+	state               string
+	modelCache          string
+	hfHome              string
+	hfCache             string
+	temp                string
+	output              string
+	outputPath          string
+	streams             string
+	runtimeEvidencePath string
 }
 
 func newPinnedTTSEvidence(t *testing.T) (pinnedTTSEvidence, pinnedTTSDirs) {
@@ -99,9 +98,7 @@ func newPinnedTTSEvidence(t *testing.T) (pinnedTTSEvidence, pinnedTTSDirs) {
 		streams:    filepath.Join(root, "streams"),
 	}
 	dirs.outputPath = filepath.Join(dirs.output, "tts-first.wav")
-	dirs.reuseOutputPath = filepath.Join(dirs.output, "tts-cache-reuse.wav")
-	dirs.transcriptPath = filepath.Join(dirs.output, "asr-transcript.txt")
-	dirs.segmentsPath = filepath.Join(dirs.output, "asr-segments.json")
+	dirs.runtimeEvidencePath = filepath.Join(dirs.root, "runtime-evidence.jsonl")
 	for _, directory := range []string{
 		dirs.work, dirs.home, dirs.state, dirs.modelCache, dirs.hfHome,
 		dirs.hfCache, dirs.temp, dirs.output, dirs.streams,
@@ -133,21 +130,6 @@ func newPinnedTTSEvidence(t *testing.T) (pinnedTTSEvidence, pinnedTTSDirs) {
 			ExpectedBytes:    pinnedTTSBackendBytes,
 			ExpectedSHA256:   pinnedTTSBackendSHA256,
 		},
-		ASRModel: pinnedTTSModelIdentity{
-			Name:     "asr",
-			Source:   pinnedASRModelSource,
-			Revision: pinnedASRModelRevision,
-		},
-		ASRBackend: pinnedTTSBackendIdentity{
-			ID:               pinnedASRBackendID,
-			SourceRepository: "https://github.com/ggml-org/whisper.cpp",
-			BackendCommit:    pinnedASRWhisperCommit,
-			LocalAICommit:    pinnedTTSLocalAICommit,
-			ProtocolRevision: pinnedTTSProtocolRevision,
-			Archive:          pinnedASRBackendArchive,
-			ExpectedBytes:    pinnedASRBackendBytes,
-			ExpectedSHA256:   pinnedASRBackendSHA256,
-		},
 		Isolation: pinnedTTSIsolation{
 			FreshWorkingDirectory: true,
 			FreshUserProfile:      true,
@@ -156,14 +138,14 @@ func newPinnedTTSEvidence(t *testing.T) (pinnedTTSEvidence, pinnedTTSDirs) {
 			FreshTempDirectory:    true,
 			FreshOutputDirectory:  true,
 			FreshPortState:        true,
-			NetworkPolicy:         "first use permits only the pinned public sources; cache reuse uses a failing proxy probe",
+			NetworkPolicy:         "one first-use call permits only the pinned public sources; no retry or cache-reuse probe",
 		},
 		Budgets: pinnedTTSBudgets{
-			Disk:             "80 GiB",
-			Download:         "32 GiB",
+			Disk:             "24 GiB",
+			Download:         "4 GiB incremental",
 			ChildProcesses:   4,
-			ModelCalls:       3,
-			HeavyInvocations: 3,
+			ModelCalls:       1,
+			HeavyInvocations: 1,
 			SemanticRetries:  0,
 			Timeout:          pinnedTTSWitnessTimeout.String(),
 		},
@@ -176,6 +158,7 @@ func newPinnedTTSEvidence(t *testing.T) (pinnedTTSEvidence, pinnedTTSDirs) {
 			"non-Windows platforms",
 			"configured-server parity",
 			"other model operations",
+			"ASR semantic execution",
 			"Factory journey and Project completion",
 		},
 	}, dirs
@@ -206,6 +189,29 @@ type pinnedTTSReuseDownload struct {
 	FreshCacheAtStart bool   `json:"freshCacheAtStart"`
 	Model             string `json:"model"`
 	Backend           string `json:"backend"`
+}
+
+type pinnedTTSEvidence struct {
+	Outcome          string                              `json:"outcome"`
+	Blocker          string                              `json:"blocker,omitempty"`
+	Platform         string                              `json:"platform"`
+	Arch             string                              `json:"architecture"`
+	Command          string                              `json:"command"`
+	Binary           pinnedTTSFileIdentity               `json:"binary"`
+	Model            pinnedTTSModelIdentity              `json:"model"`
+	Backend          pinnedTTSBackendIdentity            `json:"backend"`
+	Isolation        pinnedTTSIsolation                  `json:"isolation"`
+	Budgets          pinnedTTSBudgets                    `json:"budgets"`
+	ReuseDownload    pinnedTTSReuseDownload              `json:"reuseDownload"`
+	Execution        *pinnedTTSExecution                 `json:"execution,omitempty"`
+	Output           *pinnedTTSOutput                    `json:"output,omitempty"`
+	Cleanup          pinnedTTSCleanup                    `json:"cleanup"`
+	Streams          pinnedTTSStreams                    `json:"streams"`
+	Caches           pinnedTTSCacheEvidence              `json:"caches"`
+	StageTrace       []pinnedTTSStageEvidence            `json:"stageTrace"`
+	Failure          *pinnedTTSFailureEvidence           `json:"failure,omitempty"`
+	ChildEnvironment []pinnedTTSChildEnvironmentEvidence `json:"childEnvironment"`
+	Unproven         []string                            `json:"unproven"`
 }
 
 func pinnedTTSCacheDisposition(fresh, verified bool) string {
