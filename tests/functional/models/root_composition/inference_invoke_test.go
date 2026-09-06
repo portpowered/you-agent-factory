@@ -47,7 +47,6 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-
 	home := functionalTempDir(t)
 	writeGenericBuiltinTTSCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
@@ -349,7 +348,6 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 // contract; the named route keeps its legacy worker/content response shape.
 func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T) {
 	t.Parallel()
-
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -395,7 +393,7 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	if len(genericResponse.Outputs) != 1 || genericResponse.Outputs[0].Name != "audio" ||
 		genericResponse.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio ||
 		genericResponse.Outputs[0].Content == nil {
-		t.Fatalf("generic built-in parity response = %#v, want one audio output containing input", genericResponse)
+		t.Fatalf("generic built-in parity response = %#v, want one named audio output", genericResponse)
 	}
 	assertSemanticTTSAudio(t, []byte(*genericResponse.Outputs[0].Content), "generic built-in parity audio")
 	if genericTTS.Calls() != 0 || len(privateTTS.Calls()) != 1 {
