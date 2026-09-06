@@ -100,6 +100,11 @@ type invocationRuntimeOptions struct {
 	ASRCreateTemp    localai.TempFileFactory
 	ASRWriteFile     localai.InputFileWriter
 	ASRRemoveFile    localai.InputFileRemover
+	TTSTempDirectory func() string
+	TTSCreateTemp    localai.TempFileFactory
+	TTSInspectFile   localai.TTSOutputInspector
+	TTSReadFile      localai.TTSOutputReader
+	TTSRemoveFile    localai.InputFileRemover
 }
 
 type invocationRuntime interface {
@@ -404,6 +409,9 @@ func composeModelsService(
 	runtimeOptions = bindASRStaging(
 		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
 	)
+	runtimeOptions = bindTTSStaging(
+		runtimeOptions, runtimeTempDir, runtimeTempFile, runtimeInspect, assetReadFile, assetRemove,
+	)
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,
 	)
@@ -456,6 +464,7 @@ type operationInvocationRuntime struct {
 	omni      invocationRuntime
 	asr       invocationRuntime
 	embedding invocationRuntime
+	tts       invocationRuntime
 }
 
 func (runtime operationInvocationRuntime) Invoke(
@@ -472,6 +481,14 @@ func (runtime operationInvocationRuntime) Invoke(
 	}
 	if runtime.embedding != nil && isEmbeddingOperation(request) {
 		return runtime.embedding.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
+	}
+	if isTTSOperation(request) {
+		if runtime.tts == nil {
+			return failClosedInvocationRuntime{}.Invoke(ctx, request)
+		}
+		return runtime.tts.Invoke(
 			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
 		)
 	}
@@ -511,6 +528,21 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 			return nil, err
 		}
 		runtime.embedding = embedding
+	}
+	ttsBackend := localai.NewPinnedTTSBackend(
+		options.Dialer,
+		options.TTSTempDirectory,
+		options.TTSCreateTemp,
+		options.TTSInspectFile,
+		options.TTSReadFile,
+		options.TTSRemoveFile,
+	)
+	if ttsBackend != nil {
+		tts, err := newTTSInvocationRuntime(ttsBackend)
+		if err != nil {
+			return nil, err
+		}
+		runtime.tts = tts
 	}
 	return runtime, nil
 }
@@ -560,6 +592,12 @@ func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime,
 			Embeddings: append([]float64(nil), response.Embeddings...),
 		}, nil
 	})
+}
+
+func newTTSInvocationRuntime(
+	backend func(context.Context, modelcodecs.TTSRequest) (modelcodecs.TTSResponse, error),
+) (invocationRuntime, error) {
+	return modelsruntime.NewTTS(modelsruntime.TTSBackend(backend))
 }
 
 type omniInvocationRuntime struct {
@@ -658,6 +696,14 @@ func isEmbeddingOperation(request inference.InvocationRuntimeRequest) bool {
 		operation = request.Request.Operation
 	}
 	return strings.EqualFold(strings.TrimSpace(operation), models.OperationEMBED)
+}
+
+func isTTSOperation(request inference.InvocationRuntimeRequest) bool {
+	operation := request.Operation.Name
+	if operation == "" {
+		operation = request.Request.Operation
+	}
+	return strings.EqualFold(strings.TrimSpace(operation), models.OperationTTS)
 }
 
 func cloneInvocationParameters(parameters map[string]any) map[string]any {
