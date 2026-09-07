@@ -486,7 +486,14 @@ func (o *Root) InvokeModel(
 	}
 	correlation := nextJoinedInvocationCorrelation(o)
 	ctx = modelseffects.WithRuntimeCorrelation(ctx, correlation)
+	ctx = modelseffects.WithRuntimeLeaseReleaseTracker(ctx)
 	started := joinedInvocationStart(o)
+	var invocationEvidence modelseffects.RuntimeEvidenceRecorder
+	if o != nil {
+		invocationEvidence = modelseffects.NewRuntimeEvidenceInvocation(
+			o.process.RuntimeEvidence,
+		)
+	}
 	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
@@ -512,12 +519,12 @@ func (o *Root) InvokeModel(
 		elapsed := joinedInvocationElapsed(o, started)
 		if o != nil && (diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr)) {
 			modelseffects.RecordRuntimeEvidenceStage(
-				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+				invocationEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		if o != nil {
 			modelseffects.RecordRuntimeEvidenceTerminal(
-				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+				invocationEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		joinedInvocationRecord(
@@ -782,7 +789,7 @@ func (o *Root) finishJoinedFailure(
 	stage modelseffects.RuntimeStage,
 	invokeErr error,
 ) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
-	if !joinedInvocationLeaseReleased(result) {
+	if !joinedInvocationLeaseReleased(result) && !modelseffects.RuntimeLeaseReleaseAttempted(ctx) {
 		releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 		if releaseErr == nil {
 			result.LeaseDisposition = models.InvocationLeaseReleased
@@ -999,6 +1006,7 @@ func (o *Root) releaseJoinedLease(
 		ctx = context.Background()
 	}
 	releaseContext := context.WithoutCancel(ctx)
+	modelseffects.MarkRuntimeLeaseReleaseAttempted(releaseContext)
 	_, err := o.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: scope, Lease: lease,
 	})

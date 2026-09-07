@@ -642,6 +642,40 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	}
 }
 
+func TestRootInvokeModelScopesTerminalEvidencePerInvocation(t *testing.T) {
+	var events []string
+	inference := &joinedInferenceService{
+		events: &events,
+		result: joinedCompletedResult(t),
+	}
+	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
+	sink := &rootRuntimeEvidenceRecords{}
+	root.process = modelseffects.ProcessDependencies{
+		RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope)); err != nil {
+			t.Fatalf("InvokeModel attempt %d: %v", attempt+1, err)
+		}
+	}
+
+	terminals := make([]modelseffects.RuntimeEvidenceRecord, 0, 2)
+	for _, record := range sink.snapshot() {
+		if record.Kind == modelseffects.RuntimeEvidenceKindTerminal {
+			terminals = append(terminals, record)
+		}
+	}
+	if len(terminals) != 2 {
+		t.Fatalf("terminal evidence records = %d, want one per invocation: %#v", len(terminals), sink.snapshot())
+	}
+	for index, record := range terminals {
+		if record.Stage != modelseffects.RuntimeStageInvoke || record.Outcome != modelseffects.RuntimeEvidenceOutcomeCompleted {
+			t.Fatalf("terminal evidence[%d] = %#v, want completed invoke terminal", index, record)
+		}
+	}
+}
+
 func TestRootInvokeModelReleasesAndClearsPartialOutputOnInvocationFailure(t *testing.T) {
 	var events []string
 	inference := &joinedInferenceService{
@@ -671,6 +705,36 @@ func TestRootInvokeModelReleasesAndClearsPartialOutputOnInvocationFailure(t *tes
 	}
 	if got, want := events, []string{"resolve", "preflight", "assets", "host", "lease", "invoke", "release"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("failure stage events = %#v, want %#v", got, want)
+	}
+}
+
+func TestRootInvokeModelDoesNotRetryPrivateLeaseReleaseAttempt(t *testing.T) {
+	var events []string
+	inference := &joinedInferenceService{
+		events:                    &events,
+		markLeaseReleaseAttempted: true,
+		result: models.InvokeModelResult{
+			Status:           models.ModelInvocationStatusFailed,
+			LeaseDisposition: models.InvocationLeaseRetained,
+		},
+		err: models.ErrInferenceTimeout,
+	}
+	root, scope, host := newJoinedInvocationRoot(t, &events, inference)
+
+	result, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
+	if !errors.Is(err, models.ErrInferenceTimeout) {
+		t.Fatalf("InvokeModel error = %v, want inference timeout", err)
+	}
+	if host.releaseCalls != 0 {
+		t.Fatalf("joined release calls = %d, want no retry after private attempt", host.releaseCalls)
+	}
+	if result.Status != models.ModelInvocationStatusFailed ||
+		result.LeaseDisposition != models.InvocationLeaseRetained ||
+		len(result.Content) != 0 || len(result.Artifacts) != 0 || len(result.Outputs) != 0 {
+		t.Fatalf("failed result = %#v, want failed/retained with no output", result)
+	}
+	if got, want := events, []string{"resolve", "preflight", "assets", "host", "lease", "invoke"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("private-release failure events = %#v, want %#v", got, want)
 	}
 }
 
@@ -994,20 +1058,24 @@ func (host *joinedHostService) ReleaseModelLease(context.Context, models.Release
 }
 
 type joinedInferenceService struct {
-	events        *[]string
-	result        models.InvokeModelResult
-	err           error
-	invokeCalls   int
-	invokeRequest models.InvokeModelRequest
+	events                    *[]string
+	result                    models.InvokeModelResult
+	err                       error
+	markLeaseReleaseAttempted bool
+	invokeCalls               int
+	invokeRequest             models.InvokeModelRequest
 }
 
 func (service *joinedInferenceService) InvokeModelWithLease(
-	_ context.Context,
+	ctx context.Context,
 	request models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
 	*service.events = append(*service.events, "invoke")
 	service.invokeCalls++
 	service.invokeRequest = request
+	if service.markLeaseReleaseAttempted {
+		modelseffects.MarkRuntimeLeaseReleaseAttempted(ctx)
+	}
 	if service.result.LeaseDisposition == models.InvocationLeaseReleased {
 		*service.events = append(*service.events, "primitive-release")
 	}

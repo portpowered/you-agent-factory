@@ -140,14 +140,17 @@ func runReleaseMissingRuntime(t *testing.T) {
 	service := newInferenceServiceWithHost(
 		t, scopes, mustCatalog(t, scopes), host, nil, fixedClock(), nil,
 	)
-	result, err := service.InvokeModelWithLease(
-		context.Background(), releaseRequest(scope, lease, models.OperationOMNI),
-	)
+	ctx := modelseffects.WithRuntimeLeaseReleaseTracker(context.Background())
+	result, err := service.InvokeModelWithLease(ctx, releaseRequest(scope, lease, models.OperationOMNI))
 	if !errors.Is(err, models.ErrUnavailable) {
 		t.Fatalf("missing runtime error = %v, want ErrUnavailable", err)
 	}
-	if !result.Invocation.IsZero() {
-		t.Fatalf("missing runtime result = %#v, want no invocation", result)
+	if !result.Invocation.IsZero() || result.Status != models.ModelInvocationStatusFailed ||
+		result.Lease != lease || result.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("missing runtime result = %#v, want failed/no invocation/released lease", result)
+	}
+	if !modelseffects.RuntimeLeaseReleaseAttempted(ctx) {
+		t.Fatal("missing runtime did not record its release attempt")
 	}
 	assertOneLeaseRelease(t, host)
 	if got := host.leases[lease.String()].Status; got != models.ModelLeaseStatusReleased {

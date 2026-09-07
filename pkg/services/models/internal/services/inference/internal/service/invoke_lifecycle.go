@@ -71,6 +71,15 @@ func cancelledInvocationResult(
 	}.Clone()
 }
 
+func failedLeaseCleanupResult(
+	request models.InvokeModelRequest,
+	disposition models.InvocationLeaseDisposition,
+) models.InvokeModelResult {
+	result := failedInvocationResult(request, models.ModelInvocationRef{})
+	result.LeaseDisposition = disposition
+	return result.Clone()
+}
+
 func (s *service) finishCancelledInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,

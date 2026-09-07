@@ -229,6 +229,33 @@ func TestRuntimeEvidenceRecorderOrdersEveryMaterialFailureAndOneTerminal(t *test
 	}
 }
 
+func TestRuntimeEvidenceInvocationScopesTerminalRecords(t *testing.T) {
+	t.Parallel()
+
+	sink := &runtimeEvidenceRecords{}
+	shared := NewOrderedRuntimeEvidenceRecorder(sink)
+	first := NewRuntimeEvidenceInvocation(shared)
+	second := NewRuntimeEvidenceInvocation(shared)
+
+	RecordRuntimeEvidenceTerminal(first, RuntimeStageInvoke, nil, time.Millisecond)
+	RecordRuntimeEvidenceTerminal(first, RuntimeStageInvoke, nil, 2*time.Millisecond)
+	RecordRuntimeEvidenceTerminal(second, RuntimeStageInvoke, nil, 3*time.Millisecond)
+
+	records := sink.snapshot()
+	if len(records) != 2 {
+		t.Fatalf("invocation-scoped terminal records = %d, want one per invocation: %#v", len(records), records)
+	}
+	if records[0].Sequence != 1 || records[1].Sequence != 2 {
+		t.Fatalf("invocation-scoped terminal sequence = (%d, %d), want (1, 2)", records[0].Sequence, records[1].Sequence)
+	}
+	for index, record := range records {
+		if record.Kind != RuntimeEvidenceKindTerminal || record.Stage != RuntimeStageInvoke ||
+			record.Outcome != RuntimeEvidenceOutcomeCompleted {
+			t.Fatalf("invocation-scoped terminal[%d] = %#v, want completed invoke terminal", index, record)
+		}
+	}
+}
+
 func runtimeEvidenceFailureCause(stage RuntimeStage, class RuntimeFailureClass) error {
 	const message = "controlled private cause"
 	if stage == RuntimeStageBackendExtract {

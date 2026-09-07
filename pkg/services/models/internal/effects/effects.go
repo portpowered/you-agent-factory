@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -16,6 +17,12 @@ import (
 )
 
 type runtimeCorrelationContextKey struct{}
+
+type runtimeLeaseReleaseTrackerContextKey struct{}
+
+type runtimeLeaseReleaseTracker struct {
+	attempted atomic.Bool
+}
 
 // WithRuntimeCorrelation carries the bounded invocation identity through the
 // private Models runtime boundary without changing customer-facing contracts.
@@ -34,6 +41,40 @@ func RuntimeCorrelation(ctx context.Context) string {
 	}
 	correlation, _ := ctx.Value(runtimeCorrelationContextKey{}).(string)
 	return correlation
+}
+
+// WithRuntimeLeaseReleaseTracker attaches private per-invocation cleanup
+// state to a Models operation. It lets the joined owner distinguish an
+// inference-owned release attempt from a pre-inference failure without adding
+// a field to the customer-facing result shape.
+func WithRuntimeLeaseReleaseTracker(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, runtimeLeaseReleaseTrackerContextKey{}, &runtimeLeaseReleaseTracker{})
+}
+
+// MarkRuntimeLeaseReleaseAttempted records that the invocation's lease owner
+// has already made its one release attempt. A retained disposition is then
+// terminal for this operation; callers must not compensate with a retry.
+func MarkRuntimeLeaseReleaseAttempted(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	tracker, _ := ctx.Value(runtimeLeaseReleaseTrackerContextKey{}).(*runtimeLeaseReleaseTracker)
+	if tracker != nil {
+		tracker.attempted.Store(true)
+	}
+}
+
+// RuntimeLeaseReleaseAttempted reports whether the private invocation owner
+// has already attempted lease release for the operation carried by ctx.
+func RuntimeLeaseReleaseAttempted(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	tracker, _ := ctx.Value(runtimeLeaseReleaseTrackerContextKey{}).(*runtimeLeaseReleaseTracker)
+	return tracker != nil && tracker.attempted.Load()
 }
 
 type PullMetric struct {
