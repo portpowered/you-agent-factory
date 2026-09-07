@@ -14,15 +14,18 @@ import (
 )
 
 // publishGenericRuntimeCache promotes a verified content-addressed model
-// snapshot into the managed runtime layout. The content snapshot remains the
-// reusable source cache; the managed layout is the durable contract consumed
-// by runtime resolution and inspection.
+// snapshot into the managed runtime layout. The content snapshots remain the
+// reusable source caches; the managed layout is the durable contract consumed
+// by runtime resolution and inspection, including the backend snapshot needed
+// by a later process for offline reuse.
 func (s *service) publishGenericRuntimeCache(
 	ctx context.Context,
 	cacheDirectory string,
 	modelName string,
 	source genericSource,
 	result genericCacheResult,
+	backendResult genericCacheResult,
+	backendRevision string,
 ) (inspection assets.RuntimeCacheInspection, err error) {
 	if strings.TrimSpace(modelName) == "" || result.snapshotPath == "" {
 		return assets.RuntimeCacheInspection{}, nil
@@ -36,6 +39,12 @@ func (s *service) publishGenericRuntimeCache(
 			"%w: generic runtime snapshot is incomplete",
 			models.ErrAssetPreparationInterrupted,
 		)
+	}
+	backendMetadata, err := s.genericRuntimeBackendMetadata(
+		cacheDirectory, backendResult, backendRevision,
+	)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
 	}
 	if err := assetContextError(ctx); err != nil {
 		return assets.RuntimeCacheInspection{}, err
@@ -55,7 +64,8 @@ func (s *service) publishGenericRuntimeCache(
 	if inspectErr != nil {
 		return assets.RuntimeCacheInspection{}, inspectErr
 	}
-	if genericRuntimeInspectionMatches(existing, revision, metadataFiles) {
+	if genericRuntimeInspectionMatches(existing, revision, metadataFiles) &&
+		s.genericRuntimeBackendInspectionMatches(existing, cacheDirectory, backendMetadata) {
 		return existing, nil
 	}
 
@@ -68,7 +78,7 @@ func (s *service) publishGenericRuntimeCache(
 	defer func() {
 		publication.rollback(s)
 	}()
-	if err := s.stageGenericRuntimePublication(ctx, publication, result, metadataFiles); err != nil {
+	if err := s.stageGenericRuntimePublication(ctx, publication, result, metadataFiles, backendMetadata); err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
 	if err := s.commitGenericRuntimePublication(ctx, &publication); err != nil {
@@ -100,6 +110,40 @@ func genericRuntimeInspectionMatches(
 		artifact, ok := observed[file.Path]
 		if !ok || artifact.Bytes != file.Bytes ||
 			!strings.EqualFold(strings.TrimSpace(artifact.SHA256), strings.TrimSpace(file.SHA256)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *service) genericRuntimeBackendInspectionMatches(
+	inspection assets.RuntimeCacheInspection,
+	cacheDirectory string,
+	expected *runtimeBackendMetadata,
+) bool {
+	if expected == nil {
+		return true
+	}
+	if !inspection.BackendRequired || inspection.BackendRevision != expected.Revision ||
+		len(inspection.BackendFiles) != len(expected.Files) {
+		return false
+	}
+	expectedPath, err := s.resolveGenericRuntimeRelativePath(
+		cacheDirectory, expected.CachePath, "backend",
+	)
+	if err != nil || filepath.Clean(inspection.BackendCachePath) != filepath.Clean(expectedPath) {
+		return false
+	}
+	observed := make(map[string]struct{}, len(inspection.BackendFiles))
+	for _, path := range inspection.BackendFiles {
+		relative, relErr := filepath.Rel(inspection.BackendCachePath, path)
+		if relErr != nil || !validGenericRuntimeRelativePath(filepath.ToSlash(relative)) {
+			return false
+		}
+		observed[filepath.ToSlash(relative)] = struct{}{}
+	}
+	for _, file := range expected.Files {
+		if _, ok := observed[file.Path]; !ok {
 			return false
 		}
 	}
@@ -155,6 +199,7 @@ func (s *service) stageGenericRuntimePublication(
 	publication genericRuntimePublication,
 	result genericCacheResult,
 	metadataFiles []metadataFile,
+	backend *runtimeBackendMetadata,
 ) error {
 	for index := range result.artifacts {
 		if err := assetContextError(ctx); err != nil {
@@ -176,6 +221,7 @@ func (s *service) stageGenericRuntimePublication(
 		ModelName: publication.modelName,
 		Revision:  publication.revision,
 		Files:     metadataFiles,
+		Backend:   backend,
 	}
 	body, err := json.Marshal(metadata)
 	if err != nil {
@@ -264,6 +310,109 @@ func genericRuntimeMetadataFiles(artifacts []models.AssetArtifact) ([]metadataFi
 	return files, nil
 }
 
+func (s *service) genericRuntimeBackendMetadata(
+	cacheDirectory string,
+	result genericCacheResult,
+	revision string,
+) (*runtimeBackendMetadata, error) {
+	if result.snapshotPath == "" && len(result.artifacts) == 0 && len(result.paths) == 0 {
+		return nil, nil
+	}
+	if strings.TrimSpace(result.snapshotPath) == "" || len(result.artifacts) == 0 ||
+		len(result.artifacts) != len(result.paths) {
+		return nil, fmt.Errorf(
+			"%w: generic runtime backend snapshot is incomplete",
+			models.ErrAssetPreparationInterrupted,
+		)
+	}
+	files, err := genericRuntimeMetadataFiles(result.artifacts)
+	if err != nil {
+		return nil, err
+	}
+	cacheRoot, err := s.genericRuntimeCacheDirectory(cacheDirectory)
+	if err != nil {
+		return nil, err
+	}
+	snapshotPath, err := filepath.Abs(filepath.Clean(result.snapshotPath))
+	if err != nil {
+		return nil, fmt.Errorf("resolve generic runtime backend snapshot: %w", err)
+	}
+	relative, err := filepath.Rel(cacheRoot, snapshotPath)
+	if err != nil || !validGenericRuntimeRelativePath(filepath.ToSlash(relative)) {
+		return nil, fmt.Errorf(
+			"%w: generic runtime backend snapshot is outside the model cache",
+			models.ErrAssetPreparationInterrupted,
+		)
+	}
+	for index, path := range result.paths {
+		observedPath, pathErr := filepath.Abs(filepath.Clean(path))
+		if pathErr != nil {
+			return nil, fmt.Errorf("resolve generic runtime backend artifact: %w", pathErr)
+		}
+		expectedPath := filepath.Join(snapshotPath, filepath.FromSlash(files[index].Path))
+		if filepath.Clean(observedPath) != filepath.Clean(expectedPath) {
+			return nil, fmt.Errorf(
+				"%w: generic runtime backend artifact escaped its snapshot",
+				models.ErrAssetPreparationInterrupted,
+			)
+		}
+	}
+	return &runtimeBackendMetadata{
+		CachePath: filepath.ToSlash(relative),
+		Revision:  strings.TrimSpace(revision),
+		Files:     files,
+	}, nil
+}
+
+func (s *service) genericRuntimeCacheDirectory(cacheDirectory string) (string, error) {
+	root := strings.TrimSpace(cacheDirectory)
+	if root == "" {
+		home, err := s.resolveHome()
+		if err != nil || strings.TrimSpace(home) == "" {
+			return "", fmt.Errorf("resolve generic runtime cache directory: %w", models.ErrAssetSourceMissing)
+		}
+		root = filepath.Join(home, ".agent-factory", "models")
+	}
+	resolved, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return "", fmt.Errorf("resolve generic runtime cache directory: %w", err)
+	}
+	return resolved, nil
+}
+
+func validGenericRuntimeRelativePath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || value != filepath.ToSlash(value) {
+		return false
+	}
+	local := filepath.FromSlash(value)
+	if filepath.IsAbs(local) || filepath.VolumeName(local) != "" {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(local))
+	return clean == value && clean != "." && clean != ".." &&
+		!strings.HasPrefix(clean, "../")
+}
+
+func (s *service) resolveGenericRuntimeRelativePath(
+	cacheDirectory, value, kind string,
+) (string, error) {
+	root, err := s.genericRuntimeCacheDirectory(cacheDirectory)
+	if err != nil {
+		return "", err
+	}
+	if !validGenericRuntimeRelativePath(value) {
+		return "", fmt.Errorf("managed cache %s path is invalid", kind)
+	}
+	resolved := filepath.Join(root, filepath.FromSlash(value))
+	relative, err := filepath.Rel(root, resolved)
+	if err != nil || relative == "." || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("managed cache %s path escapes its root", kind)
+	}
+	return resolved, nil
+}
+
 func genericRuntimeRevision(source genericSource, artifacts []models.AssetArtifact) string {
 	if revision := strings.TrimSpace(source.revision); revision != "" {
 		return revision
@@ -345,14 +494,13 @@ func (s *service) inspectGenericRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, false, err
 	}
-	metadata, present, err := s.readGenericRuntimeMetadata(ctx, filepath.Join(root, metadataFileName))
+	metadata, present, invalid, err := s.readGenericRuntimeMetadataForInspection(
+		ctx, filepath.Join(root, metadataFileName),
+	)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return assets.RuntimeCacheInspection{}, present, err
-		}
-		if !errors.Is(err, models.ErrAssetUnavailable) {
-			return assets.RuntimeCacheInspection{}, present, err
-		}
+		return assets.RuntimeCacheInspection{}, present, err
+	}
+	if invalid {
 		inspection.ManifestPresent = present
 		inspection.FailureReason = "managed cache manifest is invalid"
 		return inspection, present, nil
@@ -361,10 +509,6 @@ func (s *service) inspectGenericRuntimeCache(
 		return inspection, false, nil
 	}
 	inspection.ManifestPresent = true
-	if !validGenericRuntimeMetadata(metadata) {
-		inspection.FailureReason = "managed cache manifest is invalid"
-		return inspection, true, nil
-	}
 	inspection.ManifestValid = true
 	inspection.ExpectedArtifacts = genericRuntimeRequirements(metadata)
 	revisionPath, err := managedCacheChildPath(root, metadata.Revision, "revision")
@@ -406,7 +550,74 @@ func (s *service) inspectGenericRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, true, err
 	}
+	if err := s.inspectGenericRuntimeBackend(ctx, cacheDirectory, &inspection, metadata.Backend); err != nil {
+		return assets.RuntimeCacheInspection{}, true, err
+	}
 	return inspection, true, nil
+}
+
+func (s *service) readGenericRuntimeMetadataForInspection(
+	ctx context.Context,
+	path string,
+) (cacheMetadata, bool, bool, error) {
+	metadata, present, err := s.readGenericRuntimeMetadata(ctx, path)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return metadata, present, false, err
+		}
+		if !errors.Is(err, models.ErrAssetUnavailable) {
+			return metadata, present, false, err
+		}
+		return metadata, present, true, nil
+	}
+	if !present {
+		return metadata, false, false, nil
+	}
+	if !validGenericRuntimeMetadata(metadata) {
+		return metadata, present, true, nil
+	}
+	return metadata, true, false, nil
+}
+
+func (s *service) inspectGenericRuntimeBackend(
+	ctx context.Context,
+	cacheDirectory string,
+	inspection *assets.RuntimeCacheInspection,
+	metadata *runtimeBackendMetadata,
+) error {
+	if inspection == nil || metadata == nil {
+		return nil
+	}
+	inspection.BackendRequired = true
+	backendPath, err := s.resolveGenericRuntimeRelativePath(
+		cacheDirectory, metadata.CachePath, "backend",
+	)
+	if err != nil {
+		inspection.Installed = false
+		inspection.FailureReason = "managed cache backend is missing or invalid"
+		return nil
+	}
+	inspection.BackendCachePath = backendPath
+	inspection.BackendRevision = metadata.Revision
+	observed, missing, failureReason, err := s.inspectGenericRuntimeFiles(
+		ctx, backendPath, metadata.Files,
+	)
+	if err != nil {
+		return err
+	}
+	inspection.BackendInstalledFiles = len(observed)
+	inspection.BackendFiles = make([]string, 0, len(observed))
+	for _, artifact := range observed {
+		inspection.BackendFiles = append(inspection.BackendFiles, filepath.Join(
+			backendPath, filepath.FromSlash(artifact.Name),
+		))
+	}
+	if failureReason != "" || len(missing) > 0 {
+		inspection.Installed = false
+		inspection.PartialArtifacts = inspection.PartialArtifacts || len(observed) > 0
+		inspection.FailureReason = "managed cache backend is missing or invalid"
+	}
+	return nil
 }
 
 func (s *service) inspectGenericRuntimeFiles(
@@ -493,7 +704,45 @@ func genericRuntimeCacheMatchesPlan(
 	}
 	return genericRuntimeRequirementsSatisfy(
 		requestedArtifacts, inspection.ExpectedArtifacts,
-	)
+	) && genericRuntimeBackendRequirementsSatisfy(plan, inspection)
+}
+
+func genericRuntimeBackendRequirementsSatisfy(
+	plan genericPreparationPlan,
+	inspection assets.RuntimeCacheInspection,
+) bool {
+	if len(plan.backendRequirements) == 0 {
+		return true
+	}
+	if !inspection.BackendRequired || strings.TrimSpace(inspection.BackendCachePath) == "" ||
+		inspection.BackendInstalledFiles != len(inspection.BackendFiles) ||
+		len(inspection.BackendFiles) != len(plan.backendRequirements) {
+		return false
+	}
+	requestedRevision := strings.TrimSpace(plan.backendSource.revision)
+	if requestedRevision != "" && !strings.EqualFold(
+		strings.TrimSpace(inspection.BackendRevision), requestedRevision,
+	) {
+		return false
+	}
+	observed := make(map[string]struct{}, len(inspection.BackendFiles))
+	for _, path := range inspection.BackendFiles {
+		relative, err := filepath.Rel(inspection.BackendCachePath, path)
+		if err != nil || !validGenericRuntimeRelativePath(filepath.ToSlash(relative)) {
+			return false
+		}
+		observed[filepath.ToSlash(relative)] = struct{}{}
+	}
+	for _, artifact := range plan.backendRequirements {
+		name := filepath.ToSlash(strings.TrimSpace(artifact.requirement.Name))
+		if !validGenericRuntimeRelativePath(name) {
+			return false
+		}
+		if _, ok := observed[name]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func genericRuntimeRequirementsSatisfy(
@@ -527,8 +776,9 @@ func genericCacheResultFromRuntimeCache(
 	inspection assets.RuntimeCacheInspection,
 ) genericCacheResult {
 	result := genericCacheResult{
-		artifacts: make([]models.AssetArtifact, 0, len(inspection.ObservedArtifacts)),
-		paths:     make([]string, 0, len(inspection.ObservedArtifacts)),
+		artifacts:    make([]models.AssetArtifact, 0, len(inspection.ObservedArtifacts)),
+		paths:        make([]string, 0, len(inspection.ObservedArtifacts)),
+		snapshotPath: strings.TrimSpace(inspection.CachePath),
 	}
 	for _, artifact := range inspection.ObservedArtifacts {
 		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
@@ -548,6 +798,7 @@ func genericCacheResultFromRuntimeCache(
 func (s *service) resolveGenericRuntimeCache(
 	ctx context.Context,
 	scope models.RuntimeScopeConfig,
+	scopeRef models.RuntimeScopeRef,
 	modelName string,
 ) (assets.RuntimeCacheLayout, error) {
 	// Source resolution is used only to classify a generic runtime as a
@@ -564,6 +815,9 @@ func (s *service) resolveGenericRuntimeCache(
 		return assets.RuntimeCacheLayout{}, fmt.Errorf(
 			"%w: required assets missing for %s", models.ErrNotAvailable, canonicalModelName(modelName),
 		)
+	}
+	if prepared, ok := s.preparedRuntimeInspection(scopeRef, modelName); ok {
+		inspection = mergeGenericRuntimeBackendFacts(inspection, prepared)
 	}
 	if !inspection.Installed {
 		return assets.RuntimeCacheLayout{}, fmt.Errorf(
@@ -629,19 +883,44 @@ func validGenericRuntimeMetadata(metadata cacheMetadata) bool {
 	}
 	seen := make(map[string]struct{}, len(metadata.Files))
 	for _, file := range metadata.Files {
-		name := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if name != file.Path {
+		if !validGenericRuntimeMetadataFile(file) {
 			return false
 		}
-		if err := (models.AssetRequirement{
-			Name: name, Bytes: file.Bytes, SHA256: strings.ToLower(strings.TrimSpace(file.SHA256)),
-		}).Validate(); err != nil {
-			return false
-		}
+		name := file.Path
 		if _, exists := seen[name]; exists {
 			return false
 		}
 		seen[name] = struct{}{}
+	}
+	return validGenericRuntimeBackendMetadata(metadata.Backend)
+}
+
+func validGenericRuntimeMetadataFile(file metadataFile) bool {
+	name := filepath.ToSlash(strings.TrimSpace(file.Path))
+	if name != file.Path || !validGenericRuntimeRelativePath(name) {
+		return false
+	}
+	return (models.AssetRequirement{
+		Name: name, Bytes: file.Bytes, SHA256: strings.ToLower(strings.TrimSpace(file.SHA256)),
+	}).Validate() == nil
+}
+
+func validGenericRuntimeBackendMetadata(metadata *runtimeBackendMetadata) bool {
+	if metadata == nil {
+		return true
+	}
+	if !validGenericRuntimeRelativePath(metadata.CachePath) || len(metadata.Files) == 0 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(metadata.Files))
+	for _, file := range metadata.Files {
+		if !validGenericRuntimeMetadataFile(file) {
+			return false
+		}
+		if _, exists := seen[file.Path]; exists {
+			return false
+		}
+		seen[file.Path] = struct{}{}
 	}
 	return true
 }

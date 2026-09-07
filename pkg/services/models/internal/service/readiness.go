@@ -98,6 +98,9 @@ func joinedInvocationRecord(
 			zap.String("failure_class", string(diagnostic.Class)),
 			zap.String("cause_sha256", diagnostic.CauseSHA256),
 		)
+		if diagnostic.Subcause != "" {
+			fields = append(fields, zap.String("failure_subcause", string(diagnostic.Subcause)))
+		}
 		o.process.Logger.Warn("models invocation completed", fields...)
 		return
 	}

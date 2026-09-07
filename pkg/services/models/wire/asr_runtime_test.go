@@ -17,7 +17,7 @@ func TestInferenceRuntimeRoutesDefaultASRThroughPinnedProtocol(t *testing.T) {
 
 	responsePayload, err := proto.Marshal(&localai.TranscriptResult{
 		Text:     "routed transcript",
-		Segments: []*localai.TranscriptSegment{{Id: 0, Start: 0, End: 100, Text: "routed transcript"}},
+		Segments: []*localai.TranscriptSegment{{Id: 0, Start: 0, End: 100_000_000, Text: "routed transcript"}},
 	})
 	if err != nil {
 		t.Fatalf("marshal ASR response: %v", err)

@@ -178,12 +178,22 @@ func (s *service) rememberGenericPreparedRuntime(
 		return nil
 	}
 	runtimeInspection := scopedassets.RuntimeCacheInspection{}
-	if plan.modelRuntimeCache != nil {
+	if plan.modelRuntimeCache != nil && len(plan.backendRequirements) > 0 && backendResult.snapshotPath != "" {
+		var err error
+		runtimeInspection, err = s.publishGenericRuntimeCache(
+			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
+			backendResult, plan.backendSource.revision,
+		)
+		if err != nil {
+			return err
+		}
+	} else if plan.modelRuntimeCache != nil {
 		runtimeInspection = *plan.modelRuntimeCache
 	} else if modelResult.snapshotPath != "" {
 		var err error
 		runtimeInspection, err = s.publishGenericRuntimeCache(
 			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
+			backendResult, plan.backendSource.revision,
 		)
 		if err != nil {
 			return err
@@ -203,11 +213,13 @@ func (s *service) rememberGenericPreparedRuntime(
 			InstalledFileCount: len(modelResult.artifacts),
 		}
 	}
-	runtimeInspection.BackendRequired = len(plan.backendRequirements) > 0
-	runtimeInspection.BackendCachePath = backendResult.snapshotPath
-	runtimeInspection.BackendRevision = plan.backendSource.revision
-	runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
-	runtimeInspection.BackendFiles = append([]string(nil), backendResult.paths...)
+	if len(plan.backendRequirements) > 0 {
+		runtimeInspection.BackendRequired = true
+		runtimeInspection.BackendCachePath = backendResult.snapshotPath
+		runtimeInspection.BackendRevision = plan.backendSource.revision
+		runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
+		runtimeInspection.BackendFiles = append([]string(nil), backendResult.paths...)
+	}
 	s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
 	return nil
 }

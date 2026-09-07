@@ -246,105 +246,6 @@ func TestPrepareGenericAssetsKeepsModelAndBackendCachesSeparate(t *testing.T) {
 	}
 }
 
-func TestPrepareGenericAssetsBindsPublishedSnapshotForRuntimeHost(t *testing.T) {
-	t.Parallel()
-
-	localPath := filepath.Join(t.TempDir(), "weights.gguf")
-	body := []byte("joined runtime weights")
-	if err := os.WriteFile(localPath, body, 0o644); err != nil {
-		t.Fatalf("write local fixture: %v", err)
-	}
-	scopes := newScopes(t, "generic-runtime-binding")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		t.Fatal("local joined preparation used the network")
-		return nil, nil
-	}), func(string) string { return "" })
-
-	if _, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "joined-model",
-		Reference: models.ModelReference{NameOrURI: localPath},
-		Artifacts: []models.AssetRequirement{{Name: filepath.Base(localPath), Bytes: int64(len(body)), SHA256: sha256Hex(body)}},
-	}); err != nil {
-		t.Fatalf("PrepareModelAssets: %v", err)
-	}
-	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope,
-		Name:  "joined-model",
-	})
-	if err != nil {
-		t.Fatalf("InspectRuntimeCache: %v", err)
-	}
-	if !inspection.Supported || !inspection.Installed || inspection.CachePath == "" ||
-		inspection.InstalledFileCount != 1 {
-		t.Fatalf("runtime inspection = %#v, want prepared generic snapshot", inspection)
-	}
-	if info, err := os.Stat(inspection.CachePath); err != nil || !info.IsDir() {
-		t.Fatalf("runtime cache path = %q, stat = (%v, %#v), want snapshot directory",
-			inspection.CachePath, err, info)
-	}
-}
-
-func TestPrepareGenericAssetsDownloadsPinnedBackendIntoSeparateRuntimeCache(t *testing.T) {
-	t.Parallel()
-
-	modelPath := filepath.Join(t.TempDir(), "weights.gguf")
-	modelBody := []byte("joined runtime weights")
-	backendBody := []byte("pinned backend archive")
-	if err := os.WriteFile(modelPath, modelBody, 0o644); err != nil {
-		t.Fatalf("write model fixture: %v", err)
-	}
-	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
-	scopes := newScopes(t, "generic-pinned-backend")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != backendURL {
-			t.Fatalf("backend download URL = %q, want %q", request.URL.String(), backendURL)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewReader(backendBody)),
-		}, nil
-	}), func(string) string { return "" })
-
-	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "joined-model",
-		Reference: models.ModelReference{NameOrURI: modelPath},
-		Artifacts: []models.AssetRequirement{{
-			Name: filepath.Base(modelPath), Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody),
-		}},
-		Backend:          "localai-vibevoice",
-		BackendReference: models.ModelReference{NameOrURI: backendURL},
-		BackendArtifacts: []models.AssetRequirement{{
-			Name: "backend.bin", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
-		}},
-	})
-	if err != nil {
-		t.Fatalf("PrepareModelAssets: %v", err)
-	}
-	if len(result.Asset.Artifacts) != 1 || len(result.Asset.BackendArtifacts) != 1 ||
-		result.Asset.BackendArtifacts[0].SHA256 != sha256Hex(backendBody) {
-		t.Fatalf("prepared asset snapshot = %#v, want separate verified backend artifact", result.Asset)
-	}
-	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope,
-		Name:  "joined-model",
-	})
-	if err != nil {
-		t.Fatalf("InspectRuntimeCache: %v", err)
-	}
-	if !inspection.BackendRequired || inspection.BackendCachePath == "" ||
-		inspection.BackendInstalledFiles != 1 {
-		t.Fatalf("runtime inspection = %#v, want installed backend cache facts", inspection)
-	}
-	backendPath := filepath.Join(inspection.BackendCachePath, "backend.bin")
-	if body, err := os.ReadFile(backendPath); err != nil || !bytes.Equal(body, backendBody) {
-		t.Fatalf("backend cache file = (%q, %v), want verified archive", body, err)
-	}
-}
-
 func TestPrepareGenericAssetsAcceptsFileURIWithoutNetwork(t *testing.T) {
 	t.Parallel()
 
@@ -578,6 +479,146 @@ func TestPrepareGenericAssetsRejectsSameSizeCorruptedFileBackedHFCache(t *testin
 		result.Asset.Artifacts[0].SHA256 != sha256Hex(good) || requests.Load() == 0 {
 		t.Fatalf("same-size corrupted HF result = %#v, network requests = %d", result, requests.Load())
 	}
+}
+
+func TestPublishGenericCacheReturnsCommittedAbsolutePaths(t *testing.T) {
+	t.Parallel()
+
+	body := []byte("committed backend archive")
+	localPath := filepath.Join(t.TempDir(), "backend.zip")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("write backend fixture: %v", err)
+	}
+	scopes := newScopes(t, "generic-committed-paths")
+	cacheDirectory := t.TempDir()
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("local backend preparation used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	source := genericSource{kind: genericSourceLocal, safe: "local://path", localPath: localPath}
+	artifact := genericArtifact{
+		requirement: models.AssetRequirement{
+			Name: "nested/backend.zip", Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		},
+		localPath: localPath,
+	}
+
+	result, err := service.publishGenericCache(
+		context.Background(), assetKindBackend, models.AssetArtifactKindBackend, source,
+		[]genericArtifact{artifact}, nil, []genericArtifact{artifact}, []string{cacheDirectory},
+	)
+	if err != nil {
+		t.Fatalf("publishGenericCache: %v", err)
+	}
+	path := assertPublishedBackendResult(t, result, body)
+
+	hit, err := service.acquireGenericCache(
+		context.Background(), assetKindBackend, models.AssetArtifactKindBackend, source,
+		[]genericArtifact{artifact}, []string{cacheDirectory}, false,
+	)
+	if err != nil {
+		t.Fatalf("acquireGenericCache cache hit: %v", err)
+	}
+	assertGenericCacheHit(t, hit, result.snapshotPath, path)
+}
+
+func assertPublishedBackendResult(t *testing.T, result genericCacheResult, body []byte) string {
+	t.Helper()
+	if !result.prepared || len(result.paths) != 1 {
+		t.Fatalf("committed result = %#v, want one prepared path", result)
+	}
+	assertCommittedSnapshotPath(t, result.snapshotPath)
+	path := result.paths[0]
+	assertCommittedArtifactPath(t, result.snapshotPath, path, body)
+	return path
+}
+
+func assertCommittedSnapshotPath(t *testing.T, path string) {
+	t.Helper()
+	if !filepath.IsAbs(path) || strings.Contains(path, ".partial") {
+		t.Fatalf("snapshot path = %q, want absolute committed path", path)
+	}
+}
+
+func assertCommittedArtifactPath(t *testing.T, snapshotPath, path string, wantBody []byte) {
+	t.Helper()
+	if !filepath.IsAbs(path) || strings.Contains(path, ".partial") {
+		t.Fatalf("artifact path = %q, want absolute non-partial path", path)
+	}
+	relative, err := filepath.Rel(snapshotPath, path)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		t.Fatalf("artifact path %q escaped committed snapshot %q", path, snapshotPath)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info == nil || !info.Mode().IsRegular() {
+		t.Fatalf("committed artifact stat = (%#v, %v), want existing regular file", info, err)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, wantBody) {
+		t.Fatalf("committed artifact body = (%q, %v), want %q", got, err, wantBody)
+	}
+}
+
+func assertGenericCacheHit(t *testing.T, result genericCacheResult, wantSnapshot, wantPath string) {
+	t.Helper()
+	if result.prepared || len(result.paths) != 1 || result.snapshotPath != wantSnapshot || result.paths[0] != wantPath {
+		t.Fatalf("cache-hit result = %#v, want equivalent committed paths", result)
+	}
+}
+
+func TestPublishGenericCacheValidationFailurePreservesPriorSnapshot(t *testing.T) {
+	t.Parallel()
+
+	oldBody := []byte("prior committed backend")
+	newBody := []byte("replacement backend")
+	localPath := filepath.Join(t.TempDir(), "backend.zip")
+	if err := os.WriteFile(localPath, newBody, 0o644); err != nil {
+		t.Fatalf("write replacement fixture: %v", err)
+	}
+	scopes := newScopes(t, "generic-committed-validation")
+	cacheDirectory := t.TempDir()
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("local backend preparation used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	source := genericSource{kind: genericSourceLocal, safe: "local://path", localPath: localPath}
+	artifact := genericArtifact{
+		requirement: models.AssetRequirement{Name: "backend.zip", Bytes: int64(len(newBody)), SHA256: sha256Hex(newBody)},
+		localPath:   localPath,
+	}
+	finalPath := filepath.Join(
+		cacheDirectory, assetContentDirectory, assetKindBackend,
+		genericArtifactIdentityHash(assetKindBackend, source, []genericArtifact{artifact}),
+	)
+	if err := os.MkdirAll(finalPath, 0o755); err != nil {
+		t.Fatalf("create prior snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(finalPath, artifact.requirement.Name), oldBody, 0o644); err != nil {
+		t.Fatalf("write prior snapshot: %v", err)
+	}
+	validationErr := errors.New("committed artifact validation failed")
+	originalInspect := service.inspectPath
+	service.inspectPath = func(path string) (os.FileInfo, error) {
+		if path == filepath.Join(finalPath, artifact.requirement.Name) {
+			return nil, validationErr
+		}
+		return originalInspect(path)
+	}
+
+	_, err := service.publishGenericCache(
+		context.Background(), assetKindBackend, models.AssetArtifactKindBackend, source,
+		[]genericArtifact{artifact}, nil, []genericArtifact{artifact}, []string{cacheDirectory},
+	)
+	if !errors.Is(err, validationErr) || !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("validation error = %v, want typed interruption and validation cause", err)
+	}
+	var stageErr *models.PullStageError
+	if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageCacheInstallation {
+		t.Fatalf("validation stage error = %#v, want cache-installation stage", stageErr)
+	}
+	if _, statErr := os.Stat(finalPath + ".partial"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("staging path after validation failure = %v, want absent", statErr)
+	}
+	assertFileBody(t, filepath.Join(finalPath+".previous", artifact.requirement.Name), oldBody)
 }
 
 func TestPublishGenericCacheRestoresPriorSnapshotWhenCommitRenameFails(t *testing.T) {

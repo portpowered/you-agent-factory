@@ -39,7 +39,9 @@ func newConfiguredProvidersService(
 }
 
 type modelsProcessLauncher struct {
-	recorder managedChildEnvironmentRecorder
+	recorder      managedChildEnvironmentRecorder
+	resolveLaunch func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error)
+	startCommand  func(*exec.Cmd) error
 }
 
 func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
@@ -47,7 +49,11 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 	Wait() error
 	Stop(context.Context) error
 }, error) {
-	launch, err := managedbackend.ResolveManagedBackendLaunch(ctx, spec)
+	resolveLaunch := launcher.resolveLaunch
+	if resolveLaunch == nil {
+		resolveLaunch = managedbackend.ResolveManagedBackendLaunch
+	}
+	launch, err := resolveLaunch(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +64,16 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 	if launch.WorkDir != "" {
 		cmd.Dir = launch.WorkDir
 	}
-	if err := cmd.Start(); err != nil {
-		launch.Cleanup()
-		return nil, managedbackend.WrapBackendStartFailure(err)
+	startCommand := launcher.startCommand
+	if startCommand == nil {
+		startCommand = (*exec.Cmd).Start
+	}
+	if err := startCommand(cmd); err != nil {
+		var cleanupErr error
+		if launch.Cleanup != nil {
+			cleanupErr = launch.Cleanup()
+		}
+		return nil, managedbackend.WrapBackendStartFailureWithCleanup(err, cleanupErr)
 	}
 	processID := 0
 	if cmd.Process != nil {
@@ -322,8 +335,9 @@ type modelsManagedProcess struct {
 	mu             sync.Mutex
 	cmd            *exec.Cmd
 	healthEndpoint string
-	cleanup        func()
+	cleanup        func() error
 	cleanupOnce    sync.Once
+	cleanupErr     error
 	processID      int
 	backend        string
 	recorder       managedChildEnvironmentRecorder
@@ -376,7 +390,12 @@ func (p *modelsManagedProcess) cleanupResources() {
 	if p == nil || p.cleanup == nil {
 		return
 	}
-	p.cleanupOnce.Do(p.cleanup)
+	p.cleanupOnce.Do(func() {
+		cleanupErr := p.cleanup()
+		p.mu.Lock()
+		p.cleanupErr = cleanupErr
+		p.mu.Unlock()
+	})
 }
 
 func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }
@@ -387,8 +406,15 @@ func (p *modelsManagedProcess) Wait() error {
 	}
 	<-p.finished
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.waitErr
+	waitErr, cleanupErr := p.waitErr, p.cleanupErr
+	p.mu.Unlock()
+	if cleanupErr != nil {
+		if waitErr == nil {
+			return cleanupErr
+		}
+		return errors.Join(waitErr, cleanupErr)
+	}
+	return waitErr
 }
 
 func (p *modelsManagedProcess) Stop(ctx context.Context) error {

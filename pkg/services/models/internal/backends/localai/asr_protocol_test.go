@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -18,8 +19,11 @@ func TestPinnedASRBackendStagesExactAudioAndMapsPinnedFields(t *testing.T) {
 
 	connection := &asrProtocolConnection{}
 	connection.response, _ = proto.Marshal(&TranscriptResult{
-		Text:     "spoken words",
-		Segments: []*TranscriptSegment{{Id: 0, Start: 0, End: 15000000, Text: "spoken words"}},
+		Text: "spoken words",
+		Segments: []*TranscriptSegment{
+			{Id: 0, Start: 0, End: 15_000_000, Text: "spoken words"},
+			{Id: 1, Start: 15_000_000, End: 30_000_000, Text: "next words"},
+		},
 	})
 	dialer := &asrProtocolDialer{connection: connection}
 	temporary := &asrProtocolTempFile{path: `C:\private\.you-model-asr-123.wav`}
@@ -73,8 +77,13 @@ func TestPinnedASRBackendStagesExactAudioAndMapsPinnedFields(t *testing.T) {
 
 func assertASRProtocolResponse(t *testing.T, response models.ASRBackendResponse) {
 	t.Helper()
-	if response.Text != "spoken words" || len(response.Segments) != 1 || response.Segments[0].End != 15000000 {
+	if response.Text != "spoken words" || len(response.Segments) != 2 {
 		t.Fatalf("ASR response = %#v, want decoded transcript and timestamp", response)
+	}
+	first, second := response.Segments[0], response.Segments[1]
+	if first.ID != 0 || first.Start != 0 || first.End != 15 || first.Text != "spoken words" ||
+		second.ID != 1 || second.Start != 15 || second.End != 30 || second.Text != "next words" {
+		t.Fatalf("ASR response segments = %#v, want ordered whole-millisecond segments", response.Segments)
 	}
 }
 
@@ -125,7 +134,7 @@ func TestPinnedASRBackendCleansStagedInputOnFailureAndRecovers(t *testing.T) {
 	connection := &asrProtocolConnection{err: errors.New("backend transport detail")}
 	connection.response, _ = proto.Marshal(&TranscriptResult{
 		Text:     "recovered",
-		Segments: []*TranscriptSegment{{Id: 1, Start: 10, End: 20, Text: "recovered"}},
+		Segments: []*TranscriptSegment{{Id: 1, Start: 10_000_000, End: 20_000_000, Text: "recovered"}},
 	})
 	dialer := &asrProtocolDialer{connection: connection}
 	var files []*asrProtocolTempFile
@@ -161,6 +170,108 @@ func TestPinnedASRBackendCleansStagedInputOnFailureAndRecovers(t *testing.T) {
 	}
 	if len(removed) != 2 || len(files) != 2 || files[1].closeCalls != 1 || connection.closed != 2 {
 		t.Fatalf("recovery cleanup = files:%d closes:%d removes:%d connections:%d, want second clean lifecycle", len(files), files[1].closeCalls, len(removed), connection.closed)
+	}
+}
+
+func TestTranscriptResponseRejectsMalformedTimestampsAtomically(t *testing.T) {
+	t.Parallel()
+
+	valid := func(start, end int64) *TranscriptResult {
+		return &TranscriptResult{
+			Text:     "transcript",
+			Segments: []*TranscriptSegment{{Id: 0, Start: start, End: end, Text: "transcript"}},
+		}
+	}
+	tests := []struct {
+		name     string
+		response *TranscriptResult
+	}{
+		{name: "nil segment", response: &TranscriptResult{Text: "transcript", Segments: []*TranscriptSegment{nil}}},
+		{name: "negative start", response: valid(-1, 1_000_000)},
+		{name: "negative end", response: valid(0, -1)},
+		{name: "minimum int64", response: valid(math.MinInt64, 1_000_000)},
+		{name: "maximum int64", response: valid(0, math.MaxInt64)},
+		{name: "non-integral start", response: valid(1, 1_000_000)},
+		{name: "non-integral end", response: valid(0, 1_000_001)},
+		{
+			name: "invalid later segment does not publish an earlier segment",
+			response: &TranscriptResult{
+				Text: "transcript",
+				Segments: []*TranscriptSegment{
+					{Id: 0, Start: 0, End: 1_000_000, Text: "first"},
+					{Id: 1, Start: 1_000_001, End: 2_000_000, Text: "second"},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mapped, err := transcriptResponse(test.response)
+			if err == nil {
+				t.Fatalf("transcriptResponse() error = nil, mapped = %#v; want malformed response", mapped)
+			}
+			if mapped.Text != "" || mapped.Segments != nil || mapped.Artifacts != nil {
+				t.Fatalf("transcriptResponse() mapped partial response = %#v, want empty response", mapped)
+			}
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse ||
+				failure.Operation != models.OperationASR || failure.Slot != "segments" ||
+				!errors.Is(err, models.ErrInferenceFailed) {
+				t.Fatalf("transcriptResponse() error = %v, failure = %#v, want typed malformed ASR failure", err, failure)
+			}
+		})
+	}
+}
+
+func TestTranscriptResponsePreservesNilBackendResponse(t *testing.T) {
+	t.Parallel()
+
+	mapped, err := transcriptResponse(nil)
+	if err != nil || mapped.Text != "" || mapped.Segments != nil || mapped.Artifacts != nil {
+		t.Fatalf("transcriptResponse(nil) = response:%#v error:%v, want empty response without error", mapped, err)
+	}
+}
+
+func TestPinnedASRBackendPropagatesMalformedTimestampFailureAtomically(t *testing.T) {
+	t.Parallel()
+
+	connection := &asrProtocolConnection{}
+	var err error
+	connection.response, err = proto.Marshal(&TranscriptResult{
+		Text:     "transcript",
+		Segments: []*TranscriptSegment{{Id: 0, Start: 0, End: 1, Text: "transcript"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal malformed response: %v", err)
+	}
+	temporary := &asrProtocolTempFile{path: "temp/asr-malformed"}
+	removed := 0
+	backend := NewPinnedASRBackend(
+		&asrProtocolDialer{connection: connection},
+		func() string { return "temp" },
+		func(string, string) (TempFile, error) { return temporary, nil },
+		func(string, []byte) error { return nil },
+		func(string) error {
+			removed++
+			return nil
+		},
+	)
+
+	response, err := backend(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:45912"),
+		models.ASRBackendRequest{Audio: []byte("audio"), MediaType: "audio/wav"},
+	)
+	if response.Text != "" || response.Segments != nil || response.Artifacts != nil {
+		t.Fatalf("malformed ASR response = %#v, want no partial response", response)
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse ||
+		failure.Operation != models.OperationASR || failure.Slot != "segments" ||
+		!errors.Is(err, models.ErrInferenceFailed) {
+		t.Fatalf("malformed ASR error = %v, failure = %#v, want typed failure", err, failure)
+	}
+	if temporary.closeCalls != 1 || removed != 1 || connection.closed != 1 {
+		t.Fatalf("malformed ASR cleanup = close:%d remove:%d connection:%d, want one each", temporary.closeCalls, removed, connection.closed)
 	}
 }
 

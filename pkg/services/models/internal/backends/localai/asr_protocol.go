@@ -14,6 +14,9 @@ import (
 
 const (
 	localAITranscriptionMethod = "/backend.Backend/AudioTranscription"
+	// LocalAI's pinned Whisper bridge exposes timestamps in nanoseconds while
+	// the provider-neutral ASR codec consumes whole milliseconds.
+	localAIWhisperTimestampNanosecondsPerMillisecond int64 = 1_000_000
 	// The pinned whisper bridge assigns this field directly to whisper.cpp's
 	// n_threads setting. Keep omitted optional parameters valid for the real
 	// backend instead of sending protobuf's zero value.
@@ -77,7 +80,7 @@ func (client grpcProtocolClient) transcribe(
 	if err := client.invokeProto(ctx, localAITranscriptionMethod, protocolRequest, response); err != nil {
 		return models.ASRBackendResponse{}, err
 	}
-	return transcriptResponse(response), nil
+	return transcriptResponse(response)
 }
 
 func stageASRAudio(
@@ -307,21 +310,36 @@ func asrStringSlice(value any) ([]string, bool) {
 	}
 }
 
-func transcriptResponse(response *TranscriptResult) models.ASRBackendResponse {
+func transcriptResponse(response *TranscriptResult) (models.ASRBackendResponse, error) {
 	if response == nil {
-		return models.ASRBackendResponse{}
+		return models.ASRBackendResponse{}, nil
 	}
 	result := models.ASRBackendResponse{Text: response.GetText()}
 	result.Segments = make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
 	for _, segment := range response.GetSegments() {
 		if segment == nil {
-			continue
+			return models.ASRBackendResponse{}, malformedASRProtocolResponse("segments")
+		}
+		start, err := localAIWhisperTimestampMilliseconds(segment.GetStart())
+		if err != nil {
+			return models.ASRBackendResponse{}, err
+		}
+		end, err := localAIWhisperTimestampMilliseconds(segment.GetEnd())
+		if err != nil {
+			return models.ASRBackendResponse{}, err
 		}
 		result.Segments = append(result.Segments, models.ASRBackendSegment{
-			ID: segment.GetId(), Start: segment.GetStart(), End: segment.GetEnd(), Text: segment.GetText(),
+			ID: segment.GetId(), Start: start, End: end, Text: segment.GetText(),
 		})
 	}
-	return result
+	return result, nil
+}
+
+func localAIWhisperTimestampMilliseconds(raw int64) (int64, error) {
+	if raw < 0 || raw%localAIWhisperTimestampNanosecondsPerMillisecond != 0 {
+		return 0, malformedASRProtocolResponse("segments")
+	}
+	return raw / localAIWhisperTimestampNanosecondsPerMillisecond, nil
 }
 
 func (client grpcProtocolClient) invokeProto(
@@ -376,6 +394,13 @@ func asrProtocolFailure(message string, cause error) error {
 	return &models.InvocationFailure{
 		Class: models.InvocationFailureClassBackendProtocol, Operation: models.OperationASR,
 		Message: message, Cause: cause,
+	}
+}
+
+func malformedASRProtocolResponse(slot string) error {
+	return &models.InvocationFailure{
+		Class: models.InvocationFailureClassMalformedResponse, Operation: models.OperationASR,
+		Slot: slot, Message: "ASR backend response is malformed", Cause: models.ErrInferenceFailed,
 	}
 }
 
