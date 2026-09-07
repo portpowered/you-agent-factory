@@ -1,0 +1,28 @@
+{
+  "schema": "localai.asr-known-fixture.v1",
+  "file": "localai-asr-known.wav",
+  "bytes": 10340,
+  "sha256": "eea86018ce1730baaf7f5dd6ec88c1f727dd90203521a9115b489310a248ea05",
+  "mediaType": "audio/wav",
+  "wav": {
+    "audioFormat": 1,
+    "channels": 1,
+    "sampleRateHz": 8000,
+    "bitsPerSample": 16,
+    "dataBytes": 10296,
+    "durationMillis": 644
+  },
+  "transcript": {
+    "language": "en",
+    "text": "zero",
+    "normalization": "lowercase-trim-space-and-terminal-punctuation"
+  },
+  "source": {
+    "repository": "https://github.com/Jakobovski/free-spoken-digit-dataset",
+    "revision": "2b2c7c40d93a401feccf428247dcd2317431fdd6",
+    "path": "recordings/0_jackson_0.wav",
+    "attribution": "Free Spoken Digit Dataset contributors; speaker jackson",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+  }
+}
