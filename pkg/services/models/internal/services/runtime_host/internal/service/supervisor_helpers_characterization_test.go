@@ -29,9 +29,9 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 		BackendRequired:   true,
 		BackendFiles:      []string{`C:\models\backend\llama.zip`},
 	}
-	spec, err := defaultGRPCServerStartBuilder(identity, inspection, worker)
+	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
 	if err != nil {
-		t.Fatalf("defaultGRPCServerStartBuilder: %v", err)
+		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
 	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
 		t.Fatalf("packaged backend start spec = %#v, want no authored process or endpoint", spec)
@@ -70,9 +70,9 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 		BackendRequired: true,
 		BackendFiles:    []string{`C:\models\backend\vibevoice.zip`},
 	}
-	spec, err := defaultGRPCServerStartBuilder(identity, inspection, worker)
+	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
 	if err != nil {
-		t.Fatalf("defaultGRPCServerStartBuilder: %v", err)
+		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
 	wantFiles := []string{
 		filepath.Join(inspection.CachePath, "model.gguf"),

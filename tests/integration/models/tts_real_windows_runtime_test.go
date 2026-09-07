@@ -1,3 +1,5 @@
+//go:build windows
+
 package models_test
 
 import (
@@ -24,123 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-type pinnedTTSExecution struct {
-	Started             bool   `json:"started"`
-	ProcessExited       bool   `json:"processExited"`
-	ExitCode            int    `json:"exitCode"`
-	TimedOut            bool   `json:"timedOut"`
-	ChildProcesses      int    `json:"childProcesses"`
-	ModelCalls          int    `json:"modelCalls"`
-	HeavyInvocations    int    `json:"heavyInvocations"`
-	SemanticRetries     int    `json:"semanticRetries"`
-	StdoutBytes         int    `json:"stdoutBytes"`
-	StdoutSHA256        string `json:"stdoutSha256"`
-	StderrBytes         int    `json:"stderrBytes"`
-	StderrSHA256        string `json:"stderrSha256"`
-	ProcessTreeAttached bool   `json:"processTreeAttached"`
-	ProcessTreeClosed   bool   `json:"processTreeClosed"`
-}
-
-type pinnedTTSOutput struct {
-	Name           string `json:"name"`
-	Modality       string `json:"modality"`
-	MediaType      string `json:"mediaType"`
-	Bytes          int64  `json:"bytes"`
-	SHA256         string `json:"sha256"`
-	DurationMillis int64  `json:"durationMillis"`
-	Channels       uint16 `json:"channels"`
-	SampleRate     uint32 `json:"sampleRate"`
-	Bits           uint16 `json:"bits"`
-	BlockAlign     uint16 `json:"blockAlign"`
-}
-
-type pinnedTTSStageEvidence struct {
-	Stage          string `json:"stage"`
-	Outcome        string `json:"outcome"`
-	FailureClass   string `json:"failureClass,omitempty"`
-	DurationMillis int64  `json:"durationMillis"`
-}
-
-type pinnedTTSFailureEvidence struct {
-	Stage       string `json:"stage"`
-	Class       string `json:"class"`
-	CauseSHA256 string `json:"causeSha256"`
-}
-
-type pinnedTTSCleanup struct {
-	Checked                bool   `json:"checked"`
-	ProcessTreeAttached    bool   `json:"processTreeAttached"`
-	ProcessTreeClosed      bool   `json:"processTreeClosed"`
-	OwnedProcessRemaining  bool   `json:"ownedProcessRemaining"`
-	OwnedListenerRemaining bool   `json:"ownedListenerRemaining"`
-	Observation            string `json:"observation,omitempty"`
-}
-
-type pinnedTTSStreams struct {
-	Redacted       bool `json:"redacted"`
-	RawAudioLogged bool `json:"rawAudioLogged"`
-}
-
-type pinnedTTSChildEnvironmentEvidence struct {
-	Sequence    uint64                            `json:"sequence"`
-	Kind        string                            `json:"kind"`
-	Backend     string                            `json:"backend"`
-	ProcessID   int                               `json:"process_id"`
-	Phase       string                            `json:"phase"`
-	Environment []pinnedTTSManagedEnvironmentFact `json:"environment,omitempty"`
-	ExitClass   string                            `json:"exit_class,omitempty"`
-}
-
-type pinnedTTSManagedEnvironmentFact struct {
-	Name        string `json:"name"`
-	Present     bool   `json:"present"`
-	ValueSHA256 string `json:"value_sha256,omitempty"`
-}
-
-type pinnedTTSCacheEvidence struct {
-	TTSModel              string `json:"ttsModel"`
-	TTSBackend            string `json:"ttsBackend"`
-	ModelCacheEntries     int    `json:"modelCacheEntries"`
-	HFCacheEntries        int    `json:"hfCacheEntries"`
-	PartialArtifacts      bool   `json:"partialArtifacts"`
-	ModelCacheEntriesPrev int    `json:"modelCacheEntriesBefore"`
-	HFCacheEntriesPrev    int    `json:"hfCacheEntriesBefore"`
-}
-
-type pinnedTTSRecordedRuntime struct {
-	Sequence       uint64                            `json:"sequence"`
-	Kind           string                            `json:"kind"`
-	Stage          string                            `json:"stage,omitempty"`
-	Outcome        string                            `json:"outcome"`
-	FailureClass   string                            `json:"failure_class,omitempty"`
-	DurationMillis int64                             `json:"duration_millis"`
-	CauseSHA256    string                            `json:"cause_sha256,omitempty"`
-	Backend        string                            `json:"backend,omitempty"`
-	ProcessID      int                               `json:"process_id,omitempty"`
-	Phase          string                            `json:"phase,omitempty"`
-	Environment    []pinnedTTSManagedEnvironmentFact `json:"environment,omitempty"`
-	ExitClass      string                            `json:"exit_class,omitempty"`
-}
-
-type pinnedTTSRuntimeObservation struct {
-	StageTrace       []pinnedTTSStageEvidence
-	Failure          *pinnedTTSFailureEvidence
-	ChildEnvironment []pinnedTTSChildEnvironmentEvidence
-	TerminalOutcome  string
-}
-
-type pinnedCommandResult struct {
-	stdout              []byte
-	stderr              []byte
-	exitCode            int
-	started             bool
-	processExited       bool
-	timedOut            bool
-	setupFailure        bool
-	processTreeAttached bool
-	processTreeClosed   bool
-}
 
 func runPinnedTTSCommand(
 	t *testing.T,

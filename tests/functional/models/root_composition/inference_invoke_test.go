@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -837,40 +836,6 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 	}
 }
 
-func writeControlledBuiltinTTSSource(t *testing.T, home string) {
-	t.Helper()
-	bundle := filepath.Join(home, "tts-role-bundle")
-	artifacts := map[string][]byte{
-		"vibevoice-realtime-0.5B-q8_0.gguf": []byte("controlled-vibevoice-model"),
-		"tokenizer.gguf":                    []byte("controlled-vibevoice-tokenizer"),
-		"voice-en-Carter_man.gguf":          []byte("controlled-vibevoice-voice"),
-	}
-	if err := os.MkdirAll(bundle, 0o755); err != nil {
-		t.Fatalf("create controlled TTS role bundle: %v", err)
-	}
-	for name, body := range artifacts {
-		if err := os.WriteFile(filepath.Join(bundle, name), body, 0o644); err != nil {
-			t.Fatalf("write controlled TTS role %q: %v", name, err)
-		}
-	}
-	source := (&url.URL{Scheme: "file", Path: filepath.ToSlash(bundle)}).String()
-	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("create controlled TTS operator config directory: %v", err)
-	}
-	config, err := json.Marshal(map[string]any{
-		"models": map[string]any{
-			"tts": map[string]any{"source": source},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal controlled TTS operator config: %v", err)
-	}
-	if err := os.WriteFile(configPath, config, 0o644); err != nil {
-		t.Fatalf("write controlled TTS operator config: %v", err)
-	}
-}
-
 func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
 	t.Helper()
 	name := "weights.bin"
@@ -900,49 +865,6 @@ func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
 	}
 	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
 		t.Fatalf("write generic model metadata: %v", err)
-	}
-}
-
-func pinnedTTSBackendSelection() serviceedges.ModelBackendArtifactSelection {
-	return serviceedges.ModelBackendArtifactSelection{
-		Name:     "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-		Bytes:    22,
-		SHA256:   "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
-	}
-}
-
-func writeGenericBuiltinTTSBackendCache(t *testing.T, home string) {
-	t.Helper()
-	selection := pinnedTTSBackendSelection()
-	writeGenericBackendCache(t, home, "localai-vibevoice", selection, []byte("pinned-backend-fixture"))
-}
-
-func writeGenericBackendCache(t *testing.T, home, backend string, selection serviceedges.ModelBackendArtifactSelection, body []byte) {
-	t.Helper()
-	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
-	source := "backend://" + backend + "/release://" + urlHash
-	digest := selection.SHA256
-	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, digest)
-	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
-	snapshot := filepath.Join(home, ".agent-factory", "models", "backend-artifacts", ".you-content-addressed", "backend", identityHash)
-	if err := os.MkdirAll(snapshot, 0o755); err != nil {
-		t.Fatalf("create generic backend snapshot: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), body, 0o644); err != nil {
-		t.Fatalf("write generic backend snapshot: %v", err)
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"kind": "backend", "identity": identity, "source": source, "sourceKey": source,
-		"artifacts": []map[string]any{{
-			"Name": selection.Name, "Bytes": selection.Bytes, "SHA256": selection.SHA256,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal generic backend metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
-		t.Fatalf("write generic backend metadata: %v", err)
 	}
 }
 

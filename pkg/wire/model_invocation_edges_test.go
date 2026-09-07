@@ -56,6 +56,28 @@ func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.
 	}
 	t.Parallel()
 
+	proof := newManagedWindowsChildProof(t)
+	managed := startManagedWindowsChild(t, proof)
+	defer managed.Stop(context.Background())
+	if waitErr := waitForManagedProcess(t, managed); waitErr != nil {
+		t.Fatalf("controlled managed child exit = %v, want success", waitErr)
+	}
+	assertManagedWindowsChildEnvironment(t, proof)
+	assertManagedWindowsChildEvidence(t, proof)
+}
+
+type managedWindowsChildProof struct {
+	root              string
+	managedExecutable string
+	managedLibrary    string
+	staleLibrary      string
+	environmentDump   string
+	evidencePath      string
+	environment       []string
+}
+
+func newManagedWindowsChildProof(t *testing.T) managedWindowsChildProof {
+	t.Helper()
 	root := t.TempDir()
 	cmdPath, err := exec.LookPath("cmd.exe")
 	if err != nil {
@@ -80,15 +102,27 @@ func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.
 		"TMP=" + root,
 		"vIbEvOiCeCpP_LiBrArY=" + staleLibrary,
 	})
-	evidencePath := filepath.Join(root, "runtime.jsonl")
-	recorder := &modelRuntimeEvidenceFileRecorder{path: evidencePath}
+	return managedWindowsChildProof{
+		root: root, managedExecutable: managedExecutable, managedLibrary: managedLibrary, staleLibrary: staleLibrary,
+		environmentDump: environmentDump, evidencePath: filepath.Join(root, "runtime.jsonl"),
+		environment: environment,
+	}
+}
+
+func startManagedWindowsChild(t *testing.T, proof managedWindowsChildProof) interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+} {
+	t.Helper()
+	recorder := &modelRuntimeEvidenceFileRecorder{path: proof.evidencePath}
 	managed, err := (modelsProcessLauncher{recorder: recorder}).Start(
 		context.Background(),
 		serviceedges.HostProcessStartSpec{
 			Backend:      "localai-vibevoice",
-			BackendFiles: []string{managedExecutable},
-			WorkDir:      root,
-			Env:          environment,
+			BackendFiles: []string{proof.managedExecutable},
+			WorkDir:      proof.root,
+			Env:          proof.environment,
 			Args: []string{
 				"/c",
 				"set > child-environment.txt & exit /b 0",
@@ -98,33 +132,42 @@ func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.
 	if err != nil {
 		t.Fatalf("start controlled managed child: %v", err)
 	}
-	defer managed.Stop(context.Background())
+	return managed
+}
 
-	waitErr := waitForManagedProcess(t, managed)
-	if waitErr != nil {
-		t.Fatalf("controlled managed child exit = %v, want success", waitErr)
-	}
-	dump, err := os.ReadFile(environmentDump)
+func assertManagedWindowsChildEnvironment(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	dump, err := os.ReadFile(proof.environmentDump)
 	if err != nil {
 		t.Fatalf("read child environment dump: %v", err)
 	}
 	childEnvironment := parseEnvironmentDump(string(dump))
 	wantEnvironment := map[string]string{
-		"PATH":                 requiredEnvironmentValue(t, environment, "PATH"),
-		"TEMP":                 root,
-		"TMP":                  root,
-		"VIBEVOICECPP_LIBRARY": managedLibrary,
+		"PATH":                 requiredEnvironmentValue(t, proof.environment, "PATH"),
+		"TEMP":                 proof.root,
+		"TMP":                  proof.root,
+		"VIBEVOICECPP_LIBRARY": proof.managedLibrary,
 	}
 	for name, want := range wantEnvironment {
 		if got := childEnvironment[strings.ToUpper(name)]; got != want {
 			t.Fatalf("child %s = %q, want managed value %q", name, got, want)
 		}
 	}
+}
 
-	records := readManagedChildEvidence(t, evidencePath)
+func assertManagedWindowsChildEvidence(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	records := readManagedChildEvidence(t, proof.evidencePath)
 	if len(records) != 2 {
 		t.Fatalf("managed child evidence records = %d, want start and exit: %#v", len(records), records)
 	}
+	assertManagedWindowsChildLifecycle(t, records)
+	assertManagedWindowsChildFacts(t, proof, records[0])
+	assertManagedWindowsChildRedaction(t, proof)
+}
+
+func assertManagedWindowsChildLifecycle(t *testing.T, records []managedChildEnvironmentEvidence) {
+	t.Helper()
 	started, exited := records[0], records[1]
 	if started.Kind != managedChildEvidenceKind || started.Phase != managedChildPhaseStarted ||
 		started.ProcessID <= 0 || exited.Kind != managedChildEvidenceKind ||
@@ -132,11 +175,19 @@ func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.
 		exited.ExitClass != managedChildExitClassExited {
 		t.Fatalf("managed child lifecycle evidence = %#v, want one PID with start/exit phases", records)
 	}
+}
+
+func assertManagedWindowsChildFacts(
+	t *testing.T,
+	proof managedWindowsChildProof,
+	started managedChildEnvironmentEvidence,
+) {
+	t.Helper()
 	wantDigests := map[string]string{
-		"PATH":                 environmentValueSHA256(wantEnvironment["PATH"]),
-		"TEMP":                 environmentValueSHA256(root),
-		"TMP":                  environmentValueSHA256(root),
-		"VIBEVOICECPP_LIBRARY": environmentValueSHA256(managedLibrary),
+		"PATH":                 environmentValueSHA256(requiredEnvironmentValue(t, proof.environment, "PATH")),
+		"TEMP":                 environmentValueSHA256(proof.root),
+		"TMP":                  environmentValueSHA256(proof.root),
+		"VIBEVOICECPP_LIBRARY": environmentValueSHA256(proof.managedLibrary),
 	}
 	if len(started.Environment) != len(wantDigests) {
 		t.Fatalf("started environment facts = %#v, want four allowlisted facts", started.Environment)
@@ -146,11 +197,15 @@ func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.
 			t.Fatalf("started environment fact = %#v, want bounded digest", fact)
 		}
 	}
-	body, err := os.ReadFile(evidencePath)
+}
+
+func assertManagedWindowsChildRedaction(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	body, err := os.ReadFile(proof.evidencePath)
 	if err != nil {
 		t.Fatalf("read managed child evidence: %v", err)
 	}
-	for _, marker := range []string{root, staleLibrary, managedLibrary, environmentDump, requiredEnvironmentValue(t, environment, "PATH")} {
+	for _, marker := range []string{proof.root, proof.staleLibrary, proof.managedLibrary, proof.environmentDump, requiredEnvironmentValue(t, proof.environment, "PATH")} {
 		if strings.Contains(string(body), marker) {
 			t.Fatalf("managed child evidence leaked raw value %q: %s", marker, body)
 		}

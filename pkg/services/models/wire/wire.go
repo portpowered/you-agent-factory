@@ -85,15 +85,6 @@ type InvocationProtocolDialer = platformgrpc.Dialer
 type RuntimeEvidenceRecord = modelseffects.RuntimeEvidenceRecord
 type RuntimeEvidenceRecorder = modelseffects.RuntimeEvidenceRecorder
 
-// NewOrderedRuntimeEvidenceRecorder creates the nil-safe ordered wrapper used
-// by Models and Runtime Host. It is construction-only and does not alter the
-// public Models contract.
-func NewOrderedRuntimeEvidenceRecorder(
-	recorder RuntimeEvidenceRecorder,
-) RuntimeEvidenceRecorder {
-	return modelseffects.NewOrderedRuntimeEvidenceRecorder(recorder)
-}
-
 // NewPinnedGRPCHostProtocolNegotiator exposes the LocalAI-owned readiness
 // adapter through the Models construction boundary without exporting any
 // backend-native message types.
@@ -223,65 +214,6 @@ func NewServiceWithBackendArtifactResolver(
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
 		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, nil, backendResolver, invocationRuntimeOptions{},
 		revisionResolvers...,
-	)
-}
-
-// NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer adds
-// the production transport used by the pinned LocalAI adapter while retaining
-// the injected generic and ASR backends used by deterministic fixtures.
-func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
-	assetPlatform models.AssetHostPlatform,
-	assetHTTP AssetHTTPDoer,
-	assetEndpoints models.RuntimeAssetEndpoints,
-	assetMkdirAll AssetMakeDirectories,
-	assetStat AssetInspectPath,
-	assetHome AssetResolveHomeDirectory,
-	assetWriteFile AssetWriteFile,
-	assetRename AssetRenamePath,
-	assetRemove AssetRemovePath,
-	assetReadFile AssetReadFile,
-	assetReadDir AssetReadDirectory,
-	assetCreate AssetCreateFile,
-	assetOpen AssetOpenFile,
-	processLauncher HostProcessLauncher,
-	hostHTTP HostHTTPDoer,
-	hostClock HostClock,
-	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP RuntimeHTTPDoer,
-	runtimeInspect RuntimeInspectFile,
-	runtimeTempDir RuntimeTempDirectory,
-	runtimeTempFile RuntimeCreateTempFile,
-	logger *zap.Logger,
-	now func() time.Time,
-	issuerEntropy platformrandom.Source,
-	pullMetrics PullMetricsRecorder,
-	hostLogger HostDiagnosticLogger,
-	hostMetrics HostMetricsRecorder,
-	localHooks LocalRuntimeHooks,
-	resolveEnvironment AssetResolveEnvironment,
-	protocolNegotiator HostProtocolNegotiator,
-	compatibilityChecker HostCompatibilityChecker,
-	assetCoordination AssetStagingCoordination,
-	resolveSymlinks modelseffects.HostResolveSymlinks,
-	backendResolver BackendArtifactResolver,
-	invocationProtocol InvocationProtocolClient,
-	protocolDialer InvocationProtocolDialer,
-	invocationBackend InvocationBackend,
-	asrBackend ASRBackend,
-	embeddingBackend EmbeddingBackend,
-	revisionResolvers ...func(context.Context, string) (string, error),
-) (models.Service, error) {
-	return newService(
-		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
-		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
-		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
-		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
-		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, resolveSymlinks, backendResolver,
-		invocationRuntimeOptions{
-			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
-			Client: invocationProtocol, Dialer: protocolDialer,
-		}, revisionResolvers...,
 	)
 }
 

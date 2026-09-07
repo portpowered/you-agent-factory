@@ -47,31 +47,6 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	assertTTSIsolationAndRelease(t, story)
 }
 
-func assertTTSRoleBundleReads(t *testing.T, story ttsStory) {
-	t.Helper()
-	paths := story.assetTrace.snapshot()
-	observed := make([]string, 0, 3)
-	for _, role := range []string{
-		"vibevoice-realtime-0.5B-q8_0.gguf",
-		"tokenizer.gguf",
-		"voice-en-Carter_man.gguf",
-	} {
-		want := "open:" + filepath.Join(story.home, "tts-role-bundle", role)
-		found := false
-		for _, path := range paths {
-			if path == want {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("TTS role %q was not observed in controlled asset reads; reads=%v", role, paths)
-		}
-		observed = append(observed, role)
-	}
-	t.Logf("controlled TTS role bundle source files opened: %v", observed)
-}
-
 func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +185,8 @@ func setupTTSStory(t *testing.T) ttsStory {
 	}
 	temp := &ttsTempEffects{directory: ttsTempDirectory}
 	writeControlledBuiltinTTSSource(t, home)
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	asrDefinition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
 	if !ok {
@@ -295,7 +272,11 @@ func assertTTSReady(t *testing.T, story ttsStory) {
 	if !ok {
 		t.Fatalf("models list did not include %q: %#v", models.BuiltInModelNameTTS, listed.Results)
 	}
-	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s; controlled operator source is resolved by direct invocation scope", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
+	if tts.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
+		tts.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("models list TTS runtime = %#v diagnostics=%v, want READY/INSTALLED", tts.ManagedRuntime, tts.ManagedRuntime.Diagnostics)
+	}
+	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
 }
 
 func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
@@ -354,30 +335,7 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 func runExactTTSToASRChain(t *testing.T, story ttsStory) {
 	t.Helper()
 	const phrase = "Local AI works on this machine"
-
-	ttsPath := filepath.Join(story.dir, "exact-chain.wav")
-	var ttsStdout, ttsStderr bytes.Buffer
-	ttsInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", models.BuiltInModelNameTTS, "--operation", "TTS", "--text", phrase, "--output", ttsPath,
-	})
-	ttsInputs.Input.Env = story.environment
-	ttsInputs.Input.WorkingDirectory = story.dir
-	ttsInputs.Input.Stdout = &ttsStdout
-	ttsInputs.Input.Stderr = &ttsStderr
-	if err := story.process.Execute(ttsInputs.Input); err != nil {
-		t.Fatalf("Process.Execute(exact-chain TTS) error = %v", err)
-	}
-	audio, err := os.ReadFile(ttsPath)
-	if err != nil {
-		t.Fatalf("read exact-chain TTS output: %v", err)
-	}
-	if want := story.protocol.audioFor(phrase); !bytes.Equal(audio, want) {
-		t.Fatalf("exact-chain TTS bytes = %d/%s, want fixture bytes %d/%s", len(audio), ttsDigest(audio), len(want), ttsDigest(want))
-	}
-	assertSemanticTTSAudio(t, audio, "exact-chain TTS output")
-	if ttsStdout.String() != "Wrote audio: "+ttsPath+"\n" || ttsStderr.Len() != 0 {
-		t.Fatalf("exact-chain TTS streams = stdout %q stderr %q, want cache-hit status only", ttsStdout.String(), ttsStderr.String())
-	}
+	audio, ttsPath := runExactChainTTS(t, story, phrase)
 
 	transcriptPath := filepath.Join(story.dir, "exact-chain-transcript.txt")
 	segmentsPath := filepath.Join(story.dir, "exact-chain-segments.json")
@@ -459,13 +417,6 @@ func runExactTTSToASRChain(t *testing.T, story ttsStory) {
 		t.Fatalf("exact-chain ASR JSON outputs = %#v, want transcript/text/plain then segments/application/json", response.Outputs)
 	}
 	t.Logf("runtime proof ASR JSON output identities transcript=text/plain segments=application/json stdout=%s stderr=%q", jsonOutput.String(), jsonStderr.String())
-}
-
-func wavDurationMilliseconds(audio []byte) float64 {
-	dataSize := binary.LittleEndian.Uint32(audio[40:44])
-	blockAlign := binary.LittleEndian.Uint16(audio[32:34])
-	sampleRate := binary.LittleEndian.Uint32(audio[24:28])
-	return float64(dataSize/uint32(blockAlign)) * 1000 / float64(sampleRate)
 }
 
 func runTTSFailureMatrix(t *testing.T, story ttsStory, wantAudio []byte) {

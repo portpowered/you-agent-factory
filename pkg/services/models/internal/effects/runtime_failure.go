@@ -151,28 +151,38 @@ func RuntimeFailureClassForError(err error) RuntimeFailureClass {
 	if err == nil {
 		return RuntimeFailureUnavailable
 	}
+	if class, ok := runtimeFailureClassForSentinel(err); ok {
+		return class
+	}
+	return runtimeFailureClassForInvocation(err)
+}
+
+func runtimeFailureClassForSentinel(err error) (RuntimeFailureClass, bool) {
 	switch {
 	case errors.Is(err, context.Canceled),
 		errors.Is(err, models.ErrInferenceCancelled),
 		errors.Is(err, models.ErrAssetCancelled),
 		errors.Is(err, models.ErrHostCancelled):
-		return RuntimeFailureCancelled
+		return RuntimeFailureCancelled, true
 	case errors.Is(err, context.DeadlineExceeded),
 		errors.Is(err, models.ErrInferenceTimeout),
 		errors.Is(err, models.ErrHostLoadingTimeout):
-		return RuntimeFailureTimedOut
+		return RuntimeFailureTimedOut, true
 	case errors.Is(err, models.ErrAssetIntegrityFailed):
-		return RuntimeFailureIntegrityMismatch
+		return RuntimeFailureIntegrityMismatch, true
 	case errors.Is(err, models.ErrInferenceArtifactInvalid):
-		return RuntimeFailureMalformedResponse
+		return RuntimeFailureMalformedResponse, true
 	case errors.Is(err, models.ErrHostProtocolIncompatible):
-		return RuntimeFailureProtocolIncompatible
+		return RuntimeFailureProtocolIncompatible, true
 	case errors.Is(err, models.ErrHostProcessCrash):
-		return RuntimeFailureProcessExited
+		return RuntimeFailureProcessExited, true
 	case errors.Is(err, models.ErrInferenceFailed):
-		return RuntimeFailureInvocationFailed
+		return RuntimeFailureInvocationFailed, true
 	}
+	return RuntimeFailureUnavailable, false
+}
 
+func runtimeFailureClassForInvocation(err error) RuntimeFailureClass {
 	var invocationFailure *models.InvocationFailure
 	if errors.As(err, &invocationFailure) && invocationFailure != nil {
 		switch invocationFailure.Class {

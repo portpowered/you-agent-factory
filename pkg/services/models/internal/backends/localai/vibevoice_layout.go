@@ -65,12 +65,34 @@ func confinedVibeVoiceRolePaths(
 		return nil, errVibeVoiceLayout
 	}
 	modelRootName := filepath.ToSlash(filepath.Clean(filepath.Dir(filepath.FromSlash(modelFile))))
-	expectedPaths := make(map[string]string, len(definition.Artifacts))
-	for _, artifact := range definition.Artifacts {
-		expectedPaths[filepath.ToSlash(filepath.Clean(filepath.FromSlash(artifact.Path)))] = artifact.Role
+	expectedPaths := expectedVibeVoiceRolePaths(definition)
+	paths, err := collectVibeVoiceRolePaths(
+		modelFiles, root, absoluteRoot, modelRootName, expectedPaths, resolveSymlinks,
+	)
+	if err != nil || len(paths) != len(expectedPaths) {
+		return nil, errVibeVoiceLayout
 	}
+	if !vibeVoiceModelPathMatches(modelFile, paths["model"]) {
+		return nil, errVibeVoiceLayout
+	}
+	return paths, nil
+}
 
-	paths := make(map[string]string, len(expectedPaths))
+func expectedVibeVoiceRolePaths(definition modelartifacts.ModelRoleModel) map[string]string {
+	expected := make(map[string]string, len(definition.Artifacts))
+	for _, artifact := range definition.Artifacts {
+		expected[filepath.ToSlash(filepath.Clean(filepath.FromSlash(artifact.Path)))] = artifact.Role
+	}
+	return expected
+}
+
+func collectVibeVoiceRolePaths(
+	modelFiles []string,
+	root, absoluteRoot, modelRootName string,
+	expected map[string]string,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (map[string]string, error) {
+	paths := make(map[string]string, len(expected))
 	seenCandidates := make(map[string]struct{}, len(modelFiles))
 	for _, raw := range modelFiles {
 		candidate, err := confinedVibeVoiceCandidate(
@@ -79,17 +101,10 @@ func confinedVibeVoiceRolePaths(
 		if err != nil {
 			return nil, errVibeVoiceLayout
 		}
-		absoluteCandidate, err := filepath.Abs(candidate)
+		role, absoluteCandidate, err := vibeVoiceCandidateRole(
+			candidate, absoluteRoot, expected,
+		)
 		if err != nil {
-			return nil, errVibeVoiceLayout
-		}
-		relative, err := filepath.Rel(absoluteRoot, absoluteCandidate)
-		if err != nil || filepath.IsAbs(relative) {
-			return nil, errVibeVoiceLayout
-		}
-		relativeName := filepath.ToSlash(relative)
-		role, ok := expectedPaths[relativeName]
-		if !ok || relativeName == "." {
 			return nil, errVibeVoiceLayout
 		}
 		if _, duplicate := seenCandidates[absoluteCandidate]; duplicate {
@@ -101,19 +116,36 @@ func confinedVibeVoiceRolePaths(
 		}
 		paths[role] = candidate
 	}
-	if len(paths) != len(expectedPaths) {
-		return nil, errVibeVoiceLayout
+	return paths, nil
+}
+
+func vibeVoiceCandidateRole(
+	candidate, absoluteRoot string,
+	expected map[string]string,
+) (string, string, error) {
+	absoluteCandidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", "", errVibeVoiceLayout
 	}
-	modelCandidate := paths["model"]
+	relative, err := filepath.Rel(absoluteRoot, absoluteCandidate)
+	if err != nil || filepath.IsAbs(relative) {
+		return "", "", errVibeVoiceLayout
+	}
+	relativeName := filepath.ToSlash(relative)
+	role, ok := expected[relativeName]
+	if !ok || relativeName == "." {
+		return "", "", errVibeVoiceLayout
+	}
+	return role, absoluteCandidate, nil
+}
+
+func vibeVoiceModelPathMatches(modelFile, modelCandidate string) bool {
 	modelAbsolute, err := filepath.Abs(modelFile)
 	if err != nil {
-		return nil, errVibeVoiceLayout
+		return false
 	}
 	candidateAbsolute, err := filepath.Abs(modelCandidate)
-	if err != nil || filepath.Clean(modelAbsolute) != filepath.Clean(candidateAbsolute) {
-		return nil, errVibeVoiceLayout
-	}
-	return paths, nil
+	return err == nil && filepath.Clean(modelAbsolute) == filepath.Clean(candidateAbsolute)
 }
 
 func confinedVibeVoiceCandidate(

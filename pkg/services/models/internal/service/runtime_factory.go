@@ -8,7 +8,6 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -470,8 +469,6 @@ type joinedInvocationPlan struct {
 	lease     models.ModelLeaseRef
 }
 
-const joinedInvocationFailureRuntime = "runtime_failure"
-
 // InvokeModel owns the complete prepared-model transaction. The injected
 // Inference owner remains responsible for the lease-backed primitive; this
 // root method supplies the preparation and compensating lifecycle around it.
@@ -497,26 +494,28 @@ func (o *Root) InvokeModel(
 		if !result.Invocation.IsZero() {
 			invocation = result.Invocation
 		}
-		if err != nil {
+		publicErr := err
+		diagnosticErr := err
+		if publicErr != nil {
 			result = joinedInvocationFailureResult(result)
-			err = modelseffects.WrapRuntimeFailure(stage, err)
+			diagnosticErr = modelseffects.WrapRuntimeFailure(stage, publicErr)
 		}
 		elapsed := joinedInvocationElapsed(o, started)
-		if o != nil && (err == nil || !runtimeHostEvidenceAlreadyRecorded(err)) {
+		if o != nil && (diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr)) {
 			modelseffects.RecordRuntimeEvidenceStage(
-				o.process.RuntimeEvidence, stage, err, elapsed,
+				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		if o != nil {
 			modelseffects.RecordRuntimeEvidenceTerminal(
-				o.process.RuntimeEvidence, stage, err, elapsed,
+				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		joinedInvocationRecord(
-			o, modelName, operationName, invocation, stage, err,
+			o, modelName, operationName, invocation, stage, publicErr,
 			elapsed,
 		)
-		return result.Clone(), err
+		return result.Clone(), publicErr
 	}
 
 	if err := validateJoinedRoot(o); err != nil {
@@ -939,99 +938,6 @@ func (o *Root) releaseJoinedLease(
 		Scope: scope, Lease: lease,
 	})
 	return err
-}
-
-func joinedInvocationContextError(ctx context.Context, err error) error {
-	if err == nil || ctx == nil || ctx.Err() == nil || errors.Is(err, models.ErrInferenceCancelled) {
-		return err
-	}
-	return errors.Join(models.ErrInferenceCancelled, err)
-}
-
-func joinedInvocationStart(o *Root) time.Time {
-	if o != nil && o.process.Clock != nil {
-		return o.process.Clock()
-	}
-	return time.Time{}
-}
-
-func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	if o == nil || o.process.Clock == nil || started.IsZero() {
-		return 0
-	}
-	ended := o.process.Clock()
-	if ended.Before(started) {
-		return 0
-	}
-	return ended.Sub(started)
-}
-
-func joinedInvocationRecord(
-	o *Root,
-	modelName string,
-	operation string,
-	invocation models.ModelInvocationRef,
-	stage modelseffects.RuntimeStage,
-	err error,
-	elapsed time.Duration,
-) {
-	if o == nil || o.process.Logger == nil {
-		return
-	}
-	fields := []zap.Field{
-		zap.String("model_name", modelName),
-		zap.String("operation", operation),
-		zap.String("invocation", invocation.String()),
-		zap.String("runtime_stage", string(stage)),
-		zap.Duration("duration", elapsed),
-		zap.Int64("duration_millis", elapsed.Milliseconds()),
-	}
-	if err != nil {
-		diagnostic := modelseffects.ProjectRuntimeFailure(err, elapsed)
-		fields = append(fields,
-			zap.String("outcome", "FAILED"),
-			zap.String("runtime_stage", string(diagnostic.Stage)),
-			zap.String("failure_class", string(diagnostic.Class)),
-			zap.String("cause_sha256", diagnostic.CauseSHA256),
-		)
-		o.process.Logger.Warn("models invocation completed", fields...)
-		return
-	}
-	fields = append(fields, zap.String("outcome", "COMPLETED"))
-	o.process.Logger.Info("models invocation completed", fields...)
-}
-
-func joinedInvocationFailureClass(err error) string {
-	var invocationFailure *models.InvocationFailure
-	if errors.As(err, &invocationFailure) && invocationFailure != nil && invocationFailure.Class != "" {
-		return string(invocationFailure.Class)
-	}
-	var configurationFailure models.ModelConfigurationFailure
-	if errors.As(err, &configurationFailure) {
-		return string(models.InvocationFailureClassConfiguration)
-	}
-	switch {
-	case errors.Is(err, models.ErrInferenceCancelled), errors.Is(err, models.ErrAssetCancelled), errors.Is(err, models.ErrHostCancelled):
-		return string(models.InvocationFailureClassCancellation)
-	case errors.Is(err, models.ErrInferenceTimeout), errors.Is(err, models.ErrHostLoadingTimeout):
-		return string(models.InvocationFailureClassTimeout)
-	case errors.Is(err, models.ErrHostProtocolIncompatible):
-		return string(models.InvocationFailureClassBackendProtocol)
-	case errors.Is(err, models.ErrHostRuntimeNotReady), errors.Is(err, models.ErrHostProcessCrash):
-		return string(models.InvocationFailureClassBackendReadiness)
-	case errors.Is(err, models.ErrAssetOffline):
-		return string(models.InvocationFailureClassOfflineCache)
-	case errors.Is(err, models.ErrInferenceArtifactInvalid):
-		return string(models.InvocationFailureClassArtifact)
-	case errors.Is(err, models.ErrModelRevisionUnresolved):
-		return string(models.InvocationFailureClassRevisionResolution)
-	case errors.Is(err, models.ErrModelReferenceInvalid):
-		return string(models.InvocationFailureClassInvalidModelReference)
-	case errors.Is(err, models.ErrInferenceFailed):
-		return joinedInvocationFailureRuntime
-	default:
-		return joinedInvocationFailureRuntime
-	}
 }
 
 func (o *Root) CancelInvocation(

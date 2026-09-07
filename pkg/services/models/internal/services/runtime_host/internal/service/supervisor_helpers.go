@@ -233,14 +233,6 @@ func defaultServerStartBuilder(
 	}, nil
 }
 
-func defaultGRPCServerStartBuilder(
-	identity supervisedIdentity,
-	inspection cacheInspection,
-	worker *models.RuntimeWorker,
-) (modelseffects.HostProcessStartSpec, error) {
-	return defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
-}
-
 func defaultGRPCServerStartBuilderWithSymlinkResolver(
 	identity supervisedIdentity,
 	inspection cacheInspection,

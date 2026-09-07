@@ -16,13 +16,25 @@ func TestDefaultModelRoleManifestDeclaresExactTTSBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultModelRoleManifest: %v", err)
 	}
-	if manifest.SchemaVersion != 1 || manifest.Kind != "localai-model-role-artifacts" {
-		t.Fatalf("manifest identity = %#v, want schema 1 and private role kind", manifest)
-	}
 	model, ok := manifest.Model("tts")
 	if !ok {
 		t.Fatal("manifest is missing tts")
 	}
+	assertModelRoleManifestIdentity(t, manifest)
+	assertTTSRolePublication(t, model)
+	assertTTSRoleBackend(t, model)
+	assertTTSRoleArtifacts(t, model)
+}
+
+func assertModelRoleManifestIdentity(t *testing.T, manifest artifacts.ModelRoleManifest) {
+	t.Helper()
+	if manifest.SchemaVersion != 1 || manifest.Kind != "localai-model-role-artifacts" {
+		t.Fatalf("manifest identity = %#v, want schema 1 and private role kind", manifest)
+	}
+}
+
+func assertTTSRolePublication(t *testing.T, model artifacts.ModelRoleModel) {
+	t.Helper()
 	if model.Publication.Repository != "mudler/vibevoice.cpp-models" ||
 		model.Publication.Revision != "a67807e65e3002e187179a856e96043f75060bc9" ||
 		model.Publication.License != "MIT" ||
@@ -30,6 +42,10 @@ func TestDefaultModelRoleManifestDeclaresExactTTSBundle(t *testing.T) {
 		model.Source.URI != "hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9" {
 		t.Fatalf("TTS publication/source = %#v, want exact immutable identity", model)
 	}
+}
+
+func assertTTSRoleBackend(t *testing.T, model artifacts.ModelRoleModel) {
+	t.Helper()
 	if model.Backend.ID != "localai-vibevoice" ||
 		model.Backend.Repository != "https://github.com/mudler/vibevoice.cpp" ||
 		model.Backend.Commit != "000e37282bc5bb09edc20f7047a47924122ba3a0" ||
@@ -39,6 +55,10 @@ func TestDefaultModelRoleManifestDeclaresExactTTSBundle(t *testing.T) {
 		strings.Join(model.Targets, ",") != "darwin-arm64,linux-amd64,windows-amd64" {
 		t.Fatalf("TTS backend/protocol/targets = %#v, want exact private identity", model)
 	}
+}
+
+func assertTTSRoleArtifacts(t *testing.T, model artifacts.ModelRoleModel) {
+	t.Helper()
 	wantArtifacts := []struct {
 		role, path, sha256 string
 		bytes              int64

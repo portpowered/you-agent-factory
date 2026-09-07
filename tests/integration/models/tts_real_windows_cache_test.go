@@ -1,3 +1,5 @@
+//go:build windows
+
 package models_test
 
 import (
@@ -14,16 +16,6 @@ import (
 	"strings"
 	"testing"
 )
-
-type pinnedTTSFileIdentity struct {
-	Configured  bool   `json:"configured"`
-	RegularFile bool   `json:"regularFile"`
-	Path        string `json:"path,omitempty"`
-	Commit      string `json:"commit,omitempty"`
-	Tree        string `json:"tree,omitempty"`
-	Bytes       int64  `json:"bytes,omitempty"`
-	SHA256      string `json:"sha256,omitempty"`
-}
 
 func readPinnedTTSFileIdentity(path string) (pinnedTTSFileIdentity, bool) {
 	info, err := os.Stat(path)
@@ -55,10 +47,6 @@ func pinnedTTSCacheDirectoriesEmpty(modelCache, hfCache string) bool {
 		}
 	}
 	return true
-}
-
-type pinnedTreeSnapshot struct {
-	Entries map[string]string
 }
 
 func inspectPinnedTree(t testing.TB, root string) pinnedTreeSnapshot {
@@ -140,42 +128,6 @@ func mergePinnedTTSCleanup(first, second pinnedTTSCleanup) pinnedTTSCleanup {
 		OwnedListenerRemaining: first.OwnedListenerRemaining || second.OwnedListenerRemaining,
 		Observation:            "all three supervised command trees exited; cache and output cleanup are checked after the exact-byte chain",
 	}
-}
-
-type pinnedTTSModelIdentity struct {
-	Name          string `json:"name"`
-	Source        string `json:"source"`
-	Revision      string `json:"revision"`
-	Verified      bool   `json:"verified"`
-	ArtifactCount int    `json:"artifactCount,omitempty"`
-	ArtifactBytes int64  `json:"artifactBytes,omitempty"`
-}
-
-type pinnedTTSBackendIdentity struct {
-	ID               string `json:"id"`
-	SourceRepository string `json:"sourceRepository,omitempty"`
-	BackendCommit    string `json:"backendCommit,omitempty"`
-	VibeVoiceCommit  string `json:"vibeVoiceCommit"`
-	LocalAICommit    string `json:"localAICommit"`
-	ProtocolRevision string `json:"protocolRevision"`
-	Archive          string `json:"archive"`
-	ExpectedBytes    int64  `json:"expectedBytes"`
-	ExpectedSHA256   string `json:"expectedSha256"`
-	ObservedBytes    int64  `json:"observedBytes,omitempty"`
-	ObservedSHA256   string `json:"observedSha256,omitempty"`
-	Verified         bool   `json:"verified"`
-}
-
-type pinnedTTSManagedMetadata struct {
-	ModelName string                  `json:"modelName"`
-	Revision  string                  `json:"revision"`
-	Files     []pinnedTTSMetadataFile `json:"files"`
-}
-
-type pinnedTTSMetadataFile struct {
-	Path   string `json:"path"`
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
 }
 
 func inspectPinnedTTSModelCache(cacheRoot string) (pinnedTTSModelIdentity, bool) {
@@ -291,63 +243,6 @@ func pinnedTTSResolvedChild(root, relative string) (string, bool) {
 		return "", false
 	}
 	return path, true
-}
-
-func TestPinnedTTSModelCacheRejectsForgedMetadata(t *testing.T) {
-	t.Parallel()
-
-	cacheRoot := t.TempDir()
-	revisionRoot := filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSModelRevision)
-	if err := os.MkdirAll(revisionRoot, 0o755); err != nil {
-		t.Fatalf("create model cache fixture: %v", err)
-	}
-	body := []byte("actual pinned model bytes")
-	artifactPath := filepath.Join(revisionRoot, "weights.bin")
-	if err := os.WriteFile(artifactPath, body, 0o644); err != nil {
-		t.Fatalf("write model cache artifact: %v", err)
-	}
-	actualDigest := sha256.Sum256(body)
-	metadata := pinnedTTSManagedMetadata{
-		ModelName: pinnedTTSModelName,
-		Revision:  pinnedTTSModelRevision,
-		Files: []pinnedTTSMetadataFile{{
-			Path: "weights.bin", Bytes: int64(len(body)),
-			SHA256: hex.EncodeToString(actualDigest[:]),
-		}},
-	}
-	metadataBody, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal forged model metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSManagedMetadataName), metadataBody, 0o644); err != nil {
-		t.Fatalf("write model metadata: %v", err)
-	}
-	if _, ok := inspectPinnedTTSModelCache(cacheRoot); !ok {
-		t.Fatal("inspectPinnedTTSModelCache() rejected metadata matching the actual revision artifact")
-	}
-
-	metadata.Files[0].Bytes++
-	metadataBody, err = json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal forged model metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(cacheRoot, pinnedTTSManagedModelDir, pinnedTTSManagedMetadataName), metadataBody, 0o644); err != nil {
-		t.Fatalf("write forged model metadata: %v", err)
-	}
-	if _, ok := inspectPinnedTTSModelCache(cacheRoot); ok {
-		t.Fatal("inspectPinnedTTSModelCache() accepted metadata whose declared size differs from the actual artifact")
-	}
-}
-
-type pinnedTTSAssetMetadata struct {
-	Kind      string                      `json:"kind"`
-	Artifacts []pinnedTTSAssetRequirement `json:"artifacts"`
-}
-
-type pinnedTTSAssetRequirement struct {
-	Name   string `json:"name"`
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
 }
 
 func inspectPinnedTTSBackendCache(cacheRoot string) (pinnedTTSBackendIdentity, bool) {

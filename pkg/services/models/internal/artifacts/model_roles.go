@@ -173,52 +173,92 @@ func validateModelRoleManifest(manifest ModelRoleManifest) error {
 
 func validateModelRoleModel(model ModelRoleModel, index int) error {
 	prefix := fmt.Sprintf("models[%d]", index)
-	if !validRepositoryName(model.Publication.Repository) ||
-		!commitPattern.MatchString(model.Publication.Revision) ||
-		strings.TrimSpace(model.Publication.License) == "" ||
-		strings.TrimSpace(model.Publication.BaseModel) == "" {
-		return roleManifestFailure(prefix+".publication", "requires repository, revision, license, and baseModel")
+	if err := validateModelRolePublication(model, prefix); err != nil {
+		return err
 	}
-	if !validGitHubRepository(model.Backend.Repository) ||
-		!commitPattern.MatchString(model.Backend.Commit) ||
-		!commitPattern.MatchString(model.Backend.LocalAICommit) ||
-		!validToken(model.Backend.ID) {
-		return roleManifestFailure(prefix+".backend", "requires a valid backend identity and commits")
+	if err := validateModelRoleBackend(model, prefix); err != nil {
+		return err
 	}
-	if !validRelativePath(model.Protocol.Path) || !commitPattern.MatchString(model.Protocol.Revision) {
-		return roleManifestFailure(prefix+".protocol", "requires a safe path and revision")
+	if err := validateModelRoleProtocol(model, prefix); err != nil {
+		return err
 	}
 	if !sameStrings(model.Targets, []string{"darwin-arm64", "linux-amd64", "windows-amd64"}) {
 		return roleManifestFailure(prefix+".targets", "must declare the supported target matrix")
 	}
+	if err := validateModelRoleArtifacts(model, prefix); err != nil {
+		return err
+	}
+	modelArtifact, ok := model.Artifact(modelRoleModel)
+	if !ok || model.Source.URI != "hf://"+model.Publication.Repository+"/"+modelArtifact.Path+"@"+model.Publication.Revision {
+		return roleManifestFailure(prefix+".source.uri", "must identify the model artifact at the publication revision")
+	}
+	return nil
+}
+
+func validateModelRolePublication(model ModelRoleModel, prefix string) error {
+	if validRepositoryName(model.Publication.Repository) &&
+		commitPattern.MatchString(model.Publication.Revision) &&
+		strings.TrimSpace(model.Publication.License) != "" &&
+		strings.TrimSpace(model.Publication.BaseModel) != "" {
+		return nil
+	}
+	return roleManifestFailure(prefix+".publication", "requires repository, revision, license, and baseModel")
+}
+
+func validateModelRoleBackend(model ModelRoleModel, prefix string) error {
+	if validGitHubRepository(model.Backend.Repository) &&
+		commitPattern.MatchString(model.Backend.Commit) &&
+		commitPattern.MatchString(model.Backend.LocalAICommit) &&
+		validToken(model.Backend.ID) {
+		return nil
+	}
+	return roleManifestFailure(prefix+".backend", "requires a valid backend identity and commits")
+}
+
+func validateModelRoleProtocol(model ModelRoleModel, prefix string) error {
+	if validRelativePath(model.Protocol.Path) && commitPattern.MatchString(model.Protocol.Revision) {
+		return nil
+	}
+	return roleManifestFailure(prefix+".protocol", "requires a safe path and revision")
+}
+
+func validateModelRoleArtifacts(model ModelRoleModel, prefix string) error {
 	if len(model.Artifacts) != 3 {
 		return roleManifestFailure(prefix+".artifacts", "must contain model, tokenizer, and voice")
 	}
 	seenRoles := make(map[string]struct{}, len(model.Artifacts))
 	seenPaths := make(map[string]struct{}, len(model.Artifacts))
 	for artifactIndex, artifact := range model.Artifacts {
-		artifactPrefix := fmt.Sprintf("%s.artifacts[%d]", prefix, artifactIndex)
-		if artifact.Role != modelRoleModel && artifact.Role != modelRoleTokenizer && artifact.Role != modelRoleVoice {
-			return roleManifestFailure(artifactPrefix+".role", "must be model, tokenizer, or voice")
-		}
-		if _, exists := seenRoles[artifact.Role]; exists {
-			return roleManifestFailure(prefix+".artifacts", "roles must be unique")
-		}
-		seenRoles[artifact.Role] = struct{}{}
-		if !validRelativePath(artifact.Path) {
-			return roleManifestFailure(artifactPrefix+".path", "must be a safe relative path")
-		}
-		if _, exists := seenPaths[artifact.Path]; exists {
-			return roleManifestFailure(prefix+".artifacts", "paths must be unique")
-		}
-		seenPaths[artifact.Path] = struct{}{}
-		if artifact.SizeBytes <= 0 || !digestPattern.MatchString(artifact.SHA256) {
-			return roleManifestFailure(artifactPrefix, "requires a positive size and lowercase SHA-256")
+		if err := validateModelRoleArtifact(prefix, artifactIndex, artifact, seenRoles, seenPaths); err != nil {
+			return err
 		}
 	}
-	modelArtifact, ok := model.Artifact(modelRoleModel)
-	if !ok || model.Source.URI != "hf://"+model.Publication.Repository+"/"+modelArtifact.Path+"@"+model.Publication.Revision {
-		return roleManifestFailure(prefix+".source.uri", "must identify the model artifact at the publication revision")
+	return nil
+}
+
+func validateModelRoleArtifact(
+	prefix string,
+	artifactIndex int,
+	artifact ModelRoleArtifact,
+	seenRoles, seenPaths map[string]struct{},
+) error {
+	artifactPrefix := fmt.Sprintf("%s.artifacts[%d]", prefix, artifactIndex)
+	if artifact.Role != modelRoleModel && artifact.Role != modelRoleTokenizer && artifact.Role != modelRoleVoice {
+		return roleManifestFailure(artifactPrefix+".role", "must be model, tokenizer, or voice")
+	}
+	if _, exists := seenRoles[artifact.Role]; exists {
+		return roleManifestFailure(prefix+".artifacts", "roles must be unique")
+	}
+	seenRoles[artifact.Role] = struct{}{}
+	if !validRelativePath(artifact.Path) {
+		return roleManifestFailure(artifactPrefix+".path", "must be a safe relative path")
+	}
+	if _, exists := seenPaths[artifact.Path]; exists {
+		return roleManifestFailure(prefix+".artifacts", "paths must be unique")
+	}
+	seenPaths[artifact.Path] = struct{}{}
+	if artifact.SizeBytes <= 0 || !digestPattern.MatchString(artifact.SHA256) {
+		return roleManifestFailure(artifactPrefix, "requires a positive size and lowercase SHA-256")
 	}
 	return nil
 }

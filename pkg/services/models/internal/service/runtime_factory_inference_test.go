@@ -614,60 +614,6 @@ func TestRootInvokeModelReleasesAndClearsPartialOutputOnInvocationFailure(t *tes
 	}
 }
 
-func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
-	t.Parallel()
-
-	var events []string
-	inference := &joinedInferenceService{
-		events: &events,
-		result: models.InvokeModelResult{Status: models.ModelInvocationStatusFailed},
-		err:    models.ErrInferenceTimeout,
-	}
-	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
-	sink := &rootRuntimeEvidenceRecords{}
-	root.process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
-
-	_, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
-	if !errors.Is(err, models.ErrInferenceTimeout) {
-		t.Fatalf("InvokeModel error = %v, want inference timeout", err)
-	}
-	records := sink.snapshot()
-	if len(records) != 2 {
-		t.Fatalf("runtime evidence records = %d, want one stage and one terminal: %#v", len(records), records)
-	}
-	if records[0].Kind != modelseffects.RuntimeEvidenceKindStage ||
-		records[1].Kind != modelseffects.RuntimeEvidenceKindTerminal {
-		t.Fatalf("runtime evidence kinds = (%q, %q), want STAGE then TERMINAL", records[0].Kind, records[1].Kind)
-	}
-	if records[0].Sequence != 1 || records[1].Sequence != 2 ||
-		records[0].Stage != modelseffects.RuntimeStageInvoke ||
-		records[1].Stage != modelseffects.RuntimeStageInvoke ||
-		records[0].Class != modelseffects.RuntimeFailureTimedOut ||
-		records[1].Class != modelseffects.RuntimeFailureTimedOut {
-		t.Fatalf("runtime evidence records = %#v, want ordered invoke timeout", records)
-	}
-}
-
-type rootRuntimeEvidenceRecords struct {
-	records []modelseffects.RuntimeEvidenceRecord
-}
-
-func (sink *rootRuntimeEvidenceRecords) RecordRuntimeEvidence(
-	record modelseffects.RuntimeEvidenceRecord,
-) {
-	if sink == nil {
-		return
-	}
-	sink.records = append(sink.records, record)
-}
-
-func (sink *rootRuntimeEvidenceRecords) snapshot() []modelseffects.RuntimeEvidenceRecord {
-	if sink == nil {
-		return nil
-	}
-	return append([]modelseffects.RuntimeEvidenceRecord(nil), sink.records...)
-}
-
 func TestRootInvokeModelNormalizesAtomicallyBeforeRelease(t *testing.T) {
 	var events []string
 	inference := &joinedInferenceService{

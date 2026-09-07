@@ -90,7 +90,7 @@ func validConstructionEdges() constructionEdges {
 func (edges constructionEdges) newServiceWithInvocationProtocol(
 	client InvocationProtocolClient,
 ) (models.Service, error) {
-	return NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
+	return NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
 		edges.assetPlatform,
 		edges.assetHTTP,
 		edges.assetEndpoints,
@@ -126,6 +126,7 @@ func (edges constructionEdges) newServiceWithInvocationProtocol(
 		nil,
 		nil,
 		client,
+		nil,
 		nil,
 		nil,
 		nil,

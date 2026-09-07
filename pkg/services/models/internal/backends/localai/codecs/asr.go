@@ -214,24 +214,8 @@ func (ASRCodec) DecodeResponseValueWithinAudio(response ASRResponse, audio []byt
 }
 
 func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]models.InferenceContent, error) {
-	if strings.TrimSpace(response.Text) == "" {
-		return nil, asrMalformedResponseFailure("transcript")
-	}
-	if len(response.Segments) == 0 || len(response.Segments) > maxASRSegments {
-		return nil, asrMalformedResponseFailure("segments")
-	}
-	var previousStart, previousEnd int64
-	for index, segment := range response.Segments {
-		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || strings.TrimSpace(segment.Text) == "" {
-			return nil, asrMalformedResponseFailure("segments")
-		}
-		if index > 0 && (segment.Start < previousStart || segment.End < previousEnd) {
-			return nil, asrMalformedResponseFailure("segments")
-		}
-		if durationMilliseconds != nil && float64(segment.End) > *durationMilliseconds {
-			return nil, asrMalformedResponseFailure("segments")
-		}
-		previousStart, previousEnd = segment.Start, segment.End
+	if err := validateASRResponse(response, durationMilliseconds); err != nil {
+		return nil, err
 	}
 	segments, err := json.Marshal(response.Segments)
 	if err != nil || int64(len(segments)) > MaxASRResponseBytes {
@@ -249,13 +233,57 @@ func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]m
 	}, nil
 }
 
+func validateASRResponse(response ASRResponse, durationMilliseconds *float64) error {
+	if strings.TrimSpace(response.Text) == "" {
+		return asrMalformedResponseFailure("transcript")
+	}
+	if len(response.Segments) == 0 || len(response.Segments) > maxASRSegments {
+		return asrMalformedResponseFailure("segments")
+	}
+	return validateASRSegments(response.Segments, durationMilliseconds)
+}
+
+func validateASRSegments(segments []ASRSegment, durationMilliseconds *float64) error {
+	var previousStart, previousEnd int64
+	for index, segment := range segments {
+		if !validASRSegment(segment) ||
+			(index > 0 && (segment.Start < previousStart || segment.End < previousEnd)) ||
+			(durationMilliseconds != nil && float64(segment.End) > *durationMilliseconds) {
+			return asrMalformedResponseFailure("segments")
+		}
+		previousStart, previousEnd = segment.Start, segment.End
+	}
+	return nil
+}
+
+func validASRSegment(segment ASRSegment) bool {
+	return segment.ID >= 0 && segment.Start >= 0 && segment.End > segment.Start &&
+		strings.TrimSpace(segment.Text) != ""
+}
+
 func pcmWAVDurationMilliseconds(audio []byte) (float64, bool) {
-	if len(audio) < 12 || string(audio[0:4]) != "RIFF" || string(audio[8:12]) != "WAVE" ||
-		uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 != uint64(len(audio)) {
+	if !validPCMWAVEnvelope(audio) {
 		return 0, false
 	}
-	var sampleRate uint32
-	var blockAlign uint16
+	format, dataBytes, ok := parsePCMWAVChunks(audio)
+	if !ok || dataBytes == 0 || dataBytes%uint64(format.blockAlign) != 0 {
+		return 0, false
+	}
+	return float64(dataBytes/uint64(format.blockAlign)) * 1000 / float64(format.sampleRate), true
+}
+
+func validPCMWAVEnvelope(audio []byte) bool {
+	return len(audio) >= 12 && string(audio[0:4]) == "RIFF" && string(audio[8:12]) == "WAVE" &&
+		uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 == uint64(len(audio))
+}
+
+type pcmWAVFormat struct {
+	sampleRate uint32
+	blockAlign uint16
+}
+
+func parsePCMWAVChunks(audio []byte) (pcmWAVFormat, uint64, bool) {
+	var format pcmWAVFormat
 	var dataBytes uint64
 	formatFound, dataFound := false, false
 	position := 12
@@ -265,36 +293,40 @@ func pcmWAVDurationMilliseconds(audio []byte) (float64, bool) {
 		chunkEnd := uint64(chunkStart) + chunkSize
 		next := chunkEnd + chunkSize%2
 		if chunkEnd > uint64(len(audio)) || next > uint64(len(audio)) {
-			return 0, false
+			return pcmWAVFormat{}, 0, false
 		}
 		switch string(audio[position : position+4]) {
 		case "fmt ":
-			if formatFound || chunkSize < 16 {
-				return 0, false
+			if formatFound || !validPCMWAVFormatChunk(audio, chunkStart, chunkEnd) {
+				return pcmWAVFormat{}, 0, false
 			}
 			chunk := audio[chunkStart:int(chunkEnd)]
-			format := binary.LittleEndian.Uint16(chunk[0:2])
-			channels := binary.LittleEndian.Uint16(chunk[2:4])
-			sampleRate = binary.LittleEndian.Uint32(chunk[4:8])
-			blockAlign = binary.LittleEndian.Uint16(chunk[12:14])
-			bits := binary.LittleEndian.Uint16(chunk[14:16])
-			if format != 1 || channels == 0 || sampleRate == 0 || blockAlign == 0 || bits == 0 {
-				return 0, false
-			}
+			format.sampleRate = binary.LittleEndian.Uint32(chunk[4:8])
+			format.blockAlign = binary.LittleEndian.Uint16(chunk[12:14])
 			formatFound = true
 		case "data":
 			if dataFound {
-				return 0, false
+				return pcmWAVFormat{}, 0, false
 			}
 			dataBytes = chunkSize
 			dataFound = true
 		}
 		position = int(next)
 	}
-	if !formatFound || !dataFound || dataBytes == 0 || dataBytes%uint64(blockAlign) != 0 {
-		return 0, false
+	return format, dataBytes, formatFound && dataFound
+}
+
+func validPCMWAVFormatChunk(audio []byte, start int, end uint64) bool {
+	if end-uint64(start) < 16 {
+		return false
 	}
-	return float64(dataBytes/uint64(blockAlign)) * 1000 / float64(sampleRate), true
+	chunk := audio[start:int(end)]
+	format := binary.LittleEndian.Uint16(chunk[0:2])
+	channels := binary.LittleEndian.Uint16(chunk[2:4])
+	sampleRate := binary.LittleEndian.Uint32(chunk[4:8])
+	blockAlign := binary.LittleEndian.Uint16(chunk[12:14])
+	bits := binary.LittleEndian.Uint16(chunk[14:16])
+	return format == 1 && channels != 0 && sampleRate != 0 && blockAlign != 0 && bits != 0
 }
 
 func asrHasInput(input models.InferenceInput) bool {
