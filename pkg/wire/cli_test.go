@@ -82,7 +82,6 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 		FactoryDir:       "factory",
 		WorkingDirectory: "working",
 		HomeDir:          "home",
-		ModelCacheDir:    "selected-model-cache",
 		OperatorDefaults: operatorsettings.ResolvedDefaults{
 			WorkerModelProvider: "CODEX",
 			WorkerModel:         "gpt-test",
@@ -90,7 +89,14 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 		Logger:  logger,
 		Verbose: true,
 	}
-	opened, err := composition.CompositionOpenInvokeScope(context.Background(), config)
+	cacheAware, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+	if !ok {
+		t.Fatal("Models CLI composition does not expose optional cache-aware scope opener")
+	}
+	opened, err := cacheAware.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+		Config:        config,
+		ModelCacheDir: "selected-model-cache",
+	})
 	if err != nil {
 		t.Fatalf("CompositionOpenInvokeScope() error = %v", err)
 	}
@@ -107,7 +113,7 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 		},
 		Logger:        config.Logger,
 		Verbose:       config.Verbose,
-		ModelCacheDir: config.ModelCacheDir,
+		ModelCacheDir: "selected-model-cache",
 	}
 	if !reflect.DeepEqual(source.request, want) {
 		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)

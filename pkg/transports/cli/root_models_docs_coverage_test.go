@@ -27,11 +27,12 @@ import (
 )
 
 type modelsCLIServiceFunctions struct {
-	list    func(modelscli.ListConfig) error
-	inspect func(modelscli.InspectConfig) error
-	invoke  func(modelscli.InvokeConfig) error
-	pull    func(modelscli.PullConfig) error
-	remove  func(modelscli.RemoveConfig) error
+	list                 func(modelscli.ListConfig) error
+	inspect              func(modelscli.InspectConfig) error
+	invoke               func(modelscli.InvokeConfig) error
+	invokeWithModelCache func(modelscli.InvokeConfig, string) error
+	pull                 func(modelscli.PullConfig) error
+	remove               func(modelscli.RemoveConfig) error
 }
 
 func (service modelsCLIServiceFunctions) List(cfg modelscli.ListConfig) error {
@@ -51,6 +52,12 @@ func (service modelsCLIServiceFunctions) Invoke(cfg modelscli.InvokeConfig) erro
 		return service.invoke(cfg)
 	}
 	return nil
+}
+func (service modelsCLIServiceFunctions) InvokeWithModelCache(cfg modelscli.InvokeConfig, modelCacheDir string) error {
+	if service.invokeWithModelCache != nil {
+		return service.invokeWithModelCache(cfg, modelCacheDir)
+	}
+	return service.Invoke(cfg)
 }
 func (service modelsCLIServiceFunctions) Pull(cfg modelscli.PullConfig) error {
 	if service.pull != nil {
@@ -83,9 +90,11 @@ func TestProductionModelsInvokeCarriesInvocationCacheEnvironment(t *testing.T) {
 
 	const selectedCache = "selected-model-cache"
 	var received modelscli.InvokeConfig
+	var receivedCache string
 	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
-		invoke: func(cfg modelscli.InvokeConfig) error {
+		invokeWithModelCache: func(cfg modelscli.InvokeConfig, modelCacheDir string) error {
 			received = cfg
+			receivedCache = modelCacheDir
 			return nil
 		},
 	}}))
@@ -109,8 +118,11 @@ func TestProductionModelsInvokeCarriesInvocationCacheEnvironment(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute Models invoke: %v", err)
 	}
-	if received.ModelCacheDir != selectedCache {
-		t.Fatalf("Models invoke cache directory = %q, want %q", received.ModelCacheDir, selectedCache)
+	if received.Context == nil {
+		t.Fatal("Models invoke did not receive the legacy InvokeConfig")
+	}
+	if receivedCache != selectedCache {
+		t.Fatalf("Models invoke cache directory = %q, want %q", receivedCache, selectedCache)
 	}
 }
 

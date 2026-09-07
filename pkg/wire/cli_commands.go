@@ -617,22 +617,14 @@ func (composition modelsCLIComposition) CompositionOpenInvokeScope(
 	ctx context.Context,
 	cfg modelscli.InvokeConfig,
 ) (modelscli.InvokeRuntimeScope, error) {
-	opened, err := composition.source.OpenModelsPresentationScope(ctx, modelservice.PresentationScopeRequest{
-		FactoryDir:       cfg.FactoryDir,
-		WorkingDirectory: cfg.WorkingDirectory,
-		HomeDir:          cfg.HomeDir,
-		OperatorDefaults: modelservice.PresentationOperatorDefaults{
-			WorkerModelProvider: cfg.OperatorDefaults.WorkerModelProvider,
-			WorkerModel:         cfg.OperatorDefaults.WorkerModel,
-		},
-		Logger:        cfg.Logger,
-		Verbose:       cfg.Verbose,
-		ModelCacheDir: cfg.ModelCacheDir,
-	})
-	if err != nil {
-		return modelscli.InvokeRuntimeScope{}, err
-	}
-	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	return composition.openModelsPresentationScope(ctx, cfg, "")
+}
+
+func (composition modelsCLIComposition) CompositionOpenInvokeScopeWithModelCache(
+	ctx context.Context,
+	request modelscli.InvokeScopeRequest,
+) (modelscli.InvokeRuntimeScope, error) {
+	return composition.openModelsPresentationScope(ctx, request.Config, request.ModelCacheDir)
 }
 
 func provideProvidersCLIService(service providers.Service) providerscli.Service {

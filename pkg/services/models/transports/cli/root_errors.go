@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -26,6 +27,36 @@ const (
 )
 
 const modelsFactoryLayoutNotFoundCode = "CURRENT_FACTORY_NOT_FOUND"
+
+func validateModelsInvokeRequest(cfg InvokeConfig) (string, string, string, error) {
+	if cfg.Context == nil {
+		return "", "", "", fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return "", "", "", fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return "", "", "", fmt.Errorf("model name is required")
+	}
+	operation := strings.TrimSpace(cfg.Operation)
+	if operation == "" && len(cfg.InputMappings) > 0 {
+		operation = inferGenericCLIModelOperation(modelName)
+	}
+	if operation == "" {
+		return "", "", "", fmt.Errorf("--operation is required")
+	}
+	text := strings.TrimSpace(cfg.Text)
+	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
+		return "", "", "", fmt.Errorf("--text is required")
+	}
+	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
+		return "", "", "", clidiag.NewFlagConflictFailure(
+			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
+		)
+	}
+	return modelName, operation, text, nil
+}
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
 // error while exposing the safe diagnostic fields expected by the central CLI

@@ -73,7 +73,6 @@ type InvokeConfig struct {
 	FactoryDir       string
 	WorkingDirectory string
 	HomeDir          string
-	ModelCacheDir    string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	JSON             bool

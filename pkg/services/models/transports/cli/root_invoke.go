@@ -11,46 +11,20 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func (service *rootService) Invoke(cfg InvokeConfig) error {
-	if cfg.Context == nil {
-		return fmt.Errorf("context is required")
-	}
-	if cfg.Output == nil {
-		return fmt.Errorf("output writer is required")
-	}
-	modelName := strings.TrimSpace(cfg.ModelName)
-	if modelName == "" {
-		return fmt.Errorf("model name is required")
-	}
-	operation := strings.TrimSpace(cfg.Operation)
-	if operation == "" && len(cfg.InputMappings) > 0 {
-		operation = inferGenericCLIModelOperation(modelName)
-	}
-	if operation == "" {
-		return fmt.Errorf("--operation is required")
-	}
-	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
-		return fmt.Errorf("--text is required")
-	}
-	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
-		return clidiag.NewFlagConflictFailure(
-			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
-		)
+func (service *rootService) invoke(request InvokeScopeRequest) error {
+	cfg := request.Config
+	modelName, operation, text, err := validateModelsInvokeRequest(cfg)
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(cfg.Server) != "" {
 		return fmt.Errorf("remote models invoke requires the composition-stable HTTP service")
 	}
-	if service.openInvokeScope == nil {
-		return fmt.Errorf("models invoke runtime scope opener is required")
-	}
-	scope, err := service.openInvokeScope(cfg.Context, cfg)
+	scope, err := service.openInvokeScopeForRequest(request)
 	if err != nil {
 		return mapModelsClientError(err)
 	}

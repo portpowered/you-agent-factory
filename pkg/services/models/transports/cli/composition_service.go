@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -33,6 +35,18 @@ func bindCompositionService(
 	cfg.OutputFileSystem = outputFileSystem
 	cfg.InputFileReader = inputFileReader
 	cfg.Clock = now
+	var openInvokeScopeWithCache func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
+	compositionCandidates := make([]interface{}, 0, 2)
+	if len(providers) > 0 {
+		compositionCandidates = append(compositionCandidates, providers[0])
+	}
+	compositionCandidates = append(compositionCandidates, invocation)
+	for _, candidate := range compositionCandidates {
+		if opener, ok := candidate.(CompositionInvokeScopeWithModelCacheOpener); ok {
+			openInvokeScopeWithCache = opener.CompositionOpenInvokeScopeWithModelCache
+			break
+		}
+	}
 	legacy := &httpService{
 		http:             httpProtocol,
 		pullHTTP:         pullHTTPProtocol,
@@ -46,6 +60,9 @@ func bindCompositionService(
 	owned := NewService(cfg)
 	if owned == nil {
 		return legacy
+	}
+	if root, ok := owned.(*rootService); ok {
+		root.openInvokeScopeWithCache = openInvokeScopeWithCache
 	}
 	return &compositionService{owned: owned, legacy: legacy}
 }
@@ -81,6 +98,20 @@ func (service *compositionService) Remove(cfg RemoveConfig) error {
 func (service *compositionService) Invoke(cfg InvokeConfig) error {
 	if service.owned != nil && service.canInvokeThroughOwned(cfg) {
 		return service.owned.Invoke(cfg)
+	}
+	return service.legacy.Invoke(cfg)
+}
+
+func (service *compositionService) InvokeWithModelCache(cfg InvokeConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" {
+		return service.Invoke(cfg)
+	}
+	if service.owned != nil && service.canInvokeThroughOwned(cfg) {
+		invoker, ok := service.owned.(ModelCacheInvoker)
+		if !ok {
+			return fmt.Errorf("Models owned service does not support invocation-local model cache selection")
+		}
+		return invoker.InvokeWithModelCache(cfg, modelCacheDir)
 	}
 	return service.legacy.Invoke(cfg)
 }

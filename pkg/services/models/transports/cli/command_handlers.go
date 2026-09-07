@@ -174,13 +174,19 @@ func (h *CommandHandler) Invoke(
 		// the documented default-layout discovery. A non-empty value is reserved
 		// for an explicit directory supplied by a caller of the Models service.
 		WorkingDirectory: startupcli.WorkingDirectory(cmd.Context()), HomeDir: homeDir,
-		ModelCacheDir:    modelCacheDir,
 		OperatorDefaults: defaults, Logger: logger,
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
-	return h.models.Invoke(cfg)
+	if strings.TrimSpace(modelCacheDir) == "" {
+		return h.models.Invoke(cfg)
+	}
+	invoker, ok := h.models.(ModelCacheInvoker)
+	if !ok {
+		return fmt.Errorf("models invoke service does not support invocation-local model cache selection")
+	}
+	return invoker.InvokeWithModelCache(cfg, modelCacheDir)
 }
 
 type modelsInvokeInputs struct {

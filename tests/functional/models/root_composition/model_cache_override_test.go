@@ -453,19 +453,18 @@ func cacheSelectionFailure(t *testing.T, err error) cacheSelectionFailureDetails
 }
 
 func isolatedModelEnvironment(home, cacheRoot string) []string {
-	keys := map[string]struct{}{
-		"HOME": {}, "USERPROFILE": {}, "INFINITE_YOU_OMNIVOICE_CACHE_DIR": {},
-		"HF_HOME": {}, "HUGGINGFACE_HUB_CACHE": {},
+	environment := []string{
+		"HOME=" + home,
+		"USERPROFILE=" + home,
+		"HOMEDRIVE=",
+		"HOMEPATH=",
+		"APPDATA=" + filepath.Join(home, "AppData", "Roaming"),
+		"LOCALAPPDATA=" + filepath.Join(home, "AppData", "Local"),
+		"XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
+		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
+		"TEMP=" + filepath.Join(home, "Temp"),
+		"TMP=" + filepath.Join(home, "Temp"),
 	}
-	environment := make([]string, 0, len(os.Environ())+3)
-	for _, entry := range os.Environ() {
-		key := strings.ToUpper(strings.TrimSpace(strings.SplitN(entry, "=", 2)[0]))
-		if _, ok := keys[key]; ok {
-			continue
-		}
-		environment = append(environment, entry)
-	}
-	environment = append(environment, "HOME="+home, "USERPROFILE="+home)
 	if strings.TrimSpace(cacheRoot) != "" {
 		environment = append(environment, runcli.ModelCacheDirEnvironment+"="+cacheRoot)
 	}

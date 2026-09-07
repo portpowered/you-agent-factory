@@ -488,8 +488,7 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 		t.Fatal("ConfigFromComposition() OpenInvokeScope = nil, want presentation scope opener")
 	}
 	openedScope, err := cfg.OpenInvokeScope(context.Background(), modelscli.InvokeConfig{
-		Context:       context.Background(),
-		ModelCacheDir: "selected-model-cache",
+		Context: context.Background(),
 	})
 	if err != nil {
 		t.Fatalf("OpenInvokeScope() error = %v", err)
@@ -500,8 +499,8 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 	if openedScope.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
 	}
-	if received.ModelCacheDir != "selected-model-cache" {
-		t.Fatalf("composition provider cache directory = %q, want selected-model-cache", received.ModelCacheDir)
+	if received.Context == nil {
+		t.Fatal("composition provider did not receive the legacy InvokeConfig")
 	}
 }
 

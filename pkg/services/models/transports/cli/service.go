@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -49,6 +51,23 @@ type InvokeRuntimeScope struct {
 	Close func(context.Context) error
 }
 
+// InvokeScopeRequest carries the stable CLI invoke configuration plus an
+// optional invocation-local managed-model cache selection. Keeping the cache
+// value in this separate request preserves the positional source shape of the
+// exported InvokeConfig used by existing embedded callers.
+type InvokeScopeRequest struct {
+	Config        InvokeConfig
+	ModelCacheDir string
+}
+
+// ModelCacheInvoker is an optional additive capability for Models CLI
+// services. Existing callers continue to use Service.Invoke; the production
+// command handler uses this capability only when an invocation-local cache was
+// selected.
+type ModelCacheInvoker interface {
+	InvokeWithModelCache(InvokeConfig, string) error
+}
+
 // Config carries accepted Models-root collaborators for adapter construction.
 type Config struct {
 	Models           models.Service
@@ -63,31 +82,63 @@ type Config struct {
 }
 
 type rootService struct {
-	models           models.Service
-	http             clihttp.Protocol
-	pullHTTP         clihttp.Protocol
-	artifacts        ArtifactExporter
-	outputFileSystem OutputFileSystem
-	inputFileReader  InputFileReader
-	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
-	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
-	now              func() time.Time
+	models                   models.Service
+	http                     clihttp.Protocol
+	pullHTTP                 clihttp.Protocol
+	artifacts                ArtifactExporter
+	outputFileSystem         OutputFileSystem
+	inputFileReader          InputFileReader
+	openInvokeScope          func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	openInvokeScopeWithCache func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
+	openCatalogScope         func(context.Context) (InvokeRuntimeScope, error)
+	now                      func() time.Time
 }
 
 // NewService constructs the Models-owned CLI service from the accepted Models root.
 func NewService(cfg Config) Service {
+	return newService(cfg, nil)
+}
+
+func (service *rootService) Invoke(cfg InvokeConfig) error {
+	return service.invoke(InvokeScopeRequest{Config: cfg})
+}
+
+func (service *rootService) InvokeWithModelCache(cfg InvokeConfig, modelCacheDir string) error {
+	return service.invoke(InvokeScopeRequest{Config: cfg, ModelCacheDir: modelCacheDir})
+}
+
+func (service *rootService) openInvokeScopeForRequest(
+	request InvokeScopeRequest,
+) (InvokeRuntimeScope, error) {
+	if service.openInvokeScopeWithCache != nil {
+		return service.openInvokeScopeWithCache(request.Config.Context, request)
+	}
+	if strings.TrimSpace(request.ModelCacheDir) != "" {
+		return InvokeRuntimeScope{}, fmt.Errorf("models invoke runtime scope opener does not support invocation-local model cache selection")
+	}
+	if service.openInvokeScope == nil {
+		return InvokeRuntimeScope{}, fmt.Errorf("models invoke runtime scope opener is required")
+	}
+	return service.openInvokeScope(request.Config.Context, request.Config)
+}
+
+func newService(
+	cfg Config,
+	openInvokeScopeWithCache func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error),
+) Service {
 	if cfg.Models == nil {
 		return nil
 	}
 	return &rootService{
-		models:           cfg.Models,
-		http:             cfg.HTTP,
-		pullHTTP:         cfg.PullHTTP,
-		artifacts:        cfg.Artifacts,
-		outputFileSystem: cfg.OutputFileSystem,
-		inputFileReader:  cfg.InputFileReader,
-		openInvokeScope:  cfg.OpenInvokeScope,
-		openCatalogScope: cfg.OpenCatalogScope,
-		now:              cfg.Clock,
+		models:                   cfg.Models,
+		http:                     cfg.HTTP,
+		pullHTTP:                 cfg.PullHTTP,
+		artifacts:                cfg.Artifacts,
+		outputFileSystem:         cfg.OutputFileSystem,
+		inputFileReader:          cfg.InputFileReader,
+		openInvokeScope:          cfg.OpenInvokeScope,
+		openInvokeScopeWithCache: openInvokeScopeWithCache,
+		openCatalogScope:         cfg.OpenCatalogScope,
+		now:                      cfg.Clock,
 	}
 }
