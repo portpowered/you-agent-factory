@@ -468,10 +468,12 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 		t.Fatalf("parse runtime scope: %v", err)
 	}
 	var opened bool
+	var received modelscli.InvokeConfig
 	invocation := factorySessionPresentationInvocation{
 		root: compositionModelsRoot{},
-		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+		openScope: func(_ context.Context, cfg modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			opened = true
+			received = cfg
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
@@ -486,7 +488,8 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 		t.Fatal("ConfigFromComposition() OpenInvokeScope = nil, want presentation scope opener")
 	}
 	openedScope, err := cfg.OpenInvokeScope(context.Background(), modelscli.InvokeConfig{
-		Context: context.Background(),
+		Context:       context.Background(),
+		ModelCacheDir: "selected-model-cache",
 	})
 	if err != nil {
 		t.Fatalf("OpenInvokeScope() error = %v", err)
@@ -496,6 +499,9 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 	}
 	if openedScope.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
+	}
+	if received.ModelCacheDir != "selected-model-cache" {
+		t.Fatalf("composition provider cache directory = %q, want selected-model-cache", received.ModelCacheDir)
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
@@ -74,6 +75,73 @@ func TestProductionModelsCommandWiresInjectedHandlers(t *testing.T) {
 		if findErr != nil || command.RunE == nil {
 			t.Fatalf("models %s handler = %v, %v", name, command, findErr)
 		}
+	}
+}
+
+func TestProductionModelsInvokeCarriesInvocationCacheEnvironment(t *testing.T) {
+	t.Parallel()
+
+	const selectedCache = "selected-model-cache"
+	var received modelscli.InvokeConfig
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+		invoke: func(cfg modelscli.InvokeConfig) error {
+			received = cfg
+			return nil
+		},
+	}}))
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(name string) (string, bool) {
+			if name == runcli.ModelCacheDirEnvironment {
+				return selectedCache, true
+			}
+			return "", false
+		},
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS",
+		"--text", "hello", "--output", "speech.wav",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute Models invoke: %v", err)
+	}
+	if received.ModelCacheDir != selectedCache {
+		t.Fatalf("Models invoke cache directory = %q, want %q", received.ModelCacheDir, selectedCache)
+	}
+}
+
+func TestProductionModelsInvokeCacheEnvironmentLookupFailureShortCircuitsService(t *testing.T) {
+	t.Parallel()
+
+	serviceCalls := 0
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+		invoke: func(modelscli.InvokeConfig) error {
+			serviceCalls++
+			return nil
+		},
+	}}))
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		nil,
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS",
+		"--text", "hello", "--output", "speech.wav",
+	})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "process environment lookup is required") {
+		t.Fatalf("execute Models invoke error = %v, want process environment lookup failure", err)
+	}
+	if serviceCalls != 0 {
+		t.Fatalf("Models service calls = %d, want zero after environment lookup failure", serviceCalls)
 	}
 }
 

@@ -627,7 +627,7 @@ func (composition modelsCLIComposition) CompositionOpenInvokeScope(
 		},
 		Logger:        cfg.Logger,
 		Verbose:       cfg.Verbose,
-		ModelCacheDir: "",
+		ModelCacheDir: cfg.ModelCacheDir,
 	})
 	if err != nil {
 		return modelscli.InvokeRuntimeScope{}, err
