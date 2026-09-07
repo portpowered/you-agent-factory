@@ -407,6 +407,67 @@ func TestPrepareGenericAssetsRecoversAfterStagingAccessDenied(t *testing.T) {
 	requireGenericPreparationOutcome(t, retried, err, models.AssetPreparationAlreadyAvailable, "retry after access denial")
 }
 
+func TestPrepareGenericAssetsRepairsLegacyCacheAcrossServices(t *testing.T) {
+	t.Parallel()
+
+	body := []byte("concurrent legacy repair payload")
+	source := genericSource{
+		kind: genericSourceHF, safe: "hf://owner/repo/weights.bin@" + genericTestRevision,
+		owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision,
+	}
+	cacheDirectory := t.TempDir()
+	legacyPath, correctedPath := writeLegacyGenericCacheFixture(t, cacheDirectory, source, body)
+	firstScopes := newScopes(t, "generic-legacy-repair-first")
+	secondScopes := newScopes(t, "generic-legacy-repair-second")
+	firstScope := openScope(t, firstScopes, cacheDirectory, models.RuntimeConfig{})
+	secondScope := openScope(t, secondScopes, cacheDirectory, models.RuntimeConfig{})
+	firstService := newGenericService(t, firstScopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("concurrent legacy repair must not contact the source")
+	}), func(string) string { return "" })
+	secondService := newGenericService(t, secondScopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("concurrent legacy repair must not contact the source")
+	}), func(string) string { return "" })
+	request := models.PrepareModelAssetsRequest{
+		Reference: models.ModelReference{NameOrURI: source.safe},
+		Artifacts: []models.AssetRequirement{{
+			Name: "weights.bin", Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	}
+	firstRequest := request
+	firstRequest.Scope = firstScope
+	secondRequest := request
+	secondRequest.Scope = secondScope
+	results := make(chan struct {
+		result models.PrepareModelAssetsResult
+		err    error
+	}, 2)
+	go func() {
+		result, err := firstService.PrepareModelAssets(context.Background(), firstRequest)
+		results <- struct {
+			result models.PrepareModelAssetsResult
+			err    error
+		}{result: result, err: err}
+	}()
+	go func() {
+		result, err := secondService.PrepareModelAssets(context.Background(), secondRequest)
+		results <- struct {
+			result models.PrepareModelAssetsResult
+			err    error
+		}{result: result, err: err}
+	}()
+	for index := 0; index < 2; index++ {
+		outcome := <-results
+		if outcome.err != nil || outcome.result.Outcome != models.AssetPreparationAlreadyAvailable ||
+			outcome.result.Asset.Integrity != models.AssetIntegrityVerified {
+			t.Fatalf("concurrent legacy repair %d = %#v, %v", index, outcome.result, outcome.err)
+		}
+	}
+	assertFileBody(t, filepath.Join(correctedPath, "weights.bin"), body)
+	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("concurrent legacy snapshot = %v, want absent", err)
+	}
+}
+
 func requireGenericPreparationOutcome(
 	t *testing.T,
 	result models.PrepareModelAssetsResult,

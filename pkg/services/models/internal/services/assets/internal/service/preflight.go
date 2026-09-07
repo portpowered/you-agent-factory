@@ -230,7 +230,13 @@ func (s *service) resolveGenericPreflightArtifacts(
 	discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots)
 	if len(discovered) > 0 {
 		discoveredArtifacts := s.genericArtifactsFromRequirements(source, discovered)
-		markGenericArtifactsResolved(discoveredArtifacts)
+		// Legacy content metadata can describe the artifact names while still
+		// carrying zero/blank integrity facts. It is useful discovery input, but
+		// it cannot suppress immutable-manifest resolution before repair has
+		// reverified the bytes.
+		if genericArtifactsHaveTrustedFacts(discoveredArtifacts) {
+			markGenericArtifactsResolved(discoveredArtifacts)
+		}
 		if len(resolved) == 0 {
 			resolved = discoveredArtifacts
 		} else {
