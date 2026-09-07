@@ -120,7 +120,7 @@ func (s *service) prepareGenericAssets(
 	if err := assetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
-	preflight, err := s.preflightGenericPreparation(ctx, request)
+	preflight, err := s.preflightGenericPreparation(ctx, request, false)
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}

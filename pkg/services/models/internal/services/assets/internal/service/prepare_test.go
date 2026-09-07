@@ -873,6 +873,88 @@ func TestPreflightGenericAssetsUsesHEADLengthForZeroDeclaredSizes(t *testing.T) 
 	}
 }
 
+func TestPreflightGenericAssetsRejectsUnavailableMissingSize(t *testing.T) {
+	t.Parallel()
+
+	for _, contentLength := range []int64{0, -1} {
+		contentLength := contentLength
+		t.Run(fmt.Sprintf("content-length-%d", contentLength), func(t *testing.T) {
+			t.Parallel()
+
+			var methods []string
+			client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+				methods = append(methods, request.Method+" "+request.URL.Path)
+				return &http.Response{
+					StatusCode:    http.StatusOK,
+					Body:          io.NopCloser(strings.NewReader("private source body")),
+					ContentLength: contentLength,
+				}, nil
+			})
+			scopes := newScopes(t, fmt.Sprintf("preflight-unknown-size-%d", contentLength))
+			scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+			service := newGenericService(t, scopes, client, func(string) string { return "" })
+
+			_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+				Scope:     scope,
+				Name:      "model",
+				Reference: models.ModelReference{NameOrURI: "https://github.com/owner/repo/releases/download/v1/model.bin"},
+				Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
+			})
+			if !errors.Is(err, models.ErrSourceFetchFailed) {
+				t.Fatalf("preflight error = %v, want ErrSourceFetchFailed", err)
+			}
+			if errors.Is(err, models.ErrAssetOffline) || strings.Contains(err.Error(), "private source body") {
+				t.Fatalf("preflight error = %v, want safe typed unknown-size failure", err)
+			}
+			if !reflect.DeepEqual(methods, []string{http.MethodHead + " /owner/repo/releases/download/v1/model.bin"}) {
+				t.Fatalf("preflight methods = %#v, want one HEAD", methods)
+			}
+		})
+	}
+}
+
+func TestPreflightGenericAssetsResolvesUnknownHFManifestSizeWithHEAD(t *testing.T) {
+	t.Parallel()
+
+	modelURLPath := "/owner/repo/resolve/" + genericTestRevision + "/model.bin"
+	var methods []string
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method+" "+request.URL.Path)
+		if request.URL.Path == "/models/owner/repo" {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"sha":"` + genericTestRevision + `","siblings":[{"rfilename":"model.bin"}]}`)),
+			}, nil
+		}
+		if request.URL.Path == modelURLPath && request.Method == http.MethodHead {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("unused")), ContentLength: 12}, nil
+		}
+		return nil, fmt.Errorf("unexpected preflight request %s %s", request.Method, request.URL.Path)
+	})
+	scopes := newScopes(t, "preflight-hf-head-size")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+
+	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "model",
+		Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
+	})
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	if result.ModelBytes != 12 || result.TotalBytes != 12 || !result.ModelDownloadRequired {
+		t.Fatalf("preflight result = %#v, want HEAD-resolved positive model bytes", result)
+	}
+	if !reflect.DeepEqual(methods, []string{
+		http.MethodGet + " /models/owner/repo",
+		http.MethodHead + " " + modelURLPath,
+	}) {
+		t.Fatalf("preflight methods = %#v, want manifest GET then artifact HEAD", methods)
+	}
+}
+
 func TestPreflightGenericAssetsStopsBeforeModelMetadataWhenBackendHEADFails(t *testing.T) {
 	t.Parallel()
 
