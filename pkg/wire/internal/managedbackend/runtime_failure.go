@@ -112,6 +112,25 @@ func WrapBackendStartFailure(err error) error {
 	return wrapRuntimeStageFailure(runtimeStageBackendStart, runtimeFailureClass(err, runtimeFailureProcessStart), err)
 }
 
+// WrapBackendStartFailureWithCleanup preserves a cleanup failure observed
+// while the managed process never reached a running state. The outer wrapper
+// keeps the process-start stage authoritative while the bounded CLEANUP
+// subcause and joined cause retain both failure identities for diagnostics.
+func WrapBackendStartFailureWithCleanup(startErr, cleanupErr error) error {
+	if startErr == nil {
+		return cleanupErr
+	}
+	if cleanupErr == nil {
+		return WrapBackendStartFailure(startErr)
+	}
+	return &runtimeStageError{
+		stage:    runtimeStageBackendStart,
+		class:    runtimeFailureClass(startErr, runtimeFailureProcessStart),
+		subcause: runtimeSubcauseCleanup,
+		cause:    errors.Join(startErr, cleanupErr),
+	}
+}
+
 func wrapRuntimeStageFailure(stage, class string, err error) error {
 	if err == nil {
 		return nil

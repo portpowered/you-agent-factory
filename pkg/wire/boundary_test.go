@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -53,7 +54,6 @@ func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 		t.Fatalf("CanonicalIdentity(codex) = %q, want codex", canonical)
 	}
 }
-
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
@@ -94,7 +94,6 @@ type wireTestClock struct{}
 func (*wireTestClock) Now() time.Time {
 	return time.Time{}
 }
-
 func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	t.Parallel()
 	namedPathResolver, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
@@ -509,45 +508,55 @@ func decodeManagedChildEvidence(t *testing.T, body []byte) []managedChildEvidenc
 	}
 	return records
 }
-
-func TestModelsProcessLauncherStartFailureDoesNotEmitChildEvidence(t *testing.T) {
+func TestModelsProcessLauncherStartFailureRetainsCleanupCause(t *testing.T) {
 	t.Parallel()
-
 	evidencePath := filepath.Join(t.TempDir(), "runtime.jsonl")
-	recorder := &modelRuntimeEvidenceFileRecorder{path: evidencePath}
-	missingCommand := filepath.Join(t.TempDir(), "missing-model-backend.exe")
-	_, err := (modelsProcessLauncher{recorder: recorder}).Start(
-		context.Background(),
-		serviceedges.HostProcessStartSpec{
-			Command:        missingCommand,
-			Backend:        "localai-vibevoice",
-			HealthEndpoint: "grpc://127.0.0.1:1",
+	startCause, cleanupCause := errors.New("start token=start-secret path=C:\\private\\backend"), errors.New("cleanup token=cleanup-secret path=C:\\private\\workspace")
+	cleanupCalls := 0
+	launcher := modelsProcessLauncher{
+		recorder: &modelRuntimeEvidenceFileRecorder{path: evidencePath},
+		resolveLaunch: func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error) {
+			return managedbackend.ManagedBackendLaunch{
+				Command:  "controlled-managed-backend",
+				Endpoint: "grpc://127.0.0.1:1",
+				Cleanup: func() error {
+					cleanupCalls++
+					return managedbackend.WrapBackendExtractFailure("CLEANUP", cleanupCause)
+				},
+			}, nil
 		},
-	)
-	if err == nil {
-		t.Fatal("missing managed backend start error = nil, want typed start failure")
+		startCommand: func(*exec.Cmd) error { return startCause },
+	}
+	_, err := launcher.Start(context.Background(), serviceedges.HostProcessStartSpec{Backend: "localai-vibevoice"})
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want exactly once", cleanupCalls)
+	}
+	if !errors.Is(err, startCause) {
+		t.Fatalf("start failure does not retain start cause: %v", err)
+	}
+	if !errors.Is(err, cleanupCause) {
+		t.Fatalf("start failure does not retain cleanup cause: %v", err)
 	}
 	var classifier interface {
 		ModelRuntimeStage() string
 		ModelRuntimeFailureClass() string
 	}
-	if !errors.As(err, &classifier) || classifier == nil ||
-		classifier.ModelRuntimeStage() != "BACKEND_START" ||
-		classifier.ModelRuntimeFailureClass() != "PROCESS_START_FAILED" {
-		t.Fatalf("start failure classification = %v, want BACKEND_START/PROCESS_START_FAILED", err)
+	var subcause interface{ ModelRuntimeFailureSubcause() string }
+	if !errors.As(err, &classifier) || classifier == nil || classifier.ModelRuntimeStage() != "BACKEND_START" || classifier.ModelRuntimeFailureClass() != "PROCESS_START_FAILED" ||
+		!errors.As(err, &subcause) || subcause == nil || subcause.ModelRuntimeFailureSubcause() != "CLEANUP" {
+		t.Fatalf("start failure projection = %v, want bounded start/cleanup failure", err)
 	}
-	if strings.Contains(err.Error(), missingCommand) {
-		t.Fatalf("start failure leaked command path: %q", err.Error())
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("start failure leaked raw cause: %q", err.Error())
 	}
 	body, readErr := os.ReadFile(evidencePath)
 	if readErr != nil && !os.IsNotExist(readErr) {
-		t.Fatalf("read start failure evidence: %v", readErr)
+		t.Fatalf("read failed-start runtime evidence: %v", readErr)
 	}
 	if len(bytes.TrimSpace(body)) != 0 {
-		t.Fatalf("start failure emitted false child evidence: %s", body)
+		t.Fatalf("failed start emitted false child evidence: %s", body)
 	}
 }
-
 func TestProvideModelRuntimeEvidenceRecorderIsOptionalAndOwnerOnlyJSONL(t *testing.T) {
 	t.Setenv(modelRuntimeEvidenceEnvironment, "")
 	if recorder, err := provideModelRuntimeEvidenceRecorder(); err != nil || recorder != nil {
@@ -573,7 +582,6 @@ func TestProvideModelRuntimeEvidenceRecorderIsOptionalAndOwnerOnlyJSONL(t *testi
 	})
 	assertRuntimeEvidenceFile(t, path)
 }
-
 func assertRuntimeEvidenceFile(t *testing.T, path string) {
 	t.Helper()
 	info, err := os.Stat(path)
@@ -600,14 +608,12 @@ func assertRuntimeEvidenceFile(t *testing.T, path string) {
 		t.Fatalf("runtime evidence record = %#v, want ordered bounded record", got)
 	}
 }
-
 func TestProvideModelRuntimeEvidenceRecorderRejectsRelativePath(t *testing.T) {
 	t.Setenv(modelRuntimeEvidenceEnvironment, "runtime.jsonl")
 	if recorder, err := provideModelRuntimeEvidenceRecorder(); recorder != nil || err == nil {
 		t.Fatalf("relative runtime evidence path = (%v, %v), want error and nil", recorder, err)
 	}
 }
-
 func containsEnvironmentValue(environment []string, name, want string) bool {
 	for _, entry := range environment {
 		key, value, ok := strings.Cut(entry, "=")
@@ -617,7 +623,6 @@ func containsEnvironmentValue(environment []string, name, want string) bool {
 	}
 	return false
 }
-
 func environmentValueSHA256(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
@@ -636,7 +641,6 @@ const (
 // supplied by the bounded local-real evidence environment.
 func TestVerifiedVibeVoiceArchiveSurvivesCacheRuntimeMaterializationHandoff(t *testing.T) {
 	t.Parallel()
-
 	archivePath := strings.TrimSpace(os.Getenv(exactVibeVoiceArchiveEnvironment))
 	if archivePath == "" {
 		t.Skip("exact published VibeVoice archive is not configured")
@@ -650,7 +654,6 @@ func TestVerifiedVibeVoiceArchiveSurvivesCacheRuntimeMaterializationHandoff(t *t
 	assertVerifiedArchiveLaunch(t, observation, archiveFacts)
 	stopVerifiedArchiveHost(t, service, scope, observation.launch.WorkDir)
 }
-
 func writeControlledArchiveModel(t *testing.T) (string, []byte) {
 	t.Helper()
 	modelRoot := t.TempDir()
@@ -661,7 +664,6 @@ func writeControlledArchiveModel(t *testing.T) (string, []byte) {
 	}
 	return modelPath, modelBody
 }
-
 func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScopeRef, *verifiedArchiveProcessLauncher) {
 	t.Helper()
 	launcher := &verifiedArchiveProcessLauncher{}

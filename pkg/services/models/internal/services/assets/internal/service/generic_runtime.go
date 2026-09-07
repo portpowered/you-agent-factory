@@ -704,7 +704,45 @@ func genericRuntimeCacheMatchesPlan(
 	}
 	return genericRuntimeRequirementsSatisfy(
 		requestedArtifacts, inspection.ExpectedArtifacts,
-	)
+	) && genericRuntimeBackendRequirementsSatisfy(plan, inspection)
+}
+
+func genericRuntimeBackendRequirementsSatisfy(
+	plan genericPreparationPlan,
+	inspection assets.RuntimeCacheInspection,
+) bool {
+	if len(plan.backendRequirements) == 0 {
+		return true
+	}
+	if !inspection.BackendRequired || strings.TrimSpace(inspection.BackendCachePath) == "" ||
+		inspection.BackendInstalledFiles != len(inspection.BackendFiles) ||
+		len(inspection.BackendFiles) != len(plan.backendRequirements) {
+		return false
+	}
+	requestedRevision := strings.TrimSpace(plan.backendSource.revision)
+	if requestedRevision != "" && !strings.EqualFold(
+		strings.TrimSpace(inspection.BackendRevision), requestedRevision,
+	) {
+		return false
+	}
+	observed := make(map[string]struct{}, len(inspection.BackendFiles))
+	for _, path := range inspection.BackendFiles {
+		relative, err := filepath.Rel(inspection.BackendCachePath, path)
+		if err != nil || !validGenericRuntimeRelativePath(filepath.ToSlash(relative)) {
+			return false
+		}
+		observed[filepath.ToSlash(relative)] = struct{}{}
+	}
+	for _, artifact := range plan.backendRequirements {
+		name := filepath.ToSlash(strings.TrimSpace(artifact.requirement.Name))
+		if !validGenericRuntimeRelativePath(name) {
+			return false
+		}
+		if _, ok := observed[name]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func genericRuntimeRequirementsSatisfy(
@@ -738,8 +776,9 @@ func genericCacheResultFromRuntimeCache(
 	inspection assets.RuntimeCacheInspection,
 ) genericCacheResult {
 	result := genericCacheResult{
-		artifacts: make([]models.AssetArtifact, 0, len(inspection.ObservedArtifacts)),
-		paths:     make([]string, 0, len(inspection.ObservedArtifacts)),
+		artifacts:    make([]models.AssetArtifact, 0, len(inspection.ObservedArtifacts)),
+		paths:        make([]string, 0, len(inspection.ObservedArtifacts)),
+		snapshotPath: strings.TrimSpace(inspection.CachePath),
 	}
 	for _, artifact := range inspection.ObservedArtifacts {
 		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))

@@ -109,6 +109,60 @@ func TestPrepareGenericAssetsPersistsBackendRuntimeFactsAcrossServiceReconstruct
 	}
 }
 
+func TestPrepareGenericAssetsAddsBackendToExistingManagedModelAcrossReconstruction(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory, scope, service, localPath, modelBody := newNamedGenericRuntimeFixture(t, "durable-runtime-backend-upgrade")
+	modelRequest := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "joined-model",
+		Reference: models.ModelReference{NameOrURI: localPath},
+		Artifacts: []models.AssetRequirement{{
+			Name: filepath.Base(localPath), Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody),
+		}},
+	}
+	if _, err := service.PrepareModelAssets(context.Background(), modelRequest); err != nil {
+		t.Fatalf("initial model PrepareModelAssets: %v", err)
+	}
+	initial := inspectNamedGenericRuntime(t, service, scope, modelRequest.Name)
+	if initial.BackendRequired {
+		t.Fatalf("initial runtime inspection = %#v, want model-only durable manifest", initial)
+	}
+
+	backendBody := []byte("new durable backend archive")
+	backendPath := filepath.Join(t.TempDir(), "backend.zip")
+	if err := os.WriteFile(backendPath, backendBody, 0o644); err != nil {
+		t.Fatalf("write backend fixture: %v", err)
+	}
+	backendRequest := modelRequest
+	backendRequest.Backend = "localai-vibevoice"
+	backendRequest.BackendReference = models.ModelReference{NameOrURI: backendPath}
+	backendRequest.BackendArtifacts = []models.AssetRequirement{{
+		Name: filepath.Base(backendPath), Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
+	}}
+	if _, err := service.PrepareModelAssets(context.Background(), backendRequest); err != nil {
+		t.Fatalf("backend upgrade PrepareModelAssets: %v", err)
+	}
+	upgraded := inspectNamedGenericRuntime(t, service, scope, backendRequest.Name)
+	if !upgraded.BackendRequired || len(upgraded.BackendFiles) != 1 || upgraded.BackendCachePath == "" {
+		t.Fatalf("upgraded runtime inspection = %#v, want one durable backend file", upgraded)
+	}
+	assertCommittedBackendPath(t, upgraded, backendBody)
+
+	reconstructedScopes := newScopes(t, "durable-runtime-backend-upgrade-reconstructed")
+	reconstructedScope := openScope(t, reconstructedScopes, cacheDirectory, models.RuntimeConfig{})
+	reconstructed := newGenericService(t, reconstructedScopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("reconstructed backend upgrade inspection must not use network")
+	}), func(string) string { return "" })
+	reconstructedInspection := inspectNamedGenericRuntime(t, reconstructed, reconstructedScope, backendRequest.Name)
+	if !reconstructedInspection.BackendRequired ||
+		reconstructedInspection.BackendCachePath != upgraded.BackendCachePath ||
+		len(reconstructedInspection.BackendFiles) != 1 {
+		t.Fatalf("reconstructed backend inspection = %#v, upgraded inspection = %#v", reconstructedInspection, upgraded)
+	}
+	assertCommittedBackendPath(t, reconstructedInspection, backendBody)
+}
+
 func TestPrepareGenericAssetsReusesVerifiedManagedRuntimeBeforeRemotePreflight(t *testing.T) {
 	t.Parallel()
 

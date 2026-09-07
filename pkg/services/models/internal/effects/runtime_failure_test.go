@@ -159,6 +159,29 @@ func TestProjectRuntimeFailureRedactsSensitiveCauseToDigest(t *testing.T) {
 	}
 }
 
+func TestRuntimeCauseSHA256IncludesJoinedCleanupCause(t *testing.T) {
+	t.Parallel()
+
+	startCause := errors.New("process start token=start-secret path=C:\\private\\backend")
+	cleanupCause := errors.New("cleanup token=cleanup-secret path=C:\\private\\workspace")
+	failure := NewRuntimeStageErrorWithSubcause(
+		RuntimeStageBackendStart,
+		RuntimeFailureProcessStartFailed,
+		RuntimeSubcauseCleanup,
+		errors.Join(startCause, cleanupCause),
+	)
+	diagnostic := ProjectRuntimeFailure(failure, time.Second)
+	expected := sha256.Sum256([]byte(startCause.Error() + "\n" + cleanupCause.Error()))
+	if diagnostic.CauseSHA256 != hex.EncodeToString(expected[:]) {
+		t.Fatalf("joined cause digest = %q, want %q", diagnostic.CauseSHA256, hex.EncodeToString(expected[:]))
+	}
+	if diagnostic.Subcause != RuntimeSubcauseCleanup ||
+		diagnostic.Stage != RuntimeStageBackendStart ||
+		diagnostic.Class != RuntimeFailureProcessStartFailed {
+		t.Fatalf("joined cleanup diagnostic = %#v, want bounded start cleanup failure", diagnostic)
+	}
+}
+
 func TestClassifyRuntimeFailureFailsClosedForUnknownClassifier(t *testing.T) {
 	t.Parallel()
 

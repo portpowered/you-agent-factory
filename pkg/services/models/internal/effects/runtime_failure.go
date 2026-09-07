@@ -498,11 +498,11 @@ func ProjectRuntimeFailure(err error, elapsed time.Duration) RuntimeFailureDiagn
 // returning the cause text. The digest is diagnostic evidence, not a secret
 // redaction substitute.
 func RuntimeCauseSHA256(err error) string {
-	cause := runtimeDiagnosticCause(err)
-	if cause == nil {
+	causeText := runtimeDiagnosticCauseText(err, 0)
+	if causeText == "" {
 		return ""
 	}
-	digest := sha256.Sum256([]byte(cause.Error()))
+	digest := sha256.Sum256([]byte(causeText))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -525,27 +525,31 @@ func (diagnostic RuntimeFailureDiagnostic) DiagnosticFields() map[string]string 
 	return fields
 }
 
-func runtimeDiagnosticCause(err error) error {
-	current := err
-	for depth := 0; current != nil && depth < 32; depth++ {
-		switch unwrapped := current.(type) {
-		case interface{ Unwrap() error }:
-			next := unwrapped.Unwrap()
-			if next == nil {
-				return current
+func runtimeDiagnosticCauseText(err error, depth int) string {
+	if err == nil {
+		return ""
+	}
+	if depth >= 32 {
+		return err.Error()
+	}
+	switch unwrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		causes := unwrapped.Unwrap()
+		texts := make([]string, 0, len(causes))
+		for _, cause := range causes {
+			if text := runtimeDiagnosticCauseText(cause, depth+1); text != "" {
+				texts = append(texts, text)
 			}
-			current = next
-		case interface{ Unwrap() []error }:
-			causes := unwrapped.Unwrap()
-			if len(causes) == 0 || causes[0] == nil {
-				return current
-			}
-			current = causes[0]
-		default:
-			return current
+		}
+		if len(texts) > 0 {
+			return strings.Join(texts, "\n")
+		}
+	case interface{ Unwrap() error }:
+		if cause := unwrapped.Unwrap(); cause != nil {
+			return runtimeDiagnosticCauseText(cause, depth+1)
 		}
 	}
-	return current
+	return err.Error()
 }
 
 func durationMillis(elapsed time.Duration) int64 {
