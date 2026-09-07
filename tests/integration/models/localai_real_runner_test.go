@@ -6,50 +6,48 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/locking"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"golang.org/x/sys/windows"
 )
 
 const (
-	localAIRealEvidenceSchema      = "localai.windows-real-evidence.v1"
-	localAIBudgetSchema            = "localai.windows-real-budget.v1"
-	localAIRealHelperModeEnv       = "LOCALAI_REAL_HELPER_MODE"
-	localAIRealHelperOutputEnv     = "LOCALAI_REAL_HELPER_OUTPUT"
-	localAIRealHelperResultEnv     = "LOCALAI_REAL_HELPER_RESULT"
-	localAIRealHelperTranscriptEnv = "LOCALAI_REAL_HELPER_TRANSCRIPT"
-	localAIRealHelperSegmentsEnv   = "LOCALAI_REAL_HELPER_SEGMENTS"
-	localAIRealOutputToken         = "{output}"
-	localAIRealInputToken          = "{input}"
-	localAIRealTranscriptToken     = "{transcript}"
-	localAIRealSegmentsToken       = "{segments}"
-	localAIRealRootToken           = "{root}"
-	localAIRealWorkToken           = "{work}"
-	localAIRealMaxStreamBytes      = 64 << 10
-	localAIRealMaxFailureBytes     = 192
-	localAIRealCommandTimeout      = 10 * time.Second
-	localAIJourneyTTS              = "tts"
-	localAIJourneyASR              = "asr"
-	localAIJourneyTTSASR           = "tts-asr"
-	localAIRealTranscriptFile      = "transcript.txt"
-	localAIRealSegmentsFile        = "segments.json"
+	localAIRealEvidenceSchema            = "localai.windows-real-evidence.v1"
+	localAIBudgetSchema                  = "localai.windows-real-budget.v1"
+	localAIRealHelperModeEnv             = "LOCALAI_REAL_HELPER_MODE"
+	localAIRealHelperOutputEnv           = "LOCALAI_REAL_HELPER_OUTPUT"
+	localAIRealHelperResultEnv           = "LOCALAI_REAL_HELPER_RESULT"
+	localAIRealHelperTranscriptEnv       = "LOCALAI_REAL_HELPER_TRANSCRIPT"
+	localAIRealHelperSegmentsEnv         = "LOCALAI_REAL_HELPER_SEGMENTS"
+	localAIRealModelCacheEnv             = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
+	localAIRealOutputToken               = "{output}"
+	localAIRealInputToken                = "{input}"
+	localAIRealTranscriptToken           = "{transcript}"
+	localAIRealSegmentsToken             = "{segments}"
+	localAIRealRootToken                 = "{root}"
+	localAIRealWorkToken                 = "{work}"
+	localAIRealMaxStreamBytes            = 64 << 10
+	localAIRealMaxFailureBytes           = 192
+	localAIRealMaxAudioBytes       int64 = 512 << 20
+	localAIRealMaxAudioDuration          = 5 * time.Minute
+	localAIRealCommandTimeout            = 10 * time.Second
+	localAIJourneyTTS                    = "tts"
+	localAIJourneyASR                    = "asr"
+	localAIJourneyTTSASR                 = "tts-asr"
+	localAIRealTranscriptFile            = "transcript.txt"
+	localAIRealSegmentsFile              = "segments.json"
 )
 
 type localAIRealReport struct {
@@ -60,6 +58,7 @@ type localAIRealReport struct {
 	Architecture string                    `json:"architecture"`
 	Build        localAIRealBuildIdentity  `json:"build"`
 	BudgetLedger localAIRealLedgerIdentity `json:"budgetLedger"`
+	Policy       localAIRealPolicy         `json:"policy"`
 	Redacted     bool                      `json:"redacted"`
 	Journeys     []localAIRealJourney      `json:"journeys"`
 }
@@ -82,11 +81,61 @@ type localAIRealJourney struct {
 	Status              string                `json:"status"`
 	Artifacts           []localAIRealArtifact `json:"artifacts"`
 	CacheIdentitySHA256 string                `json:"cacheIdentitySha256"`
+	Cache               localAIRealCache      `json:"cache"`
 	Offline             bool                  `json:"offline"`
 	Semantic            localAIRealSemantic   `json:"semantic"`
+	Execution           *localAIRealExecution `json:"execution,omitempty"`
 	Release             localAIRealRelease    `json:"release"`
 	Failure             *localAIRealFailure   `json:"failure"`
 	Unproven            []string              `json:"unproven"`
+}
+
+type localAIRealPolicy struct {
+	WorkRoot          string `json:"workRoot"`
+	StateRoot         string `json:"stateRoot"`
+	CacheRoot         string `json:"cacheRoot"`
+	TempRoot          string `json:"tempRoot"`
+	OutputRoot        string `json:"outputRoot"`
+	StreamsRoot       string `json:"streamsRoot"`
+	PortState         string `json:"portState"`
+	NetworkPolicy     string `json:"networkPolicy"`
+	Timeout           string `json:"timeout"`
+	ModelCallLimit    int64  `json:"modelCallLimit"`
+	DownloadLimit     int64  `json:"downloadByteLimit"`
+	ChildProcessLimit int    `json:"childProcessLimit"`
+	SemanticRetries   int    `json:"semanticRetries"`
+}
+
+type localAIRealCache struct {
+	BeforeIdentitySHA256 string `json:"beforeIdentitySha256"`
+	AfterIdentitySHA256  string `json:"afterIdentitySha256"`
+	BeforeEntries        int    `json:"beforeEntries"`
+	AfterEntries         int    `json:"afterEntries"`
+	BeforeBytes          int64  `json:"beforeBytes"`
+	AfterBytes           int64  `json:"afterBytes"`
+	FreshAtStart         bool   `json:"freshAtStart"`
+	Reused               bool   `json:"reused"`
+	PartialArtifacts     int    `json:"partialArtifacts"`
+}
+
+type localAIRealExecution struct {
+	Commands []localAIRealCommandExecution `json:"commands"`
+}
+
+type localAIRealCommandExecution struct {
+	Started             bool   `json:"started"`
+	ProcessExited       bool   `json:"processExited"`
+	ExitCode            int    `json:"exitCode"`
+	TimedOut            bool   `json:"timedOut"`
+	ProcessTreeAttached bool   `json:"processTreeAttached"`
+	ProcessTreeClosed   bool   `json:"processTreeClosed"`
+	OwnedProcesses      int    `json:"ownedProcesses"`
+	OwnedListeners      int    `json:"ownedListeners"`
+	OwnedLeases         int    `json:"ownedLeases"`
+	StdoutBytes         int64  `json:"stdoutBytes"`
+	StdoutSHA256        string `json:"stdoutSha256"`
+	StderrBytes         int64  `json:"stderrBytes"`
+	StderrSHA256        string `json:"stderrSha256"`
 }
 
 type localAIRealArtifact struct {
@@ -105,6 +154,7 @@ type localAIRealSemantic struct {
 }
 
 type localAIRealRelease struct {
+	Checked           bool `json:"checked"`
 	ProcessTreeClosed bool `json:"processTreeClosed"`
 	OwnedProcesses    int  `json:"ownedProcesses"`
 	OwnedListeners    int  `json:"ownedListeners"`
@@ -150,6 +200,7 @@ type localAIRealRunRequest struct {
 	Kind                string
 	RunID               string
 	Root                string
+	CacheRoot           string
 	ReportPath          string
 	LedgerPath          string
 	Limits              localAIBudgetLimits
@@ -162,6 +213,11 @@ type localAIRealRunRequest struct {
 	ExpectedTranscript  string
 	Build               localAIRealBuildIdentity
 	Offline             bool
+	RequireFreshCache   bool
+	RequireCacheReuse   bool
+	NetworkPolicy       string
+	ChildProcessLimit   int
+	SemanticRetries     int
 	CacheIdentitySHA256 string
 	Unproven            []string
 	Timeout             time.Duration
@@ -179,6 +235,8 @@ type localAIRealRoots struct {
 	Work    string
 	Profile string
 	Cache   string
+	HFHome  string
+	HFCache string
 	Temp    string
 	Output  string
 	Streams string
@@ -195,6 +253,9 @@ type localAICommandObservation struct {
 	Stderr              []byte
 	StdoutTruncated     bool
 	StderrTruncated     bool
+	OwnedProcesses      int
+	OwnedListeners      int
+	OwnedLeases         int
 }
 
 type localAIRealCommandExecutor interface {
@@ -235,6 +296,7 @@ func TestLocalAIRealHarnessControlledCases(t *testing.T) {
 		{name: "IC-09-report-interruption", mode: "pass", wantStatus: "PASS", setup: setupLocalAIReportInterruption},
 		{name: "IC-10-budget-exhaustion", mode: "pass", wantStatus: "FAIL", wantOwner: "harness", stub: &localAIStubExecutor{}, setup: setupLocalAIBudgetExhaustion},
 		{name: "IC-11-corrupt-ledger", mode: "pass", wantStatus: "FAIL", wantOwner: "harness", stub: &localAIStubExecutor{}, setup: setupLocalAICorruptLedger},
+		{name: "IC-13-partial-artifact-leak", mode: "pass", wantStatus: "FAIL", wantOwner: "harness", setup: setupLocalAIPartialArtifactLeak},
 		{name: "IC-14-redacted-invocation-failure", mode: "secret", wantStatus: "FAIL", wantOwner: "product"},
 	}
 	for _, testCase := range cases {
@@ -263,6 +325,12 @@ func TestLocalAIRealHarnessControlledCases(t *testing.T) {
 				t.Fatalf("runner returned infrastructure error: %v", err)
 			}
 			assertLocalAIJourneyResult(t, request, report, testCase.wantStatus, testCase.wantOwner)
+			if testCase.name == "IC-08-cleanup-leak" && (report.Journeys[0].Release.ProcessTreeClosed || report.Journeys[0].Release.OwnedProcesses == 0) {
+				t.Fatalf("cleanup leak release = %#v, want an owned process remaining", report.Journeys[0].Release)
+			}
+			if testCase.name == "IC-13-partial-artifact-leak" && report.Journeys[0].Release.PartialArtifacts == 0 {
+				t.Fatalf("partial-artifact release = %#v, want a detected partial artifact", report.Journeys[0].Release)
+			}
 			if testCase.name == "IC-10-budget-exhaustion" && testCase.stub.calls.Load() != 0 {
 				t.Fatal("budget exhaustion launched the controlled command")
 			}
@@ -340,51 +408,6 @@ func TestLocalAIRealHarnessBudgetPersistence(t *testing.T) {
 	}
 }
 
-func TestLocalAIRealHarnessControlledHelper(t *testing.T) {
-	mode := strings.TrimSpace(os.Getenv(localAIRealHelperModeEnv))
-	if mode == "" {
-		return
-	}
-	switch mode {
-	case "pass":
-		outputPath := os.Getenv(localAIRealHelperOutputEnv)
-		if err := writeLocalAIControlledWAV(outputPath); err != nil {
-			os.Exit(21)
-		}
-		_, _ = os.Stdout.Write([]byte(`{"outputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav","content":"controlled"}]}`))
-		os.Exit(0)
-	case "malformed":
-		_, _ = os.Stdout.Write([]byte(`{"outputs":[`))
-		os.Exit(0)
-	case "secret":
-		_, _ = os.Stdout.Write([]byte(`HF_TOKEN=controlled-secret`))
-		os.Exit(0)
-	case "asr-pass":
-		writeLocalAIControlledASR(t, "zero", 600)
-		os.Exit(0)
-	case "asr-mismatch":
-		writeLocalAIControlledASR(t, "one", 600)
-		os.Exit(0)
-	case "asr-failure":
-		os.Exit(23)
-	case "integration-tts":
-		outputPath := os.Getenv(localAIRealHelperOutputEnv)
-		if err := writeLocalAIControlledWAV(outputPath); err != nil {
-			os.Exit(21)
-		}
-		_, _ = os.Stdout.Write([]byte(`{"outputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav","content":"controlled"}]}`))
-		os.Exit(0)
-	case "integration-asr":
-		writeLocalAIControlledASR(t, "local ai works on this machine", 8)
-		os.Exit(0)
-	case "ledger-reserve":
-		writeLocalAIReservationHelperResult(t)
-		os.Exit(0)
-	default:
-		os.Exit(22)
-	}
-}
-
 func mustLocalAIRealRunner(t testing.TB) localAIRealRunner {
 	t.Helper()
 	runner, err := newLocalAIRealRunner()
@@ -407,7 +430,7 @@ func newLocalAIRealRunner() (localAIRealRunner, error) {
 }
 
 func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunRequest) (localAIRealReport, error) {
-	roots := localAIRealRootsFor(request.Root)
+	roots := localAIRealRootsForRequest(request)
 	report := newLocalAIRealReport(request)
 	if err := validateLocalAIRequest(request); err != nil {
 		setLocalAIFailure(&report, "harness", "runner admission", "valid isolated request", "invalid request")
@@ -415,6 +438,10 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 	}
 	if err := prepareLocalAIRoots(roots); err != nil {
 		setLocalAIFailure(&report, "environment", "isolated roots", "all owned roots are creatable", "root preparation failed")
+		return runner.finish(request, report)
+	}
+	if failure := localAICacheAdmissionFailure(request, report.Journeys[0].Cache); failure != nil {
+		setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
 		return runner.finish(request, report)
 	}
 	reservation, _, err := reserveLocalAIBudget(ctx, runner.locks, request.LedgerPath, request.RunID, request.Selector, request.ReservationKind, request.ReservationAmount, request.Limits)
@@ -425,12 +452,14 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 	}
 
 	observations := []localAICommandObservation{runner.execute(ctx, request, request.Command, roots)}
+	recordLocalAIExecution(&report, observations[0])
 	if failure := localAICommandFailureForJourney(observations[0], request.Kind == localAIJourneyASR); failure != nil {
 		setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
 		return runner.finish(request, report)
 	}
 	if request.FollowUp != nil {
 		observations = append(observations, runner.execute(ctx, request, *request.FollowUp, roots))
+		recordLocalAIExecution(&report, observations[1])
 		if failure := localAICommandFailureForJourney(observations[1], true); failure != nil {
 			setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
 			return runner.finish(request, report)
@@ -451,7 +480,6 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 	journey.Status = "PASS"
 	journey.Artifacts = artifacts
 	journey.Semantic = output
-	journey.Release = localAIRealRelease{ProcessTreeClosed: true}
 	return runner.finish(request, report)
 }
 
@@ -472,6 +500,14 @@ func (runner localAIRealRunner) execute(ctx context.Context, request localAIReal
 }
 
 func (runner localAIRealRunner) finish(request localAIRealRunRequest, report localAIRealReport) (localAIRealReport, error) {
+	if err := finalizeLocalAIReport(request, &report); err != nil {
+		if report.Status == "PASS" {
+			setLocalAIFailure(&report, "harness", "runner release and cache inspection", "owned resources and cache state are observable", "final inspection failed")
+		}
+	}
+	if report.Status == "PASS" && report.Journeys[0].Release.PartialArtifacts > 0 {
+		setLocalAIFailure(&report, "harness", "partial artifact cleanup", "no owned partial artifacts remain", "partial artifact remains")
+	}
 	if err := validateLocalAIRealReport(report); err != nil {
 		return report, err
 	}
@@ -484,7 +520,43 @@ func (runner localAIRealRunner) finish(request localAIRealRunRequest, report loc
 	return report, nil
 }
 
+func recordLocalAIExecution(report *localAIRealReport, observation localAICommandObservation) {
+	if len(report.Journeys) != 1 {
+		return
+	}
+	journey := &report.Journeys[0]
+	if journey.Execution == nil {
+		journey.Execution = &localAIRealExecution{}
+	}
+	ownedProcesses := observation.OwnedProcesses
+	if observation.Started && (!observation.ProcessExited || !observation.ProcessTreeClosed) && ownedProcesses == 0 {
+		ownedProcesses = 1
+	}
+	journey.Execution.Commands = append(journey.Execution.Commands, localAIRealCommandExecution{
+		Started: observation.Started, ProcessExited: observation.ProcessExited, ExitCode: observation.ExitCode,
+		TimedOut: observation.TimedOut, ProcessTreeAttached: observation.ProcessTreeAttached,
+		ProcessTreeClosed: observation.ProcessTreeClosed, OwnedProcesses: ownedProcesses,
+		OwnedListeners: observation.OwnedListeners, OwnedLeases: observation.OwnedLeases,
+		StdoutBytes: int64(len(observation.Stdout)), StdoutSHA256: sha256Hex(observation.Stdout),
+		StderrBytes: int64(len(observation.Stderr)), StderrSHA256: sha256Hex(observation.Stderr),
+	})
+}
+
 func newLocalAIRealReport(request localAIRealRunRequest) localAIRealReport {
+	roots := localAIRealRootsForRequest(request)
+	cache, _ := localAIRealCacheSnapshotForRoots(roots)
+	timeout := request.Timeout
+	if timeout <= 0 {
+		timeout = localAIRealCommandTimeout
+	}
+	networkPolicy := request.NetworkPolicy
+	if networkPolicy == "" {
+		networkPolicy = "controlled-no-network"
+	}
+	childProcessLimit := request.ChildProcessLimit
+	if childProcessLimit <= 0 {
+		childProcessLimit = 2
+	}
 	return localAIRealReport{
 		Schema:       localAIRealEvidenceSchema,
 		RunID:        request.RunID,
@@ -493,15 +565,37 @@ func newLocalAIRealReport(request localAIRealRunRequest) localAIRealReport {
 		Architecture: runtime.GOARCH,
 		Build:        request.Build,
 		BudgetLedger: localAIRealLedgerIdentity{PathIdentity: filepath.Base(request.LedgerPath)},
-		Redacted:     true,
+		Policy: localAIRealPolicy{
+			WorkRoot: pathIdentityHash(roots.Work), StateRoot: pathIdentityHash(roots.Profile),
+			CacheRoot: pathIdentityHash(roots.Cache), TempRoot: pathIdentityHash(roots.Temp),
+			OutputRoot: pathIdentityHash(roots.Output), StreamsRoot: pathIdentityHash(roots.Streams),
+			PortState: "selector-owned:" + pathIdentityHash(roots.Root),
+			NetworkPolicy: networkPolicy, Timeout: timeout.String(), ModelCallLimit: request.Limits.ModelCalls,
+			DownloadLimit: request.Limits.DownloadBytes, ChildProcessLimit: childProcessLimit,
+			SemanticRetries: request.SemanticRetries,
+		},
+		Redacted: true,
 		Journeys: []localAIRealJourney{{
 			Selector:            request.Selector,
 			Status:              "INCONCLUSIVE",
-			CacheIdentitySHA256: request.CacheIdentitySHA256,
-			Offline:             request.Offline,
-			Unproven:            append([]string(nil), request.Unproven...),
+			CacheIdentitySHA256: cache.IdentitySHA256,
+			Cache: localAIRealCache{
+				BeforeIdentitySHA256: cache.IdentitySHA256, BeforeEntries: cache.Entries,
+				BeforeBytes: cache.Bytes, FreshAtStart: cache.Entries == 0 && cache.PartialArtifacts == 0,
+				PartialArtifacts: cache.PartialArtifacts,
+			},
+			Offline:   request.Offline,
+			Execution: &localAIRealExecution{Commands: []localAIRealCommandExecution{}},
+			Unproven:  append([]string(nil), request.Unproven...),
 		}},
 	}
+}
+
+func pathIdentityHash(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	return "sha256=" + sha256Hex([]byte(filepath.Clean(path)))
 }
 
 func setLocalAIFailure(report *localAIRealReport, owner, assertion, expected, observed string) {
@@ -509,12 +603,21 @@ func setLocalAIFailure(report *localAIRealReport, owner, assertion, expected, ob
 	report.Status = "FAIL"
 	journey.Status = "FAIL"
 	journey.Semantic.Passed = false
-	journey.Release = localAIRealRelease{}
 	journey.Failure = &localAIRealFailure{
 		Owner:     owner,
 		Assertion: assertion,
 		Expected:  expected,
 		Observed:  boundedLocalAIValue(observed),
+	}
+}
+
+func setLocalAIInconclusive(report *localAIRealReport, owner, assertion, expected, observed string) {
+	journey := &report.Journeys[0]
+	report.Status = "INCONCLUSIVE"
+	journey.Status = "INCONCLUSIVE"
+	journey.Semantic.Passed = false
+	journey.Failure = &localAIRealFailure{
+		Owner: owner, Assertion: assertion, Expected: expected, Observed: boundedLocalAIValue(observed),
 	}
 }
 
@@ -539,623 +642,6 @@ func setLocalAIBudgetFailure(report *localAIRealReport, err error) {
 }
 
 type localAIObservationFailure = localAIRealFailure
-
-func localAICommandFailure(observation localAICommandObservation) *localAIObservationFailure {
-	return localAICommandFailureForJourney(observation, false)
-}
-
-func localAICommandFailureForJourney(observation localAICommandObservation, allowExpectedTranscript bool) *localAIObservationFailure {
-	if observation.StdoutTruncated || observation.StderrTruncated {
-		return &localAIObservationFailure{Owner: "harness", Assertion: "bounded command streams", Expected: "streams fit the redaction bound", Observed: "stream limit exceeded"}
-	}
-	if violation := localAIStreamViolationForJourney(observation.Stdout, observation.Stderr, allowExpectedTranscript); violation != "" {
-		return &localAIObservationFailure{Owner: "product", Assertion: "redacted command streams", Expected: "no secret, prompt, address, or raw media", Observed: violation}
-	}
-	if !observation.Started {
-		return &localAIObservationFailure{Owner: "environment", Assertion: "selected command start", Expected: "controlled command starts", Observed: "process did not start"}
-	}
-	if observation.TimedOut {
-		return &localAIObservationFailure{Owner: "environment", Assertion: "selected command timeout", Expected: "command exits within declared timeout", Observed: "command timed out"}
-	}
-	if !observation.ProcessExited {
-		return &localAIObservationFailure{Owner: "harness", Assertion: "process lifecycle", Expected: "process exits", Observed: "process did not exit"}
-	}
-	if !observation.ProcessTreeAttached || !observation.ProcessTreeClosed {
-		return &localAIObservationFailure{Owner: "harness", Assertion: "process-tree cleanup", Expected: "owned process tree is attached and closed", Observed: "cleanup was not proven"}
-	}
-	if observation.ExitCode != 0 {
-		return &localAIObservationFailure{Owner: "product", Assertion: "selected command exit status", Expected: "exitCode=0", Observed: fmt.Sprintf("exitCode=%d", observation.ExitCode)}
-	}
-	return nil
-}
-
-func observeLocalAI(
-	request localAIRealRunRequest,
-	roots localAIRealRoots,
-	observations []localAICommandObservation,
-) (localAIRealSemantic, []localAIRealArtifact, *localAIObservationFailure) {
-	switch request.Kind {
-	case localAIJourneyTTS:
-		if len(observations) != 1 {
-			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "one command", Observed: "unexpected command count"}
-		}
-		semantic, artifact, failure := observeLocalAITTS(request, roots, observations[0])
-		return semantic, []localAIRealArtifact{artifact}, failure
-	case localAIJourneyASR:
-		if len(observations) != 1 {
-			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "one command", Observed: "unexpected command count"}
-		}
-		return observeLocalAIASR(request, roots, observations[0])
-	case localAIJourneyTTSASR:
-		if len(observations) != 2 {
-			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "TTS followed by ASR", Observed: "unexpected command count"}
-		}
-		ttsSemantic, ttsArtifact, failure := observeLocalAITTS(request, roots, observations[0])
-		if failure != nil {
-			return localAIRealSemantic{}, nil, failure
-		}
-		asrRequest := request
-		asrRequest.Kind = localAIJourneyASR
-		asrRequest.InputPath = filepath.Join(roots.Output, request.Command.OutputName)
-		asrSemantic, asrArtifacts, failure := observeLocalAIASR(asrRequest, roots, observations[1])
-		if failure != nil {
-			return localAIRealSemantic{}, append([]localAIRealArtifact{ttsArtifact}, asrArtifacts...), failure
-		}
-		return localAIRealSemantic{
-			Assertion: "TTS output is consumed by ASR with bounded semantic output",
-			Expected:  "audio output and normalized ASR transcript with bounded segments",
-			Observed:  fmt.Sprintf("tts=%s;asr=%s", ttsSemantic.Observed, asrSemantic.Observed),
-			Passed:    true,
-		}, append([]localAIRealArtifact{ttsArtifact}, asrArtifacts...), nil
-	default:
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey kind", Expected: "bounded TTS, ASR, or TTS-to-ASR selector", Observed: "unknown journey"}
-	}
-}
-
-func observeLocalAITTS(request localAIRealRunRequest, roots localAIRealRoots, observation localAICommandObservation) (localAIRealSemantic, localAIRealArtifact, *localAIObservationFailure) {
-	response, err := decodeLocalAIInvocationResponse(observation.Stdout)
-	if err != nil {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "strict TTS response JSON", Expected: "one bounded audio output", Observed: "malformed response"}
-	}
-	if response.Failure != nil {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS invocation response", Expected: "successful audio output", Observed: "bounded invocation failure"}
-	}
-	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != "AUDIO" {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output slot", Expected: "one AUDIO output named audio", Observed: "output shape mismatch"}
-	}
-	output := response.Outputs[0]
-	mediaType := strings.ToLower(strings.TrimSpace(output.MediaType))
-	if mediaType != "audio/wav" && mediaType != "audio/wave" {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output media type", Expected: "audio/wav", Observed: "unsupported media type"}
-	}
-	if strings.TrimSpace(output.Content) == "" {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output materialization", Expected: "non-empty content marker", Observed: "empty content"}
-	}
-	audio, err := os.ReadFile(filepath.Join(roots.Output, request.Command.OutputName))
-	if err != nil {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output artifact", Expected: "readable WAV artifact", Observed: "audio artifact missing"}
-	}
-	metadata, ok := localAIWAVMetadata(audio)
-	if !ok {
-		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output decode", Expected: "bounded PCM WAV", Observed: "WAV invariant mismatch"}
-	}
-	artifact := localAIRealArtifact{Kind: "output-audio", Path: filepath.Base(request.Command.OutputName), MediaType: mediaType, Bytes: int64(len(audio)), SHA256: sha256Hex(audio)}
-	semantic := localAIRealSemantic{
-		Assertion: "decodable PCM WAV output",
-		Expected:  "audio/wav with PCM16 frames",
-		Observed:  fmt.Sprintf("bytes=%d;sampleRateHz=%d;channels=%d;bits=%d;durationMillis=%d", len(audio), metadata.sampleRate, metadata.channels, metadata.bits, metadata.durationMillis),
-		Passed:    true,
-	}
-	return semantic, artifact, nil
-}
-
-type localAIASRSegment struct {
-	ID    int64  `json:"id"`
-	Start int64  `json:"start"`
-	End   int64  `json:"end"`
-	Text  string `json:"text"`
-}
-
-func observeLocalAIASR(
-	request localAIRealRunRequest,
-	roots localAIRealRoots,
-	observation localAICommandObservation,
-) (localAIRealSemantic, []localAIRealArtifact, *localAIObservationFailure) {
-	response, err := decodeLocalAIInvocationResponse(observation.Stdout)
-	if err != nil {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "strict ASR response JSON", Expected: "transcript and segments outputs", Observed: "malformed response"}
-	}
-	if response.Failure != nil {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR invocation response", Expected: "successful transcript and segments outputs", Observed: "bounded invocation failure"}
-	}
-	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output slots", Expected: "ordered transcript and segments outputs", Observed: "output shape mismatch"}
-	}
-	transcriptOutput, segmentsOutput := response.Outputs[0], response.Outputs[1]
-	if strings.ToLower(strings.TrimSpace(transcriptOutput.MediaType)) != "text/plain" || strings.ToLower(strings.TrimSpace(segmentsOutput.MediaType)) != "application/json" {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output media types", Expected: "text/plain and application/json", Observed: "unsupported media type"}
-	}
-	if strings.TrimSpace(transcriptOutput.Content) == "" || strings.TrimSpace(segmentsOutput.Content) == "" {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output materialization", Expected: "non-empty transcript and segments content", Observed: "empty content"}
-	}
-	transcriptPath := filepath.Join(roots.Output, localAIRealTranscriptFile)
-	segmentsPath := filepath.Join(roots.Output, localAIRealSegmentsFile)
-	transcript, err := os.ReadFile(transcriptPath)
-	if err != nil || string(transcript) != transcriptOutput.Content {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR transcript materialization", Expected: "response content matches bounded transcript file", Observed: "transcript artifact mismatch"}
-	}
-	segmentsBody, err := os.ReadFile(segmentsPath)
-	if err != nil || string(segmentsBody) != segmentsOutput.Content {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segments materialization", Expected: "response content matches bounded segments file", Observed: "segments artifact mismatch"}
-	}
-	var segments []localAIASRSegment
-	if err := decodeLocalAIJSONStrict(segmentsBody, &segments); err != nil || len(segments) == 0 {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segment structure", Expected: "non-empty strict JSON segment array", Observed: "invalid segments"}
-	}
-	inputPath := request.InputPath
-	if inputPath == "" {
-		inputPath = filepath.Join(roots.Output, request.Command.OutputName)
-	}
-	input, err := os.ReadFile(inputPath)
-	if err != nil {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input artifact", Expected: "readable bounded WAV input", Observed: "input audio missing"}
-	}
-	metadata, ok := localAIWAVMetadata(input)
-	if !ok {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input audio", Expected: "bounded PCM WAV", Observed: "input audio is not a valid WAV"}
-	}
-	inputSHA := sha256Hex(input)
-	if request.ExpectedInputSHA256 != "" && !strings.EqualFold(request.ExpectedInputSHA256, inputSHA) {
-		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input identity", Expected: "pinned input SHA-256", Observed: "input digest mismatch"}
-	}
-	previousID, previousStart, previousEnd := int64(-1), int64(0), int64(0)
-	var segmentText strings.Builder
-	for index, segment := range segments {
-		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || segment.End > metadata.durationMillis || strings.TrimSpace(segment.Text) == "" || (index > 0 && (segment.ID <= previousID || segment.Start < previousStart || segment.End < previousEnd)) {
-			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segment bounds", Expected: "finite monotonic segments bounded by input duration", Observed: "segment invariant mismatch"}
-		}
-		if segmentText.Len() > 0 {
-			segmentText.WriteByte(' ')
-		}
-		segmentText.WriteString(segment.Text)
-		previousID, previousStart, previousEnd = segment.ID, segment.Start, segment.End
-	}
-	wantTranscript := request.ExpectedTranscript
-	if wantTranscript == "" {
-		wantTranscript = "zero"
-	}
-	inputArtifact := localAIRealArtifact{Kind: "input-audio", Path: filepath.Base(inputPath), MediaType: "audio/wav", Bytes: int64(len(input)), SHA256: inputSHA}
-	transcriptArtifact := localAIRealArtifact{Kind: "transcript", Path: localAIRealTranscriptFile, MediaType: "text/plain", Bytes: int64(len(transcript)), SHA256: sha256Hex(transcript)}
-	segmentsArtifact := localAIRealArtifact{Kind: "segments", Path: localAIRealSegmentsFile, MediaType: "application/json", Bytes: int64(len(segmentsBody)), SHA256: sha256Hex(segmentsBody)}
-	artifacts := []localAIRealArtifact{inputArtifact, transcriptArtifact, segmentsArtifact}
-	if normalizeLocalAITranscript(string(transcript)) != normalizeLocalAITranscript(wantTranscript) || normalizeLocalAITranscript(segmentText.String()) != normalizeLocalAITranscript(wantTranscript) {
-		return localAIRealSemantic{}, artifacts, &localAIObservationFailure{Owner: "product", Assertion: "ASR semantic transcript", Expected: "normalized transcript and segments agree with the selected input", Observed: "semantic mismatch"}
-	}
-	observedTranscript := strings.TrimSpace(string(transcript))
-	if strings.Contains(strings.ToLower(observedTranscript), "local ai works on this machine") {
-		observedTranscript = "sha256=" + sha256Hex(transcript)
-	}
-	semantic := localAIRealSemantic{
-		Assertion: "normalized ASR transcript and bounded segments",
-		Expected:  "selected transcript with monotonic duration-bounded segments",
-		Observed:  fmt.Sprintf("transcript=%s;segments=%d;inputBytes=%d;inputSha256=%s", observedTranscript, len(segments), len(input), inputSHA),
-		Passed:    true,
-	}
-	return semantic, artifacts, nil
-}
-
-func decodeLocalAIJSONStrict(body []byte, destination any) error {
-	if len(body) == 0 || len(body) > localAIRealMaxStreamBytes {
-		return errors.New("JSON value outside bound")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return errors.New("JSON value contained trailing data")
-	}
-	return nil
-}
-
-func normalizeLocalAITranscript(value string) string {
-	var normalized strings.Builder
-	for _, character := range strings.ToLower(value) {
-		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') {
-			normalized.WriteRune(character)
-			continue
-		}
-		normalized.WriteByte(' ')
-	}
-	return strings.Join(strings.Fields(normalized.String()), " ")
-}
-
-type localAIInvocationResponse struct {
-	Outputs []localAIInvocationOutput `json:"outputs"`
-	Failure any                       `json:"failure"`
-}
-
-type localAIInvocationOutput struct {
-	Name      string `json:"name"`
-	Modality  string `json:"modality"`
-	MediaType string `json:"mediaType"`
-	Content   string `json:"content"`
-}
-
-func decodeLocalAIInvocationResponse(body []byte) (localAIInvocationResponse, error) {
-	if len(body) == 0 || len(body) > localAIRealMaxStreamBytes {
-		return localAIInvocationResponse{}, errors.New("response outside bound")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	var response localAIInvocationResponse
-	if err := decoder.Decode(&response); err != nil {
-		return localAIInvocationResponse{}, err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return localAIInvocationResponse{}, errors.New("response contained trailing JSON")
-	}
-	return response, nil
-}
-
-func (executor localAIProcessExecutor) Execute(ctx context.Context, spec localAICommandSpec, roots localAIRealRoots) localAICommandObservation {
-	result := localAICommandObservation{ExitCode: -1}
-	if strings.TrimSpace(spec.BinaryPath) == "" || !filepath.IsAbs(spec.BinaryPath) {
-		return result
-	}
-	command := exec.Command(spec.BinaryPath, spec.Arguments...)
-	command.Dir = roots.Work
-	command.Env = spec.Environment
-	var stdout, stderr localAIBoundedBuffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	platformprocess.ConfigureSubprocessTree(command)
-	if err := command.Start(); err != nil {
-		return result
-	}
-	result.Started = true
-	tree, attachErr := platformprocess.AttachSubprocessTree(command)
-	if attachErr != nil {
-		_ = platformprocess.TerminateSubprocessTree(command, tree)
-	} else {
-		result.ProcessTreeAttached = true
-	}
-	waitCh := make(chan error, 1)
-	go func() { waitCh <- command.Wait() }()
-	select {
-	case waitErr := <-waitCh:
-		result = localAICommandResultFromWait(result, command, waitErr)
-	case <-ctx.Done():
-		result.TimedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
-		_ = platformprocess.TerminateSubprocessTree(command, tree)
-		result = localAICommandResultFromWait(result, command, <-waitCh)
-	}
-	platformprocess.CloseSubprocessTree(command, tree)
-	result.ProcessTreeClosed = result.ProcessTreeAttached
-	result.Stdout = append([]byte(nil), stdout.Bytes()...)
-	result.Stderr = append([]byte(nil), stderr.Bytes()...)
-	result.StdoutTruncated = stdout.Truncated()
-	result.StderrTruncated = stderr.Truncated()
-	return result
-}
-
-func localAICommandResultFromWait(result localAICommandObservation, command *exec.Cmd, waitErr error) localAICommandObservation {
-	result.ProcessExited = command.ProcessState != nil
-	if waitErr == nil {
-		result.ExitCode = 0
-		return result
-	}
-	var exitErr *exec.ExitError
-	if errors.As(waitErr, &exitErr) {
-		result.ExitCode = exitErr.ExitCode()
-	}
-	return result
-}
-
-type localAIBoundedBuffer struct {
-	bytes.Buffer
-	truncated bool
-}
-
-func (buffer *localAIBoundedBuffer) Write(value []byte) (int, error) {
-	remaining := localAIRealMaxStreamBytes - buffer.Len()
-	if remaining <= 0 {
-		buffer.truncated = true
-		return len(value), nil
-	}
-	if len(value) > remaining {
-		_, _ = buffer.Buffer.Write(value[:remaining])
-		buffer.truncated = true
-		return len(value), nil
-	}
-	return buffer.Buffer.Write(value)
-}
-
-func (buffer *localAIBoundedBuffer) Truncated() bool { return buffer.truncated }
-
-func localAIStreamViolation(stdout, stderr []byte) string {
-	return localAIStreamViolationForJourney(stdout, stderr, false)
-}
-
-func localAIStreamViolationForJourney(stdout, stderr []byte, allowExpectedTranscript bool) string {
-	value := strings.ToLower(string(append(append([]byte(nil), stdout...), stderr...)))
-	for _, marker := range []string{
-		"hf_token=", "authorization:", "bearer ", "password=", "api_key=", "access_token=",
-		"x-amz-signature=", "signed_url=", "127.0.0.1", "localhost:", "grpc://", "tcp://",
-		"raw audio", "riff",
-	} {
-		if strings.Contains(value, marker) {
-			return "forbidden stream marker"
-		}
-	}
-	if !allowExpectedTranscript && strings.Contains(value, "local ai works on this machine") {
-		return "forbidden stream marker"
-	}
-	return ""
-}
-
-func prepareLocalAIRoots(roots localAIRealRoots) error {
-	for _, path := range []string{roots.Root, roots.Work, roots.Profile, roots.Cache, roots.Temp, roots.Output, roots.Streams} {
-		if err := os.MkdirAll(path, 0o700); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func localAIRealRootsFor(root string) localAIRealRoots {
-	return localAIRealRoots{
-		Root: root, Work: filepath.Join(root, "work"), Profile: filepath.Join(root, "profile"),
-		Cache: filepath.Join(root, "cache"), Temp: filepath.Join(root, "temp"),
-		Output: filepath.Join(root, "output"), Streams: filepath.Join(root, "streams"),
-	}
-}
-
-func localAIExpandArguments(arguments []string, roots localAIRealRoots) []string {
-	values := map[string]string{
-		localAIRealOutputToken:     filepath.Join(roots.Output, "tts.wav"),
-		localAIRealInputToken:      filepath.Join(roots.Output, "tts.wav"),
-		localAIRealTranscriptToken: filepath.Join(roots.Output, localAIRealTranscriptFile),
-		localAIRealSegmentsToken:   filepath.Join(roots.Output, localAIRealSegmentsFile),
-		localAIRealRootToken:       roots.Root,
-		localAIRealWorkToken:       roots.Work,
-	}
-	expanded := make([]string, len(arguments))
-	for index, argument := range arguments {
-		expanded[index] = argument
-		for token, value := range values {
-			expanded[index] = strings.ReplaceAll(expanded[index], token, value)
-		}
-	}
-	return expanded
-}
-
-func localAIProcessEnvironment(roots localAIRealRoots, overrides []string) []string {
-	values := make(map[string]string)
-	for _, entry := range os.Environ() {
-		key, value, ok := strings.Cut(entry, "=")
-		if ok && !localAIForbiddenEnvironmentKey(key) {
-			values[key] = value
-		}
-	}
-	values["TEMP"] = roots.Temp
-	values["TMP"] = roots.Temp
-	values["USERPROFILE"] = roots.Profile
-	values["HOME"] = roots.Profile
-	values["LOCALAPPDATA"] = roots.Profile
-	values["APPDATA"] = roots.Profile
-	values["XDG_CACHE_HOME"] = filepath.Join(roots.Profile, "cache")
-	values["XDG_CONFIG_HOME"] = filepath.Join(roots.Profile, "config")
-	values["LOCALAI_REAL_OUTPUT_ROOT"] = roots.Output
-	values["LOCALAI_REAL_INPUT_ROOT"] = roots.Output
-	for _, entry := range overrides {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok || localAIForbiddenEnvironmentOverrideKey(key) {
-			continue
-		}
-		value = strings.ReplaceAll(value, localAIRealOutputToken, filepath.Join(roots.Output, "tts.wav"))
-		value = strings.ReplaceAll(value, localAIRealInputToken, filepath.Join(roots.Output, "tts.wav"))
-		value = strings.ReplaceAll(value, localAIRealTranscriptToken, filepath.Join(roots.Output, localAIRealTranscriptFile))
-		value = strings.ReplaceAll(value, localAIRealSegmentsToken, filepath.Join(roots.Output, localAIRealSegmentsFile))
-		value = strings.ReplaceAll(value, localAIRealRootToken, roots.Root)
-		value = strings.ReplaceAll(value, localAIRealWorkToken, roots.Work)
-		values[key] = value
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	for index := range keys {
-		for other := index + 1; other < len(keys); other++ {
-			if strings.ToUpper(keys[other]) < strings.ToUpper(keys[index]) {
-				keys[index], keys[other] = keys[other], keys[index]
-			}
-		}
-	}
-	environment := make([]string, 0, len(keys))
-	for _, key := range keys {
-		environment = append(environment, key+"="+values[key])
-	}
-	return environment
-}
-
-func localAIForbiddenEnvironmentKey(key string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(key))
-	if strings.HasPrefix(upper, "INFINITE_YOU_") || strings.HasPrefix(upper, "LOCALAI_REAL_") || strings.Contains(upper, "TOKEN") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "SECRET") {
-		return true
-	}
-	switch upper {
-	case "HF_ENDPOINT", "HUGGINGFACE_HUB_CACHE", "HF_HOME", "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME":
-		return true
-	default:
-		return false
-	}
-}
-
-func localAIForbiddenEnvironmentOverrideKey(key string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(key))
-	if strings.Contains(upper, "TOKEN") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "SECRET") {
-		return true
-	}
-	switch upper {
-	case "HF_ENDPOINT", "HUGGINGFACE_HUB_CACHE", "HF_HOME", "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME":
-		return true
-	default:
-		return false
-	}
-}
-
-func validateLocalAIRequest(request localAIRealRunRequest) error {
-	if strings.TrimSpace(request.Selector) == "" || strings.ContainsAny(request.Selector, "\\/\r\n") {
-		return errors.New("selector is not bounded")
-	}
-	if request.Kind != localAIJourneyTTS && request.Kind != localAIJourneyASR && request.Kind != localAIJourneyTTSASR {
-		return errors.New("journey kind is not bounded")
-	}
-	if strings.TrimSpace(request.RunID) == "" || len(request.RunID) > 128 {
-		return errors.New("run identity is not bounded")
-	}
-	for _, path := range []string{request.Root, request.ReportPath, request.LedgerPath, request.Command.BinaryPath} {
-		if strings.TrimSpace(path) == "" || !filepath.IsAbs(path) {
-			return errors.New("isolated path is not absolute")
-		}
-	}
-	if request.ReservationKind != "modelCall" && request.ReservationKind != "downloadBytes" {
-		return errors.New("reservation kind is not bounded")
-	}
-	if request.ReservationAmount <= 0 || request.Limits.ModelCalls < 0 || request.Limits.DownloadBytes < 0 {
-		return errors.New("reservation or limits are invalid")
-	}
-	if request.Command.OutputName == "" || filepath.Base(request.Command.OutputName) != request.Command.OutputName {
-		return errors.New("output name is not a file identity")
-	}
-	if request.Kind == localAIJourneyTTSASR && request.FollowUp == nil {
-		return errors.New("TTS-to-ASR journey is missing its ASR command")
-	}
-	if request.FollowUp != nil && (request.FollowUp.BinaryPath == "" || request.FollowUp.OutputName == "" || filepath.Base(request.FollowUp.OutputName) != request.FollowUp.OutputName) {
-		return errors.New("follow-up command is not bounded")
-	}
-	if request.Kind == localAIJourneyASR && (strings.TrimSpace(request.InputPath) == "" || !filepath.IsAbs(request.InputPath)) {
-		return errors.New("ASR input path is not absolute")
-	}
-	if request.ExpectedInputSHA256 != "" && !isLocalAISHA256(request.ExpectedInputSHA256) {
-		return errors.New("expected input identity is not a SHA-256")
-	}
-	if len(request.ExpectedTranscript) > localAIRealMaxFailureBytes {
-		return errors.New("expected transcript is not bounded")
-	}
-	if request.CacheIdentitySHA256 != "" && !isLocalAISHA256(request.CacheIdentitySHA256) {
-		return errors.New("cache identity is not a SHA-256")
-	}
-	return nil
-}
-
-func validateLocalAIRealReport(report localAIRealReport) error {
-	if report.Schema != localAIRealEvidenceSchema || !localAIStatus(report.Status) || report.Platform == "" || report.Architecture == "" || !report.Redacted {
-		return errors.New("report identity or status is invalid")
-	}
-	if report.RunID == "" || len(report.RunID) > 128 || len(report.Journeys) != 1 {
-		return errors.New("report cardinality is invalid")
-	}
-	if err := validateLocalAIBuild(report.Build); err != nil {
-		return err
-	}
-	journey := report.Journeys[0]
-	if journey.Selector == "" || journey.Status != report.Status || !localAIStatus(journey.Status) {
-		return errors.New("journey identity or status is invalid")
-	}
-	if journey.CacheIdentitySHA256 != "" && !isLocalAISHA256(journey.CacheIdentitySHA256) {
-		return errors.New("journey cache identity is invalid")
-	}
-	if report.Status == "PASS" {
-		if len(journey.Artifacts) == 0 || journey.Failure != nil || !journey.Semantic.Passed || !journey.Release.ProcessTreeClosed {
-			return errors.New("pass report omitted semantic or release proof")
-		}
-		for _, artifact := range journey.Artifacts {
-			if err := validateLocalAIArtifact(artifact); err != nil {
-				return err
-			}
-		}
-	} else if journey.Failure == nil || !localAIFailureOwner(journey.Failure.Owner) {
-		return errors.New("failure report omitted bounded ownership")
-	} else if err := validateLocalAIFailure(*journey.Failure); err != nil {
-		return err
-	}
-	if report.BudgetLedger.PathIdentity == "" {
-		return errors.New("budget ledger identity is missing")
-	}
-	if report.BudgetLedger.SHA256 != "" && !isLocalAISHA256(report.BudgetLedger.SHA256) {
-		return errors.New("budget ledger identity is invalid")
-	}
-	body, err := json.Marshal(report)
-	if err != nil {
-		return err
-	}
-	if localAIStreamViolation(body, nil) != "" {
-		return errors.New("report contained unredacted evidence")
-	}
-	return nil
-}
-
-func validateLocalAIBuild(build localAIRealBuildIdentity) error {
-	if !localAIPathIdentity(build.PathIdentity) || build.Bytes <= 0 || !isLocalAISHA256(build.SHA256) || build.Commit == "" || build.Tree == "" {
-		return errors.New("build identity is invalid")
-	}
-	return nil
-}
-
-func validateLocalAIArtifact(artifact localAIRealArtifact) error {
-	if artifact.Kind == "" || !localAIPathIdentity(artifact.Path) || artifact.MediaType == "" || artifact.Bytes <= 0 || !isLocalAISHA256(artifact.SHA256) {
-		return errors.New("artifact identity is invalid")
-	}
-	return nil
-}
-
-func validateLocalAIFailure(failure localAIRealFailure) error {
-	if failure.Assertion == "" || failure.Expected == "" || failure.Observed == "" || len(failure.Observed) > localAIRealMaxFailureBytes {
-		return errors.New("failure observation is not bounded")
-	}
-	if localAIStreamViolation([]byte(failure.Observed), nil) != "" {
-		return errors.New("failure observation was not redacted")
-	}
-	return nil
-}
-
-func localAIStatus(value string) bool {
-	return value == "PASS" || value == "FAIL" || value == "INCONCLUSIVE"
-}
-
-func localAIFailureOwner(value string) bool {
-	switch value {
-	case "product", "harness", "environment", "unresolved":
-		return true
-	default:
-		return false
-	}
-}
-
-func localAIPathIdentity(value string) bool {
-	return value != "" && filepath.Base(value) == value && !strings.ContainsAny(value, ":\r\n")
-}
-
-func boundedLocalAIValue(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= localAIRealMaxFailureBytes {
-		return value
-	}
-	return "sha256=" + sha256Hex([]byte(value))
-}
-
-func isLocalAISHA256(value string) bool {
-	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
-}
 
 func writeLocalAIRealReportAtomic(path string, report localAIRealReport) error {
 	return writeLocalAIRealReportAtomicWithHook(path, report, nil)
@@ -1396,308 +882,6 @@ func updateLocalAILedgerIdentity(report *localAIRealReport, path string) {
 	if ok {
 		report.BudgetLedger.SHA256 = identity.SHA256
 	}
-}
-
-type localAIFileIdentity struct {
-	Bytes  int64
-	SHA256 string
-}
-
-func localAIReadFileIdentity(path string) (localAIFileIdentity, bool) {
-	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return localAIFileIdentity{}, false
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return localAIFileIdentity{}, false
-	}
-	defer file.Close()
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return localAIFileIdentity{}, false
-	}
-	return localAIFileIdentity{Bytes: info.Size(), SHA256: hex.EncodeToString(hasher.Sum(nil))}, true
-}
-
-type localAIWAVDetails struct {
-	durationMillis int64
-	channels       uint16
-	sampleRate     uint32
-	bits           uint16
-}
-
-func localAIWAVMetadata(audio []byte) (localAIWAVDetails, bool) {
-	if len(audio) < 44 || string(audio[:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[12:16]) != "fmt " || string(audio[36:40]) != "data" {
-		return localAIWAVDetails{}, false
-	}
-	dataSize := binary.LittleEndian.Uint32(audio[40:44])
-	if uint64(dataSize)+44 != uint64(len(audio)) || binary.LittleEndian.Uint32(audio[16:20]) != 16 || binary.LittleEndian.Uint16(audio[20:22]) != 1 {
-		return localAIWAVDetails{}, false
-	}
-	channels := binary.LittleEndian.Uint16(audio[22:24])
-	sampleRate := binary.LittleEndian.Uint32(audio[24:28])
-	blockAlign := binary.LittleEndian.Uint16(audio[32:34])
-	bits := binary.LittleEndian.Uint16(audio[34:36])
-	if channels == 0 || sampleRate == 0 || blockAlign == 0 || bits != 16 || blockAlign != channels*bits/8 || binary.LittleEndian.Uint32(audio[28:32]) != sampleRate*uint32(blockAlign) || dataSize == 0 || dataSize%uint32(blockAlign) != 0 {
-		return localAIWAVDetails{}, false
-	}
-	durationMillis := int64(dataSize/uint32(blockAlign)) * 1000 / int64(sampleRate)
-	return localAIWAVDetails{durationMillis: durationMillis, channels: channels, sampleRate: sampleRate, bits: bits}, durationMillis > 0
-}
-
-func writeLocalAIControlledWAV(path string) error {
-	if strings.TrimSpace(path) == "" {
-		return errors.New("controlled output path is empty")
-	}
-	const (
-		sampleRate = 8000
-		channels   = 1
-		bits       = 16
-		frames     = 80
-	)
-	dataBytes := frames * channels * bits / 8
-	audio := make([]byte, 44+dataBytes)
-	copy(audio[:4], "RIFF")
-	binary.LittleEndian.PutUint32(audio[4:8], uint32(len(audio)-8))
-	copy(audio[8:12], "WAVE")
-	copy(audio[12:16], "fmt ")
-	binary.LittleEndian.PutUint32(audio[16:20], 16)
-	binary.LittleEndian.PutUint16(audio[20:22], 1)
-	binary.LittleEndian.PutUint16(audio[22:24], channels)
-	binary.LittleEndian.PutUint32(audio[24:28], sampleRate)
-	binary.LittleEndian.PutUint32(audio[28:32], sampleRate*channels*bits/8)
-	binary.LittleEndian.PutUint16(audio[32:34], channels*bits/8)
-	binary.LittleEndian.PutUint16(audio[34:36], bits)
-	copy(audio[36:40], "data")
-	binary.LittleEndian.PutUint32(audio[40:44], uint32(dataBytes))
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, audio, 0o600)
-}
-
-func writeLocalAIControlledASR(t *testing.T, transcript string, endMillis int64) {
-	t.Helper()
-	root := os.Getenv("LOCALAI_REAL_OUTPUT_ROOT")
-	if root == "" {
-		os.Exit(21)
-	}
-	transcriptBody := []byte(transcript)
-	segmentsBody, err := json.Marshal([]localAIASRSegment{{ID: 0, Start: 0, End: endMillis, Text: transcript}})
-	if err != nil {
-		os.Exit(21)
-	}
-	if err := os.WriteFile(filepath.Join(root, localAIRealTranscriptFile), transcriptBody, 0o600); err != nil {
-		os.Exit(21)
-	}
-	if err := os.WriteFile(filepath.Join(root, localAIRealSegmentsFile), segmentsBody, 0o600); err != nil {
-		os.Exit(21)
-	}
-	body, err := json.Marshal(localAIInvocationResponse{Outputs: []localAIInvocationOutput{
-		{Name: "transcript", Modality: "TEXT", MediaType: "text/plain", Content: string(transcriptBody)},
-		{Name: "segments", Modality: "JSON", MediaType: "application/json", Content: string(segmentsBody)},
-	}})
-	if err != nil {
-		os.Exit(21)
-	}
-	_, _ = os.Stdout.Write(body)
-}
-
-func localAIControlledRequest(t testing.TB, root, mode string) localAIRealRunRequest {
-	t.Helper()
-	binaryPath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("test executable: %v", err)
-	}
-	identity, ok := localAIReadFileIdentity(binaryPath)
-	if !ok {
-		t.Fatalf("read test executable identity")
-	}
-	return localAIRealRunRequest{
-		Selector:          "controlled-tts",
-		Kind:              localAIJourneyTTS,
-		RunID:             "controlled-run",
-		Root:              root,
-		ReportPath:        filepath.Join(root, "evidence.json"),
-		LedgerPath:        filepath.Join(root, "localai-budget.json"),
-		Limits:            localAIBudgetLimits{ModelCalls: 1},
-		ReservationKind:   "modelCall",
-		ReservationAmount: 1,
-		Command: localAICommandSpec{
-			BinaryPath: binaryPath,
-			Arguments:  []string{"-test.run=TestLocalAIRealHarnessControlledHelper", "--", mode},
-			Environment: []string{
-				localAIRealHelperModeEnv + "=" + mode,
-				localAIRealHelperOutputEnv + "=" + localAIRealOutputToken,
-			},
-			OutputName: "tts.wav",
-		},
-		Build:               localAIRealBuildIdentity{PathIdentity: "controlled-test-binary", Bytes: identity.Bytes, SHA256: identity.SHA256, Commit: "controlled", Tree: "controlled"},
-		CacheIdentitySHA256: sha256Hex([]byte("controlled-cache")),
-		Unproven:            []string{"real LocalAI model/backend", "public installation and discovery"},
-	}
-}
-
-func assertLocalAIJourneyResult(t testing.TB, request localAIRealRunRequest, report localAIRealReport, wantStatus, wantOwner string) {
-	t.Helper()
-	selector := "<missing>"
-	if len(report.Journeys) == 1 {
-		selector = report.Journeys[0].Selector
-	}
-	if report.Status != wantStatus || len(report.Journeys) != 1 || selector != request.Selector {
-		failure := "<nil>"
-		if report.Journeys != nil && len(report.Journeys) == 1 && report.Journeys[0].Failure != nil {
-			failure = fmt.Sprintf("%+v", *report.Journeys[0].Failure)
-		}
-		t.Fatalf("report status=%s selector=%s failure=%s, want one %s %q journey", report.Status, selector, failure, wantStatus, request.Selector)
-	}
-	if wantOwner != "" {
-		if report.Journeys[0].Failure == nil || report.Journeys[0].Failure.Owner != wantOwner {
-			t.Fatalf("failure = %#v, want owner %q", report.Journeys[0].Failure, wantOwner)
-		}
-		if err := validateLocalAIFailure(*report.Journeys[0].Failure); err != nil {
-			t.Fatalf("failure validation: %v", err)
-		}
-	}
-	body, err := os.ReadFile(request.ReportPath)
-	if err != nil {
-		t.Fatalf("read report: %v", err)
-	}
-	if err := validateLocalAIRealReport(report); err != nil {
-		t.Fatalf("report validation: %v", err)
-	}
-	if !bytes.Contains(body, []byte(`"redacted": true`)) {
-		t.Fatalf("report did not record redaction: %s", body)
-	}
-	if bytes.Contains(body, []byte("controlled-secret")) || bytes.Contains(body, []byte("HF_TOKEN=")) {
-		t.Fatalf("report leaked forbidden data: %s", body)
-	}
-}
-
-func setupLocalAIReportInterruption(t testing.TB, _ string, request *localAIRealRunRequest) {
-	t.Helper()
-	old := newLocalAIRealReport(*request)
-	old.Status = "PASS"
-	old.Journeys[0].Status = "PASS"
-	old.Journeys[0].Artifacts = []localAIRealArtifact{{Kind: "output-audio", Path: "tts.wav", MediaType: "audio/wav", Bytes: 44, SHA256: sha256Hex(bytes.Repeat([]byte{'a'}, 44))}}
-	old.Journeys[0].Semantic = localAIRealSemantic{Assertion: "controlled", Expected: "valid", Observed: "valid", Passed: true}
-	old.Journeys[0].Release = localAIRealRelease{ProcessTreeClosed: true}
-	old.BudgetLedger = localAIRealLedgerIdentity{PathIdentity: filepath.Base(request.LedgerPath), SHA256: sha256Hex([]byte("old-ledger"))}
-	if err := writeLocalAIRealReportAtomic(request.ReportPath, old); err != nil {
-		t.Fatalf("seed canonical report: %v", err)
-	}
-}
-
-func assertLocalAIReportInterruption(t testing.TB, request localAIRealRunRequest, report localAIRealReport, err error) {
-	t.Helper()
-	if !errors.Is(err, errLocalAIReportInterrupted) {
-		t.Fatalf("runner error = %v, want report interruption", err)
-	}
-	if report.Status != "PASS" {
-		t.Fatalf("interrupted report result = %#v, want completed in-memory PASS", report)
-	}
-	body, readErr := os.ReadFile(request.ReportPath)
-	if readErr != nil {
-		t.Fatal(readErr)
-	}
-	if !bytes.Contains(body, []byte(`"status": "PASS"`)) {
-		t.Fatalf("previous canonical report was not preserved: %s", body)
-	}
-}
-
-var errLocalAIReportInterrupted = errors.New("controlled report interruption")
-
-func setupLocalAIBudgetExhaustion(t testing.TB, _ string, request *localAIRealRunRequest) {
-	t.Helper()
-	locks := mustLocalAILockService(t)
-	if _, _, err := reserveLocalAIBudget(t.Context(), locks, request.LedgerPath, request.RunID, request.Selector, request.ReservationKind, request.ReservationAmount, request.Limits); err != nil {
-		t.Fatalf("seed budget reservation: %v", err)
-	}
-}
-
-func setupLocalAICorruptLedger(t testing.TB, _ string, request *localAIRealRunRequest) {
-	t.Helper()
-	if err := os.WriteFile(request.LedgerPath, []byte(`{"schema":"wrong"}`), 0o600); err != nil {
-		t.Fatalf("write corrupt ledger: %v", err)
-	}
-}
-
-func mustLocalAILockService(t testing.TB) locking.Service {
-	t.Helper()
-	locks, err := locking.New(locking.LocalFileSystem{})
-	if err != nil {
-		t.Fatalf("new lock service: %v", err)
-	}
-	return locks
-}
-
-func readLocalAIBudgetForTest(t testing.TB, path string) localAIBudgetLedger {
-	t.Helper()
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read budget: %v", err)
-	}
-	ledger, err := decodeLocalAIBudget(body)
-	if err != nil {
-		t.Fatalf("decode budget: %v", err)
-	}
-	return ledger
-}
-
-func runLocalAIReservationHelper(t testing.TB, root, ledgerPath, resultPath string) string {
-	t.Helper()
-	binaryPath, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	roots := localAIRealRootsFor(root)
-	if err := prepareLocalAIRoots(roots); err != nil {
-		t.Fatal(err)
-	}
-	command := exec.CommandContext(t.Context(), binaryPath, "-test.run=TestLocalAIRealHarnessControlledHelper", "--")
-	command.Dir = roots.Work
-	command.Env = localAIProcessEnvironment(roots, []string{
-		localAIRealHelperModeEnv + "=ledger-reserve",
-		"LOCALAI_REAL_HELPER_LEDGER=" + ledgerPath,
-		"LOCALAI_REAL_HELPER_RUN_ID=run-persistence",
-		localAIRealHelperResultEnv + "=" + resultPath,
-	})
-	if err := command.Run(); err != nil {
-		t.Fatalf("reservation helper: %v", err)
-	}
-	body, err := os.ReadFile(resultPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return strings.TrimSpace(string(body))
-}
-
-func writeLocalAIReservationHelperResult(t *testing.T) {
-	ledgerPath := os.Getenv("LOCALAI_REAL_HELPER_LEDGER")
-	resultPath := os.Getenv(localAIRealHelperResultEnv)
-	locks, err := locking.New(locking.LocalFileSystem{})
-	result := "ERROR"
-	if err == nil {
-		_, _, reserveErr := reserveLocalAIBudget(context.Background(), locks, ledgerPath, "run-persistence", "known-tts", "modelCall", 1, localAIBudgetLimits{ModelCalls: 1})
-		var budgetErr *localAIBudgetError
-		if errors.As(reserveErr, &budgetErr) && budgetErr.Code == "budget_exhausted" {
-			result = "BUDGET_EXHAUSTED"
-		} else if reserveErr == nil {
-			result = "RESERVED"
-		}
-	}
-	_ = os.WriteFile(resultPath, []byte(result), 0o600)
-}
-
-type localAIStubExecutor struct {
-	observation localAICommandObservation
-	calls       atomic.Int32
-}
-
-func (stub *localAIStubExecutor) Execute(context.Context, localAICommandSpec, localAIRealRoots) localAICommandObservation {
-	stub.calls.Add(1)
-	return stub.observation
 }
 
 type localAIProcessExecutor struct{}
