@@ -210,11 +210,9 @@ func (s *service) publishGenericCache(
 		return cacheResultFromPaths(artifactKind, artifacts, cached), models.ErrAssetSourceMissing
 	}
 	destinationRoot := roots[len(roots)-1]
-	identity := genericCacheKey(kind, source, artifacts)
-	identityName := genericArtifactIdentityHash(kind, source, artifacts)
+	stagingIdentityName := genericArtifactIdentityHash(kind, source, artifacts)
 	base := filepath.Join(destinationRoot, assetContentDirectory, kind)
-	finalPath := filepath.Join(base, identityName)
-	stagePath := finalPath + ".partial"
+	stagePath := filepath.Join(base, stagingIdentityName+".partial")
 	if err := s.prepareGenericStage(base, stagePath); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, cached), err
 	}
@@ -231,9 +229,18 @@ func (s *service) publishGenericCache(
 	if err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), err
 	}
+	// Requested metadata may be incomplete; only verified staged results are
+	// allowed to define the durable content-addressed identity and record.
+	observed, err := observedGenericArtifacts(artifacts, published)
+	if err != nil {
+		return cacheResultFromPaths(artifactKind, artifacts, published), err
+	}
+	identity := genericCacheKey(kind, source, observed)
+	identityName := genericArtifactIdentityHash(kind, source, observed)
+	finalPath := filepath.Join(base, identityName)
 	if err := s.writeGenericMetadata(
 		filepath.Join(stagePath, assetMetadataName), kind, identity, source.safe,
-		genericSourceIdentity(source), artifacts,
+		genericSourceIdentity(source), observed,
 	); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
 			"stage asset metadata", err,
@@ -260,7 +267,7 @@ func (s *service) publishGenericCache(
 	}
 	committed = true
 
-	result, err := s.committedGenericCacheResult(artifactKind, artifacts, published, finalPath)
+	result, err := s.committedGenericCacheResult(artifactKind, observed, published, finalPath)
 	if err != nil {
 		return genericCacheResult{}, pullsupport.WrapPullStage(
 			models.PullStageCacheInstallation, "", "validate committed asset snapshot", "", err,
@@ -276,6 +283,39 @@ func (s *service) publishGenericCache(
 	}
 	result.prepared = true
 	return result, nil
+}
+
+func observedGenericArtifacts(
+	requested []genericArtifact,
+	published map[string]genericCachePath,
+) ([]genericArtifact, error) {
+	observed := make([]genericArtifact, 0, len(requested))
+	for _, artifact := range requested {
+		found, ok := published[artifact.requirement.Name]
+		if !ok {
+			return nil, fmt.Errorf(
+				"%w: verified asset %q has no observed result",
+				models.ErrAssetIntegrityFailed, artifact.requirement.Name,
+			)
+		}
+		if found.artifact.Bytes < 0 || strings.TrimSpace(found.artifact.SHA256) == "" {
+			return nil, fmt.Errorf(
+				"%w: verified asset %q has incomplete observed identity",
+				models.ErrAssetIntegrityFailed, artifact.requirement.Name,
+			)
+		}
+		observed = append(observed, genericArtifact{
+			requirement: models.AssetRequirement{
+				Name:   artifact.requirement.Name,
+				Bytes:  found.artifact.Bytes,
+				SHA256: strings.ToLower(strings.TrimSpace(found.artifact.SHA256)),
+			},
+			url:              artifact.url,
+			localPath:        artifact.localPath,
+			metadataResolved: true,
+		})
+	}
+	return observed, nil
 }
 
 func (s *service) committedGenericCacheResult(

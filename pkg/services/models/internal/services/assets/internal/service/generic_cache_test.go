@@ -354,6 +354,103 @@ func TestPrepareGenericAssetsOfflineDiscoversPublishedRequirements(t *testing.T)
 	}
 }
 
+func TestPrepareGenericAssetsCommitsObservedMetadataAndReusesItOffline(t *testing.T) {
+	t.Parallel()
+
+	body := []byte("observed generic cache payload")
+	digest := sha256Hex(body)
+	var downloads atomic.Int32
+	scopes := newScopes(t, "generic-observed-metadata")
+	cacheDirectory := t.TempDir()
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(
+		t, scopes,
+		genericManifestWithoutDigestClient("weights.bin", func() []byte {
+			downloads.Add(1)
+			return body
+		}),
+		func(string) string { return "" },
+	)
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "weights.bin"}},
+	}
+	first, err := service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("initial preparation: %v", err)
+	}
+	if first.Outcome != models.AssetPreparationPrepared || first.Asset.TotalBytes != int64(len(body)) ||
+		len(first.Asset.Artifacts) != 1 || first.Asset.Artifacts[0].Bytes != int64(len(body)) ||
+		first.Asset.Artifacts[0].SHA256 != digest {
+		t.Fatalf("initial result = %#v, want observed bytes and digest", first)
+	}
+	if downloads.Load() != 1 {
+		t.Fatalf("asset downloads = %d, want one initial transfer", downloads.Load())
+	}
+
+	source := genericSource{
+		kind: genericSourceHF, safe: "hf://owner/repo/weights.bin@" + genericTestRevision,
+		owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision,
+	}
+	observed := []genericArtifact{{requirement: models.AssetRequirement{
+		Name: "weights.bin", Bytes: int64(len(body)), SHA256: digest,
+	}}}
+	observedIdentity := genericArtifactIdentityHash(assetKindModel, source, observed)
+	inputIdentity := genericArtifactIdentityHash(assetKindModel, source, requestArtifacts(request))
+	if observedIdentity == inputIdentity {
+		t.Fatalf("observed identity = input identity %q; fixture must exercise unresolved metadata", observedIdentity)
+	}
+	metadataPath := filepath.Join(
+		cacheDirectory, assetContentDirectory, assetKindModel, observedIdentity, assetMetadataName,
+	)
+	metadataBody, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read committed metadata: %v", err)
+	}
+	var metadata genericCacheMetadata
+	if err := json.Unmarshal(metadataBody, &metadata); err != nil {
+		t.Fatalf("decode committed metadata: %v", err)
+	}
+	wantIdentity := genericCacheKey(assetKindModel, source, observed)
+	if metadata.Identity != wantIdentity || len(metadata.Artifacts) != 1 ||
+		metadata.Artifacts[0] != observed[0].requirement {
+		t.Fatalf("committed metadata = %#v, want observed identity/requirements", metadata)
+	}
+	if _, err := os.Stat(filepath.Join(
+		cacheDirectory, assetContentDirectory, assetKindModel, inputIdentity,
+	)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unresolved identity snapshot = %v, want absent", err)
+	}
+
+	service.client = httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("offline reuse must not contact the source")
+	})
+	second, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Reference: request.Reference, Offline: true,
+	})
+	if err != nil {
+		t.Fatalf("offline preparation: %v", err)
+	}
+	if second.Outcome != models.AssetPreparationAlreadyAvailable ||
+		second.Asset.Integrity != models.AssetIntegrityVerified || second.Asset.TotalBytes != int64(len(body)) ||
+		len(second.Asset.Artifacts) != 1 || second.Asset.Artifacts[0].Bytes != int64(len(body)) ||
+		second.Asset.Artifacts[0].SHA256 != digest {
+		t.Fatalf("offline result = %#v, want the committed observed identity", second)
+	}
+	if downloads.Load() != 1 {
+		t.Fatalf("offline asset downloads = %d, want unchanged", downloads.Load())
+	}
+}
+
+func requestArtifacts(request models.PrepareModelAssetsRequest) []genericArtifact {
+	artifacts := make([]genericArtifact, 0, len(request.Artifacts))
+	for _, requirement := range request.Artifacts {
+		artifacts = append(artifacts, genericArtifact{requirement: requirement})
+	}
+	return artifacts
+}
+
 func TestPrepareGenericAssetsDigestMismatchLeavesNoSnapshotAndCanRetry(t *testing.T) {
 	t.Parallel()
 
@@ -421,7 +518,9 @@ func TestPrepareGenericAssetsPreservesPriorGoodSnapshotAfterFailedReplacement(t 
 		genericArtifactIdentityHash(assetKindModel, genericSource{
 			kind: genericSourceHF, safe: "hf://owner/repo/weights.bin@" + genericTestRevision,
 			owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision,
-		}, []genericArtifact{{requirement: firstRequest.Artifacts[0]}}),
+		}, []genericArtifact{{requirement: models.AssetRequirement{
+			Name: "weights.bin", Bytes: int64(len(body)), SHA256: digest,
+		}}}),
 		"weights.bin",
 	)
 	assertFileBody(t, firstPath, body)
@@ -638,9 +737,12 @@ func TestPublishGenericCacheRestoresPriorSnapshotWhenCommitRenameFails(t *testin
 	}), func(string) string { return "" })
 	source := genericSource{kind: genericSourceLocal, safe: "local://path", localPath: localPath}
 	artifact := genericArtifact{requirement: models.AssetRequirement{Name: "weights.bin"}, localPath: localPath}
+	observed := genericArtifact{requirement: models.AssetRequirement{
+		Name: "weights.bin", Bytes: int64(len(newBody)), SHA256: sha256Hex(newBody),
+	}}
 	finalPath := filepath.Join(
 		you, assetContentDirectory, assetKindModel,
-		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{artifact}),
+		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{observed}),
 	)
 	if err := os.MkdirAll(finalPath, 0o755); err != nil {
 		t.Fatalf("create prior snapshot: %v", err)
