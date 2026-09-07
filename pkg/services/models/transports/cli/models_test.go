@@ -60,10 +60,14 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
+	cacheResolverCalls := 0
 
 	handler := NewCommandHandler(
 		commandServiceFake{invoke: func(cfg InvokeConfig) error {
 			assertInvokeCommandConfig(t, cfg, server, logger, &diagnostics)
+			if cfg.ModelCacheDir != "/selected/model-cache" {
+				t.Fatalf("InvokeConfig model cache directory = %q, want selected path", cfg.ModelCacheDir)
+			}
 			if len(cfg.ParameterSpecs) != 1 || cfg.ParameterSpecs[0] != `{"name":"temperature","value":0.2}` {
 				t.Fatalf("InvokeConfig parameter specs = %#v", cfg.ParameterSpecs)
 			}
@@ -78,6 +82,10 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 			return operatorconfig.ResolvedDefaults{}, nil
 		},
 		func() (*zap.Logger, error) { return logger, nil },
+		func() (string, error) {
+			cacheResolverCalls++
+			return "/selected/model-cache", nil
+		},
 	)
 
 	cmd := &cobra.Command{Use: "invoke"}
@@ -86,6 +94,111 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	invokeInputs, inherited := resolvedInvokeHandlerInputs(t, server)
 	if err := handler.Invoke(cmd, invokeInputs, inherited); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
+	}
+	if cacheResolverCalls != 1 {
+		t.Fatalf("model cache resolver calls = %d, want 1", cacheResolverCalls)
+	}
+}
+
+func TestCommandHandlerInvokeWithoutCacheResolverPreservesEmptySelection(t *testing.T) {
+	t.Parallel()
+
+	var received InvokeConfig
+	handler := NewCommandHandler(
+		commandServiceFake{invoke: func(cfg InvokeConfig) error {
+			received = cfg
+			return nil
+		}},
+		nil,
+		func() (string, error) { return "/home/tester", nil },
+		func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error) {
+			return operatorconfig.ResolvedDefaults{}, nil
+		},
+		func() (*zap.Logger, error) { return zap.NewNop(), nil },
+	)
+	cmd := &cobra.Command{Use: "invoke"}
+	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/factory"))
+	cmd.SetOut(io.Discard)
+	inputs, inherited := resolvedInvokeHandlerInputs(t, "")
+	if err := handler.Invoke(cmd, inputs, inherited); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if received.ModelCacheDir != "" {
+		t.Fatalf("InvokeConfig model cache directory = %q, want empty without resolver", received.ModelCacheDir)
+	}
+}
+
+func TestCommandHandlerInvokeEmptyCacheResolverPreservesEmptySelection(t *testing.T) {
+	t.Parallel()
+
+	resolverCalls := 0
+	var received InvokeConfig
+	handler := NewCommandHandler(
+		commandServiceFake{invoke: func(cfg InvokeConfig) error {
+			received = cfg
+			return nil
+		}},
+		nil,
+		func() (string, error) { return "/home/tester", nil },
+		func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error) {
+			return operatorconfig.ResolvedDefaults{}, nil
+		},
+		func() (*zap.Logger, error) { return zap.NewNop(), nil },
+		func() (string, error) {
+			resolverCalls++
+			return "", nil
+		},
+	)
+	cmd := &cobra.Command{Use: "invoke"}
+	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/factory"))
+	cmd.SetOut(io.Discard)
+	inputs, inherited := resolvedInvokeHandlerInputs(t, "")
+	if err := handler.Invoke(cmd, inputs, inherited); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if resolverCalls != 1 {
+		t.Fatalf("model cache resolver calls = %d, want 1", resolverCalls)
+	}
+	if received.ModelCacheDir != "" {
+		t.Fatalf("InvokeConfig model cache directory = %q, want empty", received.ModelCacheDir)
+	}
+}
+
+func TestCommandHandlerInvokeCacheResolverFailureShortCircuitsModels(t *testing.T) {
+	t.Parallel()
+
+	resolverErr := errors.New("cache selection unavailable")
+	resolverCalls := 0
+	serviceCalls := 0
+	handler := NewCommandHandler(
+		commandServiceFake{invoke: func(InvokeConfig) error {
+			serviceCalls++
+			return nil
+		}},
+		nil,
+		func() (string, error) { return "/home/tester", nil },
+		func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error) {
+			return operatorconfig.ResolvedDefaults{}, nil
+		},
+		func() (*zap.Logger, error) { return zap.NewNop(), nil },
+		func() (string, error) {
+			resolverCalls++
+			return "", resolverErr
+		},
+	)
+	cmd := &cobra.Command{Use: "invoke"}
+	cmd.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/factory"))
+	cmd.SetOut(io.Discard)
+	inputs, inherited := resolvedInvokeHandlerInputs(t, "")
+	err := handler.Invoke(cmd, inputs, inherited)
+	if !errors.Is(err, resolverErr) || !strings.Contains(err.Error(), "resolve model cache directory") {
+		t.Fatalf("Invoke() error = %v, want wrapped cache resolver error", err)
+	}
+	if resolverCalls != 1 {
+		t.Fatalf("model cache resolver calls = %d, want 1", resolverCalls)
+	}
+	if serviceCalls != 0 {
+		t.Fatalf("Models service calls = %d, want 0 after resolver failure", serviceCalls)
 	}
 }
 
