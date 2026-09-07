@@ -9,6 +9,28 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
+type runtimeCorrelationContextKey struct{}
+
+// WithRuntimeCorrelation carries the bounded invocation identity through the
+// parent-private host boundary without changing the customer-facing request
+// or host contracts.
+func WithRuntimeCorrelation(ctx context.Context, correlation string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, runtimeCorrelationContextKey{}, correlation)
+}
+
+// RuntimeCorrelation returns the invocation identity carried by a host
+// operation, if one was supplied by the joined Models flow.
+func RuntimeCorrelation(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	correlation, _ := ctx.Value(runtimeCorrelationContextKey{}).(string)
+	return correlation
+}
+
 // Options supplies explicit host policy and backend effects to Runtime Host.
 // Zero values preserve the characterized legacy HTTP host behavior; managed
 // LocalAI backends require the pinned protocol and compatibility effects.

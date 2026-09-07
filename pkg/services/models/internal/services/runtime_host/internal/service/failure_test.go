@@ -323,6 +323,90 @@ func TestEnsureModelHostDiagnosticsProcessCrashEmitsFailureLogAndMetric(t *testi
 	}
 }
 
+func TestEnsureAndStopModelHostEmitCorrelatedBoundedLifecycleEvidence(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	logger := &capturingDiagnosticsLogger{}
+	sink := &runtimeEvidenceSink{}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "success-diagnostics")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	var process *fakeManagedProcess
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
+			process = newFakeManagedProcess(healthServer.URL, nil)
+			return process
+		},
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		http.DefaultClient,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	ctx := runtimehost.WithRuntimeCorrelation(context.Background(), "models-invocation-42")
+	request := models.EnsureModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"}
+	if _, err := host.EnsureModelHost(ctx, request); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	if _, err := host.StopModelHost(ctx, models.StopModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("StopModelHost: %v", err)
+	}
+	select {
+	case <-process.stopCh:
+	default:
+		t.Fatal("controlled process was not stopped")
+	}
+
+	entries := logger.snapshot()
+	wantMessages := []string{
+		"model host load started",
+		"model host load ready",
+		"model host unload",
+		"model host stopped",
+	}
+	if len(entries) != len(wantMessages) {
+		t.Fatalf("diagnostic entries = %#v, want %d lifecycle entries", entries, len(wantMessages))
+	}
+	for index, entry := range entries {
+		if entry.msg != wantMessages[index] {
+			t.Fatalf("diagnostic[%d] message = %q, want %q", index, entry.msg, wantMessages[index])
+		}
+		if entry.fields["managed_runtime_identity"] != "OMNIVOICE_Q4_K_M" ||
+			entry.fields["backend"] != "LLAMACPP" ||
+			entry.fields["revision"] != "rev-test" ||
+			entry.fields["correlation_id"] != "models-invocation-42" ||
+			entry.fields["duration_millis"] == "" {
+			t.Fatalf("diagnostic[%d] fields = %#v, want bounded correlated identity", index, entry.fields)
+		}
+		if entry.fields["stage"] == "" || entry.fields["outcome"] == "" {
+			t.Fatalf("diagnostic[%d] fields = %#v, want stage and outcome", index, entry.fields)
+		}
+	}
+	records := sink.snapshot()
+	if len(records) != 1 || records[0].Sequence != 1 ||
+		records[0].Stage != modelseffects.RuntimeStageBackendStart ||
+		records[0].Outcome != modelseffects.RuntimeEvidenceOutcomeCompleted {
+		t.Fatalf("success runtime evidence = %#v, want one completed backend-start record", records)
+	}
+}
+
 type capturingDiagnosticsLogger struct {
 	mu   sync.Mutex
 	logs []diagnosticLogEntry
@@ -365,6 +449,14 @@ func (l *capturingDiagnosticsLogger) findWarn(msg string) (diagnosticLogEntry, b
 		}
 	}
 	return diagnosticLogEntry{}, false
+}
+
+func (l *capturingDiagnosticsLogger) snapshot() []diagnosticLogEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entries := make([]diagnosticLogEntry, len(l.logs))
+	copy(entries, l.logs)
+	return entries
 }
 
 type capturingMetricsRecorder struct {

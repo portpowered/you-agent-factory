@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -42,6 +43,7 @@ type Root struct {
 	resolveBackendArtifact     modelseffects.BackendArtifactResolver
 	cacheLifecycleMu           sync.Mutex
 	runtimeMu                  sync.RWMutex
+	correlationSequence        uint64
 	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
 	process                    modelseffects.ProcessDependencies
@@ -463,10 +465,13 @@ func (o *Root) InvokeModelWithLease(
 }
 
 type joinedInvocationPlan struct {
-	modelName string
-	operation models.Operation
-	prepared  models.InvokeModelRequest
-	lease     models.ModelLeaseRef
+	modelName   string
+	backend     string
+	revision    string
+	correlation string
+	operation   models.Operation
+	prepared    models.InvokeModelRequest
+	lease       models.ModelLeaseRef
 }
 
 // InvokeModel owns the complete prepared-model transaction. The injected
@@ -479,11 +484,15 @@ func (o *Root) InvokeModel(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	correlation := nextJoinedInvocationCorrelation(o)
+	ctx = runtimehost.WithRuntimeCorrelation(ctx, correlation)
 	started := joinedInvocationStart(o)
 	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
 	var invocation models.ModelInvocationRef
+	backend := ""
+	revision := ""
 	finish := func(result models.InvokeModelResult, err error) (models.InvokeModelResult, error) {
 		if result.ModelName != "" {
 			modelName = result.ModelName
@@ -512,8 +521,8 @@ func (o *Root) InvokeModel(
 			)
 		}
 		joinedInvocationRecord(
-			o, modelName, operationName, invocation, stage, publicErr,
-			elapsed,
+			o, modelName, operationName, invocation, backend, revision,
+			correlation, stage, publicErr, elapsed,
 		)
 		return result.Clone(), publicErr
 	}
@@ -521,15 +530,19 @@ func (o *Root) InvokeModel(
 	if err := validateJoinedRoot(o); err != nil {
 		return finish(models.InvokeModelResult{}, err)
 	}
-	plan, preparedStage, err := o.prepareJoinedInvocation(ctx, request)
+	plan, preparedStage, err := o.prepareJoinedInvocation(
+		ctx, request, correlation, started,
+	)
 	stage = preparedStage
 	modelName = plan.modelName
 	operationName = plan.operation.Name
+	backend = plan.backend
+	revision = plan.revision
 	if err != nil {
 		return finish(models.InvokeModelResult{}, joinedInvocationContextError(ctx, err))
 	}
 
-	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan)
+	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan, started)
 	stage = invokeStage
 	return finish(result, joinedInvocationContextError(ctx, err))
 }
@@ -559,6 +572,8 @@ func validateJoinedRoot(o *Root) error {
 func (o *Root) prepareJoinedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
+	correlation string,
+	started time.Time,
 ) (joinedInvocationPlan, modelseffects.RuntimeStage, error) {
 	plan := joinedInvocationPlan{}
 	if err := request.ValidateGeneric(); err != nil {
@@ -573,6 +588,9 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	resolved := resolution.Resolved
 	plan.modelName = resolved.Definition.Name
+	plan.backend = resolved.Definition.Backend
+	plan.revision = joinedInvocationRevision(resolved.Definition.Source)
+	plan.correlation = correlation
 	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
@@ -599,12 +617,34 @@ func (o *Root) prepareJoinedInvocation(
 	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
 		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
-	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageArtifactProvision, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
+	ensureResult, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
 		Scope: request.Scope,
 		Name:  plan.modelName,
-	}); err != nil {
+	})
+	if err != nil {
 		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
+	if hostRevision := strings.TrimSpace(ensureResult.Host.Diagnostics["revision"]); hostRevision != "" {
+		plan.revision = hostRevision
+	}
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageBackendStart, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageHealth, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
 	leaseResult, err := o.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
 		Scope: request.Scope, Name: plan.modelName, Holder: request.Holder,
 	})
@@ -675,6 +715,7 @@ func (o *Root) resolveJoinedBackendArtifact(
 func (o *Root) executeJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
+	started time.Time,
 ) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	result, err := o.InvokeModelWithLease(ctx, plan.prepared)
 	result = joinedInvocationResultIdentity(result, plan)
@@ -682,6 +723,11 @@ func (o *Root) executeJoinedInvocation(
 		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 	}
 	if result.Status == models.ModelInvocationStatusCompleted {
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, result.Invocation, joinedLifecycleStageInvoke,
+			joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+		)
 		result.Outputs, err = models.NormalizeGenericInvocationOutputs(
 			plan.operation, result.Content, result.Artifacts,
 		)
@@ -689,6 +735,11 @@ func (o *Root) executeJoinedInvocation(
 			result.Status = models.ModelInvocationStatusFailed
 			return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 		}
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, result.Invocation, joinedLifecycleStageOutput,
+			joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+		)
 	}
 	if result.Status == models.ModelInvocationStatusAccepted {
 		result.Status = models.ModelInvocationStatusFailed
@@ -707,7 +758,21 @@ func (o *Root) executeJoinedInvocation(
 		result.Status = models.ModelInvocationStatusFailed
 		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
-	return o.releaseJoinedInvocation(ctx, plan, result)
+	released, stage, releaseErr := o.releaseJoinedInvocation(ctx, plan, result)
+	if releaseErr != nil {
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, released.Invocation, joinedLifecycleStageRelease,
+			joinedLifecycleOutcomeFailed, joinedInvocationElapsed(o, started), releaseErr,
+		)
+		return released, stage, releaseErr
+	}
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+		plan.operation.Name, released.Invocation, joinedLifecycleStageRelease,
+		joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+	)
+	return released, stage, nil
 }
 
 func (o *Root) finishJoinedFailure(

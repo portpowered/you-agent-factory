@@ -12,6 +12,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
 const (
@@ -67,6 +68,7 @@ type supervisedRuntime struct {
 	loadStarted  time.Time
 	cfg          supervisorSettings
 	identity     supervisedIdentity
+	correlation  string
 }
 
 func (r *supervisedRuntime) hostSnapshotOverlay(
@@ -137,7 +139,9 @@ func (r *supervisedRuntime) ensureReady(
 		return cancelHostError(err)
 	}
 	loadCtx, loadCancel := context.WithCancel(ctx)
-	loadDone, waitDone, alreadyReady := r.beginLoad(identity, loadCancel)
+	loadDone, waitDone, alreadyReady := r.beginLoad(
+		identity, loadCancel, runtimehost.RuntimeCorrelation(ctx),
+	)
 	if alreadyReady {
 		loadCancel()
 		r.notifyAfterLoadStateObservation()
@@ -156,6 +160,7 @@ func (r *supervisedRuntime) ensureReady(
 func (r *supervisedRuntime) beginLoad(
 	identity supervisedIdentity,
 	loadCancel context.CancelFunc,
+	correlation string,
 ) (loadDone, waitDone chan struct{}, alreadyReady bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -170,6 +175,7 @@ func (r *supervisedRuntime) beginLoad(
 		// crash or startup/readiness failure.
 	}
 	r.identity = identity
+	r.correlation = correlation
 	r.state = supervisedStateLoading
 	r.failureClass = hostFailureClassNone
 	r.failureErr = nil
@@ -188,7 +194,7 @@ func (r *supervisedRuntime) startLoad(
 	identity supervisedIdentity,
 	spec modelseffects.HostProcessStartSpec,
 ) error {
-	r.cfg.Diagnostics.logLoadStarted(identity)
+	r.cfg.Diagnostics.logLoadStarted(identity, r.correlation)
 
 	process, err := r.cfg.ProcessLauncher.Start(ctx, spec)
 	if err != nil {
@@ -330,11 +336,15 @@ func (r *supervisedRuntime) markReady(
 		r.mu.Unlock()
 		return false
 	}
+	correlation := r.correlation
+	loadStarted := r.loadStarted
 	r.state = supervisedStateReady
 	r.failureClass = hostFailureClassNone
 	r.failureErr = nil
 	r.mu.Unlock()
-	r.cfg.Diagnostics.logLoadReady(identity)
+	r.cfg.Diagnostics.logLoadReady(
+		identity, correlation, runtimeLoadElapsed(r.cfg.Clock, loadStarted),
+	)
 	go r.watchProcessExit(identity, process, processExit)
 	return true
 }
@@ -430,9 +440,12 @@ func (r *supervisedRuntime) markFailed(
 	loadStarted := r.loadStarted
 	r.endpoint = ""
 	r.process = nil
+	correlation := r.correlation
 	failure := r.failureOutcomeLocked()
 	r.mu.Unlock()
-	r.cfg.Diagnostics.logLoadFailed(identity, class, err, runtimeLoadElapsed(r.cfg.Clock, loadStarted))
+	r.cfg.Diagnostics.logLoadFailed(
+		identity, correlation, class, err, runtimeLoadElapsed(r.cfg.Clock, loadStarted),
+	)
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
 	}
@@ -497,9 +510,12 @@ func (r *supervisedRuntime) watchProcessExit(
 	loadStarted := r.loadStarted
 	r.endpoint = ""
 	r.process = nil
+	correlation := r.correlation
 	failureErr := r.failureErr
 	r.mu.Unlock()
-	r.cfg.Diagnostics.logProcessCrash(identity, failureErr, runtimeLoadElapsed(r.cfg.Clock, loadStarted))
+	r.cfg.Diagnostics.logProcessCrash(
+		identity, correlation, failureErr, runtimeLoadElapsed(r.cfg.Clock, loadStarted),
+	)
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
 	}
@@ -556,6 +572,9 @@ func (r *supervisedRuntime) stop(ctx context.Context) error {
 	process := r.process
 	loadDone := r.loadDone
 	loadCancel := r.loadCancel
+	identity := r.identity
+	correlation := r.correlation
+	loadStarted := r.loadStarted
 	r.process = nil
 	r.endpoint = ""
 	r.state = supervisedStateAbsent
@@ -574,6 +593,11 @@ func (r *supervisedRuntime) stop(ctx context.Context) error {
 	}
 	if loadDone != nil {
 		<-loadDone
+	}
+	if process != nil || loadDone != nil {
+		r.cfg.Diagnostics.logStop(
+			identity, correlation, runtimeLoadElapsed(r.cfg.Clock, loadStarted), stopErr,
+		)
 	}
 	return stopErr
 }

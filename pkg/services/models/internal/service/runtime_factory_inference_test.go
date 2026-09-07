@@ -25,6 +25,7 @@ import (
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type constructionInvocationRuntime struct{}
@@ -556,6 +557,11 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 		result: joinedCompletedResult(t),
 	}
 	root, scope, host := newJoinedInvocationRoot(t, &events, inference)
+	core, observed := observer.New(zap.InfoLevel)
+	root.process = modelseffects.ProcessDependencies{
+		Logger: zap.New(core),
+		Clock:  func() time.Time { return time.Unix(123, 0) },
+	}
 
 	result, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
 	if err != nil {
@@ -579,6 +585,60 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	}
 	if inference.invokeRequest.ModelName != "joined-model" || inference.invokeRequest.Operation != models.OperationOMNI {
 		t.Fatalf("prepared request = %#v, want resolved identity", inference.invokeRequest)
+	}
+
+	stageEntries := observed.FilterMessage("models invocation stage").All()
+	wantStages := []string{
+		joinedLifecycleStageArtifactProvision,
+		joinedLifecycleStageBackendStart,
+		joinedLifecycleStageHealth,
+		joinedLifecycleStageInvoke,
+		joinedLifecycleStageOutput,
+		joinedLifecycleStageRelease,
+	}
+	if len(stageEntries) != len(wantStages) {
+		t.Fatalf("lifecycle stage entries = %d, want %d", len(stageEntries), len(wantStages))
+	}
+	correlation := ""
+	for index, entry := range stageEntries {
+		fields := entry.ContextMap()
+		fieldString := func(name string) string {
+			value, _ := fields[name].(string)
+			return value
+		}
+		if got := fieldString("stage"); got != wantStages[index] {
+			t.Fatalf("lifecycle stage[%d] = %q, want %q", index, got, wantStages[index])
+		}
+		if fieldString("outcome") != joinedLifecycleOutcomeCompleted ||
+			fieldString("model_name") != "joined-model" ||
+			fieldString("backend") != "fixture-backend" ||
+			fields["duration_millis"] == nil {
+			t.Fatalf("lifecycle fields[%d] = %#v, want bounded completed identity", index, fields)
+		}
+		if index == 0 {
+			correlation = fieldString("correlation_id")
+		}
+		if fieldString("correlation_id") != correlation {
+			t.Fatalf("lifecycle correlation[%d] = %q, want %q", index, fieldString("correlation_id"), correlation)
+		}
+		if strings.Contains(fieldString("operation"), "hello") || strings.Contains(fieldString("model_name"), "joined-holder") {
+			t.Fatalf("lifecycle fields[%d] leaked invocation input: %#v", index, fields)
+		}
+	}
+	terminalEntries := observed.FilterMessage("models invocation completed").All()
+	if len(terminalEntries) != 1 {
+		t.Fatalf("terminal entries = %d, want exactly one", len(terminalEntries))
+	}
+	terminal := terminalEntries[0].ContextMap()
+	terminalFieldString := func(name string) string {
+		value, _ := terminal[name].(string)
+		return value
+	}
+	if terminalFieldString("stage") != joinedLifecycleStageTerminal ||
+		terminalFieldString("outcome") != joinedLifecycleOutcomeCompleted ||
+		terminalFieldString("correlation_id") != correlation ||
+		terminalFieldString("runtime_stage") != string(modelseffects.RuntimeStageInvoke) {
+		t.Fatalf("terminal fields = %#v, want one correlated completed terminal", terminal)
 	}
 }
 

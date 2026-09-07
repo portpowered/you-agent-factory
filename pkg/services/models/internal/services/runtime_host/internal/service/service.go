@@ -266,6 +266,9 @@ func (s *service) StopModelHost(
 	}
 	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
 	identity := supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, request.Name)
+	if identity.Revision == "" {
+		identity.Revision = strings.TrimSpace(inspection.Revision)
+	}
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 
 	slotKey := runtimeSlotKey(request.Scope, request.Name)
@@ -284,7 +287,9 @@ func (s *service) StopModelHost(
 	s.mu.Unlock()
 
 	if wasLoaded {
-		s.supervisor.Diagnostics.logUnload(identity, "explicit")
+		s.supervisor.Diagnostics.logUnload(
+			identity, runtimehost.RuntimeCorrelation(ctx), "explicit",
+		)
 		if err := s.unloadRuntime(ctx, identity, slotKey); err != nil {
 			return models.StopModelHostResult{}, err
 		}
