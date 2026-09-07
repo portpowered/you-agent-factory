@@ -3,8 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -633,6 +631,243 @@ func TestPrepareModelAssetsRetriesTimeoutThenReturnsSourceFailure(t *testing.T) 
 	}
 }
 
+func TestPrepareGenericAssetsFetchesManifestWhenRequirementsAreOmitted(t *testing.T) {
+	t.Parallel()
+	body := []byte("manifest-discovered model")
+	scopes := newScopes(t, "generic-manifest-discovery")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, genericManifestClient("weights.bin", body, func() []byte { return body }), func(string) string { return "" })
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{Scope: scope, Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision}})
+	if err != nil || result.Outcome != models.AssetPreparationPrepared || len(result.Asset.Artifacts) != 1 || result.Asset.Artifacts[0].Name != "weights.bin" || result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
+		t.Fatalf("manifest-discovered result = %#v", result)
+	}
+}
+
+func TestPreflightGenericAssetsReportsMissingBytesWithoutReadingHEADBody(t *testing.T) {
+	t.Parallel()
+
+	modelBody := []byte("model weights")
+	backendBody := []byte("backend archive")
+	modelPath := filepath.Join(t.TempDir(), "model.bin")
+	if err := os.WriteFile(modelPath, modelBody, 0o644); err != nil {
+		t.Fatalf("write model fixture: %v", err)
+	}
+	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
+	var methods []string
+	var headBody preflightTrackingReadCloser
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method)
+		headBody = preflightTrackingReadCloser{reader: bytes.NewReader(backendBody)}
+		return &http.Response{StatusCode: http.StatusOK, Body: &headBody, ContentLength: int64(len(backendBody))}, nil
+	})
+	scopes := newScopes(t, "preflight-estimate")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	request := models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "model", Reference: models.ModelReference{NameOrURI: modelPath},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody)}},
+		Backend:   "fixture-backend", BackendReference: models.ModelReference{NameOrURI: backendURL},
+		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody)}},
+	}
+
+	result, err := service.PreflightModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	if result.ModelName != "model" || result.BackendBytes != int64(len(backendBody)) ||
+		result.ModelBytes != int64(len(modelBody)) || result.TotalBytes != int64(len(modelBody)+len(backendBody)) ||
+		!result.BackendDownloadRequired || !result.ModelDownloadRequired {
+		t.Fatalf("preflight result = %#v, want exact missing byte totals", result)
+	}
+	if !reflect.DeepEqual(methods, []string{http.MethodHead}) {
+		t.Fatalf("preflight methods = %#v, want backend HEAD only", methods)
+	}
+	if headBody.reads.Load() != 0 || headBody.closed.Load() != 1 {
+		t.Fatalf("HEAD body reads/closes = %d/%d, want 0/1", headBody.reads.Load(), headBody.closed.Load())
+	}
+}
+
+func TestPreflightGenericAssetsUsesHEADLengthForZeroDeclaredSizes(t *testing.T) {
+	t.Parallel()
+
+	modelBody := []byte("model weights")
+	backendBody := []byte("backend archive")
+	modelURL := "https://github.com/owner/model/releases/download/v1/model.bin"
+	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
+	var requests []string
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.String())
+		var body []byte
+		switch request.URL.String() {
+		case modelURL:
+			body = modelBody
+		case backendURL:
+			body = backendBody
+		default:
+			return nil, fmt.Errorf("unexpected preflight URL %q", request.URL.String())
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body))}, nil
+	})
+	scopes := newScopes(t, "preflight-head-length")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "model", Reference: models.ModelReference{NameOrURI: modelURL},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: 0, SHA256: sha256Hex(modelBody)}},
+		Backend:   "fixture-backend", BackendReference: models.ModelReference{NameOrURI: backendURL},
+		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: 0, SHA256: sha256Hex(backendBody)}},
+	})
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	wantModelBytes := int64(len(modelBody))
+	wantBackendBytes := int64(len(backendBody))
+	if result.ModelBytes != wantModelBytes || result.BackendBytes != wantBackendBytes ||
+		result.TotalBytes != wantModelBytes+wantBackendBytes || !result.ModelDownloadRequired || !result.BackendDownloadRequired {
+		t.Fatalf("preflight result = %#v, want HEAD-derived model/backend/total bytes", result)
+	}
+	wantRequests := []string{http.MethodHead + " " + backendURL, http.MethodHead + " " + modelURL}
+	if !reflect.DeepEqual(requests, wantRequests) {
+		t.Fatalf("preflight requests = %#v, want backend then model HEAD requests", requests)
+	}
+}
+
+func TestPreflightGenericAssetsRejectsUnavailableMissingSize(t *testing.T) {
+	t.Parallel()
+
+	for _, contentLength := range []int64{0, -1} {
+		contentLength := contentLength
+		t.Run(fmt.Sprintf("content-length-%d", contentLength), func(t *testing.T) {
+			t.Parallel()
+
+			var methods []string
+			client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+				methods = append(methods, request.Method+" "+request.URL.Path)
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("private source body")), ContentLength: contentLength}, nil
+			})
+			scopes := newScopes(t, fmt.Sprintf("preflight-unknown-size-%d", contentLength))
+			scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+			service := newGenericService(t, scopes, client, func(string) string { return "" })
+			_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+				Scope: scope, Name: "model",
+				Reference: models.ModelReference{NameOrURI: "https://github.com/owner/repo/releases/download/v1/model.bin"},
+				Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
+			})
+			if !errors.Is(err, models.ErrSourceFetchFailed) {
+				t.Fatalf("preflight error = %v, want ErrSourceFetchFailed", err)
+			}
+			if errors.Is(err, models.ErrAssetOffline) || strings.Contains(err.Error(), "private source body") {
+				t.Fatalf("preflight error = %v, want safe typed unknown-size failure", err)
+			}
+			if !reflect.DeepEqual(methods, []string{http.MethodHead + " /owner/repo/releases/download/v1/model.bin"}) {
+				t.Fatalf("preflight methods = %#v, want one HEAD", methods)
+			}
+		})
+	}
+}
+
+func TestPreflightGenericAssetsResolvesUnknownHFManifestSizeWithHEAD(t *testing.T) {
+	t.Parallel()
+
+	modelURLPath := "/owner/repo/resolve/" + genericTestRevision + "/model.bin"
+	var methods []string
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method+" "+request.URL.Path)
+		if request.URL.Path == "/models/owner/repo" {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"sha":"` + genericTestRevision + `","siblings":[{"rfilename":"model.bin"}]}`))}, nil
+		}
+		if request.URL.Path == modelURLPath && request.Method == http.MethodHead {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("unused")), ContentLength: 12}, nil
+		}
+		return nil, fmt.Errorf("unexpected preflight request %s %s", request.Method, request.URL.Path)
+	})
+	scopes := newScopes(t, "preflight-hf-head-size")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "model", Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
+	})
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	if result.ModelBytes != 12 || result.TotalBytes != 12 || !result.ModelDownloadRequired {
+		t.Fatalf("preflight result = %#v, want HEAD-resolved positive model bytes", result)
+	}
+	if !reflect.DeepEqual(methods, []string{http.MethodGet + " /models/owner/repo", http.MethodHead + " " + modelURLPath}) {
+		t.Fatalf("preflight methods = %#v, want manifest GET then artifact HEAD", methods)
+	}
+}
+
+func TestPreflightGenericAssetsStopsBeforeModelMetadataWhenBackendHEADFails(t *testing.T) {
+	t.Parallel()
+
+	var methods []string
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		methods = append(methods, request.Method+" "+request.URL.Path)
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("private backend response"))}, nil
+	})
+	scopes := newScopes(t, "preflight-backend-failure")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "model", Reference: models.ModelReference{NameOrURI: "hf://owner/repo/model.bin@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin"}}, Backend: "fixture-backend",
+		BackendReference: models.ModelReference{NameOrURI: "https://github.com/owner/backend/releases/download/v1/backend.bin"},
+		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: 4, SHA256: strings.Repeat("a", 64)}},
+	})
+	if !errors.Is(err, models.ErrAssetBackendNotReady) {
+		t.Fatalf("preflight error = %v, want ErrAssetBackendNotReady", err)
+	}
+	if !reflect.DeepEqual(methods, []string{http.MethodHead + " /owner/backend/releases/download/v1/backend.bin"}) {
+		t.Fatalf("backend failure methods = %#v, want one HEAD before model metadata", methods)
+	}
+	if strings.Contains(err.Error(), "private backend response") {
+		t.Fatalf("preflight error leaked backend response body: %v", err)
+	}
+}
+
+func TestPreflightGenericAssetsRejectsOverflowBeforeRemoteEffects(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	client := httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		requests.Add(1)
+		return nil, errors.New("overflow preflight must not use network")
+	})
+	scopes := newScopes(t, "preflight-overflow")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "model", Reference: models.ModelReference{NameOrURI: "hf://owner/repo/model.bin@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: math.MaxInt64, SHA256: strings.Repeat("a", 64)}},
+		Backend:   "fixture-backend", BackendReference: models.ModelReference{NameOrURI: "https://github.com/owner/backend/releases/download/v1/backend.bin"},
+		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: 1, SHA256: strings.Repeat("b", 64)}},
+	})
+	if !errors.Is(err, models.ErrAssetEstimateOverflow) {
+		t.Fatalf("overflow error = %v, want ErrAssetEstimateOverflow", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("overflow preflight HTTP requests = %d, want 0", requests.Load())
+	}
+}
+
+type preflightTrackingReadCloser struct {
+	reader *bytes.Reader
+	reads  atomic.Int32
+	closed atomic.Int32
+}
+
+func (body *preflightTrackingReadCloser) Read(buffer []byte) (int, error) {
+	body.reads.Add(1)
+	return body.reader.Read(buffer)
+}
+
+func (body *preflightTrackingReadCloser) Close() error {
+	body.closed.Add(1)
+	return nil
+}
+
 func newPreparationTestService(
 	scopes runtimescopes.Service,
 	client modelseffects.AssetHTTPDoer,
@@ -684,355 +919,4 @@ func mustPreparationLockingService() platformlocking.Service {
 		panic(err)
 	}
 	return service
-}
-
-func writeVerifiedCacheFixture(t *testing.T, cacheDirectory string) {
-	t.Helper()
-	baseBody := []byte("cached base")
-	tokenizerBody := []byte("cached tokenizer")
-	root := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
-	revision := filepath.Join(root, "verified-revision")
-	if err := os.MkdirAll(revision, 0o755); err != nil {
-		t.Fatalf("create verified cache: %v", err)
-	}
-	files := []struct {
-		name string
-		body []byte
-	}{
-		{name: "omnivoice-base-Q4_K_M.gguf", body: baseBody},
-		{name: "omnivoice-tokenizer-Q4_K_M.gguf", body: tokenizerBody},
-	}
-	metadata := cacheMetadata{ModelName: "OMNIVOICE_Q4_K_M", Revision: "verified-revision"}
-	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(revision, file.name), file.body, 0o644); err != nil {
-			t.Fatalf("write verified asset: %v", err)
-		}
-		metadata.Files = append(metadata.Files, metadataFile{
-			Path: file.name, Bytes: int64(len(file.body)), SHA256: sha256String(file.body),
-		})
-	}
-	body, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal verified metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, metadataFileName), body, 0o644); err != nil {
-		t.Fatalf("write verified metadata: %v", err)
-	}
-}
-
-func sha256String(body []byte) string {
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:])
-}
-
-func assertFileBody(t *testing.T, path string, want []byte) {
-	t.Helper()
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %q: %v", path, err)
-	}
-	if string(got) != string(want) {
-		t.Fatalf("file %q = %q, want %q", path, got, want)
-	}
-}
-
-type httpDoerFunc func(*http.Request) (*http.Response, error)
-
-func (do httpDoerFunc) Do(request *http.Request) (*http.Response, error) {
-	return do(request)
-}
-
-type timeoutTestError struct{}
-
-func (timeoutTestError) Error() string   { return "timeout" }
-func (timeoutTestError) Timeout() bool   { return true }
-func (timeoutTestError) Temporary() bool { return true }
-
-func TestPrepareGenericAssetsFetchesManifestWhenRequirementsAreOmitted(t *testing.T) {
-	t.Parallel()
-	body := []byte("manifest-discovered model")
-	scopes := newScopes(t, "generic-manifest-discovery")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, genericManifestClient("weights.bin", body, func() []byte { return body }), func(string) string { return "" })
-	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{Scope: scope, Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision}})
-	if err != nil || result.Outcome != models.AssetPreparationPrepared || len(result.Asset.Artifacts) != 1 || result.Asset.Artifacts[0].Name != "weights.bin" || result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
-		t.Fatalf("manifest-discovered result = %#v", result)
-	}
-}
-
-func TestPreflightGenericAssetsReportsMissingBytesWithoutReadingHEADBody(t *testing.T) {
-	t.Parallel()
-
-	modelBody := []byte("model weights")
-	backendBody := []byte("backend archive")
-	modelPath := filepath.Join(t.TempDir(), "model.bin")
-	if err := os.WriteFile(modelPath, modelBody, 0o644); err != nil {
-		t.Fatalf("write model fixture: %v", err)
-	}
-	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
-	var methods []string
-	var headBody preflightTrackingReadCloser
-	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-		methods = append(methods, request.Method)
-		headBody = preflightTrackingReadCloser{reader: bytes.NewReader(backendBody)}
-		return &http.Response{
-			StatusCode:    http.StatusOK,
-			Body:          &headBody,
-			ContentLength: int64(len(backendBody)),
-		}, nil
-	})
-	scopes := newScopes(t, "preflight-estimate")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-	request := models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "model",
-		Reference: models.ModelReference{NameOrURI: modelPath},
-		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody)}},
-		Backend:   "fixture-backend",
-		BackendReference: models.ModelReference{
-			NameOrURI: backendURL,
-		},
-		BackendArtifacts: []models.AssetRequirement{{
-			Name: "backend.bin", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
-		}},
-	}
-
-	result, err := service.PreflightModelAssets(context.Background(), request)
-	if err != nil {
-		t.Fatalf("PreflightModelAssets: %v", err)
-	}
-	if result.ModelName != "model" || result.BackendBytes != int64(len(backendBody)) ||
-		result.ModelBytes != int64(len(modelBody)) || result.TotalBytes != int64(len(modelBody)+len(backendBody)) ||
-		!result.BackendDownloadRequired || !result.ModelDownloadRequired {
-		t.Fatalf("preflight result = %#v, want exact missing byte totals", result)
-	}
-	if !reflect.DeepEqual(methods, []string{http.MethodHead}) {
-		t.Fatalf("preflight methods = %#v, want backend HEAD only", methods)
-	}
-	if headBody.reads.Load() != 0 || headBody.closed.Load() != 1 {
-		t.Fatalf("HEAD body reads/closes = %d/%d, want 0/1", headBody.reads.Load(), headBody.closed.Load())
-	}
-}
-
-func TestPreflightGenericAssetsUsesHEADLengthForZeroDeclaredSizes(t *testing.T) {
-	t.Parallel()
-
-	modelBody := []byte("model weights")
-	backendBody := []byte("backend archive")
-	modelURL := "https://github.com/owner/model/releases/download/v1/model.bin"
-	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
-	var requests []string
-	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-		requests = append(requests, request.Method+" "+request.URL.String())
-		var body []byte
-		switch request.URL.String() {
-		case modelURL:
-			body = modelBody
-		case backendURL:
-			body = backendBody
-		default:
-			return nil, fmt.Errorf("unexpected preflight URL %q", request.URL.String())
-		}
-		return &http.Response{
-			StatusCode:    http.StatusOK,
-			Body:          io.NopCloser(bytes.NewReader(body)),
-			ContentLength: int64(len(body)),
-		}, nil
-	})
-	scopes := newScopes(t, "preflight-head-length")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-
-	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "model",
-		Reference: models.ModelReference{NameOrURI: modelURL},
-		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: 0, SHA256: sha256Hex(modelBody)}},
-		Backend:   "fixture-backend",
-		BackendReference: models.ModelReference{
-			NameOrURI: backendURL,
-		},
-		BackendArtifacts: []models.AssetRequirement{{
-			Name: "backend.bin", Bytes: 0, SHA256: sha256Hex(backendBody),
-		}},
-	})
-	if err != nil {
-		t.Fatalf("PreflightModelAssets: %v", err)
-	}
-	wantModelBytes := int64(len(modelBody))
-	wantBackendBytes := int64(len(backendBody))
-	if result.ModelBytes != wantModelBytes || result.BackendBytes != wantBackendBytes ||
-		result.TotalBytes != wantModelBytes+wantBackendBytes ||
-		!result.ModelDownloadRequired || !result.BackendDownloadRequired {
-		t.Fatalf("preflight result = %#v, want HEAD-derived model/backend/total bytes", result)
-	}
-	wantRequests := []string{http.MethodHead + " " + backendURL, http.MethodHead + " " + modelURL}
-	if !reflect.DeepEqual(requests, wantRequests) {
-		t.Fatalf("preflight requests = %#v, want backend then model HEAD requests", requests)
-	}
-}
-
-func TestPreflightGenericAssetsRejectsUnavailableMissingSize(t *testing.T) {
-	t.Parallel()
-
-	for _, contentLength := range []int64{0, -1} {
-		contentLength := contentLength
-		t.Run(fmt.Sprintf("content-length-%d", contentLength), func(t *testing.T) {
-			t.Parallel()
-
-			var methods []string
-			client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-				methods = append(methods, request.Method+" "+request.URL.Path)
-				return &http.Response{
-					StatusCode:    http.StatusOK,
-					Body:          io.NopCloser(strings.NewReader("private source body")),
-					ContentLength: contentLength,
-				}, nil
-			})
-			scopes := newScopes(t, fmt.Sprintf("preflight-unknown-size-%d", contentLength))
-			scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-			service := newGenericService(t, scopes, client, func(string) string { return "" })
-
-			_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-				Scope:     scope,
-				Name:      "model",
-				Reference: models.ModelReference{NameOrURI: "https://github.com/owner/repo/releases/download/v1/model.bin"},
-				Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
-			})
-			if !errors.Is(err, models.ErrSourceFetchFailed) {
-				t.Fatalf("preflight error = %v, want ErrSourceFetchFailed", err)
-			}
-			if errors.Is(err, models.ErrAssetOffline) || strings.Contains(err.Error(), "private source body") {
-				t.Fatalf("preflight error = %v, want safe typed unknown-size failure", err)
-			}
-			if !reflect.DeepEqual(methods, []string{http.MethodHead + " /owner/repo/releases/download/v1/model.bin"}) {
-				t.Fatalf("preflight methods = %#v, want one HEAD", methods)
-			}
-		})
-	}
-}
-
-func TestPreflightGenericAssetsResolvesUnknownHFManifestSizeWithHEAD(t *testing.T) {
-	t.Parallel()
-
-	modelURLPath := "/owner/repo/resolve/" + genericTestRevision + "/model.bin"
-	var methods []string
-	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-		methods = append(methods, request.Method+" "+request.URL.Path)
-		if request.URL.Path == "/models/owner/repo" {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"sha":"` + genericTestRevision + `","siblings":[{"rfilename":"model.bin"}]}`)),
-			}, nil
-		}
-		if request.URL.Path == modelURLPath && request.Method == http.MethodHead {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("unused")), ContentLength: 12}, nil
-		}
-		return nil, fmt.Errorf("unexpected preflight request %s %s", request.Method, request.URL.Path)
-	})
-	scopes := newScopes(t, "preflight-hf-head-size")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-
-	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "model",
-		Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision},
-		Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
-	})
-	if err != nil {
-		t.Fatalf("PreflightModelAssets: %v", err)
-	}
-	if result.ModelBytes != 12 || result.TotalBytes != 12 || !result.ModelDownloadRequired {
-		t.Fatalf("preflight result = %#v, want HEAD-resolved positive model bytes", result)
-	}
-	if !reflect.DeepEqual(methods, []string{
-		http.MethodGet + " /models/owner/repo",
-		http.MethodHead + " " + modelURLPath,
-	}) {
-		t.Fatalf("preflight methods = %#v, want manifest GET then artifact HEAD", methods)
-	}
-}
-
-func TestPreflightGenericAssetsStopsBeforeModelMetadataWhenBackendHEADFails(t *testing.T) {
-	t.Parallel()
-
-	var methods []string
-	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
-		methods = append(methods, request.Method+" "+request.URL.Path)
-		return &http.Response{
-			StatusCode: http.StatusNotFound,
-			Body:       io.NopCloser(strings.NewReader("private backend response")),
-		}, nil
-	})
-	scopes := newScopes(t, "preflight-backend-failure")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-	_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "model",
-		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/model.bin@" + genericTestRevision},
-		Artifacts: []models.AssetRequirement{{Name: "model.bin"}},
-		Backend:   "fixture-backend",
-		BackendReference: models.ModelReference{
-			NameOrURI: "https://github.com/owner/backend/releases/download/v1/backend.bin",
-		},
-		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: 4, SHA256: strings.Repeat("a", 64)}},
-	})
-	if !errors.Is(err, models.ErrAssetBackendNotReady) {
-		t.Fatalf("preflight error = %v, want ErrAssetBackendNotReady", err)
-	}
-	if !reflect.DeepEqual(methods, []string{http.MethodHead + " /owner/backend/releases/download/v1/backend.bin"}) {
-		t.Fatalf("backend failure methods = %#v, want one HEAD before model metadata", methods)
-	}
-	if strings.Contains(err.Error(), "private backend response") {
-		t.Fatalf("preflight error leaked backend response body: %v", err)
-	}
-}
-
-func TestPreflightGenericAssetsRejectsOverflowBeforeRemoteEffects(t *testing.T) {
-	t.Parallel()
-
-	var requests atomic.Int32
-	client := httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		requests.Add(1)
-		return nil, errors.New("overflow preflight must not use network")
-	})
-	scopes := newScopes(t, "preflight-overflow")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-	_, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Name:      "model",
-		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/model.bin@" + genericTestRevision},
-		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: math.MaxInt64, SHA256: strings.Repeat("a", 64)}},
-		Backend:   "fixture-backend",
-		BackendReference: models.ModelReference{
-			NameOrURI: "https://github.com/owner/backend/releases/download/v1/backend.bin",
-		},
-		BackendArtifacts: []models.AssetRequirement{{Name: "backend.bin", Bytes: 1, SHA256: strings.Repeat("b", 64)}},
-	})
-	if !errors.Is(err, models.ErrAssetEstimateOverflow) {
-		t.Fatalf("overflow error = %v, want ErrAssetEstimateOverflow", err)
-	}
-	if requests.Load() != 0 {
-		t.Fatalf("overflow preflight HTTP requests = %d, want 0", requests.Load())
-	}
-}
-
-type preflightTrackingReadCloser struct {
-	reader *bytes.Reader
-	reads  atomic.Int32
-	closed atomic.Int32
-}
-
-func (body *preflightTrackingReadCloser) Read(buffer []byte) (int, error) {
-	body.reads.Add(1)
-	return body.reader.Read(buffer)
-}
-
-func (body *preflightTrackingReadCloser) Close() error {
-	body.closed.Add(1)
-	return nil
 }
