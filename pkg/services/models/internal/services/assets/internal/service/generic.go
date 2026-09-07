@@ -184,6 +184,7 @@ func (s *service) rememberGenericPreparedRuntime(
 		var err error
 		runtimeInspection, err = s.publishGenericRuntimeCache(
 			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
+			backendResult, plan.backendSource.revision,
 		)
 		if err != nil {
 			return err

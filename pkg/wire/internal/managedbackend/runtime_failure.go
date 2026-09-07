@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -13,12 +14,21 @@ const (
 	runtimeFailureTimedOut     = "TIMED_OUT"
 	runtimeFailureExtraction   = "EXTRACTION_FAILED"
 	runtimeFailureProcessStart = "PROCESS_START_FAILED"
+
+	runtimeSubcauseArchiveSelection    = "ARCHIVE_SELECTION"
+	runtimeSubcauseArchiveOpen         = "ARCHIVE_OPEN"
+	runtimeSubcauseEntryValidation     = "ENTRY_VALIDATION"
+	runtimeSubcauseEntryCopy           = "ENTRY_COPY"
+	runtimeSubcauseExecutableDiscovery = "EXECUTABLE_DISCOVERY"
+	runtimeSubcauseEndpointReservation = "ENDPOINT_RESERVATION"
+	runtimeSubcauseCleanup             = "CLEANUP"
 )
 
 type runtimeStageError struct {
-	stage string
-	class string
-	cause error
+	stage    string
+	class    string
+	subcause string
+	cause    error
 }
 
 func (failure *runtimeStageError) Error() string {
@@ -49,15 +59,51 @@ func (failure *runtimeStageError) ModelRuntimeFailureClass() string {
 	return failure.class
 }
 
+func (failure *runtimeStageError) ModelRuntimeFailureSubcause() string {
+	if failure == nil {
+		return ""
+	}
+	return failure.subcause
+}
+
 type runtimeFailureClassifier interface {
 	ModelRuntimeStage() string
 	ModelRuntimeFailureClass() string
 }
 
-// WrapBackendExtractFailure marks archive selection, extraction, and launch
-// materialization failures without exposing the archive path or nested error.
-func WrapBackendExtractFailure(err error) error {
-	return wrapRuntimeStageFailure(runtimeStageBackendExtract, runtimeFailureClass(err, runtimeFailureExtraction), err)
+type runtimeFailureSubcauseClassifier interface {
+	ModelRuntimeFailureSubcause() string
+}
+
+// WrapBackendExtractFailure marks one archive selection/materialization
+// operation without exposing the archive path or nested error.
+func WrapBackendExtractFailure(subcause string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var classifier runtimeFailureClassifier
+	if errors.As(err, &classifier) && classifier != nil &&
+		classifier.ModelRuntimeStage() != "" &&
+		classifier.ModelRuntimeFailureClass() != "" {
+		var subcauseClassifier runtimeFailureSubcauseClassifier
+		if errors.As(err, &subcauseClassifier) && subcauseClassifier != nil &&
+			normalizeRuntimeFailureSubcause(subcauseClassifier.ModelRuntimeFailureSubcause()) != "" {
+			return err
+		}
+	}
+	return newBackendExtractFailure(subcause, err)
+}
+
+func newBackendExtractFailure(subcause string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &runtimeStageError{
+		stage:    runtimeStageBackendExtract,
+		class:    runtimeFailureClass(err, runtimeFailureExtraction),
+		subcause: normalizeRuntimeFailureSubcause(subcause),
+		cause:    err,
+	}
 }
 
 // WrapBackendStartFailure marks the OS process start boundary while preserving
@@ -85,5 +131,21 @@ func runtimeFailureClass(err error, fallback string) string {
 		return runtimeFailureTimedOut
 	default:
 		return fallback
+	}
+}
+
+func normalizeRuntimeFailureSubcause(subcause string) string {
+	value := strings.ToUpper(strings.TrimSpace(subcause))
+	switch value {
+	case runtimeSubcauseArchiveSelection,
+		runtimeSubcauseArchiveOpen,
+		runtimeSubcauseEntryValidation,
+		runtimeSubcauseEntryCopy,
+		runtimeSubcauseExecutableDiscovery,
+		runtimeSubcauseEndpointReservation,
+		runtimeSubcauseCleanup:
+		return value
+	default:
+		return ""
 	}
 }

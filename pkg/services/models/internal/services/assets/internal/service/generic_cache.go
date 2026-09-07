@@ -259,17 +259,49 @@ func (s *service) publishGenericCache(
 		)
 	}
 	committed = true
+
+	result, err := s.committedGenericCacheResult(artifactKind, artifacts, published, finalPath)
+	if err != nil {
+		return genericCacheResult{}, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "validate committed asset snapshot", "", err,
+		)
+	}
 	if hadExisting {
 		if err := s.removeTree(backupPath); err != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, published), pullsupport.WrapPullStage(
+			return result, pullsupport.WrapPullStage(
 				models.PullStageCacheInstallation, "", "clean replaced asset snapshot", "",
 				interruptedAssetError("clean replaced asset snapshot", err),
 			)
 		}
 	}
-	result := cacheResultFromPaths(artifactKind, artifacts, published)
-	result.snapshotPath = finalPath
 	result.prepared = true
+	return result, nil
+}
+
+func (s *service) committedGenericCacheResult(
+	kind models.AssetArtifactKind,
+	artifacts []genericArtifact,
+	published map[string]genericCachePath,
+	finalPath string,
+) (genericCacheResult, error) {
+	absoluteRoot, err := filepath.Abs(finalPath)
+	if err != nil {
+		return genericCacheResult{}, interruptedAssetError("resolve committed asset snapshot", err)
+	}
+	rebased := make(map[string]genericCachePath, len(published))
+	for name, artifact := range published {
+		artifact.path = filepath.Join(absoluteRoot, filepath.FromSlash(name))
+		info, statErr := s.inspectPath(artifact.path)
+		if statErr != nil {
+			return genericCacheResult{}, interruptedAssetError("validate committed asset file", statErr)
+		}
+		if info == nil || !info.Mode().IsRegular() {
+			return genericCacheResult{}, fmt.Errorf("committed asset is not a regular file")
+		}
+		rebased[name] = artifact
+	}
+	result := cacheResultFromPaths(kind, artifacts, rebased)
+	result.snapshotPath = absoluteRoot
 	return result, nil
 }
 

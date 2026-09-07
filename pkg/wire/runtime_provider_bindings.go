@@ -322,8 +322,9 @@ type modelsManagedProcess struct {
 	mu             sync.Mutex
 	cmd            *exec.Cmd
 	healthEndpoint string
-	cleanup        func()
+	cleanup        func() error
 	cleanupOnce    sync.Once
+	cleanupErr     error
 	processID      int
 	backend        string
 	recorder       managedChildEnvironmentRecorder
@@ -376,7 +377,12 @@ func (p *modelsManagedProcess) cleanupResources() {
 	if p == nil || p.cleanup == nil {
 		return
 	}
-	p.cleanupOnce.Do(p.cleanup)
+	p.cleanupOnce.Do(func() {
+		cleanupErr := p.cleanup()
+		p.mu.Lock()
+		p.cleanupErr = cleanupErr
+		p.mu.Unlock()
+	})
 }
 
 func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }
@@ -387,8 +393,15 @@ func (p *modelsManagedProcess) Wait() error {
 	}
 	<-p.finished
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.waitErr
+	waitErr, cleanupErr := p.waitErr, p.cleanupErr
+	p.mu.Unlock()
+	if cleanupErr != nil {
+		if waitErr == nil {
+			return cleanupErr
+		}
+		return errors.Join(waitErr, cleanupErr)
+	}
+	return waitErr
 }
 
 func (p *modelsManagedProcess) Stop(ctx context.Context) error {

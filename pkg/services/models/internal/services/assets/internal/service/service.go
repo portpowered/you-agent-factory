@@ -62,15 +62,26 @@ type assetSpec struct {
 }
 
 type cacheMetadata struct {
-	ModelName string         `json:"modelName"`
-	Revision  string         `json:"revision"`
-	Files     []metadataFile `json:"files"`
+	ModelName string                  `json:"modelName"`
+	Revision  string                  `json:"revision"`
+	Files     []metadataFile          `json:"files"`
+	Backend   *runtimeBackendMetadata `json:"backend,omitempty"`
 }
 
 type metadataFile struct {
 	Path   string `json:"path"`
 	Bytes  int64  `json:"bytes,omitempty"`
 	SHA256 string `json:"sha256,omitempty"`
+}
+
+// runtimeBackendMetadata records the content-addressed backend snapshot that
+// belongs to a managed generic model runtime. It is deliberately private to
+// the asset service: peers receive resolved runtime paths, never this cache
+// representation.
+type runtimeBackendMetadata struct {
+	CachePath string         `json:"cachePath"`
+	Revision  string         `json:"revision,omitempty"`
+	Files     []metadataFile `json:"files"`
 }
 
 type activePullState struct {
@@ -191,7 +202,7 @@ func (s *service) ResolveRuntimeCache(
 	}
 	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
 	if errors.Is(err, models.ErrAssetSourceUnsupported) {
-		return s.resolveGenericRuntimeCache(ctx, scope, request.Name)
+		return s.resolveGenericRuntimeCache(ctx, scope, request.Scope, request.Name)
 	}
 	if err != nil {
 		return assets.RuntimeCacheLayout{}, err

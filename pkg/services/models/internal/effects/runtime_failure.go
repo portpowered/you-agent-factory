@@ -49,13 +49,29 @@ const (
 	RuntimeFailureTimedOut             RuntimeFailureClass = "TIMED_OUT"
 )
 
+// RuntimeFailureSubcause identifies one bounded private materialization
+// operation. It is intentionally narrower than RuntimeFailureClass and is
+// omitted for successful records and failures outside archive handling.
+type RuntimeFailureSubcause string
+
+const (
+	RuntimeSubcauseArchiveSelection    RuntimeFailureSubcause = "ARCHIVE_SELECTION"
+	RuntimeSubcauseArchiveOpen         RuntimeFailureSubcause = "ARCHIVE_OPEN"
+	RuntimeSubcauseEntryValidation     RuntimeFailureSubcause = "ENTRY_VALIDATION"
+	RuntimeSubcauseEntryCopy           RuntimeFailureSubcause = "ENTRY_COPY"
+	RuntimeSubcauseExecutableDiscovery RuntimeFailureSubcause = "EXECUTABLE_DISCOVERY"
+	RuntimeSubcauseEndpointReservation RuntimeFailureSubcause = "ENDPOINT_RESERVATION"
+	RuntimeSubcauseCleanup             RuntimeFailureSubcause = "CLEANUP"
+)
+
 // RuntimeStageError carries a bounded stage and class around an existing
 // typed error. Error deliberately excludes Cause.Error() so a caller cannot
 // accidentally publish a token, URL, endpoint, path, prompt, or media body.
 type RuntimeStageError struct {
-	Stage RuntimeStage
-	Class RuntimeFailureClass
-	Cause error
+	Stage    RuntimeStage
+	Class    RuntimeFailureClass
+	Subcause RuntimeFailureSubcause
+	Cause    error
 }
 
 func (failure *RuntimeStageError) Error() string {
@@ -87,12 +103,26 @@ func (failure *RuntimeStageError) ModelRuntimeFailureClass() string {
 	return string(failure.Class)
 }
 
+func (failure *RuntimeStageError) ModelRuntimeFailureSubcause() string {
+	if failure == nil {
+		return ""
+	}
+	return string(failure.Subcause)
+}
+
 // RuntimeFailureClassifier is implemented by private runtime errors across
 // the Models and composition packages. The string boundary avoids an import
 // cycle between the private Models effects package and the process launcher.
 type RuntimeFailureClassifier interface {
 	ModelRuntimeStage() string
 	ModelRuntimeFailureClass() string
+}
+
+// RuntimeFailureSubcauseClassifier is optional so existing private runtime
+// classifiers remain source-compatible while archive failures can carry one
+// precise bounded operation.
+type RuntimeFailureSubcauseClassifier interface {
+	ModelRuntimeFailureSubcause() string
 }
 
 // NewRuntimeStageError constructs one safe private wrapper. A nil cause is
@@ -102,10 +132,22 @@ func NewRuntimeStageError(
 	class RuntimeFailureClass,
 	cause error,
 ) *RuntimeStageError {
+	return NewRuntimeStageErrorWithSubcause(stage, class, "", cause)
+}
+
+// NewRuntimeStageErrorWithSubcause constructs a bounded private wrapper with
+// an optional allow-listed archive operation.
+func NewRuntimeStageErrorWithSubcause(
+	stage RuntimeStage,
+	class RuntimeFailureClass,
+	subcause RuntimeFailureSubcause,
+	cause error,
+) *RuntimeStageError {
 	return &RuntimeStageError{
-		Stage: normalizeRuntimeStage(stage),
-		Class: normalizeRuntimeFailureClass(class),
-		Cause: cause,
+		Stage:    normalizeRuntimeStage(stage),
+		Class:    normalizeRuntimeFailureClass(class),
+		Subcause: normalizeRuntimeFailureSubcause(subcause),
+		Cause:    cause,
 	}
 }
 
@@ -206,12 +248,13 @@ func runtimeFailureClassForInvocation(err error) RuntimeFailureClass {
 // RuntimeFailureDiagnostic is the safe structured projection used by private
 // logs and evidence. It contains no raw cause or caller payload.
 type RuntimeFailureDiagnostic struct {
-	Message        string              `json:"message"`
-	Stage          RuntimeStage        `json:"runtime_stage"`
-	Class          RuntimeFailureClass `json:"failure_class"`
-	Outcome        string              `json:"outcome"`
-	DurationMillis int64               `json:"duration_millis"`
-	CauseSHA256    string              `json:"cause_sha256,omitempty"`
+	Message        string                 `json:"message"`
+	Stage          RuntimeStage           `json:"runtime_stage"`
+	Class          RuntimeFailureClass    `json:"failure_class"`
+	Subcause       RuntimeFailureSubcause `json:"failure_subcause,omitempty"`
+	Outcome        string                 `json:"outcome"`
+	DurationMillis int64                  `json:"duration_millis"`
+	CauseSHA256    string                 `json:"cause_sha256,omitempty"`
 }
 
 const (
@@ -231,13 +274,14 @@ const (
 // bounded enums, elapsed time, and a cause digest; callers never publish a
 // raw error, endpoint, path, prompt, token, or media payload through it.
 type RuntimeEvidenceRecord struct {
-	Sequence       uint64              `json:"sequence"`
-	Kind           string              `json:"kind"`
-	Stage          RuntimeStage        `json:"stage,omitempty"`
-	Outcome        string              `json:"outcome"`
-	Class          RuntimeFailureClass `json:"failure_class,omitempty"`
-	DurationMillis int64               `json:"duration_millis"`
-	CauseSHA256    string              `json:"cause_sha256,omitempty"`
+	Sequence       uint64                 `json:"sequence"`
+	Kind           string                 `json:"kind"`
+	Stage          RuntimeStage           `json:"stage,omitempty"`
+	Outcome        string                 `json:"outcome"`
+	Class          RuntimeFailureClass    `json:"failure_class,omitempty"`
+	Subcause       RuntimeFailureSubcause `json:"failure_subcause,omitempty"`
+	DurationMillis int64                  `json:"duration_millis"`
+	CauseSHA256    string                 `json:"cause_sha256,omitempty"`
 }
 
 // RuntimeEvidenceRecorder accepts one private runtime observation. The
@@ -360,6 +404,7 @@ func runtimeEvidenceRecordFromDiagnostic(
 		Stage:          diagnostic.Stage,
 		Outcome:        diagnostic.Outcome,
 		Class:          diagnostic.Class,
+		Subcause:       diagnostic.Subcause,
 		DurationMillis: diagnostic.DurationMillis,
 		CauseSHA256:    diagnostic.CauseSHA256,
 	}
@@ -382,12 +427,21 @@ func normalizeRuntimeEvidenceRecord(
 	}
 	if record.Outcome == RuntimeEvidenceOutcomeCompleted {
 		record.Class = ""
+		record.Subcause = ""
 		record.CauseSHA256 = ""
 		return record, true
 	}
 	if !isRuntimeFailureClass(record.Class) || !validRuntimeCauseSHA256(record.CauseSHA256) {
 		return RuntimeEvidenceRecord{}, false
 	}
+	if record.Subcause != "" && !isRuntimeFailureSubcause(record.Subcause) {
+		return RuntimeEvidenceRecord{}, false
+	}
+	if record.Stage == RuntimeStageBackendExtract &&
+		record.Class == RuntimeFailureExtractionFailed && record.Subcause == "" {
+		return RuntimeEvidenceRecord{}, false
+	}
+	record.Subcause = normalizeRuntimeFailureSubcause(record.Subcause)
 	record.CauseSHA256 = strings.ToLower(record.CauseSHA256)
 	return record, true
 }
@@ -434,6 +488,7 @@ func ProjectRuntimeFailure(err error, elapsed time.Duration) RuntimeFailureDiagn
 	diagnostic.Message = "model runtime stage failed"
 	diagnostic.Stage = stage
 	diagnostic.Class = class
+	diagnostic.Subcause = RuntimeFailureSubcauseForError(err)
 	diagnostic.Outcome = "FAILED"
 	diagnostic.CauseSHA256 = RuntimeCauseSHA256(err)
 	return diagnostic
@@ -460,6 +515,9 @@ func (diagnostic RuntimeFailureDiagnostic) DiagnosticFields() map[string]string 
 		"failure_class":   string(diagnostic.Class),
 		"outcome":         diagnostic.Outcome,
 		"duration_millis": fmt.Sprintf("%d", diagnostic.DurationMillis),
+	}
+	if diagnostic.Subcause != "" {
+		fields["failure_subcause"] = string(diagnostic.Subcause)
 	}
 	if diagnostic.CauseSHA256 != "" {
 		fields["cause_sha256"] = diagnostic.CauseSHA256
@@ -551,4 +609,41 @@ func safeRuntimeStage(stage RuntimeStage) RuntimeStage {
 
 func safeRuntimeFailureClass(class RuntimeFailureClass) RuntimeFailureClass {
 	return normalizeRuntimeFailureClass(class)
+}
+
+// RuntimeFailureSubcauseForError returns the optional allow-listed archive
+// operation carried by an error chain. Unknown implementations fail closed.
+func RuntimeFailureSubcauseForError(err error) RuntimeFailureSubcause {
+	if err == nil {
+		return ""
+	}
+	var classifier RuntimeFailureSubcauseClassifier
+	if !errors.As(err, &classifier) || classifier == nil {
+		return ""
+	}
+	return normalizeRuntimeFailureSubcause(RuntimeFailureSubcause(
+		classifier.ModelRuntimeFailureSubcause(),
+	))
+}
+
+func isRuntimeFailureSubcause(subcause RuntimeFailureSubcause) bool {
+	switch subcause {
+	case RuntimeSubcauseArchiveSelection,
+		RuntimeSubcauseArchiveOpen,
+		RuntimeSubcauseEntryValidation,
+		RuntimeSubcauseEntryCopy,
+		RuntimeSubcauseExecutableDiscovery,
+		RuntimeSubcauseEndpointReservation,
+		RuntimeSubcauseCleanup:
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeRuntimeFailureSubcause(subcause RuntimeFailureSubcause) RuntimeFailureSubcause {
+	if isRuntimeFailureSubcause(subcause) {
+		return subcause
+	}
+	return ""
 }

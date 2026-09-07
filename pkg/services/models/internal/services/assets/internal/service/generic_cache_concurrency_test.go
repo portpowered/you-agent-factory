@@ -75,6 +75,123 @@ func TestPrepareGenericAssetsSharesConcurrentFirstDownload(t *testing.T) {
 	}
 }
 
+func TestAcquireGenericCacheConcurrentCallersReceiveCommittedPaths(t *testing.T) {
+	t.Parallel()
+
+	const callers = 8
+
+	body := []byte("concurrent committed backend")
+	digest := sha256Hex(body)
+	downloadStarted := make(chan struct{})
+	releaseDownload := make(chan struct{})
+	var downloadStartedOnce sync.Once
+	var releaseDownloadOnce sync.Once
+	client := httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		downloadStartedOnce.Do(func() { close(downloadStarted) })
+		<-releaseDownload
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+		}, nil
+	})
+	scopes := newScopes(t, "generic-committed-concurrent")
+	cacheDirectory := t.TempDir()
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+	var joined atomic.Int32
+	allJoined := make(chan struct{})
+	var allJoinedOnce sync.Once
+	service.cacheJoinObserver = func() {
+		if joined.Add(1) == callers-1 {
+			allJoinedOnce.Do(func() { close(allJoined) })
+		}
+	}
+	source := genericSource{
+		kind: genericSourceHF, safe: "hf://owner/repo/backend.zip@" + genericTestRevision,
+		owner: "owner", repository: "repo", file: "backend.zip", revision: genericTestRevision,
+	}
+	artifact := genericArtifact{
+		requirement: models.AssetRequirement{
+			Name: "backend.zip", Bytes: int64(len(body)), SHA256: digest,
+		},
+		metadataResolved: true,
+	}
+	results := make(chan struct {
+		result genericCacheResult
+		err    error
+	}, callers)
+	for index := 0; index < callers; index++ {
+		go func() {
+			result, err := service.acquireGenericCache(
+				context.Background(), assetKindBackend, models.AssetArtifactKindBackend,
+				source, []genericArtifact{artifact}, []string{cacheDirectory}, false,
+			)
+			results <- struct {
+				result genericCacheResult
+				err    error
+			}{result: result, err: err}
+		}()
+	}
+	t.Cleanup(func() { releaseDownloadOnce.Do(func() { close(releaseDownload) }) })
+	<-downloadStarted
+	<-allJoined
+	releaseDownloadOnce.Do(func() { close(releaseDownload) })
+
+	var committedPath string
+	var preparedSeen bool
+	for index := 0; index < callers; index++ {
+		outcome := <-results
+		if outcome.err != nil {
+			t.Fatalf("concurrent preparation %d: %v", index, outcome.err)
+		}
+		assertLiveGenericCacheResult(t, outcome.result)
+		preparedSeen = preparedSeen || outcome.result.prepared
+		if index == 0 {
+			committedPath = outcome.result.paths[0]
+		} else if outcome.result.paths[0] != committedPath {
+			t.Fatalf("concurrent path %q, want shared committed path %q", outcome.result.paths[0], committedPath)
+		}
+	}
+	if !preparedSeen {
+		t.Fatal("concurrent cache-miss results did not report a prepared snapshot")
+	}
+	if got := joined.Load(); got != callers-1 {
+		t.Fatalf("joined caller count = %d, want %d", got, callers-1)
+	}
+
+	hit, err := service.acquireGenericCache(
+		context.Background(), assetKindBackend, models.AssetArtifactKindBackend,
+		source, []genericArtifact{artifact}, []string{cacheDirectory}, false,
+	)
+	if err != nil {
+		t.Fatalf("cache hit: %v", err)
+	}
+	assertLiveGenericCacheResult(t, hit)
+	if hit.paths[0] != committedPath {
+		t.Fatalf("cache-hit path %q, want %q", hit.paths[0], committedPath)
+	}
+}
+
+func assertLiveGenericCacheResult(t *testing.T, result genericCacheResult) {
+	t.Helper()
+	if len(result.paths) != 1 || !filepath.IsAbs(result.snapshotPath) ||
+		strings.Contains(result.snapshotPath, ".partial") {
+		t.Fatalf("generic cache result = %#v, want absolute committed snapshot", result)
+	}
+	for _, path := range result.paths {
+		if !filepath.IsAbs(path) || strings.Contains(path, ".partial") {
+			t.Fatalf("generic cache path = %q, want absolute non-partial path", path)
+		}
+		relative, err := filepath.Rel(result.snapshotPath, path)
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			t.Fatalf("generic cache path %q escaped snapshot %q", path, result.snapshotPath)
+		}
+		info, err := os.Stat(path)
+		if err != nil || info == nil || !info.Mode().IsRegular() {
+			t.Fatalf("generic cache path stat = (%#v, %v), want existing regular file", info, err)
+		}
+	}
+}
+
 func TestPrepareGenericAssetsSharesConcurrentFirstDownloadAcrossServices(t *testing.T) {
 	t.Parallel()
 

@@ -54,6 +54,65 @@ func TestRuntimeStageErrorClassifiesEveryMaterialStageAndUnwrapsCause(t *testing
 	}
 }
 
+func TestRuntimeFailureSubcauseProjectsAndRequiresBoundedArchiveEvidence(t *testing.T) {
+	t.Parallel()
+
+	cases := []RuntimeFailureSubcause{
+		RuntimeSubcauseArchiveSelection,
+		RuntimeSubcauseArchiveOpen,
+		RuntimeSubcauseEntryValidation,
+		RuntimeSubcauseEntryCopy,
+		RuntimeSubcauseExecutableDiscovery,
+		RuntimeSubcauseEndpointReservation,
+		RuntimeSubcauseCleanup,
+	}
+	for _, subcause := range cases {
+		subcause := subcause
+		t.Run(string(subcause), func(t *testing.T) {
+			t.Parallel()
+
+			cause := errors.New("token=private path=C:\\cache\\backend.zip")
+			failure := NewRuntimeStageErrorWithSubcause(
+				RuntimeStageBackendExtract,
+				RuntimeFailureExtractionFailed,
+				subcause,
+				cause,
+			)
+			diagnostic := ProjectRuntimeFailure(failure, time.Second)
+			if diagnostic.Subcause != subcause {
+				t.Fatalf("diagnostic subcause = %q, want %q", diagnostic.Subcause, subcause)
+			}
+			if diagnostic.DiagnosticFields()["failure_subcause"] != string(subcause) {
+				t.Fatalf("diagnostic fields = %#v, want bounded subcause", diagnostic.DiagnosticFields())
+			}
+			if len(diagnostic.CauseSHA256) != sha256.Size*2 || diagnostic.CauseSHA256 != strings.ToLower(diagnostic.CauseSHA256) {
+				t.Fatalf("cause digest = %q, want lowercase 64-hex digest", diagnostic.CauseSHA256)
+			}
+
+			sink := &runtimeEvidenceRecords{}
+			recorder := NewOrderedRuntimeEvidenceRecorder(sink)
+			RecordRuntimeEvidenceTerminal(recorder, RuntimeStageBackendExtract, failure, time.Second)
+			records := sink.snapshot()
+			if len(records) != 1 || records[0].Subcause != subcause {
+				t.Fatalf("archive evidence = %#v, want one %s record", records, subcause)
+			}
+		})
+	}
+
+	// A caller cannot omit the operation from an extraction failure or use an
+	// unbounded value in its place.
+	sink := &runtimeEvidenceRecords{}
+	recorder := NewOrderedRuntimeEvidenceRecorder(sink)
+	recorder.RecordRuntimeEvidence(RuntimeEvidenceRecord{
+		Kind: RuntimeEvidenceKindStage, Stage: RuntimeStageBackendExtract,
+		Outcome: RuntimeEvidenceOutcomeFailed, Class: RuntimeFailureExtractionFailed,
+		CauseSHA256: strings.Repeat("a", sha256.Size*2),
+	})
+	if len(sink.snapshot()) != 0 {
+		t.Fatal("archive evidence without a subcause was accepted")
+	}
+}
+
 func TestProjectRuntimeFailureRedactsSensitiveCauseToDigest(t *testing.T) {
 	t.Parallel()
 
@@ -137,34 +196,51 @@ func TestRuntimeEvidenceRecorderOrdersEveryMaterialFailureAndOneTerminal(t *test
 
 			sink := &runtimeEvidenceRecords{}
 			recorder := NewOrderedRuntimeEvidenceRecorder(sink)
-			cause := NewRuntimeStageError(
-				testCase.stage, testCase.class,
-				errors.New("controlled private cause"),
-			)
+			cause := runtimeEvidenceFailureCause(testCase.stage, testCase.class)
 			RecordRuntimeEvidenceStage(recorder, testCase.stage, cause, 11*time.Millisecond)
 			RecordRuntimeEvidenceTerminal(recorder, testCase.stage, cause, 12*time.Millisecond)
 			RecordRuntimeEvidenceTerminal(recorder, testCase.stage, cause, 13*time.Millisecond)
 
-			records := sink.snapshot()
-			if len(records) != 2 {
-				t.Fatalf("evidence records = %d, want one stage and one terminal: %#v", len(records), records)
-			}
-			if records[0].Sequence != 1 || records[1].Sequence != 2 {
-				t.Fatalf("evidence sequence = (%d, %d), want (1, 2)", records[0].Sequence, records[1].Sequence)
-			}
-			if records[0].Kind != RuntimeEvidenceKindStage || records[1].Kind != RuntimeEvidenceKindTerminal {
-				t.Fatalf("evidence kinds = (%q, %q), want (STAGE, TERMINAL)", records[0].Kind, records[1].Kind)
-			}
-			for _, record := range records {
-				if record.Stage != testCase.stage || record.Outcome != RuntimeEvidenceOutcomeFailed ||
-					record.Class != testCase.class || len(record.CauseSHA256) != sha256.Size*2 {
-					t.Fatalf("bounded record = %#v, want stage=%s class=%s failed digest", record, testCase.stage, testCase.class)
-				}
-				if record.CauseSHA256 != strings.ToLower(record.CauseSHA256) {
-					t.Fatalf("cause digest is not lowercase: %q", record.CauseSHA256)
-				}
-			}
+			assertOrderedRuntimeFailureEvidence(t, sink.snapshot(), testCase.stage, testCase.class)
 		})
+	}
+}
+
+func runtimeEvidenceFailureCause(stage RuntimeStage, class RuntimeFailureClass) error {
+	const message = "controlled private cause"
+	if stage == RuntimeStageBackendExtract {
+		return NewRuntimeStageErrorWithSubcause(stage, class, RuntimeSubcauseArchiveOpen, errors.New(message))
+	}
+	return NewRuntimeStageError(stage, class, errors.New(message))
+}
+
+func assertOrderedRuntimeFailureEvidence(
+	t *testing.T,
+	records []RuntimeEvidenceRecord,
+	wantStage RuntimeStage,
+	wantClass RuntimeFailureClass,
+) {
+	t.Helper()
+	if len(records) != 2 {
+		t.Fatalf("evidence records = %d, want one stage and one terminal: %#v", len(records), records)
+	}
+	if records[0].Sequence != 1 || records[1].Sequence != 2 {
+		t.Fatalf("evidence sequence = (%d, %d), want (1, 2)", records[0].Sequence, records[1].Sequence)
+	}
+	if records[0].Kind != RuntimeEvidenceKindStage || records[1].Kind != RuntimeEvidenceKindTerminal {
+		t.Fatalf("evidence kinds = (%q, %q), want (STAGE, TERMINAL)", records[0].Kind, records[1].Kind)
+	}
+	for _, record := range records {
+		if record.Stage != wantStage || record.Outcome != RuntimeEvidenceOutcomeFailed ||
+			record.Class != wantClass || len(record.CauseSHA256) != sha256.Size*2 {
+			t.Fatalf("bounded record = %#v, want stage=%s class=%s failed digest", record, wantStage, wantClass)
+		}
+		if record.CauseSHA256 != strings.ToLower(record.CauseSHA256) {
+			t.Fatalf("cause digest is not lowercase: %q", record.CauseSHA256)
+		}
+		if wantStage == RuntimeStageBackendExtract && record.Subcause != RuntimeSubcauseArchiveOpen {
+			t.Fatalf("archive subcause = %q, want %q", record.Subcause, RuntimeSubcauseArchiveOpen)
+		}
 	}
 }
 
