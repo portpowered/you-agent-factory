@@ -728,7 +728,7 @@ func localAIProcessEnvironment(roots localAIRealRoots, overrides []string) []str
 	values["LOCALAI_REAL_OUTPUT_ROOT"] = roots.Output
 	for _, entry := range overrides {
 		key, value, ok := strings.Cut(entry, "=")
-		if !ok || localAIForbiddenEnvironmentKey(key) {
+		if !ok || localAIForbiddenEnvironmentOverrideKey(key) {
 			continue
 		}
 		value = strings.ReplaceAll(value, localAIRealOutputToken, filepath.Join(roots.Output, "tts.wav"))
@@ -756,12 +756,25 @@ func localAIProcessEnvironment(roots localAIRealRoots, overrides []string) []str
 
 func localAIForbiddenEnvironmentKey(key string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(key))
+	if strings.HasPrefix(upper, "INFINITE_YOU_") || strings.HasPrefix(upper, "LOCALAI_REAL_") || strings.Contains(upper, "TOKEN") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "SECRET") {
+		return true
+	}
+	switch upper {
+	case "HF_ENDPOINT", "HUGGINGFACE_HUB_CACHE", "HF_HOME", "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME":
+		return true
+	default:
+		return false
+	}
+}
+
+func localAIForbiddenEnvironmentOverrideKey(key string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(key))
 	if strings.Contains(upper, "TOKEN") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "SECRET") {
 		return true
 	}
 	switch upper {
 	case "HF_ENDPOINT", "HUGGINGFACE_HUB_CACHE", "HF_HOME", "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME":
-		return upper != "HOME" && upper != "USERPROFILE"
+		return true
 	default:
 		return false
 	}
@@ -1278,7 +1291,7 @@ func assertLocalAIJourneyResult(t testing.TB, request localAIRealRunRequest, rep
 	}
 }
 
-func setupLocalAIReportInterruption(t testing.TB, root string, request *localAIRealRunRequest) {
+func setupLocalAIReportInterruption(t testing.TB, _ string, request *localAIRealRunRequest) {
 	t.Helper()
 	old := newLocalAIRealReport(*request)
 	old.Status = "PASS"
@@ -1290,7 +1303,6 @@ func setupLocalAIReportInterruption(t testing.TB, root string, request *localAIR
 	if err := writeLocalAIRealReportAtomic(request.ReportPath, old); err != nil {
 		t.Fatalf("seed canonical report: %v", err)
 	}
-	request.Command.Environment = append(request.Command.Environment, "LOCALAI_REAL_REPORT_INTERRUPTION=1")
 }
 
 func assertLocalAIReportInterruption(t testing.TB, request localAIRealRunRequest, report localAIRealReport, err error) {
