@@ -50,15 +50,35 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	assertPullToReadyList(t, listed, assetBody)
 	closePullToReadyProcess(t, firstProcess)
 
+	assetClient.SetOffline()
 	secondProcess := buildPullToReadyProcess(t, pullToReadyEdges(assetClient, homeDirectory, backendSelection))
+	warmPull := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "pull", pullToReadyModelName)
+	assertPullToReadyAlreadyPresent(t, warmPull, assetBody)
 	secondInspect := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "inspect", pullToReadyModelName)
 	assertPullToReadyInspect(t, secondInspect, homeDirectory, assetBody)
 	secondList := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "list")
 	assertPullToReadyList(t, secondList, assetBody)
 	closePullToReadyProcess(t, secondProcess)
+	assertPullToReadySafeOutput(t, map[string]string{
+		"pull":            pull.raw,
+		"inspect":         inspect.raw,
+		"list":            listed.raw,
+		"warm pull":       warmPull.raw,
+		"restart inspect": secondInspect.raw,
+		"restart list":    secondList.raw,
+	}, []string{
+		backendSelection.Location,
+		"https://assets.invalid",
+		string(assetBody),
+		string(backendBody),
+		"download=true",
+	}...)
 
 	if got := assetClient.Calls(); got != 6 {
-		t.Fatalf("asset edge requests = %d (%#v), want the two scoped pull resolution attempts", got, assetClient.Requests())
+		t.Fatalf("asset edge requests = %d (%#v), want only the first pull resolution attempts", got, assetClient.Requests())
+	}
+	if got := assetClient.TransferBytes(); got != int64(len(assetBody)+len(backendBody)) {
+		t.Fatalf("asset transfer bytes = %d, want first-pull artifact bytes %d", got, len(assetBody)+len(backendBody))
 	}
 	wantRequests := []string{
 		http.MethodHead + " " + backendSelection.Location,
@@ -72,9 +92,9 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 		t.Fatalf("asset edge request order = %q, want %q", got, strings.Join(wantRequests, "\n"))
 	}
 	t.Logf(
-		"pull-to-ready commands passed: downloadedBytes=%d inspectCacheBytes=%d restartInspectCacheBytes=%d cacheRoot=%s assetRequests=%d",
+		"pull-to-ready commands passed: downloadedBytes=%d inspectCacheBytes=%d restartInspectCacheBytes=%d warmPullBytes=%d cacheRoot=%s assetRequests=%d transferBytes=%d",
 		pull.downloadedBytes, inspect.cacheBytes, secondInspect.cacheBytes,
-		filepath.Join(homeDirectory, ".agent-factory", "models"), assetClient.Calls(),
+		warmPull.downloadedBytes, filepath.Join(homeDirectory, ".agent-factory", "models"), assetClient.Calls(), assetClient.TransferBytes(),
 	)
 }
 
@@ -224,6 +244,40 @@ func assertPullToReadySuccess(t *testing.T, capture pullToReadyCapture, assetBod
 	}
 }
 
+func assertPullToReadyAlreadyPresent(t *testing.T, capture pullToReadyCapture, assetBody []byte) {
+	t.Helper()
+	var response factoryapi.ModelPullResponse
+	decodePullToReadyJSON(t, capture.raw, &response)
+	if response.ModelName != pullToReadyModelName || response.Outcome != factoryapi.ModelPullOutcomeALREADYPRESENT {
+		t.Fatalf("warm models pull response = %#v, want asr/ALREADY_PRESENT", response)
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT &&
+		response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeALREADYREADY {
+		t.Fatalf("warm models pull managed result = %#v, want ALREADY_PRESENT or ALREADY_READY", response.ManagedRuntimePull)
+	}
+	if response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("warm models pull readiness = %s, want READY", response.ManagedRuntimePull.ReadinessState)
+	}
+	if len(response.DownloadedFiles) != 1 || response.DownloadedFiles[0].Path != pullToReadyAsset ||
+		response.DownloadedFiles[0].Bytes != int64(len(assetBody)) {
+		t.Fatalf("warm models pull cached files = %#v, want persisted %s/%d facts", response.DownloadedFiles, pullToReadyAsset, len(assetBody))
+	}
+	if response.ManagedRuntimePull.CachePath == nil || *response.ManagedRuntimePull.CachePath == "" {
+		t.Fatalf("warm models pull cache path = %#v, want persisted path", response.ManagedRuntimePull.CachePath)
+	}
+}
+
+func assertPullToReadySafeOutput(t *testing.T, outputs map[string]string, forbidden ...string) {
+	t.Helper()
+	for phase, output := range outputs {
+		for _, value := range forbidden {
+			if value != "" && strings.Contains(output, value) {
+				t.Fatalf("%s output leaked controlled source value %q:\n%s", phase, value, output)
+			}
+		}
+	}
+}
+
 func assertPullToReadyInspect(t *testing.T, capture pullToReadyCapture, homeDirectory string, assetBody []byte) {
 	t.Helper()
 	var response factoryapi.ModelDetail
@@ -267,6 +321,8 @@ type pullToReadyAssetClient struct {
 	backend    []byte
 	backendURL string
 	calls      atomic.Int64
+	transfers  atomic.Int64
+	offline    atomic.Bool
 	requests   []string
 }
 
@@ -295,6 +351,9 @@ func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string)
 }
 
 func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response, error) {
+	if client.offline.Load() {
+		return nil, fmt.Errorf("controlled asset source is offline")
+	}
 	client.calls.Add(1)
 	client.requests = append(client.requests, request.Method+" "+request.URL.String())
 	var body []byte
@@ -314,6 +373,10 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 			Request:    request,
 		}, nil
 	}
+	if request.Method == http.MethodGet &&
+		(request.URL.Path == "/ggerganov/whisper.cpp/resolve/"+pullToReadyRevision+"/"+pullToReadyAsset || request.URL.String() == client.backendURL) {
+		client.transfers.Add(int64(len(body)))
+	}
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewReader(body)),
@@ -325,6 +388,10 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 		}(),
 		Request: request,
 	}, nil
+}
+
+func (client *pullToReadyAssetClient) SetOffline() {
+	client.offline.Store(true)
 }
 
 func pullToReadyBackendSelection(body []byte) serviceedges.ModelBackendArtifactSelection {
@@ -339,6 +406,10 @@ func pullToReadyBackendSelection(body []byte) serviceedges.ModelBackendArtifactS
 
 func (client *pullToReadyAssetClient) Calls() int64 {
 	return client.calls.Load()
+}
+
+func (client *pullToReadyAssetClient) TransferBytes() int64 {
+	return client.transfers.Load()
 }
 
 func (client *pullToReadyAssetClient) Requests() []string {

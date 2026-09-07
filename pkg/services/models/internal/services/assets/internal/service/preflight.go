@@ -45,7 +45,7 @@ func (s *service) preflightGenericAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
 ) (models.PreflightModelAssetsResult, error) {
-	state, err := s.preflightGenericPreparation(ctx, request)
+	state, err := s.preflightGenericPreparation(ctx, request, true)
 	if err != nil {
 		return models.PreflightModelAssetsResult{}, err
 	}
@@ -74,6 +74,7 @@ func (s *service) preflightGenericAssets(
 func (s *service) preflightGenericPreparation(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
+	requirePositiveMissingBytes bool,
 ) (genericPreflightState, error) {
 	plan, err := s.genericPreparationPlan(ctx, request)
 	if err != nil {
@@ -93,7 +94,7 @@ func (s *service) preflightGenericPreparation(
 	if len(plan.backendRequirements) > 0 {
 		backendFacts, backendPreflightErr = s.preflightGenericArtifactSet(
 			ctx, assetKindBackend, plan.backendSource, plan.backendRequirements,
-			plan.backendRoots, request.Offline,
+			plan.backendRoots, request.Offline, requirePositiveMissingBytes,
 		)
 		if backendPreflightErr != nil {
 			// Offline mode is an inspection mode: collect the model-side
@@ -117,7 +118,7 @@ func (s *service) preflightGenericPreparation(
 	if modelFacts == nil {
 		facts, preflightErr := s.preflightGenericArtifactSet(
 			ctx, assetKindModel, plan.source, plan.modelRequirements,
-			plan.modelRoots, request.Offline,
+			plan.modelRoots, request.Offline, requirePositiveMissingBytes,
 		)
 		modelFacts = &facts
 		if preflightErr != nil {
@@ -179,6 +180,7 @@ func (s *service) preflightGenericArtifactSet(
 	artifacts []genericArtifact,
 	roots []string,
 	offline bool,
+	requirePositiveMissingBytes bool,
 ) (genericPreflightFacts, error) {
 	resolved, err := s.resolveGenericPreflightArtifacts(ctx, kind, source, artifacts, roots, offline)
 	if err != nil {
@@ -206,13 +208,40 @@ func (s *service) preflightGenericArtifactSet(
 			Missing: missingArtifactNames(missing),
 		}
 	}
-	if source.kind == genericSourceRelease {
+	if source.kind == genericSourceRelease ||
+		(requirePositiveMissingBytes && source.kind == genericSourceHF && genericArtifactsNeedSize(missing)) {
 		resolved, missing, err = s.headGenericArtifacts(ctx, source, resolved, cached, missing)
 		if err != nil {
 			return genericPreflightFacts{artifacts: resolved, missing: missing}, err
 		}
 	}
+	if requirePositiveMissingBytes {
+		if err := requireGenericMissingSizes(missing); err != nil {
+			return genericPreflightFacts{artifacts: resolved, missing: missing}, err
+		}
+	}
 	return genericPreflightFacts{artifacts: resolved, missing: missing}, nil
+}
+
+func genericArtifactsNeedSize(artifacts []genericArtifact) bool {
+	for _, artifact := range artifacts {
+		if artifact.requirement.Bytes <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func requireGenericMissingSizes(artifacts []genericArtifact) error {
+	for _, artifact := range artifacts {
+		if artifact.requirement.Bytes <= 0 {
+			return fmt.Errorf(
+				"%w: asset %q size is unavailable after metadata resolution",
+				models.ErrSourceFetchFailed, artifact.requirement.Name,
+			)
+		}
+	}
+	return nil
 }
 
 func (s *service) resolveGenericPreflightArtifacts(
@@ -230,7 +259,13 @@ func (s *service) resolveGenericPreflightArtifacts(
 	discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots)
 	if len(discovered) > 0 {
 		discoveredArtifacts := s.genericArtifactsFromRequirements(source, discovered)
-		markGenericArtifactsResolved(discoveredArtifacts)
+		// Legacy content metadata can describe the artifact names while still
+		// carrying zero/blank integrity facts. It is useful discovery input, but
+		// it cannot suppress immutable-manifest resolution before repair has
+		// reverified the bytes.
+		if genericArtifactsHaveTrustedFacts(discoveredArtifacts) {
+			markGenericArtifactsResolved(discoveredArtifacts)
+		}
 		if len(resolved) == 0 {
 			resolved = discoveredArtifacts
 		} else {
@@ -366,7 +401,7 @@ func (s *service) headGenericArtifact(
 	contentLength := response.ContentLength
 	declared := artifact.requirement.Bytes
 	if declared <= 0 {
-		if contentLength < 0 {
+		if contentLength <= 0 {
 			return artifact, fmt.Errorf(
 				"%w: asset %q size is unavailable from HEAD", models.ErrSourceFetchFailed, artifact.requirement.Name,
 			)

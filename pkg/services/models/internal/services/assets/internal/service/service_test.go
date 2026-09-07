@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -791,3 +793,65 @@ func assertAvailableSnapshot(t *testing.T, snapshot models.AssetSnapshot, provid
 		t.Fatalf("artifact facts = %#v total=%d", snapshot.Artifacts, snapshot.TotalBytes)
 	}
 }
+
+func writeVerifiedCacheFixture(t *testing.T, cacheDirectory string) {
+	t.Helper()
+	baseBody := []byte("cached base")
+	tokenizerBody := []byte("cached tokenizer")
+	root := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	revision := filepath.Join(root, "verified-revision")
+	if err := os.MkdirAll(revision, 0o755); err != nil {
+		t.Fatalf("create verified cache: %v", err)
+	}
+	files := []struct {
+		name string
+		body []byte
+	}{
+		{name: "omnivoice-base-Q4_K_M.gguf", body: baseBody},
+		{name: "omnivoice-tokenizer-Q4_K_M.gguf", body: tokenizerBody},
+	}
+	metadata := cacheMetadata{ModelName: "OMNIVOICE_Q4_K_M", Revision: "verified-revision"}
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(revision, file.name), file.body, 0o644); err != nil {
+			t.Fatalf("write verified asset: %v", err)
+		}
+		metadata.Files = append(metadata.Files, metadataFile{
+			Path: file.name, Bytes: int64(len(file.body)), SHA256: sha256String(file.body),
+		})
+	}
+	body, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("marshal verified metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, metadataFileName), body, 0o644); err != nil {
+		t.Fatalf("write verified metadata: %v", err)
+	}
+}
+
+func sha256String(body []byte) string {
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+func assertFileBody(t *testing.T, path string, want []byte) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %q: %v", path, err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("file %q = %q, want %q", path, got, want)
+	}
+}
+
+type httpDoerFunc func(*http.Request) (*http.Response, error)
+
+func (do httpDoerFunc) Do(request *http.Request) (*http.Response, error) {
+	return do(request)
+}
+
+type timeoutTestError struct{}
+
+func (timeoutTestError) Error() string   { return "timeout" }
+func (timeoutTestError) Timeout() bool   { return true }
+func (timeoutTestError) Temporary() bool { return true }

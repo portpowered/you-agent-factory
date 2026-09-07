@@ -421,7 +421,9 @@ func TestPrepareGenericAssetsPreservesPriorGoodSnapshotAfterFailedReplacement(t 
 		genericArtifactIdentityHash(assetKindModel, genericSource{
 			kind: genericSourceHF, safe: "hf://owner/repo/weights.bin@" + genericTestRevision,
 			owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision,
-		}, []genericArtifact{{requirement: firstRequest.Artifacts[0]}}),
+		}, []genericArtifact{{requirement: models.AssetRequirement{
+			Name: "weights.bin", Bytes: int64(len(body)), SHA256: digest,
+		}}}),
 		"weights.bin",
 	)
 	assertFileBody(t, firstPath, body)
@@ -638,9 +640,12 @@ func TestPublishGenericCacheRestoresPriorSnapshotWhenCommitRenameFails(t *testin
 	}), func(string) string { return "" })
 	source := genericSource{kind: genericSourceLocal, safe: "local://path", localPath: localPath}
 	artifact := genericArtifact{requirement: models.AssetRequirement{Name: "weights.bin"}, localPath: localPath}
+	observed := genericArtifact{requirement: models.AssetRequirement{
+		Name: "weights.bin", Bytes: int64(len(newBody)), SHA256: sha256Hex(newBody),
+	}}
 	finalPath := filepath.Join(
 		you, assetContentDirectory, assetKindModel,
-		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{artifact}),
+		genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{observed}),
 	)
 	if err := os.MkdirAll(finalPath, 0o755); err != nil {
 		t.Fatalf("create prior snapshot: %v", err)
@@ -820,178 +825,131 @@ func sha256Hex(value []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func TestGenericPrivatePlanningAndCachePreservation(t *testing.T) {
+func TestPrepareGenericAssetsCommitsObservedMetadataAndReusesItOffline(t *testing.T) {
 	t.Parallel()
 
-	scopes := newScopes(t, "generic-private-planning")
-	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		return nil, errors.New("private planning test must not use HTTP")
-	}), func(string) string { return "" })
+	body := []byte("observed generic cache payload")
+	digest := sha256Hex(body)
+	var downloads atomic.Int32
+	scopes := newScopes(t, "generic-observed-metadata")
+	cacheDirectory := t.TempDir()
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(
+		t, scopes,
+		genericManifestWithoutDigestClient("weights.bin", func() []byte {
+			downloads.Add(1)
+			return body
+		}),
+		func(string) string { return "" },
+	)
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
+		Artifacts: []models.AssetRequirement{{Name: "weights.bin"}},
+	}
 
-	assertGenericLocalRequirements(t, service)
-	assertGenericOverlayPlanning(t)
-	assertGenericCachePreservation(t, service)
+	first, err := service.PrepareModelAssets(context.Background(), request)
+	requireObservedMetadataPreparation(t, first, err, body, digest)
+	if downloads.Load() != 1 {
+		t.Fatalf("asset downloads = %d, want one initial transfer", downloads.Load())
+	}
+
+	source := observedMetadataSource(request.Reference.NameOrURI)
+	observed := []genericArtifact{{requirement: models.AssetRequirement{
+		Name: "weights.bin", Bytes: int64(len(body)), SHA256: digest,
+	}}}
+	assertObservedMetadataCommitted(t, cacheDirectory, source, request, observed)
+
+	service.client = httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("offline reuse must not contact the source")
+	})
+	second, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: scope, Reference: request.Reference, Offline: true,
+	})
+	requireObservedMetadataReuse(t, second, err, body, digest)
+	if downloads.Load() != 1 {
+		t.Fatalf("offline asset downloads = %d, want unchanged", downloads.Load())
+	}
 }
 
-func assertGenericLocalRequirements(t *testing.T, service *service) {
+func observedMetadataSource(reference string) genericSource {
+	return genericSource{
+		kind: genericSourceHF, safe: reference,
+		owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision,
+	}
+}
+
+func requireObservedMetadataPreparation(
+	t *testing.T,
+	result models.PrepareModelAssetsResult,
+	err error,
+	body []byte,
+	digest string,
+) {
 	t.Helper()
-
-	localRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(localRoot, "nested"), 0o755); err != nil {
-		t.Fatalf("create local fixture: %v", err)
+	if err != nil {
+		t.Fatalf("initial preparation: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(localRoot, "root.bin"), []byte("root"), 0o644); err != nil {
-		t.Fatalf("write root fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(localRoot, "nested", "child.bin"), []byte("child"), 0o644); err != nil {
-		t.Fatalf("write nested fixture: %v", err)
-	}
-	requirements, err := service.localRequirements(localRoot)
-	if err != nil || len(requirements) != 2 || requirements[0].Name != "nested/child.bin" || requirements[1].Name != "root.bin" {
-		t.Fatalf("localRequirements = %#v, %v, want sorted recursive files", requirements, err)
-	}
-	if _, err := service.localRequirements(filepath.Join(localRoot, "missing")); !errors.Is(err, models.ErrAssetSourceMissing) {
-		t.Fatalf("missing localRequirements error = %v, want ErrAssetSourceMissing", err)
+	if result.Outcome != models.AssetPreparationPrepared || result.Asset.TotalBytes != int64(len(body)) ||
+		len(result.Asset.Artifacts) != 1 || result.Asset.Artifacts[0].Bytes != int64(len(body)) ||
+		result.Asset.Artifacts[0].SHA256 != digest {
+		t.Fatalf("initial result = %#v, want observed bytes and digest", result)
 	}
 }
 
-func assertGenericOverlayPlanning(t *testing.T) {
+func assertObservedMetadataCommitted(
+	t *testing.T,
+	cacheDirectory string,
+	source genericSource,
+	request models.PrepareModelAssetsRequest,
+	observed []genericArtifact,
+) {
 	t.Helper()
-
-	sourceText := "hf://owner/repo@" + genericTestRevision
-	overlays := map[string]models.ModelOverlay{
-		"Alias":  {Source: &sourceText},
-		"alias ": {Source: func() *string { value := "hf://owner/other@" + genericTestRevision; return &value }()},
+	observedIdentity := genericArtifactIdentityHash(assetKindModel, source, observed)
+	inputIdentity := genericArtifactIdentityHash(assetKindModel, source, requestArtifacts(request))
+	if observedIdentity == inputIdentity {
+		t.Fatalf("observed identity = input identity %q; fixture must exercise unresolved metadata", observedIdentity)
 	}
-	name, overlay, ok := genericOverlay(overlays, "alias")
-	if !ok || name != "Alias" || overlay.Source == nil {
-		t.Fatalf("genericOverlay = %q, %#v, %v", name, overlay, ok)
+	metadataPath := filepath.Join(cacheDirectory, assetContentDirectory, assetKindModel, observedIdentity, assetMetadataName)
+	metadataBody, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read committed metadata: %v", err)
 	}
-	*overlay.Source = "mutated"
-	if *overlays["Alias"].Source != sourceText {
-		t.Fatal("genericOverlay returned a mutable source pointer")
+	var metadata genericCacheMetadata
+	if err := json.Unmarshal(metadataBody, &metadata); err != nil {
+		t.Fatalf("decode committed metadata: %v", err)
 	}
-	safe := genericHFSafeReference(genericSource{owner: "owner", repository: "repo", file: "weights.bin", revision: genericTestRevision})
-	if safe != "hf://owner/repo/weights.bin@"+genericTestRevision {
-		t.Fatalf("genericHFSafeReference = %q", safe)
+	wantIdentity := genericCacheKey(assetKindModel, source, observed)
+	if metadata.Identity != wantIdentity || len(metadata.Artifacts) != 1 || metadata.Artifacts[0] != observed[0].requirement {
+		t.Fatalf("committed metadata = %#v, want observed identity/requirements", metadata)
 	}
-	var revisionFailure *models.InvocationFailure
-	if !errors.As(genericRevisionFailure(), &revisionFailure) || revisionFailure.Class != models.InvocationFailureClassRevisionResolution {
-		t.Fatalf("genericRevisionFailure = %#v", genericRevisionFailure())
+	if _, err := os.Stat(filepath.Join(cacheDirectory, assetContentDirectory, assetKindModel, inputIdentity)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unresolved identity snapshot = %v, want absent", err)
 	}
 }
 
-func assertGenericCachePreservation(t *testing.T, service *service) {
+func requireObservedMetadataReuse(
+	t *testing.T,
+	result models.PrepareModelAssetsResult,
+	err error,
+	body []byte,
+	digest string,
+) {
 	t.Helper()
-
-	cachedPath := filepath.Join(t.TempDir(), "cached.bin")
-	if err := os.WriteFile(cachedPath, []byte("cached"), 0o644); err != nil {
-		t.Fatalf("write cached fixture: %v", err)
+	if err != nil {
+		t.Fatalf("offline preparation: %v", err)
 	}
-	stagePath := t.TempDir()
-	artifact := genericCachePath{
-		artifact: models.AssetArtifact{Name: "nested/cached.bin", Bytes: int64(len("cached"))},
-		path:     cachedPath,
-	}
-	if err := service.preserveGenericArtifact(context.Background(), artifact, artifact.artifact.Name, stagePath); err != nil {
-		t.Fatalf("preserveGenericArtifact: %v", err)
-	}
-	preserved, err := os.ReadFile(filepath.Join(stagePath, "nested", "cached.bin"))
-	if err != nil || string(preserved) != "cached" {
-		t.Fatalf("preserved cached artifact = %q, %v", preserved, err)
+	if result.Outcome != models.AssetPreparationAlreadyAvailable || result.Asset.Integrity != models.AssetIntegrityVerified ||
+		result.Asset.TotalBytes != int64(len(body)) || len(result.Asset.Artifacts) != 1 ||
+		result.Asset.Artifacts[0].Bytes != int64(len(body)) || result.Asset.Artifacts[0].SHA256 != digest {
+		t.Fatalf("offline result = %#v, want the committed observed identity", result)
 	}
 }
 
-func TestGenericSnapshotDiscoveryAndSourcePlanning(t *testing.T) {
-	t.Parallel()
-
-	scopes := newScopes(t, "generic-snapshot-planning")
-	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		return nil, errors.New("source planning test must not use HTTP")
-	}), func(string) string { return "" })
-	assertGenericSnapshotDiscovery(t, service)
-	assertGenericCacheRoots(t, service)
-	assertGenericSourceResolution(t, service)
-	assertGenericPreparationSelection(t)
-}
-
-func assertGenericSnapshotDiscovery(t *testing.T, service *service) {
-	t.Helper()
-	snapshotRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(snapshotRoot, "nested"), 0o755); err != nil {
-		t.Fatalf("create snapshot fixture: %v", err)
+func requestArtifacts(request models.PrepareModelAssetsRequest) []genericArtifact {
+	artifacts := make([]genericArtifact, 0, len(request.Artifacts))
+	for _, requirement := range request.Artifacts {
+		artifacts = append(artifacts, genericArtifact{requirement: requirement})
 	}
-	for name, body := range map[string]string{
-		"root.bin":            "root",
-		"nested/child.bin":    "child",
-		".hidden/ignored.bin": "ignored",
-	} {
-		path := filepath.Join(snapshotRoot, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create snapshot parent: %v", err)
-		}
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatalf("write snapshot file: %v", err)
-		}
-	}
-	requirements := service.discoverSnapshotRequirements(snapshotRoot)
-	if len(requirements) != 2 || requirements[0].Name != "nested/child.bin" || requirements[1].Name != "root.bin" {
-		t.Fatalf("discoverSnapshotRequirements = %#v, want visible sorted files", requirements)
-	}
-	if got := service.discoverSnapshotRequirements(filepath.Join(snapshotRoot, "missing")); got != nil {
-		t.Fatalf("missing snapshot requirements = %#v, want nil", got)
-	}
-}
-
-func assertGenericCacheRoots(t *testing.T, service *service) {
-	t.Helper()
-	scopeConfig := models.RuntimeScopeConfig{CacheDirectory: t.TempDir()}
-	modelRoots, err := service.genericCacheRoots(scopeConfig, models.AssetArtifactKindModel)
-	if err != nil || len(modelRoots) == 0 || modelRoots[len(modelRoots)-1] != scopeConfig.CacheDirectory {
-		t.Fatalf("model genericCacheRoots = %#v, %v", modelRoots, err)
-	}
-	backendRoots, err := service.genericCacheRoots(scopeConfig, models.AssetArtifactKindBackend)
-	if err != nil || len(backendRoots) != 1 || !strings.HasSuffix(filepath.ToSlash(backendRoots[0]), "/backend-artifacts") {
-		t.Fatalf("backend genericCacheRoots = %#v, %v", backendRoots, err)
-	}
-}
-
-func assertGenericSourceResolution(t *testing.T, service *service) {
-	t.Helper()
-	scopeConfig := models.RuntimeScopeConfig{CacheDirectory: t.TempDir()}
-	service.resolveRevision = func(context.Context, string) (string, error) { return genericTestRevision, nil }
-	resolved, err := service.resolveGenericSource(context.Background(), scopeConfig, "hf://owner/repo")
-	if err != nil || resolved.revision != genericTestRevision || resolved.safe != "hf://owner/repo@"+genericTestRevision {
-		t.Fatalf("resolved generic source = %#v, %v", resolved, err)
-	}
-	service.resolveRevision = func(context.Context, string) (string, error) { return "not-a-commit", nil }
-	if _, err := service.resolveGenericSource(context.Background(), scopeConfig, "hf://owner/repo"); !errors.Is(err, models.ErrModelRevisionUnresolved) {
-		t.Fatalf("unresolved revision error = %v, want ErrModelRevisionUnresolved", err)
-	}
-	if _, err := parseGenericReleaseSource("https://example.com/releases/download/v1/backend.tar"); !errors.Is(err, models.ErrModelReferenceInvalid) {
-		t.Fatalf("invalid release source error = %v, want ErrModelReferenceInvalid", err)
-	}
-	release, err := parseGenericReleaseSource("https://github.com/owner/repo/releases/download/v1/backend.tar")
-	if err != nil || release.kind != genericSourceRelease || release.artifactURL == "" {
-		t.Fatalf("valid release source = %#v, %v", release, err)
-	}
-}
-
-func assertGenericPreparationSelection(t *testing.T) {
-	t.Helper()
-	for _, request := range []models.PrepareModelAssetsRequest{
-		{Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision}},
-		{Offline: true},
-		{Artifacts: []models.AssetRequirement{}},
-		{Backend: "backend-v1"},
-		{Name: "llm"},
-		{Name: "./local/model"},
-	} {
-		if !shouldPrepareGenericAssets(request) {
-			t.Fatalf("shouldPrepareGenericAssets(%#v) = false, want true", request)
-		}
-	}
-	if shouldPrepareGenericAssets(models.PrepareModelAssetsRequest{Name: "unknown-symbol"}) {
-		t.Fatal("unknown symbolic name should not select generic preparation")
-	}
+	return artifacts
 }

@@ -73,8 +73,22 @@ type genericCacheMetadata struct {
 }
 
 type genericCachePath struct {
-	artifact models.AssetArtifact
-	path     string
+	artifact           models.AssetArtifact
+	path               string
+	legacyRoot         string
+	legacySnapshotPath string
+	legacyMetadataPath string
+	legacyMetadata     genericCacheMetadata
+}
+
+// genericCacheRecord is a complete content-addressed metadata record. The
+// raw metadata body is retained only while a legacy record is being repaired,
+// so a failed replacement can restore the exact prior record.
+type genericCacheRecord struct {
+	root         string
+	snapshotPath string
+	metadataPath string
+	metadata     genericCacheMetadata
 }
 
 func shouldPrepareGenericAssets(request models.PrepareModelAssetsRequest) bool {
@@ -106,7 +120,7 @@ func (s *service) prepareGenericAssets(
 	if err := assetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
-	preflight, err := s.preflightGenericPreparation(ctx, request)
+	preflight, err := s.preflightGenericPreparation(ctx, request, false)
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
@@ -500,36 +514,44 @@ func (s *service) discoverContentAddressedRequirements(
 	root, kind string,
 	source genericSource,
 ) []models.AssetRequirement {
+	for _, record := range s.discoverContentAddressedRecords(root, kind, source) {
+		return append([]models.AssetRequirement(nil), record.metadata.Artifacts...)
+	}
+	return nil
+}
+
+func (s *service) discoverContentAddressedRecords(
+	root, kind string,
+	source genericSource,
+) []genericCacheRecord {
 	base := filepath.Join(root, assetContentDirectory, kind)
 	entries, err := s.readDirectory(base)
 	if err != nil {
 		return nil
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	records := make([]genericCacheRecord, 0)
 	for _, entry := range entries {
 		if !entry.IsDir() || strings.HasSuffix(entry.Name(), ".partial") {
 			continue
 		}
-		if requirements := s.matchContentAddressedRequirements(base, kind, source, entry.Name()); len(requirements) > 0 {
-			return requirements
+		metadataPath := filepath.Join(base, entry.Name(), assetMetadataName)
+		body, err := s.readFile(metadataPath)
+		if err != nil {
+			continue
 		}
+		var metadata genericCacheMetadata
+		if json.Unmarshal(body, &metadata) != nil || !matchesContentAddressedMetadata(metadata, kind, source) {
+			continue
+		}
+		records = append(records, genericCacheRecord{
+			root:         root,
+			snapshotPath: filepath.Join(base, entry.Name()),
+			metadataPath: metadataPath,
+			metadata:     metadata,
+		})
 	}
-	return nil
-}
-
-func (s *service) matchContentAddressedRequirements(
-	base, kind string,
-	source genericSource,
-	entryName string,
-) []models.AssetRequirement {
-	body, err := s.readFile(filepath.Join(base, entryName, assetMetadataName))
-	if err != nil {
-		return nil
-	}
-	var metadata genericCacheMetadata
-	if json.Unmarshal(body, &metadata) != nil || !matchesContentAddressedMetadata(metadata, kind, source) {
-		return nil
-	}
-	return append([]models.AssetRequirement(nil), metadata.Artifacts...)
+	return records
 }
 
 func matchesContentAddressedMetadata(metadata genericCacheMetadata, kind string, source genericSource) bool {
@@ -754,6 +776,11 @@ func mergeGenericManifest(
 			if strings.TrimSpace(artifact.requirement.SHA256) != "" {
 				found.requirement.SHA256 = strings.ToLower(strings.TrimSpace(artifact.requirement.SHA256))
 			}
+			// An explicit positive size and digest are authoritative even when
+			// they were merged with an older incomplete cache record. Preserve
+			// that fact so offline legacy repair does not require a manifest
+			// refetch before it can verify the bytes.
+			found.metadataResolved = found.metadataResolved || artifact.metadataResolved
 			result = append(result, found)
 			continue
 		}

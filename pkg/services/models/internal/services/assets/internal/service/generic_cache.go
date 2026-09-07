@@ -26,19 +26,10 @@ func (s *service) acquireGenericCache(
 	roots []string,
 	offline bool,
 ) (genericCacheResult, error) {
-	if source.kind == genericSourceHF {
-		if discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots); len(discovered) > 0 {
-			cachedArtifacts := s.genericArtifactsFromRequirements(source, discovered)
-			if len(artifacts) == 0 {
-				artifacts = cachedArtifacts
-			} else {
-				var err error
-				artifacts, err = mergeGenericManifest(artifacts, cachedArtifacts)
-				if err != nil {
-					return genericCacheResult{}, err
-				}
-			}
-		}
+	var err error
+	artifacts, err = s.refreshGenericCacheArtifacts(kind, source, artifacts, roots)
+	if err != nil {
+		return genericCacheResult{}, err
 	}
 	key := genericCacheKey(kind, source, artifacts)
 	s.cacheMu.Lock()
@@ -105,12 +96,24 @@ func (s *service) acquireGenericCacheOnce(
 	defer func() {
 		err = closeAssetStagingLock(lock, err)
 	}()
+	// A waiter may have planned from incomplete requirements before the owner
+	// committed the observed snapshot. Refresh while holding the stable source
+	// lock so both arrival orders converge on the committed observed identity
+	// before inspecting or downloading any artifact.
+	artifacts, err = s.refreshGenericCacheArtifacts(kind, source, artifacts, roots)
+	if err != nil {
+		return genericCacheResult{}, err
+	}
 
 	cached, missing, inspectErr := s.inspectGenericCache(ctx, kind, source, artifacts, roots)
 	if inspectErr != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, cached), inspectErr
 	}
 	if len(missing) == 0 {
+		cached, err = s.repairLegacyGenericCache(ctx, kind, source, artifacts, cached, roots)
+		if err != nil {
+			return cacheResultFromPaths(artifactKind, artifacts, cached), err
+		}
 		return cacheResultFromPaths(artifactKind, artifacts, cached), nil
 	}
 	if offline {
@@ -144,6 +147,16 @@ func (s *service) inspectGenericCache(
 			continue
 		}
 		missing = append(missing, artifact)
+	}
+	if len(missing) > 0 {
+		if legacy, found, err := s.inspectLegacyGenericCache(ctx, kind, source, artifacts, roots); err != nil {
+			return cached, artifacts, err
+		} else if found {
+			// A complete, verified legacy snapshot is safer than combining a
+			// partial higher-priority cache with a missing artifact. The repair
+			// still runs only against the scope-owned root under the lock.
+			return legacy, nil, nil
+		}
 	}
 	return cached, missing, nil
 }
@@ -210,11 +223,9 @@ func (s *service) publishGenericCache(
 		return cacheResultFromPaths(artifactKind, artifacts, cached), models.ErrAssetSourceMissing
 	}
 	destinationRoot := roots[len(roots)-1]
-	identity := genericCacheKey(kind, source, artifacts)
-	identityName := genericArtifactIdentityHash(kind, source, artifacts)
+	stagingIdentityName := genericArtifactIdentityHash(kind, source, artifacts)
 	base := filepath.Join(destinationRoot, assetContentDirectory, kind)
-	finalPath := filepath.Join(base, identityName)
-	stagePath := finalPath + ".partial"
+	stagePath := filepath.Join(base, stagingIdentityName+".partial")
 	if err := s.prepareGenericStage(base, stagePath); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, cached), err
 	}
@@ -231,9 +242,18 @@ func (s *service) publishGenericCache(
 	if err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), err
 	}
+	// Requested metadata may be incomplete; only verified staged results are
+	// allowed to define the durable content-addressed identity and record.
+	observed, err := observedGenericArtifacts(artifacts, published)
+	if err != nil {
+		return cacheResultFromPaths(artifactKind, artifacts, published), err
+	}
+	identity := genericCacheKey(kind, source, observed)
+	identityName := genericArtifactIdentityHash(kind, source, observed)
+	finalPath := filepath.Join(base, identityName)
 	if err := s.writeGenericMetadata(
 		filepath.Join(stagePath, assetMetadataName), kind, identity, source.safe,
-		genericSourceIdentity(source), artifacts,
+		genericSourceIdentity(source), observed,
 	); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
 			"stage asset metadata", err,
@@ -260,7 +280,7 @@ func (s *service) publishGenericCache(
 	}
 	committed = true
 
-	result, err := s.committedGenericCacheResult(artifactKind, artifacts, published, finalPath)
+	result, err := s.committedGenericCacheResult(artifactKind, observed, published, finalPath)
 	if err != nil {
 		return genericCacheResult{}, pullsupport.WrapPullStage(
 			models.PullStageCacheInstallation, "", "validate committed asset snapshot", "", err,
@@ -276,6 +296,39 @@ func (s *service) publishGenericCache(
 	}
 	result.prepared = true
 	return result, nil
+}
+
+func observedGenericArtifacts(
+	requested []genericArtifact,
+	published map[string]genericCachePath,
+) ([]genericArtifact, error) {
+	observed := make([]genericArtifact, 0, len(requested))
+	for _, artifact := range requested {
+		found, ok := published[artifact.requirement.Name]
+		if !ok {
+			return nil, fmt.Errorf(
+				"%w: verified asset %q has no observed result",
+				models.ErrAssetIntegrityFailed, artifact.requirement.Name,
+			)
+		}
+		if found.artifact.Bytes < 0 || strings.TrimSpace(found.artifact.SHA256) == "" {
+			return nil, fmt.Errorf(
+				"%w: verified asset %q has incomplete observed identity",
+				models.ErrAssetIntegrityFailed, artifact.requirement.Name,
+			)
+		}
+		observed = append(observed, genericArtifact{
+			requirement: models.AssetRequirement{
+				Name:   artifact.requirement.Name,
+				Bytes:  found.artifact.Bytes,
+				SHA256: strings.ToLower(strings.TrimSpace(found.artifact.SHA256)),
+			},
+			url:              artifact.url,
+			localPath:        artifact.localPath,
+			metadataResolved: true,
+		})
+	}
+	return observed, nil
 }
 
 func (s *service) committedGenericCacheResult(
@@ -316,6 +369,26 @@ func (s *service) discoverContentAddressedRequirementsAcrossRoots(
 		}
 	}
 	return nil
+}
+
+func (s *service) refreshGenericCacheArtifacts(
+	kind string,
+	source genericSource,
+	artifacts []genericArtifact,
+	roots []string,
+) ([]genericArtifact, error) {
+	if source.kind != genericSourceHF {
+		return artifacts, nil
+	}
+	discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots)
+	if len(discovered) == 0 {
+		return artifacts, nil
+	}
+	discoveredArtifacts := s.genericArtifactsFromRequirements(source, discovered)
+	if len(artifacts) == 0 {
+		return discoveredArtifacts, nil
+	}
+	return mergeGenericManifest(artifacts, discoveredArtifacts)
 }
 
 func (s *service) moveExistingGenericSnapshot(finalPath string) (string, bool, error) {
@@ -644,13 +717,16 @@ func (s *service) lockGenericCache(
 	ctx context.Context,
 	kind string,
 	source genericSource,
-	artifacts []genericArtifact,
+	_ []genericArtifact,
 	roots []string,
 ) (io.Closer, error) {
 	if len(roots) == 0 {
 		return nil, nil
 	}
-	identity := genericArtifactIdentityHash(kind, source, artifacts)
+	// The observed artifact facts may differ from the request facts. Use a
+	// stable source-level owner before observation so incomplete and complete
+	// requests cannot publish the same observed snapshot concurrently.
+	identity := genericIdentityHash(kind, source, nil)
 	lockPath := filepath.Join(
 		roots[len(roots)-1], ".you-asset-locks", kind, identity+".lock",
 	)
