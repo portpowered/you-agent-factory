@@ -16,6 +16,7 @@ message ModelOptions {
   bool Embeddings = 10;
   string ModelFile = 21;
   string ModelPath = 59;
+  repeated string Options = 62;
 }
 
 message Result {

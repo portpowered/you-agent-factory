@@ -521,3 +521,63 @@ func (host *removeGuardHost) GetModelLease(context.Context, models.GetModelLease
 func (host *removeGuardHost) ReleaseModelLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
+
+func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	inference := &joinedInferenceService{
+		events: &events,
+		result: models.InvokeModelResult{Status: models.ModelInvocationStatusFailed},
+		err:    models.ErrInferenceTimeout,
+	}
+	root, scope, _ := newJoinedInvocationRoot(t, &events, inference)
+	sink := &rootRuntimeEvidenceRecords{}
+	root.process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
+
+	_, err := root.InvokeModel(context.Background(), joinedInvocationRequest(scope))
+	if !errors.Is(err, models.ErrInferenceTimeout) {
+		t.Fatalf("InvokeModel error = %v, want inference timeout", err)
+	}
+	assertInvocationTimeoutEvidence(t, sink.snapshot())
+}
+
+func assertInvocationTimeoutEvidence(
+	t *testing.T,
+	records []modelseffects.RuntimeEvidenceRecord,
+) {
+	t.Helper()
+	if len(records) != 2 {
+		t.Fatalf("runtime evidence records = %d, want one stage and one terminal: %#v", len(records), records)
+	}
+	if records[0].Kind != modelseffects.RuntimeEvidenceKindStage ||
+		records[1].Kind != modelseffects.RuntimeEvidenceKindTerminal {
+		t.Fatalf("runtime evidence kinds = (%q, %q), want STAGE then TERMINAL", records[0].Kind, records[1].Kind)
+	}
+	for index, record := range records {
+		if record.Sequence != uint64(index+1) || record.Stage != modelseffects.RuntimeStageInvoke ||
+			record.Class != modelseffects.RuntimeFailureTimedOut {
+			t.Fatalf("runtime evidence record[%d] = %#v, want ordered invoke timeout", index, record)
+		}
+	}
+}
+
+type rootRuntimeEvidenceRecords struct {
+	records []modelseffects.RuntimeEvidenceRecord
+}
+
+func (sink *rootRuntimeEvidenceRecords) RecordRuntimeEvidence(
+	record modelseffects.RuntimeEvidenceRecord,
+) {
+	if sink == nil {
+		return
+	}
+	sink.records = append(sink.records, record)
+}
+
+func (sink *rootRuntimeEvidenceRecords) snapshot() []modelseffects.RuntimeEvidenceRecord {
+	if sink == nil {
+		return nil
+	}
+	return append([]modelseffects.RuntimeEvidenceRecord(nil), sink.records...)
+}

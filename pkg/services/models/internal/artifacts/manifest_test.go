@@ -117,6 +117,24 @@ func TestVerifyBytesRejectsTamperedFixtureBytes(t *testing.T) {
 	}
 }
 
+func TestVerifyBytesRejectsDeclaredCacheSizeMismatch(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := artifacts.Decode(fixtureManifest(t))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	descriptor, err := manifest.Select(fixtureSelectionRequest())
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	descriptor.Artifact.SizeBytes++
+	err = descriptor.VerifyBytes([]byte("pinned-backend-fixture"))
+	if !errors.Is(err, artifacts.ErrIntegrityMismatch) {
+		t.Fatalf("VerifyBytes error = %v, want ErrIntegrityMismatch", err)
+	}
+}
+
 func TestManifestAcceptsEveryRegisteredArtifactBackend(t *testing.T) {
 	t.Parallel()
 

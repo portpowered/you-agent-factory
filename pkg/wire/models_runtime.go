@@ -2,20 +2,21 @@ package wire
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"reflect"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
@@ -25,9 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	managedbackend "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +41,114 @@ const (
 	modelAssetResponseHeaderTimeout = 30 * time.Second
 	modelHostHTTPTimeout            = 2 * time.Second
 	modelRuntimeHTTPTimeout         = 5 * time.Minute
+	modelRuntimeEvidenceEnvironment = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
+	managedChildEvidenceKind        = "MANAGED_CHILD"
+	managedChildPhaseStarted        = "PROCESS_STARTED"
+	managedChildPhaseExited         = "PROCESS_EXITED"
+	managedChildExitClassExited     = "EXITED"
+	managedChildExitClassNonzero    = "NONZERO_EXIT"
+	managedChildExitClassWaitFailed = "WAIT_FAILED"
 )
+
+type modelRuntimeEvidenceFileRecorder struct {
+	mu       sync.Mutex
+	path     string
+	sequence uint64
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
+	record modelswire.RuntimeEvidenceRecord,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.appendJSONLineLocked(func(sequence uint64) any {
+		record.Sequence = sequence
+		return record
+	})
+}
+
+type managedChildEnvironmentEvidence struct {
+	Sequence    uint64                   `json:"sequence"`
+	Kind        string                   `json:"kind"`
+	Backend     string                   `json:"backend"`
+	ProcessID   int                      `json:"process_id"`
+	Phase       string                   `json:"phase"`
+	Environment []managedEnvironmentFact `json:"environment,omitempty"`
+	ExitClass   string                   `json:"exit_class,omitempty"`
+}
+
+type managedEnvironmentFact struct {
+	Name        string `json:"name"`
+	Present     bool   `json:"present"`
+	ValueSHA256 string `json:"value_sha256,omitempty"`
+}
+
+type managedChildEnvironmentRecorder interface {
+	RecordManagedChildEnvironment(managedChildEnvironmentEvidence)
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) RecordManagedChildEnvironment(
+	record managedChildEnvironmentEvidence,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	recorder.appendJSONLineLocked(func(sequence uint64) any {
+		record.Sequence = sequence
+		return record
+	})
+}
+
+func (recorder *modelRuntimeEvidenceFileRecorder) appendJSONLineLocked(
+	value func(uint64) any,
+) {
+	if recorder == nil || strings.TrimSpace(recorder.path) == "" {
+		return
+	}
+	file, err := os.OpenFile(
+		recorder.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600,
+	)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_ = file.Chmod(0o600)
+	recorder.sequence++
+	payload, err := json.Marshal(value(recorder.sequence))
+	if err != nil {
+		return
+	}
+	payload = append(payload, '\n')
+	_, _ = file.Write(payload)
+}
+
+func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, error) {
+	path := strings.TrimSpace(os.Getenv(modelRuntimeEvidenceEnvironment))
+	if path == "" {
+		return nil, nil
+	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("%s must be an absolute path", modelRuntimeEvidenceEnvironment)
+	}
+	path = filepath.Clean(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open model runtime evidence path: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("set model runtime evidence permissions: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return nil, fmt.Errorf("close model runtime evidence path: %w", err)
+	}
+	return &modelRuntimeEvidenceFileRecorder{path: path}, nil
+}
 
 // TODO: this should be decomposed, we should inject these independently.
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -115,10 +221,6 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		return nil, fmt.Errorf("construct Models asset staging coordination: %w", coordinationErr)
 	}
 
-	launcher := edges.ModelHostProcessLauncher
-	if launcher == nil {
-		launcher = modelsProcessLauncher{}
-	}
 	hostHTTP := edges.ModelHostHTTPClient
 	if hostHTTP == nil {
 		hostHTTP = &http.Client{Timeout: modelHostHTTPTimeout}
@@ -135,7 +237,9 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 	if protocolNegotiator == nil {
-		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(protocolDialer)
+		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(
+			protocolDialer, platformfilesystem.Local{}.EvalSymlinks,
+		)
 	}
 	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges)
 	if compatibilityErr != nil {
@@ -178,8 +282,20 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
+	runtimeEvidence, err := provideModelRuntimeEvidenceRecorder()
+	if err != nil {
+		return nil, fmt.Errorf("construct Models runtime evidence recorder: %w", err)
+	}
+	launcher := edges.ModelHostProcessLauncher
+	if launcher == nil {
+		var childRecorder managedChildEnvironmentRecorder
+		if candidate, ok := runtimeEvidence.(managedChildEnvironmentRecorder); ok {
+			childRecorder = candidate
+		}
+		launcher = modelsProcessLauncher{recorder: childRecorder}
+	}
 
-	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -212,12 +328,14 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		assetCoordination,
+		platformfilesystem.Local{}.EvalSymlinks,
 		backendArtifactResolver,
 		edges.ModelInvocationProtocolClient,
 		protocolDialer,
 		adaptModelInvocationBackend(edges.ModelInvocationBackend),
 		adaptModelASRBackend(edges.ModelASRBackend),
 		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
+		runtimeEvidence,
 		edges.ModelResolveHuggingFaceRevision,
 	)
 }
@@ -329,6 +447,7 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -367,6 +486,7 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -505,258 +625,6 @@ func (modelsClock) NewTimer(duration time.Duration) interface {
 type modelsTimer struct{ *time.Timer }
 
 func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
-
-type modelsProcessLauncher struct{}
-
-func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
-	HealthEndpoint() string
-	Wait() error
-	Stop(context.Context) error
-}, error) {
-	launch, err := managedbackend.ResolveManagedBackendLaunch(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.Command(launch.Command, launch.Args...)
-	if len(spec.Env) > 0 {
-		cmd.Env = append([]string(nil), spec.Env...)
-	}
-	if launch.WorkDir != "" {
-		cmd.Dir = launch.WorkDir
-	}
-	if err := cmd.Start(); err != nil {
-		launch.Cleanup()
-		return nil, err
-	}
-	managed := &modelsManagedProcess{
-		cmd:            cmd,
-		healthEndpoint: launch.Endpoint,
-		cleanup:        launch.Cleanup,
-		finished:       make(chan struct{}),
-	}
-	go func() {
-		waitErr := cmd.Wait()
-		managed.cleanupResources()
-		managed.mu.Lock()
-		managed.waitErr = waitErr
-		close(managed.finished)
-		managed.mu.Unlock()
-	}()
-	return managed, nil
-}
-
-type modelHostProcessLauncherAdapter struct {
-	next interface {
-		Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
-			HealthEndpoint() string
-			Wait() error
-			Stop(context.Context) error
-		}, error)
-	}
-}
-
-func adaptModelHostProcessLauncher(next interface {
-	Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
-		HealthEndpoint() string
-		Wait() error
-		Stop(context.Context) error
-	}, error)
-}) modelswire.HostProcessLauncher {
-	if isNilModelEdgeDependency(next) {
-		return nil
-	}
-	return modelHostProcessLauncherAdapter{next: next}
-}
-
-func (adapter modelHostProcessLauncherAdapter) Start(
-	ctx context.Context,
-	spec modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
-	process, err := adapter.next.Start(ctx, serviceedges.HostProcessStartSpec{
-		Command:        spec.Command,
-		Args:           spec.Args,
-		Env:            spec.Env,
-		WorkDir:        spec.WorkDir,
-		HealthEndpoint: spec.HealthEndpoint,
-		Backend:        spec.Backend,
-		ModelPath:      spec.ModelPath,
-		BackendFiles:   append([]string(nil), spec.BackendFiles...),
-	})
-	if err != nil || process == nil {
-		return modelswire.HostManagedProcess(process), err
-	}
-	return modelswire.HostManagedProcess(process), nil
-}
-
-type modelHostClockAdapter struct {
-	next interface {
-		Now() time.Time
-		NewTimer(time.Duration) interface {
-			C() <-chan time.Time
-			Stop() bool
-		}
-	}
-}
-
-func adaptModelHostClock(next interface {
-	Now() time.Time
-	NewTimer(time.Duration) interface {
-		C() <-chan time.Time
-		Stop() bool
-	}
-}) modelswire.HostClock {
-	if isNilModelEdgeDependency(next) {
-		return nil
-	}
-	return modelHostClockAdapter{next: next}
-}
-
-func (adapter modelHostClockAdapter) Now() time.Time { return adapter.next.Now() }
-
-func (adapter modelHostClockAdapter) NewTimer(duration time.Duration) modelswire.HostTimer {
-	return modelswire.HostTimer(adapter.next.NewTimer(duration))
-}
-
-func adaptModelRuntimeTempFile(next serviceedges.RuntimeCreateTempFile) modelswire.RuntimeCreateTempFile {
-	if next == nil {
-		return nil
-	}
-	return func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
-		file, err := next(dir, pattern)
-		return modelswire.RuntimeTempFile(file), err
-	}
-}
-
-type modelsPullMetricsAdapter struct {
-	next interface {
-		RecordModelPullMetric(serviceedges.PullMetric)
-	}
-}
-
-func adaptModelsPullMetricsRecorder(next interface {
-	RecordModelPullMetric(serviceedges.PullMetric)
-}) modelswire.PullMetricsRecorder {
-	if next == nil {
-		return nil
-	}
-	return modelsPullMetricsAdapter{next: next}
-}
-
-// isNilModelEdgeDependency preserves Models Wire's typed-nil validation when
-// an edge-owned interface is wrapped by a canonical adapter. Without this
-// check, a nil pointer would become a non-nil adapter value and fail later at
-// invocation rather than during inert construction.
-func isNilModelEdgeDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
-	}
-}
-
-func (adapter modelsPullMetricsAdapter) RecordModelPullMetric(metric modelswire.PullMetric) {
-	labels := make(map[string]string, len(metric.Labels))
-	for key, value := range metric.Labels {
-		labels[key] = value
-	}
-	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
-		Name:   metric.Name,
-		Labels: labels,
-	})
-}
-
-func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {
-	return modelswire.LocalRuntimeHooks{
-		MarkResourceWaitStarted:  hooks.MarkResourceWaitStarted,
-		MarkResourceWaitFinished: hooks.MarkResourceWaitFinished,
-		MarkLoadRequested:        hooks.MarkLoadRequested,
-		MarkLoadFinished:         hooks.MarkLoadFinished,
-		MarkLoadReused:           hooks.MarkLoadReused,
-	}
-}
-
-type modelsManagedProcess struct {
-	mu             sync.Mutex
-	cmd            *exec.Cmd
-	healthEndpoint string
-	cleanup        func()
-	cleanupOnce    sync.Once
-	// finished is broadcast to both the supervisor's Wait observer and the
-	// application lifecycle closer; a one-shot error channel would let one
-	// consumer strand the other during normal teardown.
-	finished chan struct{}
-	waitErr  error
-	stopped  bool
-}
-
-func (p *modelsManagedProcess) cleanupResources() {
-	if p == nil || p.cleanup == nil {
-		return
-	}
-	p.cleanupOnce.Do(p.cleanup)
-}
-
-func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }
-
-func (p *modelsManagedProcess) Wait() error {
-	if p == nil || p.finished == nil {
-		return nil
-	}
-	<-p.finished
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.waitErr
-}
-
-func (p *modelsManagedProcess) Stop(ctx context.Context) error {
-	if p == nil {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	p.mu.Lock()
-	if p.stopped || p.cmd == nil || p.cmd.Process == nil {
-		p.mu.Unlock()
-		return nil
-	}
-	p.stopped = true
-	command := p.cmd
-	p.mu.Unlock()
-	if !p.processFinished() {
-		if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && !p.processFinished() {
-			return err
-		}
-	}
-	if p.finished == nil {
-		return nil
-	}
-	select {
-	case <-p.finished:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (p *modelsManagedProcess) processFinished() bool {
-	if p == nil {
-		return true
-	}
-	if p.finished != nil {
-		select {
-		case <-p.finished:
-			return true
-		default:
-		}
-	}
-	return p.cmd != nil && p.cmd.ProcessState != nil
-}
 
 func provideModelsCLIInvocationOperation(
 	invocation factorysessionwire.InvocationOperation,

@@ -676,7 +676,10 @@ func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T
 		Source:  "hf://owner/repository/weights.gguf@revision-1",
 		Backend: "hf://owner/backend/backend.bin@backend-revision",
 	}}
-	prepared := joinedAssetPreparationRequest(request, "tts", resolved)
+	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	if err != nil {
+		t.Fatalf("joinedAssetPreparationRequest: %v", err)
+	}
 	if prepared.Scope != request.Scope || prepared.Name != "tts" || !prepared.Offline {
 		t.Fatalf("joined preparation identity = %#v, want request scope/name/offline", prepared)
 	}
@@ -690,6 +693,26 @@ func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T
 	}
 }
 
+func TestJoinedAssetPreparationRequestKeepsPrivateLocalSourceReference(t *testing.T) {
+	t.Parallel()
+
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "tts"}}
+	resolved := models.ResolvedModelReference{
+		Definition: models.ModelDefinition{Name: "tts", Source: "file://local", Backend: "localai-vibevoice"},
+		Provenance: models.ModelReferenceProvenance{
+			Kind:       models.ModelReferenceSourceNamed,
+			SourceKind: models.ModelReferenceSourceFileURI,
+		},
+	}
+	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
+	if err != nil {
+		t.Fatalf("joinedAssetPreparationRequest: %v", err)
+	}
+	if prepared.Reference.NameOrURI != request.Model.NameOrURI {
+		t.Fatalf("asset reference = %#v, want private symbolic reference %q", prepared.Reference, request.Model.NameOrURI)
+	}
+}
+
 func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *testing.T) {
 	t.Parallel()
 
@@ -697,7 +720,10 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
 		Name: "llm", Source: "hf://owner/repository", Backend: "localai-llamacpp",
 	}}
-	prepared := joinedAssetPreparationRequest(request, "llm", resolved)
+	prepared, err := joinedAssetPreparationRequest(request, "llm", resolved)
+	if err != nil {
+		t.Fatalf("joinedAssetPreparationRequest: %v", err)
+	}
 	if prepared.Reference.NameOrURI != resolved.Definition.Source || len(prepared.Artifacts) != 0 {
 		t.Fatalf("repository source preparation = %#v, want source without guessed artifact", prepared)
 	}
@@ -728,7 +754,10 @@ func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.
 		Name: "localai-backend.tar.gz", Location: "https://github.com/owner/repo/releases/download/v1/localai-backend.tar.gz",
 		Bytes: 22, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
 	}
-	prepared := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
+	prepared, err := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
+	if err != nil {
+		t.Fatalf("joinedAssetPreparationRequestWithBackend: %v", err)
+	}
 	if prepared.Backend != resolved.Definition.Backend ||
 		prepared.BackendReference.NameOrURI != selection.Location || len(prepared.BackendArtifacts) != 1 {
 		t.Fatalf("backend preparation = %#v, want selected backend source and requirement", prepared)

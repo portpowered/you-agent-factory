@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,6 +26,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
+const controlledTTSAssetEstimate = "models asset estimate modelName=\"tts\" backendBytes=0 modelBytes=82 totalBytes=82\n"
+
 // TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges proves that
 // the public Models CLI resolves the current built-in TTS model through a
 // root.BuildProcess and uses only the published external-effect edges.
@@ -34,7 +37,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	fixture := localai.Start(t)
 	modelServer := processModelHealthServer(t)
 	home := t.TempDir()
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
@@ -97,8 +100,8 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	if got, want := output.String(), "Wrote audio: "+audioPath+"\n"; got != want {
 		t.Fatalf("models invoke stdout = %q, want %q", got, want)
 	}
-	if diagnostics.Len() != 0 {
-		t.Fatalf("models invoke stderr = %q, want empty", diagnostics.String())
+	if diagnostics.String() != controlledTTSAssetEstimate {
+		t.Fatalf("models invoke stderr = %q, want controlled asset estimate", diagnostics.String())
 	}
 	if len(backendRequests) != 0 {
 		t.Fatalf("generic backend invocation count = %d, want zero private-route fallback calls", len(backendRequests))
@@ -226,7 +229,7 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	fixture := localai.Start(t, localai.Options{TTSFailureText: "failed invocation"})
 	modelServer := processModelHealthServer(t)
 	home := t.TempDir()
-	writeGenericBuiltinTTSCache(t, home)
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	backendInvocations := 0
@@ -252,14 +255,14 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	if err != nil {
 		t.Fatalf("first Process.Execute(models invoke) error = %v\nstdout=%q\nstderr=%q", err, stdout, stderr)
 	}
-	assertSuccessfulProcessTTS(t, stdout, stderr, firstAudioPath, localai.AudioBytes())
+	assertSuccessfulProcessTTS(t, stdout, stderr, firstAudioPath, localai.AudioBytes(), controlledTTSAssetEstimate)
 
 	secondAudioPath := filepath.Join(t.TempDir(), "second.wav")
 	stdout, stderr, err = executeProcessTTS(t, process, home, factoryDir, secondAudioPath, "follow-up after success")
 	if err != nil {
 		t.Fatalf("follow-up after successful Process.Execute(models invoke) error = %v\nstdout=%q\nstderr=%q", err, stdout, stderr)
 	}
-	assertSuccessfulProcessTTS(t, stdout, stderr, secondAudioPath, localai.AudioBytes())
+	assertSuccessfulProcessTTS(t, stdout, stderr, secondAudioPath, localai.AudioBytes(), "")
 
 	failedAudioPath := filepath.Join(t.TempDir(), "failed.wav")
 	stdout, stderr, err = executeProcessTTS(t, process, home, factoryDir, failedAudioPath, "failed invocation")
@@ -285,7 +288,7 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	if err != nil {
 		t.Fatalf("follow-up after failed Process.Execute(models invoke) error = %v\nstdout=%q\nstderr=%q", err, stdout, stderr)
 	}
-	assertSuccessfulProcessTTS(t, stdout, stderr, finalAudioPath, localai.AudioBytes())
+	assertSuccessfulProcessTTS(t, stdout, stderr, finalAudioPath, localai.AudioBytes(), "")
 
 	if backendInvocations != 0 {
 		t.Fatalf("generic backend invocation count = %d, want zero private-route fallback calls", backendInvocations)
@@ -327,13 +330,14 @@ func assertSuccessfulProcessTTS(
 	stderr string,
 	outputPath string,
 	wantAudio []byte,
+	wantStderr string,
 ) {
 	t.Helper()
 	if got, want := stdout, "Wrote audio: "+outputPath+"\n"; got != want {
 		t.Fatalf("successful models invoke stdout = %q, want %q", got, want)
 	}
-	if stderr != "" {
-		t.Fatalf("successful models invoke stderr = %q, want empty", stderr)
+	if stderr != wantStderr {
+		t.Fatalf("successful models invoke stderr = %q, want %q", stderr, wantStderr)
 	}
 	written, err := os.ReadFile(outputPath)
 	if err != nil {
@@ -373,22 +377,23 @@ func newProcessTTSBoundaries(
 		assetNetwork: assetNetwork, launcher: launcher, protocol: protocol,
 		compatibility: compatibility, hostHTTP: hostHTTP,
 		edges: serviceedges.Edges{
-			ModelAssetHTTPClient:           assetNetwork,
-			ModelAssetMakeDirectories:      assetFiles.MkdirAll,
-			ModelAssetInspectPath:          assetFiles.Stat,
-			ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
-			ModelAssetResolveEnvironment:   func(string) string { return "" },
-			ModelAssetWriteFile:            assetFiles.WriteFile,
-			ModelAssetRenamePath:           assetFiles.Rename,
-			ModelAssetRemovePath:           assetFiles.Remove,
-			ModelAssetReadFile:             assetFiles.ReadFile,
-			ModelAssetReadDirectory:        assetFiles.ReadDir,
-			ModelAssetCreateFile:           assetFiles.Create,
-			ModelAssetOpenFile:             assetFiles.Open,
-			ModelHostProcessLauncher:       launcher,
-			ModelHostProtocolNegotiator:    protocol,
-			ModelHostCompatibilityChecker:  compatibility,
-			ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+			FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+			ModelAssetHTTPClient:               assetNetwork,
+			ModelAssetMakeDirectories:          assetFiles.MkdirAll,
+			ModelAssetInspectPath:              assetFiles.Stat,
+			ModelAssetResolveHomeDirectory:     assetFiles.UserHomeDir,
+			ModelAssetResolveEnvironment:       func(string) string { return "" },
+			ModelAssetWriteFile:                assetFiles.WriteFile,
+			ModelAssetRenamePath:               assetFiles.Rename,
+			ModelAssetRemovePath:               assetFiles.Remove,
+			ModelAssetReadFile:                 assetFiles.ReadFile,
+			ModelAssetReadDirectory:            assetFiles.ReadDir,
+			ModelAssetCreateFile:               assetFiles.Create,
+			ModelAssetOpenFile:                 assetFiles.Open,
+			ModelHostProcessLauncher:           launcher,
+			ModelHostProtocolNegotiator:        protocol,
+			ModelHostCompatibilityChecker:      compatibility,
+			ModelAssetHostPlatform:             models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 			ModelResolveBackendArtifact: func(
 				context.Context,
 				serviceedges.ModelBackendArtifactSelectionRequest,
@@ -519,30 +524,37 @@ func processLegacyModelServer(t *testing.T, audio []byte) *httptest.Server {
 	return server
 }
 
-const processBuiltinTTSSource = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
-
-func writeGenericBuiltinTTSCache(t *testing.T, home string) {
+func writeControlledBuiltinTTSSource(t *testing.T, home string) {
 	t.Helper()
-	body := []byte("joined built-in tts fixture")
-	name := "weights.bin"
-	digest := fmt.Sprintf("%x", sha256.Sum256(body))
-	identity := fmt.Sprintf("model|%s|%s:%d:%s", processBuiltinTTSSource, name, len(body), digest)
-	snapshot := filepath.Join(home, ".agent-factory", "models", ".you-content-addressed", "model", fmt.Sprintf("%x", sha256.Sum256([]byte(identity))))
-	if err := os.MkdirAll(snapshot, 0o755); err != nil {
-		t.Fatalf("create generic model snapshot: %v", err)
+	bundle := filepath.Join(home, "tts-role-bundle")
+	artifacts := map[string][]byte{
+		"vibevoice-realtime-0.5B-q8_0.gguf": []byte("controlled-vibevoice-model"),
+		"tokenizer.gguf":                    []byte("controlled-vibevoice-tokenizer"),
+		"voice-en-Carter_man.gguf":          []byte("controlled-vibevoice-voice"),
 	}
-	if err := os.WriteFile(filepath.Join(snapshot, name), body, 0o644); err != nil {
-		t.Fatalf("write generic model snapshot: %v", err)
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("create controlled TTS role bundle: %v", err)
 	}
-	metadata, err := json.Marshal(map[string]any{
-		"kind": "model", "identity": identity, "source": processBuiltinTTSSource, "sourceKey": processBuiltinTTSSource,
-		"artifacts": []map[string]any{{"Name": name, "Bytes": len(body), "SHA256": digest}},
+	for name, body := range artifacts {
+		if err := os.WriteFile(filepath.Join(bundle, name), body, 0o644); err != nil {
+			t.Fatalf("write controlled TTS role %q: %v", name, err)
+		}
+	}
+	source := (&url.URL{Scheme: "file", Path: filepath.ToSlash(bundle)}).String()
+	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create controlled TTS operator config directory: %v", err)
+	}
+	config, err := json.Marshal(map[string]any{
+		"models": map[string]any{
+			"tts": map[string]any{"source": source},
+		},
 	})
 	if err != nil {
-		t.Fatalf("marshal generic model metadata: %v", err)
+		t.Fatalf("marshal controlled TTS operator config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
-		t.Fatalf("write generic model metadata: %v", err)
+	if err := os.WriteFile(configPath, config, 0o644); err != nil {
+		t.Fatalf("write controlled TTS operator config: %v", err)
 	}
 }
 

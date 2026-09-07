@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -240,7 +241,42 @@ func NewDurableExecution(
 	return DurableExecution{
 		Service:         execution,
 		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
+		OperatorModels:  projectOperatorModelOverlays(operatorConfig.Models),
 	}, nil
+}
+
+// projectOperatorModelOverlays snapshots the operator-settings model map at
+// the same durable opening boundary as worker presets. Models owns the
+// resulting representation; this package only translates the settings
+// boundary without retaining pointers into the decoded operator document.
+func projectOperatorModelOverlays(
+	configured map[string]operatorconfig.ModelConfig,
+) map[string]models.ModelOverlay {
+	if len(configured) == 0 {
+		return nil
+	}
+	projected := make(map[string]models.ModelOverlay, len(configured))
+	for name, config := range configured {
+		overlay := models.ModelOverlay{
+			Source:     cloneStringPointer(config.Source),
+			Backend:    cloneStringPointer(config.Backend),
+			Operations: append([]string(nil), config.Operations...),
+		}
+		if config.LoadPolicy != nil {
+			policy := models.LoadPolicy(*config.LoadPolicy)
+			overlay.LoadPolicy = &policy
+		}
+		projected[name] = overlay
+	}
+	return projected
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func resolveDefinitionPath(

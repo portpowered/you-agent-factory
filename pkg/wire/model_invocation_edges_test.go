@@ -3,9 +3,12 @@ package wire
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -45,6 +48,266 @@ func TestModelsManagedProcessStopAfterNaturalExitIsClean(t *testing.T) {
 	if err := managed.Stop(context.Background()); err != nil {
 		t.Fatalf("repeated Stop() after natural host exit = %v, want nil", err)
 	}
+}
+
+func TestModelsProcessLauncherObservesManagedWindowsChildEnvironment(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("managed child environment proof is Windows-specific")
+	}
+	t.Parallel()
+
+	proof := newManagedWindowsChildProof(t)
+	managed := startManagedWindowsChild(t, proof)
+	defer managed.Stop(context.Background())
+	if waitErr := waitForManagedProcess(t, managed); waitErr != nil {
+		t.Fatalf("controlled managed child exit = %v, want success", waitErr)
+	}
+	assertManagedWindowsChildEnvironment(t, proof)
+	assertManagedWindowsChildEvidence(t, proof)
+}
+
+type managedWindowsChildProof struct {
+	root              string
+	managedExecutable string
+	managedLibrary    string
+	staleLibrary      string
+	environmentDump   string
+	evidencePath      string
+	environment       []string
+}
+
+func newManagedWindowsChildProof(t *testing.T) managedWindowsChildProof {
+	t.Helper()
+	root := t.TempDir()
+	cmdPath, err := exec.LookPath("cmd.exe")
+	if err != nil {
+		t.Fatalf("locate Windows command interpreter: %v", err)
+	}
+	managedExecutable := filepath.Join(root, "vibevoice-cpp.exe")
+	commandBody, err := os.ReadFile(cmdPath)
+	if err != nil {
+		t.Fatalf("read Windows command interpreter: %v", err)
+	}
+	if err := os.WriteFile(managedExecutable, commandBody, 0o700); err != nil {
+		t.Fatalf("prepare prebuilt managed command: %v", err)
+	}
+	managedLibrary := filepath.Join(root, "libgovibevoicecpp.dll")
+	if err := os.WriteFile(managedLibrary, []byte("controlled DLL marker"), 0o600); err != nil {
+		t.Fatalf("prepare managed library marker: %v", err)
+	}
+	environmentDump := filepath.Join(root, "child-environment.txt")
+	staleLibrary := filepath.Join(root, "stale-library.dll")
+	environment := appendManagedBackendEnvironment(append([]string(nil), os.Environ()...), []string{
+		"TEMP=" + root,
+		"TMP=" + root,
+		"vIbEvOiCeCpP_LiBrArY=" + staleLibrary,
+	})
+	return managedWindowsChildProof{
+		root: root, managedExecutable: managedExecutable, managedLibrary: managedLibrary, staleLibrary: staleLibrary,
+		environmentDump: environmentDump, evidencePath: filepath.Join(root, "runtime.jsonl"),
+		environment: environment,
+	}
+}
+
+func startManagedWindowsChild(t *testing.T, proof managedWindowsChildProof) interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+} {
+	t.Helper()
+	recorder := &modelRuntimeEvidenceFileRecorder{path: proof.evidencePath}
+	managed, err := (modelsProcessLauncher{recorder: recorder}).Start(
+		context.Background(),
+		serviceedges.HostProcessStartSpec{
+			Backend:      "localai-vibevoice",
+			BackendFiles: []string{proof.managedExecutable},
+			WorkDir:      proof.root,
+			Env:          proof.environment,
+			Args: []string{
+				"/c",
+				"set > child-environment.txt & exit /b 0",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("start controlled managed child: %v", err)
+	}
+	return managed
+}
+
+func assertManagedWindowsChildEnvironment(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	dump, err := os.ReadFile(proof.environmentDump)
+	if err != nil {
+		t.Fatalf("read child environment dump: %v", err)
+	}
+	childEnvironment := parseEnvironmentDump(string(dump))
+	wantEnvironment := map[string]string{
+		"PATH":                 requiredEnvironmentValue(t, proof.environment, "PATH"),
+		"TEMP":                 proof.root,
+		"TMP":                  proof.root,
+		"VIBEVOICECPP_LIBRARY": proof.managedLibrary,
+	}
+	for name, want := range wantEnvironment {
+		if got := childEnvironment[strings.ToUpper(name)]; got != want {
+			t.Fatalf("child %s = %q, want managed value %q", name, got, want)
+		}
+	}
+}
+
+func assertManagedWindowsChildEvidence(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	records := readManagedChildEvidence(t, proof.evidencePath)
+	if len(records) != 2 {
+		t.Fatalf("managed child evidence records = %d, want start and exit: %#v", len(records), records)
+	}
+	assertManagedWindowsChildLifecycle(t, records)
+	assertManagedWindowsChildFacts(t, proof, records[0])
+	assertManagedWindowsChildRedaction(t, proof)
+}
+
+func assertManagedWindowsChildLifecycle(t *testing.T, records []managedChildEnvironmentEvidence) {
+	t.Helper()
+	started, exited := records[0], records[1]
+	if started.Kind != managedChildEvidenceKind || started.Phase != managedChildPhaseStarted ||
+		started.ProcessID <= 0 || exited.Kind != managedChildEvidenceKind ||
+		exited.Phase != managedChildPhaseExited || exited.ProcessID != started.ProcessID ||
+		exited.ExitClass != managedChildExitClassExited {
+		t.Fatalf("managed child lifecycle evidence = %#v, want one PID with start/exit phases", records)
+	}
+}
+
+func assertManagedWindowsChildFacts(
+	t *testing.T,
+	proof managedWindowsChildProof,
+	started managedChildEnvironmentEvidence,
+) {
+	t.Helper()
+	wantDigests := map[string]string{
+		"PATH":                 environmentValueSHA256(requiredEnvironmentValue(t, proof.environment, "PATH")),
+		"TEMP":                 environmentValueSHA256(proof.root),
+		"TMP":                  environmentValueSHA256(proof.root),
+		"VIBEVOICECPP_LIBRARY": environmentValueSHA256(proof.managedLibrary),
+	}
+	if len(started.Environment) != len(wantDigests) {
+		t.Fatalf("started environment facts = %#v, want four allowlisted facts", started.Environment)
+	}
+	for _, fact := range started.Environment {
+		if !fact.Present || fact.ValueSHA256 != wantDigests[fact.Name] {
+			t.Fatalf("started environment fact = %#v, want bounded digest", fact)
+		}
+	}
+}
+
+func assertManagedWindowsChildRedaction(t *testing.T, proof managedWindowsChildProof) {
+	t.Helper()
+	body, err := os.ReadFile(proof.evidencePath)
+	if err != nil {
+		t.Fatalf("read managed child evidence: %v", err)
+	}
+	for _, marker := range []string{proof.root, proof.staleLibrary, proof.managedLibrary, proof.environmentDump, requiredEnvironmentValue(t, proof.environment, "PATH")} {
+		if strings.Contains(string(body), marker) {
+			t.Fatalf("managed child evidence leaked raw value %q: %s", marker, body)
+		}
+	}
+	if !bytes.Contains(body, []byte(`"sequence":1`)) || !bytes.Contains(body, []byte(`"sequence":2`)) {
+		t.Fatalf("managed child evidence sequence = %s, want ordered records", body)
+	}
+}
+
+func TestModelsProcessLauncherRecordsNonzeroManagedChildExit(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("managed child exit proof is Windows-specific")
+	}
+	t.Parallel()
+
+	cmdPath, err := exec.LookPath("cmd.exe")
+	if err != nil {
+		t.Fatalf("locate Windows command interpreter: %v", err)
+	}
+	evidencePath := filepath.Join(t.TempDir(), "runtime.jsonl")
+	recorder := &modelRuntimeEvidenceFileRecorder{path: evidencePath}
+	managed, err := (modelsProcessLauncher{recorder: recorder}).Start(
+		context.Background(),
+		serviceedges.HostProcessStartSpec{
+			Command:        cmdPath,
+			Args:           []string{"/c", "exit /b 7"},
+			Backend:        "localai-vibevoice",
+			HealthEndpoint: "grpc://127.0.0.1:1",
+		},
+	)
+	if err != nil {
+		t.Fatalf("start nonzero managed child: %v", err)
+	}
+	defer managed.Stop(context.Background())
+	if waitErr := waitForManagedProcess(t, managed); waitErr == nil {
+		t.Fatal("nonzero managed child exit = nil, want process exit error")
+	}
+	records := readManagedChildEvidence(t, evidencePath)
+	if len(records) != 2 || records[0].ProcessID <= 0 || records[1].ProcessID != records[0].ProcessID ||
+		records[0].Phase != managedChildPhaseStarted || records[1].Phase != managedChildPhaseExited ||
+		records[1].ExitClass != managedChildExitClassNonzero || len(records[1].Environment) != 0 {
+		t.Fatalf("nonzero managed child evidence = %#v, want distinct bounded exit", records)
+	}
+}
+
+func waitForManagedProcess(t *testing.T, process interface{ Wait() error }) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- process.Wait() }()
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		t.Fatal("timed out waiting for controlled managed child")
+		return nil
+	}
+}
+
+func readManagedChildEvidence(t *testing.T, path string) []managedChildEnvironmentEvidence {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read managed child evidence %q: %v", path, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	var records []managedChildEnvironmentEvidence
+	for {
+		var record managedChildEnvironmentEvidence
+		err := decoder.Decode(&record)
+		if err == io.EOF {
+			return records
+		}
+		if err != nil {
+			t.Fatalf("decode managed child evidence: %v", err)
+		}
+		records = append(records, record)
+	}
+}
+
+func parseEnvironmentDump(dump string) map[string]string {
+	values := make(map[string]string)
+	for _, line := range strings.Split(dump, "\r\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if ok {
+			values[strings.ToUpper(key)] = value
+		}
+	}
+	return values
+}
+
+func requiredEnvironmentValue(t *testing.T, environment []string, name string) string {
+	t.Helper()
+	for _, entry := range environment {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(key, name) {
+			return value
+		}
+	}
+	t.Fatalf("required environment value %s is missing", name)
+	return ""
 }
 
 var (
@@ -331,8 +594,9 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 	return modelswire.HostProtocolNegotiationRequest{
 		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
-		Revision: "revision-1",
-		Platform: models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+		Revision:  "revision-1",
+		Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+		ModelPath: "runtime/model.gguf", ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
 	}
 }
 
@@ -346,7 +610,8 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 	}
 	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
 		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
-		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform {
+		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform ||
+		protocol.request.ModelPath != request.ModelPath || !equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
 		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
 	}
 	if result != (modelswire.HostProtocolNegotiationResult{
@@ -384,9 +649,22 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 	if err := adaptedConnection.Close(); err != nil {
 		t.Fatalf("close model host connection: %v", err)
 	}
-	if connection.request.Backend != request.Backend || !connection.closed {
+	if connection.request.Backend != request.Backend || connection.request.ModelPath != request.ModelPath ||
+		!equalStringSlices(connection.request.ModelFiles, request.ModelFiles) || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func assertAdaptedOptionalPorts(t *testing.T) {

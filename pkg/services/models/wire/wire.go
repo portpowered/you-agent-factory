@@ -78,13 +78,21 @@ type InvocationProtocolClient interface {
 // pinned LocalAI adapter when no provider-neutral fixture client is supplied.
 type InvocationProtocolDialer = platformgrpc.Dialer
 
+// RuntimeEvidenceRecord and RuntimeEvidenceRecorder are aliases for the
+// parent-private Models evidence seam. They are re-exposed only at this
+// construction boundary so the canonical pkg/wire graph can inject the
+// integration-only sink without importing an internal package it cannot own.
+type RuntimeEvidenceRecord = modelseffects.RuntimeEvidenceRecord
+type RuntimeEvidenceRecorder = modelseffects.RuntimeEvidenceRecorder
+
 // NewPinnedGRPCHostProtocolNegotiator exposes the LocalAI-owned readiness
 // adapter through the Models construction boundary without exporting any
 // backend-native message types.
 func NewPinnedGRPCHostProtocolNegotiator(
 	dialer InvocationProtocolDialer,
+	resolveSymlinks ...modelseffects.HostResolveSymlinks,
 ) HostProtocolNegotiator {
-	return localai.NewPinnedGRPCHostProtocolNegotiator(dialer)
+	return localai.NewPinnedGRPCHostProtocolNegotiator(dialer, resolveSymlinks...)
 }
 
 type invocationRuntimeOptions struct {
@@ -155,7 +163,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, invocationRuntimeOptions{},
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, nil, nil, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
@@ -204,15 +212,15 @@ func NewServiceWithBackendArtifactResolver(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, backendResolver, invocationRuntimeOptions{},
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, nil, backendResolver, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
 
-// NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer adds
-// the production transport used by the pinned LocalAI adapter while retaining
-// the injected generic and ASR backends used by deterministic fixtures.
-func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
+// NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence
+// adds the optional private evidence sink used by the compiled integration
+// witness. The existing constructor remains unchanged for ordinary callers.
+func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
 	assetPlatform models.AssetHostPlatform,
 	assetHTTP AssetHTTPDoer,
 	assetEndpoints models.RuntimeAssetEndpoints,
@@ -245,12 +253,14 @@ func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	assetCoordination AssetStagingCoordination,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 	backendResolver BackendArtifactResolver,
 	invocationProtocol InvocationProtocolClient,
 	protocolDialer InvocationProtocolDialer,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
 	embeddingBackend EmbeddingBackend,
+	runtimeEvidence RuntimeEvidenceRecorder,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -259,7 +269,8 @@ func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, backendResolver,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination,
+		runtimeEvidence, resolveSymlinks, backendResolver,
 		invocationRuntimeOptions{
 			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
 			Client: invocationProtocol, Dialer: protocolDialer,
@@ -299,6 +310,8 @@ func newService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	assetCoordination AssetStagingCoordination,
+	runtimeEvidence RuntimeEvidenceRecorder,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 	backendResolver BackendArtifactResolver,
 	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
@@ -361,7 +374,7 @@ func newService(
 		resolveEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
-		assetCoordination, backendResolver, runtimeOptions, revisionResolvers...,
+		assetCoordination, runtimeEvidence, resolveSymlinks, backendResolver, runtimeOptions, revisionResolvers...,
 	)
 }
 
@@ -398,11 +411,14 @@ func composeModelsService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	assetCoordination AssetStagingCoordination,
+	runtimeEvidence RuntimeEvidenceRecorder,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 	backendResolver BackendArtifactResolver,
 	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(runtimeEvidence)
 	runtimeOptions = bindASRStaging(
 		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
 	)
@@ -417,7 +433,7 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, assetCoordination, runtimeOptions, now, issuerEntropy,
+		compatibilityChecker, assetCoordination, runtimeEvidence, resolveSymlinks, runtimeOptions, now, issuerEntropy,
 		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
@@ -430,7 +446,8 @@ func composeModelsService(
 		components.runtimeScopes, components.catalog, components.assets, components.runtimeHost, components.inference,
 		modelseffects.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
-			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
+			RuntimeEvidence: runtimeEvidence,
+			HostLogger:      hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
 			ResolveHuggingFaceRevision: firstRevisionResolver(revisionResolvers),
 			ResolveBackendArtifact:     backendResolver,
 			BackendArtifactPlatform:    assetPlatform,
@@ -469,6 +486,8 @@ func buildModelsServiceComponents(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	assetCoordination AssetStagingCoordination,
+	runtimeEvidence RuntimeEvidenceRecorder,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 	runtimeOptions invocationRuntimeOptions,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
@@ -504,6 +523,8 @@ func buildModelsServiceComponents(
 		runtimehost.Options{
 			Platform: assetPlatform, ProtocolNegotiator: protocolNegotiator,
 			CompatibilityChecker: compatibilityChecker,
+			ResolveSymlinks:      resolveSymlinks,
+			RuntimeEvidence:      runtimeEvidence,
 		},
 	)
 	if err != nil {

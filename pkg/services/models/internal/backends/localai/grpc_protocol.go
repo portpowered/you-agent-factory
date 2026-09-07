@@ -66,15 +66,21 @@ func NewPinnedEmbeddingBackend(
 // carry a backend selector.
 func NewPinnedGRPCHostProtocolNegotiator(
 	dialer platformgrpc.Dialer,
+	resolveSymlinks ...modelseffects.HostResolveSymlinks,
 ) modelseffects.HostProtocolNegotiator {
 	if dialer == nil {
 		return nil
 	}
-	return grpcHostProtocolNegotiator{dialer: dialer}
+	var resolve modelseffects.HostResolveSymlinks
+	if len(resolveSymlinks) > 0 {
+		resolve = resolveSymlinks[0]
+	}
+	return grpcHostProtocolNegotiator{dialer: dialer, resolveSymlinks: resolve}
 }
 
 type grpcHostProtocolNegotiator struct {
-	dialer platformgrpc.Dialer
+	dialer          platformgrpc.Dialer
+	resolveSymlinks modelseffects.HostResolveSymlinks
 }
 
 func (negotiator grpcHostProtocolNegotiator) Negotiate(
@@ -118,7 +124,7 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 		)
 	}
 	if strings.TrimSpace(request.ModelPath) != "" {
-		if err := loadModel(ctx, connection, request); err != nil {
+		if err := loadModel(ctx, connection, request, negotiator.resolveSymlinks); err != nil {
 			return modelseffects.HostProtocolNegotiationResult{}, err
 		}
 	}
@@ -133,14 +139,23 @@ func loadModel(
 	ctx context.Context,
 	connection platformgrpc.Connection,
 	request modelseffects.HostProtocolNegotiationRequest,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
 ) error {
 	modelFile := strings.TrimSpace(request.ModelPath)
+	options, err := vibeVoiceLoadOptions(request, resolveSymlinks)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: LocalAI VibeVoice model layout is invalid",
+			models.ErrHostProtocolIncompatible,
+		)
+	}
 	payload, err := proto.Marshal(&ModelOptions{
 		Model:      request.ModelName,
 		NBatch:     localAIModelBatchSize,
 		Embeddings: strings.EqualFold(request.ModelName, models.BuiltInModelNameEmbed),
 		ModelFile:  modelFile,
 		ModelPath:  filepath.Dir(modelFile),
+		Options:    options,
 	})
 	if err != nil {
 		return fmt.Errorf(

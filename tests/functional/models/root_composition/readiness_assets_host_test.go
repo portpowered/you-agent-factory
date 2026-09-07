@@ -339,12 +339,39 @@ func (process *functionalModelHostProcess) Wait() error {
 	return nil
 }
 
-type functionalModelAssetFileSystem struct{ home string }
+type functionalModelAssetFileSystem struct {
+	home  string
+	trace *functionalModelAssetTrace
+}
+
+type functionalModelAssetTrace struct {
+	mu    sync.Mutex
+	paths []string
+}
+
+func (trace *functionalModelAssetTrace) record(path string) {
+	if trace == nil {
+		return
+	}
+	trace.mu.Lock()
+	trace.paths = append(trace.paths, path)
+	trace.mu.Unlock()
+}
+
+func (trace *functionalModelAssetTrace) snapshot() []string {
+	if trace == nil {
+		return nil
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	return append([]string(nil), trace.paths...)
+}
 
 func (filesystem functionalModelAssetFileSystem) MkdirAll(path string, mode os.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
 func (filesystem functionalModelAssetFileSystem) Stat(path string) (os.FileInfo, error) {
+	filesystem.trace.record("stat:" + path)
 	return os.Stat(path)
 }
 func (filesystem functionalModelAssetFileSystem) UserHomeDir() (string, error) {
@@ -358,14 +385,17 @@ func (filesystem functionalModelAssetFileSystem) Rename(oldPath, newPath string)
 }
 func (filesystem functionalModelAssetFileSystem) Remove(path string) error { return os.Remove(path) }
 func (filesystem functionalModelAssetFileSystem) ReadFile(path string) ([]byte, error) {
+	filesystem.trace.record("read:" + path)
 	return os.ReadFile(path)
 }
 func (filesystem functionalModelAssetFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
+	filesystem.trace.record("readdir:" + path)
 	return os.ReadDir(path)
 }
 func (filesystem functionalModelAssetFileSystem) Create(path string) (io.WriteCloser, error) {
 	return os.Create(path)
 }
 func (filesystem functionalModelAssetFileSystem) Open(path string) (io.ReadCloser, error) {
+	filesystem.trace.record("open:" + path)
 	return os.Open(path)
 }

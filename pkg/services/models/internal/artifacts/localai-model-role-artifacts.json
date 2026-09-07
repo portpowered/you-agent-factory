@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "localai-model-role-artifacts",
+  "models": [
+    {
+      "name": "tts",
+      "publication": {
+        "repository": "mudler/vibevoice.cpp-models",
+        "revision": "a67807e65e3002e187179a856e96043f75060bc9",
+        "license": "MIT",
+        "baseModel": "microsoft/VibeVoice-Realtime-0.5B"
+      },
+      "source": {
+        "uri": "hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9"
+      },
+      "backend": {
+        "id": "localai-vibevoice",
+        "repository": "https://github.com/mudler/vibevoice.cpp",
+        "commit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+        "localAICommit": "b224c96db6f4b87306a33a808650bfce63b12588"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "targets": ["darwin-arm64", "linux-amd64", "windows-amd64"],
+      "artifacts": [
+        {
+          "role": "model",
+          "path": "vibevoice-realtime-0.5B-q8_0.gguf",
+          "sizeBytes": 1699832128,
+          "sha256": "5251e3f0386d1056a90c61b6c7359a4775da44dd19402499bef1989c4b5c653a"
+        },
+        {
+          "role": "tokenizer",
+          "path": "tokenizer.gguf",
+          "sizeBytes": 5922368,
+          "sha256": "37dc3b722d5677e37e29a57df55aa05c485116eeb5459e57ff8dde616b4986f6"
+        },
+        {
+          "role": "voice",
+          "path": "voice-en-Carter_man.gguf",
+          "sizeBytes": 8472448,
+          "sha256": "b15cd8b9cae6ee2c3d20b0ee6e7bfe93f13489f8b63b6834e9bbf0dfabf6505a"
+        }
+      ]
+    }
+  ]
+}

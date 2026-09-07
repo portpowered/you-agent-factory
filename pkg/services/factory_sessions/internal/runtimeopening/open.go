@@ -257,6 +257,7 @@ func openRuntime(
 		modelService,
 		configured.ModelCacheDirectory,
 		currentRuntimeConfig,
+		durableExecution.OperatorModels,
 	)
 	if err != nil {
 		return runtimeProducts{}, err

@@ -1,6 +1,7 @@
 package codecs_test
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"os"
@@ -155,6 +156,75 @@ func TestASRCodecRejectsMalformedOversizedAndInvalidTimestampResponsesAtomically
 			t.Fatalf("error = %#v, want malformed InvocationFailure", err)
 		}
 	}
+}
+
+func TestASRCodecRejectsNonMonotonicAndOutOfDurationSegments(t *testing.T) {
+	t.Parallel()
+
+	codec := codecs.NewASRCodec()
+	tests := []struct {
+		name      string
+		response  codecs.ASRResponse
+		withAudio bool
+	}{
+		{
+			name: "nonmonotonic timestamps",
+			response: codecs.ASRResponse{
+				Text: "hello",
+				Segments: []codecs.ASRSegment{
+					{ID: 0, Start: 0, End: 10, Text: "hello"},
+					{ID: 1, Start: 5, End: 9, Text: "again"},
+				},
+			},
+		},
+		{
+			name: "segment exceeds PCM duration",
+			response: codecs.ASRResponse{
+				Text:     "hello",
+				Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1, Text: "hello"}},
+			},
+			withAudio: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var (
+				outputs []models.InferenceContent
+				err     error
+			)
+			if test.withAudio {
+				outputs, err = codec.DecodeResponseValueWithinAudio(test.response, durationTestWAV())
+			} else {
+				outputs, err = codec.DecodeResponseValue(test.response)
+			}
+			if err == nil || len(outputs) != 0 {
+				t.Fatalf("response outputs = %#v, error = %v; want atomic malformed failure", outputs, err)
+			}
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
+				t.Fatalf("error = %v, failure = %#v, want malformed response", err, failure)
+			}
+		})
+	}
+}
+
+func durationTestWAV() []byte {
+	audio := make([]byte, 46)
+	copy(audio[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(audio[4:8], uint32(len(audio)-8))
+	copy(audio[8:12], "WAVE")
+	copy(audio[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(audio[16:20], 16)
+	binary.LittleEndian.PutUint16(audio[20:22], 1)
+	binary.LittleEndian.PutUint16(audio[22:24], 1)
+	binary.LittleEndian.PutUint32(audio[24:28], 24000)
+	binary.LittleEndian.PutUint32(audio[28:32], 48000)
+	binary.LittleEndian.PutUint16(audio[32:34], 2)
+	binary.LittleEndian.PutUint16(audio[34:36], 16)
+	copy(audio[36:40], "data")
+	binary.LittleEndian.PutUint32(audio[40:44], 2)
+	audio[44], audio[45] = 0x01, 0x02
+	return audio
 }
 
 func minASRTest(left, right int) int {

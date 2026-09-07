@@ -8,10 +8,10 @@ import (
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
@@ -112,6 +112,9 @@ func NewRoot(
 	if process.Logger == nil {
 		process.Logger = zap.NewNop()
 	}
+	process.RuntimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(
+		process.RuntimeEvidence,
+	)
 	if process.Clock == nil {
 		return nil, missingDependencyError("Models process clock")
 	}
@@ -466,8 +469,6 @@ type joinedInvocationPlan struct {
 	lease     models.ModelLeaseRef
 }
 
-const joinedInvocationFailureRuntime = "runtime_failure"
-
 // InvokeModel owns the complete prepared-model transaction. The injected
 // Inference owner remains responsible for the lease-backed primitive; this
 // root method supplies the preparation and compensating lifecycle around it.
@@ -479,7 +480,7 @@ func (o *Root) InvokeModel(
 		ctx = context.Background()
 	}
 	started := joinedInvocationStart(o)
-	stage := "validate"
+	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
 	var invocation models.ModelInvocationRef
@@ -493,14 +494,28 @@ func (o *Root) InvokeModel(
 		if !result.Invocation.IsZero() {
 			invocation = result.Invocation
 		}
-		if err != nil {
+		publicErr := err
+		diagnosticErr := err
+		if publicErr != nil {
 			result = joinedInvocationFailureResult(result)
+			diagnosticErr = modelseffects.WrapRuntimeFailure(stage, publicErr)
+		}
+		elapsed := joinedInvocationElapsed(o, started)
+		if o != nil && (diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr)) {
+			modelseffects.RecordRuntimeEvidenceStage(
+				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+			)
+		}
+		if o != nil {
+			modelseffects.RecordRuntimeEvidenceTerminal(
+				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+			)
 		}
 		joinedInvocationRecord(
-			o, modelName, operationName, invocation, stage, err,
-			joinedInvocationElapsed(o, started),
+			o, modelName, operationName, invocation, stage, publicErr,
+			elapsed,
 		)
-		return result.Clone(), err
+		return result.Clone(), publicErr
 	}
 
 	if err := validateJoinedRoot(o); err != nil {
@@ -519,6 +534,21 @@ func (o *Root) InvokeModel(
 	return finish(result, joinedInvocationContextError(ctx, err))
 }
 
+func runtimeHostEvidenceAlreadyRecorded(err error) bool {
+	stage, _, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok {
+		return false
+	}
+	switch stage {
+	case modelseffects.RuntimeStageBackendExtract,
+		modelseffects.RuntimeStageBackendStart,
+		modelseffects.RuntimeStageProtocolLoad:
+		return true
+	default:
+		return false
+	}
+}
+
 func validateJoinedRoot(o *Root) error {
 	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
 		return models.ErrUnsupportedOperation
@@ -529,23 +559,23 @@ func validateJoinedRoot(o *Root) error {
 func (o *Root) prepareJoinedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
-) (joinedInvocationPlan, string, error) {
+) (joinedInvocationPlan, modelseffects.RuntimeStage, error) {
 	plan := joinedInvocationPlan{}
 	if err := request.ValidateGeneric(); err != nil {
-		return plan, "validate", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 
 	resolution, err := o.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
 		Scope: request.Scope, Reference: request.Model,
 	})
 	if err != nil {
-		return plan, "resolve", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	resolved := resolution.Resolved
 	plan.modelName = resolved.Definition.Name
 	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
 	if err != nil {
-		return plan, "resolve", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	plan.prepared.ModelName = plan.modelName
 	plan.prepared.Operation = plan.operation.Name
@@ -555,35 +585,55 @@ func (o *Root) prepareJoinedInvocation(
 
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
 	if err != nil {
-		return plan, "resolve_backend", err
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
-	assetRequest := joinedAssetPreparationRequestWithBackend(
+	assetRequest, err := joinedAssetPreparationRequestWithBackend(
 		request, plan.modelName, resolved, backendArtifact,
 	)
+	if err != nil {
+		return plan, modelseffects.RuntimeStageArtifactResolve, err
+	}
 	if _, err := o.PreflightModelAssets(ctx, assetRequest); err != nil {
-		return plan, "preflight_assets", joinedInvocationAssetError(request, err)
+		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
 	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
-		return plan, "acquire_assets", joinedInvocationAssetError(request, err)
+		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
 	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
 		Scope: request.Scope,
 		Name:  plan.modelName,
 	}); err != nil {
-		return plan, "ensure_host", err
+		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
 	leaseResult, err := o.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
 		Scope: request.Scope, Name: plan.modelName, Holder: request.Holder,
 	})
 	if err != nil {
-		return plan, "acquire_lease", err
+		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
 	plan.lease = leaseResult.Lease.Lease
 	if plan.lease.IsZero() {
-		return plan, "acquire_lease", models.ErrHostLeaseNotFound
+		return plan, modelseffects.RuntimeStageBackendStart, models.ErrHostLeaseNotFound
 	}
 	plan.prepared.Lease = plan.lease
-	return plan, "invoke", nil
+	return plan, modelseffects.RuntimeStageInvoke, nil
+}
+
+func joinedAssetRuntimeStage(err error) modelseffects.RuntimeStage {
+	switch {
+	case errors.Is(err, models.ErrAssetIntegrityFailed):
+		return modelseffects.RuntimeStageArtifactDigest
+	case errors.Is(err, models.ErrInferenceArtifactInvalid):
+		return modelseffects.RuntimeStageArtifactDigest
+	case errors.Is(err, models.ErrAssetSourceMissing),
+		errors.Is(err, models.ErrAssetSourceUnsupported),
+		errors.Is(err, models.ErrAssetOffline),
+		errors.Is(err, models.ErrAssetUnavailable),
+		errors.Is(err, models.ErrAssetBackendNotReady):
+		return modelseffects.RuntimeStageArtifactDownload
+	default:
+		return modelseffects.RuntimeStageArtifactResolve
+	}
 }
 
 func (o *Root) resolveJoinedBackendArtifact(
@@ -625,11 +675,11 @@ func (o *Root) resolveJoinedBackendArtifact(
 func (o *Root) executeJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	result, err := o.InvokeModelWithLease(ctx, plan.prepared)
 	result = joinedInvocationResultIdentity(result, plan)
 	if err != nil {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 	}
 	if result.Status == models.ModelInvocationStatusCompleted {
 		result.Outputs, err = models.NormalizeGenericInvocationOutputs(
@@ -637,25 +687,25 @@ func (o *Root) executeJoinedInvocation(
 		)
 		if err != nil {
 			result.Status = models.ModelInvocationStatusFailed
-			return o.finishJoinedFailure(ctx, plan, result, "invoke", err)
+			return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 		}
 	}
 	if result.Status == models.ModelInvocationStatusAccepted {
 		result.Status = models.ModelInvocationStatusFailed
 		return o.finishJoinedFailure(
-			ctx, plan, result, "invoke",
+			ctx, plan, result, modelseffects.RuntimeStageInvoke,
 			fmt.Errorf("%w: joined invocation did not complete", models.ErrInferenceFailed),
 		)
 	}
 	if result.Status == models.ModelInvocationStatusFailed {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
 	if result.Status == models.ModelInvocationStatusCancelled {
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceCancelled)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceCancelled)
 	}
 	if result.Status != models.ModelInvocationStatusCompleted {
 		result.Status = models.ModelInvocationStatusFailed
-		return o.finishJoinedFailure(ctx, plan, result, "invoke", models.ErrInferenceFailed)
+		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
 	return o.releaseJoinedInvocation(ctx, plan, result)
 }
@@ -664,9 +714,9 @@ func (o *Root) finishJoinedFailure(
 	ctx context.Context,
 	plan joinedInvocationPlan,
 	result models.InvokeModelResult,
-	stage string,
+	stage modelseffects.RuntimeStage,
 	invokeErr error,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	if !joinedInvocationLeaseReleased(result) {
 		releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 		if releaseErr == nil {
@@ -681,9 +731,9 @@ func (o *Root) releaseJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
 	result models.InvokeModelResult,
-) (models.InvokeModelResult, string, error) {
+) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	if joinedInvocationLeaseReleased(result) {
-		return result, "release", nil
+		return result, modelseffects.RuntimeStageInvoke, nil
 	}
 	releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 	if releaseErr == nil {
@@ -691,7 +741,7 @@ func (o *Root) releaseJoinedInvocation(
 	} else {
 		result.Status = models.ModelInvocationStatusFailed
 	}
-	return result, "release", releaseErr
+	return result, modelseffects.RuntimeStageInvoke, releaseErr
 }
 
 func joinedInvocationResultIdentity(
@@ -716,7 +766,15 @@ func joinedAssetReference(
 	reference models.ModelReference,
 	resolved models.ResolvedModelReference,
 ) models.ModelReference {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(resolved.Definition.Source)), "hf://") {
+	// Local source details are deliberately redacted from the resolved public
+	// definition. Keep the original request at the asset boundary so the
+	// private scope overlay can resolve the actual local path there.
+	if resolved.Provenance.SourceKind == models.ModelReferenceSourceLocalPath ||
+		resolved.Provenance.SourceKind == models.ModelReferenceSourceFileURI {
+		return reference
+	}
+	resolvedSource := strings.TrimSpace(resolved.Definition.Source)
+	if isJoinedSourceReference(resolvedSource) {
 		return models.ModelReference{NameOrURI: resolved.Definition.Source}
 	}
 	return reference
@@ -726,7 +784,7 @@ func joinedAssetPreparationRequest(
 	request models.InvokeModelRequest,
 	modelName string,
 	resolved models.ResolvedModelReference,
-) models.PrepareModelAssetsRequest {
+) (models.PrepareModelAssetsRequest, error) {
 	return joinedAssetPreparationRequestWithBackend(
 		request, modelName, resolved, modelseffects.BackendArtifactSelection{},
 	)
@@ -737,29 +795,75 @@ func joinedAssetPreparationRequestWithBackend(
 	modelName string,
 	resolved models.ResolvedModelReference,
 	backendArtifact modelseffects.BackendArtifactSelection,
-) models.PrepareModelAssetsRequest {
+) (models.PrepareModelAssetsRequest, error) {
 	assetReference := joinedAssetReference(request.Model, resolved)
+	modelRequirements, err := joinedModelAssetRequirements(
+		resolved.Definition, assetReference.NameOrURI,
+	)
+	if err != nil {
+		return models.PrepareModelAssetsRequest{}, err
+	}
 	prepared := models.PrepareModelAssetsRequest{
 		Scope:     request.Scope,
 		Name:      modelName,
 		Reference: assetReference,
 		Offline:   request.Offline,
 		Backend:   strings.TrimSpace(resolved.Definition.Backend),
-		Artifacts: joinedSourceAssetRequirements(assetReference.NameOrURI),
+		Artifacts: modelRequirements,
 	}
 	if backendArtifact.Name != "" {
 		prepared.BackendReference = models.ModelReference{NameOrURI: backendArtifact.Location}
 		prepared.BackendArtifacts = []models.AssetRequirement{{
 			Name: backendArtifact.Name, Bytes: backendArtifact.Bytes, SHA256: backendArtifact.SHA256,
 		}}
-		return prepared
+		return prepared, nil
 	}
 	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
 		prepared.Backend = ""
 		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
 		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)
 	}
-	return prepared
+	return prepared, nil
+}
+
+func joinedModelAssetRequirements(
+	definition models.ModelDefinition,
+	source string,
+) ([]models.AssetRequirement, error) {
+	if !strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameTTS) ||
+		!strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-vibevoice") {
+		return joinedSourceAssetRequirements(source), nil
+	}
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		return nil, err
+	}
+	roleModel, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		return joinedSourceAssetRequirements(source), nil
+	}
+	if strings.TrimSpace(source) != roleModel.Source.URI {
+		// Operator model overlays may point the built-in TTS model at a local
+		// controlled bundle. Leave local/file sources unexpanded here so the
+		// asset service can enumerate the directory and preserve all role files;
+		// the pinned source below remains an explicit three-role contract.
+		if isJoinedSourceReference(source) &&
+			!strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), "hf://") {
+			return nil, nil
+		}
+		return joinedSourceAssetRequirements(source), nil
+	}
+	requirements := make([]models.AssetRequirement, 0, len(roleModel.Artifacts))
+	for _, role := range []string{"model", "tokenizer", "voice"} {
+		artifact, ok := roleModel.Artifact(role)
+		if !ok {
+			return nil, fmt.Errorf("%w: missing TTS role %q", modelartifacts.ErrModelRoleManifestMalformed, role)
+		}
+		requirements = append(requirements, models.AssetRequirement{
+			Name: artifact.Path, Bytes: artifact.SizeBytes, SHA256: artifact.SHA256,
+		})
+	}
+	return requirements, nil
 }
 
 func isJoinedPinnedBackend(value string) bool {
@@ -834,95 +938,6 @@ func (o *Root) releaseJoinedLease(
 		Scope: scope, Lease: lease,
 	})
 	return err
-}
-
-func joinedInvocationContextError(ctx context.Context, err error) error {
-	if err == nil || ctx == nil || ctx.Err() == nil || errors.Is(err, models.ErrInferenceCancelled) {
-		return err
-	}
-	return errors.Join(models.ErrInferenceCancelled, err)
-}
-
-func joinedInvocationStart(o *Root) time.Time {
-	if o != nil && o.process.Clock != nil {
-		return o.process.Clock()
-	}
-	return time.Time{}
-}
-
-func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	if o == nil || o.process.Clock == nil || started.IsZero() {
-		return 0
-	}
-	ended := o.process.Clock()
-	if ended.Before(started) {
-		return 0
-	}
-	return ended.Sub(started)
-}
-
-func joinedInvocationRecord(
-	o *Root,
-	modelName string,
-	operation string,
-	invocation models.ModelInvocationRef,
-	stage string,
-	err error,
-	elapsed time.Duration,
-) {
-	if o == nil || o.process.Logger == nil {
-		return
-	}
-	fields := []zap.Field{
-		zap.String("model_name", modelName),
-		zap.String("operation", operation),
-		zap.String("invocation", invocation.String()),
-		zap.String("stage", stage),
-		zap.Duration("duration", elapsed),
-	}
-	if err != nil {
-		fields = append(fields,
-			zap.String("outcome", "FAILED"),
-			zap.String("failure_class", joinedInvocationFailureClass(err)),
-		)
-		o.process.Logger.Warn("models invocation completed", fields...)
-		return
-	}
-	fields = append(fields, zap.String("outcome", "COMPLETED"))
-	o.process.Logger.Info("models invocation completed", fields...)
-}
-
-func joinedInvocationFailureClass(err error) string {
-	var invocationFailure *models.InvocationFailure
-	if errors.As(err, &invocationFailure) && invocationFailure != nil && invocationFailure.Class != "" {
-		return string(invocationFailure.Class)
-	}
-	var configurationFailure models.ModelConfigurationFailure
-	if errors.As(err, &configurationFailure) {
-		return string(models.InvocationFailureClassConfiguration)
-	}
-	switch {
-	case errors.Is(err, models.ErrInferenceCancelled), errors.Is(err, models.ErrAssetCancelled), errors.Is(err, models.ErrHostCancelled):
-		return string(models.InvocationFailureClassCancellation)
-	case errors.Is(err, models.ErrInferenceTimeout), errors.Is(err, models.ErrHostLoadingTimeout):
-		return string(models.InvocationFailureClassTimeout)
-	case errors.Is(err, models.ErrHostProtocolIncompatible):
-		return string(models.InvocationFailureClassBackendProtocol)
-	case errors.Is(err, models.ErrHostRuntimeNotReady), errors.Is(err, models.ErrHostProcessCrash):
-		return string(models.InvocationFailureClassBackendReadiness)
-	case errors.Is(err, models.ErrAssetOffline):
-		return string(models.InvocationFailureClassOfflineCache)
-	case errors.Is(err, models.ErrInferenceArtifactInvalid):
-		return string(models.InvocationFailureClassArtifact)
-	case errors.Is(err, models.ErrModelRevisionUnresolved):
-		return string(models.InvocationFailureClassRevisionResolution)
-	case errors.Is(err, models.ErrModelReferenceInvalid):
-		return string(models.InvocationFailureClassInvalidModelReference)
-	case errors.Is(err, models.ErrInferenceFailed):
-		return joinedInvocationFailureRuntime
-	default:
-		return joinedInvocationFailureRuntime
-	}
 }
 
 func (o *Root) CancelInvocation(

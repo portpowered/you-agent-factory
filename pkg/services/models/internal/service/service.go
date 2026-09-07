@@ -226,7 +226,7 @@ func (o *Root) normalizeAssetPreflightRequest(
 		resolution.Resolved.Definition.Name,
 		resolution.Resolved,
 		backendArtifact,
-	), nil
+	)
 }
 
 func joinedInvocationAssetError(

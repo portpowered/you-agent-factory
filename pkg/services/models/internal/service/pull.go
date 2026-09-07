@@ -142,7 +142,7 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 				modelName,
 				resolved,
 				backendArtifact,
-			), nil
+			)
 		},
 	)
 	if err != nil {
