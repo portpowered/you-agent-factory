@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/conformance"
@@ -41,11 +44,23 @@ type localAIOMNIPublicObservation struct {
 }
 
 type localAIOMNIFailureDiagnostic struct {
-	Class    models.InvocationFailureClass
-	HasClass bool
-	Code     string
-	Family   factoryapi.ErrorFamily
-	Message  string
+	Class   models.InvocationFailureClass
+	Code    string
+	Family  factoryapi.ErrorFamily
+	Message string
+}
+
+type localAIOMNIPathCheckpoint struct {
+	protocolRequests int
+	protocolFailures int
+	fixtureCalls     int
+}
+
+type localAIOMNIPathTrace struct {
+	label            string
+	protocolRequests []models.InvocationProtocolRequest
+	protocolFailures []error
+	fixturePredicts  []localai.Call
 }
 
 type localAIOMNICLIResult struct {
@@ -59,6 +74,7 @@ type localAIOMNICLIResult struct {
 type localAIOMNIProtocolRecorder struct {
 	mu       sync.Mutex
 	requests []models.InvocationProtocolRequest
+	failures []error
 	attempts *atomic.Int32
 	next     interface {
 		Predict(context.Context, models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error)
@@ -152,9 +168,11 @@ func runLocalAIOMNIParityCase(
 
 	localEdges, localNetwork, _, localLauncher := localAIOMNIParityEdges(home, fixture, &recorder)
 	localProcess := functionalBuildProcess(t, localEdges)
+	localCheckpoint := localAIOMNIPathCheckpointAt(&recorder, fixture)
 	localResult := executeLocalAIOMNIParityCLI(
 		t, localProcess, dir, environment, testCase.row, "",
 	)
+	localTrace := localAIOMNIPathTraceAt(t, "direct local CLI", &recorder, fixture, localCheckpoint)
 	closeRootProcess(t, localProcess, "close local OMNI process")
 	assertLocalAIOMNIHostReleased(t, localLauncher, "local")
 
@@ -167,25 +185,30 @@ func runLocalAIOMNIParityCase(
 		Edges:                     hostedEdges,
 	})
 
+	httpCheckpoint := localAIOMNIPathCheckpointAt(&recorder, fixture)
 	httpObservation, httpFailure := executeLocalAIOMNIHTTP(
 		t, server.URL()+"/models/invocations", testCase.row,
 	)
+	httpTrace := localAIOMNIPathTraceAt(t, "direct HTTP", &recorder, fixture, httpCheckpoint)
+	serverCheckpoint := localAIOMNIPathCheckpointAt(&recorder, fixture)
 	serverCLIResult := executeLocalAIOMNIParityCLI(
 		t, localAIOMNIExecutor{fn: func(input root.Input) error {
 			return server.Execute(t, input)
 		}}, dir, environment, testCase.row, server.URL(),
 	)
+	serverTrace := localAIOMNIPathTraceAt(t, "configured --server CLI", &recorder, fixture, serverCheckpoint)
+	paths := []localAIOMNIPathTrace{localTrace, httpTrace, serverTrace}
 
 	if testCase.malformed {
 		assertLocalAIOMNIMalformedParity(
 			t, testCase.row, localResult, httpObservation, httpFailure,
-			serverCLIResult, fixture, home, dir, server.URL(),
+			serverCLIResult, fixture, home, dir, server.URL(), paths,
 		)
 	} else {
 		assertLocalAIOMNISuccessParity(t, testCase.row, localResult, httpObservation, serverCLIResult)
 	}
-	assertLocalAIOMNIProtocolInputs(t, testCase.row, recorder.Requests(), !testCase.malformed)
-	assertLocalAIOMNIFixtureCalls(t, testCase.row, fixture, testCase.malformed)
+	assertLocalAIOMNIProtocolInputs(t, testCase.row, paths)
+	assertLocalAIOMNIFixtureCalls(t, testCase.row, paths)
 
 	server.Close(t)
 	assertLocalAIOMNIServerReleased(t, server, hostedLauncher)
@@ -210,21 +233,32 @@ func localAIOMNIParityEdges(
 }
 
 func localAIOMNIEnvironment(home string) []string {
-	environment := functionalHomeEnvironment(home)
-	environment = localAIOMNISetEnvironment(environment, "HOME", home)
-	return localAIOMNISetEnvironment(environment, "USERPROFILE", home)
-}
-
-func localAIOMNISetEnvironment(environment []string, name, value string) []string {
-	prefix := strings.ToLower(name) + "="
-	result := make([]string, 0, len(environment)+1)
-	for _, entry := range environment {
-		if strings.ToLower(strings.SplitN(entry, "=", 2)[0]+"=") == prefix {
+	inherited := functionalHomeEnvironment(home)
+	result := make([]string, 0, len(inherited)+3)
+	for _, entry := range inherited {
+		key := strings.ToLower(strings.TrimSpace(strings.SplitN(entry, "=", 2)[0]))
+		switch key {
+		case "home", "userprofile", "homedrive", "homepath":
 			continue
+		default:
+			result = append(result, entry)
 		}
-		result = append(result, entry)
 	}
-	return append(result, name+"="+value)
+	switch runtime.GOOS {
+	case "windows":
+		drive := filepath.VolumeName(home)
+		homePath := strings.TrimPrefix(home, drive)
+		result = append(result,
+			"USERPROFILE="+home,
+			"HOMEDRIVE="+drive,
+			"HOMEPATH="+homePath,
+		)
+	case "plan9":
+		result = append(result, "home="+home)
+	default:
+		result = append(result, "HOME="+home)
+	}
+	return result
 }
 
 func (recorder *localAIOMNIProtocolRecorder) Predict(
@@ -237,7 +271,13 @@ func (recorder *localAIOMNIProtocolRecorder) Predict(
 	recorder.mu.Lock()
 	recorder.requests = append(recorder.requests, localAIOMNICloneProtocolRequest(request))
 	recorder.mu.Unlock()
-	return recorder.next.Predict(ctx, request)
+	response, err := recorder.next.Predict(ctx, request)
+	if err != nil {
+		recorder.mu.Lock()
+		recorder.failures = append(recorder.failures, err)
+		recorder.mu.Unlock()
+	}
+	return response, err
 }
 
 func (recorder *localAIOMNIProtocolRecorder) Requests() []models.InvocationProtocolRequest {
@@ -250,10 +290,56 @@ func (recorder *localAIOMNIProtocolRecorder) Requests() []models.InvocationProto
 	return requests
 }
 
+func (recorder *localAIOMNIProtocolRecorder) Failures() []error {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return append([]error(nil), recorder.failures...)
+}
+
 func localAIOMNICloneProtocolRequest(request models.InvocationProtocolRequest) models.InvocationProtocolRequest {
 	request.Inputs = append([]models.InvocationProtocolInput(nil), request.Inputs...)
 	request.Parameters = append([]models.OperationParameter(nil), request.Parameters...)
 	return request
+}
+
+func localAIOMNIPathCheckpointAt(
+	recorder *localAIOMNIProtocolRecorder,
+	fixture *localai.Fixture,
+) localAIOMNIPathCheckpoint {
+	return localAIOMNIPathCheckpoint{
+		protocolRequests: len(recorder.Requests()),
+		protocolFailures: len(recorder.Failures()),
+		fixtureCalls:     len(fixture.Calls()),
+	}
+}
+
+func localAIOMNIPathTraceAt(
+	t testing.TB,
+	label string,
+	recorder *localAIOMNIProtocolRecorder,
+	fixture *localai.Fixture,
+	checkpoint localAIOMNIPathCheckpoint,
+) localAIOMNIPathTrace {
+	t.Helper()
+	requests := recorder.Requests()
+	failures := recorder.Failures()
+	calls := fixture.Calls()
+	if checkpoint.protocolRequests > len(requests) || checkpoint.protocolFailures > len(failures) || checkpoint.fixtureCalls > len(calls) {
+		t.Fatalf("%s path trace moved backwards: protocol %d/%d failures %d/%d fixture %d/%d", label, checkpoint.protocolRequests, len(requests), checkpoint.protocolFailures, len(failures), checkpoint.fixtureCalls, len(calls))
+		return localAIOMNIPathTrace{label: label}
+	}
+	predicts := make([]localai.Call, 0, len(calls)-checkpoint.fixtureCalls)
+	for _, call := range calls[checkpoint.fixtureCalls:] {
+		if call.Method == "Predict" {
+			predicts = append(predicts, call)
+		}
+	}
+	return localAIOMNIPathTrace{
+		label:            label,
+		protocolRequests: requests[checkpoint.protocolRequests:],
+		protocolFailures: failures[checkpoint.protocolFailures:],
+		fixturePredicts:  predicts,
+	}
 }
 
 func executeLocalAIOMNIParityCLI(
@@ -279,10 +365,6 @@ func executeLocalAIOMNIParityCLI(
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(result.Stdout)), &result.Response); err != nil {
 		result.Err = fmt.Errorf("%s CLI response was not JSON", row.Label)
-		return result
-	}
-	if result.Response.Failure != nil {
-		result.Err = &localAIOMNIResponseFailure{failure: result.Response.Failure}
 		return result
 	}
 	if err := assertConformanceResponse(row, result.Response); err != nil {
@@ -413,6 +495,7 @@ func assertLocalAIOMNIMalformedParity(
 	home string,
 	dir string,
 	serverURL string,
+	paths []localAIOMNIPathTrace,
 ) {
 	t.Helper()
 	if localResult.Err == nil || serverResult.Err == nil || httpFailure == nil {
@@ -425,17 +508,30 @@ func assertLocalAIOMNIMalformedParity(
 	if !ok {
 		t.Fatalf("%s local CLI failure was not typed", row.Label)
 	}
-	serverFailure, ok := localAIOMNIFailureFromError(serverResult.Err)
+	// The configured --server CLI receives the public HTTP ErrorResponse, so
+	// that transport's returned APIError intentionally ends the Go error chain.
+	// Assert its delivered diagnostic above and assert the actual InvocationFailure
+	// at the protocol edge below; never infer the class from the wire code.
+	serverFailure, ok := localAIOMNIErrorDiagnosticFromError(serverResult.Err)
 	if !ok {
-		t.Fatalf("%s configured-server CLI failure was not typed", row.Label)
+		t.Fatalf("%s configured-server CLI failure was not typed: %T %v", row.Label, serverResult.Err, serverResult.Err)
 	}
 	for _, failure := range []*localAIOMNIFailureDiagnostic{localFailure, httpFailure, serverFailure} {
 		if failure.Code != "MODEL_BACKEND_FAILURE" || failure.Family != factoryapi.ErrorFamilyInternalServerError || failure.Message == "" {
 			t.Fatalf("%s malformed failure category is not the provider-neutral backend failure", row.Label)
 		}
 	}
-	if localFailure.HasClass && localFailure.Class != models.InvocationFailureClassMalformedResponse {
-		t.Fatalf("%s local CLI failure class is not MALFORMED_RESPONSE", row.Label)
+	if localFailure.Class != models.InvocationFailureClassMalformedResponse {
+		t.Fatalf("%s local CLI failure class = %s, want MALFORMED_RESPONSE", row.Label, localFailure.Class)
+	}
+	for _, path := range paths {
+		if len(path.protocolFailures) != 1 {
+			t.Fatalf("%s %s underlying protocol failure count = %d, want exactly 1", row.Label, path.label, len(path.protocolFailures))
+		}
+		underlying, ok := localAIOMNIInvocationFailureFromError(path.protocolFailures[0])
+		if !ok || underlying.Class != models.InvocationFailureClassMalformedResponse {
+			t.Fatalf("%s %s underlying protocol failure = %T %v, want MALFORMED_RESPONSE InvocationFailure", row.Label, path.label, path.protocolFailures[0], path.protocolFailures[0])
+		}
 	}
 	if localFailure.Message != httpFailure.Message || localFailure.Message != serverFailure.Message {
 		t.Fatalf("%s malformed safe messages differ across public paths", row.Label)
@@ -452,81 +548,41 @@ func assertLocalAIOMNIMalformedParity(
 }
 
 func localAIOMNIFailureFromError(err error) (*localAIOMNIFailureDiagnostic, bool) {
-	if err == nil {
+	diagnostic, ok := localAIOMNIErrorDiagnosticFromError(err)
+	if !ok {
 		return nil, false
 	}
-	diagnostic := &localAIOMNIFailureDiagnostic{}
 	var failure *models.InvocationFailure
-	if errors.As(err, &failure) && failure != nil {
-		diagnostic.Class = failure.Class
-		diagnostic.HasClass = true
-	}
-	var coded interface {
-		CLIErrorCode() string
-		CLIErrorFamily() factoryapi.ErrorFamily
-		CLIErrorMessage() string
-	}
-	if errors.As(err, &coded) {
-		diagnostic.Code = coded.CLIErrorCode()
-		diagnostic.Family = coded.CLIErrorFamily()
-		diagnostic.Message = coded.CLIErrorMessage()
-		return diagnostic, true
-	} else {
-		var basic interface {
-			CLIErrorCode() string
-			CLIErrorMessage() string
-		}
-		if errors.As(err, &basic) {
-			diagnostic.Code = basic.CLIErrorCode()
-			diagnostic.Family = localAIOMNIErrorFamily(diagnostic.Code)
-			diagnostic.Message = basic.CLIErrorMessage()
-			return diagnostic, true
-		}
-	}
-	if failure != nil {
-		diagnostic.Code, diagnostic.Family = localAIOMNIInvocationDiagnostic(failure.Class)
-		diagnostic.Message = failure.Error()
-	} else {
+	if !errors.As(err, &failure) || failure == nil {
 		return nil, false
 	}
+	diagnostic.Class = failure.Class
 	return diagnostic, true
 }
 
-func localAIOMNIErrorFamily(code string) factoryapi.ErrorFamily {
-	if code == "MODEL_BACKEND_FAILURE" {
-		return factoryapi.ErrorFamilyInternalServerError
+func localAIOMNIInvocationFailureFromError(err error) (*models.InvocationFailure, bool) {
+	if err == nil {
+		return nil, false
 	}
-	return ""
-}
-
-func localAIOMNIInvocationDiagnostic(class models.InvocationFailureClass) (string, factoryapi.ErrorFamily) {
-	if class == models.InvocationFailureClassMalformedResponse || class == models.InvocationFailureClassBackendProtocol {
-		return "MODEL_BACKEND_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure == nil {
+		return nil, false
 	}
-	return "", ""
+	return failure, true
 }
 
-type localAIOMNIResponseFailure struct {
-	failure *factoryapi.ModelInvocationFailure
-}
-
-func (failure *localAIOMNIResponseFailure) Error() string {
-	if failure == nil || failure.failure == nil {
-		return "generic model invocation failed"
+func localAIOMNIErrorDiagnosticFromError(err error) (*localAIOMNIFailureDiagnostic, bool) {
+	if err == nil {
+		return nil, false
 	}
-	return failure.failure.Message
-}
-
-func (failure *localAIOMNIResponseFailure) CLIErrorCode() string {
-	return "MODEL_BACKEND_FAILURE"
-}
-
-func (failure *localAIOMNIResponseFailure) CLIErrorFamily() factoryapi.ErrorFamily {
-	return factoryapi.ErrorFamilyInternalServerError
-}
-
-func (failure *localAIOMNIResponseFailure) CLIErrorMessage() string {
-	return failure.Error()
+	var coded clidiag.FamilyCodedError
+	if !errors.As(err, &coded) {
+		return nil, false
+	}
+	return &localAIOMNIFailureDiagnostic{
+		Code:   coded.CLIErrorCode(),
+		Family: coded.CLIErrorFamily(), Message: coded.CLIErrorMessage(),
+	}, true
 }
 
 func localAIOMNIExpectedText(row conformance.Row) string {
@@ -550,24 +606,24 @@ func localAIOMNIExpectedText(row conformance.Row) string {
 func assertLocalAIOMNIProtocolInputs(
 	t *testing.T,
 	row conformance.Row,
-	requests []models.InvocationProtocolRequest,
-	allPathsRequired bool,
+	paths []localAIOMNIPathTrace,
 ) {
 	t.Helper()
-	if len(requests) > 3 {
-		t.Fatalf("%s protocol request count = %d, want at most 3", row.Label, len(requests))
+	if len(paths) != 3 {
+		t.Fatalf("%s protocol path count = %d, want exactly 3", row.Label, len(paths))
 	}
-	if allPathsRequired && len(requests) != 3 {
-		t.Fatalf("%s protocol request count = %d, want exactly 3", row.Label, len(requests))
-	}
-	for _, request := range requests {
+	for _, path := range paths {
+		if len(path.protocolRequests) != 1 {
+			t.Fatalf("%s %s protocol request count = %d, want exactly 1", row.Label, path.label, len(path.protocolRequests))
+		}
+		request := path.protocolRequests[0]
 		if request.Operation != models.OperationOMNI || request.Prompt != localAIOMNIExpectedPrompt(row) || len(request.Inputs) != len(row.Inputs) {
-			t.Fatalf("%s protocol request shape was not preserved", row.Label)
+			t.Fatalf("%s %s protocol request shape was not preserved", row.Label, path.label)
 		}
 		for index, input := range request.Inputs {
 			want := row.Inputs[index]
 			if input.Slot != want.Name || input.Modality != want.Modality || input.MediaType != want.MediaType || input.Content != want.Content {
-				t.Fatalf("%s protocol input order, media type, or bytes changed", row.Label)
+				t.Fatalf("%s %s protocol input order, media type, or bytes changed", row.Label, path.label)
 			}
 		}
 	}
@@ -585,21 +641,17 @@ func localAIOMNIExpectedPrompt(row conformance.Row) string {
 func assertLocalAIOMNIFixtureCalls(
 	t *testing.T,
 	row conformance.Row,
-	fixture *localai.Fixture,
-	malformed bool,
+	paths []localAIOMNIPathTrace,
 ) {
 	t.Helper()
-	calls := fixture.Calls()
-	predicts := make([]localai.Call, 0, len(calls))
-	for _, call := range calls {
-		if call.Method == "Predict" {
-			predicts = append(predicts, call)
+	if len(paths) != 3 {
+		t.Fatalf("%s fixture path count = %d, want exactly 3", row.Label, len(paths))
+	}
+	for _, path := range paths {
+		if len(path.fixturePredicts) != 1 {
+			t.Fatalf("%s %s controlled LocalAI Predict calls = %d, want exactly 1", row.Label, path.label, len(path.fixturePredicts))
 		}
-	}
-	if len(predicts) > 3 || (!malformed && len(predicts) != 3) {
-		t.Fatalf("%s controlled LocalAI Predict calls = %d, want %d or fewer", row.Label, len(predicts), 3)
-	}
-	for _, call := range predicts {
+		call := path.fixturePredicts[0]
 		var wantImages, wantVideos []string
 		for _, input := range row.Inputs {
 			switch input.Modality {
@@ -610,10 +662,10 @@ func assertLocalAIOMNIFixtureCalls(
 			}
 		}
 		if call.Prompt != localAIOMNIExpectedPrompt(row) || !equalLocalAIOMNIStrings(call.Images, wantImages) || !equalLocalAIOMNIStrings(call.Videos, wantVideos) {
-			t.Fatalf("%s controlled LocalAI bytes or repeated-input order changed", row.Label)
+			t.Fatalf("%s %s controlled LocalAI bytes or repeated-input order changed", row.Label, path.label)
 		}
 	}
-	if !malformed && row.Variant == conformance.VariantVideo && !strings.Contains(localAIOMNIExpectedText(row), "0:30") {
+	if row.Variant == conformance.VariantVideo && !strings.Contains(localAIOMNIExpectedText(row), "0:30") {
 		t.Fatalf("%s video fixture answer omitted the requested 0:30 observation", row.Label)
 	}
 }
