@@ -494,14 +494,13 @@ func (s *service) inspectGenericRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, false, err
 	}
-	metadata, present, err := s.readGenericRuntimeMetadata(ctx, filepath.Join(root, metadataFileName))
+	metadata, present, invalid, err := s.readGenericRuntimeMetadataForInspection(
+		ctx, filepath.Join(root, metadataFileName),
+	)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return assets.RuntimeCacheInspection{}, present, err
-		}
-		if !errors.Is(err, models.ErrAssetUnavailable) {
-			return assets.RuntimeCacheInspection{}, present, err
-		}
+		return assets.RuntimeCacheInspection{}, present, err
+	}
+	if invalid {
 		inspection.ManifestPresent = present
 		inspection.FailureReason = "managed cache manifest is invalid"
 		return inspection, present, nil
@@ -510,10 +509,6 @@ func (s *service) inspectGenericRuntimeCache(
 		return inspection, false, nil
 	}
 	inspection.ManifestPresent = true
-	if !validGenericRuntimeMetadata(metadata) {
-		inspection.FailureReason = "managed cache manifest is invalid"
-		return inspection, true, nil
-	}
 	inspection.ManifestValid = true
 	inspection.ExpectedArtifacts = genericRuntimeRequirements(metadata)
 	revisionPath, err := managedCacheChildPath(root, metadata.Revision, "revision")
@@ -559,6 +554,29 @@ func (s *service) inspectGenericRuntimeCache(
 		return assets.RuntimeCacheInspection{}, true, err
 	}
 	return inspection, true, nil
+}
+
+func (s *service) readGenericRuntimeMetadataForInspection(
+	ctx context.Context,
+	path string,
+) (cacheMetadata, bool, bool, error) {
+	metadata, present, err := s.readGenericRuntimeMetadata(ctx, path)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return metadata, present, false, err
+		}
+		if !errors.Is(err, models.ErrAssetUnavailable) {
+			return metadata, present, false, err
+		}
+		return metadata, present, true, nil
+	}
+	if !present {
+		return metadata, false, false, nil
+	}
+	if !validGenericRuntimeMetadata(metadata) {
+		return metadata, present, true, nil
+	}
+	return metadata, true, false, nil
 }
 
 func (s *service) inspectGenericRuntimeBackend(
