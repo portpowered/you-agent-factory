@@ -760,6 +760,7 @@ type recordingInferenceHost struct {
 	warmHosts    map[string]bool
 	ensureCalls  int
 	releaseCalls int
+	releaseErr   error
 }
 
 var _ runtimehost.Service = (*recordingInferenceHost)(nil)
@@ -848,6 +849,9 @@ func (host *recordingInferenceHost) ReleaseModelLease(
 	lease, ok := host.leases[request.Lease.String()]
 	if !ok || lease.Scope != request.Scope {
 		return models.ReleaseModelLeaseResult{}, models.ErrHostLeaseNotFound
+	}
+	if host.releaseErr != nil {
+		return models.ReleaseModelLeaseResult{Lease: lease}, host.releaseErr
 	}
 	lease.Status = models.ModelLeaseStatusReleased
 	host.leases[request.Lease.String()] = lease

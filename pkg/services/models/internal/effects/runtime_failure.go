@@ -301,6 +301,17 @@ type orderedRuntimeEvidenceRecorder struct {
 	recorder         RuntimeEvidenceRecorder
 }
 
+// runtimeEvidenceInvocationRecorder scopes terminal suppression to one
+// invocation while retaining the process-wide sequence owned by the ordered
+// recorder. The underlying RuntimeEvidenceRecord remains intentionally
+// unchanged and carries no request identity.
+type runtimeEvidenceInvocationRecorder struct {
+	mu               sync.Mutex
+	terminalRecorded bool
+	recorder         RuntimeEvidenceRecorder
+	ordered          *orderedRuntimeEvidenceRecorder
+}
+
 // NewOrderedRuntimeEvidenceRecorder wraps an optional sink with validation and
 // sequence assignment. Passing nil returns nil so normal runtime construction
 // remains unchanged when integration evidence is not requested.
@@ -316,19 +327,42 @@ func NewOrderedRuntimeEvidenceRecorder(
 	return &orderedRuntimeEvidenceRecorder{recorder: recorder}
 }
 
+// NewRuntimeEvidenceInvocation creates a recorder for one Models invocation.
+// It is required when a long-lived service shares one ordered recorder across
+// requests: each invocation gets one terminal, while the shared recorder
+// still assigns one process-local sequence.
+func NewRuntimeEvidenceInvocation(
+	recorder RuntimeEvidenceRecorder,
+) RuntimeEvidenceRecorder {
+	if isNilRuntimeEvidenceRecorder(recorder) {
+		return nil
+	}
+	if ordered, ok := recorder.(*orderedRuntimeEvidenceRecorder); ok {
+		return &runtimeEvidenceInvocationRecorder{ordered: ordered}
+	}
+	return &runtimeEvidenceInvocationRecorder{recorder: recorder}
+}
+
 func (recorder *orderedRuntimeEvidenceRecorder) RecordRuntimeEvidence(
 	record RuntimeEvidenceRecord,
 ) {
-	if recorder == nil || isNilRuntimeEvidenceRecorder(recorder.recorder) {
-		return
-	}
 	normalized, ok := normalizeRuntimeEvidenceRecord(record)
 	if !ok {
 		return
 	}
+	recorder.recordRuntimeEvidence(normalized, true)
+}
+
+func (recorder *orderedRuntimeEvidenceRecorder) recordRuntimeEvidence(
+	normalized RuntimeEvidenceRecord,
+	suppressTerminal bool,
+) {
+	if recorder == nil || isNilRuntimeEvidenceRecorder(recorder.recorder) {
+		return
+	}
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if normalized.Kind == RuntimeEvidenceKindTerminal {
+	if suppressTerminal && normalized.Kind == RuntimeEvidenceKindTerminal {
 		if recorder.terminalRecorded {
 			return
 		}
@@ -337,6 +371,37 @@ func (recorder *orderedRuntimeEvidenceRecorder) RecordRuntimeEvidence(
 	recorder.next++
 	normalized.Sequence = recorder.next
 	recorder.recorder.RecordRuntimeEvidence(normalized)
+}
+
+func (recorder *runtimeEvidenceInvocationRecorder) RecordRuntimeEvidence(
+	record RuntimeEvidenceRecord,
+) {
+	if recorder == nil {
+		return
+	}
+	normalized, ok := normalizeRuntimeEvidenceRecord(record)
+	if !ok {
+		return
+	}
+	recorder.mu.Lock()
+	if normalized.Kind == RuntimeEvidenceKindTerminal {
+		if recorder.terminalRecorded {
+			recorder.mu.Unlock()
+			return
+		}
+		recorder.terminalRecorded = true
+	}
+	recorder.mu.Unlock()
+	if recorder.ordered != nil {
+		// The invocation wrapper owns the terminal decision. Bypass the
+		// compatibility guard on the long-lived parent while retaining its
+		// sequence and sink serialization.
+		recorder.ordered.recordRuntimeEvidence(normalized, false)
+		return
+	}
+	if !isNilRuntimeEvidenceRecorder(recorder.recorder) {
+		recorder.recorder.RecordRuntimeEvidence(normalized)
+	}
 }
 
 // RecordRuntimeEvidenceStage emits one bounded stage observation. For a

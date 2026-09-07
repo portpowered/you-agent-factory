@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
-	"path"
 	"strings"
 	"sync"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
@@ -42,6 +40,7 @@ type Root struct {
 	resolveBackendArtifact     modelseffects.BackendArtifactResolver
 	cacheLifecycleMu           sync.Mutex
 	runtimeMu                  sync.RWMutex
+	correlationSequence        uint64
 	runtimeByScope             map[models.RuntimeScopeRef]models.Service
 	catalog                    modelcatalog.Service
 	process                    modelseffects.ProcessDependencies
@@ -463,10 +462,13 @@ func (o *Root) InvokeModelWithLease(
 }
 
 type joinedInvocationPlan struct {
-	modelName string
-	operation models.Operation
-	prepared  models.InvokeModelRequest
-	lease     models.ModelLeaseRef
+	modelName   string
+	backend     string
+	revision    string
+	correlation string
+	operation   models.Operation
+	prepared    models.InvokeModelRequest
+	lease       models.ModelLeaseRef
 }
 
 // InvokeModel owns the complete prepared-model transaction. The injected
@@ -479,11 +481,22 @@ func (o *Root) InvokeModel(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	correlation := nextJoinedInvocationCorrelation(o)
+	ctx = modelseffects.WithRuntimeCorrelation(ctx, correlation)
+	ctx = modelseffects.WithRuntimeLeaseReleaseTracker(ctx)
 	started := joinedInvocationStart(o)
+	var invocationEvidence modelseffects.RuntimeEvidenceRecorder
+	if o != nil {
+		invocationEvidence = modelseffects.NewRuntimeEvidenceInvocation(
+			o.process.RuntimeEvidence,
+		)
+	}
 	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
 	var invocation models.ModelInvocationRef
+	backend := ""
+	revision := ""
 	finish := func(result models.InvokeModelResult, err error) (models.InvokeModelResult, error) {
 		if result.ModelName != "" {
 			modelName = result.ModelName
@@ -503,17 +516,17 @@ func (o *Root) InvokeModel(
 		elapsed := joinedInvocationElapsed(o, started)
 		if o != nil && (diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr)) {
 			modelseffects.RecordRuntimeEvidenceStage(
-				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+				invocationEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		if o != nil {
 			modelseffects.RecordRuntimeEvidenceTerminal(
-				o.process.RuntimeEvidence, stage, diagnosticErr, elapsed,
+				invocationEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
 		joinedInvocationRecord(
-			o, modelName, operationName, invocation, stage, publicErr,
-			elapsed,
+			o, modelName, operationName, invocation, backend, revision,
+			correlation, stage, publicErr, elapsed,
 		)
 		return result.Clone(), publicErr
 	}
@@ -521,15 +534,19 @@ func (o *Root) InvokeModel(
 	if err := validateJoinedRoot(o); err != nil {
 		return finish(models.InvokeModelResult{}, err)
 	}
-	plan, preparedStage, err := o.prepareJoinedInvocation(ctx, request)
+	plan, preparedStage, err := o.prepareJoinedInvocation(
+		ctx, request, correlation, started,
+	)
 	stage = preparedStage
 	modelName = plan.modelName
 	operationName = plan.operation.Name
+	backend = plan.backend
+	revision = plan.revision
 	if err != nil {
 		return finish(models.InvokeModelResult{}, joinedInvocationContextError(ctx, err))
 	}
 
-	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan)
+	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan, started)
 	stage = invokeStage
 	return finish(result, joinedInvocationContextError(ctx, err))
 }
@@ -559,6 +576,8 @@ func validateJoinedRoot(o *Root) error {
 func (o *Root) prepareJoinedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
+	correlation string,
+	started time.Time,
 ) (joinedInvocationPlan, modelseffects.RuntimeStage, error) {
 	plan := joinedInvocationPlan{}
 	if err := request.ValidateGeneric(); err != nil {
@@ -573,6 +592,9 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	resolved := resolution.Resolved
 	plan.modelName = resolved.Definition.Name
+	plan.backend = resolved.Definition.Backend
+	plan.revision = joinedInvocationRevision(resolved.Definition.Source)
+	plan.correlation = correlation
 	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
@@ -599,12 +621,34 @@ func (o *Root) prepareJoinedInvocation(
 	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
 		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
-	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageArtifactProvision, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
+	ensureResult, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
 		Scope: request.Scope,
 		Name:  plan.modelName,
-	}); err != nil {
+	})
+	if err != nil {
 		return plan, modelseffects.RuntimeStageBackendStart, err
 	}
+	if hostRevision := strings.TrimSpace(ensureResult.Host.Diagnostics["revision"]); hostRevision != "" {
+		plan.revision = hostRevision
+	}
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageBackendStart, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, correlation,
+		plan.operation.Name, models.ModelInvocationRef{},
+		joinedLifecycleStageHealth, joinedLifecycleOutcomeCompleted,
+		joinedInvocationElapsed(o, started), nil,
+	)
 	leaseResult, err := o.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
 		Scope: request.Scope, Name: plan.modelName, Holder: request.Holder,
 	})
@@ -675,6 +719,7 @@ func (o *Root) resolveJoinedBackendArtifact(
 func (o *Root) executeJoinedInvocation(
 	ctx context.Context,
 	plan joinedInvocationPlan,
+	started time.Time,
 ) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
 	result, err := o.InvokeModelWithLease(ctx, plan.prepared)
 	result = joinedInvocationResultIdentity(result, plan)
@@ -682,6 +727,11 @@ func (o *Root) executeJoinedInvocation(
 		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 	}
 	if result.Status == models.ModelInvocationStatusCompleted {
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, result.Invocation, joinedLifecycleStageInvoke,
+			joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+		)
 		result.Outputs, err = models.NormalizeGenericInvocationOutputs(
 			plan.operation, result.Content, result.Artifacts,
 		)
@@ -689,6 +739,11 @@ func (o *Root) executeJoinedInvocation(
 			result.Status = models.ModelInvocationStatusFailed
 			return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, err)
 		}
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, result.Invocation, joinedLifecycleStageOutput,
+			joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+		)
 	}
 	if result.Status == models.ModelInvocationStatusAccepted {
 		result.Status = models.ModelInvocationStatusFailed
@@ -707,7 +762,21 @@ func (o *Root) executeJoinedInvocation(
 		result.Status = models.ModelInvocationStatusFailed
 		return o.finishJoinedFailure(ctx, plan, result, modelseffects.RuntimeStageInvoke, models.ErrInferenceFailed)
 	}
-	return o.releaseJoinedInvocation(ctx, plan, result)
+	released, stage, releaseErr := o.releaseJoinedInvocation(ctx, plan, result)
+	if releaseErr != nil {
+		joinedInvocationLifecycleRecord(
+			o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+			plan.operation.Name, released.Invocation, joinedLifecycleStageRelease,
+			joinedLifecycleOutcomeFailed, joinedInvocationElapsed(o, started), releaseErr,
+		)
+		return released, stage, releaseErr
+	}
+	joinedInvocationLifecycleRecord(
+		o, plan.modelName, plan.backend, plan.revision, plan.correlation,
+		plan.operation.Name, released.Invocation, joinedLifecycleStageRelease,
+		joinedLifecycleOutcomeCompleted, joinedInvocationElapsed(o, started), nil,
+	)
+	return released, stage, nil
 }
 
 func (o *Root) finishJoinedFailure(
@@ -717,7 +786,7 @@ func (o *Root) finishJoinedFailure(
 	stage modelseffects.RuntimeStage,
 	invokeErr error,
 ) (models.InvokeModelResult, modelseffects.RuntimeStage, error) {
-	if !joinedInvocationLeaseReleased(result) {
+	if !joinedInvocationLeaseReleased(result) && !modelseffects.RuntimeLeaseReleaseAttempted(ctx) {
 		releaseErr := o.releaseJoinedLease(ctx, plan.prepared.Scope, plan.lease)
 		if releaseErr == nil {
 			result.LeaseDisposition = models.InvocationLeaseReleased
@@ -762,24 +831,6 @@ func joinedInvocationFailureResult(result models.InvokeModelResult) models.Invok
 	return result
 }
 
-func joinedAssetReference(
-	reference models.ModelReference,
-	resolved models.ResolvedModelReference,
-) models.ModelReference {
-	// Local source details are deliberately redacted from the resolved public
-	// definition. Keep the original request at the asset boundary so the
-	// private scope overlay can resolve the actual local path there.
-	if resolved.Provenance.SourceKind == models.ModelReferenceSourceLocalPath ||
-		resolved.Provenance.SourceKind == models.ModelReferenceSourceFileURI {
-		return reference
-	}
-	resolvedSource := strings.TrimSpace(resolved.Definition.Source)
-	if isJoinedSourceReference(resolvedSource) {
-		return models.ModelReference{NameOrURI: resolved.Definition.Source}
-	}
-	return reference
-}
-
 func joinedAssetPreparationRequest(
 	request models.InvokeModelRequest,
 	modelName string,
@@ -788,156 +839,6 @@ func joinedAssetPreparationRequest(
 	return joinedAssetPreparationRequestWithBackend(
 		request, modelName, resolved, modelseffects.BackendArtifactSelection{},
 	)
-}
-
-func joinedAssetPreparationRequestWithBackend(
-	request models.InvokeModelRequest,
-	modelName string,
-	resolved models.ResolvedModelReference,
-	backendArtifact modelseffects.BackendArtifactSelection,
-) (models.PrepareModelAssetsRequest, error) {
-	assetReference := joinedAssetReference(request.Model, resolved)
-	modelRequirements, err := joinedModelAssetRequirements(
-		resolved.Definition, assetReference.NameOrURI,
-	)
-	if err != nil {
-		return models.PrepareModelAssetsRequest{}, err
-	}
-	prepared := models.PrepareModelAssetsRequest{
-		Scope:     request.Scope,
-		Name:      modelName,
-		Reference: assetReference,
-		Offline:   request.Offline,
-		Backend:   strings.TrimSpace(resolved.Definition.Backend),
-		Artifacts: modelRequirements,
-	}
-	if backendArtifact.Name != "" {
-		prepared.BackendReference = models.ModelReference{NameOrURI: backendArtifact.Location}
-		prepared.BackendArtifacts = []models.AssetRequirement{{
-			Name: backendArtifact.Name, Bytes: backendArtifact.Bytes, SHA256: backendArtifact.SHA256,
-		}}
-		return prepared, nil
-	}
-	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
-		prepared.Backend = ""
-		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
-		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)
-	}
-	return prepared, nil
-}
-
-func joinedModelAssetRequirements(
-	definition models.ModelDefinition,
-	source string,
-) ([]models.AssetRequirement, error) {
-	if !strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameTTS) ||
-		!strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-vibevoice") {
-		return joinedSourceAssetRequirements(source), nil
-	}
-	manifest, err := modelartifacts.DefaultModelRoleManifest()
-	if err != nil {
-		return nil, err
-	}
-	roleModel, ok := manifest.Model(models.BuiltInModelNameTTS)
-	if !ok {
-		return joinedSourceAssetRequirements(source), nil
-	}
-	if strings.TrimSpace(source) != roleModel.Source.URI {
-		// Operator model overlays may point the built-in TTS model at a local
-		// controlled bundle. Leave local/file sources unexpanded here so the
-		// asset service can enumerate the directory and preserve all role files;
-		// the pinned source below remains an explicit three-role contract.
-		if isJoinedSourceReference(source) &&
-			!strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), "hf://") {
-			return nil, nil
-		}
-		return joinedSourceAssetRequirements(source), nil
-	}
-	requirements := make([]models.AssetRequirement, 0, len(roleModel.Artifacts))
-	for _, role := range []string{"model", "tokenizer", "voice"} {
-		artifact, ok := roleModel.Artifact(role)
-		if !ok {
-			return nil, fmt.Errorf("%w: missing TTS role %q", modelartifacts.ErrModelRoleManifestMalformed, role)
-		}
-		requirements = append(requirements, models.AssetRequirement{
-			Name: artifact.Path, Bytes: artifact.SizeBytes, SHA256: artifact.SHA256,
-		})
-	}
-	return requirements, nil
-}
-
-func isJoinedPinnedBackend(value string) bool {
-	canonical := strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(canonical, "localai-") || canonical == "localai" ||
-		canonical == "localai_grpc" || canonical == "localai-grpc"
-}
-
-func isJoinedSourceReference(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(lower, "hf://") || strings.HasPrefix(lower, "file://") ||
-		strings.HasPrefix(lower, "./") || strings.HasPrefix(lower, "../") ||
-		strings.HasPrefix(lower, "/") || strings.HasPrefix(lower, "\\") ||
-		(len(lower) > 2 && lower[1] == ':')
-}
-
-func joinedSourceAssetRequirements(source string) []models.AssetRequirement {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		return nil
-	}
-	if strings.HasPrefix(strings.ToLower(source), "hf://") {
-		rest := strings.TrimPrefix(source, "hf://")
-		if at := strings.LastIndex(rest, "@"); at >= 0 {
-			rest = rest[:at]
-		}
-		parts := strings.Split(rest, "/")
-		if len(parts) > 2 {
-			name := path.Clean(strings.Join(parts[2:], "/"))
-			if name != "." && name != "" {
-				return []models.AssetRequirement{{Name: name}}
-			}
-		}
-		return nil
-	}
-	if strings.HasPrefix(strings.ToLower(source), "file://") {
-		parsed, err := url.Parse(source)
-		if err != nil || parsed.Path == "" {
-			return nil
-		}
-		return []models.AssetRequirement{{Name: path.Base(parsed.Path)}}
-	}
-	if strings.Contains(source, "://") {
-		return nil
-	}
-	return nil
-}
-
-func inferenceInputIsZero(input models.InferenceInput) bool {
-	return input.Name == "" && input.Modality == "" && input.ContentType == "" &&
-		input.MediaType == "" && input.Content == "" && input.Artifact == nil
-}
-
-func joinedInvocationLeaseReleased(result models.InvokeModelResult) bool {
-	return result.LeaseDisposition == models.InvocationLeaseReleased ||
-		result.LeaseDisposition == models.InvocationLeaseExpired
-}
-
-func (o *Root) releaseJoinedLease(
-	ctx context.Context,
-	scope models.RuntimeScopeRef,
-	lease models.ModelLeaseRef,
-) error {
-	if o == nil || o.runtimeHost == nil || lease.IsZero() {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	releaseContext := context.WithoutCancel(ctx)
-	_, err := o.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
-		Scope: scope, Lease: lease,
-	})
-	return err
 }
 
 func (o *Root) CancelInvocation(

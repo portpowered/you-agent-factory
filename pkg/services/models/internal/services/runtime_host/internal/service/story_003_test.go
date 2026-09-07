@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -96,6 +97,47 @@ func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *test
 	}
 }
 
+func TestManagedLocalAIStartupFailureUsesBoundedProcessStartClassification(t *testing.T) {
+	t.Parallel()
+
+	const sentinel = "PRIVATE_BACKEND_STARTUP_SENTINEL"
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "story-003-startup-failure")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	launcher := &fakeProcessLauncher{startErr: errors.New(sentinel)}
+	host := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrHostProcessCrash) {
+		t.Fatalf("startup error = %v, want ErrHostProcessCrash", err)
+	}
+	stage, class, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok || stage != modelseffects.RuntimeStageBackendStart ||
+		class != modelseffects.RuntimeFailureProcessStartFailed {
+		t.Fatalf("startup classification = %q/%q/%t, want BACKEND_START/PROCESS_START_FAILED", stage, class, ok)
+	}
+	if strings.Contains(err.Error(), sentinel) {
+		t.Fatalf("startup error leaked private sentinel: %v", err)
+	}
+	if launcher.startCount() != 1 {
+		t.Fatalf("process starts = %d, want 1", launcher.startCount())
+	}
+	inspected, inspectErr := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if inspectErr != nil {
+		t.Fatalf("InspectModelHost: %v", inspectErr)
+	}
+	if inspected.Host.Diagnostics["failureClass"] != "process_crash" {
+		t.Fatalf("failureClass = %q, want process_crash", inspected.Host.Diagnostics["failureClass"])
+	}
+}
+
 func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +175,65 @@ func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t 
 	assertManagedHostReady(t, result)
 	assertManagedProcess(t, launcher)
 	assertManagedProtocolCall(t, protocol)
+}
+
+func TestManagedLocalAIProtocolMismatchStopsProcessAndRecordsTypedFailure(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "story-003-protocol-mismatch")
+	ref := openScope(t, scopes, cacheDirectory, managedLocalAIConfig(models.LoadPolicyOnDemand))
+	launcher := &controlledProcessLauncher{}
+	protocol := &testProtocolNegotiator{result: modelseffects.HostProtocolNegotiationResult{
+		ProtocolVersion: "unsupported-version",
+		Backend:         "localai-llamacpp",
+		Ready:           true,
+	}}
+	sink := &runtimeEvidenceSink{}
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		http.DefaultClient,
+		realHostClock{},
+		nil,
+		nil,
+		internalservice.SupervisorTestConfig{},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: &testCompatibilityChecker{},
+			ProtocolNegotiator:   protocol,
+			RuntimeEvidence:      modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  managedModelName,
+	})
+	if !errors.Is(err, models.ErrHostProtocolIncompatible) {
+		t.Fatalf("protocol mismatch error = %v, want ErrHostProtocolIncompatible", err)
+	}
+	stage, class, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok || stage != modelseffects.RuntimeStageProtocolLoad ||
+		class != modelseffects.RuntimeFailureProtocolIncompatible {
+		t.Fatalf("protocol mismatch classification = %q/%q/%t, want PROTOCOL_LOAD/PROTOCOL_INCOMPATIBLE", stage, class, ok)
+	}
+	process := launcher.process(0)
+	select {
+	case <-process.stopped:
+	default:
+		t.Fatal("protocol mismatch left managed process active")
+	}
+	records := sink.snapshot()
+	if len(records) != 1 || records[0].Sequence != 1 ||
+		records[0].Stage != modelseffects.RuntimeStageProtocolLoad ||
+		records[0].Class != modelseffects.RuntimeFailureProtocolIncompatible ||
+		records[0].Outcome != modelseffects.RuntimeEvidenceOutcomeFailed {
+		t.Fatalf("protocol mismatch evidence = %#v, want one typed failure", records)
+	}
 }
 
 func TestManagedLocalAIPassesPinnedBackendCachePathToProcess(t *testing.T) {

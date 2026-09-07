@@ -7,6 +7,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
@@ -114,12 +115,14 @@ func (s *service) InvokeModelWithLease(
 	}
 
 	if s.runtime == nil {
-		return models.InvokeModelResult{}, models.ErrUnavailable
+		disposition, releaseErr := s.releaseInvocationLease(ctx, request)
+		return failedLeaseCleanupResult(request, disposition), joinInvocationCleanupError(models.ErrUnavailable, releaseErr)
 	}
 
 	invocation, err := s.nextInvocationRef()
 	if err != nil {
-		return models.InvokeModelResult{}, err
+		disposition, releaseErr := s.releaseInvocationLease(ctx, request)
+		return failedLeaseCleanupResult(request, disposition), joinInvocationCleanupError(err, releaseErr)
 	}
 
 	accepted := acceptedInvocationResult(request, invocation)
@@ -176,10 +179,35 @@ func (s *service) ensureModelAssetsAvailable(
 func (s *service) releaseInvocationLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
-) {
+) (models.InvocationLeaseDisposition, error) {
+	if s == nil || s.runtimeHost == nil {
+		return models.InvocationLeaseRetained, models.ErrUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	releaseContext := context.WithoutCancel(ctx)
-	_, _ = s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
+	modelseffects.MarkRuntimeLeaseReleaseAttempted(releaseContext)
+	released, err := s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})
+	return invocationLeaseDisposition(released), err
+}
+
+func invocationLeaseDisposition(
+	result models.ReleaseModelLeaseResult,
+) models.InvocationLeaseDisposition {
+	switch result.Lease.Status {
+	case models.ModelLeaseStatusReleased:
+		return models.InvocationLeaseReleased
+	case models.ModelLeaseStatusExpired:
+		return models.InvocationLeaseExpired
+	}
+	switch result.Outcome {
+	case models.ModelLeaseReleased, models.ModelLeaseAlreadyReleased:
+		return models.InvocationLeaseReleased
+	default:
+		return models.InvocationLeaseRetained
+	}
 }
