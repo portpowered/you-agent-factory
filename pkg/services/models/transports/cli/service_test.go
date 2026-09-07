@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -898,4 +899,81 @@ func TestRootAdapter_InvokeGenericFileInputCancellationStopsPreparation(t *testi
 	case <-time.After(time.Second):
 		t.Fatal("canceled generic input did not stop preparation")
 	}
+}
+
+func TestNewCompositionFacadeDelegatesListAndPullThroughOwnedRoot(t *testing.T) {
+	t.Parallel()
+
+	var pulled string
+	root := compositionModelsRoot{
+		listModels: func(context.Context) (modelinference.List, error) {
+			return modelinference.List{
+				Results: []modelinference.Summary{{Name: "OMNIVOICE_Q4_K_M"}},
+			}, nil
+		},
+		pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+			pulled = name
+			return modelinference.PullResult{ModelName: name}, nil
+		},
+	}
+	service := modelscli.New(
+		compositionHTTPProtocol(t),
+		compositionInvocation{root: root},
+	)
+	if service == nil {
+		t.Fatal("New() = nil, want composition facade")
+	}
+
+	var listOut bytes.Buffer
+	if err := service.List(modelscli.ListConfig{
+		Context: context.Background(),
+		Output:  &listOut,
+	}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !strings.Contains(listOut.String(), "OMNIVOICE_Q4_K_M") {
+		t.Fatalf("List() output = %q, want model name", listOut.String())
+	}
+
+	var pullOut bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{
+		Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Output: &pullOut,
+	}); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	if pulled != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("pulled model = %q, want OMNIVOICE_Q4_K_M", pulled)
+	}
+}
+
+func TestNewCompositionFacadeInvokeFallsBackToLegacyWhenServerSet(t *testing.T) {
+	t.Parallel()
+
+	err := modelscli.New(
+		compositionHTTPProtocol(t),
+		compositionInvocation{root: compositionModelsRoot{}},
+	).Invoke(modelscli.InvokeConfig{
+		Context:    context.Background(),
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello",
+		Server:     compositionCoverageUnreachableServer,
+		FactoryDir: t.TempDir(),
+		Output:     io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want legacy remote/bootstrap failure")
+	}
+}
+
+type exportingCompositionInvocation struct {
+	compositionInvocation
+}
+
+func (exportingCompositionInvocation) ExportModelInvocationArtifact(sourcePath, destinationPath string) error {
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(destinationPath, data, 0o600)
 }

@@ -378,13 +378,22 @@ func TestEnsureAndStopModelHostEmitCorrelatedBoundedLifecycleEvidence(t *testing
 	}); err != nil {
 		t.Fatalf("StopModelHost: %v", err)
 	}
+	assertControlledProcessStopped(t, process)
+	assertCorrelatedHostDiagnostics(t, logger.snapshot())
+	assertBackendStartEvidence(t, sink.snapshot())
+}
+
+func assertControlledProcessStopped(t *testing.T, process *fakeManagedProcess) {
+	t.Helper()
 	select {
 	case <-process.stopCh:
 	default:
 		t.Fatal("controlled process was not stopped")
 	}
+}
 
-	entries := logger.snapshot()
+func assertCorrelatedHostDiagnostics(t *testing.T, entries []diagnosticLogEntry) {
+	t.Helper()
 	wantMessages := []string{
 		"model host load started",
 		"model host load ready",
@@ -395,21 +404,29 @@ func TestEnsureAndStopModelHostEmitCorrelatedBoundedLifecycleEvidence(t *testing
 		t.Fatalf("diagnostic entries = %#v, want %d lifecycle entries", entries, len(wantMessages))
 	}
 	for index, entry := range entries {
-		if entry.msg != wantMessages[index] {
-			t.Fatalf("diagnostic[%d] message = %q, want %q", index, entry.msg, wantMessages[index])
-		}
-		if entry.fields["managed_runtime_identity"] != "OMNIVOICE_Q4_K_M" ||
-			entry.fields["backend"] != "LLAMACPP" ||
-			entry.fields["revision"] != "rev-test" ||
-			entry.fields["correlation_id"] != "models-invocation-42" ||
-			entry.fields["duration_millis"] == "" {
-			t.Fatalf("diagnostic[%d] fields = %#v, want bounded correlated identity", index, entry.fields)
-		}
-		if entry.fields["stage"] == "" || entry.fields["outcome"] == "" {
-			t.Fatalf("diagnostic[%d] fields = %#v, want stage and outcome", index, entry.fields)
-		}
+		assertHostDiagnosticEntry(t, index, entry, wantMessages[index])
 	}
-	records := sink.snapshot()
+}
+
+func assertHostDiagnosticEntry(t *testing.T, index int, entry diagnosticLogEntry, wantMessage string) {
+	t.Helper()
+	if entry.msg != wantMessage {
+		t.Fatalf("diagnostic[%d] message = %q, want %q", index, entry.msg, wantMessage)
+	}
+	if entry.fields["managed_runtime_identity"] != "OMNIVOICE_Q4_K_M" ||
+		entry.fields["backend"] != "LLAMACPP" ||
+		entry.fields["revision"] != "rev-test" ||
+		entry.fields["correlation_id"] != "models-invocation-42" ||
+		entry.fields["duration_millis"] == "" {
+		t.Fatalf("diagnostic[%d] fields = %#v, want bounded correlated identity", index, entry.fields)
+	}
+	if entry.fields["stage"] == "" || entry.fields["outcome"] == "" {
+		t.Fatalf("diagnostic[%d] fields = %#v, want stage and outcome", index, entry.fields)
+	}
+}
+
+func assertBackendStartEvidence(t *testing.T, records []modelseffects.RuntimeEvidenceRecord) {
+	t.Helper()
 	if len(records) != 1 || records[0].Sequence != 1 ||
 		records[0].Stage != modelseffects.RuntimeStageBackendStart ||
 		records[0].Outcome != modelseffects.RuntimeEvidenceOutcomeCompleted {

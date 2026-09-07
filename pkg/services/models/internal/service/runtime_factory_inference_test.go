@@ -551,6 +551,8 @@ func (inferenceRecordingAssetsService) InspectRuntimeCache(
 }
 
 func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
+	t.Parallel()
+
 	var events []string
 	inference := &joinedInferenceService{
 		events: &events,
@@ -567,6 +569,18 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
 	}
+	assertJoinedInvocationResult(t, events, result, host, inference)
+	assertJoinedInvocationEvidence(t, observed)
+}
+
+func assertJoinedInvocationResult(
+	t *testing.T,
+	events []string,
+	result models.InvokeModelResult,
+	host *joinedHostService,
+	inference *joinedInferenceService,
+) {
+	t.Helper()
 	if got, want := events, []string{"resolve", "preflight", "assets", "host", "lease", "invoke", "primitive-release"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("stage events = %#v, want %#v", got, want)
 	}
@@ -586,7 +600,10 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	if inference.invokeRequest.ModelName != "joined-model" || inference.invokeRequest.Operation != models.OperationOMNI {
 		t.Fatalf("prepared request = %#v, want resolved identity", inference.invokeRequest)
 	}
+}
 
+func assertJoinedInvocationEvidence(t *testing.T, observed *observer.ObservedLogs) {
+	t.Helper()
 	stageEntries := observed.FilterMessage("models invocation stage").All()
 	wantStages := []string{
 		joinedLifecycleStageArtifactProvision,
@@ -601,44 +618,58 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	}
 	correlation := ""
 	for index, entry := range stageEntries {
-		fields := entry.ContextMap()
-		fieldString := func(name string) string {
-			value, _ := fields[name].(string)
-			return value
-		}
-		if got := fieldString("stage"); got != wantStages[index] {
-			t.Fatalf("lifecycle stage[%d] = %q, want %q", index, got, wantStages[index])
-		}
-		if fieldString("outcome") != joinedLifecycleOutcomeCompleted ||
-			fieldString("model_name") != "joined-model" ||
-			fieldString("backend") != "fixture-backend" ||
-			fields["duration_millis"] == nil {
-			t.Fatalf("lifecycle fields[%d] = %#v, want bounded completed identity", index, fields)
-		}
-		if index == 0 {
-			correlation = fieldString("correlation_id")
-		}
-		if fieldString("correlation_id") != correlation {
-			t.Fatalf("lifecycle correlation[%d] = %q, want %q", index, fieldString("correlation_id"), correlation)
-		}
-		if strings.Contains(fieldString("operation"), "hello") || strings.Contains(fieldString("model_name"), "joined-holder") {
-			t.Fatalf("lifecycle fields[%d] leaked invocation input: %#v", index, fields)
-		}
+		assertJoinedStageFields(t, index, entry.ContextMap(), wantStages[index], &correlation)
 	}
 	terminalEntries := observed.FilterMessage("models invocation completed").All()
 	if len(terminalEntries) != 1 {
 		t.Fatalf("terminal entries = %d, want exactly one", len(terminalEntries))
 	}
-	terminal := terminalEntries[0].ContextMap()
-	terminalFieldString := func(name string) string {
-		value, _ := terminal[name].(string)
+	assertJoinedTerminalFields(t, terminalEntries[0].ContextMap(), correlation)
+}
+
+func assertJoinedStageFields(
+	t *testing.T,
+	index int,
+	fields map[string]interface{},
+	wantStage string,
+	correlation *string,
+) {
+	t.Helper()
+	fieldString := func(name string) string {
+		value, _ := fields[name].(string)
 		return value
 	}
-	if terminalFieldString("stage") != joinedLifecycleStageTerminal ||
-		terminalFieldString("outcome") != joinedLifecycleOutcomeCompleted ||
-		terminalFieldString("correlation_id") != correlation ||
-		terminalFieldString("runtime_stage") != string(modelseffects.RuntimeStageInvoke) {
-		t.Fatalf("terminal fields = %#v, want one correlated completed terminal", terminal)
+	if got := fieldString("stage"); got != wantStage {
+		t.Fatalf("lifecycle stage[%d] = %q, want %q", index, got, wantStage)
+	}
+	if fieldString("outcome") != joinedLifecycleOutcomeCompleted ||
+		fieldString("model_name") != "joined-model" ||
+		fieldString("backend") != "fixture-backend" ||
+		fields["duration_millis"] == nil {
+		t.Fatalf("lifecycle fields[%d] = %#v, want bounded completed identity", index, fields)
+	}
+	if index == 0 {
+		*correlation = fieldString("correlation_id")
+	}
+	if fieldString("correlation_id") != *correlation {
+		t.Fatalf("lifecycle correlation[%d] = %q, want %q", index, fieldString("correlation_id"), *correlation)
+	}
+	if strings.Contains(fieldString("operation"), "hello") || strings.Contains(fieldString("model_name"), "joined-holder") {
+		t.Fatalf("lifecycle fields[%d] leaked invocation input: %#v", index, fields)
+	}
+}
+
+func assertJoinedTerminalFields(t *testing.T, fields map[string]interface{}, correlation string) {
+	t.Helper()
+	fieldString := func(name string) string {
+		value, _ := fields[name].(string)
+		return value
+	}
+	if fieldString("stage") != joinedLifecycleStageTerminal ||
+		fieldString("outcome") != joinedLifecycleOutcomeCompleted ||
+		fieldString("correlation_id") != correlation ||
+		fieldString("runtime_stage") != string(modelseffects.RuntimeStageInvoke) {
+		t.Fatalf("terminal fields = %#v, want one correlated completed terminal", fields)
 	}
 }
 
@@ -781,316 +812,4 @@ func TestRootInvokeModelValidatesSlotsBeforeAssetAndHostEffects(t *testing.T) {
 	if host.releaseCalls != 0 || inference.invokeCalls != 0 {
 		t.Fatalf("invalid slot reached cleanup/invoke: releases=%d invokes=%d", host.releaseCalls, inference.invokeCalls)
 	}
-}
-
-func TestJoinedAssetPreparationRequestCarriesModelAndBackendSources(t *testing.T) {
-	t.Parallel()
-
-	scope, err := (models.RuntimeScopeRef{}).Parse("joined-scope")
-	if err != nil {
-		t.Fatalf("parse scope: %v", err)
-	}
-	request := models.InvokeModelRequest{
-		Scope:   scope,
-		Model:   models.ModelReference{NameOrURI: "tts"},
-		Offline: true,
-	}
-	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
-		Name:    "tts",
-		Source:  "hf://owner/repository/weights.gguf@revision-1",
-		Backend: "hf://owner/backend/backend.bin@backend-revision",
-	}}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
-	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequest: %v", err)
-	}
-	if prepared.Scope != request.Scope || prepared.Name != "tts" || !prepared.Offline {
-		t.Fatalf("joined preparation identity = %#v, want request scope/name/offline", prepared)
-	}
-	if prepared.Reference.NameOrURI != resolved.Definition.Source || len(prepared.Artifacts) != 1 ||
-		prepared.Artifacts[0].Name != "weights.gguf" {
-		t.Fatalf("model asset preparation = %#v, want pinned model file", prepared)
-	}
-	if prepared.Backend != "" || prepared.BackendReference.NameOrURI != resolved.Definition.Backend ||
-		len(prepared.BackendArtifacts) != 1 || prepared.BackendArtifacts[0].Name != "backend.bin" {
-		t.Fatalf("backend asset preparation = %#v, want pinned backend file", prepared)
-	}
-}
-
-func TestJoinedAssetPreparationRequestKeepsPrivateLocalSourceReference(t *testing.T) {
-	t.Parallel()
-
-	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "tts"}}
-	resolved := models.ResolvedModelReference{
-		Definition: models.ModelDefinition{Name: "tts", Source: "file://local", Backend: "localai-vibevoice"},
-		Provenance: models.ModelReferenceProvenance{
-			Kind:       models.ModelReferenceSourceNamed,
-			SourceKind: models.ModelReferenceSourceFileURI,
-		},
-	}
-	prepared, err := joinedAssetPreparationRequest(request, "tts", resolved)
-	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequest: %v", err)
-	}
-	if prepared.Reference.NameOrURI != request.Model.NameOrURI {
-		t.Fatalf("asset reference = %#v, want private symbolic reference %q", prepared.Reference, request.Model.NameOrURI)
-	}
-}
-
-func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *testing.T) {
-	t.Parallel()
-
-	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "llm"}}
-	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
-		Name: "llm", Source: "hf://owner/repository", Backend: "localai-llamacpp",
-	}}
-	prepared, err := joinedAssetPreparationRequest(request, "llm", resolved)
-	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequest: %v", err)
-	}
-	if prepared.Reference.NameOrURI != resolved.Definition.Source || len(prepared.Artifacts) != 0 {
-		t.Fatalf("repository source preparation = %#v, want source without guessed artifact", prepared)
-	}
-	if prepared.Backend != resolved.Definition.Backend || !prepared.BackendReference.IsZero() || len(prepared.BackendArtifacts) != 0 {
-		t.Fatalf("named backend preparation = %#v, want backend identity only", prepared)
-	}
-	for _, value := range []string{"hf://owner/repository", "file://weights.bin", "./weights.bin", "../weights.bin", "/weights.bin", `C:\\weights.bin`, "backend://localai"} {
-		if value == "backend://localai" {
-			if isJoinedSourceReference(value) {
-				t.Fatalf("backend identity %q should not be treated as source", value)
-			}
-			continue
-		}
-		if !isJoinedSourceReference(value) {
-			t.Fatalf("source %q was not recognized", value)
-		}
-	}
-}
-
-func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.T) {
-	t.Parallel()
-
-	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "tts"}}
-	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
-		Name: "tts", Source: "hf://owner/repository/weights.gguf@revision-1", Backend: "localai-vibevoice",
-	}}
-	selection := modelseffects.BackendArtifactSelection{
-		Name: "localai-backend.tar.gz", Location: "https://github.com/owner/repo/releases/download/v1/localai-backend.tar.gz",
-		Bytes: 22, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
-	}
-	prepared, err := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
-	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequestWithBackend: %v", err)
-	}
-	if prepared.Backend != resolved.Definition.Backend ||
-		prepared.BackendReference.NameOrURI != selection.Location || len(prepared.BackendArtifacts) != 1 {
-		t.Fatalf("backend preparation = %#v, want selected backend source and requirement", prepared)
-	}
-	if prepared.BackendArtifacts[0].Name != selection.Name ||
-		prepared.BackendArtifacts[0].Bytes != selection.Bytes ||
-		prepared.BackendArtifacts[0].SHA256 != selection.SHA256 {
-		t.Fatalf("backend requirement = %#v, want detached selected facts", prepared.BackendArtifacts[0])
-	}
-}
-
-func joinedInvocationRequest(scope models.RuntimeScopeRef) models.InvokeModelRequest {
-	return models.InvokeModelRequest{
-		Scope:  scope,
-		Holder: "joined-holder",
-		Model:  models.ModelReference{NameOrURI: "joined-model"},
-		Inputs: []models.InferenceInput{{
-			Name: "prompt", Modality: models.ModalityText,
-			MediaType: "text/plain", Content: "hello",
-		}},
-	}
-}
-
-func joinedCompletedResult(t *testing.T) models.InvokeModelResult {
-	t.Helper()
-	invocation, err := (models.ModelInvocationRef{}).Parse("joined:invocation:1")
-	if err != nil {
-		t.Fatalf("parse joined invocation: %v", err)
-	}
-	return models.InvokeModelResult{
-		Invocation:       invocation,
-		Status:           models.ModelInvocationStatusCompleted,
-		LeaseDisposition: models.InvocationLeaseReleased,
-		Content:          []models.InferenceContent{{Name: "text", Modality: models.ModalityText, MediaType: "text/plain", Content: "done"}},
-	}
-}
-
-func newJoinedInvocationRoot(
-	t *testing.T,
-	events *[]string,
-	inference *joinedInferenceService,
-) (*Root, models.RuntimeScopeRef, *joinedHostService) {
-	t.Helper()
-	baseScopes, err := runtimescopeswire.NewService(func() string { return "joined-invocation-test" })
-	if err != nil {
-		t.Fatalf("construct runtime scopes: %v", err)
-	}
-	scopes := &joinedRecordingScopes{delegate: baseScopes, events: events}
-	source := "./fixture.gguf"
-	backend := "fixture-backend"
-	loadPolicy := models.LoadPolicyOnDemand
-	ref, err := scopes.Open(models.RuntimeBinding{
-		OperatorModels: map[string]models.ModelOverlay{
-			"joined-model": {
-				Source: &source, Backend: &backend, LoadPolicy: &loadPolicy,
-				Operations: []string{models.OperationOMNI},
-			},
-		},
-		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	})
-	if err != nil {
-		t.Fatalf("open runtime scope: %v", err)
-	}
-	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
-	if err != nil {
-		t.Fatalf("parse runtime scope: %v", err)
-	}
-	host := &joinedHostService{events: events}
-	assets := &joinedAssetsService{events: events}
-	root := &Root{
-		runtimeScopes:  scopes,
-		assets:         assets,
-		runtimeHost:    host,
-		inference:      inference,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
-	}
-	return root, scope, host
-}
-
-type joinedRecordingScopes struct {
-	delegate runtimescopes.Service
-	events   *[]string
-}
-
-func (scopes *joinedRecordingScopes) Open(binding models.RuntimeBinding) (runtimescopes.Reference, error) {
-	return scopes.delegate.Open(binding)
-}
-
-func (scopes *joinedRecordingScopes) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, error) {
-	*scopes.events = append(*scopes.events, "resolve")
-	return scopes.delegate.Resolve(ref)
-}
-
-func (scopes *joinedRecordingScopes) Close(ref runtimescopes.Reference) error {
-	return scopes.delegate.Close(ref)
-}
-
-type joinedAssetsService struct {
-	events *[]string
-}
-
-func (assets *joinedAssetsService) PreflightModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PreflightModelAssetsResult, error) {
-	*assets.events = append(*assets.events, "preflight")
-	return models.PreflightModelAssetsResult{}, nil
-}
-
-func (assets *joinedAssetsService) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
-) (models.PrepareModelAssetsResult, error) {
-	*assets.events = append(*assets.events, "assets")
-	return models.PrepareModelAssetsResult{}, nil
-}
-
-func (joinedAssetsService) InspectModelAssets(context.Context, models.InspectModelAssetsRequest) (models.InspectModelAssetsResult, error) {
-	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (joinedAssetsService) RemoveModelAssets(context.Context, models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-}
-
-func (joinedAssetsService) ResolveRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheLayout, error) {
-	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
-}
-
-func (joinedAssetsService) InspectRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheInspection, error) {
-	return scopedassets.RuntimeCacheInspection{}, models.ErrUnsupportedOperation
-}
-
-type joinedHostService struct {
-	events       *[]string
-	releaseCalls int
-	lease        models.ModelLease
-}
-
-func (host *joinedHostService) EnsureModelHost(context.Context, models.EnsureModelHostRequest) (models.EnsureModelHostResult, error) {
-	*host.events = append(*host.events, "host")
-	return models.EnsureModelHostResult{}, nil
-}
-
-func (joinedHostService) InspectModelHost(context.Context, models.InspectModelHostRequest) (models.InspectModelHostResult, error) {
-	return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
-}
-
-func (joinedHostService) StopModelHost(context.Context, models.StopModelHostRequest) (models.StopModelHostResult, error) {
-	return models.StopModelHostResult{}, models.ErrUnsupportedOperation
-}
-
-func (host *joinedHostService) AcquireModelLease(context.Context, models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error) {
-	*host.events = append(*host.events, "lease")
-	if host.lease.Lease.IsZero() {
-		lease, err := (models.ModelLeaseRef{}).Parse("joined:lease:1")
-		if err != nil {
-			return models.AcquireModelLeaseResult{}, err
-		}
-		host.lease = models.ModelLease{Lease: lease, Status: models.ModelLeaseStatusActive}
-	}
-	return models.AcquireModelLeaseResult{Lease: host.lease}, nil
-}
-
-func (host *joinedHostService) GetModelLease(context.Context, models.GetModelLeaseRequest) (models.GetModelLeaseResult, error) {
-	return models.GetModelLeaseResult{Lease: host.lease}, nil
-}
-
-func (host *joinedHostService) ReleaseModelLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
-	host.releaseCalls++
-	*host.events = append(*host.events, "release")
-	host.lease.Status = models.ModelLeaseStatusReleased
-	return models.ReleaseModelLeaseResult{Lease: host.lease, Outcome: models.ModelLeaseReleased}, nil
-}
-
-type joinedInferenceService struct {
-	events                    *[]string
-	result                    models.InvokeModelResult
-	err                       error
-	markLeaseReleaseAttempted bool
-	invokeCalls               int
-	invokeRequest             models.InvokeModelRequest
-}
-
-func (service *joinedInferenceService) InvokeModelWithLease(
-	ctx context.Context,
-	request models.InvokeModelRequest,
-) (models.InvokeModelResult, error) {
-	*service.events = append(*service.events, "invoke")
-	service.invokeCalls++
-	service.invokeRequest = request
-	if service.markLeaseReleaseAttempted {
-		modelseffects.MarkRuntimeLeaseReleaseAttempted(ctx)
-	}
-	if service.result.LeaseDisposition == models.InvocationLeaseReleased {
-		*service.events = append(*service.events, "primitive-release")
-	}
-	return service.result.Clone(), service.err
-}
-
-func (joinedInferenceService) CancelInvocation(context.Context, models.CancelInvocationRequest) (models.CancelInvocationResult, error) {
-	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
-}
-
-func mustInferenceInvocationRef(t *testing.T, value string) models.ModelInvocationRef {
-	t.Helper()
-	ref, err := (models.ModelInvocationRef{}).Parse(value)
-	if err != nil {
-		t.Fatalf("parse invocation ref: %v", err)
-	}
-	return ref
 }

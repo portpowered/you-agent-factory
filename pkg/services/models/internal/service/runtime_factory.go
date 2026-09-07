@@ -4,15 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
-	"path"
 	"strings"
 	"sync"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
@@ -834,24 +831,6 @@ func joinedInvocationFailureResult(result models.InvokeModelResult) models.Invok
 	return result
 }
 
-func joinedAssetReference(
-	reference models.ModelReference,
-	resolved models.ResolvedModelReference,
-) models.ModelReference {
-	// Local source details are deliberately redacted from the resolved public
-	// definition. Keep the original request at the asset boundary so the
-	// private scope overlay can resolve the actual local path there.
-	if resolved.Provenance.SourceKind == models.ModelReferenceSourceLocalPath ||
-		resolved.Provenance.SourceKind == models.ModelReferenceSourceFileURI {
-		return reference
-	}
-	resolvedSource := strings.TrimSpace(resolved.Definition.Source)
-	if isJoinedSourceReference(resolvedSource) {
-		return models.ModelReference{NameOrURI: resolved.Definition.Source}
-	}
-	return reference
-}
-
 func joinedAssetPreparationRequest(
 	request models.InvokeModelRequest,
 	modelName string,
@@ -860,157 +839,6 @@ func joinedAssetPreparationRequest(
 	return joinedAssetPreparationRequestWithBackend(
 		request, modelName, resolved, modelseffects.BackendArtifactSelection{},
 	)
-}
-
-func joinedAssetPreparationRequestWithBackend(
-	request models.InvokeModelRequest,
-	modelName string,
-	resolved models.ResolvedModelReference,
-	backendArtifact modelseffects.BackendArtifactSelection,
-) (models.PrepareModelAssetsRequest, error) {
-	assetReference := joinedAssetReference(request.Model, resolved)
-	modelRequirements, err := joinedModelAssetRequirements(
-		resolved.Definition, assetReference.NameOrURI,
-	)
-	if err != nil {
-		return models.PrepareModelAssetsRequest{}, err
-	}
-	prepared := models.PrepareModelAssetsRequest{
-		Scope:     request.Scope,
-		Name:      modelName,
-		Reference: assetReference,
-		Offline:   request.Offline,
-		Backend:   strings.TrimSpace(resolved.Definition.Backend),
-		Artifacts: modelRequirements,
-	}
-	if backendArtifact.Name != "" {
-		prepared.BackendReference = models.ModelReference{NameOrURI: backendArtifact.Location}
-		prepared.BackendArtifacts = []models.AssetRequirement{{
-			Name: backendArtifact.Name, Bytes: backendArtifact.Bytes, SHA256: backendArtifact.SHA256,
-		}}
-		return prepared, nil
-	}
-	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
-		prepared.Backend = ""
-		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
-		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)
-	}
-	return prepared, nil
-}
-
-func joinedModelAssetRequirements(
-	definition models.ModelDefinition,
-	source string,
-) ([]models.AssetRequirement, error) {
-	if !strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameTTS) ||
-		!strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-vibevoice") {
-		return joinedSourceAssetRequirements(source), nil
-	}
-	manifest, err := modelartifacts.DefaultModelRoleManifest()
-	if err != nil {
-		return nil, err
-	}
-	roleModel, ok := manifest.Model(models.BuiltInModelNameTTS)
-	if !ok {
-		return joinedSourceAssetRequirements(source), nil
-	}
-	if strings.TrimSpace(source) != roleModel.Source.URI {
-		// Operator model overlays may point the built-in TTS model at a local
-		// controlled bundle. Leave local/file sources unexpanded here so the
-		// asset service can enumerate the directory and preserve all role files;
-		// the pinned source below remains an explicit three-role contract.
-		if isJoinedSourceReference(source) &&
-			!strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), "hf://") {
-			return nil, nil
-		}
-		return joinedSourceAssetRequirements(source), nil
-	}
-	requirements := make([]models.AssetRequirement, 0, len(roleModel.Artifacts))
-	for _, role := range []string{"model", "tokenizer", "voice"} {
-		artifact, ok := roleModel.Artifact(role)
-		if !ok {
-			return nil, fmt.Errorf("%w: missing TTS role %q", modelartifacts.ErrModelRoleManifestMalformed, role)
-		}
-		requirements = append(requirements, models.AssetRequirement{
-			Name: artifact.Path, Bytes: artifact.SizeBytes, SHA256: artifact.SHA256,
-		})
-	}
-	return requirements, nil
-}
-
-func isJoinedPinnedBackend(value string) bool {
-	canonical := strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(canonical, "localai-") || canonical == "localai" ||
-		canonical == "localai_grpc" || canonical == "localai-grpc"
-}
-
-func isJoinedSourceReference(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	return strings.HasPrefix(lower, "hf://") || strings.HasPrefix(lower, "file://") ||
-		strings.HasPrefix(lower, "./") || strings.HasPrefix(lower, "../") ||
-		strings.HasPrefix(lower, "/") || strings.HasPrefix(lower, "\\") ||
-		(len(lower) > 2 && lower[1] == ':')
-}
-
-func joinedSourceAssetRequirements(source string) []models.AssetRequirement {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		return nil
-	}
-	if strings.HasPrefix(strings.ToLower(source), "hf://") {
-		rest := strings.TrimPrefix(source, "hf://")
-		if at := strings.LastIndex(rest, "@"); at >= 0 {
-			rest = rest[:at]
-		}
-		parts := strings.Split(rest, "/")
-		if len(parts) > 2 {
-			name := path.Clean(strings.Join(parts[2:], "/"))
-			if name != "." && name != "" {
-				return []models.AssetRequirement{{Name: name}}
-			}
-		}
-		return nil
-	}
-	if strings.HasPrefix(strings.ToLower(source), "file://") {
-		parsed, err := url.Parse(source)
-		if err != nil || parsed.Path == "" {
-			return nil
-		}
-		return []models.AssetRequirement{{Name: path.Base(parsed.Path)}}
-	}
-	if strings.Contains(source, "://") {
-		return nil
-	}
-	return nil
-}
-
-func inferenceInputIsZero(input models.InferenceInput) bool {
-	return input.Name == "" && input.Modality == "" && input.ContentType == "" &&
-		input.MediaType == "" && input.Content == "" && input.Artifact == nil
-}
-
-func joinedInvocationLeaseReleased(result models.InvokeModelResult) bool {
-	return result.LeaseDisposition == models.InvocationLeaseReleased ||
-		result.LeaseDisposition == models.InvocationLeaseExpired
-}
-
-func (o *Root) releaseJoinedLease(
-	ctx context.Context,
-	scope models.RuntimeScopeRef,
-	lease models.ModelLeaseRef,
-) error {
-	if o == nil || o.runtimeHost == nil || lease.IsZero() {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	releaseContext := context.WithoutCancel(ctx)
-	modelseffects.MarkRuntimeLeaseReleaseAttempted(releaseContext)
-	_, err := o.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
-		Scope: scope, Lease: lease,
-	})
-	return err
 }
 
 func (o *Root) CancelInvocation(
