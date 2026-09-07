@@ -29,17 +29,27 @@ import (
 )
 
 const (
-	localAIRealEvidenceSchema  = "localai.windows-real-evidence.v1"
-	localAIBudgetSchema        = "localai.windows-real-budget.v1"
-	localAIRealHelperModeEnv   = "LOCALAI_REAL_HELPER_MODE"
-	localAIRealHelperOutputEnv = "LOCALAI_REAL_HELPER_OUTPUT"
-	localAIRealHelperResultEnv = "LOCALAI_REAL_HELPER_RESULT"
-	localAIRealOutputToken     = "{output}"
-	localAIRealRootToken       = "{root}"
-	localAIRealWorkToken       = "{work}"
-	localAIRealMaxStreamBytes  = 64 << 10
-	localAIRealMaxFailureBytes = 192
-	localAIRealCommandTimeout  = 10 * time.Second
+	localAIRealEvidenceSchema      = "localai.windows-real-evidence.v1"
+	localAIBudgetSchema            = "localai.windows-real-budget.v1"
+	localAIRealHelperModeEnv       = "LOCALAI_REAL_HELPER_MODE"
+	localAIRealHelperOutputEnv     = "LOCALAI_REAL_HELPER_OUTPUT"
+	localAIRealHelperResultEnv     = "LOCALAI_REAL_HELPER_RESULT"
+	localAIRealHelperTranscriptEnv = "LOCALAI_REAL_HELPER_TRANSCRIPT"
+	localAIRealHelperSegmentsEnv   = "LOCALAI_REAL_HELPER_SEGMENTS"
+	localAIRealOutputToken         = "{output}"
+	localAIRealInputToken          = "{input}"
+	localAIRealTranscriptToken     = "{transcript}"
+	localAIRealSegmentsToken       = "{segments}"
+	localAIRealRootToken           = "{root}"
+	localAIRealWorkToken           = "{work}"
+	localAIRealMaxStreamBytes      = 64 << 10
+	localAIRealMaxFailureBytes     = 192
+	localAIRealCommandTimeout      = 10 * time.Second
+	localAIJourneyTTS              = "tts"
+	localAIJourneyASR              = "asr"
+	localAIJourneyTTSASR           = "tts-asr"
+	localAIRealTranscriptFile      = "transcript.txt"
+	localAIRealSegmentsFile        = "segments.json"
 )
 
 type localAIRealReport struct {
@@ -137,6 +147,7 @@ type localAIBudgetReservation struct {
 
 type localAIRealRunRequest struct {
 	Selector            string
+	Kind                string
 	RunID               string
 	Root                string
 	ReportPath          string
@@ -145,6 +156,10 @@ type localAIRealRunRequest struct {
 	ReservationKind     string
 	ReservationAmount   int64
 	Command             localAICommandSpec
+	FollowUp            *localAICommandSpec
+	InputPath           string
+	ExpectedInputSHA256 string
+	ExpectedTranscript  string
 	Build               localAIRealBuildIdentity
 	Offline             bool
 	CacheIdentitySHA256 string
@@ -344,6 +359,24 @@ func TestLocalAIRealHarnessControlledHelper(t *testing.T) {
 	case "secret":
 		_, _ = os.Stdout.Write([]byte(`HF_TOKEN=controlled-secret`))
 		os.Exit(0)
+	case "asr-pass":
+		writeLocalAIControlledASR(t, "zero", 600)
+		os.Exit(0)
+	case "asr-mismatch":
+		writeLocalAIControlledASR(t, "one", 600)
+		os.Exit(0)
+	case "asr-failure":
+		os.Exit(23)
+	case "integration-tts":
+		outputPath := os.Getenv(localAIRealHelperOutputEnv)
+		if err := writeLocalAIControlledWAV(outputPath); err != nil {
+			os.Exit(21)
+		}
+		_, _ = os.Stdout.Write([]byte(`{"outputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav","content":"controlled"}]}`))
+		os.Exit(0)
+	case "integration-asr":
+		writeLocalAIControlledASR(t, "local ai works on this machine", 8)
+		os.Exit(0)
 	case "ledger-reserve":
 		writeLocalAIReservationHelperResult(t)
 		os.Exit(0)
@@ -391,13 +424,21 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 		return runner.finish(request, report)
 	}
 
-	observation := runner.execute(ctx, request, roots)
-	if failure := localAICommandFailure(observation); failure != nil {
+	observations := []localAICommandObservation{runner.execute(ctx, request, request.Command, roots)}
+	if failure := localAICommandFailureForJourney(observations[0], request.Kind == localAIJourneyASR); failure != nil {
 		setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
 		return runner.finish(request, report)
 	}
-	output, artifact, failure := observeLocalAITTS(request, roots, observation)
+	if request.FollowUp != nil {
+		observations = append(observations, runner.execute(ctx, request, *request.FollowUp, roots))
+		if failure := localAICommandFailureForJourney(observations[1], true); failure != nil {
+			setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
+			return runner.finish(request, report)
+		}
+	}
+	output, artifacts, failure := observeLocalAI(request, roots, observations)
 	if failure != nil {
+		report.Journeys[0].Artifacts = artifacts
 		setLocalAIFailure(&report, failure.Owner, failure.Assertion, failure.Expected, failure.Observed)
 		return runner.finish(request, report)
 	}
@@ -408,13 +449,13 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 	journey := &report.Journeys[0]
 	report.Status = "PASS"
 	journey.Status = "PASS"
-	journey.Artifacts = []localAIRealArtifact{artifact}
+	journey.Artifacts = artifacts
 	journey.Semantic = output
 	journey.Release = localAIRealRelease{ProcessTreeClosed: true}
 	return runner.finish(request, report)
 }
 
-func (runner localAIRealRunner) execute(ctx context.Context, request localAIRealRunRequest, roots localAIRealRoots) localAICommandObservation {
+func (runner localAIRealRunner) execute(ctx context.Context, request localAIRealRunRequest, spec localAICommandSpec, roots localAIRealRoots) localAICommandObservation {
 	if runner.executor == nil {
 		return localAICommandObservation{}
 	}
@@ -424,7 +465,7 @@ func (runner localAIRealRunner) execute(ctx context.Context, request localAIReal
 	}
 	commandContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	command := request.Command
+	command := spec
 	command.Arguments = localAIExpandArguments(command.Arguments, roots)
 	command.Environment = localAIProcessEnvironment(roots, command.Environment)
 	return runner.executor.Execute(commandContext, command, roots)
@@ -500,10 +541,14 @@ func setLocalAIBudgetFailure(report *localAIRealReport, err error) {
 type localAIObservationFailure = localAIRealFailure
 
 func localAICommandFailure(observation localAICommandObservation) *localAIObservationFailure {
+	return localAICommandFailureForJourney(observation, false)
+}
+
+func localAICommandFailureForJourney(observation localAICommandObservation, allowExpectedTranscript bool) *localAIObservationFailure {
 	if observation.StdoutTruncated || observation.StderrTruncated {
 		return &localAIObservationFailure{Owner: "harness", Assertion: "bounded command streams", Expected: "streams fit the redaction bound", Observed: "stream limit exceeded"}
 	}
-	if violation := localAIStreamViolation(observation.Stdout, observation.Stderr); violation != "" {
+	if violation := localAIStreamViolationForJourney(observation.Stdout, observation.Stderr, allowExpectedTranscript); violation != "" {
 		return &localAIObservationFailure{Owner: "product", Assertion: "redacted command streams", Expected: "no secret, prompt, address, or raw media", Observed: violation}
 	}
 	if !observation.Started {
@@ -524,10 +569,56 @@ func localAICommandFailure(observation localAICommandObservation) *localAIObserv
 	return nil
 }
 
+func observeLocalAI(
+	request localAIRealRunRequest,
+	roots localAIRealRoots,
+	observations []localAICommandObservation,
+) (localAIRealSemantic, []localAIRealArtifact, *localAIObservationFailure) {
+	switch request.Kind {
+	case localAIJourneyTTS:
+		if len(observations) != 1 {
+			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "one command", Observed: "unexpected command count"}
+		}
+		semantic, artifact, failure := observeLocalAITTS(request, roots, observations[0])
+		return semantic, []localAIRealArtifact{artifact}, failure
+	case localAIJourneyASR:
+		if len(observations) != 1 {
+			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "one command", Observed: "unexpected command count"}
+		}
+		return observeLocalAIASR(request, roots, observations[0])
+	case localAIJourneyTTSASR:
+		if len(observations) != 2 {
+			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey command count", Expected: "TTS followed by ASR", Observed: "unexpected command count"}
+		}
+		ttsSemantic, ttsArtifact, failure := observeLocalAITTS(request, roots, observations[0])
+		if failure != nil {
+			return localAIRealSemantic{}, nil, failure
+		}
+		asrRequest := request
+		asrRequest.Kind = localAIJourneyASR
+		asrRequest.InputPath = filepath.Join(roots.Output, request.Command.OutputName)
+		asrSemantic, asrArtifacts, failure := observeLocalAIASR(asrRequest, roots, observations[1])
+		if failure != nil {
+			return localAIRealSemantic{}, append([]localAIRealArtifact{ttsArtifact}, asrArtifacts...), failure
+		}
+		return localAIRealSemantic{
+			Assertion: "TTS output is consumed by ASR with bounded semantic output",
+			Expected:  "audio output and normalized ASR transcript with bounded segments",
+			Observed:  fmt.Sprintf("tts=%s;asr=%s", ttsSemantic.Observed, asrSemantic.Observed),
+			Passed:    true,
+		}, append([]localAIRealArtifact{ttsArtifact}, asrArtifacts...), nil
+	default:
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "harness", Assertion: "selected journey kind", Expected: "bounded TTS, ASR, or TTS-to-ASR selector", Observed: "unknown journey"}
+	}
+}
+
 func observeLocalAITTS(request localAIRealRunRequest, roots localAIRealRoots, observation localAICommandObservation) (localAIRealSemantic, localAIRealArtifact, *localAIObservationFailure) {
 	response, err := decodeLocalAIInvocationResponse(observation.Stdout)
 	if err != nil {
 		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "strict TTS response JSON", Expected: "one bounded audio output", Observed: "malformed response"}
+	}
+	if response.Failure != nil {
+		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS invocation response", Expected: "successful audio output", Observed: "bounded invocation failure"}
 	}
 	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != "AUDIO" {
 		return localAIRealSemantic{}, localAIRealArtifact{}, &localAIObservationFailure{Owner: "product", Assertion: "TTS output slot", Expected: "one AUDIO output named audio", Observed: "output shape mismatch"}
@@ -556,6 +647,129 @@ func observeLocalAITTS(request localAIRealRunRequest, roots localAIRealRoots, ob
 		Passed:    true,
 	}
 	return semantic, artifact, nil
+}
+
+type localAIASRSegment struct {
+	ID    int64  `json:"id"`
+	Start int64  `json:"start"`
+	End   int64  `json:"end"`
+	Text  string `json:"text"`
+}
+
+func observeLocalAIASR(
+	request localAIRealRunRequest,
+	roots localAIRealRoots,
+	observation localAICommandObservation,
+) (localAIRealSemantic, []localAIRealArtifact, *localAIObservationFailure) {
+	response, err := decodeLocalAIInvocationResponse(observation.Stdout)
+	if err != nil {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "strict ASR response JSON", Expected: "transcript and segments outputs", Observed: "malformed response"}
+	}
+	if response.Failure != nil {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR invocation response", Expected: "successful transcript and segments outputs", Observed: "bounded invocation failure"}
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output slots", Expected: "ordered transcript and segments outputs", Observed: "output shape mismatch"}
+	}
+	transcriptOutput, segmentsOutput := response.Outputs[0], response.Outputs[1]
+	if strings.ToLower(strings.TrimSpace(transcriptOutput.MediaType)) != "text/plain" || strings.ToLower(strings.TrimSpace(segmentsOutput.MediaType)) != "application/json" {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output media types", Expected: "text/plain and application/json", Observed: "unsupported media type"}
+	}
+	if strings.TrimSpace(transcriptOutput.Content) == "" || strings.TrimSpace(segmentsOutput.Content) == "" {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR output materialization", Expected: "non-empty transcript and segments content", Observed: "empty content"}
+	}
+	transcriptPath := filepath.Join(roots.Output, localAIRealTranscriptFile)
+	segmentsPath := filepath.Join(roots.Output, localAIRealSegmentsFile)
+	transcript, err := os.ReadFile(transcriptPath)
+	if err != nil || string(transcript) != transcriptOutput.Content {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR transcript materialization", Expected: "response content matches bounded transcript file", Observed: "transcript artifact mismatch"}
+	}
+	segmentsBody, err := os.ReadFile(segmentsPath)
+	if err != nil || string(segmentsBody) != segmentsOutput.Content {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segments materialization", Expected: "response content matches bounded segments file", Observed: "segments artifact mismatch"}
+	}
+	var segments []localAIASRSegment
+	if err := decodeLocalAIJSONStrict(segmentsBody, &segments); err != nil || len(segments) == 0 {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segment structure", Expected: "non-empty strict JSON segment array", Observed: "invalid segments"}
+	}
+	inputPath := request.InputPath
+	if inputPath == "" {
+		inputPath = filepath.Join(roots.Output, request.Command.OutputName)
+	}
+	input, err := os.ReadFile(inputPath)
+	if err != nil {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input artifact", Expected: "readable bounded WAV input", Observed: "input audio missing"}
+	}
+	metadata, ok := localAIWAVMetadata(input)
+	if !ok {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input audio", Expected: "bounded PCM WAV", Observed: "input audio is not a valid WAV"}
+	}
+	inputSHA := sha256Hex(input)
+	if request.ExpectedInputSHA256 != "" && !strings.EqualFold(request.ExpectedInputSHA256, inputSHA) {
+		return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR input identity", Expected: "pinned input SHA-256", Observed: "input digest mismatch"}
+	}
+	previousID, previousStart, previousEnd := int64(-1), int64(0), int64(0)
+	var segmentText strings.Builder
+	for index, segment := range segments {
+		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || segment.End > metadata.durationMillis || strings.TrimSpace(segment.Text) == "" || (index > 0 && (segment.ID <= previousID || segment.Start < previousStart || segment.End < previousEnd)) {
+			return localAIRealSemantic{}, nil, &localAIObservationFailure{Owner: "product", Assertion: "ASR segment bounds", Expected: "finite monotonic segments bounded by input duration", Observed: "segment invariant mismatch"}
+		}
+		if segmentText.Len() > 0 {
+			segmentText.WriteByte(' ')
+		}
+		segmentText.WriteString(segment.Text)
+		previousID, previousStart, previousEnd = segment.ID, segment.Start, segment.End
+	}
+	wantTranscript := request.ExpectedTranscript
+	if wantTranscript == "" {
+		wantTranscript = "zero"
+	}
+	inputArtifact := localAIRealArtifact{Kind: "input-audio", Path: filepath.Base(inputPath), MediaType: "audio/wav", Bytes: int64(len(input)), SHA256: inputSHA}
+	transcriptArtifact := localAIRealArtifact{Kind: "transcript", Path: localAIRealTranscriptFile, MediaType: "text/plain", Bytes: int64(len(transcript)), SHA256: sha256Hex(transcript)}
+	segmentsArtifact := localAIRealArtifact{Kind: "segments", Path: localAIRealSegmentsFile, MediaType: "application/json", Bytes: int64(len(segmentsBody)), SHA256: sha256Hex(segmentsBody)}
+	artifacts := []localAIRealArtifact{inputArtifact, transcriptArtifact, segmentsArtifact}
+	if normalizeLocalAITranscript(string(transcript)) != normalizeLocalAITranscript(wantTranscript) || normalizeLocalAITranscript(segmentText.String()) != normalizeLocalAITranscript(wantTranscript) {
+		return localAIRealSemantic{}, artifacts, &localAIObservationFailure{Owner: "product", Assertion: "ASR semantic transcript", Expected: "normalized transcript and segments agree with the selected input", Observed: "semantic mismatch"}
+	}
+	observedTranscript := strings.TrimSpace(string(transcript))
+	if strings.Contains(strings.ToLower(observedTranscript), "local ai works on this machine") {
+		observedTranscript = "sha256=" + sha256Hex(transcript)
+	}
+	semantic := localAIRealSemantic{
+		Assertion: "normalized ASR transcript and bounded segments",
+		Expected:  "selected transcript with monotonic duration-bounded segments",
+		Observed:  fmt.Sprintf("transcript=%s;segments=%d;inputBytes=%d;inputSha256=%s", observedTranscript, len(segments), len(input), inputSHA),
+		Passed:    true,
+	}
+	return semantic, artifacts, nil
+}
+
+func decodeLocalAIJSONStrict(body []byte, destination any) error {
+	if len(body) == 0 || len(body) > localAIRealMaxStreamBytes {
+		return errors.New("JSON value outside bound")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return errors.New("JSON value contained trailing data")
+	}
+	return nil
+}
+
+func normalizeLocalAITranscript(value string) string {
+	var normalized strings.Builder
+	for _, character := range strings.ToLower(value) {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') {
+			normalized.WriteRune(character)
+			continue
+		}
+		normalized.WriteByte(' ')
+	}
+	return strings.Join(strings.Fields(normalized.String()), " ")
 }
 
 type localAIInvocationResponse struct {
@@ -663,15 +877,22 @@ func (buffer *localAIBoundedBuffer) Write(value []byte) (int, error) {
 func (buffer *localAIBoundedBuffer) Truncated() bool { return buffer.truncated }
 
 func localAIStreamViolation(stdout, stderr []byte) string {
+	return localAIStreamViolationForJourney(stdout, stderr, false)
+}
+
+func localAIStreamViolationForJourney(stdout, stderr []byte, allowExpectedTranscript bool) string {
 	value := strings.ToLower(string(append(append([]byte(nil), stdout...), stderr...)))
 	for _, marker := range []string{
 		"hf_token=", "authorization:", "bearer ", "password=", "api_key=", "access_token=",
 		"x-amz-signature=", "signed_url=", "127.0.0.1", "localhost:", "grpc://", "tcp://",
-		"local ai works on this machine", "raw audio", "riff",
+		"raw audio", "riff",
 	} {
 		if strings.Contains(value, marker) {
 			return "forbidden stream marker"
 		}
+	}
+	if !allowExpectedTranscript && strings.Contains(value, "local ai works on this machine") {
+		return "forbidden stream marker"
 	}
 	return ""
 }
@@ -695,9 +916,12 @@ func localAIRealRootsFor(root string) localAIRealRoots {
 
 func localAIExpandArguments(arguments []string, roots localAIRealRoots) []string {
 	values := map[string]string{
-		localAIRealOutputToken: filepath.Join(roots.Output, "tts.wav"),
-		localAIRealRootToken:   roots.Root,
-		localAIRealWorkToken:   roots.Work,
+		localAIRealOutputToken:     filepath.Join(roots.Output, "tts.wav"),
+		localAIRealInputToken:      filepath.Join(roots.Output, "tts.wav"),
+		localAIRealTranscriptToken: filepath.Join(roots.Output, localAIRealTranscriptFile),
+		localAIRealSegmentsToken:   filepath.Join(roots.Output, localAIRealSegmentsFile),
+		localAIRealRootToken:       roots.Root,
+		localAIRealWorkToken:       roots.Work,
 	}
 	expanded := make([]string, len(arguments))
 	for index, argument := range arguments {
@@ -726,12 +950,16 @@ func localAIProcessEnvironment(roots localAIRealRoots, overrides []string) []str
 	values["XDG_CACHE_HOME"] = filepath.Join(roots.Profile, "cache")
 	values["XDG_CONFIG_HOME"] = filepath.Join(roots.Profile, "config")
 	values["LOCALAI_REAL_OUTPUT_ROOT"] = roots.Output
+	values["LOCALAI_REAL_INPUT_ROOT"] = roots.Output
 	for _, entry := range overrides {
 		key, value, ok := strings.Cut(entry, "=")
 		if !ok || localAIForbiddenEnvironmentOverrideKey(key) {
 			continue
 		}
 		value = strings.ReplaceAll(value, localAIRealOutputToken, filepath.Join(roots.Output, "tts.wav"))
+		value = strings.ReplaceAll(value, localAIRealInputToken, filepath.Join(roots.Output, "tts.wav"))
+		value = strings.ReplaceAll(value, localAIRealTranscriptToken, filepath.Join(roots.Output, localAIRealTranscriptFile))
+		value = strings.ReplaceAll(value, localAIRealSegmentsToken, filepath.Join(roots.Output, localAIRealSegmentsFile))
 		value = strings.ReplaceAll(value, localAIRealRootToken, roots.Root)
 		value = strings.ReplaceAll(value, localAIRealWorkToken, roots.Work)
 		values[key] = value
@@ -784,6 +1012,9 @@ func validateLocalAIRequest(request localAIRealRunRequest) error {
 	if strings.TrimSpace(request.Selector) == "" || strings.ContainsAny(request.Selector, "\\/\r\n") {
 		return errors.New("selector is not bounded")
 	}
+	if request.Kind != localAIJourneyTTS && request.Kind != localAIJourneyASR && request.Kind != localAIJourneyTTSASR {
+		return errors.New("journey kind is not bounded")
+	}
 	if strings.TrimSpace(request.RunID) == "" || len(request.RunID) > 128 {
 		return errors.New("run identity is not bounded")
 	}
@@ -800,6 +1031,21 @@ func validateLocalAIRequest(request localAIRealRunRequest) error {
 	}
 	if request.Command.OutputName == "" || filepath.Base(request.Command.OutputName) != request.Command.OutputName {
 		return errors.New("output name is not a file identity")
+	}
+	if request.Kind == localAIJourneyTTSASR && request.FollowUp == nil {
+		return errors.New("TTS-to-ASR journey is missing its ASR command")
+	}
+	if request.FollowUp != nil && (request.FollowUp.BinaryPath == "" || request.FollowUp.OutputName == "" || filepath.Base(request.FollowUp.OutputName) != request.FollowUp.OutputName) {
+		return errors.New("follow-up command is not bounded")
+	}
+	if request.Kind == localAIJourneyASR && (strings.TrimSpace(request.InputPath) == "" || !filepath.IsAbs(request.InputPath)) {
+		return errors.New("ASR input path is not absolute")
+	}
+	if request.ExpectedInputSHA256 != "" && !isLocalAISHA256(request.ExpectedInputSHA256) {
+		return errors.New("expected input identity is not a SHA-256")
+	}
+	if len(request.ExpectedTranscript) > localAIRealMaxFailureBytes {
+		return errors.New("expected transcript is not bounded")
 	}
 	if request.CacheIdentitySHA256 != "" && !isLocalAISHA256(request.CacheIdentitySHA256) {
 		return errors.New("cache identity is not a SHA-256")
@@ -825,11 +1071,13 @@ func validateLocalAIRealReport(report localAIRealReport) error {
 		return errors.New("journey cache identity is invalid")
 	}
 	if report.Status == "PASS" {
-		if len(journey.Artifacts) != 1 || journey.Failure != nil || !journey.Semantic.Passed || !journey.Release.ProcessTreeClosed {
+		if len(journey.Artifacts) == 0 || journey.Failure != nil || !journey.Semantic.Passed || !journey.Release.ProcessTreeClosed {
 			return errors.New("pass report omitted semantic or release proof")
 		}
-		if err := validateLocalAIArtifact(journey.Artifacts[0]); err != nil {
-			return err
+		for _, artifact := range journey.Artifacts {
+			if err := validateLocalAIArtifact(artifact); err != nil {
+				return err
+			}
 		}
 	} else if journey.Failure == nil || !localAIFailureOwner(journey.Failure.Owner) {
 		return errors.New("failure report omitted bounded ownership")
@@ -1229,6 +1477,33 @@ func writeLocalAIControlledWAV(path string) error {
 	return os.WriteFile(path, audio, 0o600)
 }
 
+func writeLocalAIControlledASR(t *testing.T, transcript string, endMillis int64) {
+	t.Helper()
+	root := os.Getenv("LOCALAI_REAL_OUTPUT_ROOT")
+	if root == "" {
+		os.Exit(21)
+	}
+	transcriptBody := []byte(transcript)
+	segmentsBody, err := json.Marshal([]localAIASRSegment{{ID: 0, Start: 0, End: endMillis, Text: transcript}})
+	if err != nil {
+		os.Exit(21)
+	}
+	if err := os.WriteFile(filepath.Join(root, localAIRealTranscriptFile), transcriptBody, 0o600); err != nil {
+		os.Exit(21)
+	}
+	if err := os.WriteFile(filepath.Join(root, localAIRealSegmentsFile), segmentsBody, 0o600); err != nil {
+		os.Exit(21)
+	}
+	body, err := json.Marshal(localAIInvocationResponse{Outputs: []localAIInvocationOutput{
+		{Name: "transcript", Modality: "TEXT", MediaType: "text/plain", Content: string(transcriptBody)},
+		{Name: "segments", Modality: "JSON", MediaType: "application/json", Content: string(segmentsBody)},
+	}})
+	if err != nil {
+		os.Exit(21)
+	}
+	_, _ = os.Stdout.Write(body)
+}
+
 func localAIControlledRequest(t testing.TB, root, mode string) localAIRealRunRequest {
 	t.Helper()
 	binaryPath, err := os.Executable()
@@ -1241,6 +1516,7 @@ func localAIControlledRequest(t testing.TB, root, mode string) localAIRealRunReq
 	}
 	return localAIRealRunRequest{
 		Selector:          "controlled-tts",
+		Kind:              localAIJourneyTTS,
 		RunID:             "controlled-run",
 		Root:              root,
 		ReportPath:        filepath.Join(root, "evidence.json"),
@@ -1265,8 +1541,16 @@ func localAIControlledRequest(t testing.TB, root, mode string) localAIRealRunReq
 
 func assertLocalAIJourneyResult(t testing.TB, request localAIRealRunRequest, report localAIRealReport, wantStatus, wantOwner string) {
 	t.Helper()
-	if report.Status != wantStatus || len(report.Journeys) != 1 || report.Journeys[0].Selector != request.Selector {
-		t.Fatalf("report = %#v, want one %s %q journey", report, wantStatus, request.Selector)
+	selector := "<missing>"
+	if len(report.Journeys) == 1 {
+		selector = report.Journeys[0].Selector
+	}
+	if report.Status != wantStatus || len(report.Journeys) != 1 || selector != request.Selector {
+		failure := "<nil>"
+		if report.Journeys != nil && len(report.Journeys) == 1 && report.Journeys[0].Failure != nil {
+			failure = fmt.Sprintf("%+v", *report.Journeys[0].Failure)
+		}
+		t.Fatalf("report status=%s selector=%s failure=%s, want one %s %q journey", report.Status, selector, failure, wantStatus, request.Selector)
 	}
 	if wantOwner != "" {
 		if report.Journeys[0].Failure == nil || report.Journeys[0].Failure.Owner != wantOwner {
