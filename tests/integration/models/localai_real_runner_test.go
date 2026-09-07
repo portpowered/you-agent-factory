@@ -569,7 +569,7 @@ func newLocalAIRealReport(request localAIRealRunRequest) localAIRealReport {
 			WorkRoot: pathIdentityHash(roots.Work), StateRoot: pathIdentityHash(roots.Profile),
 			CacheRoot: pathIdentityHash(roots.Cache), TempRoot: pathIdentityHash(roots.Temp),
 			OutputRoot: pathIdentityHash(roots.Output), StreamsRoot: pathIdentityHash(roots.Streams),
-			PortState: "selector-owned:" + pathIdentityHash(roots.Root),
+			PortState:     "selector-owned:" + pathIdentityHash(roots.Root),
 			NetworkPolicy: networkPolicy, Timeout: timeout.String(), ModelCallLimit: request.Limits.ModelCalls,
 			DownloadLimit: request.Limits.DownloadBytes, ChildProcessLimit: childProcessLimit,
 			SemanticRetries: request.SemanticRetries,
