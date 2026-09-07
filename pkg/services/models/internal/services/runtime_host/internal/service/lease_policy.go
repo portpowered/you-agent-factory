@@ -6,7 +6,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func normalizeHostPolicy(idleUnloadAfter time.Duration, maxLoadedRuntimes int) (time.Duration, int) {
@@ -107,7 +107,7 @@ func (s *service) runIdleUnload(
 	s.mu.Unlock()
 
 	diagnostics := s.supervisor.Diagnostics
-	diagnostics.logUnload(identity, runtimehost.RuntimeCorrelation(ctxWithoutCancel()), "idle")
+	diagnostics.logUnload(identity, modelseffects.RuntimeCorrelation(ctxWithoutCancel()), "idle")
 	_ = s.unloadRuntime(ctxWithoutCancel(), identity, slotKey)
 }
 
@@ -167,7 +167,7 @@ func (s *service) evictIdleRuntimesForCapacity(
 	}
 	diagnostics := s.supervisor.Diagnostics
 	diagnostics.logUnload(
-		evictedIdentity, runtimehost.RuntimeCorrelation(ctx), "pressure_eviction",
+		evictedIdentity, modelseffects.RuntimeCorrelation(ctx), "pressure_eviction",
 	)
 	return slot.stop(ctx)
 }

@@ -12,7 +12,6 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
 const (
@@ -140,7 +139,7 @@ func (r *supervisedRuntime) ensureReady(
 	}
 	loadCtx, loadCancel := context.WithCancel(ctx)
 	loadDone, waitDone, alreadyReady := r.beginLoad(
-		identity, loadCancel, runtimehost.RuntimeCorrelation(ctx),
+		identity, loadCancel, modelseffects.RuntimeCorrelation(ctx),
 	)
 	if alreadyReady {
 		loadCancel()
@@ -198,14 +197,24 @@ func (r *supervisedRuntime) startLoad(
 
 	process, err := r.cfg.ProcessLauncher.Start(ctx, spec)
 	if err != nil {
+		failureCause := err
+		subcause := modelseffects.RuntimeFailureSubcause("")
 		if process != nil {
-			_ = process.Stop(context.Background())
+			if stopErr := process.Stop(context.Background()); stopErr != nil {
+				failureCause = errors.Join(failureCause, stopErr)
+				subcause = modelseffects.RuntimeSubcauseCleanup
+			}
 		}
 		return r.markFailed(
 			loadDone,
 			identity,
 			hostFailureClassProcessCrash,
-			fmt.Errorf("%w: %w", models.ErrHostProcessCrash, err),
+			modelseffects.NewRuntimeStageErrorWithSubcause(
+				modelseffects.RuntimeStageBackendStart,
+				modelseffects.RuntimeFailureProcessStartFailed,
+				subcause,
+				errors.Join(models.ErrHostProcessCrash, failureCause),
+			),
 		)
 	}
 	if process == nil {
@@ -213,7 +222,11 @@ func (r *supervisedRuntime) startLoad(
 			loadDone,
 			identity,
 			hostFailureClassProcessCrash,
-			models.ErrHostProcessCrash,
+			modelseffects.NewRuntimeStageError(
+				modelseffects.RuntimeStageBackendStart,
+				modelseffects.RuntimeFailureProcessStartFailed,
+				models.ErrHostProcessCrash,
+			),
 		)
 	}
 	processExit := make(chan error, 1)

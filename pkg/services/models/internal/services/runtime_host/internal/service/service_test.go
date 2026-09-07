@@ -553,6 +553,7 @@ type fakeProcessLauncher struct {
 	mu         sync.Mutex
 	starts     int
 	newProcess func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess
+	startErr   error
 }
 
 func (f *fakeProcessLauncher) Start(
@@ -562,7 +563,11 @@ func (f *fakeProcessLauncher) Start(
 	f.mu.Lock()
 	f.starts++
 	newProcess := f.newProcess
+	startErr := f.startErr
 	f.mu.Unlock()
+	if startErr != nil {
+		return nil, startErr
+	}
 	if newProcess == nil {
 		return nil, errors.New("fake process launcher is not configured")
 	}

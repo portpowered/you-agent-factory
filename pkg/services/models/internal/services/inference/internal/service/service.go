@@ -114,12 +114,14 @@ func (s *service) InvokeModelWithLease(
 	}
 
 	if s.runtime == nil {
-		return models.InvokeModelResult{}, models.ErrUnavailable
+		_, releaseErr := s.releaseInvocationLease(ctx, request)
+		return models.InvokeModelResult{}, joinInvocationCleanupError(models.ErrUnavailable, releaseErr)
 	}
 
 	invocation, err := s.nextInvocationRef()
 	if err != nil {
-		return models.InvokeModelResult{}, err
+		_, releaseErr := s.releaseInvocationLease(ctx, request)
+		return models.InvokeModelResult{}, joinInvocationCleanupError(err, releaseErr)
 	}
 
 	accepted := acceptedInvocationResult(request, invocation)
@@ -176,10 +178,31 @@ func (s *service) ensureModelAssetsAvailable(
 func (s *service) releaseInvocationLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
-) {
+) (models.InvocationLeaseDisposition, error) {
+	if s == nil || s.runtimeHost == nil {
+		return models.InvocationLeaseRetained, models.ErrUnavailable
+	}
 	releaseContext := context.WithoutCancel(ctx)
-	_, _ = s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
+	released, err := s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})
+	return invocationLeaseDisposition(released), err
+}
+
+func invocationLeaseDisposition(
+	result models.ReleaseModelLeaseResult,
+) models.InvocationLeaseDisposition {
+	switch result.Lease.Status {
+	case models.ModelLeaseStatusReleased:
+		return models.InvocationLeaseReleased
+	case models.ModelLeaseStatusExpired:
+		return models.InvocationLeaseExpired
+	}
+	switch result.Outcome {
+	case models.ModelLeaseReleased, models.ModelLeaseAlreadyReleased:
+		return models.InvocationLeaseReleased
+	default:
+		return models.InvocationLeaseRetained
+	}
 }

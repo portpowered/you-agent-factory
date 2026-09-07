@@ -485,7 +485,7 @@ func (o *Root) InvokeModel(
 		ctx = context.Background()
 	}
 	correlation := nextJoinedInvocationCorrelation(o)
-	ctx = runtimehost.WithRuntimeCorrelation(ctx, correlation)
+	ctx = modelseffects.WithRuntimeCorrelation(ctx, correlation)
 	started := joinedInvocationStart(o)
 	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""

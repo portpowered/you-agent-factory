@@ -15,6 +15,27 @@ import (
 	"go.uber.org/zap"
 )
 
+type runtimeCorrelationContextKey struct{}
+
+// WithRuntimeCorrelation carries the bounded invocation identity through the
+// private Models runtime boundary without changing customer-facing contracts.
+func WithRuntimeCorrelation(ctx context.Context, correlation string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, runtimeCorrelationContextKey{}, correlation)
+}
+
+// RuntimeCorrelation returns the bounded invocation identity carried by a
+// private Models runtime operation, if one was supplied.
+func RuntimeCorrelation(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	correlation, _ := ctx.Value(runtimeCorrelationContextKey{}).(string)
+	return correlation
+}
+
 type PullMetric struct {
 	Name   string
 	Labels map[string]string

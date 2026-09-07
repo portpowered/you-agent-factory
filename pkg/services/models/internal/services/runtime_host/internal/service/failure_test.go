@@ -28,9 +28,11 @@ func TestEnsureModelHostReadinessTimeoutReturnsTypedFailure(t *testing.T) {
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "readiness-timeout")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	var process *fakeManagedProcess
 	launcher := &fakeProcessLauncher{
 		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
-			return newFakeManagedProcess(healthServer.URL, nil)
+			process = newFakeManagedProcess(healthServer.URL, nil)
+			return process
 		},
 	}
 	service := internalservice.NewWithSupervisorTestConfig(
@@ -53,6 +55,14 @@ func TestEnsureModelHostReadinessTimeoutReturnsTypedFailure(t *testing.T) {
 	})
 	if !errors.Is(err, models.ErrHostLoadingTimeout) {
 		t.Fatalf("error = %v, want ErrHostLoadingTimeout", err)
+	}
+	if process == nil {
+		t.Fatal("readiness timeout did not start a managed process")
+	}
+	select {
+	case <-process.stopCh:
+	default:
+		t.Fatal("readiness timeout left managed process active")
 	}
 
 	inspected, err := service.InspectModelHost(context.Background(), models.InspectModelHostRequest{
@@ -358,7 +368,7 @@ func TestEnsureAndStopModelHostEmitCorrelatedBoundedLifecycleEvidence(t *testing
 			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
 		},
 	)
-	ctx := runtimehost.WithRuntimeCorrelation(context.Background(), "models-invocation-42")
+	ctx := modelseffects.WithRuntimeCorrelation(context.Background(), "models-invocation-42")
 	request := models.EnsureModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"}
 	if _, err := host.EnsureModelHost(ctx, request); err != nil {
 		t.Fatalf("EnsureModelHost: %v", err)

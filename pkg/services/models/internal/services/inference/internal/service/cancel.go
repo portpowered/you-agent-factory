@@ -27,10 +27,10 @@ func (s *service) CancelInvocation(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	invocation, ok := s.invocations[request.Invocation]
 	if !ok || invocation.Scope != request.Scope {
+		s.mu.Unlock()
 		return models.CancelInvocationResult{}, models.ErrInvocationNotFound
 	}
 
@@ -42,21 +42,33 @@ func (s *service) CancelInvocation(
 	switch invocation.Status {
 	case models.ModelInvocationStatusAccepted:
 		invocation.Status = models.ModelInvocationStatusCancelled
-		invocation.LeaseDisposition = models.InvocationLeaseReleased
+		invocation.LeaseDisposition = models.InvocationLeaseRetained
 		invocation.CancellationOutcome = models.InvocationCancellationRequested
 		s.invocations[request.Invocation] = invocation
-		s.releaseInvocationLease(ctx, models.InvokeModelRequest{
+		s.mu.Unlock()
+
+		disposition, releaseErr := s.releaseInvocationLease(ctx, models.InvokeModelRequest{
 			Scope: invocation.Scope,
 			Lease: invocation.Lease,
 		})
+		s.mu.Lock()
+		invocation.LeaseDisposition = disposition
+		s.invocations[request.Invocation] = invocation
+		s.mu.Unlock()
 		result.Status = invocation.Status
-		result.LeaseDisposition = invocation.LeaseDisposition
+		result.LeaseDisposition = disposition
 		result.Outcome = models.InvocationCancellationRequested
+		var outcomeErr error
+		if releaseErr != nil {
+			outcomeErr = joinInvocationCleanupError(models.ErrInferenceCancelled, releaseErr)
+		}
+		return result, outcomeErr
 	case models.ModelInvocationStatusCancelled:
 		result.Outcome = models.InvocationCancellationAlreadyCancelled
 	default:
 		result.Outcome = models.InvocationCancellationAlreadyCompleted
 	}
+	s.mu.Unlock()
 	return result, nil
 }
 

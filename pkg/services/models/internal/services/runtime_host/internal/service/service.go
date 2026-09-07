@@ -288,7 +288,7 @@ func (s *service) StopModelHost(
 
 	if wasLoaded {
 		s.supervisor.Diagnostics.logUnload(
-			identity, runtimehost.RuntimeCorrelation(ctx), "explicit",
+			identity, modelseffects.RuntimeCorrelation(ctx), "explicit",
 		)
 		if err := s.unloadRuntime(ctx, identity, slotKey); err != nil {
 			return models.StopModelHostResult{}, err

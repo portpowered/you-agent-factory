@@ -7,6 +7,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
@@ -77,9 +78,12 @@ func (s *service) finishCancelledInvocation(
 	cause error,
 ) (models.InvokeModelResult, error) {
 	result := cancelledInvocationResult(request, invocation)
+	disposition, releaseErr := s.releaseInvocationLease(ctx, request)
+	result.LeaseDisposition = disposition
 	s.putInvocation(invocation, result)
-	s.releaseInvocationLease(ctx, request)
-	return result.Clone(), classifyInvokeCancellationError(cause)
+	return result.Clone(), joinInvocationCleanupError(
+		classifyInvokeCancellationError(cause), releaseErr,
+	)
 }
 
 func (s *service) finishFailedInvocation(
@@ -96,9 +100,10 @@ func (s *service) finishFailedInvocation(
 	if errors.Is(classified, models.ErrInferenceCancelled) {
 		result = cancelledInvocationResult(request, invocation)
 	}
+	disposition, releaseErr := s.releaseInvocationLease(invokeCtx, request)
+	result.LeaseDisposition = disposition
 	s.putInvocation(invocation, result)
-	s.releaseInvocationLease(invokeCtx, request)
-	return result.Clone(), classified
+	return result.Clone(), joinInvocationCleanupError(classified, releaseErr)
 }
 
 func (s *service) finishCompletedInvocation(
@@ -140,9 +145,34 @@ func (s *service) finishCompletedInvocation(
 		Outputs:          outputs,
 		LeaseDisposition: models.InvocationLeaseReleased,
 	}.Clone()
+	disposition, releaseErr := s.releaseInvocationLease(ctx, request)
+	result.LeaseDisposition = disposition
+	if releaseErr != nil {
+		// A completed result is only truthful when the capacity transition also
+		// completed. Do not publish runtime content while cleanup is uncertain.
+		result.Status = models.ModelInvocationStatusFailed
+		result.Content = nil
+		result.Artifacts = nil
+		result.Outputs = nil
+	}
 	s.putInvocation(invocation, result)
-	s.releaseInvocationLease(ctx, request)
-	return result, nil
+	return result.Clone(), joinInvocationCleanupError(nil, releaseErr)
+}
+
+func joinInvocationCleanupError(primary, cleanup error) error {
+	if cleanup == nil {
+		return primary
+	}
+	safeCleanup := modelseffects.NewRuntimeStageErrorWithSubcause(
+		modelseffects.RuntimeStageInvoke,
+		modelseffects.RuntimeFailureInvocationFailed,
+		modelseffects.RuntimeSubcauseCleanup,
+		cleanup,
+	)
+	if primary == nil {
+		primary = models.ErrInferenceFailed
+	}
+	return errors.Join(primary, safeCleanup)
 }
 
 func (s *service) registerInvocationArtifacts(
