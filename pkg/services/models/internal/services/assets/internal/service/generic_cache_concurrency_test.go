@@ -488,6 +488,26 @@ func TestPrepareGenericAssetsSerializesObservedIdentityPublishAcrossServices(t *
 	assertObservedIdentitySnapshot(t, fixture)
 }
 
+func TestPrepareGenericAssetsSerializesObservedIdentityPublishCompleteFirst(t *testing.T) {
+	t.Parallel()
+
+	fixture := newObservedIdentityRaceFixture(t)
+	results := make(chan observedIdentityPreparation, 2)
+	startObservedIdentityPreparation(results, fixture.secondService, fixture.secondRequest)
+	<-fixture.transferStarted
+	startObservedIdentityPreparation(results, fixture.firstService, fixture.firstRequest)
+	<-fixture.lockState.secondAttempted
+	fixture.releaseTransfer()
+
+	prepared, reused := collectObservedIdentityPreparations(t, results, fixture.body, fixture.digest)
+	if prepared.result.Outcome != models.AssetPreparationPrepared ||
+		reused.result.Outcome != models.AssetPreparationAlreadyAvailable {
+		t.Fatalf("reverse observed identity outcomes = %#v and %#v, want prepared then reused", prepared.result.Outcome, reused.result.Outcome)
+	}
+	assertObservedIdentityCoordination(t, fixture)
+	assertObservedIdentitySnapshot(t, fixture)
+}
+
 type observedIdentityPreparation struct {
 	result models.PrepareModelAssetsResult
 	err    error

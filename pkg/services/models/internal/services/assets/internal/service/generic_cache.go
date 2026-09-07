@@ -26,19 +26,10 @@ func (s *service) acquireGenericCache(
 	roots []string,
 	offline bool,
 ) (genericCacheResult, error) {
-	if source.kind == genericSourceHF {
-		if discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots); len(discovered) > 0 {
-			cachedArtifacts := s.genericArtifactsFromRequirements(source, discovered)
-			if len(artifacts) == 0 {
-				artifacts = cachedArtifacts
-			} else {
-				var err error
-				artifacts, err = mergeGenericManifest(artifacts, cachedArtifacts)
-				if err != nil {
-					return genericCacheResult{}, err
-				}
-			}
-		}
+	var err error
+	artifacts, err = s.refreshGenericCacheArtifacts(kind, source, artifacts, roots)
+	if err != nil {
+		return genericCacheResult{}, err
 	}
 	key := genericCacheKey(kind, source, artifacts)
 	s.cacheMu.Lock()
@@ -105,6 +96,14 @@ func (s *service) acquireGenericCacheOnce(
 	defer func() {
 		err = closeAssetStagingLock(lock, err)
 	}()
+	// A waiter may have planned from incomplete requirements before the owner
+	// committed the observed snapshot. Refresh while holding the stable source
+	// lock so both arrival orders converge on the committed observed identity
+	// before inspecting or downloading any artifact.
+	artifacts, err = s.refreshGenericCacheArtifacts(kind, source, artifacts, roots)
+	if err != nil {
+		return genericCacheResult{}, err
+	}
 
 	cached, missing, inspectErr := s.inspectGenericCache(ctx, kind, source, artifacts, roots)
 	if inspectErr != nil {
@@ -370,6 +369,26 @@ func (s *service) discoverContentAddressedRequirementsAcrossRoots(
 		}
 	}
 	return nil
+}
+
+func (s *service) refreshGenericCacheArtifacts(
+	kind string,
+	source genericSource,
+	artifacts []genericArtifact,
+	roots []string,
+) ([]genericArtifact, error) {
+	if source.kind != genericSourceHF {
+		return artifacts, nil
+	}
+	discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots)
+	if len(discovered) == 0 {
+		return artifacts, nil
+	}
+	discoveredArtifacts := s.genericArtifactsFromRequirements(source, discovered)
+	if len(artifacts) == 0 {
+		return discoveredArtifacts, nil
+	}
+	return mergeGenericManifest(artifacts, discoveredArtifacts)
 }
 
 func (s *service) moveExistingGenericSnapshot(finalPath string) (string, bool, error) {
