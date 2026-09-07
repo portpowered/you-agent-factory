@@ -10,12 +10,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 const (
@@ -149,6 +152,145 @@ func TestLocalAICandidate_ValidatesOptInPrebuiltWindowsCandidate(t *testing.T) {
 		t.Fatalf("marshal candidate evidence: %v", err)
 	}
 	t.Logf("LOCALAI-CANDIDATE status=PASS property=%s evidence=%s", evidence.Property, encoded)
+}
+
+func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows candidate release smoke is only available on Windows")
+	}
+
+	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
+	if manifestPath == "" {
+		t.Skip("set " + localAICandidateManifestEnv + " to run the prebuilt candidate release smoke")
+	}
+	if !filepath.IsAbs(manifestPath) {
+		t.Fatalf("candidate manifest path %q is not absolute; %s must name an absolute path", manifestPath, localAICandidateManifestEnv)
+	}
+	if _, err := validateLocalAICandidate(manifestPath); err != nil {
+		t.Fatalf("validate candidate before public install smoke: %v", err)
+	}
+
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Fatalf("candidate release smoke requires pwsh: %v", err)
+	}
+	repoRoot := testutil.MustRepoRoot(t)
+	installDir := filepath.Join(t.TempDir(), "installed-bin")
+	reportPath := filepath.Join(t.TempDir(), "install-validation-report.json")
+	command := exec.Command(
+		pwsh,
+		"-NoProfile",
+		"-File",
+		filepath.Join(repoRoot, "scripts", "release", "smoke-install.ps1"),
+		"-CandidateManifestPath",
+		manifestPath,
+		"-InstallDir",
+		installDir,
+		"-ReportPath",
+		reportPath,
+	)
+	command.Dir = repoRoot
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("public Windows candidate install smoke: %v\n%s", err, output)
+	}
+
+	reportBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read candidate install smoke report: %v\n%s", err, output)
+	}
+	var report struct {
+		Status   string `json:"status"`
+		Property string `json:"property"`
+		Cleanup  struct {
+			Status             string   `json:"status"`
+			RemainingTaskPaths []string `json:"remainingTaskPaths"`
+		} `json:"cleanup"`
+		PostCleanup struct {
+			CandidateHashesStable bool `json:"candidateHashesStable"`
+		} `json:"postCleanup"`
+	}
+	if err := json.Unmarshal(reportBytes, &report); err != nil {
+		t.Fatalf("decode candidate install smoke report: %v\n%s", err, reportBytes)
+	}
+	if report.Status != "PASS" || report.Property != "public-install-identity-discovery-zero-model-backend-activity-cleanup" {
+		t.Fatalf("candidate install smoke report = %#v, want PASS with named property", report)
+	}
+	if report.Cleanup.Status != "PASS" || len(report.Cleanup.RemainingTaskPaths) != 0 || !report.PostCleanup.CandidateHashesStable {
+		t.Fatalf("candidate install smoke cleanup evidence = %#v, want clean stable candidate", report)
+	}
+	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
+		t.Fatalf("install directory stat error = %v, want task-owned install directory removed", err)
+	}
+}
+
+func TestLocalAICandidate_PublicInstallPreconditionsRemainFailClosed(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows candidate release smoke is only available on Windows")
+	}
+
+	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
+	if manifestPath == "" {
+		t.Skip("set " + localAICandidateManifestEnv + " to run the prebuilt candidate release smoke")
+	}
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Fatalf("candidate release smoke requires pwsh: %v", err)
+	}
+	repoRoot := testutil.MustRepoRoot(t)
+	installDir := filepath.Join(t.TempDir(), "installed-bin")
+	if err := os.MkdirAll(installDir, 0o700); err != nil {
+		t.Fatalf("create nonempty install directory: %v", err)
+	}
+	markerPath := filepath.Join(installDir, "ambient-marker.txt")
+	if err := os.WriteFile(markerPath, []byte("must remain untouched"), 0o600); err != nil {
+		t.Fatalf("write install precondition marker: %v", err)
+	}
+	reportPath := filepath.Join(t.TempDir(), "install-validation-report.json")
+	command := exec.Command(
+		pwsh,
+		"-NoProfile",
+		"-File",
+		filepath.Join(repoRoot, "scripts", "release", "smoke-install.ps1"),
+		"-CandidateManifestPath",
+		manifestPath,
+		"-InstallDir",
+		installDir,
+		"-ReportPath",
+		reportPath,
+	)
+	command.Dir = repoRoot
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("nonempty install precondition unexpectedly passed\n%s", output)
+	}
+	if !strings.Contains(string(output), "declared root 'install' is not empty") {
+		t.Fatalf("precondition output = %q, want fail-closed install-root evidence", output)
+	}
+	if _, statErr := os.Stat(markerPath); statErr != nil {
+		t.Fatalf("precondition marker stat error = %v, want marker preserved", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(installDir, "you.exe")); !os.IsNotExist(statErr) {
+		t.Fatalf("installed binary stat error = %v, want no installation after precondition failure", statErr)
+	}
+
+	reportBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read failed candidate install smoke report: %v", err)
+	}
+	var report struct {
+		Status  string `json:"status"`
+		Cleanup struct {
+			Status             string   `json:"status"`
+			RemainingTaskPaths []string `json:"remainingTaskPaths"`
+		} `json:"cleanup"`
+	}
+	if err := json.Unmarshal(reportBytes, &report); err != nil {
+		t.Fatalf("decode failed candidate install smoke report: %v", err)
+	}
+	if report.Status != "FAIL" || report.Cleanup.Status != "PASS" || len(report.Cleanup.RemainingTaskPaths) != 0 {
+		t.Fatalf("failed candidate install smoke report = %#v, want failed operation with clean task roots", report)
+	}
 }
 
 func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T) {
