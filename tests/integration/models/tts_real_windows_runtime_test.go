@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,10 +133,15 @@ func TestLocalAIRealHarnessControlledHelper(t *testing.T) {
 		if os.Getenv("HF_HUB_OFFLINE") != "1" || os.Getenv("LOCALAI_OFFLINE") != "1" || !strings.Contains(os.Getenv("HTTP_PROXY"), "127.0.0.1:9") {
 			os.Exit(24)
 		}
+		cacheIdentity, err := readLocalAIControlledCacheFixture(os.Getenv(localAIRealModelCacheEnv), os.Getenv("HUGGINGFACE_HUB_CACHE"))
+		if err != nil {
+			os.Exit(25)
+		}
 		outputPath := os.Getenv(localAIRealHelperOutputEnv)
 		if err := writeLocalAIControlledWAV(outputPath); err != nil {
 			os.Exit(21)
 		}
+		_, _ = os.Stderr.Write([]byte(localAIControlledCacheConsumptionMarker + cacheIdentity))
 		_, _ = os.Stdout.Write([]byte(`{"outputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav","content":"controlled"}]}`))
 		os.Exit(0)
 	case "malformed":
@@ -181,6 +187,58 @@ func TestLocalAIRealHarnessOutputBounds(t *testing.T) {
 	}
 	if _, ok := localAIWAVMetadataWithLimits(audio, localAIRealMaxAudioBytes, time.Millisecond); ok {
 		t.Fatal("WAV over the duration limit was accepted")
+	}
+}
+
+func TestLocalAIRealHarnessBoundedFileGrowth(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "output.bin")
+	if err := os.WriteFile(path, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := localAIReadBoundedFileWithOpen(path, 4, func(path string) (*os.File, error) {
+		file, err := os.OpenFile(path, os.O_RDWR, 0)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := file.Seek(0, io.SeekEnd); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		if _, err := file.Write([]byte("grown")); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		return file, nil
+	})
+	if err == nil {
+		t.Fatal("bounded file reader accepted a file that grew after the initial stat")
+	}
+}
+
+func TestLocalAIRealHarnessFinalInspectionFailure(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	request := localAIControlledRequest(t, root, "pass")
+	report := newLocalAIRealReport(request)
+	setLocalAIFailure(&report, "product", "selected command", "controlled command succeeds", "controlled command failed")
+	runner := mustLocalAIRealRunner(t)
+	runner.finalizeReport = func(localAIRealRunRequest, *localAIRealReport) error {
+		return errors.New("controlled final inspection failure")
+	}
+	result, err := runner.finish(request, report)
+	if err != nil {
+		t.Fatalf("finish returned infrastructure error: %v", err)
+	}
+	if result.Status != "INCONCLUSIVE" || result.Journeys[0].Failure == nil || result.Journeys[0].Failure.Owner != "harness" || result.Journeys[0].Failure.Assertion != "runner release and cache inspection" {
+		t.Fatalf("final inspection result = %#v, want explicit harness INCONCLUSIVE", result)
+	}
+	if result.Journeys[0].Release.Checked || !result.Journeys[0].Release.InspectionFailed {
+		t.Fatalf("release evidence = %#v, want unchecked inspection failure", result.Journeys[0].Release)
 	}
 }
 
@@ -243,7 +301,9 @@ func setupLocalAIReportInterruption(t testing.TB, _ string, request *localAIReal
 	old.Journeys[0].Semantic = localAIRealSemantic{Assertion: "controlled", Expected: "valid", Observed: "valid", Passed: true}
 	old.Journeys[0].Release = localAIRealRelease{Checked: true, ProcessTreeClosed: true}
 	old.Journeys[0].Cache.AfterIdentitySHA256 = old.Journeys[0].Cache.BeforeIdentitySHA256
+	old.Journeys[0].Cache.AfterContentIdentitySHA256 = old.Journeys[0].Cache.BeforeContentIdentitySHA256
 	old.Journeys[0].Cache.AfterEntries = old.Journeys[0].Cache.BeforeEntries
+	old.Journeys[0].Cache.AfterFiles = old.Journeys[0].Cache.BeforeFiles
 	old.Journeys[0].Cache.AfterBytes = old.Journeys[0].Cache.BeforeBytes
 	old.BudgetLedger = localAIRealLedgerIdentity{PathIdentity: filepath.Base(request.LedgerPath), SHA256: sha256Hex([]byte("old-ledger"))}
 	if err := writeLocalAIRealReportAtomic(request.ReportPath, old); err != nil {

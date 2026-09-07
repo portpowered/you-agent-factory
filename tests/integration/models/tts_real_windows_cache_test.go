@@ -20,8 +20,13 @@ func localAICacheAdmissionFailure(request localAIRealRunRequest, cache localAIRe
 	if request.RequireFreshCache && (!cache.FreshAtStart || cache.PartialArtifacts != 0) {
 		return &localAIObservationFailure{Owner: "harness", Assertion: "first-use cache freshness", Expected: "model and HF cache are empty before first use", Observed: "cache was not fresh"}
 	}
-	if request.RequireCacheReuse && (cache.BeforeEntries == 0 || cache.PartialArtifacts != 0) {
-		return &localAIObservationFailure{Owner: "harness", Assertion: "offline cache reuse admission", Expected: "complete non-empty cache is available without network", Observed: "offline cache miss"}
+	if request.RequireCacheReuse {
+		if cache.BeforeFiles == 0 || cache.BeforeBytes == 0 || cache.PartialArtifacts != 0 || !isLocalAISHA256(cache.BeforeContentIdentitySHA256) {
+			return &localAIObservationFailure{Owner: "harness", Assertion: "offline cache reuse admission", Expected: "complete cache content is available without network", Observed: "offline cache content miss"}
+		}
+		if request.ExpectedCacheContentSHA256 != "" && !strings.EqualFold(request.ExpectedCacheContentSHA256, cache.BeforeContentIdentitySHA256) {
+			return &localAIObservationFailure{Owner: "harness", Assertion: "offline cache content identity", Expected: "pinned cache content identity", Observed: "offline cache content mismatch"}
+		}
 	}
 	return nil
 }
@@ -34,18 +39,59 @@ func finalizeLocalAIReport(request localAIRealRunRequest, report *localAIRealRep
 	roots := localAIRealRootsForRequest(request)
 	after, cacheErr := localAIRealCacheSnapshotForRoots(roots)
 	journey.Cache.AfterIdentitySHA256 = after.IdentitySHA256
+	journey.Cache.AfterContentIdentitySHA256 = after.ContentIdentitySHA256
 	journey.Cache.AfterEntries = after.Entries
+	journey.Cache.AfterFiles = after.Files
 	journey.Cache.AfterBytes = after.Bytes
 	journey.Cache.PartialArtifacts = after.PartialArtifacts
 	journey.CacheIdentitySHA256 = after.IdentitySHA256
-	journey.Cache.Reused = request.RequireCacheReuse && cacheErr == nil && after.PartialArtifacts == 0 && after.Entries > 0
+	journey.Cache.ContentBacked = journey.Cache.BeforeFiles > 0 && journey.Cache.BeforeBytes > 0 && journey.Cache.PartialArtifacts == 0 && isLocalAISHA256(journey.Cache.BeforeContentIdentitySHA256) && (request.ExpectedCacheContentSHA256 == "" || strings.EqualFold(request.ExpectedCacheContentSHA256, journey.Cache.BeforeContentIdentitySHA256))
+	journey.Cache.ContentConsumed = request.RequireCacheReuse && journey.Cache.ContentBacked && report.Status == "PASS" && cacheErr == nil && after.Files > 0 && after.Bytes > 0 && after.PartialArtifacts == 0 && strings.EqualFold(after.ContentIdentitySHA256, journey.Cache.BeforeContentIdentitySHA256)
+	if journey.Cache.ContentConsumed {
+		journey.Cache.ConsumedContentIdentitySHA256 = after.ContentIdentitySHA256
+	}
+	journey.Cache.Reused = request.RequireCacheReuse && journey.Cache.ContentConsumed
 	journey.Release = localAIReleaseFromExecution(journey.Execution)
 	partial, partialErr := localAIPartialArtifactCount(roots)
 	journey.Release.PartialArtifacts = partial
 	if cacheErr != nil {
-		return cacheErr
+		journey.Cache.AfterInspectionFailed = true
+		journey.Release.Checked = false
+		journey.Release.InspectionFailed = true
+		return &localAIFinalInspectionError{Stage: "cache snapshot inspection failed", Err: cacheErr}
+	}
+	if partialErr != nil {
+		journey.Release.Checked = false
+		journey.Release.InspectionFailed = true
+		return &localAIFinalInspectionError{Stage: "partial artifact inspection failed", Err: partialErr}
 	}
 	return partialErr
+}
+
+func localAIHasCacheConsumptionMarker(observation localAICommandObservation, expected string) bool {
+	marker := localAIControlledCacheConsumptionMarker + strings.ToLower(strings.TrimSpace(expected))
+	return strings.Contains(strings.ToLower(string(observation.Stderr)), marker)
+}
+
+func localAIFinalInspectionObservation(err error) string {
+	var inspectionErr *localAIFinalInspectionError
+	if errors.As(err, &inspectionErr) {
+		return inspectionErr.Stage
+	}
+	return "final inspection failed"
+}
+
+type localAIFinalInspectionError struct {
+	Stage string
+	Err   error
+}
+
+func (err *localAIFinalInspectionError) Error() string {
+	return err.Stage
+}
+
+func (err *localAIFinalInspectionError) Unwrap() error {
+	return err.Err
 }
 
 func localAIReleaseFromExecution(execution *localAIRealExecution) localAIRealRelease {
@@ -65,6 +111,10 @@ func localAIReleaseFromExecution(execution *localAIRealExecution) localAIRealRel
 }
 
 func localAIReadBoundedFile(path string, maxBytes int64) ([]byte, error) {
+	return localAIReadBoundedFileWithOpen(path, maxBytes, os.Open)
+}
+
+func localAIReadBoundedFileWithOpen(path string, maxBytes int64, open func(string) (*os.File, error)) ([]byte, error) {
 	if maxBytes <= 0 {
 		return nil, errors.New("bounded file limit is invalid")
 	}
@@ -75,28 +125,44 @@ func localAIReadBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBytes {
 		return nil, errors.New("file is outside the bounded output limit")
 	}
-	body, err := os.ReadFile(path)
+	file, err := open(path)
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(body)) != info.Size() {
+	defer file.Close()
+	body, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxBytes || int64(len(body)) != info.Size() {
+		return nil, errors.New("file changed while it was read")
+	}
+	finalInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !finalInfo.Mode().IsRegular() || finalInfo.Size() != info.Size() {
 		return nil, errors.New("file changed while it was read")
 	}
 	return body, nil
 }
 
 type localAIRealCacheSnapshot struct {
-	IdentitySHA256   string
-	Entries          int
-	Bytes            int64
-	PartialArtifacts int
+	IdentitySHA256        string
+	ContentIdentitySHA256 string
+	Entries               int
+	Files                 int
+	Bytes                 int64
+	PartialArtifacts      int
 }
 
 type localAIRealCacheTree struct {
-	IdentitySHA256   string
-	Entries          int
-	Bytes            int64
-	PartialArtifacts int
+	IdentitySHA256        string
+	ContentIdentitySHA256 string
+	Entries               int
+	Files                 int
+	Bytes                 int64
+	PartialArtifacts      int
 }
 
 func localAIRealCacheSnapshotForRoots(roots localAIRealRoots) (localAIRealCacheSnapshot, error) {
@@ -113,15 +179,23 @@ func localAIRealCacheSnapshotForRoots(roots localAIRealRoots) (localAIRealCacheS
 	_, _ = io.WriteString(hasher, model.IdentitySHA256)
 	_, _ = io.WriteString(hasher, "\nhuggingface\x00")
 	_, _ = io.WriteString(hasher, huggingFace.IdentitySHA256)
+	contentHasher := sha256.New()
+	_, _ = io.WriteString(contentHasher, "managed\x00")
+	_, _ = io.WriteString(contentHasher, model.ContentIdentitySHA256)
+	_, _ = io.WriteString(contentHasher, "\nhuggingface\x00")
+	_, _ = io.WriteString(contentHasher, huggingFace.ContentIdentitySHA256)
 	return localAIRealCacheSnapshot{
-		IdentitySHA256: hex.EncodeToString(hasher.Sum(nil)), Entries: model.Entries + huggingFace.Entries,
+		IdentitySHA256: hex.EncodeToString(hasher.Sum(nil)), ContentIdentitySHA256: hex.EncodeToString(contentHasher.Sum(nil)),
+		Entries: model.Entries + huggingFace.Entries, Files: model.Files + huggingFace.Files,
 		Bytes: model.Bytes + huggingFace.Bytes, PartialArtifacts: model.PartialArtifacts + huggingFace.PartialArtifacts,
 	}, nil
 }
 
 func readLocalAIRealCacheTree(root string) (localAIRealCacheTree, error) {
 	entries := map[string]string{}
+	contentEntries := map[string]string{}
 	var totalBytes int64
+	files := 0
 	partialArtifacts := 0
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if errors.Is(walkErr, os.ErrNotExist) {
@@ -154,6 +228,8 @@ func readLocalAIRealCacheTree(root string) (localAIRealCacheTree, error) {
 			return errors.New("cache file identity could not be read")
 		}
 		entries[relative] = fmt.Sprintf("file:%d:%s", identity.Bytes, identity.SHA256)
+		contentEntries[relative] = entries[relative]
+		files++
 		totalBytes += identity.Bytes
 		return nil
 	})
@@ -172,9 +248,21 @@ func readLocalAIRealCacheTree(root string) (localAIRealCacheTree, error) {
 		_, _ = io.WriteString(hasher, entries[path])
 		_, _ = io.WriteString(hasher, "\n")
 	}
+	contentPaths := make([]string, 0, len(contentEntries))
+	for path := range contentEntries {
+		contentPaths = append(contentPaths, path)
+	}
+	sort.Strings(contentPaths)
+	contentHasher := sha256.New()
+	for _, path := range contentPaths {
+		_, _ = io.WriteString(contentHasher, path)
+		_, _ = io.WriteString(contentHasher, "\x00")
+		_, _ = io.WriteString(contentHasher, contentEntries[path])
+		_, _ = io.WriteString(contentHasher, "\n")
+	}
 	return localAIRealCacheTree{
-		IdentitySHA256: hex.EncodeToString(hasher.Sum(nil)), Entries: len(entries), Bytes: totalBytes,
-		PartialArtifacts: partialArtifacts,
+		IdentitySHA256: hex.EncodeToString(hasher.Sum(nil)), ContentIdentitySHA256: hex.EncodeToString(contentHasher.Sum(nil)),
+		Entries: len(entries), Files: files, Bytes: totalBytes, PartialArtifacts: partialArtifacts,
 	}, nil
 }
 
@@ -269,6 +357,9 @@ func validateLocalAIRequest(request localAIRealRunRequest) error {
 	if request.CacheIdentitySHA256 != "" && !isLocalAISHA256(request.CacheIdentitySHA256) {
 		return errors.New("cache identity is not a SHA-256")
 	}
+	if request.ExpectedCacheContentSHA256 != "" && !isLocalAISHA256(request.ExpectedCacheContentSHA256) {
+		return errors.New("expected cache content identity is not a SHA-256")
+	}
 	return nil
 }
 
@@ -315,7 +406,11 @@ func validateLocalAIRealReport(report localAIRealReport) error {
 	} else if err := validateLocalAIFailure(*journey.Failure); err != nil {
 		return err
 	}
-	if !journey.Release.Checked {
+	if journey.Release.InspectionFailed && journey.Release.Checked {
+		return errors.New("release inspection failure was inconsistent")
+	}
+	inspectionFailure := report.Status == "INCONCLUSIVE" && journey.Failure != nil && journey.Failure.Owner == "harness" && journey.Failure.Assertion == "runner release and cache inspection"
+	if !journey.Release.Checked && !inspectionFailure {
 		return errors.New("release evidence was not checked")
 	}
 	if report.BudgetLedger.PathIdentity == "" {
@@ -354,18 +449,30 @@ func validateLocalAIPolicy(policy localAIRealPolicy) error {
 }
 
 func validateLocalAICache(cache localAIRealCache) error {
-	for _, identity := range []string{cache.BeforeIdentitySHA256, cache.AfterIdentitySHA256} {
+	for _, identity := range []string{cache.BeforeIdentitySHA256, cache.BeforeContentIdentitySHA256} {
 		if !isLocalAISHA256(identity) {
 			return errors.New("cache snapshot identity is invalid")
 		}
 	}
-	if cache.BeforeEntries < 0 || cache.AfterEntries < 0 || cache.BeforeBytes < 0 || cache.AfterBytes < 0 || cache.PartialArtifacts < 0 {
+	if !cache.AfterInspectionFailed && (!isLocalAISHA256(cache.AfterIdentitySHA256) || !isLocalAISHA256(cache.AfterContentIdentitySHA256)) {
+		return errors.New("cache after identity is invalid")
+	}
+	if cache.AfterInspectionFailed && (cache.AfterIdentitySHA256 != "" || cache.AfterContentIdentitySHA256 != "") {
+		return errors.New("failed cache inspection reported an after identity")
+	}
+	if cache.BeforeEntries < 0 || cache.AfterEntries < 0 || cache.BeforeFiles < 0 || cache.AfterFiles < 0 || cache.BeforeBytes < 0 || cache.AfterBytes < 0 || cache.PartialArtifacts < 0 {
 		return errors.New("cache snapshot counters are invalid")
 	}
 	if cache.FreshAtStart && (cache.BeforeEntries != 0 || cache.PartialArtifacts != 0) {
 		return errors.New("fresh cache evidence is inconsistent")
 	}
-	if cache.Reused && cache.BeforeEntries == 0 {
+	if cache.ContentBacked && (cache.BeforeFiles == 0 || cache.BeforeBytes == 0) {
+		return errors.New("content-backed cache evidence is inconsistent")
+	}
+	if cache.ContentConsumed && (!cache.ContentBacked || cache.AfterFiles == 0 || cache.AfterBytes == 0 || !isLocalAISHA256(cache.ConsumedContentIdentitySHA256)) {
+		return errors.New("cache consumption evidence is inconsistent")
+	}
+	if cache.Reused && !cache.ContentConsumed {
 		return errors.New("cache reuse evidence is inconsistent")
 	}
 	return nil

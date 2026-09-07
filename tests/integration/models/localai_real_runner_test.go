@@ -24,30 +24,35 @@ import (
 )
 
 const (
-	localAIRealEvidenceSchema            = "localai.windows-real-evidence.v1"
-	localAIBudgetSchema                  = "localai.windows-real-budget.v1"
-	localAIRealHelperModeEnv             = "LOCALAI_REAL_HELPER_MODE"
-	localAIRealHelperOutputEnv           = "LOCALAI_REAL_HELPER_OUTPUT"
-	localAIRealHelperResultEnv           = "LOCALAI_REAL_HELPER_RESULT"
-	localAIRealHelperTranscriptEnv       = "LOCALAI_REAL_HELPER_TRANSCRIPT"
-	localAIRealHelperSegmentsEnv         = "LOCALAI_REAL_HELPER_SEGMENTS"
-	localAIRealModelCacheEnv             = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
-	localAIRealOutputToken               = "{output}"
-	localAIRealInputToken                = "{input}"
-	localAIRealTranscriptToken           = "{transcript}"
-	localAIRealSegmentsToken             = "{segments}"
-	localAIRealRootToken                 = "{root}"
-	localAIRealWorkToken                 = "{work}"
-	localAIRealMaxStreamBytes            = 64 << 10
-	localAIRealMaxFailureBytes           = 192
-	localAIRealMaxAudioBytes       int64 = 512 << 20
-	localAIRealMaxAudioDuration          = 5 * time.Minute
-	localAIRealCommandTimeout            = 10 * time.Second
-	localAIJourneyTTS                    = "tts"
-	localAIJourneyASR                    = "asr"
-	localAIJourneyTTSASR                 = "tts-asr"
-	localAIRealTranscriptFile            = "transcript.txt"
-	localAIRealSegmentsFile              = "segments.json"
+	localAIRealEvidenceSchema                     = "localai.windows-real-evidence.v1"
+	localAIBudgetSchema                           = "localai.windows-real-budget.v1"
+	localAIRealHelperModeEnv                      = "LOCALAI_REAL_HELPER_MODE"
+	localAIRealHelperOutputEnv                    = "LOCALAI_REAL_HELPER_OUTPUT"
+	localAIRealHelperResultEnv                    = "LOCALAI_REAL_HELPER_RESULT"
+	localAIRealHelperTranscriptEnv                = "LOCALAI_REAL_HELPER_TRANSCRIPT"
+	localAIRealHelperSegmentsEnv                  = "LOCALAI_REAL_HELPER_SEGMENTS"
+	localAIRealModelCacheEnv                      = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
+	localAIRealOutputToken                        = "{output}"
+	localAIRealInputToken                         = "{input}"
+	localAIRealTranscriptToken                    = "{transcript}"
+	localAIRealSegmentsToken                      = "{segments}"
+	localAIRealRootToken                          = "{root}"
+	localAIRealWorkToken                          = "{work}"
+	localAIRealMaxStreamBytes                     = 64 << 10
+	localAIRealMaxFailureBytes                    = 192
+	localAIRealMaxAudioBytes                int64 = 512 << 20
+	localAIRealMaxAudioDuration                   = 5 * time.Minute
+	localAIRealCommandTimeout                     = 10 * time.Second
+	localAIJourneyTTS                             = "tts"
+	localAIJourneyASR                             = "asr"
+	localAIJourneyTTSASR                          = "tts-asr"
+	localAIRealTranscriptFile                     = "transcript.txt"
+	localAIRealSegmentsFile                       = "segments.json"
+	localAIControlledCacheConsumptionMarker       = "controlled-cache-consumed-sha256="
+	localAIControlledModelManifest                = "controlled-model/manifest.json"
+	localAIControlledModelManifestBody            = `{"model":"controlled","revision":"fixture"}`
+	localAIControlledHFIndex                      = "controlled-index"
+	localAIControlledHFIndexBody                  = "controlled-cache-index"
 )
 
 type localAIRealReport struct {
@@ -107,15 +112,23 @@ type localAIRealPolicy struct {
 }
 
 type localAIRealCache struct {
-	BeforeIdentitySHA256 string `json:"beforeIdentitySha256"`
-	AfterIdentitySHA256  string `json:"afterIdentitySha256"`
-	BeforeEntries        int    `json:"beforeEntries"`
-	AfterEntries         int    `json:"afterEntries"`
-	BeforeBytes          int64  `json:"beforeBytes"`
-	AfterBytes           int64  `json:"afterBytes"`
-	FreshAtStart         bool   `json:"freshAtStart"`
-	Reused               bool   `json:"reused"`
-	PartialArtifacts     int    `json:"partialArtifacts"`
+	BeforeIdentitySHA256          string `json:"beforeIdentitySha256"`
+	AfterIdentitySHA256           string `json:"afterIdentitySha256"`
+	BeforeContentIdentitySHA256   string `json:"beforeContentIdentitySha256"`
+	AfterContentIdentitySHA256    string `json:"afterContentIdentitySha256"`
+	BeforeEntries                 int    `json:"beforeEntries"`
+	AfterEntries                  int    `json:"afterEntries"`
+	BeforeFiles                   int    `json:"beforeFiles"`
+	AfterFiles                    int    `json:"afterFiles"`
+	BeforeBytes                   int64  `json:"beforeBytes"`
+	AfterBytes                    int64  `json:"afterBytes"`
+	FreshAtStart                  bool   `json:"freshAtStart"`
+	ContentBacked                 bool   `json:"contentBacked"`
+	ContentConsumed               bool   `json:"contentConsumed"`
+	ConsumedContentIdentitySHA256 string `json:"consumedContentIdentitySha256"`
+	Reused                        bool   `json:"reused"`
+	PartialArtifacts              int    `json:"partialArtifacts"`
+	AfterInspectionFailed         bool   `json:"afterInspectionFailed"`
 }
 
 type localAIRealExecution struct {
@@ -155,6 +168,7 @@ type localAIRealSemantic struct {
 
 type localAIRealRelease struct {
 	Checked           bool `json:"checked"`
+	InspectionFailed  bool `json:"inspectionFailed"`
 	ProcessTreeClosed bool `json:"processTreeClosed"`
 	OwnedProcesses    int  `json:"ownedProcesses"`
 	OwnedListeners    int  `json:"ownedListeners"`
@@ -196,31 +210,32 @@ type localAIBudgetReservation struct {
 }
 
 type localAIRealRunRequest struct {
-	Selector            string
-	Kind                string
-	RunID               string
-	Root                string
-	CacheRoot           string
-	ReportPath          string
-	LedgerPath          string
-	Limits              localAIBudgetLimits
-	ReservationKind     string
-	ReservationAmount   int64
-	Command             localAICommandSpec
-	FollowUp            *localAICommandSpec
-	InputPath           string
-	ExpectedInputSHA256 string
-	ExpectedTranscript  string
-	Build               localAIRealBuildIdentity
-	Offline             bool
-	RequireFreshCache   bool
-	RequireCacheReuse   bool
-	NetworkPolicy       string
-	ChildProcessLimit   int
-	SemanticRetries     int
-	CacheIdentitySHA256 string
-	Unproven            []string
-	Timeout             time.Duration
+	Selector                   string
+	Kind                       string
+	RunID                      string
+	Root                       string
+	CacheRoot                  string
+	ReportPath                 string
+	LedgerPath                 string
+	Limits                     localAIBudgetLimits
+	ReservationKind            string
+	ReservationAmount          int64
+	Command                    localAICommandSpec
+	FollowUp                   *localAICommandSpec
+	InputPath                  string
+	ExpectedInputSHA256        string
+	ExpectedTranscript         string
+	Build                      localAIRealBuildIdentity
+	Offline                    bool
+	RequireFreshCache          bool
+	RequireCacheReuse          bool
+	NetworkPolicy              string
+	ChildProcessLimit          int
+	SemanticRetries            int
+	CacheIdentitySHA256        string
+	ExpectedCacheContentSHA256 string
+	Unproven                   []string
+	Timeout                    time.Duration
 }
 
 type localAICommandSpec struct {
@@ -263,9 +278,10 @@ type localAIRealCommandExecutor interface {
 }
 
 type localAIRealRunner struct {
-	executor    localAIRealCommandExecutor
-	locks       locking.Service
-	writeReport func(string, localAIRealReport) error
+	executor       localAIRealCommandExecutor
+	locks          locking.Service
+	writeReport    func(string, localAIRealReport) error
+	finalizeReport func(localAIRealRunRequest, *localAIRealReport) error
 }
 
 type localAIBudgetError struct {
@@ -423,9 +439,10 @@ func newLocalAIRealRunner() (localAIRealRunner, error) {
 		return localAIRealRunner{}, err
 	}
 	return localAIRealRunner{
-		executor:    localAIProcessExecutor{},
-		locks:       locks,
-		writeReport: writeLocalAIRealReportAtomic,
+		executor:       localAIProcessExecutor{},
+		locks:          locks,
+		writeReport:    writeLocalAIRealReportAtomic,
+		finalizeReport: finalizeLocalAIReport,
 	}, nil
 }
 
@@ -465,6 +482,10 @@ func (runner localAIRealRunner) Run(ctx context.Context, request localAIRealRunR
 			return runner.finish(request, report)
 		}
 	}
+	if request.RequireCacheReuse && request.ExpectedCacheContentSHA256 != "" && !localAIHasCacheConsumptionMarker(observations[0], request.ExpectedCacheContentSHA256) {
+		setLocalAIFailure(&report, "harness", "offline cache content consumption", "selected command reads the expected cache fixture content", "cache content was not observed by the selected child")
+		return runner.finish(request, report)
+	}
 	output, artifacts, failure := observeLocalAI(request, roots, observations)
 	if failure != nil {
 		report.Journeys[0].Artifacts = artifacts
@@ -500,10 +521,20 @@ func (runner localAIRealRunner) execute(ctx context.Context, request localAIReal
 }
 
 func (runner localAIRealRunner) finish(request localAIRealRunRequest, report localAIRealReport) (localAIRealReport, error) {
-	if err := finalizeLocalAIReport(request, &report); err != nil {
-		if report.Status == "PASS" {
-			setLocalAIFailure(&report, "harness", "runner release and cache inspection", "owned resources and cache state are observable", "final inspection failed")
+	finalize := runner.finalizeReport
+	if finalize == nil {
+		finalize = finalizeLocalAIReport
+	}
+	if err := finalize(request, &report); err != nil {
+		if len(report.Journeys) != 1 {
+			return report, err
 		}
+		if report.Journeys[0].Cache.AfterIdentitySHA256 == "" && report.Journeys[0].Cache.AfterContentIdentitySHA256 == "" {
+			report.Journeys[0].Cache.AfterInspectionFailed = true
+		}
+		report.Journeys[0].Release.Checked = false
+		report.Journeys[0].Release.InspectionFailed = true
+		setLocalAIInconclusive(&report, "harness", "runner release and cache inspection", "owned resources and cache state are observable", localAIFinalInspectionObservation(err))
 	}
 	if report.Status == "PASS" && report.Journeys[0].Release.PartialArtifacts > 0 {
 		setLocalAIFailure(&report, "harness", "partial artifact cleanup", "no owned partial artifacts remain", "partial artifact remains")
@@ -580,9 +611,13 @@ func newLocalAIRealReport(request localAIRealRunRequest) localAIRealReport {
 			Status:              "INCONCLUSIVE",
 			CacheIdentitySHA256: cache.IdentitySHA256,
 			Cache: localAIRealCache{
-				BeforeIdentitySHA256: cache.IdentitySHA256, BeforeEntries: cache.Entries,
-				BeforeBytes: cache.Bytes, FreshAtStart: cache.Entries == 0 && cache.PartialArtifacts == 0,
-				PartialArtifacts: cache.PartialArtifacts,
+				BeforeIdentitySHA256:        cache.IdentitySHA256,
+				BeforeContentIdentitySHA256: cache.ContentIdentitySHA256,
+				BeforeEntries:               cache.Entries,
+				BeforeFiles:                 cache.Files,
+				BeforeBytes:                 cache.Bytes,
+				FreshAtStart:                cache.Entries == 0 && cache.PartialArtifacts == 0,
+				PartialArtifacts:            cache.PartialArtifacts,
 			},
 			Offline:   request.Offline,
 			Execution: &localAIRealExecution{Commands: []localAIRealCommandExecution{}},

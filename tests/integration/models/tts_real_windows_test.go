@@ -108,6 +108,7 @@ func TestLocalAIRealHarnessSelectorControlledCases(t *testing.T) {
 		wantOwner     string
 		wantArtifacts int
 		stub          *localAIStubExecutor
+		invalidCache  bool
 	}{
 		{name: "IC-02-offline-cache-reuse-tts", selector: "offline-cache-reuse-tts", kind: localAIJourneyTTS, mode: "offline-pass", offline: true, wantStatus: "PASS", wantArtifacts: 1},
 		{name: "IC-03-known-fixture-asr", selector: "known-fixture-asr", kind: localAIJourneyASR, mode: "asr-pass", expected: knownASRFixtureTranscript, wantStatus: "PASS", wantArtifacts: 3},
@@ -115,6 +116,7 @@ func TestLocalAIRealHarnessSelectorControlledCases(t *testing.T) {
 		{name: "IC-06-asr-invocation-failure", selector: "known-fixture-asr", kind: localAIJourneyASR, mode: "asr-failure", expected: knownASRFixtureTranscript, wantStatus: "FAIL", wantOwner: "product"},
 		{name: "IC-07-asr-semantic-mismatch", selector: "known-fixture-asr", kind: localAIJourneyASR, mode: "asr-mismatch", expected: knownASRFixtureTranscript, wantStatus: "FAIL", wantOwner: "product"},
 		{name: "IC-12-offline-cache-miss", selector: "offline-cache-reuse-tts", kind: localAIJourneyTTS, mode: "pass", offline: true, wantStatus: "FAIL", wantOwner: "harness", stub: &localAIStubExecutor{}},
+		{name: "IC-13-offline-cache-invalid-content", selector: "offline-cache-reuse-tts", kind: localAIJourneyTTS, mode: "offline-pass", offline: true, wantStatus: "FAIL", wantOwner: "harness", stub: &localAIStubExecutor{}, invalidCache: true},
 	}
 	for _, testCase := range cases {
 		testCase := testCase
@@ -126,6 +128,17 @@ func TestLocalAIRealHarnessSelectorControlledCases(t *testing.T) {
 			} else if testCase.offline {
 				request.RequireCacheReuse = true
 				writeLocalAIControlledCache(t, request.Root)
+				cache, err := localAIRealCacheSnapshotForRoots(localAIRealRootsFor(request.Root))
+				if err != nil {
+					t.Fatalf("snapshot controlled cache: %v", err)
+				}
+				request.ExpectedCacheContentSHA256 = cache.ContentIdentitySHA256
+				if testCase.invalidCache {
+					modelManifest := filepath.Join(localAIRealRootsFor(request.Root).Cache, filepath.FromSlash(localAIControlledModelManifest))
+					if err := os.WriteFile(modelManifest, []byte(`{"model":"tampered","revision":"fixture"}`), 0o600); err != nil {
+						t.Fatalf("tamper controlled model cache: %v", err)
+					}
+				}
 			}
 			runner := mustLocalAIRealRunner(t)
 			if testCase.stub != nil {
@@ -142,10 +155,10 @@ func TestLocalAIRealHarnessSelectorControlledCases(t *testing.T) {
 			if testCase.offline && !report.Journeys[0].Offline {
 				t.Fatal("offline selector did not retain offline evidence")
 			}
-			if testCase.name == "IC-02-offline-cache-reuse-tts" && (!report.Journeys[0].Cache.Reused || report.Journeys[0].Cache.BeforeEntries == 0 || report.Journeys[0].Cache.PartialArtifacts != 0) {
+			if testCase.name == "IC-02-offline-cache-reuse-tts" && (!report.Journeys[0].Cache.Reused || !report.Journeys[0].Cache.ContentBacked || !report.Journeys[0].Cache.ContentConsumed || report.Journeys[0].Cache.ConsumedContentIdentitySHA256 != report.Journeys[0].Cache.BeforeContentIdentitySHA256 || report.Journeys[0].Cache.BeforeFiles == 0 || report.Journeys[0].Cache.PartialArtifacts != 0) {
 				t.Fatalf("offline cache evidence = %#v, want content-backed reuse", report.Journeys[0].Cache)
 			}
-			if testCase.name == "IC-12-offline-cache-miss" && testCase.stub.calls.Load() != 0 {
+			if (testCase.name == "IC-12-offline-cache-miss" || testCase.name == "IC-13-offline-cache-invalid-content") && testCase.stub.calls.Load() != 0 {
 				t.Fatal("offline cache miss launched a command")
 			}
 		})
@@ -191,17 +204,35 @@ func writeLocalAIControlledCache(t testing.TB, root string) {
 	if err := prepareLocalAIRoots(roots); err != nil {
 		t.Fatalf("prepare controlled cache roots: %v", err)
 	}
-	modelManifest := filepath.Join(roots.Cache, "controlled-model", "manifest.json")
+	modelManifest := filepath.Join(roots.Cache, filepath.FromSlash(localAIControlledModelManifest))
 	if err := os.MkdirAll(filepath.Dir(modelManifest), 0o700); err != nil {
 		t.Fatalf("create controlled model cache: %v", err)
 	}
-	if err := os.WriteFile(modelManifest, []byte(`{"model":"controlled","revision":"fixture"}`), 0o600); err != nil {
+	if err := os.WriteFile(modelManifest, []byte(localAIControlledModelManifestBody), 0o600); err != nil {
 		t.Fatalf("write controlled model cache: %v", err)
 	}
-	hfIndex := filepath.Join(roots.HFCache, "controlled-index")
-	if err := os.WriteFile(hfIndex, []byte("controlled-cache-index"), 0o600); err != nil {
+	hfIndex := filepath.Join(roots.HFCache, localAIControlledHFIndex)
+	if err := os.WriteFile(hfIndex, []byte(localAIControlledHFIndexBody), 0o600); err != nil {
 		t.Fatalf("write controlled HF cache: %v", err)
 	}
+}
+
+func readLocalAIControlledCacheFixture(modelRoot, hfRoot string) (string, error) {
+	modelManifest := filepath.Join(modelRoot, filepath.FromSlash(localAIControlledModelManifest))
+	modelBody, err := localAIReadBoundedFile(modelManifest, localAIRealMaxStreamBytes)
+	if err != nil || string(modelBody) != localAIControlledModelManifestBody {
+		return "", errors.New("controlled model cache fixture mismatch")
+	}
+	hfIndex := filepath.Join(hfRoot, localAIControlledHFIndex)
+	hfBody, err := localAIReadBoundedFile(hfIndex, localAIRealMaxStreamBytes)
+	if err != nil || string(hfBody) != localAIControlledHFIndexBody {
+		return "", errors.New("controlled HF cache fixture mismatch")
+	}
+	snapshot, err := localAIRealCacheSnapshotForRoots(localAIRealRoots{Cache: modelRoot, HFCache: hfRoot})
+	if err != nil || snapshot.Files != 2 || snapshot.Bytes != int64(len(modelBody)+len(hfBody)) {
+		return "", errors.New("controlled cache fixture identity could not be established")
+	}
+	return snapshot.ContentIdentitySHA256, nil
 }
 
 func TestLocalAIRealHarnessCacheIdentityUsesContents(t *testing.T) {
