@@ -20,6 +20,7 @@ import (
 type ManagedBackendLaunch struct {
 	Command  string
 	Args     []string
+	Env      []string
 	WorkDir  string
 	Endpoint string
 	Cleanup  func()
@@ -56,19 +57,32 @@ func ResolveManagedBackendLaunch(
 	}
 	root, executable, cleanup, err := materializeManagedBackend(ctx, backend, spec.BackendFiles)
 	if err != nil {
-		return ManagedBackendLaunch{}, err
+		return ManagedBackendLaunch{}, WrapBackendExtractFailure(err)
 	}
 	endpoint, address, err := managedBackendEndpoint(spec.HealthEndpoint)
 	if err != nil {
 		cleanup()
-		return ManagedBackendLaunch{}, err
+		return ManagedBackendLaunch{}, WrapBackendExtractFailure(err)
 	}
 	args := append([]string(nil), spec.Args...)
 	args = append(args, "--addr="+address)
 	return ManagedBackendLaunch{
 		Command: executable, Args: args,
+		Env:     managedBackendEnvironment(backend, root),
 		WorkDir: root, Endpoint: endpoint, Cleanup: cleanup,
 	}, nil
+}
+
+func managedBackendEnvironment(backend, root string) []string {
+	if runtime.GOOS != "windows" || !strings.EqualFold(strings.TrimSpace(backend), "localai-vibevoice") {
+		return nil
+	}
+	// The pinned Windows VibeVoice package ships the DLL under this name,
+	// while its backend entrypoint otherwise defaults to the Unix fallback
+	// library when VIBEVOICECPP_LIBRARY is absent. Keep this correction
+	// private to the managed candidate launch; public model configuration and
+	// backend identity remain unchanged.
+	return []string{"VIBEVOICECPP_LIBRARY=" + filepath.Join(root, "libgovibevoicecpp.dll")}
 }
 
 func materializeManagedBackend(

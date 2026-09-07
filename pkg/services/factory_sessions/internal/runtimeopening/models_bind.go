@@ -79,6 +79,7 @@ func bindModelsRuntimeScope(
 	modelService models.Service,
 	cacheDirectory string,
 	runtimeConfigLoader models.RuntimeConfigLoader,
+	operatorModels map[string]models.ModelOverlay,
 ) (modelsRuntimeBind, error) {
 	if modelService == nil {
 		return modelsRuntimeBind{}, fmt.Errorf("construct runtime scope: Models service is required")
@@ -88,6 +89,7 @@ func bindModelsRuntimeScope(
 	}
 	scopeConfig := models.RuntimeScopeConfig{
 		CacheDirectory: cacheDirectory,
+		OperatorModels: cloneOperatorModelOverlays(operatorModels),
 	}
 	if runtimeConfig := runtimeConfigLoader(); runtimeConfig != nil {
 		scopeConfig.Runtime = *runtimeConfig
@@ -105,4 +107,17 @@ func bindModelsRuntimeScope(
 		Root:  modelService,
 		Scope: opened.Scope,
 	}, nil
+}
+
+func cloneOperatorModelOverlays(
+	overlays map[string]models.ModelOverlay,
+) map[string]models.ModelOverlay {
+	if len(overlays) == 0 {
+		return nil
+	}
+	cloned := make(map[string]models.ModelOverlay, len(overlays))
+	for name, overlay := range overlays {
+		cloned[name] = overlay.Clone()
+	}
+	return cloned
 }

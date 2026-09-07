@@ -64,6 +64,7 @@ type ModelOptions struct {
 	Embeddings    bool                   `protobuf:"varint,10,opt,name=Embeddings,proto3" json:"Embeddings,omitempty"`
 	ModelFile     string                 `protobuf:"bytes,21,opt,name=ModelFile,proto3" json:"ModelFile,omitempty"`
 	ModelPath     string                 `protobuf:"bytes,59,opt,name=ModelPath,proto3" json:"ModelPath,omitempty"`
+	Options       []string               `protobuf:"bytes,62,rep,name=Options,proto3" json:"Options,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -131,6 +132,13 @@ func (x *ModelOptions) GetModelPath() string {
 		return x.ModelPath
 	}
 	return ""
+}
+
+func (x *ModelOptions) GetOptions() []string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
 }
 
 type Result struct {
@@ -858,7 +866,7 @@ var File_pkg_services_models_internal_backends_localai_backend_subset_proto prot
 const file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc = "" +
 	"\n" +
 	"Bpkg/services/models/internal/backends/localai/backend_subset.proto\x12\abackend\"\x0f\n" +
-	"\rHealthMessage\"\x98\x01\n" +
+	"\rHealthMessage\"\xb2\x01\n" +
 	"\fModelOptions\x12\x14\n" +
 	"\x05Model\x18\x01 \x01(\tR\x05Model\x12\x16\n" +
 	"\x06NBatch\x18\x04 \x01(\x05R\x06NBatch\x12\x1e\n" +
@@ -867,7 +875,8 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	" \x01(\bR\n" +
 	"Embeddings\x12\x1c\n" +
 	"\tModelFile\x18\x15 \x01(\tR\tModelFile\x12\x1c\n" +
-	"\tModelPath\x18; \x01(\tR\tModelPath\"<\n" +
+	"\tModelPath\x18; \x01(\tR\tModelPath\x12\x18\n" +
+	"\aOptions\x18> \x03(\tR\aOptions\"<\n" +
 	"\x06Result\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\"g\n" +

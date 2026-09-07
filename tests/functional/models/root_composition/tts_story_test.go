@@ -39,8 +39,10 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	assertTTSReady(t, story)
 	wantAudio := localai.AudioBytes()
 	runGenericTTS(t, story, wantAudio)
+	assertTTSRoleBundleReads(t, story)
 	runAliasTTS(t, story, wantAudio)
 	assertEquivalentTTSRequests(t, story.protocol.Calls(), story.temp.directory)
+	runExactTTSToASRChain(t, story)
 	runTTSFailureMatrix(t, story, wantAudio)
 	assertTTSIsolationAndRelease(t, story)
 }
@@ -86,8 +88,8 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 				t.Fatalf("%s audio digest = %s, want %s", scenario.name, ttsDigest(got), ttsDigest(want))
 			}
 			assertSemanticTTSAudio(t, got, scenario.name+" output")
-			if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.Len() != 0 {
-				t.Fatalf("%s streams = stdout %q stderr %q, want isolated status-only output", scenario.name, stdout.String(), stderr.String())
+			if stdout.String() != "Wrote audio: "+outputPath+"\n" || stderr.String() != controlledTTSAssetEstimate {
+				t.Fatalf("%s streams = stdout %q stderr %q, want first-use status and controlled asset estimate", scenario.name, stdout.String(), stderr.String())
 			}
 			if got := story.generic.Calls(); got != 0 {
 				t.Fatalf("%s generic TTS backend calls = %d, want zero", scenario.name, got)
@@ -158,8 +160,12 @@ type ttsStory struct {
 	protocol          *ttsPrivateProtocolFixture
 	generic           *ttsGenericBackendTrap
 	host              *ttsHostLauncher
+	network           *rejectingModelAssetHTTP
+	assetTrace        *functionalModelAssetTrace
 	outputFailurePath string
 }
+
+const controlledTTSAssetEstimate = "models asset estimate modelName=\"tts\" backendBytes=0 modelBytes=82 totalBytes=82\n"
 
 func setupTTSStory(t *testing.T) ttsStory {
 	t.Helper()
@@ -178,11 +184,20 @@ func setupTTSStory(t *testing.T) ttsStory {
 		t.Fatalf("create TTS runtime temp directory: %v", err)
 	}
 	temp := &ttsTempEffects{directory: ttsTempDirectory}
+	writeControlledBuiltinTTSSource(t, home)
 	writeGenericBuiltinTTSCache(t, home)
 	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
+	asrDefinition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	if !ok {
+		t.Fatal("built-in catalog did not publish the ASR model definition")
+	}
+	writeGenericBuiltinModelCache(t, home, asrDefinition.Source)
+	asrSelection, asrBackendBody := fixtureBackendSelection(asrDefinition.Backend)
+	writeGenericBackendCache(t, home, asrDefinition.Backend, asrSelection, asrBackendBody)
 	selection := pinnedTTSBackendSelection()
-	assetFiles := functionalModelAssetFileSystem{home: home}
+	assetTrace := &functionalModelAssetTrace{}
+	assetFiles := functionalModelAssetFileSystem{home: home, trace: assetTrace}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostProtocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
@@ -192,22 +207,29 @@ func setupTTSStory(t *testing.T) ttsStory {
 	host := &ttsHostLauncher{endpoint: modelServer.URL}
 	outputFailurePath := filepath.Join(dir, "forced-output-failure.wav")
 	process := functionalBuildProcess(t, serviceedges.Edges{
-		ModelAssetHTTPClient:           rejectingNetwork,
-		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
-		ModelAssetInspectPath:          assetFiles.Stat,
-		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
-		ModelAssetResolveEnvironment:   func(string) string { return "" },
-		ModelAssetWriteFile:            assetFiles.WriteFile,
-		ModelAssetRenamePath:           assetFiles.Rename,
-		ModelAssetReadFile:             assetFiles.ReadFile,
-		ModelAssetReadDirectory:        assetFiles.ReadDir,
-		ModelAssetCreateFile:           assetFiles.Create,
-		ModelAssetOpenFile:             assetFiles.Open,
-		ModelHostProcessLauncher:       host,
-		ModelHostProtocolNegotiator:    hostProtocol,
-		ModelHostCompatibilityChecker:  compatibility,
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		ModelAssetHTTPClient:               rejectingNetwork,
+		ModelAssetMakeDirectories:          assetFiles.MkdirAll,
+		ModelAssetInspectPath:              assetFiles.Stat,
+		ModelAssetResolveHomeDirectory:     assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:       func(string) string { return "" },
+		ModelAssetWriteFile:                assetFiles.WriteFile,
+		ModelAssetRenamePath:               assetFiles.Rename,
+		ModelAssetReadFile:                 assetFiles.ReadFile,
+		ModelAssetReadDirectory:            assetFiles.ReadDir,
+		ModelAssetCreateFile:               assetFiles.Create,
+		ModelAssetOpenFile:                 assetFiles.Open,
+		ModelHostProcessLauncher:           host,
+		ModelHostProtocolNegotiator:        hostProtocol,
+		ModelHostCompatibilityChecker:      compatibility,
+		ModelAssetHostPlatform:             models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			// Both built-in operations share this isolated cache. The resolver is
+			// still explicit so a cache miss cannot accidentally select the TTS
+			// backend for ASR.
+			if request.Backend == asrDefinition.Backend {
+				return asrSelection, nil
+			}
 			return selection, nil
 		},
 		ModelInvocationBackend:     generic.Invoke,
@@ -218,6 +240,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 		ModelRuntimeCreateTempFile: temp.CreateTemp,
 		ModelRuntimeInspectFile:    os.Stat,
 		ModelAssetRemovePath:       temp.Remove,
+		ModelASRBackend:            protocol.ASRBackend,
 		ModelCLIOutputRenamePath: func(oldPath, newPath string) error {
 			if newPath == outputFailurePath {
 				return errors.New("controlled output publication failure")
@@ -228,7 +251,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 	t.Cleanup(func() { closeRootProcess(t, process, "close TTS root process") })
 	return ttsStory{
 		process: process, dir: dir, environment: functionalHomeEnvironment(home), home: home,
-		temp: temp, protocol: protocol, generic: generic, host: host,
+		temp: temp, protocol: protocol, generic: generic, host: host, network: rejectingNetwork, assetTrace: assetTrace,
 		outputFailurePath: outputFailurePath,
 	}
 }
@@ -251,7 +274,7 @@ func assertTTSReady(t *testing.T, story ttsStory) {
 	}
 	if tts.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
 		tts.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
-		t.Fatalf("models list TTS runtime = %#v, want READY/INSTALLED", tts.ManagedRuntime)
+		t.Fatalf("models list TTS runtime = %#v diagnostics=%v, want READY/INSTALLED", tts.ManagedRuntime, tts.ManagedRuntime.Diagnostics)
 	}
 	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
 }
@@ -273,8 +296,8 @@ func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 		t.Fatalf("generic TTS stdout = %d bytes, want exact fixture audio %d bytes", genericStdout.Len(), len(wantAudio))
 	}
 	assertSemanticTTSAudio(t, genericStdout.Bytes(), "generic stdout")
-	if genericStderr.Len() != 0 {
-		t.Fatalf("generic TTS stderr = %q, want empty", genericStderr.String())
+	if genericStderr.String() != controlledTTSAssetEstimate {
+		t.Fatalf("generic TTS stderr = %q, want controlled bundle estimate %q", genericStderr.String(), controlledTTSAssetEstimate)
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --input text=hello")
 	t.Logf("runtime proof exitCode=0 stdout=<raw audio bytes> mediaType=audio/wav size=%d sha256=%s stderr=%q", len(genericStdout.Bytes()), ttsDigest(genericStdout.Bytes()), genericStderr.String())
@@ -307,6 +330,93 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --text hello --output %s", aliasPath)
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", aliasStdout.String(), aliasStderr.String(), len(aliasAudio), ttsDigest(aliasAudio))
+}
+
+func runExactTTSToASRChain(t *testing.T, story ttsStory) {
+	t.Helper()
+	const phrase = "Local AI works on this machine"
+	audio, ttsPath := runExactChainTTS(t, story, phrase)
+
+	transcriptPath := filepath.Join(story.dir, "exact-chain-transcript.txt")
+	segmentsPath := filepath.Join(story.dir, "exact-chain-segments.json")
+	var asrStdout, asrStderr bytes.Buffer
+	asrInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+		"--output", "transcript=" + transcriptPath, "--output", "segments=" + segmentsPath,
+	})
+	asrInputs.Input.Env = story.environment
+	asrInputs.Input.WorkingDirectory = story.dir
+	asrInputs.Input.Stdout = &asrStdout
+	asrInputs.Input.Stderr = &asrStderr
+	if err := story.process.Execute(asrInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(exact-chain ASR) error = %v", err)
+	}
+	transcript, err := os.ReadFile(transcriptPath)
+	if err != nil {
+		t.Fatalf("read exact-chain transcript: %v", err)
+	}
+	if string(transcript) != phrase {
+		t.Fatalf("exact-chain transcript = %q, want semantic phrase %q", transcript, phrase)
+	}
+	segments, err := os.ReadFile(segmentsPath)
+	if err != nil {
+		t.Fatalf("read exact-chain segments: %v", err)
+	}
+	var decoded []struct {
+		ID    int32  `json:"id"`
+		Start int64  `json:"start"`
+		End   int64  `json:"end"`
+		Text  string `json:"text"`
+	}
+	if err := json.Unmarshal(segments, &decoded); err != nil {
+		t.Fatalf("decode exact-chain segments: %v", err)
+	}
+	if len(decoded) == 0 || decoded[0].Text != phrase {
+		t.Fatalf("exact-chain segments = %#v, want one semantic segment", decoded)
+	}
+	duration := wavDurationMilliseconds(audio)
+	var previousStart, previousEnd int64
+	for index, segment := range decoded {
+		if segment.ID < 0 || segment.Start < 0 || segment.End <= segment.Start || segment.End > int64(duration) ||
+			(index > 0 && (segment.Start < previousStart || segment.End < previousEnd)) {
+			t.Fatalf("exact-chain segment[%d] = %#v, want finite nonnegative monotonic timestamps within %.3fms", index, segment, duration)
+		}
+		previousStart, previousEnd = segment.Start, segment.End
+	}
+	asrCalls := story.protocol.ASRCalls()
+	if len(asrCalls) == 0 || !bytes.Equal(asrCalls[len(asrCalls)-1].Audio, audio) || asrCalls[len(asrCalls)-1].MediaType != "audio/wav" {
+		t.Fatalf("exact-chain ASR calls = %#v, want exact TTS bytes with audio/wav", asrCalls)
+	}
+	if story.network.Calls() != 0 {
+		t.Fatalf("exact-chain cache reuse network calls = %d, want zero", story.network.Calls())
+	}
+	if entries, readErr := os.ReadDir(story.temp.directory); readErr != nil || len(entries) != 0 {
+		t.Fatalf("exact-chain staging entries = %v, read error = %v; want no owned temporary files", entries, readErr)
+	}
+	t.Logf("runtime proof TTS->ASR command chain: tts text=%q output=%s; asr input=%s transcript=%s segments=%s", phrase, ttsPath, ttsPath, transcriptPath, segmentsPath)
+	t.Logf("runtime proof exact-byte lineage ttsSHA256=%s asrSHA256=%s mediaType=audio/wav transcript=%q segmentBytes=%d durationMs=%.3f stdout=%q stderr=%q", ttsDigest(audio), ttsDigest(asrCalls[len(asrCalls)-1].Audio), phrase, len(segments), duration, asrStdout.String(), asrStderr.String())
+
+	var jsonOutput, jsonStderr bytes.Buffer
+	jsonInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+	})
+	jsonInputs.Input.Env = story.environment
+	jsonInputs.Input.WorkingDirectory = story.dir
+	jsonInputs.Input.Stdout = &jsonOutput
+	jsonInputs.Input.Stderr = &jsonStderr
+	if err := story.process.Execute(jsonInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(exact-chain ASR JSON) error = %v", err)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(jsonOutput.Bytes(), &response); err != nil {
+		t.Fatalf("decode exact-chain ASR JSON: %v\n%s", err, jsonOutput.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" ||
+		response.Outputs[0].MediaType == nil || *response.Outputs[0].MediaType != "text/plain" ||
+		response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("exact-chain ASR JSON outputs = %#v, want transcript/text/plain then segments/application/json", response.Outputs)
+	}
+	t.Logf("runtime proof ASR JSON output identities transcript=text/plain segments=application/json stdout=%s stderr=%q", jsonOutput.String(), jsonStderr.String())
 }
 
 func runTTSFailureMatrix(t *testing.T, story ttsStory, wantAudio []byte) {
@@ -503,10 +613,16 @@ type ttsProtocolCall struct {
 	Destination string
 }
 
+type asrInvocationCall struct {
+	Audio     []byte
+	MediaType string
+}
+
 type ttsPrivateProtocolFixture struct {
 	mu                sync.Mutex
 	audio             []byte
 	calls             []ttsProtocolCall
+	asrCalls          []asrInvocationCall
 	dials             int
 	invokes           int
 	closes            int
@@ -555,6 +671,34 @@ func (fixture *ttsPrivateProtocolFixture) Calls() []ttsProtocolCall {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	return append([]ttsProtocolCall(nil), fixture.calls...)
+}
+
+func (fixture *ttsPrivateProtocolFixture) ASRBackend(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return models.ASRBackendResponse{}, err
+	}
+	fixture.mu.Lock()
+	fixture.asrCalls = append(fixture.asrCalls, asrInvocationCall{
+		Audio: append([]byte(nil), request.Audio...), MediaType: request.MediaType,
+	})
+	fixture.mu.Unlock()
+	if !bytes.Equal(request.Audio, fixture.audioFor("Local AI works on this machine")) {
+		return models.ASRBackendResponse{}, errors.New("fixture-secret ASR received unexpected audio")
+	}
+	return models.ASRBackendResponse{
+		Text:     "Local AI works on this machine",
+		Segments: []models.ASRBackendSegment{{ID: 0, Start: 0, End: 10, Text: "Local AI works on this machine"}},
+	}, nil
+}
+
+func (fixture *ttsPrivateProtocolFixture) ASRCalls() []asrInvocationCall {
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	result := make([]asrInvocationCall, len(fixture.asrCalls))
+	for index, call := range fixture.asrCalls {
+		result[index] = asrInvocationCall{Audio: append([]byte(nil), call.Audio...), MediaType: call.MediaType}
+	}
+	return result
 }
 
 func (fixture *ttsPrivateProtocolFixture) CancellationStarted() <-chan struct{} {
@@ -847,32 +991,4 @@ func assertSemanticTTSAudio(t *testing.T, audio []byte, label string) {
 
 func jsonUnmarshalFunctional(data string, target any) error {
 	return json.Unmarshal([]byte(data), target)
-}
-
-func writeGenericBuiltinTTSManagedRuntimeCache(t *testing.T, home string) {
-	t.Helper()
-	const revision = "505114ae6ad17be74df98e6939707434ec49c187"
-	body := []byte("joined built-in tts fixture")
-	digest := sha256.Sum256(body)
-	canonicalModelName := strings.ToUpper(strings.TrimSpace(models.BuiltInModelNameTTS))
-	revisionPath := filepath.Join(home, ".agent-factory", "models", canonicalModelName, revision)
-	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
-		t.Fatalf("create managed TTS runtime fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(revisionPath, "weights.bin"), body, 0o644); err != nil {
-		t.Fatalf("write managed TTS runtime fixture: %v", err)
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"modelName": "tts",
-		"revision":  revision,
-		"files": []map[string]any{{
-			"path": "weights.bin", "bytes": len(body), "sha256": hex.EncodeToString(digest[:]),
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal managed TTS runtime metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(filepath.Dir(revisionPath), ".managed-cache.json"), metadata, 0o644); err != nil {
-		t.Fatalf("write managed TTS runtime metadata: %v", err)
-	}
 }

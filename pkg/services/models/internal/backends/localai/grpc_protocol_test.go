@@ -1,6 +1,7 @@
 package localai
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -11,12 +12,31 @@ import (
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	grpcgo "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+func TestPinnedLocalAIModelOptionsDescriptorMatchesField62Contract(t *testing.T) {
+	t.Parallel()
+
+	fields := (&ModelOptions{}).ProtoReflect().Descriptor().Fields()
+	options := fields.ByName("Options")
+	if options == nil || options.Number() != 62 ||
+		options.Cardinality() != protoreflect.Repeated || options.Kind() != protoreflect.StringKind {
+		t.Fatalf("Options descriptor = %#v, want repeated string field 62", options)
+	}
+	for _, number := range []protoreflect.FieldNumber{15, 38} {
+		if field := fields.ByNumber(number); field != nil {
+			t.Fatalf("unexpected speculative ModelOptions field %d: %v", number, field)
+		}
+	}
+}
 
 func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.T) {
 	t.Parallel()
@@ -249,11 +269,141 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		connection.loadRequest.GetEmbeddings() ||
 		connection.loadRequest.GetModelFile() != modelFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
-		connection.loadRequest.GetNBatch() != localAIModelBatchSize {
+		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
+		len(connection.loadRequest.GetOptions()) != 0 {
 		t.Fatalf(
-			"load request model=%q modelFile=%q modelPath=%q nBatch=%d, want model name, file path, model directory, and nonzero batch size",
-			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(),
+			"load request model=%q modelFile=%q modelPath=%q nBatch=%d options=%v, want model name, file path, model directory, nonzero batch size, and no VibeVoice option",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
 		)
+	}
+	expected := appendStringField(nil, 1, "llm")
+	expected = appendVarintField(expected, 4, localAIModelBatchSize)
+	expected = appendStringField(expected, 21, modelFile)
+	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
+	if !bytes.Equal(connection.loadPayload, expected) {
+		t.Fatalf("non-TTS LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTTS(t *testing.T) {
+	t.Parallel()
+
+	for _, modelName := range []string{"llm", models.BuiltInModelNameEmbed, "asr"} {
+		modelName := modelName
+		t.Run(modelName, func(t *testing.T) {
+			t.Parallel()
+			connection := &recordingGRPCConnection{}
+			connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
+			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+			modelFile := filepath.Join(t.TempDir(), "model.gguf")
+			_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Backend:         "localai-llamacpp",
+				ModelName:       modelName,
+				ModelPath:       modelFile,
+			})
+			if err != nil {
+				t.Fatalf("Negotiate() error = %v", err)
+			}
+			if len(connection.loadRequest.GetOptions()) != 0 {
+				t.Fatalf("%s LoadModel options = %#v, want no VibeVoice option", modelName, connection.loadRequest.GetOptions())
+			}
+		})
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorSerializesConfinedVibeVoiceRoleOptions(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	modelRoot := t.TempDir()
+	modelFile := filepath.Join(modelRoot, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(modelRoot, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(modelRoot, definition.Artifacts[2].Path)
+	_, err = negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-vibevoice",
+		ModelName:       models.BuiltInModelNameTTS,
+		Revision:        definition.Publication.Revision,
+		ModelPath:       modelFile,
+		ModelFiles:      []string{modelFile, tokenizerFile, voiceFile},
+	})
+	if err != nil {
+		t.Fatalf("Negotiate() error = %v", err)
+	}
+	wantOptions := []string{"tokenizer=" + tokenizerFile, "voice=" + voiceFile}
+	if !equalStrings(connection.loadRequest.GetOptions(), wantOptions) {
+		t.Fatalf("VibeVoice options = %#v, want confined tokenizer and voice options", connection.loadRequest.GetOptions())
+	}
+
+	expected := appendStringField(nil, 1, models.BuiltInModelNameTTS)
+	expected = appendVarintField(expected, 4, localAIModelBatchSize)
+	expected = appendStringField(expected, 21, modelFile)
+	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
+	expected = appendStringField(expected, 62, "tokenizer="+tokenizerFile)
+	expected = appendStringField(expected, 62, "voice="+voiceFile)
+	if !bytes.Equal(connection.loadPayload, expected) {
+		t.Fatalf("LoadModel wire bytes = %x, want exact pinned bytes %x", connection.loadPayload, expected)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorRejectsInvalidVibeVoiceLayoutBeforeLoadRPC(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	modelRoot := t.TempDir()
+	modelFile := filepath.Join(modelRoot, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(modelRoot, definition.Artifacts[1].Path)
+	for _, testCase := range []struct {
+		name  string
+		files []string
+	}{
+		{name: "missing", files: nil},
+		{name: "ambiguous", files: []string{modelFile, tokenizerFile, tokenizerFile}},
+		{name: "traversal", files: []string{modelFile, tokenizerFile, filepath.Join(modelRoot, "..", definition.Artifacts[2].Path)}},
+		{name: "absolute escape", files: []string{modelFile, tokenizerFile, filepath.Join(filepath.Dir(modelRoot), "outside", definition.Artifacts[2].Path)}},
+		{name: "malformed", files: []string{modelFile, ""}},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			connection := &recordingGRPCConnection{}
+			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+			_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Backend:         "localai-vibevoice",
+				ModelName:       models.BuiltInModelNameTTS,
+				Revision:        definition.Publication.Revision,
+				ModelPath:       modelFile,
+				ModelFiles:      testCase.files,
+			})
+			if !errors.Is(err, models.ErrHostProtocolIncompatible) {
+				t.Fatalf("Negotiate() error = %v, want typed protocol incompatibility", err)
+			}
+			if strings.Contains(err.Error(), definition.Artifacts[1].Path) || strings.Contains(err.Error(), definition.Artifacts[2].Path) {
+				t.Fatalf("layout error leaked a path or role artifact name: %v", err)
+			}
+			if !equalStrings(connection.methods, []string{localAIHealthMethod}) || connection.closed != 1 {
+				t.Fatalf("invalid layout transport facts = methods %#v closed %d, want health only and one close", connection.methods, connection.closed)
+			}
+		})
 	}
 }
 
@@ -350,6 +500,7 @@ type recordingGRPCConnection struct {
 	request          PredictOptions
 	embeddingRequest PredictOptions
 	loadRequest      ModelOptions
+	loadPayload      []byte
 	response         []byte
 	invokeErr        error
 	closed           int
@@ -376,11 +527,22 @@ func (connection *recordingGRPCConnection) Invoke(
 		}
 	}
 	if method == localAILoadModelMethod {
+		connection.loadPayload = append([]byte(nil), payload...)
 		if err := proto.Unmarshal(payload, &connection.loadRequest); err != nil {
 			return nil, err
 		}
 	}
 	return connection.response, nil
+}
+
+func appendStringField(buffer []byte, number protowire.Number, value string) []byte {
+	buffer = protowire.AppendTag(buffer, number, protowire.BytesType)
+	return protowire.AppendString(buffer, value)
+}
+
+func appendVarintField(buffer []byte, number protowire.Number, value int32) []byte {
+	buffer = protowire.AppendTag(buffer, number, protowire.VarintType)
+	return protowire.AppendVarint(buffer, uint64(value))
 }
 
 type countingEmbeddingDialer struct {

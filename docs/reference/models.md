@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-24
+last-modified: 2026-09-06
 doc-id: agent-factory/models
 ---
 
@@ -69,15 +69,60 @@ sizes exclude the additional platform-specific backend and runtime files.
 | --- | --- | ---: |
 | `llm` | `OMNI` | 5.0 GB |
 | `asr` | `ASR` | 148 MB |
-| `tts` | `TTS` | 18.7 GB |
+| `tts` | `TTS` | 1.714 GB |
 | `embed` | `EMBED` | 1.21 GB |
 
 Run `you --json models inspect <name>` to confirm the pinned source before a
 pull. After installation, `cacheBytes` reports the exact managed cache size.
 
-Warning: Pulling `tts` downloads an approximately 18.7 GB pinned model
-payload. Backend and runtime files need additional disk space. Inspect `tts`
+Warning: Pulling `tts` downloads an approximately 1.714 GB three-file model
+bundle. Backend and runtime files need additional disk space. Inspect `tts`
 before pulling or invoking it.
+
+### Built-in TTS bundle identity
+
+The built-in `tts` model uses one immutable three-file bundle. The bundle contains one model, one tokenizer, and one voice.
+
+| Role | File | Size in bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| `model` | `vibevoice-realtime-0.5B-q8_0.gguf` | `1699832128` | `5251e3f0386d1056a90c61b6c7359a4775da44dd19402499bef1989c4b5c653a` |
+| `tokenizer` | `tokenizer.gguf` | `5922368` | `37dc3b722d5677e37e29a57df55aa05c485116eeb5459e57ff8dde616b4986f6` |
+| `voice` | `voice-en-Carter_man.gguf` | `8472448` | `b15cd8b9cae6ee2c3d20b0ee6e7bfe93f13489f8b63b6834e9bbf0dfabf6505a` |
+
+The immutable model source is `hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9`.
+The publication revision is `a67807e65e3002e187179a856e96043f75060bc9`.
+The base model is `microsoft/VibeVoice-Realtime-0.5B`, under the `MIT` license.
+
+The private backend identity uses `localai-vibevoice` from
+`https://github.com/mudler/vibevoice.cpp` at commit
+`000e37282bc5bb09edc20f7047a47924122ba3a0`.
+The LocalAI source commit is `b224c96db6f4b87306a33a808650bfce63b12588`.
+The protocol source is `backend/backend.proto` at revision
+`ad62c6df07ae1169eb14411a565a689cd996b19c`.
+
+The published backend artifacts use these target identities:
+
+| Target | Artifact | Size in bytes | SHA-256 | Accelerator |
+| --- | --- | ---: | --- | --- |
+| `darwin-arm64` | `localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `9200265` | `624385483a7c67804ff546ed8649e35c4e7122b833f318ff4d1cf2d44d9f2752` | `metal` |
+| `linux-amd64` | `localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `14976678` | `8a8ae6b816e4eb4b7088a7e5c7ef291dbd657f6f38f930b5471b9a73fb056bcb` | `cpu` |
+| `windows-amd64` | `localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `10757902` | `8f3c14212948be34c930e9a790af7757460cb2f6bb6a0de80d5b9f95b71e8646` | `cpu` |
+
+The role manifest is authored at
+`pkg/services/models/internal/artifacts/localai-model-role-artifacts.json`.
+The private protocol subset is authored at
+`pkg/services/models/internal/backends/localai/backend_subset.proto`.
+Regenerate `backend_subset.pb.go` with `protoc` `6.31.1` and
+`protoc-gen-go` `1.36.7`; do not edit the generated file by hand.
+
+The public `tts` name, `TTS` operation, input and output slots, and lifecycle
+remain unchanged. A different immutable revision does not reuse this bundle's
+cache. After an upgrade, run `you models inspect tts`, then `you models pull tts`
+when the readiness state is `MISSING`.
+
+To roll back, restore the catalog source and private role metadata from one
+reviewed revision. Remove a newer `tts` cache before invoking the restored
+revision. Do not mix a catalog revision with another revision's role metadata.
 
 ## Pull A Managed Local Model
 

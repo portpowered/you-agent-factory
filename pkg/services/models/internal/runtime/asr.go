@@ -65,7 +65,7 @@ func (runtime asr) Invoke(
 	if err := ctx.Err(); err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
-	content, err := runtime.codec.DecodeResponseValue(backendResponse)
+	content, err := runtime.codec.DecodeResponseValueWithinAudio(backendResponse, backendRequest.Audio)
 	if err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
