@@ -223,6 +223,10 @@ func ReadReport(path string) (Report, error) {
 }
 
 func WriteReportAtomic(path string, report Report) error {
+	return writeReportAtomicWithHook(path, report, nil)
+}
+
+func writeReportAtomicWithHook(path string, report Report, beforeRename func() error) error {
 	report = normalizeReport(report)
 	if err := report.validate(); err != nil {
 		return fmt.Errorf("write readiness report: %w", err)
@@ -231,7 +235,7 @@ func WriteReportAtomic(path string, report Report) error {
 	if err != nil {
 		return err
 	}
-	return writeJSONAtomic(path, body, nil)
+	return writeJSONAtomic(path, body, beforeRename)
 }
 
 func WriteReport(path string, report Report) error { return WriteReportAtomic(path, report) }
