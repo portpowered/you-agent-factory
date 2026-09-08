@@ -924,6 +924,15 @@ func newProductionModelsCommand(
 	if operatorDefaults == nil {
 		operatorDefaults = &cliOperatorDefaultsOptions{}
 	}
+	modelCacheDirResolvers := []func() (string, error){
+		func() (string, error) {
+			modelCacheDir, _, err := lookupProcessEnvironment(
+				rootOptions,
+				runcli.ModelCacheDirEnvironment,
+			)
+			return modelCacheDir, err
+		},
+	}
 	handler := modelscli.NewCommandHandler(
 		rootOptions.ModelsCLI,
 		diagnostics.writer,
@@ -935,6 +944,7 @@ func newProductionModelsCommand(
 			policy := diagnostics.resolvePolicy(false)
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
+		modelCacheDirResolvers...,
 	)
 	return climanifestcobra.NewModelsCommand(handler)
 }

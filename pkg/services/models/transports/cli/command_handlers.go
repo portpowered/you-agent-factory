@@ -21,6 +21,7 @@ type CommandHandler struct {
 	homeDir                 func() (string, error)
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error)
 	buildLogger             func() (*zap.Logger, error)
+	modelCacheDir           func() (string, error)
 }
 
 // NewCommandHandler constructs the Models-owned CLI handler from injected dependencies.
@@ -30,10 +31,16 @@ func NewCommandHandler(
 	homeDir func() (string, error),
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error),
 	buildLogger func() (*zap.Logger, error),
+	modelCacheDirResolvers ...func() (string, error),
 ) *CommandHandler {
+	var modelCacheDir func() (string, error)
+	if len(modelCacheDirResolvers) > 0 {
+		modelCacheDir = modelCacheDirResolvers[0]
+	}
 	return &CommandHandler{
 		models: models, diagnosticsWriter: diagnosticsWriter, homeDir: homeDir,
 		resolveOperatorDefaults: resolveOperatorDefaults, buildLogger: buildLogger,
+		modelCacheDir: modelCacheDir,
 	}
 }
 
@@ -151,6 +158,13 @@ func (h *CommandHandler) Invoke(
 	if err != nil {
 		return err
 	}
+	modelCacheDir := ""
+	if h.modelCacheDir != nil {
+		modelCacheDir, err = h.modelCacheDir()
+		if err != nil {
+			return fmt.Errorf("resolve model cache directory: %w", err)
+		}
+	}
 	cfg := InvokeConfig{
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
 		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings,
@@ -165,7 +179,14 @@ func (h *CommandHandler) Invoke(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
-	return h.models.Invoke(cfg)
+	if strings.TrimSpace(modelCacheDir) == "" {
+		return h.models.Invoke(cfg)
+	}
+	invoker, ok := h.models.(ModelCacheInvoker)
+	if !ok {
+		return fmt.Errorf("models invoke service does not support invocation-local model cache selection")
+	}
+	return invoker.InvokeWithModelCache(cfg, modelCacheDir)
 }
 
 type modelsInvokeInputs struct {

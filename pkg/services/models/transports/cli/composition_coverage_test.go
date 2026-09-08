@@ -39,12 +39,17 @@ func TestNew_ServerValidationUsesHTTPFallbackWhenCompositionRootExists(t *testin
 	t.Cleanup(server.Close)
 
 	localCalled := false
+	scopeOpened := false
 	invocation := factorySessionPresentationInvocation{
 		root: compositionModelsRoot{
 			getModel: func(context.Context, string) (modelinference.Detail, error) {
 				localCalled = true
 				return modelinference.Detail{}, nil
 			},
+		},
+		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			scopeOpened = true
+			return modelscli.InvokeRuntimeScope{}, nil
 		},
 	}
 	service := modelscli.New(compositionHTTPProtocol(t), invocation)
@@ -57,6 +62,9 @@ func TestNew_ServerValidationUsesHTTPFallbackWhenCompositionRootExists(t *testin
 	}
 	if localCalled {
 		t.Fatal("server-bound validation opened the locally composed Models catalog")
+	}
+	if scopeOpened {
+		t.Fatal("server-bound validation opened the local Models presentation scope")
 	}
 	if !strings.Contains(out.String(), `"mode":"VALIDATION_ONLY"`) {
 		t.Fatalf("Invoke() output = %q, want validation-only metadata", out.String())
