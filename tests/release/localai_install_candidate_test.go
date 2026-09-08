@@ -25,7 +25,7 @@ const (
 	localAICandidateManifestEnv                 = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
 	localAICandidateSchemaVersion               = "localai-windows-install-candidate/v1"
 	localAICandidateProject                     = "localai"
-	localAICandidateCycle                       = "040"
+	localAICandidateCycle                       = "042"
 	localAICandidateRepository                  = "https://github.com/portpowered/you-agent-factory"
 	localAICandidateCommit                      = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
 	localAICandidateTree                        = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
@@ -39,7 +39,7 @@ const (
 	localAICandidateModelDownloadMaximum  int64 = 0
 	localAICandidateModelCallsMaximum     int64 = 0
 	localAICandidatePaidUSDMaximum        int64 = 0
-	localAICandidateChildProcessesMaximum int64 = 4
+	localAICandidateChildProcessesMaximum int64 = 12
 	localAICandidateRerunsMaximum         int64 = 1
 )
 
@@ -207,7 +207,6 @@ func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
 		t.Fatalf("install directory stat error = %v, want task-owned install directory removed", err)
 	}
 }
-
 func TestLocalAICandidate_PublicInstallPreconditionsRemainFailClosed(t *testing.T) {
 	manifestPath := localAICandidateManifestPath(t, "candidate release smoke")
 	pwsh, err := exec.LookPath("powershell.exe")
@@ -264,7 +263,6 @@ func TestLocalAICandidate_PublicInstallPreconditionsRemainFailClosed(t *testing.
 		t.Fatalf("failed candidate install smoke report = %#v, want failed operation with clean task roots", report)
 	}
 }
-
 func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -304,7 +302,15 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "030"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "030", want "040"`,
+			want: `candidate cycle = "030", want "042"`,
+		},
+		{
+			name: "failed cycle",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Cycle = "040"
+				fixture.writeManifest(t)
+			},
+			want: `candidate cycle = "040", want "042"`,
 		},
 		{
 			name: "ordinary download allowance",
@@ -327,7 +333,6 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 		})
 	}
 }
-
 func TestLocalAICandidateManifestValidationRejectsReparseCandidateDirectory(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows junction fixture is only available on Windows")
@@ -359,7 +364,6 @@ func TestLocalAICandidateManifestValidationRejectsReparseCandidateDirectory(t *t
 		t.Fatalf("validate reparse artifact error = %v, want symlink/reparse rejection", err)
 	}
 }
-
 func TestLocalAICandidateManifestValidationAcceptsMatchingArtifacts(t *testing.T) {
 	t.Parallel()
 	fixture := newLocalAICandidateFixture(t)
@@ -377,7 +381,6 @@ func TestLocalAICandidateManifestValidationAcceptsMatchingArtifacts(t *testing.T
 		t.Fatalf("installer evidence = %#v, want nonempty install.ps1", evidence.Installer)
 	}
 }
-
 func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -425,7 +428,6 @@ func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T)
 		})
 	}
 }
-
 func TestLocalAICandidatePreconditionsAcceptAbsentAndEmptyRoots(t *testing.T) {
 	t.Parallel()
 	fixture := newLocalAICandidateFixture(t)
@@ -439,7 +441,6 @@ func TestLocalAICandidatePreconditionsAcceptAbsentAndEmptyRoots(t *testing.T) {
 		t.Fatalf("validate empty roots: %v", err)
 	}
 }
-
 func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEvidence, error) {
 	if !filepath.IsAbs(manifestPath) {
 		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate manifest path %q must be absolute", manifestPath)

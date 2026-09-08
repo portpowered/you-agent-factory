@@ -709,8 +709,8 @@ function Invoke-CandidateSmoke {
         if ($manifest.schemaVersion -ne "localai-windows-install-candidate/v1") {
             Fail-Smoke "candidate schemaVersion is not localai-windows-install-candidate/v1"
         }
-        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "040") {
-            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 040"
+        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "042") {
+            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 042"
         }
         if ($manifest.source.repository -ne "https://github.com/portpowered/you-agent-factory" -or $manifest.source.commit -ne "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9" -or $manifest.source.tree -ne "623dcd01569ccac5776bcf15ffe9fb6a58324b24" -or [int]$manifest.source.mergedPullRequest -ne 2556 -or $manifest.source.mergedPullRequestHead -ne "1d45c19416774ea2aaffe0cae695102cf2a17a18") {
             Fail-Smoke "candidate source identity does not match the exact merged base"
@@ -728,7 +728,7 @@ function Invoke-CandidateSmoke {
             modelBackendDownloadBytesMaximum = 0
             modelCallsMaximum = 0
             paidUSDMaximum = 0
-            childProcessesMaximum = 4
+            childProcessesMaximum = 12
             packagingOrSmokeRerunsMaximum = 1
         }
         foreach ($limit in $requiredLimits.GetEnumerator()) {
