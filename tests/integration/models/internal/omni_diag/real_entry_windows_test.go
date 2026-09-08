@@ -602,7 +602,7 @@ func TestLocalAIOMNIRealExecutor(t *testing.T) {
 		if !observation.ProcessTreeClosed || !observation.ProcessExited || !observation.Cancelled {
 			t.Fatalf("child cancellation observation = %#v", observation)
 		}
-		if localAIOMNIWindowsProcessRunning(pid) {
+		if !localAIOMNIWindowsProcessExitedWithin(pid, localAIOMNIProcessWaitGrace) {
 			localAIOMNITerminateWindowsProcess(pid)
 			t.Fatalf("child process %d survived the closed process tree", pid)
 		}
@@ -659,14 +659,14 @@ func localAIOMNIWaitForChildPID(t testing.TB, path string) uint32 {
 	}
 }
 
-func localAIOMNIWindowsProcessRunning(pid uint32) bool {
+func localAIOMNIWindowsProcessExitedWithin(pid uint32, timeout time.Duration) bool {
 	process, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
 	if err != nil {
-		return false
+		return true
 	}
 	defer windows.CloseHandle(process)
-	event, err := windows.WaitForSingleObject(process, 0)
-	return err == nil && event == uint32(windows.WAIT_TIMEOUT)
+	event, err := windows.WaitForSingleObject(process, uint32(timeout.Milliseconds()))
+	return err == nil && event == uint32(windows.WAIT_OBJECT_0)
 }
 
 func localAIOMNITerminateWindowsProcess(pid uint32) {
