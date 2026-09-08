@@ -612,8 +612,58 @@ functional-test-viz:
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL)),$(findstring sh.exe,$(SHELL)),$(findstring bash.exe,$(SHELL))))
 test-release:
-	$(GO) test -short $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+	@set -eu; \
+	release_root="$$(mktemp -d "$${TMPDIR:-/tmp}/infinite-you-release.XXXXXX")"; \
+	cleanup() { rm -rf "$$release_root"; }; \
+	trap cleanup EXIT HUP INT TERM; \
+	artifact_path="$$release_root/$(BINARY_NAME)"; \
+	GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o "$$artifact_path" $(CMD_PATH); \
+	chmod a-w "$$artifact_path"; \
+	artifact_size="$$(wc -c < "$$artifact_path" | tr -d '[:space:]')"; \
+	if command -v sha256sum >/dev/null 2>&1; then artifact_sha256="$$(sha256sum "$$artifact_path" | awk '{print $$1}')"; else artifact_sha256="$$(shasum -a 256 "$$artifact_path" | awk '{print $$1}')"; fi; \
+	source_commit="$$(git rev-parse HEAD)"; \
+	source_tree="$$(git rev-parse 'HEAD^{tree}')"; \
+	tool_path="$$(command -v $(GO))"; \
+	tool_version="$$($(GO) version)"; \
+	goos="$$($(GO) env GOOS)"; \
+	goarch="$$($(GO) env GOARCH)"; \
+	descriptor_path="$$artifact_path"; descriptor_tool_path="$$tool_path"; \
+	if command -v cygpath >/dev/null 2>&1; then descriptor_path="$$(cygpath -w "$$artifact_path")"; descriptor_tool_path="$$(cygpath -w "$$tool_path")"; fi; \
+	printf '%s\n' "release prebuilt artifact:" "  path=$$descriptor_path" "  size=$$artifact_size" "  sha256=$$artifact_sha256" "  source_commit=$$source_commit" "  source_tree=$$source_tree" "  tool_path=$$descriptor_tool_path" "  tool_version=$$tool_version" "  goos=$$goos" "  goarch=$$goarch"; \
+	unset INFINITE_YOU_RELEASE_LOCAL_GO_INSTALL_SMOKE INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE; \
+	export INFINITE_YOU_RELEASE_PREBUILT_REQUIRED=1 INFINITE_YOU_RELEASE_PREBUILT_PATH="$$descriptor_path" INFINITE_YOU_RELEASE_PREBUILT_SHA256="$$artifact_sha256" INFINITE_YOU_RELEASE_PREBUILT_SIZE="$$artifact_size" INFINITE_YOU_RELEASE_PREBUILT_SOURCE_COMMIT="$$source_commit" INFINITE_YOU_RELEASE_PREBUILT_SOURCE_TREE="$$source_tree" INFINITE_YOU_RELEASE_PREBUILT_TOOL_PATH="$$descriptor_tool_path" INFINITE_YOU_RELEASE_PREBUILT_TOOL_VERSION="$$tool_version" INFINITE_YOU_RELEASE_PREBUILT_GOOS="$$goos" INFINITE_YOU_RELEASE_PREBUILT_GOARCH="$$goarch"; \
+	$(GO) test -short -p=4 -parallel=4 $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+else
+test-release:
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$root = Join-Path ([System.IO.Path]::GetTempPath()) ('infinite-you-release-' + [System.Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $$root -Force | Out-Null; $$status = 1; try { $$artifact = Join-Path $$root '$(BINARY_NAME)'; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o $$artifact $(CMD_PATH); if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; Set-ItemProperty -LiteralPath $$artifact -Name IsReadOnly -Value $$true; $$item = Get-Item -LiteralPath $$artifact; $$artifactSize = [string]$$item.Length; $$sha256 = [System.Security.Cryptography.SHA256]::Create(); try { $$artifactSHA256 = [System.BitConverter]::ToString($$sha256.ComputeHash([System.IO.File]::ReadAllBytes($$artifact))).Replace('-', '').ToLowerInvariant() } finally { $$sha256.Dispose() }; $$sourceCommit = (& git rev-parse HEAD).Trim(); $$sourceTree = (& git rev-parse 'HEAD^{tree}').Trim(); $$toolPath = (Get-Command '$(GO)' -ErrorAction Stop).Source; $$toolVersion = (& '$(GO)' version).Trim(); $$goos = (& '$(GO)' env GOOS).Trim(); $$goarch = (& '$(GO)' env GOARCH).Trim(); Write-Output 'release prebuilt artifact:'; Write-Output ('  path=' + $$artifact); Write-Output ('  size=' + $$artifactSize); Write-Output ('  sha256=' + $$artifactSHA256); Write-Output ('  source_commit=' + $$sourceCommit); Write-Output ('  source_tree=' + $$sourceTree); Write-Output ('  tool_path=' + $$toolPath); Write-Output ('  tool_version=' + $$toolVersion); Write-Output ('  goos=' + $$goos); Write-Output ('  goarch=' + $$goarch); Remove-Item Env:INFINITE_YOU_RELEASE_LOCAL_GO_INSTALL_SMOKE -ErrorAction SilentlyContinue; Remove-Item Env:INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE -ErrorAction SilentlyContinue; $$env:INFINITE_YOU_RELEASE_PREBUILT_REQUIRED = '1'; $$env:INFINITE_YOU_RELEASE_PREBUILT_PATH = $$artifact; $$env:INFINITE_YOU_RELEASE_PREBUILT_SHA256 = $$artifactSHA256; $$env:INFINITE_YOU_RELEASE_PREBUILT_SIZE = $$artifactSize; $$env:INFINITE_YOU_RELEASE_PREBUILT_SOURCE_COMMIT = $$sourceCommit; $$env:INFINITE_YOU_RELEASE_PREBUILT_SOURCE_TREE = $$sourceTree; $$env:INFINITE_YOU_RELEASE_PREBUILT_TOOL_PATH = $$toolPath; $$env:INFINITE_YOU_RELEASE_PREBUILT_TOOL_VERSION = $$toolVersion; $$env:INFINITE_YOU_RELEASE_PREBUILT_GOOS = $$goos; $$env:INFINITE_YOU_RELEASE_PREBUILT_GOARCH = $$goarch; & '$(GO)' test -short -p=4 -parallel=4 $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT); $$status = $$LASTEXITCODE } finally { if (Test-Path -LiteralPath $$root) { Remove-Item -LiteralPath $$root -Recurse -Force } }; exit $$status"
+endif
+else
+test-release:
+	@set -eu; \
+	release_root="$$(mktemp -d "$${TMPDIR:-/tmp}/infinite-you-release.XXXXXX")"; \
+	cleanup() { rm -rf "$$release_root"; }; \
+	trap cleanup EXIT HUP INT TERM; \
+	artifact_path="$$release_root/$(BINARY_NAME)"; \
+	GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o "$$artifact_path" $(CMD_PATH); \
+	chmod a-w "$$artifact_path"; \
+	artifact_size="$$(wc -c < "$$artifact_path" | tr -d '[:space:]')"; \
+	if command -v sha256sum >/dev/null 2>&1; then artifact_sha256="$$(sha256sum "$$artifact_path" | awk '{print $$1}')"; else artifact_sha256="$$(shasum -a 256 "$$artifact_path" | awk '{print $$1}')"; fi; \
+	source_commit="$$(git rev-parse HEAD)"; \
+	source_tree="$$(git rev-parse 'HEAD^{tree}')"; \
+	tool_path="$$(command -v $(GO))"; \
+	tool_version="$$($(GO) version)"; \
+	goos="$$($(GO) env GOOS)"; \
+	goarch="$$($(GO) env GOARCH)"; \
+	descriptor_path="$$artifact_path"; descriptor_tool_path="$$tool_path"; \
+	if command -v cygpath >/dev/null 2>&1; then descriptor_path="$$(cygpath -w "$$artifact_path")"; descriptor_tool_path="$$(cygpath -w "$$tool_path")"; fi; \
+	printf '%s\n' "release prebuilt artifact:" "  path=$$descriptor_path" "  size=$$artifact_size" "  sha256=$$artifact_sha256" "  source_commit=$$source_commit" "  source_tree=$$source_tree" "  tool_path=$$descriptor_tool_path" "  tool_version=$$tool_version" "  goos=$$goos" "  goarch=$$goarch"; \
+	unset INFINITE_YOU_RELEASE_LOCAL_GO_INSTALL_SMOKE INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE; \
+	export INFINITE_YOU_RELEASE_PREBUILT_REQUIRED=1 INFINITE_YOU_RELEASE_PREBUILT_PATH="$$descriptor_path" INFINITE_YOU_RELEASE_PREBUILT_SHA256="$$artifact_sha256" INFINITE_YOU_RELEASE_PREBUILT_SIZE="$$artifact_size" INFINITE_YOU_RELEASE_PREBUILT_SOURCE_COMMIT="$$source_commit" INFINITE_YOU_RELEASE_PREBUILT_SOURCE_TREE="$$source_tree" INFINITE_YOU_RELEASE_PREBUILT_TOOL_PATH="$$descriptor_tool_path" INFINITE_YOU_RELEASE_PREBUILT_TOOL_VERSION="$$tool_version" INFINITE_YOU_RELEASE_PREBUILT_GOOS="$$goos" INFINITE_YOU_RELEASE_PREBUILT_GOARCH="$$goarch"; \
+	$(GO) test -short -p=4 -parallel=4 $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+endif
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
