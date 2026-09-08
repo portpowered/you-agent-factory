@@ -17,9 +17,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/locking"
+	"golang.org/x/sys/windows"
 )
 
 var errLocalAIOMNIReportInterrupted = errors.New("localai omni report interruption")
+var errLocalAIOMNIRealDisabled = errors.New("localai omni real selector is disabled")
 
 type localAIOMNIControlledExecutor struct {
 	Observation localAIOMNIObservation
@@ -71,11 +73,17 @@ func localAIOMNIInvocationValues(enable, path string) (localAIOMNIInvocation, er
 	return localAIOMNIInvocation{Manifest: m, ManifestSHA256: hash, RunID: "real-" + m.Selector + "-" + hash[:12], EvidenceKind: localAIOMNIReal, Command: localAIOMNICommand(m)}, nil
 }
 func localAIOMNIReadManifest(path string) (localAIOMNIManifest, string, error) {
-	info, err := os.Lstat(path)
+	return localAIOMNIReadManifestWith(path, localAIOMNIWindowsPathMetadata)
+}
+func localAIOMNIReadManifestWith(path string, metadata localAIOMNIPathMetadataFunc) (localAIOMNIManifest, string, error) {
+	if err := localAIOMNIRejectReparsePath(path, "manifest", metadata); err != nil {
+		return localAIOMNIManifest{}, "", err
+	}
+	info, _, err := metadata(path)
 	if err != nil {
 		return localAIOMNIManifest{}, "", err
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > localAIOMNIMaxManifest {
+	if info == nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > localAIOMNIMaxManifest {
 		return localAIOMNIManifest{}, "", errors.New("manifest is not bounded")
 	}
 	body, err := os.ReadFile(path)
@@ -97,12 +105,207 @@ func localAIOMNIReadManifest(path string) (localAIOMNIManifest, string, error) {
 	}
 	return m, sha256Hex(body), nil
 }
+
+func localAIOMNICommand(m localAIOMNIManifest) localAICommandSpec {
+	prompt, media := "Return this exact token: "+m.Text.Token, ""
+	if m.Selector == localAIOMNIImage {
+		prompt, media = "Name every required fact visible in the image: "+strings.Join(m.Image.RequiredFacts, ", "), "image=@"+m.Image.Path
+	}
+	if m.Selector == localAIOMNIVideo {
+		prompt, media = fmt.Sprintf("Report %s/%s and %s/%s, and the numeric transition time in milliseconds.", m.Video.Phase1, m.Video.Phase1Color, m.Video.Phase2, m.Video.Phase2Color), "video=@"+m.Video.Path
+	}
+	args := []string{"--json", "models", "invoke", m.Model.Name, "--operation", "OMNI", "--input", "prompt=" + prompt}
+	if media != "" {
+		args = append(args, "--input", media)
+	}
+	return localAICommandSpec{BinaryPath: m.CLI.Path, Arguments: args}
+}
+
+func TestLocalAIOMNIReparseManifestAdmission(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name  string
+		final bool
+	}{
+		{name: "final", final: true},
+		{name: "existing-parent", final: false},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			_, originalPath := localAIOMNIRealManifestForTest(t, root, localAIOMNIText)
+			manifestPath := filepath.Join(root, "nested", "manifest.json")
+			if err := os.MkdirAll(filepath.Dir(manifestPath), 0o700); err != nil {
+				t.Fatalf("manifest directory: %v", err)
+			}
+			body, err := os.ReadFile(originalPath)
+			if err != nil {
+				t.Fatalf("read manifest fixture: %v", err)
+			}
+			if err := os.WriteFile(manifestPath, body, 0o600); err != nil {
+				t.Fatalf("write manifest fixture: %v", err)
+			}
+			flagged := filepath.Clean(manifestPath)
+			if !testCase.final {
+				flagged = filepath.Dir(flagged)
+			}
+			var calls []string
+			metadata := func(path string) (os.FileInfo, uint32, error) {
+				calls = append(calls, filepath.Clean(path))
+				info, err := os.Lstat(path)
+				if err != nil {
+					return nil, 0, err
+				}
+				if filepath.Clean(path) == flagged {
+					return info, windows.FILE_ATTRIBUTE_REPARSE_POINT, nil
+				}
+				return info, 0, nil
+			}
+			_, _, err = localAIOMNIReadManifestWith(manifestPath, metadata)
+			localAIOMNIReparseErrorMust(t, err, "manifest", testCase.final, map[bool]int{true: 0, false: 1}[testCase.final], calls, manifestPath, flagged)
+		})
+	}
+}
+
+func TestLocalAIOMNIReparseArtifactAdmissionStopsBeforeHash(t *testing.T) {
+	t.Parallel()
+	for _, artifact := range []struct {
+		label string
+		path  func(localAIOMNIManifest) string
+		hash  func(localAIOMNIManifest) string
+	}{
+		{label: "CLI", path: func(m localAIOMNIManifest) string { return m.CLI.Path }, hash: func(m localAIOMNIManifest) string { return m.CLI.SHA256 }},
+		{label: "image fixture", path: func(m localAIOMNIManifest) string { return m.Image.Path }, hash: func(m localAIOMNIManifest) string { return m.Image.SHA256 }},
+		{label: "video fixture", path: func(m localAIOMNIManifest) string { return m.Video.Path }, hash: func(m localAIOMNIManifest) string { return m.Video.SHA256 }},
+	} {
+		artifact := artifact
+		t.Run(artifact.label, func(t *testing.T) {
+			t.Parallel()
+			for _, final := range []bool{true, false} {
+				final := final
+				t.Run(map[bool]string{true: "final", false: "existing-parent"}[final], func(t *testing.T) {
+					root := t.TempDir()
+					manifest := localAIOMNIManifestForTest(t, root)
+					path, expected := artifact.path(manifest), artifact.hash(manifest)
+					flagged := filepath.Clean(path)
+					if !final {
+						flagged = filepath.Dir(flagged)
+					}
+					var calls []string
+					metadata := func(path string) (os.FileInfo, uint32, error) {
+						calls = append(calls, filepath.Clean(path))
+						info, err := os.Lstat(path)
+						if err != nil {
+							return nil, 0, err
+						}
+						if filepath.Clean(path) == flagged {
+							return info, windows.FILE_ATTRIBUTE_REPARSE_POINT, nil
+						}
+						return info, 0, nil
+					}
+					var identityCalls atomic.Int32
+					err := localAIOMNIFileWith(path, expected, artifact.label, metadata, func(string) (localAIFileIdentity, bool) {
+						identityCalls.Add(1)
+						return localAIFileIdentity{Bytes: 1, SHA256: expected}, true
+					})
+					localAIOMNIReparseErrorMust(t, err, artifact.label, final, map[bool]int{true: 0, false: 1}[final], calls, path, flagged)
+					if got := identityCalls.Load(); got != 0 {
+						t.Fatalf("identity calls=%d, want zero", got)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestLocalAIOMNIReparseWalkerBounds(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	info, err := os.Lstat(root)
+	if err != nil {
+		t.Fatalf("root metadata: %v", err)
+	}
+	path := root
+	for i := 0; i < 32; i++ {
+		path = filepath.Join(path, fmt.Sprintf("component-%02d", i))
+	}
+	var calls atomic.Int32
+	metadata := func(string) (os.FileInfo, uint32, error) {
+		calls.Add(1)
+		return info, 0, nil
+	}
+	if err := localAIOMNIRejectReparsePath(path, "bounds", metadata); err != nil {
+		t.Fatalf("bounded walk: %v", err)
+	}
+	var want int32
+	current := filepath.Clean(path)
+	for {
+		want++
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	if got := calls.Load(); got != want {
+		t.Fatalf("metadata calls=%d, want %d final-to-root components", got, want)
+	}
+	var invalidCalls atomic.Int32
+	if err := localAIOMNIRejectReparsePath("relative", "bounds", func(string) (os.FileInfo, uint32, error) {
+		invalidCalls.Add(1)
+		return info, 0, nil
+	}); err == nil || invalidCalls.Load() != 0 {
+		t.Fatalf("relative path err=%v metadata calls=%d", err, invalidCalls.Load())
+	}
+	missing := filepath.Join(root, "existing", "missing.json")
+	missingParent := filepath.Dir(missing)
+	var missingCalls []string
+	missingMetadata := func(path string) (os.FileInfo, uint32, error) {
+		missingCalls = append(missingCalls, filepath.Clean(path))
+		if filepath.Clean(path) == filepath.Clean(missing) {
+			return nil, 0, os.ErrNotExist
+		}
+		if filepath.Clean(path) == filepath.Clean(missingParent) {
+			return info, windows.FILE_ATTRIBUTE_REPARSE_POINT, nil
+		}
+		return info, 0, nil
+	}
+	if err := localAIOMNIRejectReparsePath(missing, "bounds", missingMetadata); err == nil {
+		t.Fatal("missing final path did not inspect existing parent reparse")
+	} else {
+		localAIOMNIReparseErrorMust(t, err, "bounds", false, 1, missingCalls, missing, missingParent)
+	}
+}
+
+func localAIOMNIReparseErrorMust(t *testing.T, err error, label string, final bool, index int, calls []string, path, flagged string) {
+	t.Helper()
+	var reparseErr *localAIOMNIReparsePathError
+	if !errors.As(err, &reparseErr) || reparseErr.Label != label || reparseErr.Final != final || reparseErr.ComponentIndex != index {
+		t.Fatalf("reparse error=%v, want label=%q final=%t index=%d", err, label, final, index)
+	}
+	if strings.Contains(err.Error(), filepath.Clean(path)) || strings.Contains(err.Error(), filepath.Clean(flagged)) {
+		t.Fatalf("reparse error leaked path: %q", err)
+	}
+	wantCalls := []string{filepath.Clean(path)}
+	if !final {
+		wantCalls = append(wantCalls, filepath.Clean(flagged))
+	}
+	if len(calls) != len(wantCalls) {
+		t.Fatalf("metadata calls=%v, want ordered prefix=%v", calls, wantCalls)
+	}
+	for i := range wantCalls {
+		if calls[i] != wantCalls[i] {
+			t.Fatalf("metadata calls=%v, want %v", calls, wantCalls)
+		}
+	}
+}
 func localAIOMNIValidateReport(r localAIOMNIReport) error {
 	if r.Schema != localAIOMNIEvidenceSchema || (r.EvidenceKind != localAIOMNIControlled && r.EvidenceKind != localAIOMNIReal) || r.RunID == "" || r.Platform == "" || r.Architecture == "" || !r.Redacted || (r.Status != "PASS" && r.Status != "FAIL" && r.Status != "INCONCLUSIVE") {
 		return errors.New("report identity or status is invalid")
 	}
 	admission := r.Failure != nil && r.Failure.Assertion == "manifest admission"
-	if err := errors.Join(localAIOMNIRequire(localAIOMNISelector(r.Selector) || admission, "report selector or manifest identity is invalid"), localAIOMNIRequire(r.ManifestSHA256 == "" || isLocalAISHA256(r.ManifestSHA256), "report selector or manifest identity is invalid"), localAIOMNIRequire(len(r.Command.Arguments) <= localAIOMNIMaxArguments && r.Command.SecretsRedacted, "command evidence is invalid")); err != nil {
+	if err := errors.Join(localAIOMNIRequire((r.Selector == localAIOMNIText || r.Selector == localAIOMNIImage || r.Selector == localAIOMNIVideo) || admission, "report selector or manifest identity is invalid"), localAIOMNIRequire(r.ManifestSHA256 == "" || isLocalAISHA256(r.ManifestSHA256), "report selector or manifest identity is invalid"), localAIOMNIRequire(len(r.Command.Arguments) <= localAIOMNIMaxArguments && r.Command.SecretsRedacted, "command evidence is invalid")); err != nil {
 		return err
 	}
 	if r.EvidenceKind == localAIOMNIControlled && r.Activity != (localAIOMNIActivity{}) {

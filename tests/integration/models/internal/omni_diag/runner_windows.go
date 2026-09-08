@@ -46,10 +46,9 @@ const (
 )
 
 var (
-	errLocalAIOMNIRealDisabled = errors.New("localai omni real selector is disabled")
-	localAIOMNITransition      = regexp.MustCompile(`(?i)(?:transition|change|switch|midpoint|at)[^0-9]{0,32}([0-9]{1,6})\s*(?:ms|milliseconds)\b`)
-	localAIOMNIPathPattern     = regexp.MustCompile(`(?i)(?:[a-z]:\\|\\\\)[^\s"<>]+`)
-	localAIOMNISecretPattern   = regexp.MustCompile(`(?i)(hf_token=|password=|api_key=|access_token=|x-amz-signature=|signed_url=|authorization:\s*|bearer\s+)[^\s,;]+`)
+	localAIOMNITransition    = regexp.MustCompile(`(?i)(?:transition|change|switch|midpoint|at)[^0-9]{0,32}([0-9]{1,6})\s*(?:ms|milliseconds)\b`)
+	localAIOMNIPathPattern   = regexp.MustCompile(`(?i)(?:[a-z]:\\|\\\\)[^\s"<>]+`)
+	localAIOMNISecretPattern = regexp.MustCompile(`(?i)(hf_token=|password=|api_key=|access_token=|x-amz-signature=|signed_url=|authorization:\s*|bearer\s+)[^\s,;]+`)
 )
 
 type (
@@ -233,7 +232,86 @@ type (
 		Downloads        int64 `json:"downloads"`
 		ModelCalls       int64 `json:"modelCalls"`
 	}
-	localAIOMNISnapshot = localAIRealCacheTree
+	localAIOMNIPathMetadataFunc func(string) (os.FileInfo, uint32, error)
+	localAIOMNIReparsePathError struct {
+		Label          string
+		ComponentIndex int
+		Final          bool
+	}
+	localAIRealRelease struct {
+		Checked           bool `json:"checked"`
+		InspectionFailed  bool `json:"inspectionFailed"`
+		ProcessTreeClosed bool `json:"processTreeClosed"`
+		OwnedProcesses    int  `json:"ownedProcesses"`
+		OwnedListeners    int  `json:"ownedListeners"`
+		OwnedLeases       int  `json:"ownedLeases"`
+		PartialArtifacts  int  `json:"partialArtifacts"`
+	}
+	localAIRealFailure struct {
+		Owner     string `json:"owner"`
+		Assertion string `json:"assertion"`
+		Expected  string `json:"expected"`
+		Observed  string `json:"observed"`
+	}
+	localAIRealArtifact struct {
+		Kind      string `json:"kind"`
+		Path      string `json:"pathIdentity"`
+		MediaType string `json:"mediaType"`
+		Bytes     int64  `json:"bytes"`
+		SHA256    string `json:"sha256"`
+	}
+	localAICommandSpec struct {
+		BinaryPath string
+		Arguments  []string
+	}
+	localAIRealRoots struct {
+		Work, Profile, Cache, HFHome, HFCache, Temp, Output, Streams string
+	}
+	localAICommandObservation struct {
+		Started, ProcessExited, TimedOut, ProcessTreeClosed bool
+		ExitCode                                            int
+		Stdout, Stderr                                      []byte
+		StdoutTruncated, StderrTruncated                    bool
+		OwnedProcesses, OwnedListeners, OwnedLeases         int
+	}
+	localAIBudgetLimits struct {
+		ModelCalls    int64 `json:"modelCalls"`
+		DownloadBytes int64 `json:"downloadBytes"`
+	}
+	localAIBudgetConsumed struct {
+		ModelCalls    int64 `json:"modelCalls"`
+		DownloadBytes int64 `json:"downloadBytes"`
+	}
+	localAIBudgetReservation struct {
+		ID      string `json:"id"`
+		Journey string `json:"journey"`
+		Kind    string `json:"kind"`
+		Amount  int64  `json:"amount"`
+		State   string `json:"state"`
+	}
+	localAIBudgetLedger struct {
+		Schema       string                     `json:"schema"`
+		RunID        string                     `json:"runId"`
+		Limits       localAIBudgetLimits        `json:"limits"`
+		Consumed     localAIBudgetConsumed      `json:"consumed"`
+		Reservations []localAIBudgetReservation `json:"reservations"`
+	}
+	localAIBudgetError struct {
+		Code     string
+		Consumed int64
+		Limit    int64
+	}
+	localAIFileIdentity struct {
+		Bytes  int64
+		SHA256 string
+	}
+	localAIRealCacheTree struct {
+		IdentitySHA256   string
+		Entries          int
+		Files            int
+		Bytes            int64
+		PartialArtifacts int
+	}
 )
 
 func (r localAIOMNIRunner) Run(ctx context.Context, in localAIOMNIInvocation) (localAIOMNIReport, error) {
@@ -380,7 +458,7 @@ func localAIOMNIAdmit(in localAIOMNIInvocation) error {
 	return errors.Join(localAIOMNIRequire(in.EvidenceKind == localAIOMNIControlled || in.EvidenceKind == localAIOMNIReal, "evidence kind is invalid"), localAIOMNIRequire(strings.TrimSpace(in.RunID) != "" && len(in.RunID) <= localAIOMNIMaxIdentity && isLocalAISHA256(in.ManifestSHA256), "run or manifest identity is invalid"), localAIOMNIValidateManifest(in.Manifest), localAIOMNIRequire(in.Command.BinaryPath == in.Manifest.CLI.Path && filepath.IsAbs(in.Command.BinaryPath) && len(in.Command.Arguments) > 0 && len(in.Command.Arguments) <= localAIOMNIMaxArguments, "command does not match immutable admission"))
 }
 func localAIOMNIValidateManifest(m localAIOMNIManifest) error {
-	return errors.Join(localAIOMNIRequire(m.Schema == localAIOMNIInputSchema && localAIOMNISelector(m.Selector), "manifest schema or selector is invalid"), localAIOMNIFile(m.CLI.Path, m.CLI.SHA256, "CLI"), localAIOMNIIdentities(m.Model.Name, m.Model.Identity, m.Backend.Identity), localAIOMNIRequire(strings.TrimSpace(m.Text.Token) != "" && len(m.Text.Token) <= localAIOMNIMaxFailure && !strings.ContainsAny(m.Text.Token, "\r\n"), "text token is invalid"), localAIOMNIFile(m.Image.Path, m.Image.SHA256, "image fixture"), localAIOMNIFacts(m.Image.RequiredFacts), localAIOMNIFile(m.Video.Path, m.Video.SHA256, "video fixture"), localAIOMNIIdentities(m.Video.Phase1, m.Video.Phase1Color, m.Video.Phase2, m.Video.Phase2Color), localAIOMNIRequire(m.Video.TransitionStartMilliseconds >= 0 && m.Video.TransitionEndMilliseconds >= m.Video.TransitionStartMilliseconds && m.Video.TransitionEndMilliseconds <= 24*60*60*1000, "video timing window is invalid"), localAIOMNIRootSet(m.Isolation), localAIOMNIRequire(m.Isolation.Host == "127.0.0.1" && m.Isolation.Port >= 1 && m.Isolation.Port <= 65535 && m.Isolation.NetworkPolicy == localAIOMNINetworkPolicy, "isolation listener or network policy is invalid"), localAIOMNIRequire(m.Limits.TimeoutSeconds > 0 && m.Limits.TimeoutSeconds <= 24*60*60 && m.Limits.Processes > 0 && m.Limits.Processes <= 128 && m.Limits.DownloadBytes >= 0 && m.Limits.ModelCalls > 0 && m.Limits.ModelCalls <= 1000, "execution limits are invalid"), localAIOMNIAbs(m.Evidence.ReportPath), localAIOMNIRequire(localAIOMNIAbs(m.Evidence.LedgerPath) == nil && !strings.EqualFold(filepath.Clean(m.Evidence.ReportPath), filepath.Clean(m.Evidence.LedgerPath)), "evidence paths are invalid"))
+	return errors.Join(localAIOMNIRequire(m.Schema == localAIOMNIInputSchema && (m.Selector == localAIOMNIText || m.Selector == localAIOMNIImage || m.Selector == localAIOMNIVideo), "manifest schema or selector is invalid"), localAIOMNIFile(m.CLI.Path, m.CLI.SHA256, "CLI"), localAIOMNIIdentities(m.Model.Name, m.Model.Identity, m.Backend.Identity), localAIOMNIRequire(strings.TrimSpace(m.Text.Token) != "" && len(m.Text.Token) <= localAIOMNIMaxFailure && !strings.ContainsAny(m.Text.Token, "\r\n"), "text token is invalid"), localAIOMNIFile(m.Image.Path, m.Image.SHA256, "image fixture"), localAIOMNIFacts(m.Image.RequiredFacts), localAIOMNIFile(m.Video.Path, m.Video.SHA256, "video fixture"), localAIOMNIIdentities(m.Video.Phase1, m.Video.Phase1Color, m.Video.Phase2, m.Video.Phase2Color), localAIOMNIRequire(m.Video.TransitionStartMilliseconds >= 0 && m.Video.TransitionEndMilliseconds >= m.Video.TransitionStartMilliseconds && m.Video.TransitionEndMilliseconds <= 24*60*60*1000, "video timing window is invalid"), localAIOMNIRootSet(m.Isolation), localAIOMNIRequire(m.Isolation.Host == "127.0.0.1" && m.Isolation.Port >= 1 && m.Isolation.Port <= 65535 && m.Isolation.NetworkPolicy == localAIOMNINetworkPolicy, "isolation listener or network policy is invalid"), localAIOMNIRequire(m.Limits.TimeoutSeconds > 0 && m.Limits.TimeoutSeconds <= 24*60*60 && m.Limits.Processes > 0 && m.Limits.Processes <= 128 && m.Limits.DownloadBytes >= 0 && m.Limits.ModelCalls > 0 && m.Limits.ModelCalls <= 1000, "execution limits are invalid"), localAIOMNIAbs(m.Evidence.ReportPath), localAIOMNIRequire(localAIOMNIAbs(m.Evidence.LedgerPath) == nil && !strings.EqualFold(filepath.Clean(m.Evidence.ReportPath), filepath.Clean(m.Evidence.LedgerPath)), "evidence paths are invalid"))
 }
 func localAIOMNIRequire(ok bool, msg string) error {
 	if ok {
@@ -389,12 +467,7 @@ func localAIOMNIRequire(ok bool, msg string) error {
 	return errors.New(msg)
 }
 func localAIOMNIIdentities(values ...string) error {
-	for _, value := range values {
-		if err := localAIOMNIIdentity(value, "manifest identity"); err != nil {
-			return err
-		}
-	}
-	return nil
+	return localAIOMNIRequire(!slices.ContainsFunc(values, func(value string) bool { return localAIOMNIIdentity(value, "manifest identity") != nil }), "manifest identity is invalid")
 }
 func localAIOMNIFacts(values []string) error {
 	if len(values) == 0 || len(values) > localAIOMNIMaxFacts {
@@ -430,36 +503,59 @@ func localAIOMNIIdentity(value, label string) error {
 func localAIOMNIAbs(path string) error {
 	return localAIOMNIRequire(strings.TrimSpace(path) != "" && filepath.IsAbs(path) && !strings.ContainsAny(path, "\r\n*?"), "path is not absolute and bounded")
 }
+func (err *localAIOMNIReparsePathError) Error() string {
+	return fmt.Sprintf("%s path component %d is a Windows reparse point", err.Label, err.ComponentIndex)
+}
+func localAIOMNIWindowsPathMetadata(path string) (os.FileInfo, uint32, error) {
+	name, err := windows.UTF16PtrFromString(filepath.Clean(path))
+	if err != nil {
+		return nil, 0, err
+	}
+	attributes, attributesErr := windows.GetFileAttributes(name)
+	info, infoErr := os.Lstat(path)
+	return info, attributes, errors.Join(infoErr, attributesErr)
+}
+func localAIOMNIRejectReparsePath(path, label string, metadata localAIOMNIPathMetadataFunc) error {
+	if err := localAIOMNIAbs(path); err != nil {
+		return err
+	}
+	if metadata == nil {
+		return errors.New("path metadata reader is required")
+	}
+	current := filepath.Clean(path)
+	for index := 0; ; index++ {
+		_, attributes, err := metadata(current)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err == nil && attributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+			return &localAIOMNIReparsePathError{Label: label, ComponentIndex: index, Final: index == 0}
+		}
+		if filepath.Dir(current) == current {
+			return nil
+		}
+		current = filepath.Dir(current)
+	}
+}
 func localAIOMNIFile(path, expected, label string) error {
-	if err := localAIOMNIAbs(path); err != nil || !isLocalAISHA256(expected) {
+	return localAIOMNIFileWith(path, expected, label, localAIOMNIWindowsPathMetadata, localAIReadFileIdentity)
+}
+func localAIOMNIFileWith(path, expected, label string, metadata localAIOMNIPathMetadataFunc, identity func(string) (localAIFileIdentity, bool)) error {
+	if err := localAIOMNIAbs(path); err != nil || !isLocalAISHA256(expected) || identity == nil {
 		return fmt.Errorf("%s identity is invalid", label)
 	}
-	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 {
+	if err := localAIOMNIRejectReparsePath(path, label, metadata); err != nil {
+		return err
+	}
+	info, _, err := metadata(path)
+	if err != nil || info == nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 {
 		return fmt.Errorf("%s is not a nonempty regular file", label)
 	}
-	identity, ok := localAIReadFileIdentity(path)
-	return localAIOMNIRequire(ok && strings.EqualFold(identity.SHA256, expected), fmt.Sprintf("%s hash mismatch", label))
-}
-func localAIOMNISelector(v string) bool {
-	return v == localAIOMNIText || v == localAIOMNIImage || v == localAIOMNIVideo
+	fileIdentity, ok := identity(path)
+	return localAIOMNIRequire(ok && strings.EqualFold(fileIdentity.SHA256, expected), fmt.Sprintf("%s hash mismatch", label))
 }
 func localAIOMNIRoots(m localAIOMNIManifest) localAIRealRoots {
 	return localAIRealRoots{Work: m.Isolation.WorkRoot, Profile: filepath.Clean(m.Isolation.StateRoot), Cache: filepath.Clean(m.Isolation.CacheRoot), HFHome: filepath.Join(filepath.Dir(filepath.Clean(m.Isolation.StateRoot)), "."+filepath.Base(filepath.Clean(m.Isolation.StateRoot))+"-hf-home"), HFCache: filepath.Join(filepath.Dir(filepath.Clean(m.Isolation.CacheRoot)), "."+filepath.Base(filepath.Clean(m.Isolation.CacheRoot))+"-hf-cache"), Temp: m.Isolation.TempRoot, Output: m.Isolation.OutputRoot, Streams: m.Isolation.StreamsRoot}
-}
-func localAIOMNICommand(m localAIOMNIManifest) localAICommandSpec {
-	prompt, media := "Return this exact token: "+m.Text.Token, ""
-	if m.Selector == localAIOMNIImage {
-		prompt, media = "Name every required fact visible in the image: "+strings.Join(m.Image.RequiredFacts, ", "), "image=@"+m.Image.Path
-	}
-	if m.Selector == localAIOMNIVideo {
-		prompt, media = fmt.Sprintf("Report %s/%s and %s/%s, and the numeric transition time in milliseconds.", m.Video.Phase1, m.Video.Phase1Color, m.Video.Phase2, m.Video.Phase2Color), "video=@"+m.Video.Path
-	}
-	args := []string{"--json", "models", "invoke", m.Model.Name, "--operation", "OMNI", "--input", "prompt=" + prompt}
-	if media != "" {
-		args = append(args, "--input", media)
-	}
-	return localAICommandSpec{BinaryPath: m.CLI.Path, Arguments: args}
 }
 func localAIOMNIFixtureSHA(m localAIOMNIManifest) string {
 	if m.Selector == localAIOMNIImage {
@@ -578,9 +674,9 @@ func localAIOMNISecret(body []byte) bool {
 	value := string(body)
 	return localAIOMNISecretPattern.ReplaceAllString(value, `${1}<redacted>`) != value
 }
-func localAIOMNISnapshotRoots(r localAIRealRoots) (localAIOMNISnapshot, error) {
+func localAIOMNISnapshotRoots(r localAIRealRoots) (localAIRealCacheTree, error) {
 	h := sha256.New()
-	result := localAIOMNISnapshot{}
+	result := localAIRealCacheTree{}
 	if _, err := os.Stat(filepath.Join(r.Work, ".omni-inspection-failure")); err == nil {
 		return result, errors.New("controlled final inspection failure")
 	}
@@ -595,85 +691,8 @@ func localAIOMNISnapshotRoots(r localAIRealRoots) (localAIOMNISnapshot, error) {
 	result.IdentitySHA256 = hex.EncodeToString(h.Sum(nil))
 	return result, nil
 }
-
-type localAIRealRelease struct {
-	Checked           bool `json:"checked"`
-	InspectionFailed  bool `json:"inspectionFailed"`
-	ProcessTreeClosed bool `json:"processTreeClosed"`
-	OwnedProcesses    int  `json:"ownedProcesses"`
-	OwnedListeners    int  `json:"ownedListeners"`
-	OwnedLeases       int  `json:"ownedLeases"`
-	PartialArtifacts  int  `json:"partialArtifacts"`
-}
-type localAIRealFailure struct {
-	Owner     string `json:"owner"`
-	Assertion string `json:"assertion"`
-	Expected  string `json:"expected"`
-	Observed  string `json:"observed"`
-}
-type localAIRealArtifact struct {
-	Kind      string `json:"kind"`
-	Path      string `json:"pathIdentity"`
-	MediaType string `json:"mediaType"`
-	Bytes     int64  `json:"bytes"`
-	SHA256    string `json:"sha256"`
-}
-type localAICommandSpec struct {
-	BinaryPath string
-	Arguments  []string
-}
-type localAIRealRoots struct {
-	Work, Profile, Cache, HFHome, HFCache, Temp, Output, Streams string
-}
-type localAICommandObservation struct {
-	Started, ProcessExited, TimedOut, ProcessTreeClosed bool
-	ExitCode                                            int
-	Stdout, Stderr                                      []byte
-	StdoutTruncated, StderrTruncated                    bool
-	OwnedProcesses, OwnedListeners, OwnedLeases         int
-}
-type localAIBudgetLimits struct {
-	ModelCalls    int64 `json:"modelCalls"`
-	DownloadBytes int64 `json:"downloadBytes"`
-}
-type localAIBudgetConsumed struct {
-	ModelCalls    int64 `json:"modelCalls"`
-	DownloadBytes int64 `json:"downloadBytes"`
-}
-type localAIBudgetReservation struct {
-	ID      string `json:"id"`
-	Journey string `json:"journey"`
-	Kind    string `json:"kind"`
-	Amount  int64  `json:"amount"`
-	State   string `json:"state"`
-}
-type localAIBudgetLedger struct {
-	Schema       string                     `json:"schema"`
-	RunID        string                     `json:"runId"`
-	Limits       localAIBudgetLimits        `json:"limits"`
-	Consumed     localAIBudgetConsumed      `json:"consumed"`
-	Reservations []localAIBudgetReservation `json:"reservations"`
-}
-type localAIBudgetError struct {
-	Code     string
-	Consumed int64
-	Limit    int64
-}
-
 func (err *localAIBudgetError) Error() string {
 	return fmt.Sprintf("budget ledger %s (%d/%d)", err.Code, err.Consumed, err.Limit)
-}
-
-type localAIFileIdentity struct {
-	Bytes  int64
-	SHA256 string
-}
-type localAIRealCacheTree struct {
-	IdentitySHA256   string
-	Entries          int
-	Files            int
-	Bytes            int64
-	PartialArtifacts int
 }
 
 const (
