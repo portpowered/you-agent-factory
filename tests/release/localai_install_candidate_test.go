@@ -25,7 +25,7 @@ const (
 	localAICandidateManifestEnv                 = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
 	localAICandidateSchemaVersion               = "localai-windows-install-candidate/v1"
 	localAICandidateProject                     = "localai"
-	localAICandidateCycle                       = "042"
+	localAICandidateCycle                       = "045"
 	localAICandidateRepository                  = "https://github.com/portpowered/you-agent-factory"
 	localAICandidateCommit                      = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
 	localAICandidateTree                        = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
@@ -302,7 +302,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "030"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "030", want "042"`,
+			want: `candidate cycle = "030", want "045"`,
 		},
 		{
 			name: "failed cycle",
@@ -310,7 +310,15 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "040"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "040", want "042"`,
+			want: `candidate cycle = "040", want "045"`,
+		},
+		{
+			name: "contaminated dependency cycle",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Cycle = "042"
+				fixture.writeManifest(t)
+			},
+			want: `candidate cycle = "042", want "045"`,
 		},
 		{
 			name: "ordinary download allowance",
