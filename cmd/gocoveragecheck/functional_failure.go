@@ -341,10 +341,6 @@ func hasRawFunctionalBearerToken(line string) bool {
 	return false
 }
 
-func compactFunctionalFailureReason(output string) string {
-	return selectFunctionalFailureReasonCandidates(functionalFailureReasonCandidates(output, 0))
-}
-
 func renderFunctionalFailureFallback(output string) string {
 	rendered := renderGoTestEventOutput(output)
 	lines := make([]string, 0)

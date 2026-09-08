@@ -34,9 +34,9 @@ func TestFunctionalFailureReasonRanksTerminalSignals(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := compactFunctionalFailureReason(tc.output)
+			got := selectFunctionalFailureReasonCandidates(functionalFailureReasonCandidates(tc.output, 0))
 			if got != tc.want {
-				t.Fatalf("compactFunctionalFailureReason() = %q, want %q", got, tc.want)
+				t.Fatalf("failure reason selector = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func TestFunctionalFailureReasonBoundsUTF8AndRedactsSecretCandidates(t *testing.
 	t.Parallel()
 
 	long := strings.Repeat("界", 100)
-	bounded := compactFunctionalFailureReason(long)
+	bounded := selectFunctionalFailureReasonCandidates(functionalFailureReasonCandidates(long, 0))
 	if !utf8.ValidString(bounded) || len([]byte(bounded)) > maxTimingFailureReasonLength || !strings.HasSuffix(bounded, "...") {
 		t.Fatalf("bounded reason = %q, valid=%t bytes=%d, want valid <=%d with ellipsis", bounded, utf8.ValidString(bounded), len([]byte(bounded)), maxTimingFailureReasonLength)
 	}
@@ -147,7 +147,7 @@ func TestFunctionalFailureReasonBoundsUTF8AndRedactsSecretCandidates(t *testing.
 	if selected != "fatal error: safe terminal signal" || strings.Contains(selected, "synthetic-secret-sentinel") {
 		t.Fatalf("selected reason = %q, want safe terminal signal without raw secret", selected)
 	}
-	if redacted := compactFunctionalFailureReason("failure: <redacted>"); redacted != "failure: <redacted>" {
+	if redacted := selectFunctionalFailureReasonCandidates(functionalFailureReasonCandidates("failure: <redacted>", 0)); redacted != "failure: <redacted>" {
 		t.Fatalf("redacted reason = %q, want marker preserved", redacted)
 	}
 }
