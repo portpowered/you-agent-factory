@@ -13,6 +13,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
+$expectedCandidateSourceCommit = "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc"
+$expectedCandidateSourceTree = "2c00a0d213fbf878402b66895466053a832a9583"
+
 function Fail-Smoke {
     param([string]$Message)
     throw "install smoke: $Message"
@@ -716,8 +720,8 @@ function Invoke-CandidateSmoke {
         if ($manifest.project -ne "localai" -or $manifest.cycle -ne "063") {
             Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 063"
         }
-        if ($manifest.source.repository -ne "https://github.com/portpowered/you-agent-factory" -or [string]$manifest.source.commit -cnotmatch '^[0-9a-f]{40}$' -or [string]$manifest.source.tree -cnotmatch '^[0-9a-f]{40}$') {
-            Fail-Smoke "candidate source identity is not a canonical final Git commit/tree tuple"
+        if ([string]$manifest.source.repository -cne $expectedCandidateSourceRepository -or [string]$manifest.source.commit -cne $expectedCandidateSourceCommit -or [string]$manifest.source.tree -cne $expectedCandidateSourceTree) {
+            Fail-Smoke "candidate source identity = repository=$($manifest.source.repository) commit=$($manifest.source.commit) tree=$($manifest.source.tree), want repository=$expectedCandidateSourceRepository commit=$expectedCandidateSourceCommit tree=$expectedCandidateSourceTree"
         }
         $version = [string]$manifest.build.candidateVersion
         if ([string]::IsNullOrWhiteSpace($version) -or $version -match '[\\/:*?"<>|\s]') {

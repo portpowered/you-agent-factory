@@ -23,15 +23,12 @@ import (
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
 	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "063", "-p=4", "4"
-	localAICandidateRepository, localAICandidateGitOIDPattern                                                                                                                                                                                                                                                                            = "https://github.com/portpowered/you-agent-factory", `^[0-9a-f]{40}$`
+	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc", "2c00a0d213fbf878402b66895466053a832a9583"
 	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
 	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
 )
 
-var (
-	localAICandidateGitOIDRegexp  = regexp.MustCompile(localAICandidateGitOIDPattern)
-	localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
-)
+var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type localAICandidateManifest struct {
 	SchemaVersion string                     `json:"schemaVersion"`
@@ -136,7 +133,6 @@ type localAICandidateObserverReport struct {
 	ReleaseStatus string                           `json:"releaseStatus"`
 	Observation   localAICandidateObserverEvidence `json:"observation"`
 }
-
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
 	t.Helper()
 	if runtime.GOOS != "windows" {
@@ -306,6 +302,14 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			},
 			want: "candidate limits.ordinaryToolDownloadBytesMaximum = 536870912, want 0",
 		},
+		{name: "changed source commit", edit: func(fixture *localAICandidateFixture) {
+			fixture.manifest.Source.Commit = strings.Repeat("d", 40)
+			fixture.writeManifest(t)
+		}, want: "candidate source identity"},
+		{name: "changed source tree", edit: func(fixture *localAICandidateFixture) {
+			fixture.manifest.Source.Tree = strings.Repeat("e", 40)
+			fixture.writeManifest(t)
+		}, want: "candidate source identity"},
 		{name: "changed Go controls", edit: func(fixture *localAICandidateFixture) {
 			fixture.manifest.Limits.GOFLAGS = "-p=8"
 			fixture.manifest.Limits.GOMAXPROCS = "8"
@@ -602,9 +606,9 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 		return fmt.Errorf("candidate cycle = %q, want %q", manifest.Cycle, localAICandidateCycle)
 	}
 	if manifest.Source.Repository != localAICandidateRepository ||
-		!localAICandidateGitOIDRegexp.MatchString(manifest.Source.Commit) ||
-		!localAICandidateGitOIDRegexp.MatchString(manifest.Source.Tree) {
-		return fmt.Errorf("candidate source identity is not a canonical final Git commit/tree tuple: repository=%q commit=%q tree=%q", manifest.Source.Repository, manifest.Source.Commit, manifest.Source.Tree)
+		manifest.Source.Commit != localAICandidateSourceCommit ||
+		manifest.Source.Tree != localAICandidateSourceTree {
+		return fmt.Errorf("candidate source identity = repository=%q commit=%q tree=%q, want repository=%q commit=%q tree=%q", manifest.Source.Repository, manifest.Source.Commit, manifest.Source.Tree, localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree)
 	}
 	if strings.TrimSpace(manifest.Build.CandidateVersion) == "" || strings.ContainsAny(manifest.Build.CandidateVersion, "/\\\\:*?\"<>|\t\r\n ") {
 		return fmt.Errorf("candidateVersion %q is not a usable release version", manifest.Build.CandidateVersion)
@@ -865,7 +869,6 @@ func sha256File(path string) (string, error) {
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
-
 type localAICandidateFixture struct {
 	root         string
 	manifestPath string
@@ -874,7 +877,6 @@ type localAICandidateFixture struct {
 	roots        []localAICandidateRoot
 	taskPath     string
 }
-
 func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 	t.Helper()
 	root := t.TempDir()
@@ -902,7 +904,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 		SchemaVersion: localAICandidateSchemaVersion,
 		Project:       localAICandidateProject,
 		Cycle:         localAICandidateCycle,
-		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: strings.Repeat("a", 40), Tree: strings.Repeat("b", 40)},
+		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: localAICandidateSourceCommit, Tree: localAICandidateSourceTree},
 		Build: localAICandidateBuild{
 			CandidateVersion:       "1.2.3-snapshot-test",
 			CLIVersion:             "1.2.3-snapshot-test",
