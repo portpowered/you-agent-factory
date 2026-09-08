@@ -10,19 +10,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/locking"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/portpowered/infinite-you/pkg/platform/locking"
 )
 
 const (
@@ -241,7 +242,7 @@ func (r localAIOMNIRunner) Run(ctx context.Context, in localAIOMNIInvocation) (l
 		localAIOMNISet(&report, "FAIL", "harness", "manifest admission", "complete immutable manifest", err.Error())
 		return r.finish(in, roots, report, false)
 	}
-	if err := localAIOMNIPrepare(roots); err != nil {
+	if err := prepareLocalAIRoots(roots); err != nil {
 		localAIOMNISet(&report, "FAIL", "environment", "isolated roots", "all declared roots are creatable", err.Error())
 		return r.finish(in, roots, report, false)
 	}
@@ -303,7 +304,9 @@ func (r localAIOMNIRunner) finish(in localAIOMNIInvocation, roots localAIRealRoo
 		}
 	}
 	if r.writeReport == nil {
-		r.writeReport = writeLocalAIOMNIReportAtomic
+		r.writeReport = func(path string, report localAIOMNIReport) error {
+			return writeLocalAIOMNIReportAtomicHook(path, report, nil)
+		}
 	}
 	if !filepath.IsAbs(in.Manifest.Evidence.ReportPath) {
 		return report, errors.New("diagnostic report path is not absolute")
@@ -314,25 +317,15 @@ func (r localAIOMNIRunner) finish(in localAIOMNIInvocation, roots localAIRealRoo
 	return report, nil
 }
 func localAIOMNIReportFor(in localAIOMNIInvocation) localAIOMNIReport {
-	m := in.Manifest
-	return localAIOMNIReport{Schema: localAIOMNIEvidenceSchema, EvidenceKind: in.EvidenceKind, RunID: in.RunID, Selector: m.Selector, Status: "INCONCLUSIVE", Platform: runtime.GOOS, Architecture: runtime.GOARCH, Redacted: true, ManifestSHA256: in.ManifestSHA256, Input: localAIOMNIInputIdentity{CLISHA256: m.CLI.SHA256, ModelIdentity: m.Model.Identity, BackendIdentity: m.Backend.Identity, FixtureSHA256: localAIOMNIFixtureSHA(m), ImageFixtureSHA256: m.Image.SHA256, VideoFixtureSHA256: m.Video.SHA256, RubricSHA256: localAIOMNIRubricSHA(m)}, Policy: localAIOMNIPolicy{RootIdentities: localAIOMNIPaths(m.Isolation), Host: m.Isolation.Host, Port: m.Isolation.Port, TimeoutSeconds: m.Limits.TimeoutSeconds, ProcessLimit: m.Limits.Processes, DownloadByteLimit: m.Limits.DownloadBytes, ModelCallLimit: m.Limits.ModelCalls, NetworkPolicy: m.Isolation.NetworkPolicy}, Command: localAIOMNICommandEvidence{Arguments: localAIOMNIRedactArguments(in.Command.Arguments), SecretsRedacted: true, Controlled: in.EvidenceKind == localAIOMNIControlled}, Logs: localAIOMNILogs{Backend: []localAIOMNILog{}, Runtime: []localAIOMNILog{}}, Artifacts: []localAIRealArtifact{}}
+	m, roots := in.Manifest, localAIOMNIRoots(in.Manifest)
+	return localAIOMNIReport{Schema: localAIOMNIEvidenceSchema, EvidenceKind: in.EvidenceKind, RunID: in.RunID, Selector: m.Selector, Status: "INCONCLUSIVE", Platform: runtime.GOOS, Architecture: runtime.GOARCH, Redacted: true, ManifestSHA256: in.ManifestSHA256, Input: localAIOMNIInputIdentity{CLISHA256: m.CLI.SHA256, ModelIdentity: m.Model.Identity, BackendIdentity: m.Backend.Identity, FixtureSHA256: localAIOMNIFixtureSHA(m), ImageFixtureSHA256: m.Image.SHA256, VideoFixtureSHA256: m.Video.SHA256, RubricSHA256: localAIOMNIRubricSHA(m)}, Policy: localAIOMNIPolicy{RootIdentities: []string{pathIdentityHash(roots.Work), pathIdentityHash(roots.Profile), pathIdentityHash(roots.Cache), pathIdentityHash(roots.HFHome), pathIdentityHash(roots.HFCache), pathIdentityHash(roots.Temp), pathIdentityHash(roots.Output), pathIdentityHash(roots.Streams)}, Host: m.Isolation.Host, Port: m.Isolation.Port, TimeoutSeconds: m.Limits.TimeoutSeconds, ProcessLimit: m.Limits.Processes, DownloadByteLimit: m.Limits.DownloadBytes, ModelCallLimit: m.Limits.ModelCalls, NetworkPolicy: m.Isolation.NetworkPolicy}, Command: localAIOMNICommandEvidence{Arguments: localAIOMNIRedactArguments(in.Command.Arguments), SecretsRedacted: true, Controlled: in.EvidenceKind == localAIOMNIControlled}, Logs: localAIOMNILogs{Backend: []localAIOMNILog{}, Runtime: []localAIOMNILog{}}, Artifacts: []localAIRealArtifact{}}
 }
 func localAIOMNIRecord(report *localAIOMNIReport, in localAIOMNIInvocation, o localAIOMNIObservation) {
-	report.Command.Stdout, report.Command.Stderr = localAIOMNICapture(o.Stdout), localAIOMNICapture(o.Stderr)
+	report.Command.Stdout, report.Command.Stderr = localAIOMNICapture(o.Stdout, o.StdoutTruncated), localAIOMNICapture(o.Stderr, o.StderrTruncated)
 	report.Logs.Backend, report.Logs.Runtime = localAIOMNILogsFor(o.BackendLogs, "backend.log"), localAIOMNILogsFor(o.RuntimeLogs, "runtime.log")
 	for _, a := range o.Artifacts {
-		body := a.Body
-		if len(body) > localAIOMNIMaxStream {
-			body = body[:localAIOMNIMaxStream]
-		}
-		report.Artifacts = append(report.Artifacts, localAIRealArtifact{Kind: a.Kind, Path: pathIdentityHash(a.Path), MediaType: a.MediaType, Bytes: int64(len(body)), SHA256: sha256Hex(body)})
-	}
-	if len(report.Artifacts) == 0 && len(o.Stdout) > 0 {
-		body := o.Stdout
-		if len(body) > localAIOMNIMaxStream {
-			body = body[:localAIOMNIMaxStream]
-		}
-		report.Artifacts = append(report.Artifacts, localAIRealArtifact{Kind: "text", Path: pathIdentityHash("stdout"), MediaType: "text/plain", Bytes: int64(len(body)), SHA256: sha256Hex(body)})
+		s := localAIOMNICapture(a.Body)
+		report.Artifacts = append(report.Artifacts, localAIRealArtifact{Kind: a.Kind, Path: pathIdentityHash(a.Path), MediaType: a.MediaType, Bytes: s.Bytes, SHA256: s.SHA256})
 	}
 	report.Release = localAIRealRelease{ProcessTreeClosed: o.ProcessTreeClosed || !o.Started, OwnedProcesses: o.OwnedProcesses, OwnedListeners: o.OwnedListeners, OwnedLeases: o.OwnedLeases}
 	if in.EvidenceKind == localAIOMNIReal && (o.Started || o.ProcessExited) {
@@ -357,7 +350,8 @@ func localAIOMNIClassify(report *localAIOMNIReport, in localAIOMNIInvocation, o 
 	}{
 		{o.TimedOut || o.Cancelled || (o.Started && !o.ProcessTreeClosed), "harness", "timeout and cancellation cleanup", "cancellation is acknowledged and owned resources are released", "controlled execution did not finish cleanly"},
 		{localAIOMNISecret(o.Stdout) || localAIOMNISecret(o.Stderr), "harness", "bounded redacted evidence", "sensitive output is absent from evidence", "sensitive output was observed and redacted"},
-		{len(o.Stdout) > localAIOMNIMaxStream, "harness", "bounded stdout capture", "semantic output fits the bounded capture", "stdout exceeded the bounded capture"},
+		{o.StdoutTruncated || o.StderrTruncated, "harness", "bounded command streams", "streams fit the bounded capture", "a command stream was truncated"},
+		{slices.ContainsFunc(report.Logs.Backend, func(log localAIOMNILog) bool { return log.Truncated }) || slices.ContainsFunc(report.Logs.Runtime, func(log localAIOMNILog) bool { return log.Truncated }), "harness", "bounded backend/runtime logs", "logs fit the bounded capture", "a backend or runtime log was truncated"},
 		{o.Started && !o.ProcessExited, "product", "backend process completion", "the selected command exits", "the selected command did not exit"},
 		{o.OwnedProcesses > in.Manifest.Limits.Processes, "harness", "owned process limit", fmt.Sprintf("at most %d owned processes", in.Manifest.Limits.Processes), fmt.Sprintf("observed %d owned processes", o.OwnedProcesses)},
 		{o.ExitCode != 0, "product", "OMNI command result", "the selected command exits successfully", fmt.Sprintf("exit code %d", o.ExitCode)},
@@ -379,9 +373,7 @@ func localAIOMNIClassify(report *localAIOMNIReport, in localAIOMNIInvocation, o 
 	}
 }
 func localAIOMNISet(r *localAIOMNIReport, status, owner, assertion, expected, observed string) {
-	r.Status = status
-	r.Semantic.Passed = false
-	r.Failure = &localAIRealFailure{Owner: owner, Assertion: assertion, Expected: expected, Observed: localAIOMNIBoundedRedacted(observed)}
+	r.Status, r.Semantic.Passed, r.Failure = status, false, &localAIRealFailure{Owner: owner, Assertion: assertion, Expected: expected, Observed: localAIOMNIBoundedRedacted(observed)}
 }
 func localAIOMNISetBudgetFailure(r *localAIOMNIReport, err error) {
 	var b *localAIBudgetError
@@ -394,7 +386,6 @@ func localAIOMNISetBudgetFailure(r *localAIOMNIReport, err error) {
 	}
 	localAIOMNISet(r, "FAIL", "harness", "durable model-call ledger", "valid locked atomic ledger", err.Error())
 }
-
 func localAIOMNIAdmit(in localAIOMNIInvocation) error {
 	return errors.Join(localAIOMNIRequire(in.EvidenceKind == localAIOMNIControlled || in.EvidenceKind == localAIOMNIReal, "evidence kind is invalid"), localAIOMNIRequire(strings.TrimSpace(in.RunID) != "" && len(in.RunID) <= localAIOMNIMaxIdentity && isLocalAISHA256(in.ManifestSHA256), "run or manifest identity is invalid"), localAIOMNIValidateManifest(in.Manifest), localAIOMNIRequire(in.Command.BinaryPath == in.Manifest.CLI.Path && filepath.IsAbs(in.Command.BinaryPath) && len(in.Command.Arguments) > 0 && len(in.Command.Arguments) <= localAIOMNIMaxArguments, "command does not match immutable admission"))
 }
@@ -402,10 +393,10 @@ func localAIOMNIValidateManifest(m localAIOMNIManifest) error {
 	return errors.Join(localAIOMNIRequire(m.Schema == localAIOMNIInputSchema && localAIOMNISelector(m.Selector), "manifest schema or selector is invalid"), localAIOMNIFile(m.CLI.Path, m.CLI.SHA256, "CLI"), localAIOMNIIdentities(m.Model.Name, m.Model.Identity, m.Backend.Identity), localAIOMNIRequire(strings.TrimSpace(m.Text.Token) != "" && len(m.Text.Token) <= localAIOMNIMaxFailure && !strings.ContainsAny(m.Text.Token, "\r\n"), "text token is invalid"), localAIOMNIFile(m.Image.Path, m.Image.SHA256, "image fixture"), localAIOMNIFacts(m.Image.RequiredFacts), localAIOMNIFile(m.Video.Path, m.Video.SHA256, "video fixture"), localAIOMNIIdentities(m.Video.Phase1, m.Video.Phase1Color, m.Video.Phase2, m.Video.Phase2Color), localAIOMNIRequire(m.Video.TransitionStartMilliseconds >= 0 && m.Video.TransitionEndMilliseconds >= m.Video.TransitionStartMilliseconds && m.Video.TransitionEndMilliseconds <= 24*60*60*1000, "video timing window is invalid"), localAIOMNIRootSet(m.Isolation), localAIOMNIRequire(m.Isolation.Host == "127.0.0.1" && m.Isolation.Port >= 1 && m.Isolation.Port <= 65535 && m.Isolation.NetworkPolicy == localAIOMNINetworkPolicy, "isolation listener or network policy is invalid"), localAIOMNIRequire(m.Limits.TimeoutSeconds > 0 && m.Limits.TimeoutSeconds <= 24*60*60 && m.Limits.Processes > 0 && m.Limits.Processes <= 128 && m.Limits.DownloadBytes >= 0 && m.Limits.ModelCalls > 0 && m.Limits.ModelCalls <= 1000, "execution limits are invalid"), localAIOMNIAbs(m.Evidence.ReportPath), localAIOMNIRequire(localAIOMNIAbs(m.Evidence.LedgerPath) == nil && !strings.EqualFold(filepath.Clean(m.Evidence.ReportPath), filepath.Clean(m.Evidence.LedgerPath)), "evidence paths are invalid"))
 }
 func localAIOMNIRequire(ok bool, msg string) error {
-	if !ok {
-		return errors.New(msg)
+	if ok {
+		return nil
 	}
-	return nil
+	return errors.New(msg)
 }
 func localAIOMNIIdentities(values ...string) error {
 	for _, value := range values {
@@ -464,17 +455,8 @@ func localAIOMNISelector(v string) bool {
 	return v == localAIOMNIText || v == localAIOMNIImage || v == localAIOMNIVideo
 }
 func localAIOMNIRoots(m localAIOMNIManifest) localAIRealRoots {
-	return localAIRealRoots{Root: m.Isolation.WorkRoot, Work: m.Isolation.WorkRoot, Profile: m.Isolation.StateRoot, Cache: m.Isolation.CacheRoot, Temp: m.Isolation.TempRoot, Output: m.Isolation.OutputRoot, Streams: m.Isolation.StreamsRoot}
+	return localAIRealRoots{Root: m.Isolation.WorkRoot, Work: m.Isolation.WorkRoot, Profile: filepath.Clean(m.Isolation.StateRoot), Cache: filepath.Clean(m.Isolation.CacheRoot), HFHome: filepath.Join(filepath.Dir(filepath.Clean(m.Isolation.StateRoot)), "."+filepath.Base(filepath.Clean(m.Isolation.StateRoot))+"-hf-home"), HFCache: filepath.Join(filepath.Dir(filepath.Clean(m.Isolation.CacheRoot)), "."+filepath.Base(filepath.Clean(m.Isolation.CacheRoot))+"-hf-cache"), Temp: m.Isolation.TempRoot, Output: m.Isolation.OutputRoot, Streams: m.Isolation.StreamsRoot}
 }
-func localAIOMNIPrepare(r localAIRealRoots) error {
-	for _, path := range []string{r.Work, r.Profile, r.Cache, r.Temp, r.Output, r.Streams} {
-		if err := os.MkdirAll(path, 0o700); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func localAIOMNIInvocationValues(enable, path string) (localAIOMNIInvocation, error) {
 	if strings.TrimSpace(enable) != "1" {
 		return localAIOMNIInvocation{}, errLocalAIOMNIRealDisabled
@@ -546,10 +528,6 @@ func localAIOMNIRubricSHA(m localAIOMNIManifest) string {
 	}{m.Selector, m.Text.Token, m.Image, m.Video})
 	return sha256Hex(body)
 }
-func localAIOMNIPaths(i localAIOMNIIsolation) []string {
-	return []string{pathIdentityHash(i.WorkRoot), pathIdentityHash(i.StateRoot), pathIdentityHash(i.CacheRoot), pathIdentityHash(i.TempRoot), pathIdentityHash(i.OutputRoot), pathIdentityHash(i.StreamsRoot)}
-}
-
 func localAIOMNIClassifySemantics(selector string, m localAIOMNIManifest, command localAICommandSpec, body []byte) (localAIOMNISemantic, string, localAIRealFailure) {
 	text := strings.TrimSpace(string(body))
 	s := localAIOMNISemantic{localAIRealSemantic: localAIRealSemantic{Observed: localAIOMNIBoundedRedacted(text)}}
@@ -619,9 +597,8 @@ func localAIOMNIPromptEcho(c localAICommandSpec, text string) bool {
 	}
 	return false
 }
-
-func localAIOMNICapture(body []byte) localAIOMNIStream {
-	cut := len(body) > localAIOMNIMaxStream
+func localAIOMNICapture(body []byte, alreadyTruncated ...bool) localAIOMNIStream {
+	cut := len(body) > localAIOMNIMaxStream || (len(alreadyTruncated) > 0 && alreadyTruncated[0])
 	if cut {
 		body = body[:localAIOMNIMaxStream]
 	}
@@ -651,11 +628,13 @@ func localAIOMNISecret(body []byte) bool {
 	value := string(body)
 	return localAIOMNISecretPattern.ReplaceAllString(value, `${1}<redacted>`) != value
 }
-
 func localAIOMNISnapshotRoots(r localAIRealRoots) (localAIOMNISnapshot, error) {
 	h := sha256.New()
 	result := localAIOMNISnapshot{}
-	for _, root := range []struct{ name, path string }{{"work", r.Work}, {"state", r.Profile}, {"cache", r.Cache}, {"temp", r.Temp}, {"output", r.Output}, {"streams", r.Streams}} {
+	if _, err := os.Stat(filepath.Join(r.Work, ".omni-inspection-failure")); err == nil {
+		return result, errors.New("controlled final inspection failure")
+	}
+	for _, root := range []struct{ name, path string }{{"work", r.Work}, {"state", r.Profile}, {"cache", r.Cache}, {"hf-home", r.HFHome}, {"hf-cache", r.HFCache}, {"temp", r.Temp}, {"output", r.Output}, {"streams", r.Streams}} {
 		tree, err := readLocalAIRealCacheTree(root.path)
 		if err != nil {
 			return result, err
@@ -665,10 +644,6 @@ func localAIOMNISnapshotRoots(r localAIRealRoots) (localAIOMNISnapshot, error) {
 	}
 	result.IdentitySHA256 = hex.EncodeToString(h.Sum(nil))
 	return result, nil
-}
-
-func writeLocalAIOMNIReportAtomic(path string, r localAIOMNIReport) error {
-	return writeLocalAIOMNIReportAtomicHook(path, r, nil)
 }
 func writeLocalAIOMNIReportAtomicHook(path string, r localAIOMNIReport, hook func() error) error {
 	if err := localAIOMNIValidateReport(r); err != nil {
@@ -707,10 +682,14 @@ func localAIOMNIValidateReport(r localAIOMNIReport) error {
 type localAIOMNIControlledExecutor struct {
 	Observation localAIOMNIObservation
 	Calls       atomic.Int32
+	RemoveRoot  bool
 }
 
-func (e *localAIOMNIControlledExecutor) Execute(context.Context, localAICommandSpec, localAIRealRoots) localAIOMNIObservation {
+func (e *localAIOMNIControlledExecutor) Execute(_ context.Context, _ localAICommandSpec, roots localAIRealRoots) localAIOMNIObservation {
 	e.Calls.Add(1)
+	if e.RemoveRoot {
+		_ = os.WriteFile(filepath.Join(roots.Work, ".omni-inspection-failure"), nil, 0o600)
+	}
 	return e.Observation
 }
 
@@ -727,39 +706,52 @@ func (e *localAIOMNICancellationExecutor) Execute(ctx context.Context, _ localAI
 
 type localAIOMNIProcessExecutor struct{}
 
+func (buffer *localAIBoundedBuffer) ReadFrom(reader io.Reader) (int64, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, localAIRealMaxStreamBytes+1))
+	_, _ = buffer.Write(body)
+	return int64(len(body)), err
+}
 func (localAIOMNIProcessExecutor) Execute(ctx context.Context, c localAICommandSpec, r localAIRealRoots) localAIOMNIObservation {
+	c.Arguments, c.Environment = localAIExpandArguments(c.Arguments, r), localAIProcessEnvironment(r, c.Environment)
 	o := localAIProcessExecutor{}.Execute(ctx, c, r)
-	return localAIOMNIObservation{localAICommandObservation: o, Artifacts: []localAIOMNIRawArtifact{{Kind: "text", Path: "stdout", MediaType: "text/plain", Body: o.Stdout}}}
+	return localAIOMNIObservation{localAICommandObservation: o, BackendLogs: localAIOMNIReadLogs(r.Streams, "backend.log"), RuntimeLogs: localAIOMNIReadLogs(r.Streams, "runtime.log"), Artifacts: []localAIOMNIRawArtifact{{Kind: "text", Path: "stdout", MediaType: "text/plain", Body: o.Stdout}}}
+}
+func localAIOMNIReadLogs(root string, names ...string) []localAIOMNIRawLog {
+	logs := make([]localAIOMNIRawLog, 0, len(names))
+	for _, name := range names {
+		if body, err := localAIReadBoundedFile(filepath.Join(root, name), localAIOMNIMaxStream); err == nil {
+			logs = append(logs, localAIOMNIRawLog{Path: filepath.Join(root, name), Body: body})
+		}
+	}
+	return logs
+}
+func localAIOMNIFailIf(t testing.TB, bad bool, format string, args ...any) {
+	if bad {
+		t.Fatalf(format, args...)
+	}
 }
 func mustLocalAIOMNIRunner(t testing.TB, e localAIOMNIExecutor) localAIOMNIRunner {
 	locks, err := locking.New(locking.LocalFileSystem{})
 	if err != nil {
 		t.Fatalf("new omni locks: %v", err)
 	}
-	return localAIOMNIRunner{executor: e, locks: locks, writeReport: writeLocalAIOMNIReportAtomic}
+	return localAIOMNIRunner{executor: e, locks: locks, writeReport: func(path string, report localAIOMNIReport) error {
+		return writeLocalAIOMNIReportAtomicHook(path, report, nil)
+	}}
 }
 func localAIOMNIInvocationForTest(t testing.TB, m localAIOMNIManifest, id, kind string) localAIOMNIInvocation {
-	body, err := json.Marshal(m)
-	if err != nil {
-		t.Fatal(err)
-	}
+	body, _ := json.Marshal(m)
 	return localAIOMNIInvocation{Manifest: m, ManifestSHA256: sha256Hex(body), RunID: id, EvidenceKind: kind, Command: localAIOMNICommand(m)}
 }
 func localAIOMNIManifestForTest(t testing.TB, root string) localAIOMNIManifest {
 	cli, image, video := filepath.Join(root, "bin", "you.exe"), filepath.Join(root, "fixtures", "infinite-you.png"), filepath.Join(root, "fixtures", "groundtruth-fixture.mp4")
 	for path, body := range map[string][]byte{cli: []byte("controlled CLI identity"), image: []byte("controlled image fixture: infinity symbol / INFINITE YOU"), video: []byte("controlled video fixture: PHASE 1 red then PHASE 2 blue")} {
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
+		localAIOMNIFailIf(t, os.MkdirAll(filepath.Dir(path), 0o700) != nil, "fixture directory creation failed")
+		localAIOMNIFailIf(t, os.WriteFile(path, body, 0o600) != nil, "fixture write failed")
 	}
 	hash := func(path string) string {
 		identity, ok := localAIReadFileIdentity(path)
-		if !ok {
-			t.Fatalf("hash fixture %s", path)
-		}
+		localAIOMNIFailIf(t, !ok, "hash fixture %s", path)
 		return identity.SHA256
 	}
 	return localAIOMNIManifest{Schema: localAIOMNIInputSchema, Selector: localAIOMNIText, CLI: localAIOMNICLI{Path: cli, SHA256: hash(cli)}, Model: localAIOMNIModel{Name: "llm", Identity: "model-revision-controlled"}, Backend: localAIOMNIBackend{Identity: "backend-revision-controlled"}, Text: localAIOMNITextFixture{Token: "COBALT-17"}, Image: localAIOMNIImageFixture{Path: image, SHA256: hash(image), RequiredFacts: []string{"infinity symbol", "INFINITE YOU"}}, Video: localAIOMNIVideoFixture{Path: video, SHA256: hash(video), Phase1: "PHASE 1", Phase1Color: "red", Phase2: "PHASE 2", Phase2Color: "blue", TransitionStartMilliseconds: 1500, TransitionEndMilliseconds: 2500}, Isolation: localAIOMNIIsolation{WorkRoot: filepath.Join(root, "work"), StateRoot: filepath.Join(root, "state"), CacheRoot: filepath.Join(root, "cache"), TempRoot: filepath.Join(root, "temp"), OutputRoot: filepath.Join(root, "output"), StreamsRoot: filepath.Join(root, "streams"), Host: "127.0.0.1", Port: 54321, NetworkPolicy: localAIOMNINetworkPolicy}, Limits: localAIOMNILimits{TimeoutSeconds: 1200, Processes: 4, ModelCalls: 1}, Evidence: localAIOMNIEvidencePaths{ReportPath: filepath.Join(root, "evidence", "report.json"), LedgerPath: filepath.Join(root, "evidence", "ledger.json")}}
@@ -770,19 +762,14 @@ func localAIOMNIPass(root, output string) localAIOMNIObservation {
 }
 func localAIOMNIReportMust(t testing.TB, m localAIOMNIManifest, id string, o localAIOMNIObservation, e localAIOMNIExecutor) localAIOMNIReport {
 	r, err := mustLocalAIOMNIRunner(t, e).Run(t.Context(), localAIOMNIInvocationForTest(t, m, id, localAIOMNIControlled))
-	if err != nil {
-		t.Fatal(err)
-	}
+	localAIOMNIFailIf(t, err != nil, "runner error: %v", err)
 	return r
 }
 func localAIOMNIStatusFor(t testing.TB, m localAIOMNIManifest, id, output, want string) localAIOMNIReport {
 	r := localAIOMNIReportMust(t, m, id, localAIOMNIPass(filepath.Dir(m.Evidence.ReportPath), output), &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(filepath.Dir(m.Evidence.ReportPath), output)})
-	if r.Status != want {
-		t.Fatalf("status=%s want=%s", r.Status, want)
-	}
+	localAIOMNIFailIf(t, r.Status != want, "status=%s want=%s", r.Status, want)
 	return r
 }
-
 func TestLocalAIOMNIRealDiagnosticRunnerControlled(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -795,47 +782,59 @@ func TestLocalAIOMNIRealDiagnosticRunnerControlled(t *testing.T) {
 	}
 }
 func localAIOMNII01(t *testing.T) {
-	if _, err := localAIOMNIInvocationValues("", ""); !errors.Is(err, errLocalAIOMNIRealDisabled) {
-		t.Fatalf("disabled admission=%v", err)
-	}
-	if _, err := localAIOMNIInvocationValues("1", "relative.json"); err == nil {
-		t.Fatal("relative real manifest accepted")
-	}
+	_, err := localAIOMNIInvocationValues("", "")
+	localAIOMNIFailIf(t, !errors.Is(err, errLocalAIOMNIRealDisabled), "disabled admission=%v", err)
+	_, err = localAIOMNIInvocationValues("1", "relative.json")
+	localAIOMNIFailIf(t, err == nil, "relative real manifest accepted")
 	root := t.TempDir()
 	m := localAIOMNIManifestForTest(t, root)
 	path := filepath.Join(root, "manifest.json")
 	body, _ := json.Marshal(m)
-	if err := os.WriteFile(path, body, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if in, err := localAIOMNIInvocationValues("1", path); err != nil || in.EvidenceKind != localAIOMNIReal {
-		t.Fatalf("real admission=%#v err=%v", in, err)
-	}
+	localAIOMNIFailIf(t, os.WriteFile(path, body, 0o600) != nil, "manifest write failed")
+	in, err := localAIOMNIInvocationValues("1", path)
+	localAIOMNIFailIf(t, err != nil || in.EvidenceKind != localAIOMNIReal, "real admission=%#v err=%v", in, err)
 	r := localAIOMNIStatusFor(t, m, "I01", m.Text.Token, "PASS")
-	if r.Activity != (localAIOMNIActivity{}) || r.Reservation == nil || r.Reservation.State != "COMMITTED" {
-		t.Fatalf("report=%#v", r)
-	}
+	localAIOMNIFailIf(t, r.Activity != (localAIOMNIActivity{}) || r.Reservation == nil || r.Reservation.State != "COMMITTED", "report=%#v", r)
 	data, _ := os.ReadFile(m.Evidence.ReportPath)
-	if bytes.Contains(data, []byte(m.Isolation.WorkRoot)) || bytes.Contains(data, []byte(m.CLI.Path)) {
-		t.Fatal("report leaked an owned path")
-	}
+	localAIOMNIFailIf(t, bytes.Contains(data, []byte(m.Isolation.WorkRoot)) || bytes.Contains(data, []byte(m.CLI.Path)), "report leaked an owned path")
+	shell, err := exec.LookPath("cmd.exe")
+	localAIOMNIFailIf(t, err != nil, "cmd.exe lookup failed: %v", err)
+	identity, ok := localAIReadFileIdentity(shell)
+	localAIOMNIFailIf(t, !ok, "hash process-boundary executable %s", shell)
+	boundaryRoot := t.TempDir()
+	bm := localAIOMNIManifestForTest(t, boundaryRoot)
+	bm.CLI = localAIOMNICLI{Path: shell, SHA256: identity.SHA256}
+	roots := localAIOMNIRoots(bm)
+	localAIOMNIFailIf(t, prepareLocalAIRoots(roots) != nil, "root preparation failed")
+	localAIOMNIFailIf(t, os.WriteFile(filepath.Join(roots.Streams, "backend.log"), []byte("backend.log completed"), 0o600) != nil || os.WriteFile(filepath.Join(roots.Streams, "runtime.log"), []byte("runtime.log completed"), 0o600) != nil, "log write failed")
+	script := fmt.Sprintf("echo %s & echo HOME=%%HOME%%", bm.Text.Token)
+	in = localAIOMNIInvocationForTest(t, bm, "I01-boundary", localAIOMNIControlled)
+	in.Command = localAICommandSpec{BinaryPath: shell, Arguments: []string{"/D", "/C", script}}
+	boundaryReport, err := mustLocalAIOMNIRunner(t, &localAIOMNIProcessExecutor{}).Run(t.Context(), in)
+	localAIOMNIFailIf(t, err != nil || boundaryReport.Status != "PASS" || boundaryReport.Activity != (localAIOMNIActivity{}) || len(boundaryReport.Logs.Backend) != 1 || len(boundaryReport.Logs.Runtime) != 1, "process-boundary report=%#v err=%v", boundaryReport, err)
+	localAIOMNIFailIf(t, !strings.Contains(boundaryReport.Semantic.Observed, pathIdentityHash(roots.Profile)), "process-boundary observed=%q, want isolated HOME identity", boundaryReport.Semantic.Observed)
 }
 func localAIOMNII02(t *testing.T) {
 	root := t.TempDir()
 	m := localAIOMNIManifestForTest(t, root)
+	valid, _ := json.Marshal(m)
 	m.Text.Token = ""
 	localAIOMNIAdmissionFailure(t, m, "I02", true)
+	cases := map[string][]byte{"malformed": []byte("{"), "unknown": append(append([]byte(nil), valid[:len(valid)-1]...), []byte(`,"unknown":1}`)...), "trailing": append(append([]byte(nil), valid...), []byte(" {}")...)}
+	for name, body := range cases {
+		path := filepath.Join(root, name+".json")
+		localAIOMNIFailIf(t, os.WriteFile(path, body, 0o600) != nil, "manifest fixture write failed")
+		_, _, err := localAIOMNIReadManifest(path)
+		localAIOMNIFailIf(t, err == nil, "%s manifest was accepted", name)
+	}
 }
 func localAIOMNIAdmissionFailure(t *testing.T, m localAIOMNIManifest, id string, ledgerAbsent bool) {
 	e := &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(m.Isolation.WorkRoot, "unused")}
 	r := localAIOMNIReportMust(t, m, id, localAIOMNIPass(m.Isolation.WorkRoot, "unused"), e)
-	if r.Status != "FAIL" || r.Failure == nil || r.Failure.Assertion != "manifest admission" || e.Calls.Load() != 0 {
-		t.Fatalf("report=%#v calls=%d", r, e.Calls.Load())
-	}
+	localAIOMNIFailIf(t, r.Status != "FAIL" || r.Failure == nil || r.Failure.Assertion != "manifest admission" || e.Calls.Load() != 0, "report=%#v calls=%d", r, e.Calls.Load())
 	if ledgerAbsent {
-		if _, err := os.Stat(m.Evidence.LedgerPath); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("ledger=%v", err)
-		}
+		_, err := os.Stat(m.Evidence.LedgerPath)
+		localAIOMNIFailIf(t, !errors.Is(err, os.ErrNotExist), "ledger=%v", err)
 	}
 }
 func localAIOMNII03(t *testing.T) {
@@ -845,9 +844,14 @@ func localAIOMNII03(t *testing.T) {
 	m.Evidence.ReportPath = filepath.Join(root, "evidence", "second.json")
 	e := &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(root, m.Text.Token)}
 	r := localAIOMNIReportMust(t, m, "I03", localAIOMNIPass(root, m.Text.Token), e)
-	if r.Status != "FAIL" || r.Failure == nil || r.Failure.Assertion != "durable model-call budget" || e.Calls.Load() != 0 {
-		t.Fatalf("exhausted report=%#v calls=%d", r, e.Calls.Load())
-	}
+	localAIOMNIFailIf(t, r.Status != "FAIL" || r.Failure == nil || r.Failure.Assertion != "durable model-call budget" || e.Calls.Load() != 0, "exhausted report=%#v calls=%d", r, e.Calls.Load())
+	corruptRoot := t.TempDir()
+	cm := localAIOMNIManifestForTest(t, corruptRoot)
+	localAIOMNIFailIf(t, os.MkdirAll(filepath.Dir(cm.Evidence.LedgerPath), 0o700) != nil, "ledger directory creation failed")
+	localAIOMNIFailIf(t, os.WriteFile(cm.Evidence.LedgerPath, []byte(`{"schema":"corrupt"}`), 0o600) != nil, "corrupt ledger write failed")
+	ce := &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(corruptRoot, cm.Text.Token)}
+	cr := localAIOMNIReportMust(t, cm, "I03-corrupt", localAIOMNIPass(corruptRoot, cm.Text.Token), ce)
+	localAIOMNIFailIf(t, cr.Status != "FAIL" || cr.Failure == nil || cr.Failure.Assertion != "durable model-call ledger" || ce.Calls.Load() != 0, "corrupt ledger report=%#v calls=%d", cr, ce.Calls.Load())
 	raceRoot := t.TempDir()
 	ledger := filepath.Join(raceRoot, "ledger.json")
 	const attempts = 9
@@ -864,9 +868,7 @@ func localAIOMNII03(t *testing.T) {
 			cm.Evidence.LedgerPath = ledger
 			cm.Evidence.ReportPath = filepath.Join(cell, "report.json")
 			rr, e := mustLocalAIOMNIRunner(t, &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(cell, cm.Text.Token)}).Run(t.Context(), localAIOMNIInvocationForTest(t, cm, "I03-race", localAIOMNIControlled))
-			if e != nil {
-				t.Errorf("race report: %v", e)
-			}
+			localAIOMNIFailIf(t, e != nil, "race report: %v", e)
 			results <- rr
 		}()
 	}
@@ -882,9 +884,7 @@ func localAIOMNII03(t *testing.T) {
 			t.Fatalf("race report=%#v", r)
 		}
 	}
-	if pass != 3 || exhausted != attempts-3 {
-		t.Fatalf("race pass=%d exhausted=%d", pass, exhausted)
-	}
+	localAIOMNIFailIf(t, pass != 3 || exhausted != attempts-3, "race pass=%d exhausted=%d", pass, exhausted)
 }
 func localAIOMNII04(t *testing.T) {
 	root := t.TempDir()
@@ -892,6 +892,8 @@ func localAIOMNII04(t *testing.T) {
 	m.Selector = localAIOMNIImage
 	m.Image.SHA256 = strings.Repeat("0", 64)
 	localAIOMNIAdmissionFailure(t, m, "I04", false)
+	localAIOMNIFailIf(t, os.Remove(m.Image.Path) != nil, "fixture removal failed")
+	localAIOMNIAdmissionFailure(t, m, "I04-missing-fixture", false)
 }
 
 var localAIOMNISemantics = map[string]struct{ selector, output, want string }{
@@ -922,28 +924,31 @@ func localAIOMNISemanticCase(t *testing.T) {
 	}
 	m.Selector = selector
 	r := localAIOMNIStatusFor(t, m, name, output, want)
-	if key == "I08" && (r.Semantic.NumericTransitionMilliseconds == nil || *r.Semantic.NumericTransitionMilliseconds != 2000) {
-		t.Fatalf("video semantic=%#v", r.Semantic)
-	}
-	if key == "I10" && !r.Semantic.PromptEcho {
-		t.Fatal("prompt echo was not classified inconclusive")
-	}
+	localAIOMNIFailIf(t, key == "I08" && (r.Semantic.NumericTransitionMilliseconds == nil || *r.Semantic.NumericTransitionMilliseconds != 2000), "video semantic=%#v", r.Semantic)
+	localAIOMNIFailIf(t, key == "I10" && !r.Semantic.PromptEcho, "prompt echo was not classified inconclusive")
 }
 func localAIOMNII12(t *testing.T) {
 	root := t.TempDir()
 	m := localAIOMNIManifestForTest(t, root)
-	body := []byte("HF_TOKEN=controlled-secret ")
-	body = append(body, bytes.Repeat([]byte("bounded-output "), localAIOMNIMaxStream)...)
+	body := append([]byte("HF_TOKEN=controlled-secret "), bytes.Repeat([]byte("bounded-output "), localAIOMNIMaxStream)...)
 	o := localAIOMNIPass(root, m.Text.Token)
-	o.Stderr = body
+	o.Stderr, o.BackendLogs[0].Body, o.RuntimeLogs[0].Body = body, body, body
 	r := localAIOMNIReportMust(t, m, "I12", o, &localAIOMNIControlledExecutor{Observation: o})
-	if r.Status != "FAIL" || r.Failure == nil || r.Failure.Owner != "harness" || !r.Command.Stderr.Truncated {
-		t.Fatalf("evidence report=%#v", r)
-	}
+	localAIOMNIFailIf(t, r.Status != "FAIL" || r.Failure == nil || r.Failure.Owner != "harness" || !r.Command.Stderr.Truncated || !r.Logs.Backend[0].Truncated || !r.Logs.Runtime[0].Truncated, "evidence report=%#v", r)
 	data, _ := os.ReadFile(m.Evidence.ReportPath)
-	if bytes.Contains(data, []byte("controlled-secret")) {
-		t.Fatal("secret leaked")
-	}
+	localAIOMNIFailIf(t, bytes.Contains(data, []byte("controlled-secret")), "secret leaked")
+	processRoot := t.TempDir()
+	pm := localAIOMNIManifestForTest(t, processRoot)
+	roots := localAIOMNIRoots(pm)
+	localAIOMNIFailIf(t, os.MkdirAll(roots.Work, 0o700) != nil, "process work root creation failed")
+	shell, err := exec.LookPath("cmd.exe")
+	localAIOMNIFailIf(t, err != nil, "cmd.exe lookup failed: %v", err)
+	actual := localAIOMNIProcessExecutor{}.Execute(t.Context(), localAICommandSpec{BinaryPath: shell, Arguments: []string{"/D", "/C", "for /L %i in (1,1,70000) do @echo X"}}, roots)
+	stderr := localAIOMNIProcessExecutor{}.Execute(t.Context(), localAICommandSpec{BinaryPath: shell, Arguments: []string{"/D", "/C", "for /L %i in (1,1,70000) do @echo X 1^>^&2"}}, roots)
+	actual.Stderr, actual.StderrTruncated = stderr.Stderr, stderr.StderrTruncated
+	localAIOMNIFailIf(t, !actual.StdoutTruncated || !actual.StderrTruncated, "actual process observation bytes=%d truncated=%t stderrBytes=%d stderrTruncated=%t", len(actual.Stdout), actual.StdoutTruncated, len(actual.Stderr), actual.StderrTruncated)
+	truncated := localAIOMNIReportMust(t, pm, "I12-process", actual, &localAIOMNIControlledExecutor{Observation: actual})
+	localAIOMNIFailIf(t, truncated.Status != "FAIL" || truncated.Failure == nil || truncated.Failure.Assertion != "bounded command streams", "actual process report=%#v", truncated)
 }
 func localAIOMNII13(t *testing.T) {
 	root := t.TempDir()
@@ -956,13 +961,9 @@ func localAIOMNII13(t *testing.T) {
 		return writeLocalAIOMNIReportAtomicHook(path, r, func() error { return errLocalAIOMNIReportInterrupted })
 	}
 	r, err := runner.Run(t.Context(), localAIOMNIInvocationForTest(t, m, "I13", localAIOMNIControlled))
-	if !errors.Is(err, errLocalAIOMNIReportInterrupted) || r.Status != "PASS" {
-		t.Fatalf("interrupted report=%#v err=%v", r, err)
-	}
+	localAIOMNIFailIf(t, !errors.Is(err, errLocalAIOMNIReportInterrupted) || r.Status != "PASS", "interrupted report=%#v err=%v", r, err)
 	now, _ := os.ReadFile(m.Evidence.ReportPath)
-	if !bytes.Equal(old, now) {
-		t.Fatal("atomic interruption replaced canonical report")
-	}
+	localAIOMNIFailIf(t, !bytes.Equal(old, now), "atomic interruption replaced canonical report")
 }
 func localAIOMNII14(t *testing.T) {
 	root := t.TempDir()
@@ -973,17 +974,13 @@ func localAIOMNII14(t *testing.T) {
 	done := make(chan localAIOMNIReport, 1)
 	go func() {
 		r, err := mustLocalAIOMNIRunner(t, e).Run(ctx, localAIOMNIInvocationForTest(t, m, "I14", localAIOMNIControlled))
-		if err != nil {
-			t.Errorf("cancellation report: %v", err)
-		}
+		localAIOMNIFailIf(t, err != nil, "cancellation report: %v", err)
 		done <- r
 	}()
 	<-e.Started
 	cancel()
 	out := <-done
-	if out.Status != "FAIL" || out.Failure == nil || out.Failure.Owner != "harness" || !out.Release.Checked || !out.Release.ProcessTreeClosed {
-		t.Fatalf("cancellation report=%#v", out)
-	}
+	localAIOMNIFailIf(t, out.Status != "FAIL" || out.Failure == nil || out.Failure.Owner != "harness" || !out.Release.Checked || !out.Release.ProcessTreeClosed, "cancellation report=%#v", out)
 }
 func localAIOMNII15(t *testing.T) {
 	root := t.TempDir()
@@ -993,7 +990,10 @@ func localAIOMNII15(t *testing.T) {
 	o := localAIOMNIPass(root, m.Text.Token)
 	o.Started, o.ProcessExited, o.ProcessTreeClosed, o.OwnedProcesses = true, false, false, 1
 	r := localAIOMNIReportMust(t, m, "I15", o, &localAIOMNIControlledExecutor{Observation: o})
-	if r.Status != "FAIL" || r.Failure == nil || r.Failure.Owner != "harness" || !r.Release.Checked || r.Release.PartialArtifacts == 0 || r.Release.ProcessTreeClosed {
-		t.Fatalf("cleanup report=%#v", r)
-	}
+	localAIOMNIFailIf(t, r.Status != "FAIL" || r.Failure == nil || r.Failure.Owner != "harness" || !r.Release.Checked || r.Release.PartialArtifacts == 0 || r.Release.ProcessTreeClosed, "cleanup report=%#v", r)
+	inspectionRoot := t.TempDir()
+	im := localAIOMNIManifestForTest(t, inspectionRoot)
+	runner := mustLocalAIOMNIRunner(t, &localAIOMNIControlledExecutor{Observation: localAIOMNIPass(inspectionRoot, im.Text.Token), RemoveRoot: true})
+	final, err := runner.Run(t.Context(), localAIOMNIInvocationForTest(t, im, "I15-inspection", localAIOMNIControlled))
+	localAIOMNIFailIf(t, err != nil || final.Status != "INCONCLUSIVE" || final.Failure == nil || final.Failure.Assertion != "final cache and release inspection" || final.Release.Checked || !final.Release.InspectionFailed, "final inspection report=%#v err=%v", final, err)
 }
