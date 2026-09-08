@@ -711,8 +711,8 @@ function Invoke-CandidateSmoke {
         if ($manifest.schemaVersion -ne "localai-windows-install-candidate/v1") {
             Fail-Smoke "candidate schemaVersion is not localai-windows-install-candidate/v1"
         }
-        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "048") {
-            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 048"
+        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "050") {
+            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 050"
         }
         if ($manifest.source.repository -ne "https://github.com/portpowered/you-agent-factory" -or $manifest.source.commit -ne "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9" -or $manifest.source.tree -ne "623dcd01569ccac5776bcf15ffe9fb6a58324b24" -or [int]$manifest.source.mergedPullRequest -ne 2556 -or $manifest.source.mergedPullRequestHead -ne "1d45c19416774ea2aaffe0cae695102cf2a17a18") {
             Fail-Smoke "candidate source identity does not match the exact merged base"
@@ -737,6 +737,16 @@ function Invoke-CandidateSmoke {
             $actualLimit = $manifest.limits.($limit.Key)
             if ($null -eq $actualLimit -or [int64]$actualLimit -ne [int64]$limit.Value) {
                 Fail-Smoke "candidate limit $($limit.Key) = $actualLimit, want $($limit.Value)"
+            }
+        }
+        $requiredControls = [ordered]@{
+            goflags = "-p=4"
+            gomaxprocs = "4"
+        }
+        foreach ($control in $requiredControls.GetEnumerator()) {
+            $actualControl = [string]$manifest.limits.($control.Key)
+            if ($actualControl -ne [string]$control.Value) {
+                Fail-Smoke "candidate control $($control.Key) = $actualControl, want $($control.Value)"
             }
         }
         $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
@@ -809,6 +819,8 @@ function Invoke-CandidateSmoke {
             paidUSDMaximum = [int64]$manifest.limits.paidUSDMaximum
             descendantMaximum = [int64]$manifest.limits.descendantMaximum
             packagingOrSmokeRerunsMaximum = [int64]$manifest.limits.packagingOrSmokeRerunsMaximum
+            goflags = [string]$manifest.limits.goflags
+            gomaxprocs = [string]$manifest.limits.gomaxprocs
         }
         $report.installer.archiveName = $archiveName
         $report.installer.checksumName = "you_${version}_checksums.txt"
@@ -1254,6 +1266,10 @@ function Invoke-ObserverFixture {
         status = "FAIL"; independent = $false; startPeriodicFinal = $false
         maximumGapMilliseconds = 0; peakDeltaBytes = 0
     }
+    $goEnvironment = [ordered]@{
+        GOFLAGS = [string]$env:GOFLAGS
+        GOMAXPROCS = [string]$env:GOMAXPROCS
+    }
 
     try {
         $processJob = Start-Job -ScriptBlock {
@@ -1313,7 +1329,7 @@ function Invoke-ObserverFixture {
                 while (-not (Test-Path -LiteralPath $PidPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
                 if (-not (Test-Path -LiteralPath $PidPath)) { throw "root PID was not published" }
                 $rootId = [int]([System.IO.File]::ReadAllText($PidPath)).Trim()
-                $previous = $startedAt
+                $previous = [DateTime]::UtcNow
                 $maximumGap = [int64]0
                 $samples = 0
                 $descendantHighWater = [int64]0
@@ -1449,13 +1465,14 @@ function Invoke-ObserverFixture {
         if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 
-    $observerPass = $processObservation.status -eq "PASS" -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal
+    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
-        cycle = "048"
+        cycle = "050"
         releaseStatus = "observer-fixture"
         observation = [ordered]@{
+            environment = $goEnvironment
             processNetworkObserver = [ordered]@{
                 startedBeforeRoot = [bool]$processObservation.startedBeforeRoot
                 continuedThroughDescendantExit = [bool]$processObservation.continuedThroughDescendantExit

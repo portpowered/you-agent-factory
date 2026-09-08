@@ -21,27 +21,12 @@ import (
 )
 
 const (
-	localAICandidateManifestEnv                    = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
-	localAICandidateSchemaVersion                  = "localai-windows-install-candidate/v1"
-	localAICandidateProject                        = "localai"
-	localAICandidateCycle                          = "048"
-	localAICandidateRepository                     = "https://github.com/portpowered/you-agent-factory"
-	localAICandidateCommit                         = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
-	localAICandidateTree                           = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
-	localAICandidatePullRequest                    = 2556
-	localAICandidateMergedHead                     = "1d45c19416774ea2aaffe0cae695102cf2a17a18"
-	localAICandidateGoReleaser                     = "v2.12.7"
-	localAICandidateGOOS                           = "windows"
-	localAICandidateGOARCH                         = "amd64"
-	localAICandidateTemporaryDiskMaximum     int64 = 4294967296
-	localAICandidateToolDownloadMaximum      int64 = 0
-	localAICandidateModelDownloadMaximum     int64 = 0
-	localAICandidateModelCallsMaximum        int64 = 0
-	localAICandidatePaidUSDMaximum           int64 = 0
-	localAICandidateDescendantMaximum        int64 = 36
-	localAICandidateRerunsMaximum            int64 = 1
-	localAICandidateProcessNetworkGapMaximum int64 = 2000
-	localAICandidateDiskGapMaximum           int64 = 15000
+	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
+	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "050", "-p=4", "4"
+	localAICandidateRepository, localAICandidateCommit, localAICandidateTree                                                                                                                                                                                                                                                             = "https://github.com/portpowered/you-agent-factory", "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9", "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
+	localAICandidatePullRequest                                                                                                                                                                                                                                                                                                          = 2556
+	localAICandidateMergedHead, localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                 = "1d45c19416774ea2aaffe0cae695102cf2a17a18", "v2.12.7", "windows", "amd64"
+	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
 )
 
 var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -89,6 +74,8 @@ type localAICandidateLimits struct {
 	PaidUSDMaximum                *int64 `json:"paidUSDMaximum"`
 	DescendantMaximum             *int64 `json:"descendantMaximum"`
 	PackagingOrSmokeRerunsMaximum *int64 `json:"packagingOrSmokeRerunsMaximum"`
+	GOFLAGS                       string `json:"goflags"`
+	GOMAXPROCS                    string `json:"gomaxprocs"`
 }
 type localAICandidateArtifactEvidence struct {
 	Role   string `json:"role"`
@@ -130,6 +117,7 @@ type localAICandidateDiskObserver struct {
 	PeakDeltaBytes         int64  `json:"peakDeltaBytes"`
 }
 type localAICandidateObserverEvidence struct {
+	Environment            map[string]string                      `json:"environment"`
 	ProcessNetworkObserver localAICandidateProcessNetworkObserver `json:"processNetworkObserver"`
 	DiskObserver           localAICandidateDiskObserver           `json:"diskObserver"`
 	DescendantMaximum      int64                                  `json:"descendantMaximum"`
@@ -316,6 +304,11 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			},
 			want: "candidate limits.ordinaryToolDownloadBytesMaximum = 536870912, want 0",
 		},
+		{name: "changed Go controls", edit: func(fixture *localAICandidateFixture) {
+			fixture.manifest.Limits.GOFLAGS = "-p=8"
+			fixture.manifest.Limits.GOMAXPROCS = "8"
+			fixture.writeManifest(t)
+		}, want: "candidate Go controls"},
 	}
 	for _, test := range tests {
 		test := test
@@ -328,13 +321,13 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			}
 		})
 	}
-	for _, cycle := range []string{"030", "040", "042", "045"} {
+	for _, cycle := range []string{"030", "040", "042", "045", "048"} {
 		cycle := cycle
 		t.Run("historical cycle "+cycle, func(t *testing.T) {
 			fixture := newLocalAICandidateFixture(t)
 			fixture.manifest.Cycle = cycle
 			fixture.writeManifest(t)
-			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "048"`) {
+			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "050"`) {
 				t.Fatalf("validate historical cycle error = %v, want cycle %s rejection", err, cycle)
 			}
 		})
@@ -447,6 +440,7 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 	}
 	reportPath := filepath.Join(t.TempDir(), "observer-report.json")
 	command := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", filepath.Join(testutil.MustRepoRoot(t), "scripts", "release", "smoke-install.ps1"), "-InstallDir", t.TempDir(), "-ObserverFixture", "-ObserverReportPath", reportPath)
+	command.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("observer fixture: %v\n%s", err, output)
@@ -460,7 +454,7 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 		t.Fatalf("decode observer report: %v", err)
 	}
 	if report.SchemaVersion != "localai-windows-install-candidate-observer/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.ReleaseStatus != "observer-fixture" {
-		t.Fatalf("observer report identity/status = %#v, want cycle-048 PASS observer-fixture", report)
+		t.Fatalf("observer report identity/status = %#v, want cycle-050 PASS observer-fixture", report)
 	}
 	if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
 		t.Fatalf("observer report evidence: %v", err)
@@ -671,6 +665,9 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 		if err := validateLocalAICandidateLimit(limit.name, limit.actual, limit.want); err != nil {
 			return err
 		}
+	}
+	if strings.TrimSpace(manifest.Limits.GOFLAGS) == "" || manifest.Limits.GOFLAGS != localAICandidateGOFLAGS || strings.TrimSpace(manifest.Limits.GOMAXPROCS) == "" || manifest.Limits.GOMAXPROCS != localAICandidateGOMAXPROCS {
+		return fmt.Errorf("candidate Go controls = GOFLAGS=%q GOMAXPROCS=%q, want GOFLAGS=%q GOMAXPROCS=%q", manifest.Limits.GOFLAGS, manifest.Limits.GOMAXPROCS, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS)
 	}
 	return nil
 }
@@ -933,6 +930,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			PaidUSDMaximum:                candidateInt64Pointer(localAICandidatePaidUSDMaximum),
 			DescendantMaximum:             candidateInt64Pointer(localAICandidateDescendantMaximum),
 			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
+			GOFLAGS:                       localAICandidateGOFLAGS, GOMAXPROCS: localAICandidateGOMAXPROCS,
 		},
 	}
 	roots := make([]localAICandidateRoot, 0, 8)
