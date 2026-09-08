@@ -25,7 +25,7 @@ const (
 	localAICandidateManifestEnv                 = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
 	localAICandidateSchemaVersion               = "localai-windows-install-candidate/v1"
 	localAICandidateProject                     = "localai"
-	localAICandidateCycle                       = "030"
+	localAICandidateCycle                       = "040"
 	localAICandidateRepository                  = "https://github.com/portpowered/you-agent-factory"
 	localAICandidateCommit                      = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
 	localAICandidateTree                        = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
@@ -35,7 +35,7 @@ const (
 	localAICandidateGOOS                        = "windows"
 	localAICandidateGOARCH                      = "amd64"
 	localAICandidateTemporaryDiskMaximum  int64 = 4294967296
-	localAICandidateToolDownloadMaximum   int64 = 536870912
+	localAICandidateToolDownloadMaximum   int64 = 0
 	localAICandidateModelDownloadMaximum  int64 = 0
 	localAICandidateModelCallsMaximum     int64 = 0
 	localAICandidatePaidUSDMaximum        int64 = 0
@@ -310,6 +310,22 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				}
 			},
 			want: "exactly one windows-amd64 ZIP",
+		},
+		{
+			name: "historical cycle",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Cycle = "030"
+				fixture.writeManifest(t)
+			},
+			want: `candidate cycle = "030", want "040"`,
+		},
+		{
+			name: "ordinary download allowance",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Limits.OrdinaryToolDownloadMaximum = candidateInt64Pointer(536870912)
+				fixture.writeManifest(t)
+			},
+			want: "candidate limits.ordinaryToolDownloadBytesMaximum = 536870912, want 0",
 		},
 	}
 	for _, test := range tests {
