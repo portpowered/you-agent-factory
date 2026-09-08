@@ -243,7 +243,8 @@ func (runner ControlledRunner) waitControlledAttempt(ctx context.Context, waitCh
 }
 
 func (runner ControlledRunner) collectControlledAttempt(spec RunSpec, attempt *controlledAttempt) {
-	attempt.release = runner.releaseEvidence(spec, attempt.process, attempt.tree, attempt.treeAttached, attempt.waitCompleted, attempt.cleanupErr, attempt.stdout.sawEvent("listener-ready"))
+	listenerObserved := attempt.stdout.sawEvent("listener-ready")
+	runner.observeControlledQuiescence(spec, attempt, listenerObserved)
 	partialCount, partialBytes, partialErr := cleanControlledPartial(attempt.partialPath)
 	attempt.release.PartialArtifacts = partialCount
 	attempt.release.TemporaryBytes = partialBytes
@@ -679,7 +680,7 @@ func waitForControlledProcess(waitCh <-chan error, delay time.Duration) (error, 
 			return errors.New("controlled process did not reach a terminal wait signal"), false
 		}
 	}
-	timer := time.NewTimer(delay * 4)
+	timer := time.NewTimer(controlledCleanupCeiling(delay))
 	defer timer.Stop()
 	select {
 	case err := <-waitCh:
@@ -717,6 +718,12 @@ func classifyControlledResult(
 		return StatusFail, &ReportFailure{
 			Owner: controlledFailureOwnerHarness, Assertion: "controlled command start",
 			Expected: "executable starts after reservation", Observed: controlledErrorClass(startErr),
+		}, observations
+	}
+	if isControlledCleanupCeiling(cleanupErr) {
+		return StatusFail, &ReportFailure{
+			Owner: controlledFailureOwnerHarness, Assertion: controlledAssertionCleanup,
+			Expected: "owned process tree and listeners close before the cleanup ceiling", Observed: controlledReleaseObservation(release, cleanupErr, waitErr),
 		}, observations
 	}
 	if timedOut {
@@ -828,6 +835,9 @@ func controlledReleaseObservation(release ReleaseEvidence, cleanupErr, waitErr e
 func controlledErrorClass(err error) string {
 	if err == nil {
 		return "none"
+	}
+	if isControlledCleanupCeiling(err) {
+		return "quiescence_ceiling"
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "deadline_exceeded"

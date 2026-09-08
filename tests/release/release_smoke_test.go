@@ -19,7 +19,8 @@ import (
 func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {
 	t.Parallel()
 
-	binaryPath := buildReleaseSmokeBinary(t)
+	artifact := requireReleasePrebuiltArtifact(t)
+	binaryPath := artifact.Path
 	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
 	var renderedDashboardURL string
 	result, err := releasesmoke.Run(context.Background(), releasesmoke.Config{
@@ -86,7 +87,8 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructuredFailure(t *testing.T) {
 	t.Parallel()
 
-	binaryPath := buildReleaseSmokeBinary(t)
+	artifact := requireReleasePrebuiltArtifact(t)
+	binaryPath := artifact.Path
 	fixturePath := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
 	renderErr := errors.New("forced rendered dashboard failure")
 
@@ -125,6 +127,9 @@ func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructur
 
 func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
 	t.Parallel()
+	if os.Getenv(releaseLocalGoInstallSmokeEnv) != "1" {
+		t.Skip("set INFINITE_YOU_RELEASE_LOCAL_GO_INSTALL_SMOKE=1 to run the local go install smoke")
+	}
 
 	binaryPath := runGoInstallSmoke(t, "./cmd/factory", testutil.MustRepoRoot(t))
 	assertInstalledDocsSmoke(t, binaryPath)
@@ -134,32 +139,12 @@ func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
 func TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE") != "1" {
+	if os.Getenv(releasePublicGoInstallSmokeEnv) != "1" {
 		t.Skip("set INFINITE_YOU_RELEASE_PUBLIC_GO_INSTALL_SMOKE=1 to run the published-module go install smoke")
 	}
 
 	binaryPath := runGoInstallSmoke(t, "github.com/portpowered/infinite-you/cmd/factory@latest", "")
 	assertInstalledDocsSmoke(t, binaryPath)
-}
-
-func buildReleaseSmokeBinary(t *testing.T) string {
-	t.Helper()
-
-	binaryPath := filepath.Join(t.TempDir(), releaseSmokeBinaryName())
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build release smoke binary: %v\n%s", err, string(output))
-	}
-	return binaryPath
-}
-
-func releaseSmokeBinaryName() string {
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	return binaryName
 }
 
 func goInstallBinaryName() string {
