@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -48,6 +50,7 @@ func TestStory001CharacterizesOverlappingInvokes(t *testing.T) {
 // while the follower waits for the owner to release the model lock.
 func TestStory005SerializesOverlappingBuiltInvokes(t *testing.T) {
 	origin := newCharacterizationOrigin(t, characterizationOriginOptions{blockModel: true})
+	followerReadiness := installStory005FollowerReadiness(t, origin)
 	binaryPath := buildStory001Binary(t)
 	workDir := t.TempDir()
 	writeStory001Factory(t, workDir)
@@ -59,8 +62,10 @@ func TestStory005SerializesOverlappingBuiltInvokes(t *testing.T) {
 	first := startStory001Command(t, context.Background(), binaryPath, workDir, environment, args...)
 	t.Cleanup(first.stop)
 	waitForStory001ModelStarts(t, origin, 1)
+	followerReadiness.markOwnerTransferStarted()
 	second := startStory001Command(t, context.Background(), binaryPath, workDir, environment, args...)
 	t.Cleanup(second.stop)
+	followerReadiness.wait(t)
 	origin.releaseModelContent()
 	firstResult := first.wait()
 	secondResult := second.wait()
@@ -99,6 +104,58 @@ func TestStory005SerializesOverlappingBuiltInvokes(t *testing.T) {
 		"STORY-005-EVIDENCE acceptance=semantic-cross-process-publication probe=two delivered concurrent invokes plus cache-only follow-up artifactSHA256=%s artifactBytes=%d transferBeforeReuse=%s transferAfterReuse=%s committed=%s first={%s} second={%s} followUp={%s} assetLedger=%s",
 		story001Binary.identity.sha256, story001Binary.identity.size, compactJSON(transferBeforeReuse), compactJSON(transferAfterReuse), compactJSON(committedAfterReuse), summarizeProcess(firstResult), summarizeProcess(secondResult), summarizeProcess(followUp), compactJSON(origin.assetExchanges()),
 	)
+}
+
+// story005FollowerReadiness observes the second process entering the
+// controlled origin after the owner has reached the blocked model transfer.
+// This proves the owner and follower are live at the same time before the
+// transfer release; the channel is the readiness signal and the timeout is
+// only a safety ceiling.
+type story005FollowerReadiness struct {
+	mu                    sync.Mutex
+	ownerTransferObserved bool
+	followerReady         chan struct{}
+	followerReadyOnce     sync.Once
+}
+
+func installStory005FollowerReadiness(t testing.TB, origin *characterizationOrigin) *story005FollowerReadiness {
+	t.Helper()
+	previousServer := origin.server
+	previousServer.Close()
+	readiness := &story005FollowerReadiness{followerReady: make(chan struct{})}
+	origin.server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == story001ManifestPath() {
+			readiness.observeManifest()
+		}
+		origin.ServeHTTP(writer, request)
+	}))
+	return readiness
+}
+
+func (readiness *story005FollowerReadiness) markOwnerTransferStarted() {
+	readiness.mu.Lock()
+	readiness.ownerTransferObserved = true
+	readiness.mu.Unlock()
+}
+
+func (readiness *story005FollowerReadiness) observeManifest() {
+	readiness.mu.Lock()
+	ownerStarted := readiness.ownerTransferObserved
+	readiness.mu.Unlock()
+	if ownerStarted {
+		readiness.followerReadyOnce.Do(func() { close(readiness.followerReady) })
+	}
+}
+
+func (readiness *story005FollowerReadiness) wait(t testing.TB) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), story001ServerTimeout)
+	defer cancel()
+	select {
+	case <-readiness.followerReady:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for follower manifest request while owner transfer was blocked")
+	}
 }
 
 // TestStory005RecoversAfterOwnerExit proves that a later delivered process
