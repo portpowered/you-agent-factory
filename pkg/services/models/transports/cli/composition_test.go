@@ -468,10 +468,12 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 		t.Fatalf("parse runtime scope: %v", err)
 	}
 	var opened bool
+	var received modelscli.InvokeConfig
 	invocation := factorySessionPresentationInvocation{
 		root: compositionModelsRoot{},
-		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+		openScope: func(_ context.Context, cfg modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			opened = true
+			received = cfg
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
@@ -496,6 +498,9 @@ func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T)
 	}
 	if openedScope.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
+	}
+	if received.Context == nil {
+		t.Fatal("composition provider did not receive the legacy InvokeConfig")
 	}
 }
 

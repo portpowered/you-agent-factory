@@ -19,6 +19,10 @@ import (
 
 const genericCLIInputMaxFileBytes int64 = 8 * 1024 * 1024
 
+type PresentationScopeRequest = modelinference.PresentationScopeRequest
+type PresentationScope = modelinference.PresentationScope
+type PresentationOperatorDefaults = modelinference.PresentationOperatorDefaults
+
 // CompositionModelsRoot exposes the accepted Models root from injected
 // composition collaborators when the invocation operation can supply it.
 type CompositionModelsRoot interface {
@@ -35,6 +39,14 @@ type CompositionOpenCatalogScope interface {
 // composition collaborators when the invocation operation can supply it.
 type CompositionInvokeScopeOpener interface {
 	CompositionOpenInvokeScope(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+}
+
+// CompositionInvokeScopeWithModelCacheOpener is the optional additive
+// composition port for an invocation-local managed-model cache selection. It
+// deliberately sits beside the legacy opener so existing composition
+// providers remain source-compatible.
+type CompositionInvokeScopeWithModelCacheOpener interface {
+	CompositionOpenInvokeScopeWithModelCache(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
 }
 
 // CompositionScopeProvider is the Models transport's explicit composition

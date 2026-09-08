@@ -755,3 +755,26 @@ func (o modelsCLIInvocationOperation) ExportModelInvocationArtifact(
 ) error {
 	return o.invocation.ExportModelInvocationArtifact(source, destination)
 }
+
+func (composition modelsCLIComposition) openModelsPresentationScope(
+	ctx context.Context,
+	cfg modelscli.InvokeConfig,
+	modelCacheDir string,
+) (modelscli.InvokeRuntimeScope, error) {
+	opened, err := composition.source.OpenModelsPresentationScope(ctx, models.PresentationScopeRequest{
+		FactoryDir:       cfg.FactoryDir,
+		WorkingDirectory: cfg.WorkingDirectory,
+		HomeDir:          cfg.HomeDir,
+		OperatorDefaults: models.PresentationOperatorDefaults{
+			WorkerModelProvider: cfg.OperatorDefaults.WorkerModelProvider,
+			WorkerModel:         cfg.OperatorDefaults.WorkerModel,
+		},
+		Logger:        cfg.Logger,
+		Verbose:       cfg.Verbose,
+		ModelCacheDir: modelCacheDir,
+	})
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+}

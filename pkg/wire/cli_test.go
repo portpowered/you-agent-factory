@@ -20,6 +20,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -31,9 +33,92 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
+	"go.uber.org/zap"
 )
 
 type processCommandRunner struct{}
+
+type modelsCLICompositionRootStub struct {
+	modelservice.Service
+}
+
+type modelsCLICompositionScopeSourceStub struct {
+	factorysessionwire.InvocationOperation
+	request modelservice.PresentationScopeRequest
+	scope   modelservice.PresentationScope
+}
+
+func (stub *modelsCLICompositionScopeSourceStub) OpenModelsCatalogScope(
+	_ context.Context,
+) (modelservice.PresentationScope, error) {
+	return stub.scope, nil
+}
+
+func (stub *modelsCLICompositionScopeSourceStub) OpenModelsPresentationScope(
+	_ context.Context,
+	request modelservice.PresentationScopeRequest,
+) (modelservice.PresentationScope, error) {
+	stub.request = request
+	return stub.scope, nil
+}
+
+func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:invoke")
+	if err != nil {
+		t.Fatalf("parse Models runtime scope: %v", err)
+	}
+	logger := zap.NewNop()
+	source := &modelsCLICompositionScopeSourceStub{
+		scope: modelservice.PresentationScope{Scope: scope},
+	}
+	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source)
+	if err != nil {
+		t.Fatalf("provideModelsCLIComposition() error = %v", err)
+	}
+
+	config := modelscli.InvokeConfig{
+		FactoryDir:       "factory",
+		WorkingDirectory: "working",
+		HomeDir:          "home",
+		OperatorDefaults: operatorsettings.ResolvedDefaults{
+			WorkerModelProvider: "CODEX",
+			WorkerModel:         "gpt-test",
+		},
+		Logger:  logger,
+		Verbose: true,
+	}
+	cacheAware, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+	if !ok {
+		t.Fatal("Models CLI composition does not expose optional cache-aware scope opener")
+	}
+	opened, err := cacheAware.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+		Config:        config,
+		ModelCacheDir: "selected-model-cache",
+	})
+	if err != nil {
+		t.Fatalf("CompositionOpenInvokeScope() error = %v", err)
+	}
+	if opened.Scope != scope {
+		t.Fatalf("opened scope = %q, want %q", opened.Scope, scope)
+	}
+	want := modelservice.PresentationScopeRequest{
+		FactoryDir:       config.FactoryDir,
+		WorkingDirectory: config.WorkingDirectory,
+		HomeDir:          config.HomeDir,
+		OperatorDefaults: modelservice.PresentationOperatorDefaults{
+			WorkerModelProvider: config.OperatorDefaults.WorkerModelProvider,
+			WorkerModel:         config.OperatorDefaults.WorkerModel,
+		},
+		Logger:        config.Logger,
+		Verbose:       config.Verbose,
+		ModelCacheDir: "selected-model-cache",
+	}
+	if !reflect.DeepEqual(source.request, want) {
+		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)
+	}
+}
 
 func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 	t.Parallel()
