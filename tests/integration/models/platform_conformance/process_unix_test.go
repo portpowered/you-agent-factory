@@ -27,20 +27,14 @@ func attachControlledProcessTree(command *exec.Cmd) (controlledProcessTree, erro
 }
 
 func terminateControlledProcessTree(command *exec.Cmd, tree controlledProcessTree) error {
-	pgid := tree.pgid
-	if pgid <= 0 && command != nil && command.Process != nil {
-		pgid = command.Process.Pid
-	}
-	if pgid <= 0 {
-		return nil
-	}
-	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-		return err
-	}
-	return nil
+	return signalControlledProcessGroup(command, tree, syscall.SIGKILL)
 }
 
 func requestControlledProcessTreeStop(command *exec.Cmd, tree controlledProcessTree) error {
+	return signalControlledProcessGroup(command, tree, syscall.SIGINT)
+}
+
+func signalControlledProcessGroup(command *exec.Cmd, tree controlledProcessTree, signal syscall.Signal) error {
 	pgid := tree.pgid
 	if pgid <= 0 && command != nil && command.Process != nil {
 		pgid = command.Process.Pid
@@ -48,7 +42,7 @@ func requestControlledProcessTreeStop(command *exec.Cmd, tree controlledProcessT
 	if pgid <= 0 {
 		return nil
 	}
-	if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil && !errors.Is(err, syscall.ESRCH) {
+	if err := syscall.Kill(-pgid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
 	return nil
@@ -57,9 +51,16 @@ func requestControlledProcessTreeStop(command *exec.Cmd, tree controlledProcessT
 func closeControlledProcessTree(controlledProcessTree, bool) {}
 
 func controlledProcessTreeAlive(tree controlledProcessTree) bool {
-	if tree.pgid <= 0 {
-		return false
-	}
-	err := syscall.Kill(-tree.pgid, 0)
+	err := probeControlledProcessGroup(tree)
 	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// probeControlledProcessGroup sends only the read-only zero signal to the
+// attached PGID. It deliberately has no fallback to the direct PID, so
+// release evidence cannot widen ownership to an unrelated process.
+func probeControlledProcessGroup(tree controlledProcessTree) error {
+	if tree.pgid <= 0 {
+		return syscall.ESRCH
+	}
+	return syscall.Kill(-tree.pgid, 0)
 }
