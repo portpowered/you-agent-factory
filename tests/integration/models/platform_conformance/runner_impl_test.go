@@ -21,10 +21,9 @@ import (
 )
 
 const (
-	defaultControlledStreamLimit       int64 = 64 << 10
-	defaultControlledWaitDelay               = 250 * time.Millisecond
-	controlledCleanupCeilingMultiplier       = 4
-	controlledProductFailureExitCode         = 42
+	defaultControlledStreamLimit     int64 = 64 << 10
+	defaultControlledWaitDelay             = 250 * time.Millisecond
+	controlledProductFailureExitCode       = 42
 
 	controlledHelperModeEnv        = "LOCALAI_PLATFORM_CONFORMANCE_HELPER_MODE"
 	controlledHelperOutputRootEnv  = "LOCALAI_PLATFORM_CONFORMANCE_OUTPUT_ROOT"
@@ -51,12 +50,6 @@ const (
 	controlledAssertionCleanup   = "owned resource cleanup"
 	controlledAssertionRedaction = "bounded secret redaction"
 )
-
-type controlledCleanupCeilingError struct{}
-
-func (controlledCleanupCeilingError) Error() string {
-	return "controlled owned resources did not reach quiescence before cleanup ceiling"
-}
 
 // ControlledRunner is the integration-only process boundary for the private
 // platform conformance package. It consumes an already admitted run and never
@@ -260,59 +253,6 @@ func (runner ControlledRunner) collectControlledAttempt(spec RunSpec, attempt *c
 	attempt.exitCode = controlledExitCode(attempt.process, attempt.waitErr, attempt.started)
 	attempt.commandEvidence = runner.commandEvidence(attempt.command, attempt.environment, attempt.redactionTokens, attempt.started, attempt.exitCode, attempt.timedOut, attempt.cancelled, attempt.stdout, attempt.stderr)
 	attempt.semantic = controlledSemanticObservation(attempt.stdout.Bytes(), attempt.redactionTokens)
-}
-
-func (runner ControlledRunner) observeControlledQuiescence(spec RunSpec, attempt *controlledAttempt, listenerObserved bool) {
-	sample := func() ReleaseEvidence {
-		return runner.releaseEvidence(
-			spec, attempt.process, attempt.tree, attempt.treeAttached, attempt.waitCompleted,
-			attempt.cleanupErr, listenerObserved,
-		)
-	}
-	attempt.release = sample()
-	if controlledReleaseResourcesClosed(attempt.release) {
-		return
-	}
-	if runner.waitDelay <= 0 {
-		attempt.cleanupErr = errors.Join(attempt.cleanupErr, controlledCleanupCeilingError{})
-		return
-	}
-
-	// Direct Wait only covers the root process. The attached PGID and declared
-	// listener have no completion channel, so bounded observation is required;
-	// the first sample above remains immediate and the timer is only a safety
-	// ceiling, not a fixed synchronization delay.
-	deadline := time.NewTimer(controlledCleanupCeiling(runner.waitDelay))
-	defer deadline.Stop()
-	interval := time.NewTicker(runner.waitDelay)
-	defer interval.Stop()
-	for {
-		select {
-		case <-interval.C:
-			attempt.release = sample()
-			if controlledReleaseResourcesClosed(attempt.release) {
-				return
-			}
-		case <-deadline.C:
-			attempt.release = sample()
-			if controlledReleaseResourcesClosed(attempt.release) {
-				return
-			}
-			attempt.cleanupErr = errors.Join(attempt.cleanupErr, controlledCleanupCeilingError{})
-			return
-		}
-	}
-}
-
-func controlledCleanupCeiling(delay time.Duration) time.Duration {
-	if delay <= 0 {
-		return 0
-	}
-	return delay * controlledCleanupCeilingMultiplier
-}
-
-func controlledReleaseResourcesClosed(release ReleaseEvidence) bool {
-	return release.OwnedProcesses == 0 && release.OwnedListeners == 0
 }
 
 func (runner ControlledRunner) finishControlledAttempt(admission Admission, options ControlledRunOptions, attempt *controlledAttempt) (Report, error) {
@@ -909,11 +849,6 @@ func controlledErrorClass(err error) string {
 		return "missing"
 	}
 	return "bounded_failure"
-}
-
-func isControlledCleanupCeiling(err error) bool {
-	var ceiling controlledCleanupCeilingError
-	return errors.As(err, &ceiling)
 }
 
 func cleanControlledPartial(path string) (int, int64, error) {
