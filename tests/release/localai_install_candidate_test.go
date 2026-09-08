@@ -22,25 +22,25 @@ import (
 )
 
 const (
-	localAICandidateManifestEnv                 = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
-	localAICandidateSchemaVersion               = "localai-windows-install-candidate/v1"
-	localAICandidateProject                     = "localai"
-	localAICandidateCycle                       = "045"
-	localAICandidateRepository                  = "https://github.com/portpowered/you-agent-factory"
-	localAICandidateCommit                      = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
-	localAICandidateTree                        = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
-	localAICandidatePullRequest                 = 2556
-	localAICandidateMergedHead                  = "1d45c19416774ea2aaffe0cae695102cf2a17a18"
-	localAICandidateGoReleaser                  = "v2.12.7"
-	localAICandidateGOOS                        = "windows"
-	localAICandidateGOARCH                      = "amd64"
-	localAICandidateTemporaryDiskMaximum  int64 = 4294967296
-	localAICandidateToolDownloadMaximum   int64 = 0
-	localAICandidateModelDownloadMaximum  int64 = 0
-	localAICandidateModelCallsMaximum     int64 = 0
-	localAICandidatePaidUSDMaximum        int64 = 0
-	localAICandidateChildProcessesMaximum int64 = 12
-	localAICandidateRerunsMaximum         int64 = 1
+	localAICandidateManifestEnv                = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST"
+	localAICandidateSchemaVersion              = "localai-windows-install-candidate/v1"
+	localAICandidateProject                    = "localai"
+	localAICandidateCycle                      = "048"
+	localAICandidateRepository                 = "https://github.com/portpowered/you-agent-factory"
+	localAICandidateCommit                     = "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9"
+	localAICandidateTree                       = "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
+	localAICandidatePullRequest                = 2556
+	localAICandidateMergedHead                 = "1d45c19416774ea2aaffe0cae695102cf2a17a18"
+	localAICandidateGoReleaser                 = "v2.12.7"
+	localAICandidateGOOS                       = "windows"
+	localAICandidateGOARCH                     = "amd64"
+	localAICandidateTemporaryDiskMaximum int64 = 4294967296
+	localAICandidateToolDownloadMaximum  int64 = 0
+	localAICandidateModelDownloadMaximum int64 = 0
+	localAICandidateModelCallsMaximum    int64 = 0
+	localAICandidatePaidUSDMaximum       int64 = 0
+	localAICandidateDescendantMaximum    int64 = 36
+	localAICandidateRerunsMaximum        int64 = 1
 )
 
 var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -89,7 +89,7 @@ type localAICandidateLimits struct {
 	ModelBackendDownloadMaximum   *int64 `json:"modelBackendDownloadBytesMaximum"`
 	ModelCallsMaximum             *int64 `json:"modelCallsMaximum"`
 	PaidUSDMaximum                *int64 `json:"paidUSDMaximum"`
-	ChildProcessesMaximum         *int64 `json:"childProcessesMaximum"`
+	DescendantMaximum             *int64 `json:"descendantMaximum"`
 	PackagingOrSmokeRerunsMaximum *int64 `json:"packagingOrSmokeRerunsMaximum"`
 }
 type localAICandidateArtifactEvidence struct {
@@ -302,7 +302,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "030"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "030", want "045"`,
+			want: `candidate cycle = "030", want "048"`,
 		},
 		{
 			name: "failed cycle",
@@ -310,7 +310,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "040"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "040", want "045"`,
+			want: `candidate cycle = "040", want "048"`,
 		},
 		{
 			name: "contaminated dependency cycle",
@@ -318,7 +318,23 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 				fixture.manifest.Cycle = "042"
 				fixture.writeManifest(t)
 			},
-			want: `candidate cycle = "042", want "045"`,
+			want: `candidate cycle = "042", want "048"`,
+		},
+		{
+			name: "historical cycle 045",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Cycle = "045"
+				fixture.writeManifest(t)
+			},
+			want: `candidate cycle = "045", want "048"`,
+		},
+		{
+			name: "old descendant ceiling",
+			edit: func(fixture *localAICandidateFixture) {
+				fixture.manifest.Limits.DescendantMaximum = candidateInt64Pointer(12)
+				fixture.writeManifest(t)
+			},
+			want: "candidate limits.descendantMaximum = 12, want 36",
 		},
 		{
 			name: "ordinary download allowance",
@@ -629,7 +645,7 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 		{"modelBackendDownloadBytesMaximum", manifest.Limits.ModelBackendDownloadMaximum, localAICandidateModelDownloadMaximum},
 		{"modelCallsMaximum", manifest.Limits.ModelCallsMaximum, localAICandidateModelCallsMaximum},
 		{"paidUSDMaximum", manifest.Limits.PaidUSDMaximum, localAICandidatePaidUSDMaximum},
-		{"childProcessesMaximum", manifest.Limits.ChildProcessesMaximum, localAICandidateChildProcessesMaximum},
+		{"descendantMaximum", manifest.Limits.DescendantMaximum, localAICandidateDescendantMaximum},
 		{"packagingOrSmokeRerunsMaximum", manifest.Limits.PackagingOrSmokeRerunsMaximum, localAICandidateRerunsMaximum},
 	} {
 		if err := validateLocalAICandidateLimit(limit.name, limit.actual, limit.want); err != nil {
@@ -928,7 +944,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			ModelBackendDownloadMaximum:   candidateInt64Pointer(localAICandidateModelDownloadMaximum),
 			ModelCallsMaximum:             candidateInt64Pointer(localAICandidateModelCallsMaximum),
 			PaidUSDMaximum:                candidateInt64Pointer(localAICandidatePaidUSDMaximum),
-			ChildProcessesMaximum:         candidateInt64Pointer(localAICandidateChildProcessesMaximum),
+			DescendantMaximum:             candidateInt64Pointer(localAICandidateDescendantMaximum),
 			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
 		},
 	}
