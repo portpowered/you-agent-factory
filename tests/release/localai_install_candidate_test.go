@@ -22,14 +22,16 @@ import (
 
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "050", "-p=4", "4"
-	localAICandidateRepository, localAICandidateCommit, localAICandidateTree                                                                                                                                                                                                                                                             = "https://github.com/portpowered/you-agent-factory", "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9", "623dcd01569ccac5776bcf15ffe9fb6a58324b24"
-	localAICandidatePullRequest                                                                                                                                                                                                                                                                                                          = 2556
-	localAICandidateMergedHead, localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                 = "1d45c19416774ea2aaffe0cae695102cf2a17a18", "v2.12.7", "windows", "amd64"
+	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "063", "-p=4", "4"
+	localAICandidateRepository, localAICandidateGitOIDPattern                                                                                                                                                                                                                                                                            = "https://github.com/portpowered/you-agent-factory", `^[0-9a-f]{40}$`
+	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
 	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
 )
 
-var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var (
+	localAICandidateGitOIDRegexp  = regexp.MustCompile(localAICandidateGitOIDPattern)
+	localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+)
 
 type localAICandidateManifest struct {
 	SchemaVersion string                     `json:"schemaVersion"`
@@ -39,13 +41,12 @@ type localAICandidateManifest struct {
 	Build         localAICandidateBuild      `json:"build"`
 	Artifacts     []localAICandidateArtifact `json:"artifacts"`
 	Limits        localAICandidateLimits     `json:"limits"`
+	Attempts      map[string]any             `json:"attempts"`
 }
 type localAICandidateSource struct {
-	Repository            string `json:"repository"`
-	Commit                string `json:"commit"`
-	Tree                  string `json:"tree"`
-	MergedPullRequest     int    `json:"mergedPullRequest"`
-	MergedPullRequestHead string `json:"mergedPullRequestHead"`
+	Repository string `json:"repository"`
+	Commit     string `json:"commit"`
+	Tree       string `json:"tree"`
 }
 type localAICandidateBuild struct {
 	CandidateVersion       string                 `json:"candidateVersion"`
@@ -54,6 +55,7 @@ type localAICandidateBuild struct {
 	GoReleaserVersion      string                 `json:"goreleaserVersion"`
 	GoReleaserConfigSHA256 string                 `json:"goreleaserConfigSha256"`
 	Target                 localAICandidateTarget `json:"target"`
+	Environment            map[string]string      `json:"environment"`
 }
 type localAICandidateTarget struct {
 	GOOS       string `json:"goos"`
@@ -327,7 +329,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			fixture := newLocalAICandidateFixture(t)
 			fixture.manifest.Cycle = cycle
 			fixture.writeManifest(t)
-			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "050"`) {
+			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "063"`) {
 				t.Fatalf("validate historical cycle error = %v, want cycle %s rejection", err, cycle)
 			}
 		})
@@ -371,7 +373,7 @@ func TestLocalAICandidateManifestValidationAcceptsMatchingArtifacts(t *testing.T
 		t.Fatalf("validate matching candidate: %v", err)
 	}
 	if evidence.Status != "PASS" || evidence.Property == "" || evidence.Archive.File != "you_1.2.3-snapshot-test_windows_amd64.zip" || evidence.Archive.Bytes != int64(len(fixture.archiveBytes)) || evidence.Installer.File != "install.ps1" || evidence.Installer.Bytes <= 0 {
-		t.Fatalf("candidate evidence = %#v, want PASS with matching archive and installer identity", evidence)
+		t.Fatalf("candidate evidence = %#v, want PASS with matching archive, executable, and installer identity", evidence)
 	}
 }
 func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T) {
@@ -454,7 +456,7 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 		t.Fatalf("decode observer report: %v", err)
 	}
 	if report.SchemaVersion != "localai-windows-install-candidate-observer/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.ReleaseStatus != "observer-fixture" {
-		t.Fatalf("observer report identity/status = %#v, want cycle-050 PASS observer-fixture", report)
+		t.Fatalf("observer report identity/status = %#v, want cycle-063 PASS observer-fixture", report)
 	}
 	if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
 		t.Fatalf("observer report evidence: %v", err)
@@ -524,13 +526,6 @@ func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEv
 	installer, ok := artifactByRole["windows-installer"]
 	if !ok {
 		return localAICandidateValidationEvidence{}, errors.New("candidate manifest is missing windows-installer artifact")
-	}
-	archiveName := fmt.Sprintf("you_%s_windows_amd64.zip", manifest.Build.CandidateVersion)
-	if archive.File != archiveName {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("windows archive filename %q does not match candidate version; want %q", archive.File, archiveName)
-	}
-	if installer.File != "install.ps1" {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("windows installer filename %q does not match required install.ps1", installer.File)
 	}
 	archiveCandidates, err := localAICandidateArchiveCandidates(candidateDir)
 	if err != nil {
@@ -607,11 +602,9 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 		return fmt.Errorf("candidate cycle = %q, want %q", manifest.Cycle, localAICandidateCycle)
 	}
 	if manifest.Source.Repository != localAICandidateRepository ||
-		manifest.Source.Commit != localAICandidateCommit ||
-		manifest.Source.Tree != localAICandidateTree ||
-		manifest.Source.MergedPullRequest != localAICandidatePullRequest ||
-		manifest.Source.MergedPullRequestHead != localAICandidateMergedHead {
-		return fmt.Errorf("candidate source identity does not match exact merged LocalAI base: repository=%q commit=%q tree=%q mergedPullRequest=%d mergedPullRequestHead=%q", manifest.Source.Repository, manifest.Source.Commit, manifest.Source.Tree, manifest.Source.MergedPullRequest, manifest.Source.MergedPullRequestHead)
+		!localAICandidateGitOIDRegexp.MatchString(manifest.Source.Commit) ||
+		!localAICandidateGitOIDRegexp.MatchString(manifest.Source.Tree) {
+		return fmt.Errorf("candidate source identity is not a canonical final Git commit/tree tuple: repository=%q commit=%q tree=%q", manifest.Source.Repository, manifest.Source.Commit, manifest.Source.Tree)
 	}
 	if strings.TrimSpace(manifest.Build.CandidateVersion) == "" || strings.ContainsAny(manifest.Build.CandidateVersion, "/\\\\:*?\"<>|\t\r\n ") {
 		return fmt.Errorf("candidateVersion %q is not a usable release version", manifest.Build.CandidateVersion)
@@ -638,11 +631,11 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 	if manifest.Build.Target.CgoEnabled == nil || *manifest.Build.Target.CgoEnabled {
 		return fmt.Errorf("candidate target.cgoEnabled = %v, want false", manifest.Build.Target.CgoEnabled != nil && *manifest.Build.Target.CgoEnabled)
 	}
-	if len(manifest.Artifacts) != 2 {
-		return fmt.Errorf("candidate artifacts count = %d, want exactly 2", len(manifest.Artifacts))
+	if len(manifest.Artifacts) != 3 {
+		return fmt.Errorf("candidate artifacts count = %d, want exactly 3", len(manifest.Artifacts))
 	}
 	for _, artifact := range manifest.Artifacts {
-		if (artifact.Role != "windows-amd64-archive" && artifact.Role != "windows-installer") || !isLocalAICandidateBasename(artifact.File) {
+		if (artifact.Role != "windows-amd64-archive" && artifact.Role != "windows-installer" && artifact.Role != "windows-amd64-executable") || !isLocalAICandidateBasename(artifact.File) {
 			return fmt.Errorf("candidate artifact %q has an unsupported role or unsafe file %q", artifact.Role, artifact.File)
 		}
 		if artifact.Bytes == nil || *artifact.Bytes <= 0 || !localAICandidateSHA256Pattern.MatchString(artifact.SHA256) {
@@ -734,13 +727,17 @@ func validateLocalAICandidateArchive(path string) error {
 		return fmt.Errorf("open archive %s: %w", filepath.Base(path), err)
 	}
 	defer archive.Close()
+	entries := 0
 	for _, entry := range archive.File {
 		if entry.Name != "you.exe" || entry.FileInfo().IsDir() {
 			continue
 		}
-		return nil
+		entries++
 	}
-	return fmt.Errorf("archive %s does not contain you.exe", filepath.Base(path))
+	if entries != 1 {
+		return fmt.Errorf("archive %s contains %d regular you.exe entries, want exactly 1", filepath.Base(path), entries)
+	}
+	return nil
 }
 func validateLocalAICandidateDetachedDigest(directory, expected string) error {
 	digestPath := filepath.Join(directory, "candidate-manifest.sha256")
@@ -892,20 +889,20 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 	if err := os.WriteFile(installerPath, installerBytes, 0o600); err != nil {
 		t.Fatalf("write candidate installer: %v", err)
 	}
+	executableBytes := []byte("prebuilt-you-executable")
+	executablePath := filepath.Join(root, "you.exe")
+	if err := os.WriteFile(executablePath, executableBytes, 0o600); err != nil {
+		t.Fatalf("write candidate executable: %v", err)
+	}
 	cgoDisabled := false
 	archiveSize := int64(len(archiveBytes))
 	installerSize := int64(len(installerBytes))
+	executableSize := int64(len(executableBytes))
 	manifest := localAICandidateManifest{
 		SchemaVersion: localAICandidateSchemaVersion,
 		Project:       localAICandidateProject,
 		Cycle:         localAICandidateCycle,
-		Source: localAICandidateSource{
-			Repository:            localAICandidateRepository,
-			Commit:                localAICandidateCommit,
-			Tree:                  localAICandidateTree,
-			MergedPullRequest:     localAICandidatePullRequest,
-			MergedPullRequestHead: localAICandidateMergedHead,
-		},
+		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: strings.Repeat("a", 40), Tree: strings.Repeat("b", 40)},
 		Build: localAICandidateBuild{
 			CandidateVersion:       "1.2.3-snapshot-test",
 			CLIVersion:             "1.2.3-snapshot-test",
@@ -917,10 +914,12 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 				GOARCH:     localAICandidateGOARCH,
 				CgoEnabled: &cgoDisabled,
 			},
+			Environment: map[string]string{"GOPROXY": "file:///C:/cache/download", "GOSUMDB": "off", "GOTOOLCHAIN": "go1.26.8", "npm_config_offline": "true", "GOFLAGS": localAICandidateGOFLAGS, "GOMAXPROCS": localAICandidateGOMAXPROCS},
 		},
 		Artifacts: []localAICandidateArtifact{
 			{Role: "windows-amd64-archive", File: archiveName, Bytes: &archiveSize, SHA256: localAICandidateSHA256(t, archivePath)},
 			{Role: "windows-installer", File: "install.ps1", Bytes: &installerSize, SHA256: localAICandidateSHA256(t, installerPath)},
+			{Role: "windows-amd64-executable", File: "you.exe", Bytes: &executableSize, SHA256: localAICandidateSHA256(t, executablePath)},
 		},
 		Limits: localAICandidateLimits{
 			TemporaryDiskBytesMaximum:     candidateInt64Pointer(localAICandidateTemporaryDiskMaximum),
@@ -932,6 +931,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
 			GOFLAGS:                       localAICandidateGOFLAGS, GOMAXPROCS: localAICandidateGOMAXPROCS,
 		},
+		Attempts: map[string]any{"priorCycles": []string{"030", "040", "042", "045", "048", "050"}, "cycle063BuildMaximum": 1, "cycle063BuildUsed": 1},
 	}
 	roots := make([]localAICandidateRoot, 0, 8)
 	for _, name := range []string{"HOME", "USERPROFILE", "install", "config", "state", "models", "backend", "HF"} {

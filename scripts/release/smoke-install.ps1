@@ -675,9 +675,11 @@ function Invoke-CandidateSmoke {
     $reportPath = $null
     $archivePath = $null
     $installerPath = $null
+    $executablePath = $null
     $digestPath = $null
     $archiveEvidence = $null
     $installerEvidence = $null
+    $executableEvidence = $null
     $manifestEvidence = $null
     $originalEnvironment = @{}
     $runStartedAt = [DateTime]::UtcNow
@@ -711,11 +713,11 @@ function Invoke-CandidateSmoke {
         if ($manifest.schemaVersion -ne "localai-windows-install-candidate/v1") {
             Fail-Smoke "candidate schemaVersion is not localai-windows-install-candidate/v1"
         }
-        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "050") {
-            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 050"
+        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "063") {
+            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 063"
         }
-        if ($manifest.source.repository -ne "https://github.com/portpowered/you-agent-factory" -or $manifest.source.commit -ne "a9c41aade845c8f09047a11b2e5a3abf41f0f9e9" -or $manifest.source.tree -ne "623dcd01569ccac5776bcf15ffe9fb6a58324b24" -or [int]$manifest.source.mergedPullRequest -ne 2556 -or $manifest.source.mergedPullRequestHead -ne "1d45c19416774ea2aaffe0cae695102cf2a17a18") {
-            Fail-Smoke "candidate source identity does not match the exact merged base"
+        if ($manifest.source.repository -ne "https://github.com/portpowered/you-agent-factory" -or [string]$manifest.source.commit -cnotmatch '^[0-9a-f]{40}$' -or [string]$manifest.source.tree -cnotmatch '^[0-9a-f]{40}$') {
+            Fail-Smoke "candidate source identity is not a canonical final Git commit/tree tuple"
         }
         $version = [string]$manifest.build.candidateVersion
         if ([string]::IsNullOrWhiteSpace($version) -or $version -match '[\\/:*?"<>|\s]') {
@@ -723,6 +725,21 @@ function Invoke-CandidateSmoke {
         }
         if ([string]::IsNullOrWhiteSpace([string]$manifest.build.cliVersion) -or [string]$manifest.build.goreleaserConfigSha256 -notmatch '^[0-9a-f]{64}$' -or $manifest.build.goreleaserVersion -ne "v2.12.7" -or $manifest.build.target.goos -ne "windows" -or $manifest.build.target.goarch -ne "amd64" -or $manifest.build.target.cgoEnabled -ne $false) {
             Fail-Smoke "candidate build target/tool identity is not windows/amd64 with cgo disabled"
+        }
+        $requiredEnvironment = [ordered]@{
+            GOSUMDB = "off"
+            GOTOOLCHAIN = "go1.26.8"
+            npm_config_offline = "true"
+            GOFLAGS = "-p=4"
+            GOMAXPROCS = "4"
+        }
+        foreach ($environment in $requiredEnvironment.GetEnumerator()) {
+            if ([string]$manifest.build.environment.($environment.Key) -ne [string]$environment.Value) {
+                Fail-Smoke "candidate build environment $($environment.Key) = $($manifest.build.environment.($environment.Key)), want $($environment.Value)"
+            }
+        }
+        if ([string]$manifest.build.environment.GOPROXY -notmatch '^file://') {
+            Fail-Smoke "candidate build environment GOPROXY must be a file URL"
         }
         $requiredLimits = [ordered]@{
             temporaryDiskBytesMaximum = 4294967296
@@ -749,18 +766,28 @@ function Invoke-CandidateSmoke {
                 Fail-Smoke "candidate control $($control.Key) = $actualControl, want $($control.Value)"
             }
         }
+        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050")
+        $actualPriorCycles = @($manifest.attempts.priorCycles | ForEach-Object { [string]$_ })
+        if ($actualPriorCycles.Count -ne $expectedPriorCycles.Count -or (Compare-Object -ReferenceObject $expectedPriorCycles -DifferenceObject $actualPriorCycles)) {
+            Fail-Smoke "candidate attempts priorCycles = $($actualPriorCycles -join ', '), want $($expectedPriorCycles -join ', ')"
+        }
+        if ([int]$manifest.attempts.cycle063BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle063BuildUsed -ne 1) {
+            Fail-Smoke "candidate attempts must record cycle063BuildMaximum=1 and cycle063BuildUsed=1"
+        }
         $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
         $installerArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-installer" })
-        if (@($manifest.artifacts).Count -ne 2 -or $archiveArtifacts.Count -ne 1 -or $installerArtifacts.Count -ne 1) {
-            Fail-Smoke "candidate manifest must contain one archive and one installer artifact"
+        $executableArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-executable" })
+        if (@($manifest.artifacts).Count -ne 3 -or $archiveArtifacts.Count -ne 1 -or $installerArtifacts.Count -ne 1 -or $executableArtifacts.Count -ne 1) {
+            Fail-Smoke "candidate manifest must contain one archive, one executable, and one installer artifact"
         }
         $archiveArtifact = $archiveArtifacts[0]
         $installerArtifact = $installerArtifacts[0]
+        $executableArtifact = $executableArtifacts[0]
         $archiveName = "you_${version}_windows_amd64.zip"
-        if ($archiveArtifact.file -ne $archiveName -or $installerArtifact.file -ne "install.ps1") {
-            Fail-Smoke "candidate artifact filenames do not match the declared version"
+        if ($archiveArtifact.file -ne $archiveName -or $installerArtifact.file -ne "install.ps1" -or $executableArtifact.file -ne "you.exe") {
+            Fail-Smoke "candidate artifact filenames do not match the declared version and executable identity"
         }
-        foreach ($artifact in @($archiveArtifact, $installerArtifact)) {
+        foreach ($artifact in @($archiveArtifact, $installerArtifact, $executableArtifact)) {
             if ([System.IO.Path]::GetFileName([string]$artifact.file) -ne [string]$artifact.file -or [int64]$artifact.bytes -le 0 -or [string]$artifact.sha256 -notmatch '^[0-9a-f]{64}$') {
                 Fail-Smoke "candidate artifact $($artifact.role) is incomplete or unsafe"
             }
@@ -768,13 +795,18 @@ function Invoke-CandidateSmoke {
 
         $archivePath = Join-Path $candidateDirectory $archiveArtifact.file
         $installerPath = Join-Path $candidateDirectory $installerArtifact.file
+        $executablePath = Join-Path $candidateDirectory $executableArtifact.file
         $archiveEvidence = Get-SmokeArtifactEvidence "windows-amd64-archive" $archivePath
         $installerEvidence = Get-SmokeArtifactEvidence "windows-installer" $installerPath
+        $executableEvidence = Get-SmokeArtifactEvidence "windows-amd64-executable" $executablePath
         if ($archiveEvidence.bytes -ne [int64]$archiveArtifact.bytes -or $archiveEvidence.sha256 -ne [string]$archiveArtifact.sha256) {
             Fail-Smoke "candidate archive bytes or SHA-256 do not match the manifest"
         }
         if ($installerEvidence.bytes -ne [int64]$installerArtifact.bytes -or $installerEvidence.sha256 -ne [string]$installerArtifact.sha256) {
             Fail-Smoke "candidate installer bytes or SHA-256 do not match the manifest"
+        }
+        if ($executableEvidence.bytes -ne [int64]$executableArtifact.bytes -or $executableEvidence.sha256 -ne [string]$executableArtifact.sha256) {
+            Fail-Smoke "candidate executable bytes or SHA-256 do not match the manifest"
         }
         $archiveCandidates = @(Get-ChildItem -LiteralPath $candidateDirectory -File -Force | Where-Object { $_.Name -match '^you_.+_windows_amd64\.zip$' })
         if ($archiveCandidates.Count -ne 1 -or $archiveCandidates[0].Name -ne $archiveName) {
@@ -787,6 +819,9 @@ function Invoke-CandidateSmoke {
             Fail-Smoke "detached candidate manifest digest does not match the manifest"
         }
         $zipEntryEvidence = Get-SmokeZipEntryEvidence $archivePath
+        if ($executableEvidence.bytes -ne $zipEntryEvidence.bytes -or $executableEvidence.sha256 -ne $zipEntryEvidence.sha256) {
+            Fail-Smoke "candidate executable does not match the you.exe member in the declared archive"
+        }
         $report.identity = [ordered]@{
             schemaVersion = $manifest.schemaVersion
             sourceCommit = $manifest.source.commit
@@ -796,6 +831,7 @@ function Invoke-CandidateSmoke {
             target = "$($manifest.build.target.goos)/$($manifest.build.target.goarch)"
             archive = $archiveEvidence
             archiveYouEntry = $zipEntryEvidence
+            executable = $executableEvidence
             installer = $installerEvidence
             manifest = $manifestEvidence
             detachedManifestDigest = $digestFields[0]
@@ -1198,17 +1234,19 @@ function Invoke-CandidateSmoke {
         }
 
         try {
-            if ($null -ne $archiveEvidence -and $null -ne $installerEvidence -and $null -ne $manifestEvidence) {
+            if ($null -ne $archiveEvidence -and $null -ne $installerEvidence -and $null -ne $executableEvidence -and $null -ne $manifestEvidence) {
                 $postArchive = Get-SmokeArtifactEvidence "windows-amd64-archive" $archivePath
                 $postInstaller = Get-SmokeArtifactEvidence "windows-installer" $installerPath
+                $postExecutable = Get-SmokeArtifactEvidence "windows-amd64-executable" $executablePath
                 $postManifest = Get-SmokeArtifactEvidence "candidate-manifest" $manifestPath
                 $postDigest = (([System.IO.File]::ReadAllText($digestPath)).Trim() -split '\s+')[0]
                 $report.postCleanup = [ordered]@{
                     archive = $postArchive
+                    executable = $postExecutable
                     installer = $postInstaller
                     manifest = $postManifest
                     detachedManifestDigest = $postDigest
-                    candidateHashesStable = ($postArchive.sha256 -eq $archiveEvidence.sha256 -and $postInstaller.sha256 -eq $installerEvidence.sha256 -and $postManifest.sha256 -eq $manifestEvidence.sha256 -and $postDigest -eq $manifestEvidence.sha256)
+                    candidateHashesStable = ($postArchive.sha256 -eq $archiveEvidence.sha256 -and $postExecutable.sha256 -eq $executableEvidence.sha256 -and $postInstaller.sha256 -eq $installerEvidence.sha256 -and $postManifest.sha256 -eq $manifestEvidence.sha256 -and $postDigest -eq $manifestEvidence.sha256)
                 }
                 if (-not $report.postCleanup.candidateHashesStable) {
                     if ($null -eq $failure) { $failure = [System.Exception]::new("candidate hashes changed during install smoke cleanup") }
@@ -1469,7 +1507,7 @@ function Invoke-ObserverFixture {
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
-        cycle = "050"
+        cycle = "063"
         releaseStatus = "observer-fixture"
         observation = [ordered]@{
             environment = $goEnvironment
