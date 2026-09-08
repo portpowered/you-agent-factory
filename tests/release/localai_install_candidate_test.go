@@ -117,18 +117,22 @@ type localAICandidateRoot struct {
 	Path string
 }
 
-func TestLocalAICandidate_ValidatesOptInPrebuiltWindowsCandidate(t *testing.T) {
+func localAICandidateManifestPath(t *testing.T, purpose string) string {
+	t.Helper()
 	if runtime.GOOS != "windows" {
-		t.Skip("Windows candidate release cell is only available on Windows")
+		t.Skip("Windows " + purpose + " is only available on Windows")
 	}
 	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
 	if manifestPath == "" {
-		t.Skip("set " + localAICandidateManifestEnv + " to run the prebuilt candidate release cell")
+		t.Skip("set " + localAICandidateManifestEnv + " to run the " + purpose)
 	}
 	if !filepath.IsAbs(manifestPath) {
 		t.Fatalf("candidate manifest path %q is not absolute; %s must name an absolute path", manifestPath, localAICandidateManifestEnv)
 	}
-
+	return manifestPath
+}
+func TestLocalAICandidate_ValidatesOptInPrebuiltWindowsCandidate(t *testing.T) {
+	manifestPath := localAICandidateManifestPath(t, "candidate release cell")
 	evidence, err := validateLocalAICandidate(manifestPath)
 	if err != nil {
 		t.Logf("LOCALAI-CANDIDATE status=FAIL property=prebuilt-candidate-schema-source-target-artifact-and-detached-digest-identity reason=%q", err)
@@ -140,18 +144,8 @@ func TestLocalAICandidate_ValidatesOptInPrebuiltWindowsCandidate(t *testing.T) {
 	}
 	t.Logf("LOCALAI-CANDIDATE status=PASS property=%s evidence=%s", evidence.Property, encoded)
 }
-
 func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows candidate release smoke is only available on Windows")
-	}
-	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
-	if manifestPath == "" {
-		t.Skip("set " + localAICandidateManifestEnv + " to run the prebuilt candidate release smoke")
-	}
-	if !filepath.IsAbs(manifestPath) {
-		t.Fatalf("candidate manifest path %q is not absolute; %s must name an absolute path", manifestPath, localAICandidateManifestEnv)
-	}
+	manifestPath := localAICandidateManifestPath(t, "candidate release smoke")
 	if _, err := validateLocalAICandidate(manifestPath); err != nil {
 		t.Fatalf("validate candidate before public install smoke: %v", err)
 	}
@@ -179,7 +173,6 @@ func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("public Windows candidate install smoke: %v\n%s", err, output)
 	}
-
 	reportBytes, err := os.ReadFile(reportPath)
 	if err != nil {
 		t.Fatalf("read candidate install smoke report: %v\n%s", err, output)
@@ -216,13 +209,7 @@ func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
 }
 
 func TestLocalAICandidate_PublicInstallPreconditionsRemainFailClosed(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows candidate release smoke is only available on Windows")
-	}
-	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
-	if manifestPath == "" {
-		t.Skip("set " + localAICandidateManifestEnv + " to run the prebuilt candidate release smoke")
-	}
+	manifestPath := localAICandidateManifestPath(t, "candidate release smoke")
 	pwsh, err := exec.LookPath("powershell.exe")
 	if err != nil {
 		t.Fatalf("candidate release smoke requires Windows PowerShell (powershell.exe): %v", err)
@@ -426,7 +413,6 @@ func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T)
 			want: "declared root \"HOME\" is not empty",
 		},
 	}
-
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
@@ -897,7 +883,6 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 	if err := os.WriteFile(installerPath, installerBytes, 0o600); err != nil {
 		t.Fatalf("write candidate installer: %v", err)
 	}
-
 	cgoDisabled := false
 	archiveSize := int64(len(archiveBytes))
 	installerSize := int64(len(installerBytes))
@@ -938,7 +923,6 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
 		},
 	}
-
 	fixture := &localAICandidateFixture{
 		root:         root,
 		manifestPath: filepath.Join(root, "candidate-manifest.json"),
@@ -962,7 +946,6 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 
 func (fixture *localAICandidateFixture) writeManifest(t *testing.T) {
 	t.Helper()
-
 	manifestBytes, err := json.MarshalIndent(fixture.manifest, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal candidate fixture manifest: %v", err)
@@ -980,7 +963,6 @@ func (fixture *localAICandidateFixture) writeManifest(t *testing.T) {
 
 func localAICandidateZip(t *testing.T) []byte {
 	t.Helper()
-
 	var buffer bytes.Buffer
 	writer := zip.NewWriter(&buffer)
 	for name, contents := range map[string][]byte{
