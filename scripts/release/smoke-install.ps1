@@ -16,6 +16,45 @@ function Fail-Smoke {
     throw "install smoke: $Message"
 }
 
+function Ensure-SmokeFileHashCommand {
+    if ($null -ne (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+        return
+    }
+
+    function global:Get-FileHash {
+        param(
+            [string[]]$Path,
+            [string[]]$LiteralPath,
+            [string]$Algorithm = "SHA256"
+        )
+
+        $paths = if ($null -ne $LiteralPath -and $LiteralPath.Count -ne 0) {
+            $LiteralPath
+        } else {
+            @(Resolve-Path -Path $Path | ForEach-Object { $_.ProviderPath })
+        }
+        foreach ($filePath in $paths) {
+            $hasher = [System.Security.Cryptography.HashAlgorithm]::Create($Algorithm)
+            $stream = [System.IO.File]::OpenRead($filePath)
+            try {
+                $digest = $hasher.ComputeHash($stream)
+            } finally {
+                $stream.Dispose()
+                $hasher.Dispose()
+            }
+            [pscustomobject]@{
+                Algorithm = $Algorithm.ToUpperInvariant()
+                Hash = [System.BitConverter]::ToString($digest).Replace("-", "")
+                Path = $filePath
+            }
+        }
+    }
+
+    if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
+        Fail-Smoke "candidate mode could not establish the SHA-256 file-hash observer"
+    }
+}
+
 function Resolve-SmokeAbsolutePath {
     param([string]$Value)
 
@@ -89,6 +128,94 @@ function Get-SmokeForbiddenProcesses {
     return $matches
 }
 
+function Get-SmokeNetworkConnections {
+    param([int]$ProcessId)
+
+    if ($null -eq (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+        Fail-Smoke "candidate mode requires the Get-NetTCPConnection network observer"
+    }
+    try {
+        $connections = @(Get-NetTCPConnection -OwningProcess $ProcessId -ErrorAction Stop)
+    } catch {
+        if ($_.Exception.Message -like "*No MSFT_NetTCPConnection objects found*" -or $_.Exception.Message -like "*No matching MSFT_NetTCPConnection*") {
+            return @()
+        }
+        throw
+    }
+    return @($connections | ForEach-Object {
+        [ordered]@{
+            processId = $ProcessId
+            localAddress = [string]$_.LocalAddress
+            localPort = [int]$_.LocalPort
+            remoteAddress = [string]$_.RemoteAddress
+            remotePort = [int]$_.RemotePort
+            state = [string]$_.State
+        }
+    })
+}
+
+function Get-SmokeDirectoryBytes {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return [int64]0
+    }
+    $total = [int64]0
+    foreach ($item in @(Get-ChildItem -LiteralPath $Path -File -Force -Recurse -ErrorAction Stop)) {
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            Fail-Smoke "activity root contains a reparse point: $($item.FullName)"
+        }
+        $total += [int64]$item.Length
+    }
+    return $total
+}
+
+function Test-SmokeLoopbackAddress {
+    param([string]$Address)
+
+    return $Address -eq "127.0.0.1" -or $Address -eq "::1" -or $Address -eq "0:0:0:0:0:0:0:1"
+}
+
+function Get-SmokeUnexpectedConnections {
+    param(
+        [object[]]$Connections,
+        [int]$AllowedRemotePort = 0
+    )
+
+    return @($Connections | Where-Object {
+        $loopback = Test-SmokeLoopbackAddress ([string]$_.remoteAddress)
+        $allowed = $loopback -and $AllowedRemotePort -gt 0 -and [int]$_.remotePort -eq $AllowedRemotePort
+        -not $allowed
+    })
+}
+
+function Assert-SmokeCommandNetwork {
+    param(
+        [object]$Result,
+        [string]$CommandName
+    )
+
+    if ($null -eq $Result.network -or $Result.network.observerStatus -ne "PASS" -or [int]$Result.network.samples -le 0) {
+        Fail-Smoke "network observer did not produce a live sample for $CommandName"
+    }
+    if (@($Result.network.unexpectedConnections).Count -ne 0) {
+        Fail-Smoke "unexpected network connection observed for $($CommandName): $($Result.network.unexpectedConnections | ConvertTo-Json -Compress)"
+    }
+}
+
+function Record-SmokeCommandObservation {
+    param(
+        [object]$Result,
+        [System.Collections.Generic.List[object]]$NetworkObservations,
+        [System.Collections.Generic.List[string]]$ForbiddenProcessObservations
+    )
+
+    [void]$NetworkObservations.Add($Result.network)
+    foreach ($processName in @($Result.forbiddenProcesses)) {
+        [void]$ForbiddenProcessObservations.Add([string]$processName)
+    }
+}
+
 function Get-SmokeArtifactEvidence {
     param(
         [string]$Role,
@@ -99,7 +226,15 @@ function Get-SmokeArtifactEvidence {
     if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
         Fail-Smoke "$Role is not a regular file: $Path"
     }
-    $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $digest = $hasher.ComputeHash($stream)
+    } finally {
+        $stream.Dispose()
+        $hasher.Dispose()
+    }
+    $hash = [System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant()
     return [ordered]@{
         role = $Role
         file = $item.Name
@@ -147,7 +282,8 @@ function Invoke-SmokeCommand {
         [string]$FilePath,
         [string[]]$Arguments,
         [string]$WorkingDirectory,
-        [int]$TimeoutMilliseconds = 60000
+        [int]$TimeoutMilliseconds = 60000,
+        [int]$NetworkObserverSampleMilliseconds = 50
     )
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -161,25 +297,74 @@ function Invoke-SmokeCommand {
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
+    $networkSamples = New-Object 'System.Collections.Generic.List[object]'
+    $forbiddenProcessSamples = New-Object 'System.Collections.Generic.List[string]'
+    $observerErrors = New-Object 'System.Collections.Generic.List[string]'
+    $networkSampleCount = 0
     try {
         if (-not $process.Start()) {
             Fail-Smoke "could not start $FilePath"
         }
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
-            try {
-                $process.Kill($true)
-            } catch {
-                try { $process.Kill() } catch { }
+        $startedAt = [DateTime]::UtcNow
+        $deadline = $startedAt.AddMilliseconds($TimeoutMilliseconds)
+        try {
+            $networkSampleCount++
+            foreach ($connection in @(Get-SmokeNetworkConnections -ProcessId $process.Id)) {
+                [void]$networkSamples.Add($connection)
             }
-            Fail-Smoke "$FilePath $([string]::Join(' ', $Arguments)) exceeded ${TimeoutMilliseconds}ms"
+            foreach ($processName in @(Get-SmokeForbiddenProcesses)) {
+                [void]$forbiddenProcessSamples.Add($processName)
+            }
+        } catch {
+            [void]$observerErrors.Add($_.Exception.Message)
+        }
+        while (-not $process.HasExited) {
+            try {
+                $networkSampleCount++
+                foreach ($connection in @(Get-SmokeNetworkConnections -ProcessId $process.Id)) {
+                    [void]$networkSamples.Add($connection)
+                }
+                foreach ($processName in @(Get-SmokeForbiddenProcesses)) {
+                    [void]$forbiddenProcessSamples.Add($processName)
+                }
+            } catch {
+                [void]$observerErrors.Add($_.Exception.Message)
+                break
+            }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                try {
+                    $process.Kill($true)
+                } catch {
+                    try { $process.Kill() } catch { }
+                }
+                Fail-Smoke "$FilePath $([string]::Join(' ', $Arguments)) exceeded ${TimeoutMilliseconds}ms"
+            }
+            if ($process.WaitForExit($NetworkObserverSampleMilliseconds)) {
+                break
+            }
         }
         $process.WaitForExit()
+        if ($observerErrors.Count -ne 0) {
+            Fail-Smoke "network/process observer failed for $FilePath`: $($observerErrors -join '; ')"
+        }
+        $unexpectedConnections = @(Get-SmokeUnexpectedConnections -Connections $networkSamples.ToArray())
+        $port7437Connections = @($networkSamples.ToArray() | Where-Object { [int]$_.remotePort -eq 7437 })
         return [pscustomobject]@{
             exitCode = $process.ExitCode
             stdout = $stdoutTask.GetAwaiter().GetResult()
             stderr = $stderrTask.GetAwaiter().GetResult()
+            network = [ordered]@{
+                observerStatus = "PASS"
+                sampler = "Get-NetTCPConnection"
+                sampleIntervalMilliseconds = $NetworkObserverSampleMilliseconds
+                samples = [int]$networkSampleCount
+                connections = $networkSamples.ToArray()
+                unexpectedConnections = $unexpectedConnections
+                port7437Connections = $port7437Connections
+            }
+            forbiddenProcesses = @($forbiddenProcessSamples | Sort-Object -Unique)
         }
     } finally {
         $process.Dispose()
@@ -206,49 +391,53 @@ function Start-CandidateServer {
         [string]$LedgerPath
     )
 
-    if ($null -eq (Get-Command Start-ThreadJob -ErrorAction SilentlyContinue)) {
-        Fail-Smoke "candidate mode requires the PowerShell Start-ThreadJob command"
-    }
-
     $port = New-SmokeLoopbackPort
     $baseUrl = "http://127.0.0.1:$port/releases"
-    $listener = [System.Net.HttpListener]::new()
-    [void]$listener.Prefixes.Add("http://127.0.0.1:$port/")
-    $ready = [System.Threading.ManualResetEventSlim]::new($false)
     $scriptRequestPath = "/releases/download/v$Version/install.ps1"
     $archiveRequestPath = "/releases/download/v$Version/$ArchiveName"
     $checksumName = "you_${Version}_checksums.txt"
     $checksumRequestPath = "/releases/download/v$Version/$checksumName"
     $expectedPaths = @($scriptRequestPath, $archiveRequestPath, $checksumRequestPath)
     $checksumContents = "$ArchiveSHA256  $ArchiveName`n"
+    $eventName = "LocalAI-Candidate-Loopback-" + [System.Guid]::NewGuid().ToString("N")
+    $createdNew = $false
+    $readyEvent = [System.Threading.EventWaitHandle]::new(
+        $false,
+        [System.Threading.EventResetMode]::ManualReset,
+        $eventName,
+        [ref]$createdNew
+    )
 
-    $job = Start-ThreadJob -Name "localai-candidate-loopback" -ArgumentList @(
-        $listener,
-        $ready,
+    $job = Start-Job -Name "localai-candidate-loopback" -ArgumentList @(
+        $port,
         $InstallerPath,
         $ArchivePath,
         $LedgerPath,
+        $eventName,
         $scriptRequestPath,
         $archiveRequestPath,
         $checksumRequestPath,
         $checksumContents
     ) -ScriptBlock {
         param(
-            $server,
-            $signal,
+            $port,
             $scriptPath,
             $archivePath,
             $ledgerPath,
+            $eventName,
             $scriptRequestPath,
             $archiveRequestPath,
             $checksumRequestPath,
             $checksumContents
         )
 
+        $server = [System.Net.HttpListener]::new()
+        [void]$server.Prefixes.Add("http://127.0.0.1:$port/")
+        $ready = [System.Threading.EventWaitHandle]::OpenExisting($eventName)
         $servedExpected = 0
         try {
             [void]$server.Start()
-            [void]$signal.Set()
+            [void]$ready.Set()
             while ($servedExpected -lt 3) {
                 $context = $server.GetContext()
                 $path = $context.Request.Url.AbsolutePath
@@ -286,7 +475,7 @@ function Start-CandidateServer {
                 }
             }
         } catch {
-            [void]$signal.Set()
+            [void]$ready.Set()
             throw
         } finally {
             try {
@@ -299,13 +488,18 @@ function Start-CandidateServer {
                 $server.Close()
             } catch {
             }
+            try {
+                $ready.Close()
+            } catch {
+            }
         }
     }
 
-    if (-not $ready.Wait(5000)) {
+    if (-not $readyEvent.WaitOne(5000)) {
         $reason = $job.ChildJobs[0].JobStateInfo.Reason
         try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch { }
         try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { }
+        $readyEvent.Close()
         if ($null -ne $reason) {
             Fail-Smoke "loopback candidate server did not become ready: $reason"
         }
@@ -314,8 +508,9 @@ function Start-CandidateServer {
 
     return [pscustomobject]@{
         baseUrl = $baseUrl
-        listener = $listener
         job = $job
+        readyEvent = $readyEvent
+        port = $port
         ledgerPath = $LedgerPath
         expectedPaths = $expectedPaths
     }
@@ -326,12 +521,6 @@ function Stop-CandidateServer {
 
     if ($null -eq $ServerState) {
         return
-    }
-    try {
-        if ($null -ne $ServerState.listener -and $ServerState.listener.IsListening) {
-            $ServerState.listener.Stop()
-        }
-    } catch {
     }
     if ($null -ne $ServerState.job) {
         try {
@@ -345,8 +534,8 @@ function Stop-CandidateServer {
         try { Remove-Job -Job $ServerState.job -Force -ErrorAction SilentlyContinue } catch { }
     }
     try {
-        if ($null -ne $ServerState.listener) {
-            $ServerState.listener.Close()
+        if ($null -ne $ServerState.readyEvent) {
+            $ServerState.readyEvent.Close()
         }
     } catch {
     }
@@ -432,6 +621,39 @@ function Invoke-CandidateSmoke {
         schemaVersion = "localai-windows-install-candidate-install/v1"
         status = "FAIL"
         property = "public-install-identity-discovery-zero-model-backend-activity-cleanup"
+        run = [ordered]@{
+            schemaVersion = "localai-windows-install-candidate-run/v1"
+            status = "NOT_STARTED"
+            startedAt = $null
+            endedAt = $null
+            durationMilliseconds = $null
+            platform = [ordered]@{
+                os = "windows"
+                architecture = "amd64"
+                powershell = [string]$PSVersionTable.PSVersion
+                edition = [string]$PSVersionTable.PSEdition
+            }
+            artifact = [ordered]@{}
+            isolation = [ordered]@{}
+            timeouts = [ordered]@{
+                commandMilliseconds = 60000
+                loopbackServerReadyMilliseconds = 5000
+                loopbackCompletionMilliseconds = 15000
+                networkObserverSampleMilliseconds = 50
+            }
+            processLifetime = [ordered]@{
+                command = "observed from process start until exit or command timeout"
+                descendantPolicy = "candidate smoke owns and cleans the loopback server job and installed CLI processes"
+            }
+            networkPolicy = [ordered]@{
+                allowed = "installer loopback requests recorded by the task server"
+                unexpected = "any non-loopback or unexpected loopback connection observed for the installed CLI fails the smoke"
+                port7437 = "must remain unobserved"
+                observer = "Get-NetTCPConnection by installed CLI process id"
+            }
+            budgets = [ordered]@{}
+            observed = [ordered]@{}
+        }
         preconditions = [ordered]@{}
         identity = [ordered]@{}
         installer = [ordered]@{}
@@ -456,6 +678,11 @@ function Invoke-CandidateSmoke {
     $installerEvidence = $null
     $manifestEvidence = $null
     $originalEnvironment = @{}
+    $runStartedAt = [DateTime]::UtcNow
+    $networkObservations = New-Object 'System.Collections.Generic.List[object]'
+    $forbiddenProcessObservations = New-Object 'System.Collections.Generic.List[string]'
+    $report.run.startedAt = $runStartedAt.ToString("o")
+    $report.run.status = "RUNNING"
     $environmentNames = @(
         "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "PATH", "TEMP", "TMP",
         "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
@@ -465,6 +692,7 @@ function Invoke-CandidateSmoke {
     )
 
     try {
+        Ensure-SmokeFileHashCommand
         $manifestPath = Resolve-SmokeAbsolutePath $RequestedManifestPath
         $candidateDirectory = Split-Path -Parent $manifestPath
         $installDirectory = Resolve-SmokeAbsolutePath $RequestedInstallDir
@@ -560,6 +788,26 @@ function Invoke-CandidateSmoke {
             manifest = $manifestEvidence
             detachedManifestDigest = $digestFields[0]
         }
+        $report.run.status = "RUNNING"
+        $report.run.startedAt = $runStartedAt.ToString("o")
+        $report.run.artifact = [ordered]@{
+            candidateVersion = $version
+            cliVersion = [string]$manifest.build.cliVersion
+            sourceCommit = [string]$manifest.source.commit
+            sourceTree = [string]$manifest.source.tree
+            manifest = $manifestEvidence
+            archive = $archiveEvidence
+            installer = $installerEvidence
+        }
+        $report.run.budgets = [ordered]@{
+            temporaryDiskBytesMaximum = [int64]$manifest.limits.temporaryDiskBytesMaximum
+            ordinaryToolDownloadBytesMaximum = [int64]$manifest.limits.ordinaryToolDownloadBytesMaximum
+            modelBackendDownloadBytesMaximum = [int64]$manifest.limits.modelBackendDownloadBytesMaximum
+            modelCallsMaximum = [int64]$manifest.limits.modelCallsMaximum
+            paidUSDMaximum = [int64]$manifest.limits.paidUSDMaximum
+            childProcessesMaximum = [int64]$manifest.limits.childProcessesMaximum
+            packagingOrSmokeRerunsMaximum = [int64]$manifest.limits.packagingOrSmokeRerunsMaximum
+        }
         $report.installer.archiveName = $archiveName
         $report.installer.checksumName = "you_${version}_checksums.txt"
 
@@ -600,6 +848,7 @@ function Invoke-CandidateSmoke {
             Assert-SmokeDisposableRoot $root.name $root.path
         }
         $installRootSafe = $true
+        Import-Module Microsoft.PowerShell.Utility -Global -ErrorAction Stop
         if ($installDirectory.StartsWith($candidateDirectory.TrimEnd('\\') + '\\', [System.StringComparison]::OrdinalIgnoreCase) -or $installDirectory.TrimEnd('\\').Equals($candidateDirectory.TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {
             Fail-Smoke "install directory must not be inside the retained candidate directory"
         }
@@ -647,6 +896,32 @@ function Invoke-CandidateSmoke {
         $env:HF_HOME = $hfRoot
 
         [void](New-Item -ItemType Directory -Path $tempRoot -Force)
+        $baselineNetworkConnections = @(Get-SmokeNetworkConnections -ProcessId $PID)
+        foreach ($processName in $forbiddenBefore) {
+            [void]$forbiddenProcessObservations.Add($processName)
+        }
+        $activityBytesBefore = [int64](Get-SmokeDirectoryBytes -Path $modelsRoot) + [int64](Get-SmokeDirectoryBytes -Path $hfRoot)
+        $report.run.isolation = [ordered]@{
+            manifest = $manifestPath
+            candidateDirectory = $candidateDirectory
+            taskRoot = $taskRoot
+            installDirectory = $installDirectory
+            home = $homeRoot
+            userProfile = $profileRoot
+            temporary = $tempRoot
+            models = $modelsRoot
+            backend = $backendRoot
+            huggingFace = $hfRoot
+        }
+        $report.run.observer = [ordered]@{
+            status = "PASS"
+            startedBeforeInstaller = $true
+            networkSampler = "Get-NetTCPConnection"
+            baselineSamples = 1
+            baselineConnections = $baselineNetworkConnections
+            processSampler = "Get-Process forbidden-name scan"
+            errors = @()
+        }
         $ledgerPath = Join-Path $tempRoot "installer-request-ledger.jsonl"
         $serverState = Start-CandidateServer -InstallerPath $installerPath -ArchivePath $archivePath -ArchiveName $archiveName -ArchiveSHA256 $archiveEvidence.sha256 -Version $version -LedgerPath $ledgerPath
         $env:INFINITE_YOU_INSTALL_BASE_URL = $serverState.baseUrl
@@ -682,7 +957,9 @@ function Invoke-CandidateSmoke {
 
         $commandEvidence = @()
         $versionResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("--version") -WorkingDirectory $tempRoot
-        $commandEvidence += [ordered]@{ command = "you --version"; exitCode = $versionResult.exitCode; stdout = $versionResult.stdout; stderr = $versionResult.stderr }
+        Record-SmokeCommandObservation -Result $versionResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
+        Assert-SmokeCommandNetwork -Result $versionResult -CommandName "you --version"
+        $commandEvidence += [ordered]@{ command = "you --version"; exitCode = $versionResult.exitCode; stdout = $versionResult.stdout; stderr = $versionResult.stderr; network = $versionResult.network; forbiddenProcesses = $versionResult.forbiddenProcesses }
         if ($versionResult.exitCode -ne 0 -or $versionResult.stdout.Trim() -ne [string]$manifest.build.cliVersion) {
             Fail-Smoke "installed you --version was '$($versionResult.stdout.Trim())', want '$($manifest.build.cliVersion)'"
         }
@@ -691,7 +968,9 @@ function Invoke-CandidateSmoke {
         }
 
         $helpResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("models", "--help") -WorkingDirectory $tempRoot
-        $commandEvidence += [ordered]@{ command = "you models --help"; exitCode = $helpResult.exitCode; stdout = $helpResult.stdout; stderr = $helpResult.stderr }
+        Record-SmokeCommandObservation -Result $helpResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
+        Assert-SmokeCommandNetwork -Result $helpResult -CommandName "you models --help"
+        $commandEvidence += [ordered]@{ command = "you models --help"; exitCode = $helpResult.exitCode; stdout = $helpResult.stdout; stderr = $helpResult.stderr; network = $helpResult.network; forbiddenProcesses = $helpResult.forbiddenProcesses }
         if ($helpResult.exitCode -ne 0) {
             Fail-Smoke "you models --help failed with exit code $($helpResult.exitCode)"
         }
@@ -707,7 +986,9 @@ function Invoke-CandidateSmoke {
         $inspectionEvidence = @()
         foreach ($modelName in @("llm", "asr", "tts", "embed")) {
             $inspectResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("--json", "models", "inspect", $modelName) -WorkingDirectory $tempRoot
-            $commandEvidence += [ordered]@{ command = "you --json models inspect $modelName"; exitCode = $inspectResult.exitCode; stdout = $inspectResult.stdout; stderr = $inspectResult.stderr }
+            Record-SmokeCommandObservation -Result $inspectResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
+            Assert-SmokeCommandNetwork -Result $inspectResult -CommandName "you --json models inspect $modelName"
+            $commandEvidence += [ordered]@{ command = "you --json models inspect $modelName"; exitCode = $inspectResult.exitCode; stdout = $inspectResult.stdout; stderr = $inspectResult.stderr; network = $inspectResult.network; forbiddenProcesses = $inspectResult.forbiddenProcesses }
             if ($inspectResult.exitCode -ne 0) {
                 Fail-Smoke "you --json models inspect $modelName failed with exit code $($inspectResult.exitCode)"
             }
@@ -737,6 +1018,9 @@ function Invoke-CandidateSmoke {
         }
 
         $forbiddenAfter = @(Get-SmokeForbiddenProcesses)
+        foreach ($processName in $forbiddenAfter) {
+            [void]$forbiddenProcessObservations.Add($processName)
+        }
         $nonEmptyActivityRoots = @()
         foreach ($root in @(
             [pscustomobject]@{ name = "models"; path = $modelsRoot },
@@ -754,13 +1038,58 @@ function Invoke-CandidateSmoke {
         if ($forbiddenAfter.Count -ne 0) {
             Fail-Smoke "model/backend processes remained after discovery: $($forbiddenAfter -join ', ')"
         }
+        $allObservedConnections = New-Object 'System.Collections.Generic.List[object]'
+        $allUnexpectedConnections = New-Object 'System.Collections.Generic.List[object]'
+        $allPort7437Connections = New-Object 'System.Collections.Generic.List[object]'
+        $networkSampleCount = 0
+        foreach ($observation in $networkObservations) {
+            $networkSampleCount += [int]$observation.samples
+            foreach ($connection in @($observation.connections)) {
+                [void]$allObservedConnections.Add($connection)
+            }
+            foreach ($connection in @($observation.unexpectedConnections)) {
+                [void]$allUnexpectedConnections.Add($connection)
+            }
+            foreach ($connection in @($observation.port7437Connections)) {
+                [void]$allPort7437Connections.Add($connection)
+            }
+        }
+        if ($allUnexpectedConnections.Count -ne 0) {
+            Fail-Smoke "unexpected network activity was observed: $($allUnexpectedConnections | ConvertTo-Json -Compress)"
+        }
+        $activityBytesAfter = [int64](Get-SmokeDirectoryBytes -Path $modelsRoot) + [int64](Get-SmokeDirectoryBytes -Path $hfRoot)
+        $modelBackendDownloadBytes = [int64]$activityBytesAfter - [int64]$activityBytesBefore
+        if ($modelBackendDownloadBytes -lt 0) {
+            Fail-Smoke "model/backend activity byte observation moved backwards"
+        }
+        $observedForbiddenProcesses = @($forbiddenProcessObservations | Sort-Object -Unique)
+        $networkObserverEvidence = [ordered]@{
+            status = "PASS"
+            sampler = "Get-NetTCPConnection"
+            samples = $networkSampleCount
+            commandObservations = $networkObservations.ToArray()
+            connectionsObserved = $allObservedConnections.ToArray()
+            unexpectedConnectionsObserved = $allUnexpectedConnections.ToArray()
+            port7437ConnectionsObserved = $allPort7437Connections.ToArray()
+        }
         $report.activity = [ordered]@{
-            modelBackendProcesses = $forbiddenAfter
+            modelBackendProcesses = $observedForbiddenProcesses
             modelBackendActivityRoots = $nonEmptyActivityRoots
-            modelBackendDownloadBytes = 0
-            modelCalls = 0
-            backendRequestsObserved = 0
-            conclusion = "PASS within task-owned process, filesystem, and loopback observations"
+            modelBackendDownloadBytes = $modelBackendDownloadBytes
+            modelCalls = [int]$allObservedConnections.Count
+            backendRequestsObserved = [int]$allPort7437Connections.Count
+            unexpectedNetworkConnectionsObserved = $allUnexpectedConnections.ToArray()
+            networkObserver = $networkObserverEvidence
+            conclusion = "PASS from live installed-CLI process/network observations and task-owned activity roots"
+        }
+        $report.run.observed = [ordered]@{
+            networkSamples = $networkSampleCount
+            connections = [int]$allObservedConnections.Count
+            unexpectedConnections = [int]$allUnexpectedConnections.Count
+            port7437Connections = [int]$allPort7437Connections.Count
+            forbiddenProcesses = $observedForbiddenProcesses
+            modelBackendDownloadBytes = $modelBackendDownloadBytes
+            modelCalls = [int]$allObservedConnections.Count
         }
 
         $completed = Wait-Job -Job $serverState.job -Timeout 15
@@ -782,7 +1111,9 @@ function Invoke-CandidateSmoke {
         $report.status = "PASS"
     } catch {
         $failure = $_.Exception
-        $report.error = $failure.Message
+        $report.error = $failure.ToString()
+        $report.errorType = $failure.GetType().FullName
+        $report.errorInvocation = $_.InvocationInfo.PositionMessage
     } finally {
         try {
             Stop-CandidateServer $serverState
@@ -876,6 +1207,10 @@ function Invoke-CandidateSmoke {
             $report.postCleanup = [ordered]@{ status = "ERROR"; error = $_.Exception.Message }
             if ($null -eq $failure) { $failure = $_.Exception }
         }
+        $runEndedAt = [DateTime]::UtcNow
+        $report.run.endedAt = $runEndedAt.ToString("o")
+        $report.run.durationMilliseconds = [int64]($runEndedAt - $runStartedAt).TotalMilliseconds
+        $report.run.status = if ($null -eq $failure) { "PASS" } else { "FAIL" }
     }
 
     if ($null -ne $failure) {
