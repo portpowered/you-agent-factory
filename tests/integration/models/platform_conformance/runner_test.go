@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -36,6 +37,74 @@ func TestPortableControlledRunner(t *testing.T) {
 			runner := mustControlledRunner(t)
 			testCase.body(t, runner, fixture)
 		})
+	}
+}
+
+func TestPortableControlledRunnerUsesDeclaredTimeout(t *testing.T) {
+	fixture := newControlledFixture(t, controlledHelperModeTimeout)
+	fixture.spec.TimeoutMillis = 1000
+	admitted, err := AdmitWithInspector(fixture.spec, fixture.host, fixture.inspector)
+	if err != nil {
+		t.Fatalf("admit short-timeout fixture: %v", err)
+	}
+	runner := mustControlledRunner(t)
+	ready := make(chan struct{})
+	result := make(chan controlledRunResult, 1)
+	go func() {
+		report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
+			OnReady: func() { close(ready) },
+		})
+		result <- controlledRunResult{report: report, err: runErr}
+	}()
+	waitControlledSignal(t, ready, "declared-timeout helper readiness")
+	completed := <-result
+	if completed.err != nil {
+		t.Fatalf("declared-timeout run: %v", completed.err)
+	}
+	if !completed.report.Commands[0].TimedOut || completed.report.Commands[0].Cancelled {
+		t.Fatalf("declared-timeout command evidence = %#v", completed.report.Commands[0])
+	}
+	assertCleanRelease(t, completed.report)
+}
+
+func TestPortableControlledRunnerDoesNotStartWhenCommandSelectionFails(t *testing.T) {
+	fixture := newControlledFixture(t, controlledHelperModeSuccess)
+	runner := mustControlledRunner(t)
+	var starts atomic.Int32
+	runner.starter = func(*exec.Cmd) error {
+		starts.Add(1)
+		return errors.New("unexpected controlled launch")
+	}
+	if _, err := runner.Run(context.Background(), fixture.admission, ControlledRunOptions{CommandName: "missing"}); err == nil {
+		t.Fatal("missing admitted command was accepted")
+	}
+	if got := starts.Load(); got != 0 {
+		t.Fatalf("launch seam calls = %d, want zero", got)
+	}
+}
+
+func TestPortableControlledRunnerRejectsArtifactReplacementBeforeLaunch(t *testing.T) {
+	fixture := newReadinessFixture(t)
+	admitted, err := AdmitWithInspector(fixture.spec, fixture.host, fixture.inspector)
+	if err != nil {
+		t.Fatalf("admit replacement fixture: %v", err)
+	}
+	if err := os.WriteFile(fixture.spec.CLI.Path, []byte("replacement cli\n"), 0o600); err != nil {
+		t.Fatalf("replace admitted CLI artifact: %v", err)
+	}
+	runner := mustControlledRunner(t)
+	var starts atomic.Int32
+	runner.starter = func(*exec.Cmd) error {
+		starts.Add(1)
+		return errors.New("unexpected controlled launch")
+	}
+	_, err = runner.Run(context.Background(), admitted, ControlledRunOptions{})
+	requireAdmissionCode(t, err, "artifact_changed")
+	if got := starts.Load(); got != 0 {
+		t.Fatalf("replacement launch seam calls = %d, want zero", got)
+	}
+	if _, statErr := os.Stat(fixture.spec.LedgerPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("artifact replacement created a ledger: %v", statErr)
 	}
 }
 
@@ -172,10 +241,15 @@ type controlledFixture struct {
 func newControlledFixture(t *testing.T, mode string) controlledFixture {
 	t.Helper()
 	root := t.TempDir()
-	commandPath, err := filepath.Abs(os.Args[0])
+	commandPath := os.Getenv(controlledHelperPathEnv)
+	if strings.TrimSpace(commandPath) == "" {
+		commandPath = os.Args[0]
+	}
+	commandPath, err := filepath.Abs(commandPath)
 	if err != nil {
 		t.Fatalf("resolve controlled test executable: %v", err)
 	}
+	t.Logf("controlled helper artifact: %s", PathIdentity(commandPath))
 	cli, err := (LocalArtifactInspector{}).Inspect(commandPath)
 	if err != nil {
 		t.Fatalf("inspect controlled test executable: %v", err)

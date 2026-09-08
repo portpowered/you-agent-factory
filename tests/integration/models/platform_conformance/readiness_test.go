@@ -103,8 +103,12 @@ func writeFixtureArtifact(t *testing.T, path string, body []byte) fixtureArtifac
 }
 
 func TestPortableRunnerAdmission(t *testing.T) {
-	f := newReadinessFixture(t)
+	t.Run("accepts canonical immutable inputs", testPortableValidAdmission)
+	t.Run("rejects invalid prelaunch inputs", testPortableInvalidAdmission)
+}
 
+func testPortableValidAdmission(t *testing.T) {
+	f := newReadinessFixture(t)
 	if err := f.spec.Validate(); err != nil {
 		t.Fatalf("valid fixture specification rejected: %v", err)
 	}
@@ -138,20 +142,24 @@ func TestPortableRunnerAdmission(t *testing.T) {
 	if !reflect.DeepEqual(f.spec, roundTrip) {
 		t.Fatalf("run specification changed during canonical round trip:\n got=%+v\nwant=%+v", roundTrip, f.spec)
 	}
+}
 
-	tests := []struct {
-		name string
-		edit func(*readinessFixture)
-		want string
-	}{
+type portableAdmissionCase struct {
+	name string
+	edit func(*testing.T, *readinessFixture)
+	want string
+}
+
+func portableAdmissionCases() []portableAdmissionCase {
+	return []portableAdmissionCase{
 		{
 			name: "unsupported host",
-			edit: func(f *readinessFixture) { f.host = HostIdentity{OS: TargetLinux, Arch: ArchARM64} },
+			edit: func(_ *testing.T, f *readinessFixture) { f.host = HostIdentity{OS: TargetLinux, Arch: ArchARM64} },
 			want: "unsupported_host",
 		},
 		{
 			name: "absent cli",
-			edit: func(f *readinessFixture) {
+			edit: func(_ *testing.T, f *readinessFixture) {
 				f.spec.CLI.Path = filepath.Join(f.root, "missing-cli")
 				f.spec.Commands[0].Path = f.spec.CLI.Path
 			},
@@ -159,24 +167,24 @@ func TestPortableRunnerAdmission(t *testing.T) {
 		},
 		{
 			name: "non executable cli",
-			edit: func(f *readinessFixture) {
+			edit: func(_ *testing.T, f *readinessFixture) {
 				f.inspector.artifacts[f.spec.CLI.Path] = ObservedArtifact{Regular: true, Executable: false, SizeBytes: f.spec.CLI.SizeBytes, SHA256: f.spec.CLI.SHA256}
 			},
 			want: "artifact_not_executable",
 		},
 		{
 			name: "cli digest drift",
-			edit: func(f *readinessFixture) { f.spec.CLI.SHA256 = strings.Repeat("0", 64) },
+			edit: func(_ *testing.T, f *readinessFixture) { f.spec.CLI.SHA256 = strings.Repeat("0", 64) },
 			want: "artifact_digest_mismatch",
 		},
 		{
 			name: "fixture digest drift",
-			edit: func(f *readinessFixture) { f.spec.Fixture.SHA256 = strings.Repeat("0", 64) },
+			edit: func(_ *testing.T, f *readinessFixture) { f.spec.Fixture.SHA256 = strings.Repeat("0", 64) },
 			want: "artifact_digest_mismatch",
 		},
 		{
 			name: "corrupt ledger",
-			edit: func(f *readinessFixture) {
+			edit: func(t *testing.T, f *readinessFixture) {
 				if err := os.WriteFile(f.spec.LedgerPath, []byte("{\"schema\":\"broken\"}\n"), 0o600); err != nil {
 					t.Fatalf("write corrupt ledger: %v", err)
 				}
@@ -184,8 +192,21 @@ func TestPortableRunnerAdmission(t *testing.T) {
 			want: "ledger_invalid",
 		},
 		{
+			name: "ledger identity drift",
+			edit: func(t *testing.T, f *readinessFixture) {
+				ledger := BudgetLedger{
+					Schema: BudgetSchemaV1, LedgerID: "foreign-ledger", RunID: f.spec.RunID,
+					Generation: 1, Limits: f.spec.Limits, Reservations: []BudgetReservation{},
+				}
+				if err := WriteBudgetLedgerAtomic(f.spec.LedgerPath, ledger); err != nil {
+					t.Fatalf("write foreign ledger: %v", err)
+				}
+			},
+			want: "ledger_identity_drift",
+		},
+		{
 			name: "over budget ledger",
-			edit: func(f *readinessFixture) {
+			edit: func(t *testing.T, f *readinessFixture) {
 				ledger := BudgetLedger{
 					Schema: BudgetSchemaV1, LedgerID: DefaultLedgerID(f.spec.RunID), RunID: f.spec.RunID,
 					Generation: 1, Limits: f.spec.Limits, Consumed: BudgetConsumed{ChildProcesses: f.spec.Limits.MaxChildProcesses + 1},
@@ -203,17 +224,17 @@ func TestPortableRunnerAdmission(t *testing.T) {
 		},
 		{
 			name: "invalid network policy",
-			edit: func(f *readinessFixture) { f.spec.NetworkPolicy = "allow" },
+			edit: func(_ *testing.T, f *readinessFixture) { f.spec.NetworkPolicy = "allow" },
 			want: "invalid_network_policy",
 		},
 		{
 			name: "root overlap",
-			edit: func(f *readinessFixture) { f.spec.Roots.State = f.spec.Roots.Work },
+			edit: func(_ *testing.T, f *readinessFixture) { f.spec.Roots.State = f.spec.Roots.Work },
 			want: "path_overlap",
 		},
 		{
 			name: "report destination reused",
-			edit: func(f *readinessFixture) {
+			edit: func(t *testing.T, f *readinessFixture) {
 				if err := os.WriteFile(f.spec.ReportPath, []byte("existing\n"), 0o600); err != nil {
 					t.Fatalf("write reused report: %v", err)
 				}
@@ -221,30 +242,28 @@ func TestPortableRunnerAdmission(t *testing.T) {
 			want: "report_path_reused",
 		},
 	}
+}
 
-	for _, test := range tests {
+func testPortableInvalidAdmission(t *testing.T) {
+	for _, test := range portableAdmissionCases() {
 		t.Run(test.name, func(t *testing.T) {
 			caseFixture := newReadinessFixture(t)
-			test.edit(&caseFixture)
+			test.edit(t, &caseFixture)
 			admitted, err := AdmitWithInspector(caseFixture.spec, caseFixture.host, caseFixture.inspector)
 			if admitted.SpecIdentity != "" {
 				t.Fatalf("rejected run returned an admission identity: %q", admitted.SpecIdentity)
 			}
 			requireAdmissionCode(t, err, test.want)
-			// The admission boundary has no executor dependency. This counter is
-			// the caller-side launch gate: a rejected admission must not cross it.
-			executorCalls := 0
-			if err == nil {
-				executorCalls++
-			}
-			if executorCalls != 0 {
-				t.Fatalf("rejected admission crossed executor gate %d times", executorCalls)
-			}
 		})
 	}
 }
 
 func TestPortableBudgetLedger(t *testing.T) {
+	t.Run("reservation lifecycle", testPortableReservationLifecycle)
+	t.Run("contention and atomic persistence", testPortableBudgetContention)
+}
+
+func testPortableReservationLifecycle(t *testing.T) {
 	f := newReadinessFixture(t)
 	if _, err := AdmitWithInspector(f.spec, f.host, f.inspector); err != nil {
 		t.Fatalf("valid fixture admission failed: %v", err)
@@ -336,7 +355,14 @@ func TestPortableBudgetLedger(t *testing.T) {
 	} else {
 		requireBudgetCode(t, err, "ledger_finalized")
 	}
+}
 
+func testPortableBudgetContention(t *testing.T) {
+	f := newReadinessFixture(t)
+	store, err := NewLocalBudgetStore()
+	if err != nil {
+		t.Fatalf("create local budget store: %v", err)
+	}
 	contentionPath := filepath.Join(f.root, "contention.json")
 	contentionLimits := f.spec.Limits
 	contentionLimits.MaxChildProcesses = 3

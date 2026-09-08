@@ -583,11 +583,16 @@ jobs:
         run: |
           mkdir -p .artifacts/integration/bin
           go build -o .artifacts/integration/bin/you ./cmd/factory
+      - name: Build platform conformance helper artifact
+        run: |
+          go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
+          test -x .artifacts/integration/bin/platform-conformance-helper
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:
           INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+          LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH: ${{ github.workspace }}/.artifacts/integration/bin/platform-conformance-helper
       - name: Run required runtime metrics session probe
         if: always()
         shell: bash

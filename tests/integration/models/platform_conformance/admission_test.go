@@ -264,6 +264,9 @@ func validateExistingEvidence(spec RunSpec) error {
 	if ledger.RunID != spec.RunID {
 		return admissionFailure("ledger_foreign", "ledger.runId", spec.RunID, "different run", nil)
 	}
+	if ledger.LedgerID != DefaultLedgerID(spec.RunID) {
+		return admissionFailure("ledger_identity_drift", "ledger.ledgerId", DefaultLedgerID(spec.RunID), ledger.LedgerID, nil)
+	}
 	if !sameLimits(ledger.Limits, spec.Limits) {
 		return admissionFailure("ledger_drift", "ledger.limits", "limits match run specification", "different limits", nil)
 	}

@@ -3,6 +3,8 @@ package platform_conformance
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +38,7 @@ const (
 	controlledHelperModeTree       = "tree"
 	controlledHelperModeListener   = "listener-child"
 	controlledHelperModeSecret     = "secret"
+	controlledHelperPathEnv        = "LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH"
 )
 
 const (
@@ -56,7 +59,10 @@ type ControlledRunner struct {
 	streamLimit int64
 	waitDelay   time.Duration
 	writeReport func(string, Report) error
+	starter     controlledProcessStarter
 }
+
+type controlledProcessStarter func(*exec.Cmd) error
 
 // ControlledRunOptions carries observations and lifecycle choices owned by a
 // single integration scenario. A false FinalizeLedger value is used only by
@@ -106,6 +112,7 @@ func NewControlledRunner(budget BudgetStore) (ControlledRunner, error) {
 	return ControlledRunner{
 		budget: budget, streamLimit: defaultControlledStreamLimit,
 		waitDelay: defaultControlledWaitDelay, writeReport: WriteReportAtomic,
+		starter: func(command *exec.Cmd) error { return command.Start() },
 	}, nil
 }
 
@@ -117,6 +124,8 @@ func (runner ControlledRunner) Run(ctx context.Context, admission Admission, opt
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	runContext, cancel := context.WithTimeout(ctx, time.Duration(admission.Spec.TimeoutMillis)*time.Millisecond)
+	defer cancel()
 	commandIndex, command, err := admittedCommand(admission, options.CommandName)
 	if err != nil {
 		return Report{}, err
@@ -131,12 +140,16 @@ func (runner ControlledRunner) Run(ctx context.Context, admission Admission, opt
 	commandEnvironment = setEnvironmentValue(commandEnvironment, controlledHelperPortEnv, strconv.Itoa(admission.Spec.Port))
 	commandEnvironment = setEnvironmentValue(commandEnvironment, controlledHelperOutputRootEnv, admission.Spec.Roots.Output)
 	redactionTokens := controlledRedactionTokens(admission, commandEnvironment, options.Secrets)
+	stagedPath, cleanupStage, err := stageControlledCommand(admission.Spec, command)
+	if err != nil {
+		return Report{}, err
+	}
 
 	reservationID := options.ReservationID
 	if reservationID == "" {
 		reservationID = "reservation-" + admission.Spec.RunID + "-" + command.Name
 	}
-	reservation, _, reserveErr := runner.budget.Reserve(ctx, ReservationRequest{
+	reservation, _, reserveErr := runner.budget.Reserve(runContext, ReservationRequest{
 		LedgerPath: admission.Spec.LedgerPath,
 		LedgerID:   DefaultLedgerID(admission.Spec.RunID),
 		RunID:      admission.Spec.RunID,
@@ -147,20 +160,24 @@ func (runner ControlledRunner) Run(ctx context.Context, admission Admission, opt
 		Limits:     admission.Spec.Limits,
 	})
 	if reserveErr != nil {
+		if cleanupErr := cleanupStage(); cleanupErr != nil {
+			return Report{}, errors.Join(reserveErr, fmt.Errorf("clean staged controlled command: %w", cleanupErr))
+		}
 		return runner.finishUnstarted(admission, commandIndex, command, commandEnvironment, redactionTokens, reserveErr)
 	}
 	attempt := controlledAttempt{
 		commandIndex: commandIndex, command: command, environment: commandEnvironment,
 		redactionTokens: redactionTokens, partialPath: partialPath, reservation: reservation,
 	}
-	runner.executeControlledAttempt(ctx, admission.Spec, options, &attempt)
+	runner.executeControlledAttempt(runContext, admission.Spec, options, stagedPath, &attempt)
+	attempt.cleanupErr = errors.Join(attempt.cleanupErr, cleanupStage())
 	return runner.finishControlledAttempt(admission, options, &attempt)
 }
 
-func (runner ControlledRunner) executeControlledAttempt(ctx context.Context, spec RunSpec, options ControlledRunOptions, attempt *controlledAttempt) {
+func (runner ControlledRunner) executeControlledAttempt(ctx context.Context, spec RunSpec, options ControlledRunOptions, executablePath string, attempt *controlledAttempt) {
 	attempt.stdout = newControlledCapture(runner.streamLimit, runner.readyObserver(options))
 	attempt.stderr = newControlledCapture(runner.streamLimit, nil)
-	attempt.process = exec.Command(attempt.command.Path, attempt.command.Args...)
+	attempt.process = exec.Command(executablePath, attempt.command.Args...)
 	attempt.process.Dir = spec.Roots.Work
 	attempt.process.Env = attempt.environment
 	attempt.process.Stdout = attempt.stdout
@@ -173,7 +190,11 @@ func (runner ControlledRunner) executeControlledAttempt(ctx context.Context, spe
 }
 
 func (runner ControlledRunner) startControlledAttempt(options ControlledRunOptions, attempt *controlledAttempt) <-chan error {
-	if err := attempt.process.Start(); err != nil {
+	starter := runner.starter
+	if starter == nil {
+		starter = func(command *exec.Cmd) error { return command.Start() }
+	}
+	if err := starter(attempt.process); err != nil {
 		attempt.startErr = err
 		attempt.cleanupErr = err
 		return nil
@@ -430,6 +451,112 @@ func prepareControlledRoots(roots Roots) error {
 		}
 	}
 	return nil
+}
+
+func stageControlledCommand(spec RunSpec, command CommandSpec) (string, func() error, error) {
+	if command.Path != spec.CLI.Path {
+		return "", nil, admissionFailure("command_path_drift", "command.path", spec.CLI.Path, command.Path, nil)
+	}
+	source, sourceInfo, err := openControlledArtifact(command.Path)
+	if err != nil {
+		return "", nil, admissionFailure("artifact_changed", "cli.path", spec.CLI.SHA256, "unavailable during staging", err)
+	}
+	defer source.Close()
+
+	stagedPath := filepath.Join(spec.Roots.Temp, "platform-conformance-command"+filepath.Ext(command.Path))
+	destination, err := os.OpenFile(stagedPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o700)
+	if err != nil {
+		return "", nil, fmt.Errorf("create staged controlled command: %w", err)
+	}
+	if err := destination.Chmod(sourceInfo.Mode().Perm()); err != nil {
+		_ = destination.Close()
+		_ = os.Remove(stagedPath)
+		return "", nil, fmt.Errorf("protect staged controlled command: %w", err)
+	}
+	digest, size, copyErr := copyControlledArtifact(destination, source)
+	if copyErr == nil {
+		copyErr = destination.Sync()
+	}
+	closeErr := destination.Close()
+	if copyErr != nil || closeErr != nil {
+		_ = os.Remove(stagedPath)
+		return "", nil, fmt.Errorf("copy controlled command: %w", errors.Join(copyErr, closeErr))
+	}
+	if size != spec.CLI.SizeBytes || !strings.EqualFold(digest, spec.CLI.SHA256) {
+		_ = os.Remove(stagedPath)
+		return "", nil, admissionFailure(
+			"artifact_changed", "cli.path", spec.CLI.SHA256,
+			fmt.Sprintf("sha256:%s size=%d", digest, size), nil,
+		)
+	}
+	if err := verifyControlledSource(command.Path, sourceInfo); err != nil {
+		_ = os.Remove(stagedPath)
+		return "", nil, admissionFailure("artifact_changed", "cli.path", spec.CLI.SHA256, "source replaced during staging", err)
+	}
+	return stagedPath, func() error { return removeStagedCommand(stagedPath) }, nil
+}
+
+func openControlledArtifact(path string) (*os.File, os.FileInfo, error) {
+	if err := rejectSymlinkComponents(path); err != nil {
+		return nil, nil, err
+	}
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return nil, nil, errors.New("declared command is not a regular file")
+	}
+	source, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	sourceInfo, err := source.Stat()
+	if err != nil || !os.SameFile(pathInfo, sourceInfo) {
+		_ = source.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, errors.New("declared command changed before staging")
+	}
+	return source, sourceInfo, nil
+}
+
+func copyControlledArtifact(destination, source *os.File) (string, int64, error) {
+	hasher := sha256.New()
+	size, err := io.Copy(io.MultiWriter(destination, hasher), source)
+	return hex.EncodeToString(hasher.Sum(nil)), size, err
+}
+
+func verifyControlledSource(path string, openedInfo os.FileInfo) error {
+	if err := rejectSymlinkComponents(path); err != nil {
+		return err
+	}
+	currentInfo, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if currentInfo.Mode()&os.ModeSymlink != 0 || !currentInfo.Mode().IsRegular() {
+		return errors.New("declared command is no longer a regular file")
+	}
+	if !os.SameFile(openedInfo, currentInfo) {
+		return errors.New("declared command was replaced during staging")
+	}
+	return nil
+}
+
+func removeStagedCommand(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return errors.New("staged controlled command is not a regular file")
+	}
+	return os.Remove(path)
 }
 
 func controlledCommandEnvironment(command CommandSpec) []string {
