@@ -11,54 +11,73 @@ import (
 )
 
 type parsedFunctionalTimingEvents struct {
-	packageOutcomes  map[string]functionalPackageTimingJSON
-	testOutcomes     map[string]functionalTestTimingJSON
-	observedPackages map[string]struct{}
-	failureReasons   map[string]string
-	complete         bool
+	packageOutcomes   map[string]functionalPackageTimingJSON
+	testOutcomes      map[string]functionalTestTimingJSON
+	observedPackages  map[string]struct{}
+	failureReasons    map[string]string
+	failureCandidates map[string][]functionalFailureReasonCandidate
+	terminalPositions map[string]int
+	complete          bool
 }
 
 func parseFunctionalTimingEvents(jsonOutput string, expectedPackages []string) parsedFunctionalTimingEvents {
 	parsed := parsedFunctionalTimingEvents{
-		packageOutcomes:  make(map[string]functionalPackageTimingJSON, len(expectedPackages)),
-		testOutcomes:     make(map[string]functionalTestTimingJSON),
-		observedPackages: make(map[string]struct{}, len(expectedPackages)),
-		failureReasons:   make(map[string]string),
-		complete:         true,
+		packageOutcomes:   make(map[string]functionalPackageTimingJSON, len(expectedPackages)),
+		testOutcomes:      make(map[string]functionalTestTimingJSON),
+		observedPackages:  make(map[string]struct{}, len(expectedPackages)),
+		failureReasons:    make(map[string]string),
+		failureCandidates: make(map[string][]functionalFailureReasonCandidate),
+		terminalPositions: make(map[string]int),
+		complete:          true,
 	}
 	scanner := bufio.NewScanner(strings.NewReader(jsonOutput))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	eventPosition := 0
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
+			eventPosition++
 			continue
 		}
 		var event goTestTimingEvent
 		if err := json.Unmarshal(line, &event); err != nil {
 			parsed.complete = false
+			eventPosition++
 			continue
 		}
 		if strings.TrimSpace(event.Package) == "" {
+			eventPosition++
 			continue
 		}
 		parsed.observedPackages[event.Package] = struct{}{}
-		parsed.recordFailureReason(event)
+		parsed.recordFailureReason(event, eventPosition)
 		if !hasFunctionalTimingOutcome(event) {
+			eventPosition++
 			continue
 		}
 		if math.IsNaN(event.Elapsed) || math.IsInf(event.Elapsed, 0) || event.Elapsed < 0 {
 			parsed.complete = false
+			eventPosition++
 			continue
 		}
 		if event.Test != "" {
 			parsed.recordTest(event)
+			if event.Action == timingOutcomeFail {
+				parsed.terminalPositions[timingEventKey(event.Package, event.Test)] = eventPosition
+			}
+			eventPosition++
 			continue
 		}
 		parsed.recordPackage(event)
+		if event.Action == timingOutcomeFail {
+			parsed.terminalPositions[timingEventKey(event.Package, "")] = eventPosition
+		}
+		eventPosition++
 	}
 	if err := scanner.Err(); err != nil {
 		parsed.complete = false
 	}
+	parsed.resolveFailureReasons()
 	return parsed
 }
 
@@ -152,14 +171,73 @@ func formatFunctionalInventoryKeys(keys []string) string {
 	return fmt.Sprintf("%d[%s]", len(formatted), strings.Join(formatted, ","))
 }
 
-func (parsed *parsedFunctionalTimingEvents) recordFailureReason(event goTestTimingEvent) {
+func (parsed *parsedFunctionalTimingEvents) recordFailureReason(event goTestTimingEvent, positions ...int) {
 	if event.Output == "" {
 		return
 	}
-	key := timingEventKey(event.Package, event.Test)
-	if reason := firstTimingFailureReason(event.Output); reason != "" && parsed.failureReasons[key] == "" {
-		parsed.failureReasons[key] = reason
+	eventPosition := 0
+	if len(positions) > 0 {
+		eventPosition = positions[0]
 	}
+	key := timingEventKey(event.Package, event.Test)
+	candidates := functionalFailureReasonCandidates(event.Output, eventPosition)
+	if len(candidates) > 0 {
+		parsed.failureCandidates[key] = append(parsed.failureCandidates[key], candidates...)
+	}
+}
+
+func (parsed *parsedFunctionalTimingEvents) resolveFailureReasons() {
+	for key, outcome := range parsed.testOutcomes {
+		if outcome.Outcome != timingOutcomeFail {
+			continue
+		}
+		reason := selectFunctionalFailureReasonCandidates(parsed.candidatesBeforeTerminal(key))
+		if reason == "" {
+			reason = functionalFailureNoDiagnosticReason
+		}
+		parsed.failureReasons[key] = reason
+		outcome.Reason = reason
+		parsed.testOutcomes[key] = outcome
+	}
+
+	for packageName, outcome := range parsed.packageOutcomes {
+		if outcome.Outcome != timingOutcomeFail {
+			continue
+		}
+		key := timingEventKey(packageName, "")
+		candidates := append([]functionalFailureReasonCandidate(nil), parsed.failureCandidates[key]...)
+		for testKey, testOutcome := range parsed.testOutcomes {
+			if testOutcome.Package != packageName || testOutcome.Outcome != timingOutcomeFail {
+				continue
+			}
+			candidates = append(candidates, parsed.failureCandidates[testKey]...)
+		}
+		reason := selectFunctionalFailureReasonCandidates(parsed.candidatesBeforeTerminalFrom(key, candidates))
+		if reason == "" {
+			reason = functionalFailureNoDiagnosticReason
+		}
+		parsed.failureReasons[key] = reason
+		outcome.Reason = reason
+		parsed.packageOutcomes[packageName] = outcome
+	}
+}
+
+func (parsed *parsedFunctionalTimingEvents) candidatesBeforeTerminal(key string) []functionalFailureReasonCandidate {
+	return parsed.candidatesBeforeTerminalFrom(key, parsed.failureCandidates[key])
+}
+
+func (parsed *parsedFunctionalTimingEvents) candidatesBeforeTerminalFrom(key string, candidates []functionalFailureReasonCandidate) []functionalFailureReasonCandidate {
+	terminalPosition, hasTerminal := parsed.terminalPositions[key]
+	if !hasTerminal {
+		return candidates
+	}
+	filtered := make([]functionalFailureReasonCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.eventPosition <= terminalPosition {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
 }
 
 func hasFunctionalTimingOutcome(event goTestTimingEvent) bool {
