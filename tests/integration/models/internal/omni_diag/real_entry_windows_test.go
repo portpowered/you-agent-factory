@@ -412,6 +412,47 @@ func localAIOMNIRealEntryIdentityTest(t *testing.T) {
 	})
 }
 
+func TestLocalAIOMNIRealEntryRejectsDirectoryJunctionBeforeRunner(t *testing.T) {
+	targetRoot := t.TempDir()
+	_, targetManifestPath := localAIOMNIRealManifestForTest(t, targetRoot, localAIOMNIText)
+	linkRoot := t.TempDir()
+	junctionPath := filepath.Join(linkRoot, "manifest-root")
+	command := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", junctionPath, targetRoot)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("create directory junction: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	cleaned := false
+	t.Cleanup(func() {
+		if !cleaned {
+			_ = os.Remove(junctionPath)
+		}
+	})
+
+	linkedManifestPath := filepath.Join(junctionPath, filepath.Base(targetManifestPath))
+	var runnerBuilds atomic.Int32
+	_, enabled, err := localAIOMNIRealEntryWith(t.Context(), localAIOMNIRealEntryEnv("1", linkedManifestPath), func() (localAIOMNIRunner, error) {
+		runnerBuilds.Add(1)
+		return localAIOMNIRunner{}, nil
+	})
+	var reparseErr *localAIOMNIReparsePathError
+	if !enabled || !errors.As(err, &reparseErr) || reparseErr.Label != "manifest" || reparseErr.Final || reparseErr.ComponentIndex != 1 || runnerBuilds.Load() != 0 {
+		t.Fatalf("junction admission enabled=%t err=%v typed=%#v runner builds=%d", enabled, err, reparseErr, runnerBuilds.Load())
+	}
+	if strings.Contains(err.Error(), junctionPath) || strings.Contains(err.Error(), targetRoot) {
+		t.Fatalf("junction error leaked path: %q", err)
+	}
+	if _, err := os.Stat(targetManifestPath); err != nil {
+		t.Fatalf("target manifest after rejected junction: %v", err)
+	}
+	if err := os.Remove(junctionPath); err != nil {
+		t.Fatalf("remove task-owned directory junction: %v", err)
+	}
+	cleaned = true
+	if _, err := os.Lstat(junctionPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("junction cleanup stat=%v, want not-exist", err)
+	}
+}
+
 func localAIOMNIRealEntryEnv(enable, manifestPath string) func(string) string {
 	return func(name string) string {
 		switch name {
