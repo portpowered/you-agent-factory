@@ -51,6 +51,47 @@ func TestFunctionalFailureDetailSortsMultipleFailedPackages(t *testing.T) {
 	}
 }
 
+func TestFunctionalFailureUsesTerminalReasonForDetailAndTiming(t *testing.T) {
+	t.Parallel()
+
+	packageName := modulePath + "/tests/functional/diagnostics"
+	stream := strings.Join([]string{
+		marshalGoTestEventOrPanic(goTestTimingEvent{
+			Action:  "output",
+			Package: packageName,
+			Test:    "TestBroken",
+			Output:  "=== RUN   TestBroken\nsetup progress: model is ready\n",
+		}),
+		marshalGoTestEventOrPanic(goTestTimingEvent{
+			Action:  "output",
+			Package: packageName,
+			Test:    "TestBroken",
+			Output:  "functional_test.go:42: later fatal assertion\n--- FAIL: TestBroken (0.03s)\n",
+		}),
+		marshalGoTestEventOrPanic(goTestTimingEvent{Action: timingOutcomeFail, Package: packageName, Test: "TestBroken", Elapsed: 0.03}),
+		marshalGoTestEventOrPanic(goTestTimingEvent{Action: timingOutcomeFail, Package: packageName, Elapsed: 0.04}),
+	}, "\n")
+
+	detail := renderFunctionalFailureDetail(stream)
+	if !strings.Contains(detail, "reason=functional_test.go:42: later fatal assertion") {
+		t.Fatalf("functional failure detail = %q, want terminal assertion", detail)
+	}
+	if strings.Contains(detail, "setup progress: model is ready") {
+		t.Fatalf("functional failure detail retained benign progress: %q", detail)
+	}
+
+	summary := buildFunctionalTimingSummary(stream, []string{packageName}, 0.04)
+	if !summary.Complete || len(summary.Packages) != 1 || len(summary.Tests) != 1 {
+		t.Fatalf("timing summary = %+v, want complete package and test failures", summary)
+	}
+	if summary.Packages[0].Reason != "functional_test.go:42: later fatal assertion" {
+		t.Fatalf("package timing reason = %q, want terminal assertion", summary.Packages[0].Reason)
+	}
+	if summary.Tests[0].Reason != summary.Packages[0].Reason {
+		t.Fatalf("package/test reasons differ: package=%q test=%q", summary.Packages[0].Reason, summary.Tests[0].Reason)
+	}
+}
+
 func TestFunctionalRunSuppressesSuccessfulChildChatterAndKeepsArtifacts(t *testing.T) {
 	packageNames := []string{
 		modulePath + "/tests/functional/quiet/alpha",
