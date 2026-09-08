@@ -26,7 +26,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -275,8 +274,13 @@ func countLargeStressWorkAtState(listed factoryapi.ListWorkResponse, workType, s
 
 func closeLargeStressSession(t *testing.T, baseURL, sessionID string) {
 	t.Helper()
-	terminateLargeStressSession(t, baseURL, sessionID)
-	waitLargeStressSessionStopped(t, baseURL, sessionID)
+	control := terminateLargeStressSession(t, baseURL, sessionID)
+	if control.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted &&
+		control.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated {
+		eventStream := openLargeStressEventStream(t, largeStressSessionEventsURL(baseURL, sessionID))
+		defer eventStream.Close()
+		waitLargeStressSessionTerminated(t, eventStream, sessionID)
+	}
 
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
 	request, err := http.NewRequest(http.MethodDelete, endpoint, nil)
@@ -294,7 +298,7 @@ func closeLargeStressSession(t *testing.T, baseURL, sessionID string) {
 	}
 }
 
-func terminateLargeStressSession(t *testing.T, baseURL, sessionID string) {
+func terminateLargeStressSession(t *testing.T, baseURL, sessionID string) factoryapi.FactorySessionLifecycleControlResponse {
 	t.Helper()
 	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
 	if err != nil {
@@ -311,35 +315,63 @@ func terminateLargeStressSession(t *testing.T, baseURL, sessionID string) {
 		t.Fatalf("POST terminate large rollout stress Factory Session: %v", err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
-		return
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read terminate large rollout stress Factory Session response: %v", err)
 	}
-	body, _ := io.ReadAll(response.Body)
-	if response.StatusCode == http.StatusConflict && strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
-		return
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(body, &control); err != nil {
+		t.Fatalf("decode terminate large rollout stress Factory Session response: %v\nbody:\n%s", err, strings.TrimSpace(string(body)))
+	}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		return control
+	}
+	if response.StatusCode == http.StatusConflict && control.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		return control
 	}
 	t.Fatalf("terminate large rollout stress Factory Session status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	return factoryapi.FactorySessionLifecycleControlResponse{}
 }
 
-func waitLargeStressSessionStopped(t *testing.T, baseURL, sessionID string) {
+func waitLargeStressSessionTerminated(t *testing.T, eventStream *largeStressEventStream, sessionID string) {
 	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		response, err := http.Get(endpoint)
-		if err == nil {
-			var status factoryapi.StatusResponse
-			decodeErr := json.NewDecoder(response.Body).Decode(&status)
-			_ = response.Body.Close()
-			if decodeErr == nil && (status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) ||
-				status.RuntimeStatus == string(interfaces.RuntimeStatusFinished)) {
-				return
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for {
+		// The public Factory Event stream is the synchronization primitive. The
+		// deadline only bounds missing lifecycle evidence; it is not a poll or
+		// quiet-period success path.
+		event := eventStream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeSessionCompleted {
+			if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+				t.Fatalf("large rollout stress lifecycle event session = %#v, want %q", event.Context.SessionId, sessionID)
 			}
+			return
 		}
-		timer := time.NewTimer(20 * time.Millisecond)
-		<-timer.C
+		if event.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+			continue
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("large rollout stress lifecycle event session = %#v, want %q", event.Context.SessionId, sessionID)
+		}
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err != nil {
+			t.Fatalf("decode large rollout stress lifecycle-control event: %v", err)
+		}
+		if payload.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate {
+			continue
+		}
+		if payload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+			payload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusTerminated {
+			t.Fatalf(
+				"large rollout stress termination event = operation:%q outcome:%q newStatus:%q, want accepted TERMINATED",
+				payload.Operation,
+				payload.Outcome,
+				payload.NewStatus,
+			)
+		}
+		return
 	}
-	t.Fatalf("timed out waiting for large rollout stress Factory Session %q to stop", sessionID)
 }
 
 // TestLargeRolloutStress keeps the capacity-sensitive rollout witness in the
@@ -380,6 +412,7 @@ func TestLargeRolloutStress(t *testing.T) {
 		}
 	})
 	eventStream := openLargeStressEventStream(t, largeStressSessionEventsURL(baseURL, sessionID))
+	t.Cleanup(eventStream.Close)
 	workID := submitLargeStressWork(t, ctx, process, inputs.Input.Env, factoryDir, baseURL, sessionID)
 	events := readLargeStressEvents(t, ctx, eventStream, workID, sessionID)
 	assertLargeStressPublicState(t, baseURL, sessionID, workID, events)
@@ -643,16 +676,18 @@ func openLargeStressEventStream(t *testing.T, endpoint string) *largeStressEvent
 		errs:   make(chan error, 1),
 	}
 	go stream.read(response)
-	t.Cleanup(stream.Close)
 	return stream
 }
 
 func (stream *largeStressEventStream) read(response *http.Response) {
-	defer close(stream.done)
 	defer response.Body.Close()
 	scanner := bufio.NewScanner(response.Body)
-	scanner.Buffer(make([]byte, 64<<10), 4<<20)
+	// The terminal dispatch event carries the deliberately large rollout
+	// output, so the SSE data line is bounded by the rollout fixture rather
+	// than the Scanner default or a small fixed token cap.
+	scanner.Buffer(make([]byte, 64<<10), int(largeStressRolloutMaxBytes+16<<20))
 	var dataLines []string
+	defer close(stream.done)
 	flush := func() {
 		if len(dataLines) == 0 {
 			return
@@ -696,12 +731,28 @@ func (stream *largeStressEventStream) read(response *http.Response) {
 }
 
 func (stream *largeStressEventStream) NextEventContext(ctx context.Context) factoryapi.FactoryEvent {
+	// Prefer events already accepted from the public stream before observing its
+	// terminal read state. The server can close after publishing the final
+	// frames, and those buffered events remain the authoritative evidence.
+	select {
+	case event := <-stream.events:
+		return event
+	default:
+	}
+
 	select {
 	case event := <-stream.events:
 		return event
 	case err := <-stream.errs:
 		stream.t.Fatalf("large rollout stress Factory Event stream: %v", err)
 	case <-stream.done:
+		select {
+		case event := <-stream.events:
+			return event
+		case err := <-stream.errs:
+			stream.t.Fatalf("large rollout stress Factory Event stream: %v", err)
+		default:
+		}
 		stream.t.Fatal("large rollout stress Factory Event stream closed before terminal response")
 	case <-ctx.Done():
 		stream.t.Fatalf("waiting for large rollout stress Factory Event: %v", ctx.Err())
