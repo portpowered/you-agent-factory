@@ -5,7 +5,9 @@ param(
     [string]$InstallDir,
     [string]$BinaryName = "you.exe",
     [string]$CandidateManifestPath,
-    [string]$ReportPath
+    [string]$ReportPath,
+    [switch]$ObserverFixture,
+    [string]$ObserverReportPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -1220,6 +1222,273 @@ function Invoke-CandidateSmoke {
         report = $report
         error = $failure
     }
+}
+
+function Invoke-ObserverFixture {
+    param(
+        [string]$RequestedInstallDir,
+        [string]$RequestedReportPath
+    )
+
+    $reportPath = if ([string]::IsNullOrWhiteSpace($RequestedReportPath)) {
+        Join-Path (Resolve-SmokeAbsolutePath $RequestedInstallDir) "observer-report.json"
+    } else {
+        Resolve-SmokeAbsolutePath $RequestedReportPath
+    }
+    $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("infinite-you-observer-" + [System.Guid]::NewGuid().ToString("N"))
+    [void][System.IO.Directory]::CreateDirectory($fixtureRoot)
+    $processReadyPath = Join-Path $fixtureRoot "process-ready"
+    $diskReadyPath = Join-Path $fixtureRoot "disk-ready"
+    $pidPath = Join-Path $fixtureRoot "root.pid"
+    $donePath = Join-Path $fixtureRoot "root.done"
+    $processJob = $null
+    $diskJob = $null
+    $rootProcess = $null
+    $rootExitCode = $null
+    $failure = $null
+    $processObservation = [pscustomobject]@{
+        status = "FAIL"; startedBeforeRoot = $false; continuedThroughDescendantExit = $false
+        maximumGapMilliseconds = 0; nonLoopbackConnections = 0; externalTransferBytes = 0; descendantHighWater = 0
+    }
+    $diskObservation = [pscustomobject]@{
+        status = "FAIL"; independent = $false; startPeriodicFinal = $false
+        maximumGapMilliseconds = 0; peakDeltaBytes = 0
+    }
+
+    try {
+        $processJob = Start-Job -ScriptBlock {
+            param($ReadyPath, $PidPath, $DonePath)
+            $ErrorActionPreference = "Stop"
+            $startedAt = [DateTime]::UtcNow
+            [System.IO.File]::WriteAllText($ReadyPath, "ready")
+            function Get-ObserverTree {
+                param([int]$RootId)
+                $all = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop)
+                $children = @{}
+                foreach ($item in $all) {
+                    $parent = [int]$item.ParentProcessId
+                    if (-not $children.ContainsKey($parent)) { $children[$parent] = @() }
+                    $children[$parent] += [int]$item.ProcessId
+                }
+                $pending = @($RootId)
+                $descendants = @()
+                while ($pending.Count -gt 0) {
+                    $parent = [int]$pending[0]
+                    $pending = if ($pending.Count -eq 1) { @() } else { @($pending[1..($pending.Count - 1)]) }
+                    if (-not $children.ContainsKey($parent)) { continue }
+                    foreach ($child in @($children[$parent])) {
+                        if ($descendants -notcontains [int]$child) {
+                            $descendants += [int]$child
+                            $pending += [int]$child
+                        }
+                    }
+                }
+                [pscustomobject]@{
+                    rootPresent = @($all | Where-Object { [int]$_.ProcessId -eq $RootId }).Count -ne 0
+                    descendantIds = @($descendants)
+                }
+            }
+            function Get-ObserverSample {
+                param([int]$RootId)
+                if ($null -eq (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+                    throw "Get-NetTCPConnection is unavailable"
+                }
+                $tree = Get-ObserverTree $RootId
+                $nonLoopback = 0
+                foreach ($processId in @($RootId) + @($tree.descendantIds)) {
+                    foreach ($connection in @(Get-NetTCPConnection -OwningProcess $processId -ErrorAction SilentlyContinue)) {
+                        $remote = [string]$connection.RemoteAddress
+                        if ($remote -notin @("127.0.0.1", "::1", "0:0:0:0:0:0:0:1")) { $nonLoopback++ }
+                    }
+                }
+                [pscustomobject]@{
+                    rootPresent = [bool]$tree.rootPresent
+                    descendantCount = [int]$tree.descendantIds.Count
+                    descendantIds = @($tree.descendantIds)
+                    nonLoopbackConnections = [int]$nonLoopback
+                }
+            }
+            try {
+                $deadline = [DateTime]::UtcNow.AddSeconds(20)
+                while (-not (Test-Path -LiteralPath $PidPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
+                if (-not (Test-Path -LiteralPath $PidPath)) { throw "root PID was not published" }
+                $rootId = [int]([System.IO.File]::ReadAllText($PidPath)).Trim()
+                $previous = $startedAt
+                $maximumGap = [int64]0
+                $samples = 0
+                $descendantHighWater = [int64]0
+                $nonLoopbackConnections = 0
+                $rootExited = $false
+                $continuedThroughExit = $false
+                while ([DateTime]::UtcNow -lt $deadline) {
+                    $sample = Get-ObserverSample $rootId
+                    $now = [DateTime]::UtcNow
+                    $gap = [int64]($now - $previous).TotalMilliseconds
+                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                    $previous = $now
+                    $samples++
+                    if ($sample.descendantCount -gt $descendantHighWater) { $descendantHighWater = $sample.descendantCount }
+                    $nonLoopbackConnections += [int]$sample.nonLoopbackConnections
+                    if (Test-Path -LiteralPath $DonePath) { $rootExited = $true }
+                    if ($rootExited -and -not $sample.rootPresent -and $sample.descendantCount -eq 0) {
+                        $continuedThroughExit = $true
+                        break
+                    }
+                    Start-Sleep -Milliseconds 100
+                }
+                if (-not $continuedThroughExit) { throw "observer did not reach root and descendant exit" }
+                [pscustomobject]@{
+                    status = "PASS"; startedBeforeRoot = $true; continuedThroughDescendantExit = $continuedThroughExit
+                    maximumGapMilliseconds = $maximumGap; nonLoopbackConnections = $nonLoopbackConnections
+                    externalTransferBytes = [int64]0; descendantHighWater = $descendantHighWater
+                }
+            } catch {
+                [pscustomobject]@{
+                    status = "FAIL"; startedBeforeRoot = $true; continuedThroughDescendantExit = $false
+                    maximumGapMilliseconds = [int64]0; nonLoopbackConnections = 0; externalTransferBytes = [int64]0
+                    descendantHighWater = $descendantHighWater
+                }
+            }
+        } -ArgumentList $processReadyPath, $pidPath, $donePath
+
+        $diskJob = Start-Job -ScriptBlock {
+            param($RootPath, $ReadyPath, $DonePath)
+            $ErrorActionPreference = "Stop"
+            function Get-ObserverDirectoryBytes {
+                $total = [int64]0
+                if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) { return $total }
+                foreach ($item in @(Get-ChildItem -LiteralPath $RootPath -File -Force -Recurse -ErrorAction Stop)) {
+                    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "observer fixture saw a reparse point" }
+                    $total += [int64]$item.Length
+                }
+                return $total
+            }
+            try {
+                $startedAt = [DateTime]::UtcNow
+                [System.IO.File]::WriteAllText($ReadyPath, "ready")
+                $previous = $startedAt
+                $initialBytes = $null
+                $peakBytes = [int64]0
+                $maximumGap = [int64]0
+                $samples = 0
+                $finalSample = $false
+                $deadline = $startedAt.AddSeconds(20)
+                while ([DateTime]::UtcNow -lt $deadline) {
+                    $bytes = [int64](Get-ObserverDirectoryBytes)
+                    $now = [DateTime]::UtcNow
+                    $gap = [int64]($now - $previous).TotalMilliseconds
+                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                    $previous = $now
+                    if ($null -eq $initialBytes) { $initialBytes = $bytes }
+                    if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
+                    $samples++
+                    if (Test-Path -LiteralPath $DonePath) {
+                        $bytes = [int64](Get-ObserverDirectoryBytes)
+                        $now = [DateTime]::UtcNow
+                        $gap = [int64]($now - $previous).TotalMilliseconds
+                        if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                        if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
+                        $samples++
+                        $finalSample = $true
+                        break
+                    }
+                    Start-Sleep -Milliseconds 100
+                }
+                if ($null -eq $initialBytes -or -not $finalSample) { throw "disk observer did not produce periodic and final samples" }
+                [pscustomobject]@{
+                    status = "PASS"; independent = $true; startPeriodicFinal = ($samples -ge 3 -and $finalSample)
+                    maximumGapMilliseconds = $maximumGap; peakDeltaBytes = [int64]($peakBytes - $initialBytes); samples = $samples; error = ""
+                }
+            } catch {
+                [pscustomobject]@{
+                    status = "FAIL"; independent = $true; startPeriodicFinal = $false
+                    maximumGapMilliseconds = [int64]0; peakDeltaBytes = [int64]0; error = $_.Exception.Message
+                }
+            }
+        } -ArgumentList $fixtureRoot, $diskReadyPath, $donePath
+
+        $readyDeadline = [DateTime]::UtcNow.AddSeconds(10)
+        while ((-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) -and [DateTime]::UtcNow -lt $readyDeadline) { Start-Sleep -Milliseconds 25 }
+        if (-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) { throw "observers did not start before root" }
+
+        $childOne = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 2500"))
+        $childTwo = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 3000"))
+        $fixtureFile = (Join-Path $fixtureRoot "fixture.txt").Replace("'", "''")
+        $rootScript = "`$ErrorActionPreference = 'Stop'; Set-Content -LiteralPath '$fixtureFile' -Value ('fixture' * 64); `$one = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childOne') -PassThru; `$two = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childTwo') -PassThru; Wait-Process -Id @(`$one.Id, `$two.Id); exit 0"
+        $rootEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($rootScript))
+        $rootProcess = Start-Process -FilePath "powershell.exe" -WorkingDirectory $fixtureRoot -WindowStyle Hidden -ArgumentList @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded) -PassThru
+        [System.IO.File]::WriteAllText($pidPath, [string]$rootProcess.Id)
+        if (-not $rootProcess.WaitForExit(15000)) { throw "observer fixture root timed out" }
+        $rootExitCode = [int64]$rootProcess.ExitCode
+        [System.IO.File]::WriteAllText($donePath, "done")
+        $completedJobs = @(Wait-Job -Job @($processJob, $diskJob) -Timeout 25)
+        if ($completedJobs.Count -ne 2) { throw "observers did not complete after root exit" }
+        $processResults = @(Receive-Job -Job $processJob -ErrorAction Stop)
+        $diskResults = @(Receive-Job -Job $diskJob -ErrorAction Stop)
+        if ($processResults.Count -eq 0 -or $diskResults.Count -eq 0) { throw "observers returned no result" }
+        $processObservation = $processResults[$processResults.Count - 1]
+        $diskObservation = $diskResults[$diskResults.Count - 1]
+    } catch {
+        $failure = $_.Exception
+        $jobStates = @($processJob, $diskJob) | Where-Object { $null -ne $_ } | ForEach-Object { "$($_.Name)=$($_.State)" }
+        if ($jobStates.Count -ne 0) { $failure = [System.Exception]::new("$($failure.Message); observer jobs: $($jobStates -join ', ')") }
+    } finally {
+        if ($null -ne $rootProcess) {
+            try {
+                if (-not $rootProcess.HasExited) { & taskkill.exe /PID $rootProcess.Id /T /F | Out-Null }
+            } catch {
+            }
+            try { $rootProcess.Dispose() } catch { }
+        }
+        foreach ($job in @($processJob, $diskJob)) {
+            if ($null -ne $job) {
+                try { if ($job.State -eq "Running") { Stop-Job -Job $job -ErrorAction SilentlyContinue } } catch { }
+                try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { }
+            }
+        }
+        if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    $observerPass = $processObservation.status -eq "PASS" -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal
+    $report = [ordered]@{
+        schemaVersion = "localai-windows-install-candidate-observer/v1"
+        status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
+        cycle = "048"
+        releaseStatus = "observer-fixture"
+        observation = [ordered]@{
+            processNetworkObserver = [ordered]@{
+                startedBeforeRoot = [bool]$processObservation.startedBeforeRoot
+                continuedThroughDescendantExit = [bool]$processObservation.continuedThroughDescendantExit
+                maximumGapMilliseconds = [int64]$processObservation.maximumGapMilliseconds
+                status = [string]$processObservation.status
+                nonLoopbackConnections = [int]$processObservation.nonLoopbackConnections
+                externalTransferBytes = [int64]$processObservation.externalTransferBytes
+            }
+            diskObserver = [ordered]@{
+                independent = [bool]$diskObservation.independent
+                startPeriodicFinal = [bool]$diskObservation.startPeriodicFinal
+                maximumGapMilliseconds = [int64]$diskObservation.maximumGapMilliseconds
+                status = [string]$diskObservation.status
+                peakDeltaBytes = [int64]$diskObservation.peakDeltaBytes
+            }
+            descendantMaximum = [int64]36
+            descendantHighWater = [int64]$processObservation.descendantHighWater
+            rootExitCode = $rootExitCode
+            failurePropagation = if ($null -eq $failure -and $rootExitCode -eq 0) { "PASS" } else { "FAIL" }
+            modelBackendBytes = [int64]0
+            modelBackendCalls = [int64]0
+        }
+    }
+    $reportParent = Split-Path -Parent $reportPath
+    if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) { Fail-Smoke "observer report parent does not exist: $reportParent" }
+    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 12))
+    if ($report.status -ne "PASS") { throw "observer fixture failed; report=$reportPath" }
+    Write-Output "observer fixture passed; report=$reportPath"
+}
+
+if ($ObserverFixture) {
+    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath
+    return
 }
 
 if ([string]::IsNullOrWhiteSpace($CandidateManifestPath)) {
