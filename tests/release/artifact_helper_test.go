@@ -2,12 +2,14 @@ package release_test
 
 import (
 	"crypto/sha256"
+	"debug/pe"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -219,6 +221,9 @@ func (artifact releasePrebuiltArtifact) validateFile() error {
 	if info.Mode().Perm()&0o222 != 0 {
 		return fmt.Errorf("artifact path %s must be read-only, mode=%#o", artifact.Path, info.Mode().Perm())
 	}
+	if err := validateReleaseArtifactLaunchability(artifact, info); err != nil {
+		return err
+	}
 
 	file, err := os.Open(artifact.Path)
 	if err != nil {
@@ -232,6 +237,26 @@ func (artifact releasePrebuiltArtifact) validateFile() error {
 	observed := hex.EncodeToString(hasher.Sum(nil))
 	if observed != artifact.SHA256 {
 		return fmt.Errorf("artifact SHA-256 for %s = %s, want %s", artifact.Path, observed, artifact.SHA256)
+	}
+	return nil
+}
+
+func validateReleaseArtifactLaunchability(artifact releasePrebuiltArtifact, info os.FileInfo) error {
+	if artifact.GOOS == "windows" {
+		if !strings.EqualFold(filepath.Ext(artifact.Path), ".exe") {
+			return fmt.Errorf("artifact path %s must use the .exe extension for Windows launchability", artifact.Path)
+		}
+		image, err := pe.Open(artifact.Path)
+		if err != nil {
+			return fmt.Errorf("artifact path %s is not a launchable Windows executable: %w", artifact.Path, err)
+		}
+		if err := image.Close(); err != nil {
+			return fmt.Errorf("close Windows executable inspection for %s: %w", artifact.Path, err)
+		}
+		return nil
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("artifact path %s must be executable, mode=%#o", artifact.Path, info.Mode().Perm())
 	}
 	return nil
 }
@@ -304,6 +329,26 @@ func releaseArtifactValidationCases() []releaseArtifactValidationCase {
 			env[releasePrebuiltSHA256Env] = strings.Repeat("0", sha256.Size*2)
 			return true, "artifact SHA-256"
 		}},
+		{name: "non-executable Unix artifact", prepare: func(t *testing.T, env map[string]string) (bool, string) {
+			env[releasePrebuiltGOOSEnv] = "linux"
+			if err := os.Chmod(env[releasePrebuiltPathEnv], 0o444); err != nil {
+				t.Fatalf("remove artifact execute permission: %v", err)
+			}
+			return true, "executable"
+		}},
+		{name: "non-launchable Windows artifact", prepare: func(t *testing.T, env map[string]string) (bool, string) {
+			path := filepath.Join(t.TempDir(), "not-launchable.exe")
+			contents := []byte("not a Windows executable")
+			if err := os.WriteFile(path, contents, 0o555); err != nil {
+				t.Fatalf("write non-launchable Windows fixture: %v", err)
+			}
+			digest := sha256.Sum256(contents)
+			env[releasePrebuiltPathEnv] = path
+			env[releasePrebuiltSHA256Env] = hex.EncodeToString(digest[:])
+			env[releasePrebuiltSizeEnv] = strconv.Itoa(len(contents))
+			env[releasePrebuiltGOOSEnv] = "windows"
+			return true, "launchable Windows executable"
+		}},
 		{name: "mutable file", prepare: func(t *testing.T, env map[string]string) (bool, string) {
 			if err := os.Chmod(env[releasePrebuiltPathEnv], 0o755); err != nil {
 				t.Fatalf("make artifact mutable: %v", err)
@@ -319,8 +364,19 @@ func releaseArtifactValidationCases() []releaseArtifactValidationCase {
 func validReleaseArtifactEnvironment(t *testing.T) map[string]string {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "you")
-	contents := []byte("release-artifact")
+	sourcePath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("locate test executable: %v", err)
+	}
+	contents, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read test executable: %v", err)
+	}
+	name := "you"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, contents, 0o555); err != nil {
 		t.Fatalf("write artifact fixture: %v", err)
 	}
@@ -335,8 +391,8 @@ func validReleaseArtifactEnvironment(t *testing.T) map[string]string {
 		releasePrebuiltSourceCommitEnv: strings.Repeat("a", 40),
 		releasePrebuiltSourceTreeEnv:   strings.Repeat("b", 40),
 		releasePrebuiltToolPathEnv:     path,
-		releasePrebuiltToolVersionEnv:  "go version go1.25.0 windows/amd64",
-		releasePrebuiltGOOSEnv:         "windows",
-		releasePrebuiltGOARCHEnv:       "amd64",
+		releasePrebuiltToolVersionEnv:  "go version " + runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH,
+		releasePrebuiltGOOSEnv:         runtime.GOOS,
+		releasePrebuiltGOARCHEnv:       runtime.GOARCH,
 	}
 }
