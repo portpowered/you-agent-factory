@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -80,6 +81,65 @@ func TestPortableControlledRunnerDoesNotStartWhenCommandSelectionFails(t *testin
 	}
 	if got := starts.Load(); got != 0 {
 		t.Fatalf("launch seam calls = %d, want zero", got)
+	}
+}
+
+func TestPortableControlledRunnerQuiescenceCeilingRetainsAliveCounts(t *testing.T) {
+	fixture := newControlledFixture(t, controlledHelperModeTimeout)
+	command, tree := startControlledObservationProcess(t, fixture, controlledHelperModeTimeout)
+	t.Cleanup(func() {
+		_ = terminateControlledProcess(command, tree, true)
+		_ = command.Wait()
+		closeControlledProcessTree(tree, true)
+	})
+
+	attempt := &controlledAttempt{
+		process: command, tree: tree, treeAttached: true, waitCompleted: true,
+		stdout: newControlledCapture(defaultControlledStreamLimit, nil),
+	}
+	runner := mustControlledRunner(t)
+	runner.waitDelay = 25 * time.Millisecond
+	runner.observeControlledQuiescence(fixture.spec, attempt, false)
+
+	var ceiling controlledCleanupCeilingError
+	if !errors.As(attempt.cleanupErr, &ceiling) {
+		t.Fatalf("quiescence ceiling error = %v, want typed cleanup-ceiling error", attempt.cleanupErr)
+	}
+	if attempt.release.ProcessTreeClosed || attempt.release.OwnedProcesses == 0 || attempt.release.OwnedListeners != 0 {
+		t.Fatalf("quiescence ceiling release = %#v, want retained process count", attempt.release)
+	}
+	status, failure, _ := classifyControlledResult(
+		true, 0, false, true, true, nil, nil, attempt.cleanupErr, attempt.release,
+		SemanticObservation{Assertion: controlledAssertionSemantic, Expected: "controlled output", Observed: "controlled output", Passed: true}, false,
+	)
+	if status != StatusFail || failure == nil || failure.Owner != controlledFailureOwnerHarness || failure.Assertion != controlledAssertionCleanup {
+		t.Fatalf("quiescence ceiling classification = status %q failure %#v", status, failure)
+	}
+	if controlledErrorClass(attempt.cleanupErr) != "quiescence_ceiling" {
+		t.Fatalf("quiescence ceiling error class = %q", controlledErrorClass(attempt.cleanupErr))
+	}
+}
+
+func TestPortableControlledRunnerQuiescenceReturnsImmediatelyWhenClosed(t *testing.T) {
+	fixture := newControlledFixture(t, controlledHelperModeSuccess)
+	command, tree := startControlledObservationProcess(t, fixture, controlledHelperModeSuccess)
+	if err := command.Wait(); err != nil {
+		t.Fatalf("wait already-closed controlled process: %v", err)
+	}
+	if err := terminateControlledProcess(command, tree, true); err != nil {
+		t.Fatalf("settle already-closed controlled process tree: %v", err)
+	}
+	t.Cleanup(func() { closeControlledProcessTree(tree, true) })
+
+	attempt := &controlledAttempt{
+		process: command, tree: tree, treeAttached: true, waitCompleted: true,
+		stdout: newControlledCapture(defaultControlledStreamLimit, nil),
+	}
+	runner := mustControlledRunner(t)
+	runner.waitDelay = time.Hour
+	runner.observeControlledQuiescence(fixture.spec, attempt, false)
+	if attempt.cleanupErr != nil || attempt.release != (ReleaseEvidence{ProcessTreeClosed: true}) {
+		t.Fatalf("already-closed quiescence = release %#v cleanup=%v", attempt.release, attempt.cleanupErr)
 	}
 }
 
@@ -433,14 +493,22 @@ func testControlledPartial(t *testing.T, runner ControlledRunner, fixture contro
 }
 
 func testControlledTree(t *testing.T, runner ControlledRunner, fixture controlledFixture) {
+	unrelatedListener, unrelatedProcess, unrelatedTree := startUnrelatedControlledResources(t, fixture)
+	readyObserved := make(chan bool, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan controlledRunResult, 1)
 	ready := make(chan struct{})
 	go func() {
-		report, err := runner.Run(ctx, fixture.admission, ControlledRunOptions{OnReady: func() { close(ready) }})
+		report, err := runner.Run(ctx, fixture.admission, ControlledRunOptions{OnReady: func() {
+			readyObserved <- !controlledListenerReleased(fixture.spec.Port)
+			close(ready)
+		}})
 		result <- controlledRunResult{report: report, err: err}
 	}()
 	waitControlledSignal(t, ready, "tree helper readiness")
+	if !<-readyObserved {
+		t.Fatal("tree helper did not hold the declared listener before cancellation")
+	}
 	cancel()
 	completed := <-result
 	if completed.err != nil {
@@ -453,6 +521,13 @@ func testControlledTree(t *testing.T, runner ControlledRunner, fixture controlle
 		t.Fatalf("tree release = %#v failure=%#v", completed.report.Release, completed.report.Failure)
 	}
 	assertPortAvailable(t, fixture.spec.Port)
+	if !controlledProcessTreeAlive(unrelatedTree) {
+		t.Fatal("unrelated controlled process was signaled by owned cleanup")
+	}
+	if err := assertControlledListenerOccupied(unrelatedListener); err != nil {
+		t.Fatalf("unrelated listener ownership changed: %v", err)
+	}
+	_ = unrelatedProcess
 	assertFinalizedChildLedger(t, fixture.spec.LedgerPath, 1)
 }
 
@@ -547,4 +622,49 @@ func assertPortAvailable(t *testing.T, port int) {
 	if err := listener.Close(); err != nil {
 		t.Fatalf("close controlled listener probe: %v", err)
 	}
+}
+
+func startControlledObservationProcess(t testing.TB, fixture controlledFixture, mode string) (*exec.Cmd, controlledProcessTree) {
+	t.Helper()
+	command := exec.Command(fixture.command.Path, fixture.command.Args...)
+	command.Env = setEnvironmentValue(append([]string(nil), fixture.command.Environment...), controlledHelperModeEnv, mode)
+	command.Stdout = io.Discard
+	command.Stderr = io.Discard
+	configureControlledProcessTree(command)
+	if err := command.Start(); err != nil {
+		t.Fatalf("start controlled observation process: %v", err)
+	}
+	tree, err := attachControlledProcessTree(command)
+	if err != nil {
+		_ = terminateControlledProcess(command, tree, false)
+		_ = command.Wait()
+		t.Fatalf("attach controlled observation process: %v", err)
+	}
+	return command, tree
+}
+
+func startUnrelatedControlledResources(t testing.TB, fixture controlledFixture) (net.Listener, *exec.Cmd, controlledProcessTree) {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("start unrelated listener: %v", err)
+	}
+	command, tree := startControlledObservationProcess(t, fixture, controlledHelperModeTimeout)
+	t.Cleanup(func() {
+		_ = terminateControlledProcess(command, tree, true)
+		_ = command.Wait()
+		closeControlledProcessTree(tree, true)
+		_ = listener.Close()
+	})
+	return listener, command, tree
+}
+
+func assertControlledListenerOccupied(listener net.Listener) error {
+	address := listener.Addr().String()
+	probe, err := net.Listen("tcp4", address)
+	if err == nil {
+		_ = probe.Close()
+		return fmt.Errorf("listener %s was reusable while its owner remained active", address)
+	}
+	return nil
 }
