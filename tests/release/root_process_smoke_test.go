@@ -18,7 +18,8 @@ import (
 // TestRootProcessCompiledBinaryModeMatrix proves the process-root migration at
 // the installed-binary boundary instead of only through Cobra or root fakes.
 func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
-	binaryPath := buildReleaseSmokeBinary(t)
+	artifact := requireReleasePrebuiltArtifact(t)
+	binaryPath := artifact.Path
 	home := t.TempDir()
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 

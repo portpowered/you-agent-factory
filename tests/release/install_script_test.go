@@ -268,10 +268,10 @@ func readInstallScript(t *testing.T) []byte {
 func readInstallTestBinary(t *testing.T) []byte {
 	t.Helper()
 
-	binaryPath := buildReleaseSmokeBinary(t)
-	contents, err := os.ReadFile(binaryPath)
+	artifact := requireReleasePrebuiltArtifact(t)
+	contents, err := artifact.readBytes()
 	if err != nil {
-		t.Fatalf("read install test binary: %v", err)
+		t.Fatalf("read install test binary %s: %v", artifact.Path, err)
 	}
 	return contents
 }
