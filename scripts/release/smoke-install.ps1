@@ -158,6 +158,41 @@ function Get-SmokeFileEvidence {
     }
 }
 
+function Copy-SmokeNativeToolToShortPath {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath,
+        [string]$ExpectedSHA256
+    )
+    if ($ExpectedSHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+        Fail-Smoke "native tool SHA-256 must be a 64-character digest"
+    }
+    $sourceEvidence = Get-SmokeFileEvidence "native tool" $SourcePath
+    if ($sourceEvidence.sha256 -cne $ExpectedSHA256.ToLowerInvariant()) {
+        Fail-Smoke "native tool SHA-256 is $($sourceEvidence.sha256), want $($ExpectedSHA256.ToLowerInvariant())"
+    }
+    $destination = Resolve-SmokePath $DestinationPath
+    if (Test-Path -LiteralPath $destination) {
+        Fail-Smoke "short native tool destination already exists: $destination"
+    }
+    if ($destination.Length -gt $SmokeMaximumTaskRootPathLength) {
+        Fail-Smoke "short native tool path is $($destination.Length) characters, want at most $SmokeMaximumTaskRootPathLength"
+    }
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+    Copy-Item -LiteralPath (Resolve-SmokePath $SourcePath) -Destination $destination -Force
+    $destinationEvidence = Get-SmokeFileEvidence "short native tool" $destination
+    if ($destinationEvidence.bytes -ne $sourceEvidence.bytes -or
+        $destinationEvidence.sha256 -cne $ExpectedSHA256.ToLowerInvariant()) {
+        Fail-Smoke "short native tool bytes or SHA-256 differ from the verified source"
+    }
+    return [ordered]@{
+        source = $sourceEvidence
+        destination = $destinationEvidence
+        path = $destination
+        pathLength = $destination.Length
+    }
+}
+
 function Get-SmokeDirectoryBytes {
     param([string]$Path)
     $total = [int64]0
@@ -808,7 +843,7 @@ function Invoke-LocalCandidateSmoke {
     [void][System.IO.Directory]::CreateDirectory($workDirectory)
     $checkoutPath = Join-Path $workDirectory "src"
     $extractPath = Join-Path $workDirectory "archive"
-    $environmentNames = @("GOFLAGS", "GOMAXPROCS", "GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "npm_config_offline")
+    $environmentNames = @("GOFLAGS", "GOMAXPROCS", "GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "npm_config_offline", "ESBUILD_BINARY_PATH")
     $originalEnvironment = @{}
     foreach ($name in $environmentNames) {
         $originalEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, "Process")
@@ -871,13 +906,17 @@ function Invoke-LocalCandidateSmoke {
         if ($esbuildPath.Length -gt 220) {
             Fail-Smoke "staged esbuild path is $($esbuildPath.Length) characters, want at most 220"
         }
-        $esbuildResult = Invoke-CandidateCommand -FilePath $esbuildPath `
+        $esbuildOverridePath = Join-Path $workDirectory "esbuild-native.exe"
+        $esbuildOverride = Copy-SmokeNativeToolToShortPath -SourcePath $esbuildPath `
+            -DestinationPath $esbuildOverridePath -ExpectedSHA256 $EsbuildSHA256
+        $esbuildResult = Invoke-CandidateCommand -FilePath $esbuildOverridePath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $outputDirectory "esbuild.stdout.log") `
             -StderrPath (Join-Path $outputDirectory "esbuild.stderr.log")
         if ($esbuildResult.exitCode -ne 0 -or $esbuildResult.stdout.Trim() -cne $EsbuildVersion) {
             Fail-Smoke "esbuild sanity check failed: exit=$($esbuildResult.exitCode) version='$($esbuildResult.stdout.Trim())'"
         }
+        $env:ESBUILD_BINARY_PATH = $esbuildOverridePath
         $releaseToolEvidence = Get-SmokeFileEvidence "goreleaser" $releaseToolPath
         $releaseToolResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
@@ -922,8 +961,10 @@ function Invoke-LocalCandidateSmoke {
             config = Get-SmokeFileEvidence "goreleaser-config" (Join-Path $checkoutPath ".goreleaser.yml")
             bunLock = $sourceLock
             esbuild = $esbuildEvidence
+            esbuildOverride = $esbuildOverride
             esbuildVersion = $EsbuildVersion
             esbuildPathLength = $esbuildPath.Length
+            esbuildOverridePathLength = $esbuildOverride.pathLength
             workBytes = $workBytes
             maximumWorkBytes = $MaximumWorkBytes
             environment = [ordered]@{
@@ -933,6 +974,7 @@ function Invoke-LocalCandidateSmoke {
                 GOSUMDB = $env:GOSUMDB
                 GOTOOLCHAIN = $env:GOTOOLCHAIN
                 npm_config_offline = $env:npm_config_offline
+                ESBUILD_BINARY_PATH = $env:ESBUILD_BINARY_PATH
             }
         }
         if ($releaseResult.exitCode -ne 0) {

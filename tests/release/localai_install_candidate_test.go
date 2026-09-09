@@ -20,7 +20,12 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
-const localAICandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
+const (
+	localAICandidateSourceCommit      = "059474b2c00915865306a33ca5e3d02b618bb6f0"
+	localAICandidateNativeToolVersion = "0.27.7"
+	localAICandidateNativeToolSHA256  = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
+	localAICandidateNativeToolBytes   = int64(11386368)
+)
 
 func TestLocalAICandidateScriptParses(t *testing.T) {
 	t.Parallel()
@@ -510,6 +515,57 @@ func localAICandidateRunGit(t *testing.T, directory string, arguments ...string)
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
+	}
+}
+
+func TestLocalAICandidateCopiesNativeToolToShortPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	sourcePath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_ESBUILD_BINARY"))
+	if sourcePath == "" {
+		t.Skip("set INFINITE_YOU_LOCALAI_ESBUILD_BINARY to the verified esbuild executable")
+	}
+	if !filepath.IsAbs(sourcePath) {
+		t.Fatalf("INFINITE_YOU_LOCALAI_ESBUILD_BINARY must be absolute: %s", sourcePath)
+	}
+
+	tempDir := t.TempDir()
+	destinationPath := filepath.Join(tempDir, "esbuild-native.exe")
+	stdoutPath := filepath.Join(tempDir, "esbuild.stdout")
+	stderrPath := filepath.Join(tempDir, "esbuild.stderr")
+	harnessPath := filepath.Join(tempDir, "native-tool.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$evidence = Copy-SmokeNativeToolToShortPath -SourcePath %s -DestinationPath %s -ExpectedSHA256 %s
+if ($evidence.destination.sha256 -cne %s) { throw 'short native tool hash changed' }
+if ($evidence.pathLength -gt 220) { throw 'short native tool path exceeded the limit' }
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('--version') -WorkingDirectory %s -StdoutPath %s -StderrPath %s
+if ($result.exitCode -ne 0 -or $result.stdout.Trim() -cne %s) { throw "short native tool launch failed: $($result | ConvertTo-Json -Compress)" }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourcePath),
+		localAICandidatePowerShellLiteral(destinationPath),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolSHA256),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolSHA256),
+		localAICandidatePowerShellLiteral(destinationPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(stdoutPath),
+		localAICandidatePowerShellLiteral(stderrPath),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolVersion),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write native-tool harness: %v", err)
+	}
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("copy and launch short native tool: %v\n%s", err, output)
+	}
+	if info, err := os.Stat(destinationPath); err != nil || info.Size() != localAICandidateNativeToolBytes {
+		t.Fatalf("short native tool = %v, want %d bytes", err, localAICandidateNativeToolBytes)
+	}
+	if destinationPathLength := len(destinationPath); destinationPathLength > 220 {
+		t.Fatalf("short native tool path length = %d, want at most 220", destinationPathLength)
 	}
 }
 
