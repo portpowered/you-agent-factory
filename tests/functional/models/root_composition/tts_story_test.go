@@ -95,6 +95,7 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 				t.Fatalf("%s generic TTS backend calls = %d, want zero", scenario.name, got)
 			}
 			closeRootProcess(t, story.process, "close concurrent TTS root process")
+			waitForTTSHostLifecycle(t, story.host, scenario.name)
 			created, removed, duplicateRemoves := story.temp.Snapshot()
 			if created != 1 || removed != created || duplicateRemoves != 0 {
 				t.Fatalf("%s TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one isolated one-shot path", scenario.name, created, removed, duplicateRemoves)
@@ -140,6 +141,7 @@ func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
 		t.Fatalf("first default-scope invocation error = %v, want cancellation after overlap characterization", err)
 	}
 	closeRootProcess(t, story.process, "close non-reentrant TTS root process")
+	waitForTTSHostLifecycle(t, story.host, "non-reentrant")
 	created, removed, duplicateRemoves := story.temp.Snapshot()
 	if created != removed || duplicateRemoves != 0 {
 		t.Fatalf("non-reentrant TTS staging release = created:%d removed:%d duplicateRemoves:%d, want exactly-once cleanup", created, removed, duplicateRemoves)
@@ -566,6 +568,7 @@ func assertTTSIsolationAndRelease(t *testing.T, story ttsStory) {
 		t.Fatalf("generic TTS backend calls = %d, want zero private-route fallback calls", got)
 	}
 	closeRootProcess(t, story.process, "close TTS root process for release proof")
+	waitForTTSHostLifecycle(t, story.host, "sequential")
 	created, removed, duplicateRemoves := story.temp.Snapshot()
 	if created == 0 || created != removed || duplicateRemoves != 0 {
 		t.Fatalf("TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one removal per staged path", created, removed, duplicateRemoves)
@@ -859,12 +862,13 @@ func (effects *ttsTempEffects) Snapshot() (created, removed, duplicates int) {
 }
 
 type ttsHostLauncher struct {
-	mu       sync.Mutex
-	endpoint string
-	starts   int
-	stops    int
-	waits    int
-	active   int
+	mu        sync.Mutex
+	endpoint  string
+	processes []*ttsHostProcess
+	starts    int
+	stops     int
+	waits     int
+	active    int
 }
 
 func (launcher *ttsHostLauncher) Start(
@@ -879,8 +883,15 @@ func (launcher *ttsHostLauncher) Start(
 	launcher.starts++
 	launcher.active++
 	endpoint := launcher.endpoint
+	process := &ttsHostProcess{
+		launcher: launcher,
+		endpoint: endpoint,
+		stopped:  make(chan struct{}),
+		waited:   make(chan struct{}),
+	}
+	launcher.processes = append(launcher.processes, process)
 	launcher.mu.Unlock()
-	return &ttsHostProcess{launcher: launcher, endpoint: endpoint, stopped: make(chan struct{})}, nil
+	return process, nil
 }
 
 func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
@@ -889,20 +900,48 @@ func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
 	return launcher.starts, launcher.stops, launcher.waits, launcher.active
 }
 
+func waitForTTSHostLifecycle(t testing.TB, launcher *ttsHostLauncher, label string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := launcher.WaitForAll(ctx); err != nil {
+		t.Fatalf("%s TTS host wait completion = %v", label, err)
+	}
+}
+
+func (launcher *ttsHostLauncher) WaitForAll(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	launcher.mu.Lock()
+	processes := append([]*ttsHostProcess(nil), launcher.processes...)
+	launcher.mu.Unlock()
+	for _, process := range processes {
+		select {
+		case <-process.waited:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
 type ttsHostProcess struct {
 	launcher *ttsHostLauncher
 	endpoint string
 	stopped  chan struct{}
+	waited   chan struct{}
 	once     sync.Once
 }
 
 func (process *ttsHostProcess) HealthEndpoint() string { return process.endpoint }
 
 func (process *ttsHostProcess) Wait() error {
+	<-process.stopped
 	process.launcher.mu.Lock()
 	process.launcher.waits++
 	process.launcher.mu.Unlock()
-	<-process.stopped
+	close(process.waited)
 	return nil
 }
 
