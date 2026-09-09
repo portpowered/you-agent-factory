@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -21,6 +22,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -761,7 +763,7 @@ func (composition modelsCLIComposition) openModelsPresentationScope(
 	cfg modelscli.InvokeConfig,
 	modelCacheDir string,
 ) (modelscli.InvokeRuntimeScope, error) {
-	opened, err := composition.source.OpenModelsPresentationScope(ctx, models.PresentationScopeRequest{
+	request := models.PresentationScopeRequest{
 		FactoryDir:       cfg.FactoryDir,
 		WorkingDirectory: cfg.WorkingDirectory,
 		HomeDir:          cfg.HomeDir,
@@ -772,9 +774,42 @@ func (composition modelsCLIComposition) openModelsPresentationScope(
 		Logger:        cfg.Logger,
 		Verbose:       cfg.Verbose,
 		ModelCacheDir: modelCacheDir,
+	}
+	opened, err := composition.source.OpenModelsPresentationScope(ctx, request)
+	if err == nil {
+		return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	}
+	if strings.TrimSpace(cfg.FactoryDir) != "" ||
+		!errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+}
+
+func (composition modelsCLIComposition) openStandaloneModelsScope(
+	ctx context.Context,
+	modelCacheDir string,
+) (modelscli.InvokeRuntimeScope, error) {
+	opened, err := composition.root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: modelCacheDir},
 	})
 	if err != nil {
 		return modelscli.InvokeRuntimeScope{}, err
 	}
-	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	return modelscli.InvokeRuntimeScope{
+		Scope: opened.Scope,
+		Close: func(closeCtx context.Context) error {
+			closed, closeErr := composition.root.CloseRuntimeScope(
+				context.WithoutCancel(closeCtx),
+				models.CloseRuntimeScopeRequest{Scope: opened.Scope},
+			)
+			if closeErr != nil {
+				return closeErr
+			}
+			if !closed.Closed {
+				return errors.New("close standalone Models scope: scope was not closed")
+			}
+			return nil
+		},
+	}, nil
 }
