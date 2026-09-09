@@ -463,6 +463,56 @@ Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository 'https://examp
 	}
 }
 
+func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	cloneDir := filepath.Join(tempDir, "clone")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("create source repository: %v", err)
+	}
+	localAICandidateRunGit(t, sourceDir, "init", "--quiet")
+	localAICandidateRunGit(t, sourceDir, "config", "user.email", "candidate@example.invalid")
+	localAICandidateRunGit(t, sourceDir, "config", "user.name", "candidate")
+	if err := os.WriteFile(filepath.Join(sourceDir, "tracked.txt"), []byte("candidate"), 0o600); err != nil {
+		t.Fatalf("write source repository: %v", err)
+	}
+	localAICandidateRunGit(t, sourceDir, "add", "tracked.txt")
+	localAICandidateRunGit(t, sourceDir, "commit", "--quiet", "-m", "fixture")
+
+	harnessPath := filepath.Join(tempDir, "clone.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-SmokeGit @('clone', '--local', '--no-checkout', '--', %s, %s)
+if (-not (Test-Path -LiteralPath %s -PathType Container)) { throw 'clone directory was not created' }
+if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retained' }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(cloneDir),
+		localAICandidatePowerShellLiteral(cloneDir),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write clone harness: %v", err)
+	}
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("capture git clone progress: %v\n%s", err, output)
+	}
+}
+
+func localAICandidateRunGit(t *testing.T, directory string, arguments ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", arguments, err, output)
+	}
+}
+
 func TestLocalAICandidateWorkAccountingSkipsLinkedDependencyTree(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -543,6 +593,10 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if version == "" {
 		t.Fatal("prebuilt candidate returned an empty version")
 	}
+	archiveVersion := strings.TrimPrefix(version, "v")
+	if archiveVersion == "" {
+		t.Fatal("prebuilt candidate returned an invalid archive version")
+	}
 
 	tempDir := t.TempDir()
 	candidateDir := filepath.Join(tempDir, "candidate")
@@ -556,7 +610,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	}
 	stagedBinary := filepath.Join(stageDir, "you.exe")
 	copyLocalAICandidateFile(t, binaryPath, stagedBinary)
-	archiveName := "you_" + version + "_windows_amd64.zip"
+	archiveName := "you_" + archiveVersion + "_windows_amd64.zip"
 	archivePath := filepath.Join(candidateDir, archiveName)
 	writeLocalAICandidateZip(t, archivePath, stagedBinary)
 	archiveBytes, err := os.ReadFile(archivePath)
@@ -564,7 +618,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 		t.Fatalf("read candidate archive: %v", err)
 	}
 	archiveDigest := sha256.Sum256(archiveBytes)
-	checksumPath := filepath.Join(candidateDir, "you_"+version+"_checksums.txt")
+	checksumPath := filepath.Join(candidateDir, "you_"+archiveVersion+"_checksums.txt")
 	checksum := fmt.Sprintf("%x  %s\n", archiveDigest, archiveName)
 	if err := os.WriteFile(checksumPath, []byte(checksum), 0o600); err != nil {
 		t.Fatalf("write candidate checksums: %v", err)
@@ -576,7 +630,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	harnessPath := filepath.Join(tempDir, "install.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$result = Invoke-InstalledCandidateSmoke -CandidateDirectory %s -ArchivePath %s -ChecksumPath %s -InstallerPath %s -ArchiveExecutablePath %s -Version %s -ExpectedSourceCommit %s -GoExecutablePath %s -RequestedInstallDir %s -WorkDirectory %s
+$result = Invoke-InstalledCandidateSmoke -CandidateDirectory %s -ArchivePath %s -ChecksumPath %s -InstallerPath %s -ArchiveExecutablePath %s -Version %s -ExpectedExecutableVersion %s -ExpectedSourceCommit %s -GoExecutablePath %s -RequestedInstallDir %s -WorkDirectory %s
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
@@ -586,6 +640,7 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(checksumPath),
 		localAICandidatePowerShellLiteral(installerPath),
 		localAICandidatePowerShellLiteral(stagedBinary),
+		localAICandidatePowerShellLiteral(archiveVersion),
 		localAICandidatePowerShellLiteral(version),
 		localAICandidatePowerShellLiteral(localAICandidateSourceCommit),
 		localAICandidatePowerShellLiteral(goPath),
@@ -599,11 +654,18 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
 		t.Fatalf("run public candidate install smoke: %v\n%s", err, output)
 	}
+	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version)
+}
+
+func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version string) {
+	t.Helper()
 	var result struct {
 		Status                    string `json:"status"`
 		ModelCalls                int    `json:"modelCalls"`
 		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
 		PathResolution            string `json:"pathResolution"`
+		Version                   string `json:"version"`
+		ExpectedVersion           string `json:"expectedVersion"`
 		ExecutableBuildInfo       struct {
 			SourceRevision string `json:"sourceRevision"`
 			VCSModified    bool   `json:"vcsModified"`
@@ -617,8 +679,8 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 	if result.Status != "PASS" || result.ModelCalls != 0 || result.ModelBackendDownloadBytes != 0 {
 		t.Fatalf("public candidate install result = %#v", result)
 	}
-	if result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
-		t.Fatalf("public candidate PATH resolution = %q, want installed executable", result.PathResolution)
+	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
+		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
 	}
 	if result.ExecutableBuildInfo.SourceRevision != localAICandidateSourceCommit || result.ExecutableBuildInfo.VCSModified {
 		t.Fatalf("public candidate executable build info = %#v", result.ExecutableBuildInfo)

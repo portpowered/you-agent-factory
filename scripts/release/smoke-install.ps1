@@ -399,9 +399,9 @@ function Get-SmokeExecutableBuildInfo {
     )
     $goPath = $GoExecutablePath
     if ([string]::IsNullOrWhiteSpace($goPath)) {
-        $go = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue
+        $go = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -eq $go) { Fail-Smoke "Go is required to inspect executable build info" }
-        $goPath = $go.Source
+        $goPath = [string]$go.Source
     }
     $result = Invoke-CandidateCommand -FilePath $goPath `
         -ArgumentList @("version", "-m", (Resolve-SmokePath $ExecutablePath)) `
@@ -437,8 +437,18 @@ function Get-SmokeExecutableBuildInfo {
 
 function Invoke-SmokeGit {
     param([string[]]$ArgumentList)
-    $output = @(& git.exe @ArgumentList 2>&1 | ForEach-Object { [string]$_ })
-    if ($LASTEXITCODE -ne 0) { Fail-Smoke "git $($ArgumentList -join ' ') failed: $($output -join ' ')" }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell promotes native stderr to a terminating error when
+        # the caller uses Stop. Git writes normal clone progress there, so
+        # capture it as command evidence and classify failure by exit status.
+        $ErrorActionPreference = "Continue"
+        $output = @(& git.exe @ArgumentList 2>&1 | ForEach-Object { [string]$_ })
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) { Fail-Smoke "git $($ArgumentList -join ' ') failed: $($output -join ' ')" }
     return ($output -join "`n").Trim()
 }
 
@@ -536,6 +546,7 @@ function Invoke-InstalledCandidateSmoke {
         [string]$InstallerPath,
         [string]$ArchiveExecutablePath,
         [string]$Version,
+        [string]$ExpectedExecutableVersion,
         [string]$ExpectedSourceCommit,
         [string]$GoExecutablePath,
         [string]$RequestedInstallDir,
@@ -650,8 +661,11 @@ function Invoke-InstalledCandidateSmoke {
             -StdoutPath (Join-Path $smokeRoot "version.stdout") `
             -StderrPath (Join-Path $smokeRoot "version.stderr")
         [void]$commands.Add($versionCommand)
-        if ($versionCommand.exitCode -ne 0 -or $versionCommand.stdout.Trim() -cne $Version) {
-            Fail-Smoke "installed candidate version is '$($versionCommand.stdout.Trim())', want '$Version'"
+        $reportedVersion = $versionCommand.stdout.Trim()
+        $expectedVersion = if ([string]::IsNullOrWhiteSpace($ExpectedExecutableVersion)) { $Version } else { $ExpectedExecutableVersion }
+        if ($versionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($reportedVersion) -or
+            $reportedVersion -match '[\r\n]' -or $reportedVersion -cne $expectedVersion) {
+            Fail-Smoke "installed candidate version is '$reportedVersion', want '$expectedVersion'"
         }
         $rootHelpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
             -ArgumentList @("--help") -WorkingDirectory $smokeRoot `
@@ -717,6 +731,8 @@ function Invoke-InstalledCandidateSmoke {
             status = "PASS"
             installedExecutable = $installedEvidence
             pathResolution = $pathResolution
+            version = $reportedVersion
+            expectedVersion = $expectedVersion
             executableBuildInfo = $buildInfo
             commands = @($commands | ForEach-Object { $_ })
             modelCalls = 0
@@ -870,9 +886,10 @@ function Invoke-LocalCandidateSmoke {
         if ($releaseToolResult.exitCode -ne 0 -or $releaseToolResult.stdout -notmatch ("(?m)\b" + [regex]::Escape($ReleaseToolVersion) + "\b")) {
             Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
         }
-        $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue
+        $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -eq $goCommand) { Fail-Smoke "Go 1.26.8 is required for candidate release" }
-        $goVersionResult = Invoke-CandidateCommand -FilePath $goCommand.Source `
+        $goPath = [string]$goCommand.Source
+        $goVersionResult = Invoke-CandidateCommand -FilePath $goPath `
             -ArgumentList @("version") -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $outputDirectory "go-version.stdout.log") `
             -StderrPath (Join-Path $outputDirectory "go-version.stderr.log")
@@ -950,11 +967,28 @@ function Invoke-LocalCandidateSmoke {
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
         $archiveExecutablePath = Join-Path $extractPath "you.exe"
         [void](Assert-SmokeRegularFile "archive executable" $archiveExecutablePath)
+        $archiveVersionCommand = Invoke-CandidateCommand -FilePath $archiveExecutablePath `
+            -ArgumentList @("--version") -WorkingDirectory $extractPath `
+            -StdoutPath (Join-Path $outputDirectory "archive-version.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "archive-version.stderr.log")
+        $expectedExecutableVersion = $archiveVersionCommand.stdout.Trim()
+        if ($archiveVersionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($expectedExecutableVersion) -or
+            $expectedExecutableVersion -match '[\r\n]') {
+            Fail-Smoke "archive executable version probe failed: exit=$($archiveVersionCommand.exitCode) output='$expectedExecutableVersion'"
+        }
+        $retainedExecutablePath = Join-Path $outputDirectory "you.exe"
+        Copy-Item -LiteralPath $archiveExecutablePath -Destination $retainedExecutablePath -Force
+        $archiveExecutableEvidence = Get-SmokeFileEvidence "archive executable" $archiveExecutablePath
+        $retainedExecutableEvidence = Get-SmokeFileEvidence "windows-amd64-executable" $retainedExecutablePath
+        if ($archiveExecutableEvidence.bytes -ne $retainedExecutableEvidence.bytes -or
+            $archiveExecutableEvidence.sha256 -cne $retainedExecutableEvidence.sha256) {
+            Fail-Smoke "retained executable does not match the archive member"
+        }
         $report.artifacts = @(
             Get-SmokeFileEvidence "windows-amd64-archive" $archivePath
             Get-SmokeFileEvidence "checksums" $checksumPath
             Get-SmokeFileEvidence "windows-installer" $installerPath
-            Get-SmokeFileEvidence "windows-amd64-executable" $archiveExecutablePath
+            $retainedExecutableEvidence
         )
         $installArguments = @{
             CandidateDirectory = $outputDirectory
@@ -963,8 +997,9 @@ function Invoke-LocalCandidateSmoke {
             InstallerPath = $installerPath
             ArchiveExecutablePath = $archiveExecutablePath
             Version = $version
+            ExpectedExecutableVersion = $expectedExecutableVersion
             ExpectedSourceCommit = $sourceIdentity.commit
-            GoExecutablePath = $goCommand.Source
+            GoExecutablePath = $goPath
             RequestedInstallDir = $installDirectory
             WorkDirectory = $workDirectory
         }
