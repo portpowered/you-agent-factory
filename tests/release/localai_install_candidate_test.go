@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"debug/buildinfo"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
@@ -370,6 +373,17 @@ func localAICandidatePowerShellCommand(t *testing.T, arguments ...string) *exec.
 	command := exec.Command(pwsh, commandArguments...)
 	command.Dir = root
 	return command
+}
+func localAICandidatePowerShellLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+func utf16LE(value string) []byte {
+	encoded := utf16.Encode([]rune(value))
+	result := make([]byte, len(encoded)*2)
+	for index, character := range encoded {
+		binary.LittleEndian.PutUint16(result[index*2:], character)
+	}
+	return result
 }
 func localAICandidateRunGit(t *testing.T, directory string, arguments ...string) string {
 	t.Helper()
@@ -735,6 +749,131 @@ func TestLocalAICandidateObserverRootFailureRetainsOutput(t *testing.T) {
 		}
 	}
 	t.Logf("LOCALAI-OBSERVER-FAILURE status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateObserverArgumentVector(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows argument-vector fixture is only available on Windows")
+	}
+	repo := testutil.MustRepoRoot(t)
+	shell, err := exec.LookPath("pwsh.exe")
+	if err != nil {
+		shell, err = exec.LookPath("powershell.exe")
+		if err != nil {
+			t.Fatalf("argument-vector fixture requires PowerShell: %v", err)
+		}
+	}
+	recorderPath := filepath.Join(t.TempDir(), "argv-recorder.ps1")
+	recorder := `$observed = [string[]]$args
+Write-Output (ConvertTo-Json -InputObject $observed -Compress)
+[Console]::Error.WriteLine("argv-recorder stderr")
+$sleepScript = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 1500"))
+$childPath = Join-Path $PSHOME "pwsh.exe"
+if (-not (Test-Path -LiteralPath $childPath)) { $childPath = Join-Path $PSHOME "powershell.exe" }
+$child = Start-Process -FilePath $childPath -WindowStyle Hidden -ArgumentList @("-NoProfile", "-NonInteractive", "-EncodedCommand", $sleepScript) -PassThru
+Wait-Process -Id $child.Id
+exit 0
+`
+	if err := os.WriteFile(recorderPath, []byte(recorder), 0o600); err != nil {
+		t.Fatalf("write argv recorder: %v", err)
+	}
+	spacedArgument := filepath.Join(t.TempDir(), "config path with spaces", ".goreleaser.yml")
+	wantArguments := []string{"release", "--snapshot", "--clean", "-f", spacedArgument}
+	collapsedArguments := "'" + strings.Join([]string{"release", "--snapshot", "--clean", "-f", spacedArgument}, "','") + "'"
+	readArguments := func(t *testing.T, reportPath string) []string {
+		t.Helper()
+		raw, err := os.ReadFile(reportPath)
+		if err != nil {
+			t.Fatalf("read argument observer report: %v", err)
+		}
+		var report localAICandidateObserverReport
+		if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
+			t.Fatalf("decode argument observer report: %v", err)
+		}
+		if report.Status != "PASS" || report.Observation.RootExitCode == nil || *report.Observation.RootExitCode != 0 {
+			t.Fatalf("argument observer report = %#v, want successful observed root", report)
+		}
+		if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
+			t.Fatalf("argument observer evidence: %v", err)
+		}
+		stdout, err := os.ReadFile(report.Observation.RootOutput.Stdout.Path)
+		if err != nil {
+			t.Fatalf("read argument recorder stdout: %v", err)
+		}
+		stderr, err := os.ReadFile(report.Observation.RootOutput.Stderr.Path)
+		if err != nil {
+			t.Fatalf("read argument recorder stderr: %v", err)
+		}
+		if !strings.Contains(string(stderr), "argv-recorder stderr") {
+			t.Fatalf("argument recorder stderr = %q, want retained stderr", stderr)
+		}
+		var observed []string
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(stdout))), &observed); err != nil {
+			t.Fatalf("decode recorded argv %q: %v", stdout, err)
+		}
+		return observed
+	}
+	newInstallDir := filepath.Join(t.TempDir(), "install-root")
+	if err := os.MkdirAll(newInstallDir, 0o700); err != nil {
+		t.Fatalf("create direct-array install root: %v", err)
+	}
+	newReportPath := filepath.Join(t.TempDir(), "direct-array-report.json")
+	newStdoutPath := filepath.Join(filepath.Dir(newReportPath), "direct-array.stdout.txt")
+	newStderrPath := filepath.Join(filepath.Dir(newReportPath), "direct-array.stderr.txt")
+	argumentLiterals := make([]string, 0, len(wantArguments)+4)
+	for _, argument := range append([]string{"-NoProfile", "-NonInteractive", "-File", recorderPath}, wantArguments...) {
+		argumentLiterals = append(argumentLiterals, localAICandidatePowerShellLiteral(argument))
+	}
+	invocation := fmt.Sprintf(`$parameters = @{
+    InstallDir = %s
+    ObserverFixture = $true
+    ObserverReportPath = %s
+    ObserverRootCommand = %s
+    ObserverRootArgumentList = @(%s)
+    ObserverRootWorkingDirectory = %s
+    ObserverRootStdoutPath = %s
+    ObserverRootStderrPath = %s
+    ObserverRootOutputMaximumBytes = 65536
+    ObserverTimeoutSeconds = 10
+}
+& %s @parameters`, localAICandidatePowerShellLiteral(newInstallDir), localAICandidatePowerShellLiteral(newReportPath), localAICandidatePowerShellLiteral(shell), strings.Join(argumentLiterals, ", "), localAICandidatePowerShellLiteral(repo), localAICandidatePowerShellLiteral(newStdoutPath), localAICandidatePowerShellLiteral(newStderrPath), localAICandidatePowerShellLiteral(filepath.Join(repo, "scripts", "release", "smoke-install.ps1")))
+	command := exec.Command(shell, "-NoProfile", "-NonInteractive", "-EncodedCommand", base64.StdEncoding.EncodeToString(utf16LE(invocation)))
+	command.Dir = repo
+	command.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
+	if output, err := command.CombinedOutput(); err != nil {
+		report, readErr := os.ReadFile(newReportPath)
+		t.Fatalf("direct argument-vector observer: %v\n%s\nreport=%s readError=%v", err, output, report, readErr)
+	}
+	observed := readArguments(t, newReportPath)
+	if !slices.Equal(observed, wantArguments) {
+		t.Fatalf("direct argument-vector recorder = %#v, want %#v", observed, wantArguments)
+	}
+	t.Logf("LOCALAI-ARGV status=PASS requested=%#v observed=%#v", wantArguments, observed)
+
+	collapsedInstallDir := filepath.Join(t.TempDir(), "install-root")
+	if err := os.MkdirAll(collapsedInstallDir, 0o700); err != nil {
+		t.Fatalf("create collapsed-array install root: %v", err)
+	}
+	collapsedReportPath := filepath.Join(t.TempDir(), "collapsed-array-report.json")
+	collapsedStdoutPath := filepath.Join(filepath.Dir(collapsedReportPath), "collapsed-array.stdout.txt")
+	collapsedStderrPath := filepath.Join(filepath.Dir(collapsedReportPath), "collapsed-array.stderr.txt")
+	collapsedCommand := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-File", filepath.Join(repo, "scripts", "release", "smoke-install.ps1"), "-InstallDir", collapsedInstallDir, "-ObserverFixture", "-ObserverReportPath", collapsedReportPath, "-ObserverRootCommand", shell, "-ObserverRootWorkingDirectory", repo, "-ObserverRootStdoutPath", collapsedStdoutPath, "-ObserverRootStderrPath", collapsedStderrPath, "-ObserverRootOutputMaximumBytes", "65536", "-ObserverTimeoutSeconds", "10", "-ObserverRootArgumentList", collapsedArguments)
+	collapsedCommand.Dir = repo
+	collapsedCommand.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
+	if output, err := collapsedCommand.CombinedOutput(); err == nil {
+		t.Fatalf("retained collapsed argument-vector observer unexpectedly succeeded: %s", output)
+	}
+	collapsedRaw, err := os.ReadFile(collapsedReportPath)
+	if err != nil {
+		t.Fatalf("read collapsed argument observer report: %v", err)
+	}
+	var collapsedReport localAICandidateObserverReport
+	if err := decodeLocalAICandidateJSON(collapsedRaw, &collapsedReport); err != nil {
+		t.Fatalf("decode collapsed argument observer report: %v", err)
+	}
+	if collapsedReport.Status != "FAIL" || collapsedReport.Observation.RootExitCode == nil || *collapsedReport.Observation.RootExitCode == 0 || collapsedReport.Observation.RootOutput.Status != "PASS" {
+		t.Fatalf("collapsed argument observer report = %#v, want retained failure with root output", collapsedReport)
+	}
+	t.Logf("LOCALAI-ARGV-REGRESSION status=PASS retainedCollapsed=%q rootExit=%d", collapsedArguments, *collapsedReport.Observation.RootExitCode)
 }
 func TestLocalAICandidateObserverIdentityFixture(t *testing.T) {
 	if runtime.GOOS != "windows" {

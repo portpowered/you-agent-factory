@@ -1251,8 +1251,7 @@ function Get-SmokeExecutableBuildInfo {
     if ([string]::IsNullOrWhiteSpace($GoExecutablePath)) {
         Fail-Smoke "candidate mode requires the Go tool to inspect executable build info"
     }
-    $quotedExecutablePath = '"' + $ExecutablePath.Replace('"', '\"') + '"'
-    $result = Invoke-SmokeCommand -FilePath $GoExecutablePath -Arguments @("version", "-m", $quotedExecutablePath) -WorkingDirectory $WorkingDirectory
+    $result = Invoke-SmokeCommand -FilePath $GoExecutablePath -Arguments @("version", "-m", $ExecutablePath) -WorkingDirectory $WorkingDirectory
     if ($result.exitCode -ne 0) {
         Fail-Smoke "go version -m failed for candidate executable with exit code $($result.exitCode): $($result.stderr.Trim())"
     }
@@ -1302,14 +1301,7 @@ function Invoke-SmokeCommand {
         [int]$NetworkObserverSampleMilliseconds = 50
     )
 
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $FilePath
-    $startInfo.Arguments = [string]::Join(" ", $Arguments)
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
+    $startInfo = New-SmokeProcessStartInfo -FilePath $FilePath -Arguments $Arguments -WorkingDirectory $WorkingDirectory
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
@@ -1415,6 +1407,35 @@ function Convert-SmokeProcessArgumentListToCommandLine {
         [void]$quotedArguments.Add($builder.ToString())
     }
     return [string]::Join(" ", $quotedArguments.ToArray())
+}
+
+function New-SmokeProcessStartInfo {
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory
+    )
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $argumentListProperty = $startInfo.PSObject.Properties["ArgumentList"]
+    if ($null -ne $argumentListProperty) {
+        foreach ($argument in @($Arguments)) {
+            $value = if ($null -eq $argument) { "" } else { [string]$argument }
+            [void]$startInfo.ArgumentList.Add($value)
+        }
+    } else {
+        # Windows PowerShell 5.1 uses .NET Framework, whose ProcessStartInfo
+        # has no ArgumentList. The quoting routine preserves the same token
+        # boundary without invoking a shell or reparsing a serialized list.
+        $startInfo.Arguments = Convert-SmokeProcessArgumentListToCommandLine $Arguments
+    }
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    return $startInfo
 }
 
 function New-SmokeLoopbackPort {
@@ -2924,14 +2945,8 @@ function Invoke-ObserverFixture {
         $rootFilePath = "powershell.exe"
         $rootArguments = @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded)
         }
-        $rootStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
-        $rootStartInfo.FileName = $rootFilePath
-        $rootStartInfo.Arguments = Convert-SmokeProcessArgumentListToCommandLine $rootArguments
-        $rootStartInfo.WorkingDirectory = if ($externalRoot) { $resolvedRootWorkingDirectory } else { $fixtureRoot }
-        $rootStartInfo.UseShellExecute = $false
-        $rootStartInfo.CreateNoWindow = $true
-        $rootStartInfo.RedirectStandardOutput = $true
-        $rootStartInfo.RedirectStandardError = $true
+        $rootWorkingDirectory = if ($externalRoot) { $resolvedRootWorkingDirectory } else { $fixtureRoot }
+        $rootStartInfo = New-SmokeProcessStartInfo -FilePath $rootFilePath -Arguments $rootArguments -WorkingDirectory $rootWorkingDirectory
         $rootProcess = [System.Diagnostics.Process]::new()
         $rootProcess.StartInfo = $rootStartInfo
         if (-not $rootProcess.Start()) { throw "observer root could not start: $rootFilePath" }
