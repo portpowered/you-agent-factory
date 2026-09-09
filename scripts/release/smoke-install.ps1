@@ -1550,6 +1550,27 @@ function Invoke-ObserverFixture {
                     }
                 }
             }
+            function Remove-ObserverInactivePidIdentities {
+                param(
+                    [object]$Snapshot,
+                    [hashtable]$IdentityByPid
+                )
+
+                # A PID may be reused after its prior owned process has
+                # disappeared between intervals. Keep every creation-time
+                # identity in OwnedIdentityToPid, but compare only active PID
+                # mappings across the before/after pair so reuse during one
+                # TCP query remains fail closed.
+                $activePids = @{}
+                foreach ($record in @($Snapshot.ownedRecords)) {
+                    $activePids[[int]$record.processId] = $true
+                }
+                foreach ($processId in @($IdentityByPid.Keys)) {
+                    if (-not $activePids.ContainsKey([int]$processId)) {
+                        [void]$IdentityByPid.Remove($processId)
+                    }
+                }
+            }
             function Test-ObserverLoopbackAddress {
                 param([string]$Address)
 
@@ -1566,6 +1587,7 @@ function Invoke-ObserverFixture {
                     throw "Get-NetTCPConnection is unavailable"
                 }
                 $before = Get-ObserverProcessSnapshot $RootId
+                Remove-ObserverInactivePidIdentities $before $IdentityByPid
                 Register-ObserverIdentities $before $IdentityByPid $OwnedIdentityToPid $State
                 # One complete TCP-table query is deliberately shared by every
                 # owned process in this interval; an empty table is a valid sample.
