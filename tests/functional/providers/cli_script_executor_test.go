@@ -80,6 +80,75 @@ func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
 	return runner.calls
 }
 
+const scriptTimeoutCausalSignalTimeout = 10 * time.Second
+
+type scriptTimeoutThenReleaseCommandRunner struct {
+	mu             sync.Mutex
+	callCount      int
+	firstStartCh   chan struct{}
+	firstTimeoutCh chan struct{}
+	retryStartCh   chan struct{}
+	releaseRetryCh chan struct{}
+	firstStart     sync.Once
+	firstTimeout   sync.Once
+	retryStart     sync.Once
+}
+
+func newScriptTimeoutThenReleaseCommandRunner() *scriptTimeoutThenReleaseCommandRunner {
+	return &scriptTimeoutThenReleaseCommandRunner{
+		firstStartCh:   make(chan struct{}),
+		firstTimeoutCh: make(chan struct{}),
+		retryStartCh:   make(chan struct{}),
+		releaseRetryCh: make(chan struct{}),
+	}
+}
+
+func (runner *scriptTimeoutThenReleaseCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.callCount++
+	call := runner.callCount
+	runner.mu.Unlock()
+
+	if call == 1 {
+		runner.firstStart.Do(func() { close(runner.firstStartCh) })
+		<-ctx.Done()
+		runner.firstTimeout.Do(func() { close(runner.firstTimeoutCh) })
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+
+	runner.retryStart.Do(func() { close(runner.retryStartCh) })
+	select {
+	case <-runner.releaseRetryCh:
+		return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
+	default:
+	}
+	select {
+	case <-runner.releaseRetryCh:
+		return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func (runner *scriptTimeoutThenReleaseCommandRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.callCount
+}
+
+func waitForScriptTimeoutCausalSignal(t testing.TB, signal <-chan struct{}, name string) {
+	t.Helper()
+	timer := time.NewTimer(scriptTimeoutCausalSignalTimeout)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatalf("missing %s within %s", name, scriptTimeoutCausalSignalTimeout)
+	case <-t.Context().Done():
+		t.Fatalf("waiting for %s: %v", name, t.Context().Err())
+	}
+}
+
 type baseCanceledCommandRunner struct{}
 
 func (baseCanceledCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -539,16 +608,61 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	runner := newTimeoutThenSuccessCommandRunner()
-	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	runner := newScriptTimeoutThenReleaseCommandRunner()
+	fixture := FixtureFor(t)
+	scenario := fixture.OpenScenario(t, dir, dir, runner)
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, scenario.sessionID))
+	waitForScriptTimeoutCausalSignal(t, runner.firstStartCh, "first script attempt start")
+	waitForScriptTimeoutCausalSignal(t, runner.firstTimeoutCh, "first script attempt timeout")
+	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeFailed, "execution timeout")
+	waitForScriptTimeoutCausalSignal(t, runner.retryStartCh, "later script retry start")
+	close(runner.releaseRetryCh)
+	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeAccepted, "")
+	scenario.WaitForTerminal(t, 5*time.Second)
+	listed := scenario.ListWork(t)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() < 2 {
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	assertDispatchTimeoutEventuallyAccepted(t, server.factoryEvents(t))
-	server.stop(t)
+	assertDispatchTimeoutEventuallyAccepted(t, scenario.FactoryEvents(t))
+	scenario.Stop(t)
+}
+
+func waitForScriptTimeoutDispatchResponse(
+	t testing.TB,
+	stream *support.FactoryEventStream,
+	wantOutcome factoryapi.WorkOutcome,
+	wantError string,
+) factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), scriptTimeoutCausalSignalTimeout)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode script timeout dispatch response: %v", err)
+		}
+		if wantOutcome == factoryapi.WorkOutcomeAccepted && payload.Outcome == factoryapi.WorkOutcomeFailed &&
+			payload.Error != nil && strings.Contains(*payload.Error, "execution timeout") {
+			continue
+		}
+		if payload.Outcome != wantOutcome {
+			t.Fatalf("script timeout dispatch outcome = %s, want %s", payload.Outcome, wantOutcome)
+		}
+		if wantError != "" && (payload.Error == nil || !strings.Contains(*payload.Error, wantError)) {
+			t.Fatalf("script timeout dispatch error = %#v, want substring %q", payload.Error, wantError)
+		}
+		if wantOutcome == factoryapi.WorkOutcomeAccepted && payload.Error != nil {
+			t.Fatalf("accepted script timeout dispatch error = %#v, want nil", payload.Error)
+		}
+		return payload
+	}
 }
 
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
