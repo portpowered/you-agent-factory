@@ -4,26 +4,29 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "063", "-p=4", "4"
-	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc", "2c00a0d213fbf878402b66895466053a832a9583"
+	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "067", "-p=4", "4"
+	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "059474b2c00915865306a33ca5e3d02b618bb6f0", "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
 	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
 	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
 )
@@ -83,18 +86,20 @@ type localAICandidateArtifactEvidence struct {
 	SHA256 string `json:"sha256"`
 }
 type localAICandidateValidationEvidence struct {
-	Status           string                           `json:"status"`
-	Property         string                           `json:"property"`
-	SchemaVersion    string                           `json:"schemaVersion"`
-	SourceCommit     string                           `json:"sourceCommit"`
-	SourceTree       string                           `json:"sourceTree"`
-	CandidateVersion string                           `json:"candidateVersion"`
-	CLIVersion       string                           `json:"cliVersion"`
-	Target           string                           `json:"target"`
-	Archive          localAICandidateArtifactEvidence `json:"archive"`
-	Installer        localAICandidateArtifactEvidence `json:"installer"`
-	Manifest         localAICandidateArtifactEvidence `json:"manifest"`
-	Preconditions    string                           `json:"preconditions"`
+	Status                 string                           `json:"status"`
+	Property               string                           `json:"property"`
+	SchemaVersion          string                           `json:"schemaVersion"`
+	SourceCommit           string                           `json:"sourceCommit"`
+	SourceTree             string                           `json:"sourceTree"`
+	EmbeddedSourceRevision string                           `json:"embeddedSourceRevision"`
+	EmbeddedVCSModified    bool                             `json:"embeddedVCSModified"`
+	CandidateVersion       string                           `json:"candidateVersion"`
+	CLIVersion             string                           `json:"cliVersion"`
+	Target                 string                           `json:"target"`
+	Archive                localAICandidateArtifactEvidence `json:"archive"`
+	Installer              localAICandidateArtifactEvidence `json:"installer"`
+	Manifest               localAICandidateArtifactEvidence `json:"manifest"`
+	Preconditions          string                           `json:"preconditions"`
 }
 type localAICandidateRoot struct {
 	Name string
@@ -334,7 +339,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			fixture := newLocalAICandidateFixture(t)
 			fixture.manifest.Cycle = cycle
 			fixture.writeManifest(t)
-			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "063"`) {
+			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "`+localAICandidateCycle+`"`) {
 				t.Fatalf("validate historical cycle error = %v, want cycle %s rejection", err, cycle)
 			}
 		})
@@ -373,12 +378,103 @@ func TestLocalAICandidateManifestValidationRejectsReparseCandidateDirectory(t *t
 }
 func TestLocalAICandidateManifestValidationAcceptsMatchingArtifacts(t *testing.T) {
 	fixture := newLocalAICandidateFixture(t)
-	evidence, err := validateLocalAICandidate(fixture.manifestPath)
+	evidence, err := validateLocalAICandidateWithBuildInfoReader(fixture.manifestPath, func(string) (*debug.BuildInfo, error) {
+		return localAICandidateCleanBuildInfo(), nil
+	})
 	if err != nil {
 		t.Fatalf("validate matching candidate: %v", err)
 	}
-	if evidence.Status != "PASS" || evidence.Property == "" || evidence.Archive.File != "you_1.2.3-snapshot-test_windows_amd64.zip" || evidence.Archive.Bytes != int64(len(fixture.archiveBytes)) || evidence.Installer.File != "install.ps1" || evidence.Installer.Bytes <= 0 {
-		t.Fatalf("candidate evidence = %#v, want PASS with matching archive, executable, and installer identity", evidence)
+	if evidence.Status != "PASS" || evidence.Property == "" || evidence.SourceCommit != localAICandidateSourceCommit || evidence.SourceTree != localAICandidateSourceTree || evidence.EmbeddedSourceRevision != localAICandidateSourceCommit || evidence.EmbeddedVCSModified || evidence.Archive.File != "you_1.2.3-snapshot-test_windows_amd64.zip" || evidence.Archive.Bytes != int64(len(fixture.archiveBytes)) || evidence.Installer.File != "install.ps1" || evidence.Installer.Bytes <= 0 {
+		t.Fatalf("candidate evidence = %#v, want PASS with matching archive, executable, and clean embedded revision", evidence)
+	}
+}
+func TestLocalAICandidateBuildInfoValidationRejectsDriftAndAmbiguity(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings []debug.BuildSetting
+		readErr  error
+		want     string
+	}{
+		{
+			name: "clean revision and VCS state",
+			settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+				{Key: "vcs.modified", Value: "false"},
+			},
+		},
+		{
+			name:     "missing revision",
+			settings: []debug.BuildSetting{{Key: "vcs.modified", Value: "false"}},
+			want:     "vcs.revision is missing",
+		},
+		{
+			name: "mismatched revision",
+			settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: strings.Repeat("d", 40)},
+				{Key: "vcs.modified", Value: "false"},
+			},
+			want: "vcs.revision =",
+		},
+		{
+			name:     "missing modified state",
+			settings: []debug.BuildSetting{{Key: "vcs.revision", Value: localAICandidateSourceCommit}},
+			want:     "vcs.modified is missing",
+		},
+		{
+			name: "dirty modified state",
+			settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+				{Key: "vcs.modified", Value: "true"},
+			},
+			want: "vcs.modified =",
+		},
+		{
+			name: "duplicate revision settings",
+			settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+				{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+				{Key: "vcs.modified", Value: "false"},
+			},
+			want: "duplicate \"vcs.revision\" settings",
+		},
+		{
+			name: "duplicate modified settings",
+			settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+				{Key: "vcs.modified", Value: "false"},
+				{Key: "vcs.modified", Value: "true"},
+			},
+			want: "duplicate \"vcs.modified\" settings",
+		},
+		{
+			name:    "unreadable executable metadata",
+			readErr: errors.New("not a Go executable"),
+			want:    "read executable build info",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			build := &debug.BuildInfo{Settings: test.settings}
+			revision, modified, err := readAndValidateLocalAICandidateBuildInfo("candidate.exe", func(string) (*debug.BuildInfo, error) {
+				return build, test.readErr
+			})
+			if test.want == "" {
+				if err != nil || revision != localAICandidateSourceCommit || modified {
+					t.Fatalf("build-info validation = revision=%q modified=%v error=%v, want clean protected revision", revision, modified, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("build-info validation error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+func TestLocalAICandidateBuildInfoReadFailureFailsClosed(t *testing.T) {
+	fixture := newLocalAICandidateFixture(t)
+	if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), "read executable build info") {
+		t.Fatalf("candidate build-info read error = %v, want fail-closed metadata evidence", err)
 	}
 }
 func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T) {
@@ -461,7 +557,7 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 		t.Fatalf("decode observer report: %v", err)
 	}
 	if report.SchemaVersion != "localai-windows-install-candidate-observer/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.ReleaseStatus != "observer-fixture" {
-		t.Fatalf("observer report identity/status = %#v, want cycle-063 PASS observer-fixture", report)
+		t.Fatalf("observer report identity/status = %#v, want cycle-%s PASS observer-fixture", report, localAICandidateCycle)
 	}
 	if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
 		t.Fatalf("observer report evidence: %v", err)
@@ -489,6 +585,9 @@ func validateLocalAICandidateObserverEvidence(observation localAICandidateObserv
 	return nil
 }
 func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEvidence, error) {
+	return validateLocalAICandidateWithBuildInfoReader(manifestPath, buildinfo.ReadFile)
+}
+func validateLocalAICandidateWithBuildInfoReader(manifestPath string, readBuildInfo func(string) (*debug.BuildInfo, error)) (localAICandidateValidationEvidence, error) {
 	if !filepath.IsAbs(manifestPath) {
 		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate manifest path %q must be absolute", manifestPath)
 	}
@@ -532,6 +631,10 @@ func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEv
 	if !ok {
 		return localAICandidateValidationEvidence{}, errors.New("candidate manifest is missing windows-installer artifact")
 	}
+	executable, ok := artifactByRole["windows-amd64-executable"]
+	if !ok {
+		return localAICandidateValidationEvidence{}, errors.New("candidate manifest is missing windows-amd64-executable artifact")
+	}
 	archiveCandidates, err := localAICandidateArchiveCandidates(candidateDir)
 	if err != nil {
 		return localAICandidateValidationEvidence{}, err
@@ -550,17 +653,23 @@ func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEv
 	if err != nil {
 		return localAICandidateValidationEvidence{}, fmt.Errorf("validate windows installer: %w", err)
 	}
+	embeddedSourceRevision, embeddedVCSModified, err := readAndValidateLocalAICandidateBuildInfo(filepath.Join(candidateDir, filepath.FromSlash(executable.File)), readBuildInfo)
+	if err != nil {
+		return localAICandidateValidationEvidence{}, err
+	}
 	return localAICandidateValidationEvidence{
-		Status:           "PASS",
-		Property:         "prebuilt-candidate-schema-source-target-artifact-and-detached-digest-identity",
-		SchemaVersion:    manifest.SchemaVersion,
-		SourceCommit:     manifest.Source.Commit,
-		SourceTree:       manifest.Source.Tree,
-		CandidateVersion: manifest.Build.CandidateVersion,
-		CLIVersion:       manifest.Build.CLIVersion,
-		Target:           manifest.Build.Target.GOOS + "/" + manifest.Build.Target.GOARCH,
-		Archive:          archiveEvidence,
-		Installer:        installerEvidence,
+		Status:                 "PASS",
+		Property:               "prebuilt-candidate-schema-source-target-artifact-and-detached-digest-identity",
+		SchemaVersion:          manifest.SchemaVersion,
+		SourceCommit:           manifest.Source.Commit,
+		SourceTree:             manifest.Source.Tree,
+		EmbeddedSourceRevision: embeddedSourceRevision,
+		EmbeddedVCSModified:    embeddedVCSModified,
+		CandidateVersion:       manifest.Build.CandidateVersion,
+		CLIVersion:             manifest.Build.CLIVersion,
+		Target:                 manifest.Build.Target.GOOS + "/" + manifest.Build.Target.GOARCH,
+		Archive:                archiveEvidence,
+		Installer:              installerEvidence,
 		Manifest: localAICandidateArtifactEvidence{
 			Role:   "candidate-manifest",
 			File:   filepath.Base(manifestPath),
@@ -569,6 +678,51 @@ func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEv
 		},
 		Preconditions: "not-run-by-schema-cell; install cell must supply task-owned PATH and roots",
 	}, nil
+}
+func readAndValidateLocalAICandidateBuildInfo(path string, readBuildInfo func(string) (*debug.BuildInfo, error)) (string, bool, error) {
+	if readBuildInfo == nil {
+		return "", false, errors.New("read executable build info: reader is nil")
+	}
+	build, err := readBuildInfo(path)
+	if err != nil {
+		return "", false, fmt.Errorf("read executable build info %q: %w", path, err)
+	}
+	if build == nil {
+		return "", false, fmt.Errorf("read executable build info %q: returned no metadata", path)
+	}
+	revision, err := localAICandidateBuildSetting(build, "vcs.revision")
+	if err != nil {
+		return "", false, err
+	}
+	if revision != localAICandidateSourceCommit {
+		return "", false, fmt.Errorf("candidate executable build info vcs.revision = %q, want %q", revision, localAICandidateSourceCommit)
+	}
+	modified, err := localAICandidateBuildSetting(build, "vcs.modified")
+	if err != nil {
+		return "", false, err
+	}
+	if modified != "false" {
+		return "", false, fmt.Errorf("candidate executable build info vcs.modified = %q, want %q", modified, "false")
+	}
+	return revision, false, nil
+}
+func localAICandidateBuildSetting(build *debug.BuildInfo, key string) (string, error) {
+	var value string
+	found := false
+	for _, setting := range build.Settings {
+		if setting.Key != key {
+			continue
+		}
+		if found {
+			return "", fmt.Errorf("candidate executable build info contains duplicate %q settings", key)
+		}
+		found = true
+		value = strings.TrimSpace(setting.Value)
+	}
+	if !found || value == "" {
+		return "", fmt.Errorf("candidate executable build info %s is missing", key)
+	}
+	return value, nil
 }
 func readLocalAICandidateManifest(manifestPath string) ([]byte, localAICandidateManifest, error) {
 	manifestBytes, err := os.ReadFile(manifestPath)
@@ -995,5 +1149,11 @@ func localAICandidateSHA256(t *testing.T, path string) string {
 		t.Fatalf("hash candidate fixture %q: %v", path, err)
 	}
 	return digest
+}
+func localAICandidateCleanBuildInfo() *debug.BuildInfo {
+	return &debug.BuildInfo{Settings: []debug.BuildSetting{
+		{Key: "vcs.revision", Value: localAICandidateSourceCommit},
+		{Key: "vcs.modified", Value: "false"},
+	}}
 }
 func candidateInt64Pointer(value int64) *int64 { return &value }

@@ -13,9 +13,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$expectedCandidateCycle = "067"
 $expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
-$expectedCandidateSourceCommit = "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc"
-$expectedCandidateSourceTree = "2c00a0d213fbf878402b66895466053a832a9583"
+$expectedCandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
+$expectedCandidateSourceTree = "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
 
 function Fail-Smoke {
     param([string]$Message)
@@ -280,6 +281,58 @@ function Get-SmokeZipEntryEvidence {
         }
     } finally {
         $archive.Dispose()
+    }
+}
+
+function Get-SmokeExecutableBuildInfo {
+    param(
+        [string]$ExecutablePath,
+        [string]$GoExecutablePath,
+        [string]$WorkingDirectory
+    )
+
+    if ([string]::IsNullOrWhiteSpace($GoExecutablePath)) {
+        Fail-Smoke "candidate mode requires the Go tool to inspect executable build info"
+    }
+    $quotedExecutablePath = '"' + $ExecutablePath.Replace('"', '\"') + '"'
+    $result = Invoke-SmokeCommand -FilePath $GoExecutablePath -Arguments @("version", "-m", $quotedExecutablePath) -WorkingDirectory $WorkingDirectory
+    if ($result.exitCode -ne 0) {
+        Fail-Smoke "go version -m failed for candidate executable with exit code $($result.exitCode): $($result.stderr.Trim())"
+    }
+
+    $settings = @{}
+    foreach ($line in @($result.stdout -split "`r?`n")) {
+        $columns = $line -split "`t", 2
+        if ($columns.Count -ne 2 -or $columns[0] -ne "build") {
+            continue
+        }
+        $setting = $columns[1] -split "=", 2
+        if ($setting.Count -ne 2 -or $setting[0] -notin @("vcs.revision", "vcs.modified")) {
+            continue
+        }
+        $key = [string]$setting[0]
+        if ($settings.ContainsKey($key)) {
+            Fail-Smoke "candidate executable build info contains duplicate '$key' settings"
+        }
+        $settings[$key] = [string]$setting[1].Trim()
+    }
+
+    foreach ($key in @("vcs.revision", "vcs.modified")) {
+        if (-not $settings.ContainsKey($key) -or [string]::IsNullOrWhiteSpace([string]$settings[$key])) {
+            Fail-Smoke "candidate executable build info $key is missing"
+        }
+    }
+    if ([string]$settings["vcs.revision"] -cne $expectedCandidateSourceCommit) {
+        Fail-Smoke "candidate executable build info vcs.revision = $($settings['vcs.revision']), want $expectedCandidateSourceCommit"
+    }
+    if ([string]$settings["vcs.modified"] -cne "false") {
+        Fail-Smoke "candidate executable build info vcs.modified = $($settings['vcs.modified']), want false"
+    }
+
+    return [pscustomobject]@{
+        sourceRevision = [string]$settings["vcs.revision"]
+        vcsModified = $false
+        result = $result
     }
 }
 
@@ -685,6 +738,8 @@ function Invoke-CandidateSmoke {
     $installerEvidence = $null
     $executableEvidence = $null
     $manifestEvidence = $null
+    $goExecutablePath = $null
+    $commandEvidence = @()
     $originalEnvironment = @{}
     $runStartedAt = [DateTime]::UtcNow
     $networkObservations = New-Object 'System.Collections.Generic.List[object]'
@@ -701,6 +756,11 @@ function Invoke-CandidateSmoke {
 
     try {
         Ensure-SmokeFileHashCommand
+        $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $goCommand) {
+            Fail-Smoke "candidate mode requires Go to inspect executable build info"
+        }
+        $goExecutablePath = [System.IO.Path]::GetFullPath($goCommand.Source)
         $manifestPath = Resolve-SmokeAbsolutePath $RequestedManifestPath
         $candidateDirectory = Split-Path -Parent $manifestPath
         $installDirectory = Resolve-SmokeAbsolutePath $RequestedInstallDir
@@ -717,8 +777,8 @@ function Invoke-CandidateSmoke {
         if ($manifest.schemaVersion -ne "localai-windows-install-candidate/v1") {
             Fail-Smoke "candidate schemaVersion is not localai-windows-install-candidate/v1"
         }
-        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "063") {
-            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 063"
+        if ($manifest.project -ne "localai" -or $manifest.cycle -ne $expectedCandidateCycle) {
+            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle $expectedCandidateCycle"
         }
         if ([string]$manifest.source.repository -cne $expectedCandidateSourceRepository -or [string]$manifest.source.commit -cne $expectedCandidateSourceCommit -or [string]$manifest.source.tree -cne $expectedCandidateSourceTree) {
             Fail-Smoke "candidate source identity = repository=$($manifest.source.repository) commit=$($manifest.source.commit) tree=$($manifest.source.tree), want repository=$expectedCandidateSourceRepository commit=$expectedCandidateSourceCommit tree=$expectedCandidateSourceTree"
@@ -826,10 +886,23 @@ function Invoke-CandidateSmoke {
         if ($executableEvidence.bytes -ne $zipEntryEvidence.bytes -or $executableEvidence.sha256 -ne $zipEntryEvidence.sha256) {
             Fail-Smoke "candidate executable does not match the you.exe member in the declared archive"
         }
+        $buildInfoEvidence = Get-SmokeExecutableBuildInfo -ExecutablePath $executablePath -GoExecutablePath $goExecutablePath -WorkingDirectory $candidateDirectory
+        Record-SmokeCommandObservation -Result $buildInfoEvidence.result -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
+        Assert-SmokeCommandNetwork -Result $buildInfoEvidence.result -CommandName "go version -m candidate executable"
+        $commandEvidence += [ordered]@{
+            command = "go version -m $executablePath"
+            exitCode = $buildInfoEvidence.result.exitCode
+            stdout = $buildInfoEvidence.result.stdout
+            stderr = $buildInfoEvidence.result.stderr
+            network = $buildInfoEvidence.result.network
+            forbiddenProcesses = $buildInfoEvidence.result.forbiddenProcesses
+        }
         $report.identity = [ordered]@{
             schemaVersion = $manifest.schemaVersion
             sourceCommit = $manifest.source.commit
             sourceTree = $manifest.source.tree
+            embeddedSourceRevision = $buildInfoEvidence.sourceRevision
+            embeddedVCSModified = $buildInfoEvidence.vcsModified
             candidateVersion = $version
             cliVersion = [string]$manifest.build.cliVersion
             target = "$($manifest.build.target.goos)/$($manifest.build.target.goarch)"
@@ -847,6 +920,8 @@ function Invoke-CandidateSmoke {
             cliVersion = [string]$manifest.build.cliVersion
             sourceCommit = [string]$manifest.source.commit
             sourceTree = [string]$manifest.source.tree
+            embeddedSourceRevision = $buildInfoEvidence.sourceRevision
+            embeddedVCSModified = $buildInfoEvidence.vcsModified
             manifest = $manifestEvidence
             archive = $archiveEvidence
             installer = $installerEvidence
@@ -1009,7 +1084,6 @@ function Invoke-CandidateSmoke {
         $report.identity.installedBinary = $installedEvidence
         $report.identity.pathResolvedBinary = $resolvedPath
 
-        $commandEvidence = @()
         $versionResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("--version") -WorkingDirectory $tempRoot
         Record-SmokeCommandObservation -Result $versionResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
         Assert-SmokeCommandNetwork -Result $versionResult -CommandName "you --version"
@@ -1511,7 +1585,7 @@ function Invoke-ObserverFixture {
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
-        cycle = "063"
+        cycle = $expectedCandidateCycle
         releaseStatus = "observer-fixture"
         observation = [ordered]@{
             environment = $goEnvironment
