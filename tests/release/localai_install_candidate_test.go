@@ -25,7 +25,7 @@ import (
 
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGoVersion, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS, localAICandidateObserverQueryMode                                                                                                                                                                                             = "068", "go1.26.8", "-p=4", "4", "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
+	localAICandidateCycle, localAICandidateGoVersion, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS, localAICandidateObserverQueryMode                                                                                                                                                                                             = "070", "go1.26.8", "-p=4", "4", "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
 	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "059474b2c00915865306a33ca5e3d02b618bb6f0", "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
 	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
 	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 2000
@@ -87,6 +87,8 @@ type localAICandidateAttempts struct {
 	Cycle067BuildUsed    *int64   `json:"cycle067BuildUsed"`
 	Cycle068BuildMaximum *int64   `json:"cycle068BuildMaximum"`
 	Cycle068BuildUsed    *int64   `json:"cycle068BuildUsed"`
+	Cycle070BuildMaximum *int64   `json:"cycle070BuildMaximum"`
+	Cycle070BuildUsed    *int64   `json:"cycle070BuildUsed"`
 }
 type localAICandidateArtifactEvidence struct {
 	Role   string `json:"role"`
@@ -129,6 +131,10 @@ type localAICandidateProcessNetworkObserver struct {
 	QueryMode                      string   `json:"queryMode"`
 	ForbiddenProcesses             []string `json:"forbiddenProcesses"`
 	Error                          string   `json:"error"`
+	ReleaseStatusCleanBeforeRoot   bool     `json:"releaseStatusCleanBeforeRoot"`
+	ReleaseStatusCleanDuringRoot   bool     `json:"releaseStatusCleanDuringRoot"`
+	ReleaseStatusCleanAfterOutput  bool     `json:"releaseStatusCleanAfterOutput"`
+	ReleaseStatusChecks            int      `json:"releaseStatusChecks"`
 }
 type localAICandidateDiskObserver struct {
 	Independent            bool   `json:"independent"`
@@ -154,13 +160,32 @@ type localAICandidateObserverCleanup struct {
 	RemainingTaskPaths []string `json:"remainingTaskPaths"`
 	Errors             []string `json:"errors"`
 }
+type localAICandidateReleaseCheckoutEvidence struct {
+	Status                      string   `json:"status"`
+	GitDirIsDirectory           bool     `json:"gitDirIsDirectory"`
+	CheckoutPath                string   `json:"checkoutPath"`
+	DetachedHead                bool     `json:"detachedHead"`
+	Head                        string   `json:"head"`
+	Tree                        string   `json:"tree"`
+	Origin                      string   `json:"origin"`
+	PrivateExcludePath          string   `json:"privateExcludePath"`
+	PrivateExcludeBefore        []string `json:"privateExcludeBefore"`
+	PrivateExcludeAfter         []string `json:"privateExcludeAfter"`
+	PrivateExcludeAdded         []string `json:"privateExcludeAdded"`
+	StatusCleanBefore           bool     `json:"statusCleanBefore"`
+	StatusCleanAfterPreparation bool     `json:"statusCleanAfterPreparation"`
+	StatusCleanDuringOutput     bool     `json:"statusCleanDuringOutput"`
+	StatusCleanAfterOutput      bool     `json:"statusCleanAfterOutput"`
+	StatusChecks                int      `json:"statusChecks"`
+}
 type localAICandidateObserverReport struct {
-	SchemaVersion string                           `json:"schemaVersion"`
-	Status        string                           `json:"status"`
-	Cycle         string                           `json:"cycle"`
-	ReleaseStatus string                           `json:"releaseStatus"`
-	Observation   localAICandidateObserverEvidence `json:"observation"`
-	Cleanup       localAICandidateObserverCleanup  `json:"cleanup"`
+	SchemaVersion   string                                   `json:"schemaVersion"`
+	Status          string                                   `json:"status"`
+	Cycle           string                                   `json:"cycle"`
+	ReleaseStatus   string                                   `json:"releaseStatus"`
+	Observation     localAICandidateObserverEvidence         `json:"observation"`
+	Cleanup         localAICandidateObserverCleanup          `json:"cleanup"`
+	ReleaseCheckout *localAICandidateReleaseCheckoutEvidence `json:"releaseCheckout"`
 }
 
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
@@ -284,6 +309,27 @@ func localAICandidateSmokeCommand(t *testing.T, manifestPath, installDir, report
 	command.Dir = root
 	return command
 }
+func localAICandidatePowerShellCommand(t *testing.T, arguments ...string) *exec.Cmd {
+	t.Helper()
+	pwsh, err := exec.LookPath("powershell.exe")
+	if err != nil {
+		t.Fatalf("candidate release smoke requires Windows PowerShell (powershell.exe): %v", err)
+	}
+	root := testutil.MustRepoRoot(t)
+	commandArguments := append([]string{"-NoProfile", "-NonInteractive", "-File", filepath.Join(root, "scripts", "release", "smoke-install.ps1")}, arguments...)
+	command := exec.Command(pwsh, commandArguments...)
+	command.Dir = root
+	return command
+}
+func localAICandidateRunGit(t *testing.T, directory string, arguments ...string) string {
+	t.Helper()
+	commandArguments := append([]string{"-C", directory}, arguments...)
+	output, err := exec.Command("git", commandArguments...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git -C %s %s: %v\n%s", directory, strings.Join(arguments, " "), err, output)
+	}
+	return strings.TrimSpace(string(output))
+}
 func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T) {
 	tests := []struct {
 		name string
@@ -361,7 +407,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			}
 		})
 	}
-	for _, cycle := range []string{"030", "040", "042", "045", "048", "050", "063", "067"} {
+	for _, cycle := range []string{"030", "040", "042", "045", "048", "050", "063", "067", "068"} {
 		cycle := cycle
 		t.Run("historical cycle "+cycle, func(t *testing.T) {
 			fixture := newLocalAICandidateFixture(t)
@@ -594,6 +640,128 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 		t.Fatalf("observer cleanup evidence = %#v, want complete cleanup", report.Cleanup)
 	}
 	t.Logf("LOCALAI-OBSERVER status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateObserverIdentityFixture(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows observer identity fixture is only available on Windows")
+	}
+	reportPath := filepath.Join(t.TempDir(), "observer-identity-report.json")
+	command := localAICandidatePowerShellCommand(t, "-InstallDir", t.TempDir(), "-ObserverIdentityFixture", "-ObserverReportPath", reportPath)
+	command.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("observer identity fixture: %v\n%s", err, output)
+	}
+	var report struct {
+		SchemaVersion string `json:"schemaVersion"`
+		Status        string `json:"status"`
+		Cycle         string `json:"cycle"`
+		ReleaseStatus string `json:"releaseStatus"`
+		CrossInterval struct {
+			Status               string   `json:"status"`
+			ActiveIdentity       string   `json:"activeIdentity"`
+			HistoricalIdentities []string `json:"historicalIdentities"`
+			Continued            bool     `json:"continued"`
+		} `json:"crossInterval"`
+		WithinSample struct {
+			Status   string `json:"status"`
+			Rejected bool   `json:"rejected"`
+			Error    string `json:"error"`
+		} `json:"withinSample"`
+		EmptyTCP struct {
+			Status   string `json:"status"`
+			RowCount int    `json:"rowCount"`
+		} `json:"emptyTCP"`
+		QueryError struct {
+			Status string `json:"status"`
+			Error  string `json:"error"`
+		} `json:"queryError"`
+	}
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read observer identity report: %v", err)
+	}
+	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
+		t.Fatalf("decode observer identity report: %v", err)
+	}
+	if report.SchemaVersion != "localai-windows-install-candidate-observer-identity/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.ReleaseStatus != "observer-identity-fixture" {
+		t.Fatalf("observer identity report identity/status = %#v, want cycle-%s PASS observer-identity-fixture", report, localAICandidateCycle)
+	}
+	if report.CrossInterval.Status != "PASS" || report.CrossInterval.ActiveIdentity != "42/B" || !report.CrossInterval.Continued || !slices.Equal(report.CrossInterval.HistoricalIdentities, []string{"100/root", "42/A", "42/B"}) {
+		t.Fatalf("cross-interval identity evidence = %#v, want retired 42/A with historical 42/A and 42/B", report.CrossInterval)
+	}
+	if report.WithinSample.Status != "PASS" || !report.WithinSample.Rejected || !strings.Contains(report.WithinSample.Error, "changed identity") {
+		t.Fatalf("within-sample identity evidence = %#v, want fail-closed PID reuse", report.WithinSample)
+	}
+	if report.EmptyTCP.Status != "PASS" || report.EmptyTCP.RowCount != 0 {
+		t.Fatalf("empty TCP evidence = %#v, want valid zero-row sample", report.EmptyTCP)
+	}
+	if report.QueryError.Status != "PASS" || !strings.Contains(report.QueryError.Error, "synthetic query error") {
+		t.Fatalf("query-error evidence = %#v, want preserved query failure", report.QueryError)
+	}
+	t.Logf("LOCALAI-OBSERVER-IDENTITY status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateReleaseCheckoutPreparation(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows release checkout preparation is only available on Windows")
+	}
+	repoRoot := testutil.MustRepoRoot(t)
+	clonePath := filepath.Join(t.TempDir(), "source-clone")
+	cloneOutput, err := exec.Command("git", "clone", "--no-local", "--no-checkout", repoRoot, clonePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("clone exact-source fixture: %v\n%s", err, cloneOutput)
+	}
+	localAICandidateRunGit(t, clonePath, "checkout", "--detach", localAICandidateSourceCommit)
+	reportPath := filepath.Join(t.TempDir(), "release-checkout-report.json")
+	command := localAICandidatePowerShellCommand(t, "-InstallDir", t.TempDir(), "-PrepareReleaseCheckout", "-ReleaseCheckoutPath", clonePath, "-ReleaseCheckoutReportPath", reportPath)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("prepare release checkout: %v\n%s", err, output)
+	}
+	var report localAICandidateReleaseCheckoutEvidence
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read release checkout report: %v", err)
+	}
+	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
+		t.Fatalf("decode release checkout report: %v", err)
+	}
+	distEntryCount := 0
+	for _, line := range report.PrivateExcludeAfter {
+		if line == "/dist/" {
+			distEntryCount++
+		}
+	}
+	remoteIsNonLocal := strings.Contains(report.Origin, "://") && !strings.HasPrefix(report.Origin, "file://") || strings.HasPrefix(report.Origin, "git@")
+	if report.Status != "PASS" || !report.GitDirIsDirectory || !report.DetachedHead || report.Head != localAICandidateSourceCommit || report.Tree != localAICandidateSourceTree || report.Origin == "" || remoteIsNonLocal || !report.StatusCleanBefore || !report.StatusCleanAfterPreparation || !slices.Equal(report.PrivateExcludeAdded, []string{"/dist/"}) || distEntryCount != 1 {
+		t.Fatalf("release checkout preparation evidence = %#v, want exact detached clean local clone and /dist/ addition", report)
+	}
+	distPath := filepath.Join(clonePath, "dist")
+	if err := os.MkdirAll(distPath, 0o700); err != nil {
+		t.Fatalf("create representative dist root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distPath, "representative-output.txt"), []byte("ignored release output"), 0o600); err != nil {
+		t.Fatalf("write representative dist output: %v", err)
+	}
+	if status := localAICandidateRunGit(t, clonePath, "status", "--porcelain=v1", "--untracked-files=all"); status != "" {
+		t.Fatalf("status after ignored dist output = %q, want clean", status)
+	}
+	trackedPath := filepath.Join(clonePath, ".goreleaser.yml")
+	trackedFile, err := os.OpenFile(trackedPath, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatalf("open tracked fixture: %v", err)
+	}
+	if _, err := trackedFile.WriteString("\n# controlled dirty fixture\n"); err != nil {
+		trackedFile.Close()
+		t.Fatalf("modify tracked fixture: %v", err)
+	}
+	if err := trackedFile.Close(); err != nil {
+		t.Fatalf("close tracked fixture: %v", err)
+	}
+	if status := localAICandidateRunGit(t, clonePath, "status", "--porcelain=v1", "--untracked-files=all"); !strings.Contains(status, ".goreleaser.yml") {
+		t.Fatalf("status after tracked source modification = %q, want tracked modification", status)
+	}
+	t.Logf("LOCALAI-CLONE status=PASS evidence=%s", raw)
 }
 func validateLocalAICandidateObserverEvidence(observation localAICandidateObserverEvidence) error {
 	process := observation.ProcessNetworkObserver
@@ -909,7 +1077,7 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 	return nil
 }
 func validateLocalAICandidateAttempts(attempts localAICandidateAttempts) error {
-	wantPriorCycles := []string{"030", "040", "042", "045", "048", "050", "063", "067"}
+	wantPriorCycles := []string{"030", "040", "042", "045", "048", "050", "063", "067", "068"}
 	if !slices.Equal(attempts.PriorCycles, wantPriorCycles) {
 		return fmt.Errorf("candidate attempts priorCycles = %v, want %v", attempts.PriorCycles, wantPriorCycles)
 	}
@@ -923,6 +1091,7 @@ func validateLocalAICandidateAttempts(attempts localAICandidateAttempts) error {
 		{name: "cycle063", maximum: attempts.Cycle063BuildMaximum, used: attempts.Cycle063BuildUsed, wantMax: 1, wantUse: 1},
 		{name: "cycle067", maximum: attempts.Cycle067BuildMaximum, used: attempts.Cycle067BuildUsed, wantMax: 2, wantUse: 2},
 		{name: "cycle068", maximum: attempts.Cycle068BuildMaximum, used: attempts.Cycle068BuildUsed, wantMax: 1, wantUse: 1},
+		{name: "cycle070", maximum: attempts.Cycle070BuildMaximum, used: attempts.Cycle070BuildUsed, wantMax: 1, wantUse: 1},
 	} {
 		if attempt.maximum == nil || attempt.used == nil || *attempt.maximum != attempt.wantMax || *attempt.used != attempt.wantUse {
 			return fmt.Errorf("candidate attempts %sBuildMaximum/Used = %v/%v, want %d/%d", attempt.name, valueOrZero(attempt.maximum), valueOrZero(attempt.used), attempt.wantMax, attempt.wantUse)
@@ -1201,10 +1370,11 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			GOFLAGS:                       localAICandidateGOFLAGS, GOMAXPROCS: localAICandidateGOMAXPROCS,
 		},
 		Attempts: localAICandidateAttempts{
-			PriorCycles:          []string{"030", "040", "042", "045", "048", "050", "063", "067"},
+			PriorCycles:          []string{"030", "040", "042", "045", "048", "050", "063", "067", "068"},
 			Cycle063BuildMaximum: candidateInt64Pointer(1), Cycle063BuildUsed: candidateInt64Pointer(1),
 			Cycle067BuildMaximum: candidateInt64Pointer(2), Cycle067BuildUsed: candidateInt64Pointer(2),
 			Cycle068BuildMaximum: candidateInt64Pointer(1), Cycle068BuildUsed: candidateInt64Pointer(1),
+			Cycle070BuildMaximum: candidateInt64Pointer(1), Cycle070BuildUsed: candidateInt64Pointer(1),
 		},
 	}
 	roots := make([]localAICandidateRoot, 0, 8)

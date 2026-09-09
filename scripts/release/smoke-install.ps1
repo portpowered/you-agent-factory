@@ -7,17 +7,22 @@ param(
     [string]$CandidateManifestPath,
     [string]$ReportPath,
     [switch]$ObserverFixture,
+    [switch]$ObserverIdentityFixture,
     [string]$ObserverReportPath,
     [string]$ObserverRootCommand,
     [string[]]$ObserverRootArgumentList,
     [string]$ObserverRootWorkingDirectory,
+    [string]$ObserverReleaseCheckoutPath,
+    [switch]$PrepareReleaseCheckout,
+    [string]$ReleaseCheckoutPath,
+    [string]$ReleaseCheckoutReportPath,
     [int]$ObserverTimeoutSeconds = 20
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$expectedCandidateCycle = "068"
+$expectedCandidateCycle = "070"
 $expectedCandidateGoVersion = "go1.26.8"
 $expectedObserverQueryMode = "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
 $expectedProcessNetworkGapMilliseconds = 2000
@@ -27,6 +32,104 @@ $expectedTemporaryDiskBytesMaximum = [int64]4294967296
 $expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
 $expectedCandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
 $expectedCandidateSourceTree = "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
+
+$observerIdentityFunctionSource = @'
+function Register-ObserverIdentities {
+    param(
+        [object]$Snapshot,
+        [hashtable]$IdentityByPid,
+        [hashtable]$OwnedIdentityToPid,
+        [hashtable]$State
+    )
+
+    foreach ($record in @($Snapshot.ownedRecords)) {
+        if ($null -eq $record) { continue }
+        $processId = [int]$record.processId
+        $identity = [string]$record.identity
+        if ($IdentityByPid.ContainsKey($processId) -and [string]$IdentityByPid[$processId] -cne $identity) {
+            throw "owned process PID $processId changed identity from $($IdentityByPid[$processId]) to $identity"
+        }
+        if ($OwnedIdentityToPid.ContainsKey($identity) -and [int]$OwnedIdentityToPid[$identity] -ne $processId) {
+            throw "owned process identity $identity is ambiguous across PIDs"
+        }
+        $IdentityByPid[$processId] = $identity
+        $OwnedIdentityToPid[$identity] = $processId
+    }
+    if ($Snapshot.rootPresent) {
+        $identity = [string]$Snapshot.root.identity
+        if ($null -eq $State["rootIdentity"]) {
+            $State["rootIdentity"] = $identity
+        } elseif ([string]$State["rootIdentity"] -cne $identity) {
+            throw "owned root identity changed from $($State['rootIdentity']) to $identity"
+        }
+    }
+}
+
+function Remove-ObserverInactivePidIdentities {
+    param(
+        [object]$Snapshot,
+        [hashtable]$IdentityByPid
+    )
+
+    # A PID may be reused after its prior owned process has disappeared
+    # between intervals. Retire both an absent PID and a PID whose current
+    # creation identity differs, but retain every identity in the historical
+    # OwnedIdentityToPid ledger. Register-ObserverIdentities still compares
+    # the before/after pair without retirement, so reuse during one TCP query
+    # remains fail closed.
+    $activeIdentities = @{}
+    foreach ($record in @($Snapshot.ownedRecords)) {
+        if ($null -ne $record) {
+            $activeIdentities[[int]$record.processId] = [string]$record.identity
+        }
+    }
+    foreach ($processId in @($IdentityByPid.Keys)) {
+        $processId = [int]$processId
+        if (-not $activeIdentities.ContainsKey($processId) -or [string]$IdentityByPid[$processId] -cne [string]$activeIdentities[$processId]) {
+            [void]$IdentityByPid.Remove($processId)
+        }
+    }
+}
+
+function Get-ObserverConnectionTable {
+    param([scriptblock]$Query)
+
+    if ($null -eq $Query) {
+        throw "TCP-table query is missing"
+    }
+    try {
+        return @(& $Query)
+    } catch {
+        throw "TCP-table query failed: $($_.Exception.Message)"
+    }
+}
+
+function Get-ObserverGitStatus {
+    param([string]$CheckoutPath)
+
+    if ([string]::IsNullOrWhiteSpace($CheckoutPath)) {
+        return ""
+    }
+    $output = @(& git.exe -C $CheckoutPath status --porcelain=v1 --untracked-files=all 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "release checkout Git status failed: $($output -join ' ')"
+    }
+    return (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+}
+'@
+
+function Get-ObserverGitStatus {
+    param([string]$CheckoutPath)
+
+    if ([string]::IsNullOrWhiteSpace($CheckoutPath)) {
+        return ""
+    }
+    $output = @(& git.exe -C $CheckoutPath status --porcelain=v1 --untracked-files=all 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "release checkout Git status failed: $($output -join ' ')"
+    }
+    return (($output | ForEach-Object { [string]$_ }) -join "`n").Trim()
+}
 
 function Fail-Smoke {
     param([string]$Message)
@@ -82,6 +185,110 @@ function Resolve-SmokeAbsolutePath {
         return [System.IO.Path]::GetFullPath($Value)
     }
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $Value))
+}
+
+function Invoke-SmokeGit {
+    param(
+        [string]$CheckoutPath,
+        [string[]]$ArgumentList
+    )
+
+    $output = @(& git.exe -C $CheckoutPath @ArgumentList 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Fail-Smoke "git -C $CheckoutPath $($ArgumentList -join ' ') failed: $($output -join ' ')"
+    }
+    return @($output | ForEach-Object { [string]$_ })
+}
+
+function Assert-SmokeReleaseCheckout {
+    param(
+        [string]$RequestedCheckoutPath,
+        [switch]$PrepareDistExclude,
+        [switch]$RequireDistExclude
+    )
+
+    $checkoutPath = Resolve-SmokeAbsolutePath $RequestedCheckoutPath
+    $gitPath = Join-Path $checkoutPath ".git"
+    $gitItem = Get-Item -LiteralPath $gitPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $gitItem -or -not $gitItem.PSIsContainer) {
+        Fail-Smoke "release checkout .git is not a real directory: $gitPath"
+    }
+    $topLevel = (Invoke-SmokeGit $checkoutPath @("rev-parse", "--show-toplevel") | Select-Object -Last 1).Trim()
+    if ([System.IO.Path]::GetFullPath($topLevel) -ne $checkoutPath) {
+        Fail-Smoke "release checkout top-level = $topLevel, want $checkoutPath"
+    }
+    $head = (Invoke-SmokeGit $checkoutPath @("rev-parse", "HEAD") | Select-Object -Last 1).Trim()
+    if ($head -cne $expectedCandidateSourceCommit) {
+        Fail-Smoke "release checkout HEAD = $head, want $expectedCandidateSourceCommit"
+    }
+    $tree = (Invoke-SmokeGit $checkoutPath @("rev-parse", "HEAD^{tree}") | Select-Object -Last 1).Trim()
+    if ($tree -cne $expectedCandidateSourceTree) {
+        Fail-Smoke "release checkout tree = $tree, want $expectedCandidateSourceTree"
+    }
+    $branch = (Invoke-SmokeGit $checkoutPath @("rev-parse", "--abbrev-ref", "HEAD") | Select-Object -Last 1).Trim()
+    if ($branch -cne "HEAD") {
+        Fail-Smoke "release checkout is not detached: branch=$branch"
+    }
+    $origin = (Invoke-SmokeGit $checkoutPath @("remote", "get-url", "origin") | Select-Object -Last 1).Trim()
+    if ($origin -match "^(https?|ssh)://" -or $origin -match "^git@") {
+        Fail-Smoke "release checkout origin is not local-filesystem-only: $origin"
+    }
+    $statusBefore = Get-ObserverGitStatus $checkoutPath
+    if ($statusBefore -ne "") {
+        Fail-Smoke "release checkout is dirty before output production: $statusBefore"
+    }
+    $excludePath = Join-Path $gitPath "info\exclude"
+    if (-not (Test-Path -LiteralPath $excludePath -PathType Leaf)) {
+        Fail-Smoke "release checkout private exclude is missing: $excludePath"
+    }
+    $beforeLines = @([System.IO.File]::ReadAllLines($excludePath))
+    $beforeDistCount = @($beforeLines | Where-Object { $_ -ceq "/dist/" }).Count
+    if ($PrepareDistExclude) {
+        if ($beforeDistCount -ne 0) {
+            Fail-Smoke "release checkout private exclude already contains /dist/"
+        }
+        $existingText = [System.IO.File]::ReadAllText($excludePath)
+        $separator = if ($existingText.EndsWith("`n") -or $existingText.EndsWith("`r") -or $existingText.Length -eq 0) { "" } else { [Environment]::NewLine }
+        [System.IO.File]::AppendAllText($excludePath, $separator + "/dist/" + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+    }
+    $afterLines = @([System.IO.File]::ReadAllLines($excludePath))
+    $afterDistCount = @($afterLines | Where-Object { $_ -ceq "/dist/" }).Count
+    if ($RequireDistExclude -and $afterDistCount -ne 1) {
+        Fail-Smoke "release checkout private exclude must contain exactly one /dist/ entry, found $afterDistCount"
+    }
+    if ($PrepareDistExclude) {
+        if ($afterLines.Count -ne $beforeLines.Count + 1 -or $afterLines[$afterLines.Count - 1] -cne "/dist/") {
+            Fail-Smoke "release checkout private exclude changed by more than the exact /dist/ addition"
+        }
+        for ($index = 0; $index -lt $beforeLines.Count; $index++) {
+            if ($afterLines[$index] -cne $beforeLines[$index]) {
+                Fail-Smoke "release checkout private exclude changed before the exact /dist/ addition"
+            }
+        }
+    }
+    $statusAfter = Get-ObserverGitStatus $checkoutPath
+    if ($statusAfter -ne "") {
+        Fail-Smoke "release checkout is dirty after private exclude preparation: $statusAfter"
+    }
+    $privateExcludeAdded = New-Object 'System.Collections.Generic.List[string]'
+    if ($PrepareDistExclude) {
+        [void]$privateExcludeAdded.Add("/dist/")
+    }
+    return [ordered]@{
+        status = "PASS"
+        gitDirIsDirectory = $true
+        checkoutPath = $checkoutPath
+        detachedHead = $true
+        head = $head
+        tree = $tree
+        origin = $origin
+        privateExcludePath = $excludePath
+        privateExcludeBefore = $beforeLines
+        privateExcludeAfter = $afterLines
+        privateExcludeAdded = $privateExcludeAdded
+        statusCleanBefore = ($statusBefore -eq "")
+        statusCleanAfterPreparation = ($statusAfter -eq "")
+    }
 }
 
 function Assert-SmokeDisposableRoot {
@@ -840,7 +1047,7 @@ function Invoke-CandidateSmoke {
                 Fail-Smoke "candidate control $($control.Key) = $actualControl, want $($control.Value)"
             }
         }
-        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050", "063", "067")
+        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050", "063", "067", "068")
         $actualPriorCycles = @($manifest.attempts.priorCycles | ForEach-Object { [string]$_ })
         if ($actualPriorCycles.Count -ne $expectedPriorCycles.Count -or (Compare-Object -ReferenceObject $expectedPriorCycles -DifferenceObject $actualPriorCycles)) {
             Fail-Smoke "candidate attempts priorCycles = $($actualPriorCycles -join ', '), want $($expectedPriorCycles -join ', ')"
@@ -853,6 +1060,9 @@ function Invoke-CandidateSmoke {
         }
         if ([int]$manifest.attempts.cycle068BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle068BuildUsed -ne 1) {
             Fail-Smoke "candidate attempts must record cycle068BuildMaximum=1 and cycle068BuildUsed=1"
+        }
+        if ([int]$manifest.attempts.cycle070BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle070BuildUsed -ne 1) {
+            Fail-Smoke "candidate attempts must record cycle070BuildMaximum=1 and cycle070BuildUsed=1"
         }
         $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
         $installerArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-installer" })
@@ -1368,6 +1578,130 @@ function Invoke-CandidateSmoke {
     }
 }
 
+function Invoke-ObserverIdentityFixture {
+    param(
+        [string]$RequestedInstallDir,
+        [string]$RequestedReportPath
+    )
+
+    $reportPath = if ([string]::IsNullOrWhiteSpace($RequestedReportPath)) {
+        Join-Path (Resolve-SmokeAbsolutePath $RequestedInstallDir) "observer-identity-report.json"
+    } else {
+        Resolve-SmokeAbsolutePath $RequestedReportPath
+    }
+    $job = Start-Job -ScriptBlock {
+        param($IdentityFunctionSource, $CandidateCycle)
+        $ErrorActionPreference = "Stop"
+        Invoke-Expression $IdentityFunctionSource
+
+        function New-ObserverSyntheticSnapshot {
+            param([string]$Identity)
+
+            $root = [pscustomobject]@{ processId = 100; identity = "100/root"; name = "powershell" }
+            $descendant = [pscustomobject]@{ processId = 42; identity = $Identity; name = "powershell" }
+            return [pscustomobject]@{
+                rootPresent = $true
+                root = $root
+                descendants = @($descendant)
+                ownedRecords = @($root, $descendant)
+            }
+        }
+
+        $crossActive = @{}
+        $crossHistory = @{}
+        $crossState = @{ rootIdentity = $null }
+        Register-ObserverIdentities (New-ObserverSyntheticSnapshot "42/A") $crossActive $crossHistory $crossState
+        $emptyRows = @(Get-ObserverConnectionTable { @() })
+        Remove-ObserverInactivePidIdentities (New-ObserverSyntheticSnapshot "42/B") $crossActive
+        Register-ObserverIdentities (New-ObserverSyntheticSnapshot "42/B") $crossActive $crossHistory $crossState
+        Register-ObserverIdentities (New-ObserverSyntheticSnapshot "42/B") $crossActive $crossHistory $crossState
+        $crossPass = [string]$crossActive[42] -ceq "42/B" -and $crossHistory.ContainsKey("42/A") -and $crossHistory.ContainsKey("42/B") -and $emptyRows.Count -eq 0
+
+        $withinActive = @{}
+        $withinHistory = @{}
+        $withinState = @{ rootIdentity = $null }
+        Register-ObserverIdentities (New-ObserverSyntheticSnapshot "42/A") $withinActive $withinHistory $withinState
+        $withinRejected = $false
+        $withinError = ""
+        try {
+            [void](Get-ObserverConnectionTable { @() })
+            Register-ObserverIdentities (New-ObserverSyntheticSnapshot "42/B") $withinActive $withinHistory $withinState
+        } catch {
+            $withinRejected = $true
+            $withinError = $_.Exception.Message
+        }
+
+        $queryErrorPreserved = $false
+        $queryError = ""
+        try {
+            [void](Get-ObserverConnectionTable { throw "synthetic query error" })
+        } catch {
+            $queryError = $_.Exception.Message
+            $queryErrorPreserved = $queryError -like "*synthetic query error*"
+        }
+        [ordered]@{
+            schemaVersion = "localai-windows-install-candidate-observer-identity/v1"
+            status = if ($crossPass -and $withinRejected -and $queryErrorPreserved) { "PASS" } else { "FAIL" }
+            cycle = $CandidateCycle
+            releaseStatus = "observer-identity-fixture"
+            crossInterval = [ordered]@{
+                status = if ($crossPass) { "PASS" } else { "FAIL" }
+                activeIdentity = [string]$crossActive[42]
+                historicalIdentities = @($crossHistory.Keys | Sort-Object)
+                continued = $crossPass
+            }
+            withinSample = [ordered]@{
+                status = if ($withinRejected) { "PASS" } else { "FAIL" }
+                rejected = $withinRejected
+                error = $withinError
+            }
+            emptyTCP = [ordered]@{
+                status = if ($emptyRows.Count -eq 0) { "PASS" } else { "FAIL" }
+                rowCount = $emptyRows.Count
+            }
+            queryError = [ordered]@{
+                status = if ($queryErrorPreserved) { "PASS" } else { "FAIL" }
+                error = $queryError
+            }
+        } | ConvertTo-Json -Depth 12
+    } -ArgumentList $observerIdentityFunctionSource, $expectedCandidateCycle
+    $report = $null
+    $failure = $null
+    try {
+        $completed = Wait-Job -Job $job -Timeout 10
+        if ($null -eq $completed -or $job.State -ne "Completed") {
+            throw "observer identity fixture did not complete"
+        }
+        $results = @(Receive-Job -Job $job -ErrorAction Stop)
+        if ($results.Count -eq 0) {
+            throw "observer identity fixture returned no report"
+        }
+        $report = [string]$results[$results.Count - 1] | ConvertFrom-Json
+    } catch {
+        $failure = $_.Exception
+    } finally {
+        try { Remove-Job -Job $job -Force -ErrorAction Stop } catch { }
+    }
+    if ($null -eq $report) {
+        $report = [ordered]@{
+            schemaVersion = "localai-windows-install-candidate-observer-identity/v1"
+            status = "FAIL"
+            cycle = $expectedCandidateCycle
+            releaseStatus = "observer-identity-fixture"
+            error = if ($null -eq $failure) { "observer identity fixture returned no report" } else { $failure.Message }
+        }
+    }
+    $reportParent = Split-Path -Parent $reportPath
+    if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) {
+        Fail-Smoke "observer identity report parent does not exist: $reportParent"
+    }
+    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 12))
+    if ($report.status -ne "PASS") {
+        throw "observer identity fixture failed; report=$reportPath"
+    }
+    Write-Output "observer identity fixture passed; report=$reportPath"
+}
+
 function Invoke-ObserverFixture {
     param(
         [string]$RequestedInstallDir,
@@ -1375,6 +1709,7 @@ function Invoke-ObserverFixture {
         [string]$RootCommand,
         [string[]]$RootArgumentList,
         [string]$RootWorkingDirectory,
+        [string]$ObserverReleaseCheckoutPath,
         [int]$TimeoutSeconds = 20
     )
 
@@ -1408,6 +1743,13 @@ function Invoke-ObserverFixture {
     if (-not (Test-Path -LiteralPath $observationRoot -PathType Container)) {
         Fail-Smoke "observer observation root does not exist: $observationRoot"
     }
+    $releaseCheckoutEvidence = $null
+    if (-not [string]::IsNullOrWhiteSpace($ObserverReleaseCheckoutPath)) {
+        $releaseCheckoutEvidence = Assert-SmokeReleaseCheckout -RequestedCheckoutPath $ObserverReleaseCheckoutPath -RequireDistExclude
+        $releaseCheckoutEvidence.statusCleanDuringOutput = $false
+        $releaseCheckoutEvidence.statusCleanAfterOutput = $false
+        $releaseCheckoutEvidence.statusChecks = 0
+    }
     $processReadyPath = Join-Path $fixtureRoot "process-ready"
     $diskReadyPath = Join-Path $fixtureRoot "disk-ready"
     $pidPath = Join-Path $fixtureRoot "root.pid"
@@ -1424,6 +1766,7 @@ function Invoke-ObserverFixture {
         maximumGapMilliseconds = [int64]0; nonLoopbackConnections = 0; externalTransferBytes = [int64]0; descendantHighWater = [int64]0
         sampleCount = 0; tcpTableQueries = 0; zeroConnectionSamples = 0; ownedConnectionMatches = 0
         ownedProcessIdentityCount = 0; queryMode = $expectedObserverQueryMode; forbiddenProcesses = @(); error = ""
+        releaseStatusCleanBeforeRoot = $false; releaseStatusCleanDuringRoot = $false; releaseStatusCleanAfterOutput = $false; releaseStatusChecks = 0
     }
     $diskObservation = [pscustomobject]@{
         status = "FAIL"; independent = $false; startPeriodicFinal = $false
@@ -1436,12 +1779,24 @@ function Invoke-ObserverFixture {
 
     try {
         $processJob = Start-Job -ScriptBlock {
-            param($ReadyPath, $PidPath, $DonePath, $TimeoutSeconds)
+            param($ReadyPath, $PidPath, $DonePath, $TimeoutSeconds, $IdentityFunctionSource, $ReleaseCheckoutPath)
             $ErrorActionPreference = "Stop"
+            Invoke-Expression $IdentityFunctionSource
             $processNetworkGapMaximumMilliseconds = [int64]2000
             $descendantMaximum = [int64]36
             $queryMode = "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
             $forbiddenNamePatterns = @("localai", "local-ai", "llama-server", "llama-cli", "vibevoice", "whisper", "piper")
+            $releaseStatusCleanBeforeRoot = $false
+            $releaseStatusCleanDuringRoot = $false
+            $releaseStatusCleanAfterOutput = $false
+            $releaseStatusChecks = 0
+            if (-not [string]::IsNullOrWhiteSpace($ReleaseCheckoutPath)) {
+                if ((Get-ObserverGitStatus $ReleaseCheckoutPath) -ne "") {
+                    throw "release checkout is dirty before root start"
+                }
+                $releaseStatusChecks++
+                $releaseStatusCleanBeforeRoot = $true
+            }
             [System.IO.File]::WriteAllText($ReadyPath, "ready")
             function Convert-ObserverCreationTimeTicks {
                 param($Value)
@@ -1521,56 +1876,6 @@ function Invoke-ObserverFixture {
                     ownedRecords = $ownedRecords.ToArray()
                 }
             }
-            function Register-ObserverIdentities {
-                param(
-                    [object]$Snapshot,
-                    [hashtable]$IdentityByPid,
-                    [hashtable]$OwnedIdentityToPid,
-                    [hashtable]$State
-                )
-
-                foreach ($record in @($Snapshot.ownedRecords)) {
-                    $processId = [int]$record.processId
-                    $identity = [string]$record.identity
-                    if ($IdentityByPid.ContainsKey($processId) -and [string]$IdentityByPid[$processId] -cne $identity) {
-                        throw "owned process PID $processId changed identity from $($IdentityByPid[$processId]) to $identity"
-                    }
-                    if ($OwnedIdentityToPid.ContainsKey($identity) -and [int]$OwnedIdentityToPid[$identity] -ne $processId) {
-                        throw "owned process identity $identity is ambiguous across PIDs"
-                    }
-                    $IdentityByPid[$processId] = $identity
-                    $OwnedIdentityToPid[$identity] = $processId
-                }
-                if ($Snapshot.rootPresent) {
-                    $identity = [string]$Snapshot.root.identity
-                    if ($null -eq $State["rootIdentity"]) {
-                        $State["rootIdentity"] = $identity
-                    } elseif ([string]$State["rootIdentity"] -cne $identity) {
-                        throw "owned root identity changed from $($State['rootIdentity']) to $identity"
-                    }
-                }
-            }
-            function Remove-ObserverInactivePidIdentities {
-                param(
-                    [object]$Snapshot,
-                    [hashtable]$IdentityByPid
-                )
-
-                # A PID may be reused after its prior owned process has
-                # disappeared between intervals. Keep every creation-time
-                # identity in OwnedIdentityToPid, but compare only active PID
-                # mappings across the before/after pair so reuse during one
-                # TCP query remains fail closed.
-                $activePids = @{}
-                foreach ($record in @($Snapshot.ownedRecords)) {
-                    $activePids[[int]$record.processId] = $true
-                }
-                foreach ($processId in @($IdentityByPid.Keys)) {
-                    if (-not $activePids.ContainsKey([int]$processId)) {
-                        [void]$IdentityByPid.Remove($processId)
-                    }
-                }
-            }
             function Test-ObserverLoopbackAddress {
                 param([string]$Address)
 
@@ -1591,7 +1896,7 @@ function Invoke-ObserverFixture {
                 Register-ObserverIdentities $before $IdentityByPid $OwnedIdentityToPid $State
                 # One complete TCP-table query is deliberately shared by every
                 # owned process in this interval; an empty table is a valid sample.
-                $connections = @(Get-NetTCPConnection -ErrorAction Stop)
+                $connections = @(Get-ObserverConnectionTable { Get-NetTCPConnection -ErrorAction Stop })
                 $after = Get-ObserverProcessSnapshot $RootId
                 Register-ObserverIdentities $after $IdentityByPid $OwnedIdentityToPid $State
                 $ownedPids = @{}
@@ -1672,6 +1977,14 @@ function Invoke-ObserverFixture {
                     if ([int]$sample.ownedConnectionMatches -eq 0) { $zeroConnectionSamples++ }
                     if ([int]$sample.nonLoopbackConnections -ne 0) { throw "non-loopback connection observed in owned TCP sample" }
                     if (Test-Path -LiteralPath $DonePath) { $rootExited = $true }
+                    if (-not [string]::IsNullOrWhiteSpace($ReleaseCheckoutPath)) {
+                        if ((Get-ObserverGitStatus $ReleaseCheckoutPath) -ne "") {
+                            throw "release checkout became dirty during output production"
+                        }
+                        $releaseStatusChecks++
+                        $releaseStatusCleanDuringRoot = $true
+                        if ($rootExited) { $releaseStatusCleanAfterOutput = $true }
+                    }
                     if ($rootExited -and -not $sample.rootPresent -and $sample.descendantCount -eq 0) {
                         if ($null -eq $observerState["rootIdentity"]) { throw "root exited before its owned process identity was captured" }
                         $continuedThroughExit = $true
@@ -1690,6 +2003,7 @@ function Invoke-ObserverFixture {
                     zeroConnectionSamples = $zeroConnectionSamples; ownedConnectionMatches = $ownedConnectionMatches
                     ownedProcessIdentityCount = [int64]$ownedIdentityToPid.Count; queryMode = $queryMode
                     forbiddenProcesses = @(); error = ""
+                    releaseStatusCleanBeforeRoot = $releaseStatusCleanBeforeRoot; releaseStatusCleanDuringRoot = $releaseStatusCleanDuringRoot; releaseStatusCleanAfterOutput = $releaseStatusCleanAfterOutput; releaseStatusChecks = $releaseStatusChecks
                 }
             } catch {
                 [pscustomobject]@{
@@ -1699,9 +2013,10 @@ function Invoke-ObserverFixture {
                     zeroConnectionSamples = $zeroConnectionSamples; ownedConnectionMatches = $ownedConnectionMatches
                     ownedProcessIdentityCount = [int64]$ownedIdentityToPid.Count; queryMode = $queryMode
                     forbiddenProcesses = @(); error = $_.Exception.Message
+                    releaseStatusCleanBeforeRoot = $releaseStatusCleanBeforeRoot; releaseStatusCleanDuringRoot = $releaseStatusCleanDuringRoot; releaseStatusCleanAfterOutput = $releaseStatusCleanAfterOutput; releaseStatusChecks = $releaseStatusChecks
                 }
             }
-        } -ArgumentList $processReadyPath, $pidPath, $donePath, $TimeoutSeconds
+        } -ArgumentList $processReadyPath, $pidPath, $donePath, $TimeoutSeconds, $observerIdentityFunctionSource, $ObserverReleaseCheckoutPath
 
         $diskJob = Start-Job -ScriptBlock {
             param($RootPath, $ReadyPath, $DonePath, $TimeoutSeconds)
@@ -1805,6 +2120,12 @@ function Invoke-ObserverFixture {
         if ($processResults.Count -eq 0 -or $diskResults.Count -eq 0) { throw "observers returned no result" }
         $processObservation = $processResults[$processResults.Count - 1]
         $diskObservation = $diskResults[$diskResults.Count - 1]
+        if (-not [string]::IsNullOrWhiteSpace($ObserverReleaseCheckoutPath)) {
+            $finalCheckoutEvidence = Assert-SmokeReleaseCheckout -RequestedCheckoutPath $ObserverReleaseCheckoutPath -RequireDistExclude
+            $releaseCheckoutEvidence.statusCleanDuringOutput = [bool]$processObservation.releaseStatusCleanDuringRoot
+            $releaseCheckoutEvidence.statusCleanAfterOutput = [bool]$finalCheckoutEvidence.statusCleanAfterPreparation
+            $releaseCheckoutEvidence.statusChecks = [int]$processObservation.releaseStatusChecks
+        }
     } catch {
         $failure = $_.Exception
         if ($processObservation.error -eq "") { $processObservation.error = $failure.Message }
@@ -1839,7 +2160,8 @@ function Invoke-ObserverFixture {
     if ($cleanupErrors.Count -ne 0 -and $processObservation.error -eq "") {
         $processObservation.error = $cleanupErrors -join "; "
     }
-    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $processObservation.sampleCount -gt 0 -and $processObservation.tcpTableQueries -eq $processObservation.sampleCount -and $processObservation.zeroConnectionSamples -gt 0 -and $processObservation.ownedProcessIdentityCount -gt 0 -and $processObservation.queryMode -eq $expectedObserverQueryMode -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal -and $processObservation.maximumGapMilliseconds -le $expectedProcessNetworkGapMilliseconds -and $diskObservation.maximumGapMilliseconds -le $expectedDiskGapMilliseconds -and $diskObservation.peakDeltaBytes -le $expectedTemporaryDiskBytesMaximum -and $cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0
+    $checkoutPass = [string]::IsNullOrWhiteSpace($ObserverReleaseCheckoutPath) -or ($null -ne $releaseCheckoutEvidence -and [bool]$processObservation.releaseStatusCleanBeforeRoot -and [bool]$processObservation.releaseStatusCleanDuringRoot -and [bool]$processObservation.releaseStatusCleanAfterOutput -and [bool]$releaseCheckoutEvidence.statusCleanAfterOutput)
+    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $processObservation.sampleCount -gt 0 -and $processObservation.tcpTableQueries -eq $processObservation.sampleCount -and $processObservation.zeroConnectionSamples -gt 0 -and $processObservation.ownedProcessIdentityCount -gt 0 -and $processObservation.queryMode -eq $expectedObserverQueryMode -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal -and $processObservation.maximumGapMilliseconds -le $expectedProcessNetworkGapMilliseconds -and $diskObservation.maximumGapMilliseconds -le $expectedDiskGapMilliseconds -and $diskObservation.peakDeltaBytes -le $expectedTemporaryDiskBytesMaximum -and $checkoutPass -and $cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
@@ -1862,6 +2184,10 @@ function Invoke-ObserverFixture {
                 queryMode = [string]$processObservation.queryMode
                 forbiddenProcesses = @($processObservation.forbiddenProcesses)
                 error = [string]$processObservation.error
+                releaseStatusCleanBeforeRoot = [bool]$processObservation.releaseStatusCleanBeforeRoot
+                releaseStatusCleanDuringRoot = [bool]$processObservation.releaseStatusCleanDuringRoot
+                releaseStatusCleanAfterOutput = [bool]$processObservation.releaseStatusCleanAfterOutput
+                releaseStatusChecks = [int]$processObservation.releaseStatusChecks
             }
             diskObserver = [ordered]@{
                 independent = [bool]$diskObservation.independent
@@ -1883,6 +2209,7 @@ function Invoke-ObserverFixture {
             remainingTaskPaths = $remainingTaskPaths
             errors = $cleanupErrors.ToArray()
         }
+        releaseCheckout = $releaseCheckoutEvidence
     }
     $reportParent = Split-Path -Parent $reportPath
     if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) { Fail-Smoke "observer report parent does not exist: $reportParent" }
@@ -1891,8 +2218,32 @@ function Invoke-ObserverFixture {
     Write-Output "observer fixture passed; report=$reportPath"
 }
 
+if ($PrepareReleaseCheckout) {
+    if ([string]::IsNullOrWhiteSpace($ReleaseCheckoutPath)) {
+        Fail-Smoke "release checkout path is required for private exclude preparation"
+    }
+    $releaseCheckoutEvidence = Assert-SmokeReleaseCheckout -RequestedCheckoutPath $ReleaseCheckoutPath -PrepareDistExclude -RequireDistExclude
+    $releaseCheckoutReportPath = if ([string]::IsNullOrWhiteSpace($ReleaseCheckoutReportPath)) {
+        Join-Path (Resolve-SmokeAbsolutePath $InstallDir) "release-checkout-report.json"
+    } else {
+        Resolve-SmokeAbsolutePath $ReleaseCheckoutReportPath
+    }
+    $releaseCheckoutReportParent = Split-Path -Parent $releaseCheckoutReportPath
+    if (-not (Test-Path -LiteralPath $releaseCheckoutReportParent -PathType Container)) {
+        Fail-Smoke "release checkout report parent does not exist: $releaseCheckoutReportParent"
+    }
+    [System.IO.File]::WriteAllText($releaseCheckoutReportPath, ($releaseCheckoutEvidence | ConvertTo-Json -Depth 12))
+    Write-Output "release checkout prepared; report=$releaseCheckoutReportPath"
+    return
+}
+
+if ($ObserverIdentityFixture) {
+    Invoke-ObserverIdentityFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath
+    return
+}
+
 if ($ObserverFixture) {
-    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath -RootCommand $ObserverRootCommand -RootArgumentList $ObserverRootArgumentList -RootWorkingDirectory $ObserverRootWorkingDirectory -TimeoutSeconds $ObserverTimeoutSeconds
+    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath -RootCommand $ObserverRootCommand -RootArgumentList $ObserverRootArgumentList -RootWorkingDirectory $ObserverRootWorkingDirectory -ObserverReleaseCheckoutPath $ObserverReleaseCheckoutPath -TimeoutSeconds $ObserverTimeoutSeconds
     return
 }
 
