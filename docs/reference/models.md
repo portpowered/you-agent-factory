@@ -246,7 +246,7 @@ The built-in `embed` model converts one text input into one `embedding:JSON`
 output. Its only operation is `EMBED`, so Models infers the operation when you
 omit `--operation`.
 
-Run this command from a directory containing a valid Current Factory:
+Run this command from any directory; a Current Factory is not required:
 
 ```bash
 you models invoke embed --operation EMBED --input text="Find similar work"

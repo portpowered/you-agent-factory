@@ -238,6 +238,18 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 	}
 }
 
+func TestDocsCommandSmoke_ModelsEmbeddingExampleHasNoFactoryPrerequisite(t *testing.T) {
+	t.Parallel()
+
+	output := executeDocsSmokeCommand(t, t.TempDir(), "docs", "models")
+	if strings.Contains(output, "Run this command from a directory containing a valid Current Factory:") {
+		t.Fatalf("Models embedding example still requires a Current Factory:\n%s", output)
+	}
+	if !strings.Contains(output, "Run this command from any directory; a Current Factory is not required:") {
+		t.Fatalf("Models embedding example is missing the zero-Factory instruction:\n%s", output)
+	}
+}
+
 func executeDocsSmokeCommand(t *testing.T, workingDir string, args ...string) string {
 	t.Helper()
 

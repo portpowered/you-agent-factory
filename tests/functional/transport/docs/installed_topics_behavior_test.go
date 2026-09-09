@@ -171,6 +171,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"An explicit `--server` must identify a reachable service",
 		`you models invoke embed --operation EMBED --input text="Find similar work"`,
 		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
+		"Run this command from any directory; a Current Factory is not required:",
 		"does not provide an `--offline` flag",
 	} {
 		if !strings.Contains(markdown, want) {
@@ -191,6 +192,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"OMNIVOICE_Q4_K_M",
 		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
 		"Run this zero-configuration command",
+		"Run this command from a directory containing a valid Current Factory:",
 		"shared in-process bootstrap",
 	} {
 		if strings.Contains(markdown, stale) {
