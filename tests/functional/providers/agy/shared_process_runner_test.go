@@ -2,6 +2,7 @@ package agy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -284,6 +285,94 @@ func TestAgySharedLifecycleTraceRequiresTwoDistinctActiveRoutes(t *testing.T) {
 				t.Fatalf("both-entered = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestAgySharedCommandRunnerCancellationUnblocksEnteredPeerAndPreservesReuse(t *testing.T) {
+	t.Parallel()
+	runner := newAgySharedCommandRunner()
+	blockedDir := filepath.Join(t.TempDir(), "blocked")
+	reusableDir := filepath.Join(t.TempDir(), "reusable")
+	release := make(chan struct{})
+	blockedRoute, err := runner.registerOutcomes(
+		"blocked",
+		blockedDir,
+		agySharedCommandOutcome{release: release},
+	)
+	if err != nil {
+		t.Fatalf("register blocked AGY route: %v", err)
+	}
+	if _, err := runner.register(
+		"reusable",
+		reusableDir,
+		platformprocess.CommandResult{Stdout: []byte("reusable")},
+	); err != nil {
+		t.Fatalf("register reusable AGY route: %v", err)
+	}
+	runner.freeze()
+
+	trace := newAgySharedLifecycleTrace()
+	if err := trace.expectRoute(blockedRoute.selector); err != nil {
+		t.Fatalf("expect blocked AGY route: %v", err)
+	}
+	if err := blockedRoute.bindLifecycleTrace("blocked-scope", trace); err != nil {
+		t.Fatalf("bind blocked AGY lifecycle trace: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, runErr := runner.Run(ctx, platformprocess.CommandRequest{
+			Command:          "agy",
+			WorkDir:          blockedDir,
+			ExecutionScopeID: "blocked-scope",
+		})
+		done <- runErr
+	}()
+
+	trace.mu.Lock()
+	entered := trace.expectedRouteGates[blockedRoute.selector]
+	trace.mu.Unlock()
+	entryTimeout := time.NewTimer(time.Second)
+	defer entryTimeout.Stop()
+	select {
+	case <-entered:
+	case <-entryTimeout.C:
+		t.Fatal("timed out waiting for blocked AGY route to enter")
+	}
+	if got := runner.activeCallCount(); got != 1 {
+		t.Fatalf("active AGY calls before cancellation = %d, want 1", got)
+	}
+
+	cancel()
+	select {
+	case runErr := <-done:
+		if !errors.Is(runErr, context.Canceled) {
+			t.Fatalf("canceled blocked AGY route error = %v, want context.Canceled", runErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled blocked AGY route remained active")
+	}
+	if got := runner.activeCallCount(); got != 0 {
+		t.Fatalf("active AGY calls after cancellation = %d, want 0", got)
+	}
+	if active, _ := trace.activeCounts(); active != 0 {
+		t.Fatalf("trace active AGY calls after cancellation = %d, want 0", active)
+	}
+
+	result, err := runner.Run(context.Background(), platformprocess.CommandRequest{
+		Command: "agy",
+		WorkDir: reusableDir,
+	})
+	if err != nil {
+		t.Fatalf("reuse AGY route after cancellation: %v", err)
+	}
+	if string(result.Stdout) != "reusable" {
+		t.Fatalf("reuse AGY route output = %q, want %q", result.Stdout, "reusable")
+	}
+	if err := runner.clear(); err != nil {
+		t.Fatalf("clear AGY runner after cancellation and reuse: %v", err)
 	}
 }
 

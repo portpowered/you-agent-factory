@@ -86,15 +86,17 @@ func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 			trace.record(stage, "", "", detail)
 		})
 	}
-	firstCallStart := firstRoute.callCount()
-	secondCallStart := secondRoute.callCount()
-	firstSessionID, firstStream := fixture.openConcurrentRoute(t, host, firstRoute, trace)
-	secondSessionID, secondStream := fixture.openConcurrentRoute(t, host, secondRoute, trace)
+	// Register release cleanup before either session setup can enter the held
+	// provider edge. A partial setup failure must still unblock a peer route.
 	t.Cleanup(func() {
 		releaseGate("release-forced", "test cleanup closed the shared release gate")
 		firstRoute.setRelease(nil)
 		secondRoute.setRelease(nil)
 	})
+	firstCallStart := firstRoute.callCount()
+	secondCallStart := secondRoute.callCount()
+	firstSessionID, firstStream := fixture.openConcurrentRoute(t, host, firstRoute, trace)
+	secondSessionID, secondStream := fixture.openConcurrentRoute(t, host, secondRoute, trace)
 	trace.record(
 		"rendezvous-wait",
 		"",
