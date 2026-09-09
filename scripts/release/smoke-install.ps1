@@ -7,7 +7,11 @@ param(
     [string]$CandidateManifestPath,
     [string]$ReportPath,
     [switch]$ObserverFixture,
-    [string]$ObserverReportPath
+    [string]$ObserverReportPath,
+    [string]$ObserverRootCommand,
+    [string[]]$ObserverRootArgumentList,
+    [string]$ObserverRootWorkingDirectory,
+    [int]$ObserverTimeoutSeconds = 20
 )
 
 $ErrorActionPreference = "Stop"
@@ -1367,9 +1371,28 @@ function Invoke-CandidateSmoke {
 function Invoke-ObserverFixture {
     param(
         [string]$RequestedInstallDir,
-        [string]$RequestedReportPath
+        [string]$RequestedReportPath,
+        [string]$RootCommand,
+        [string[]]$RootArgumentList,
+        [string]$RootWorkingDirectory,
+        [int]$TimeoutSeconds = 20
     )
 
+    $externalRoot = -not [string]::IsNullOrWhiteSpace($RootCommand)
+    if ($TimeoutSeconds -le 0) {
+        Fail-Smoke "observer timeout must be positive"
+    }
+    $resolvedRootWorkingDirectory = $null
+    if ($externalRoot) {
+        $resolvedRootWorkingDirectory = if ([string]::IsNullOrWhiteSpace($RootWorkingDirectory)) {
+            (Get-Location).Path
+        } else {
+            Resolve-SmokeAbsolutePath $RootWorkingDirectory
+        }
+        if (-not (Test-Path -LiteralPath $resolvedRootWorkingDirectory -PathType Container)) {
+            Fail-Smoke "observer root working directory does not exist: $resolvedRootWorkingDirectory"
+        }
+    }
     $reportPath = if ([string]::IsNullOrWhiteSpace($RequestedReportPath)) {
         Join-Path (Resolve-SmokeAbsolutePath $RequestedInstallDir) "observer-report.json"
     } else {
@@ -1377,6 +1400,14 @@ function Invoke-ObserverFixture {
     }
     $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("infinite-you-observer-" + [System.Guid]::NewGuid().ToString("N"))
     [void][System.IO.Directory]::CreateDirectory($fixtureRoot)
+    $observationRoot = if ($externalRoot) {
+        Resolve-SmokeAbsolutePath $RequestedInstallDir
+    } else {
+        $fixtureRoot
+    }
+    if (-not (Test-Path -LiteralPath $observationRoot -PathType Container)) {
+        Fail-Smoke "observer observation root does not exist: $observationRoot"
+    }
     $processReadyPath = Join-Path $fixtureRoot "process-ready"
     $diskReadyPath = Join-Path $fixtureRoot "disk-ready"
     $pidPath = Join-Path $fixtureRoot "root.pid"
@@ -1405,7 +1436,7 @@ function Invoke-ObserverFixture {
 
     try {
         $processJob = Start-Job -ScriptBlock {
-            param($ReadyPath, $PidPath, $DonePath)
+            param($ReadyPath, $PidPath, $DonePath, $TimeoutSeconds)
             $ErrorActionPreference = "Stop"
             $processNetworkGapMaximumMilliseconds = [int64]2000
             $descendantMaximum = [int64]36
@@ -1592,7 +1623,7 @@ function Invoke-ObserverFixture {
             $zeroConnectionSamples = 0
             $ownedConnectionMatches = 0
             try {
-                $deadline = [DateTime]::UtcNow.AddSeconds(20)
+                $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
                 while (-not (Test-Path -LiteralPath $PidPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
                 if (-not (Test-Path -LiteralPath $PidPath)) { throw "root PID was not published" }
                 $rootId = [int]([System.IO.File]::ReadAllText($PidPath)).Trim()
@@ -1648,10 +1679,10 @@ function Invoke-ObserverFixture {
                     forbiddenProcesses = @(); error = $_.Exception.Message
                 }
             }
-        } -ArgumentList $processReadyPath, $pidPath, $donePath
+        } -ArgumentList $processReadyPath, $pidPath, $donePath, $TimeoutSeconds
 
         $diskJob = Start-Job -ScriptBlock {
-            param($RootPath, $ReadyPath, $DonePath)
+            param($RootPath, $ReadyPath, $DonePath, $TimeoutSeconds)
             $ErrorActionPreference = "Stop"
             $diskGapMaximumMilliseconds = [int64]2000
             $temporaryDiskMaximum = [int64]4294967296
@@ -1673,7 +1704,7 @@ function Invoke-ObserverFixture {
                 $previous = $null
                 $initialBytes = $null
                 $finalSample = $false
-                $deadline = $startedAt.AddSeconds(20)
+                $deadline = $startedAt.AddSeconds($TimeoutSeconds)
                 while ([DateTime]::UtcNow -lt $deadline) {
                     $bytes = [int64](Get-ObserverDirectoryBytes)
                     $now = [DateTime]::UtcNow
@@ -1722,7 +1753,7 @@ function Invoke-ObserverFixture {
                     maximumGapMilliseconds = $maximumGap; peakDeltaBytes = [int64]$peakBytes; error = $_.Exception.Message
                 }
             }
-        } -ArgumentList $fixtureRoot, $diskReadyPath, $donePath
+        } -ArgumentList $observationRoot, $diskReadyPath, $donePath, $TimeoutSeconds
 
         $readyDeadline = [DateTime]::UtcNow.AddSeconds(10)
         # Readiness is polled only until both independent observer jobs publish
@@ -1730,14 +1761,19 @@ function Invoke-ObserverFixture {
         while ((-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) -and [DateTime]::UtcNow -lt $readyDeadline) { Start-Sleep -Milliseconds 25 }
         if (-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) { throw "observers did not start before root" }
 
+        if ($externalRoot) {
+            $rootProcess = Start-Process -FilePath $RootCommand -WorkingDirectory $resolvedRootWorkingDirectory -WindowStyle Hidden -ArgumentList @($RootArgumentList) -PassThru
+        } else {
         $childOne = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 2500"))
         $childTwo = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 3000"))
         $fixtureFile = (Join-Path $fixtureRoot "fixture.txt").Replace("'", "''")
         $rootScript = "`$ErrorActionPreference = 'Stop'; Set-Content -LiteralPath '$fixtureFile' -Value ('fixture' * 64); `$one = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childOne') -PassThru; `$two = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childTwo') -PassThru; Wait-Process -Id @(`$one.Id, `$two.Id); exit 0"
         $rootEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($rootScript))
         $rootProcess = Start-Process -FilePath "powershell.exe" -WorkingDirectory $fixtureRoot -WindowStyle Hidden -ArgumentList @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded) -PassThru
+        }
         [System.IO.File]::WriteAllText($pidPath, [string]$rootProcess.Id)
-        if (-not $rootProcess.WaitForExit(15000)) { throw "observer fixture root timed out" }
+        $waitMilliseconds = [int][Math]::Min([int64]2147483647, [int64]$TimeoutSeconds * 1000)
+        if (-not $rootProcess.WaitForExit($waitMilliseconds)) { throw "observer root timed out" }
         $rootExitCode = [int64]$rootProcess.ExitCode
         [System.IO.File]::WriteAllText($donePath, "done")
         $completedJobs = @(Wait-Job -Job @($processJob, $diskJob) -Timeout 25)
@@ -1786,7 +1822,7 @@ function Invoke-ObserverFixture {
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
         cycle = $expectedCandidateCycle
-        releaseStatus = "observer-fixture"
+        releaseStatus = if ($externalRoot) { "observed-command" } else { "observer-fixture" }
         observation = [ordered]@{
             environment = $goEnvironment
             processNetworkObserver = [ordered]@{
@@ -1834,7 +1870,7 @@ function Invoke-ObserverFixture {
 }
 
 if ($ObserverFixture) {
-    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath
+    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath -RootCommand $ObserverRootCommand -RootArgumentList $ObserverRootArgumentList -RootWorkingDirectory $ObserverRootWorkingDirectory -TimeoutSeconds $ObserverTimeoutSeconds
     return
 }
 
