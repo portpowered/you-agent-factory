@@ -527,6 +527,60 @@ func (fixture *agySharedProcessFixture) runDirect(
 	return session, listed, events, responseEvents, route, callStart
 }
 
+// openConcurrentRoute binds one scenario-owned lifecycle trace before the
+// public session is opened. The session, response stream and route are then
+// registered together so a peer scenario cannot satisfy this scenario's gate.
+func (fixture *agySharedProcessFixture) openConcurrentRoute(
+	t *testing.T,
+	host *agySharedRoleHost,
+	route *agySharedCommandRoute,
+	trace *agySharedLifecycleTrace,
+) (string, *support.FactoryResponseEventStream) {
+	t.Helper()
+	if err := trace.expectRoute(route.selector); err != nil {
+		t.Fatalf("expect concurrent AGY route %q: %v", route.selector, err)
+	}
+	if err := route.bindLifecycleTrace("", trace); err != nil {
+		t.Fatalf("bind concurrent AGY lifecycle trace before session open: %v", err)
+	}
+	trace.record("route-trace-bound", route.selector, "", "diagnostic binding installed before public session open")
+	t.Cleanup(func() { route.unbindLifecycleTrace(trace) })
+	trace.record(
+		"session-open-request",
+		route.selector,
+		"",
+		fmt.Sprintf("workDir=%q", route.workDir),
+	)
+	opened := support.OpenFactorySessionAt(t, host.baseURL, route.workDir)
+	sessionID := opened.Session.Id
+	trace.record("session-opened", route.selector, sessionID, "public Factory Session created")
+	var stream *support.FactoryResponseEventStream
+	t.Cleanup(func() {
+		trace.record("stream-close-request", route.selector, sessionID, "scenario cleanup")
+		if stream != nil {
+			stream.Close()
+		}
+		trace.record("stream-closed", route.selector, sessionID, "Response Event stream closed")
+		fixture.runner.unregisterScope(sessionID, route)
+		trace.record("route-unbound", route.selector, sessionID, "provider route unregistered")
+		support.CloseFactorySessionAt(t, host.baseURL, sessionID)
+		trace.record("session-closed", route.selector, sessionID, "public Factory Session closed")
+	})
+	if err := fixture.runner.registerScope(sessionID, route); err != nil {
+		t.Fatalf("register concurrent AGY route: %v", err)
+	}
+	if err := fixture.runner.registerScopeTrace(sessionID, trace); err != nil {
+		t.Fatalf("register concurrent AGY lifecycle trace: %v", err)
+	}
+	trace.record("route-bound", route.selector, sessionID, fmt.Sprintf("workDir=%q", route.workDir))
+	stream = support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(host.baseURL, sessionID),
+	)
+	trace.record("stream-ready", route.selector, sessionID, "Response Event stream opened")
+	return sessionID, stream
+}
+
 func (fixture *agySharedProcessFixture) runExplicitRoute(
 	t *testing.T,
 	route *agySharedCommandRoute,

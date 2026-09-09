@@ -1,8 +1,11 @@
 package agy
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -63,56 +66,99 @@ func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
 // Work, Factory Event, Response Event or HTTP-server state.
 func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 	t.Parallel()
+	trace := newAgySharedLifecycleTrace()
+	t.Cleanup(func() { trace.log(t) })
+	scenarioContext, cancel := context.WithTimeout(context.Background(), agySharedInvocationTimeout)
+	t.Cleanup(cancel)
 	fixture := agySharedProcess(t)
+	trace.record("host-start-request", "", "", "shared role host")
 	host := fixture.startRoleHost(t)
+	trace.record("host-ready", "", "", fmt.Sprintf("baseURL=%q homeDir=%q", host.baseURL, host.homeDir))
 	firstRoute := fixture.routes["concurrency-a"]
 	secondRoute := fixture.routes["concurrency-b"]
 	release := make(chan struct{})
-	released := false
 	firstRoute.setRelease(release)
 	secondRoute.setRelease(release)
-	t.Cleanup(func() {
-		if !released {
+	var releaseOnce sync.Once
+	releaseGate := func(stage, detail string) {
+		releaseOnce.Do(func() {
 			close(release)
-		}
+			trace.record(stage, "", "", detail)
+		})
+	}
+	// Register release cleanup before either session setup can enter the held
+	// provider edge. A partial setup failure must still unblock a peer route.
+	t.Cleanup(func() {
+		releaseGate("release-forced", "test cleanup closed the shared release gate")
 		firstRoute.setRelease(nil)
 		secondRoute.setRelease(nil)
 	})
-	runnerCallStart := fixture.runner.callCount()
 	firstCallStart := firstRoute.callCount()
 	secondCallStart := secondRoute.callCount()
-	openRoute := func(route *agySharedCommandRoute) (string, *support.FactoryResponseEventStream) {
-		opened := support.OpenFactorySessionAt(t, host.baseURL, route.workDir)
-		sessionID := opened.Session.Id
-		if err := fixture.runner.registerScope(sessionID, route); err != nil {
-			t.Fatalf("register concurrent AGY route: %v", err)
-		}
-		stream := support.OpenFactoryResponseEventStreamAt(
-			t, support.SessionResponseEventsURL(host.baseURL, sessionID),
+	firstSessionID, firstStream := fixture.openConcurrentRoute(t, host, firstRoute, trace)
+	secondSessionID, secondStream := fixture.openConcurrentRoute(t, host, secondRoute, trace)
+	trace.record(
+		"rendezvous-wait",
+		"",
+		fmt.Sprintf("%s,%s", firstSessionID, secondSessionID),
+		"scenario-owned provider-entry gates for both expected routes",
+	)
+	if err := trace.waitForBothEntered(scenarioContext); err != nil {
+		t.Fatalf("wait for concurrent AGY route entries: %v", err)
+	}
+	traceActive, traceMaxActive := trace.activeCounts()
+	traceEntries := trace.entryCounts()
+	trace.record(
+		"rendezvous-observed",
+		"",
+		fmt.Sprintf("%s,%s", firstSessionID, secondSessionID),
+		fmt.Sprintf(
+			"aggregateRequests=%d aggregateActive=%d aggregateMaxActive=%d scenarioActive=%d scenarioMaxActive=%d scenarioEntries=%d,%d routeCalls=%d,%d",
+			fixture.runner.callCount(),
+			fixture.runner.activeCallCount(),
+			fixture.runner.maxActiveCallCount(),
+			traceActive,
+			traceMaxActive,
+			traceEntries[firstRoute.selector],
+			traceEntries[secondRoute.selector],
+			firstRoute.callCount()-firstCallStart,
+			secondRoute.callCount()-secondCallStart,
+		),
+	)
+	if traceActive != 2 {
+		t.Fatalf("scenario active AGY calls while routes are held = %d, want 2", traceActive)
+	}
+	if traceMaxActive < 2 {
+		t.Fatalf("scenario maximum active AGY calls = %d, want overlap of both routes", traceMaxActive)
+	}
+	if traceEntries[firstRoute.selector] != 1 || traceEntries[secondRoute.selector] != 1 {
+		t.Fatalf(
+			"scenario provider entries = %d,%d, want exactly one per route",
+			traceEntries[firstRoute.selector], traceEntries[secondRoute.selector],
 		)
-		t.Cleanup(func() {
-			stream.Close()
-			fixture.runner.unregisterScope(sessionID, route)
-			support.CloseFactorySessionAt(t, host.baseURL, sessionID)
-		})
-		return sessionID, stream
 	}
-	firstSessionID, firstStream := openRoute(firstRoute)
-	secondSessionID, secondStream := openRoute(secondRoute)
-	fixture.runner.waitForCallCount(t, runnerCallStart+2)
-	if got := fixture.runner.activeCallCount(); got != 2 {
-		t.Fatalf("active AGY calls while routes are held = %d, want 2", got)
+	if got := firstRoute.callCount() - firstCallStart; got != 1 {
+		t.Fatalf("route %q provider calls = %d, want exactly one", firstRoute.selector, got)
 	}
-	if got := fixture.runner.maxActiveCallCount(); got < 2 {
-		t.Fatalf("maximum active AGY calls = %d, want overlap of both routes", got)
+	if got := secondRoute.callCount() - secondCallStart; got != 1 {
+		t.Fatalf("route %q provider calls = %d, want exactly one", secondRoute.selector, got)
 	}
-	close(release)
-	released = true
+	releaseGate("released", fmt.Sprintf("shared release gate closed for %s,%s", firstSessionID, secondSessionID))
 	firstSession, firstListed, firstEvents, firstResponseEvents := fixture.observeHostedSession(
 		t, host.baseURL, firstSessionID, firstStream,
 	)
+	trace.record("terminal-observed", firstRoute.selector, firstSessionID, "session/work/events/response events collected")
 	secondSession, secondListed, secondEvents, secondResponseEvents := fixture.observeHostedSession(
 		t, host.baseURL, secondSessionID, secondStream,
+	)
+	trace.record("terminal-observed", secondRoute.selector, secondSessionID, "session/work/events/response events collected")
+	if firstSession.Id == secondSession.Id {
+		t.Fatalf("concurrent Factory Session IDs are identical: %q", firstSession.Id)
+	}
+	assertAgyInvocationIdentitiesDistinct(
+		t,
+		readAgyFactoryEventIdentity(t, firstEvents),
+		readAgyFactoryEventIdentity(t, secondEvents),
 	)
 
 	assertAgyConcurrentInvocation(t, firstSession, firstListed, firstEvents, firstResponseEvents, firstRoute, firstCallStart, firstSessionID, "shared concurrency A COMPLETE", "shared concurrency B COMPLETE")
