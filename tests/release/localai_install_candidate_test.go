@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
@@ -129,6 +130,240 @@ if ($result.exitCode -ne 23) { exit 2 }
 	}
 	if len(result.StdoutEvidence.SHA256) != 64 || len(result.StderrEvidence.SHA256) != 64 {
 		t.Fatalf("retained output hashes are missing: %#v", result)
+	}
+}
+
+func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	childPIDPath := filepath.Join(tempDir, "child.pid")
+	childPath := filepath.Join(tempDir, "child.ps1")
+	parentPath := filepath.Join(tempDir, "parent.ps1")
+	if err := os.WriteFile(childPath, []byte(`while ($true) { Start-Sleep -Milliseconds 100 }`), 0o600); err != nil {
+		t.Fatalf("write hanging child: %v", err)
+	}
+	parent := fmt.Sprintf(`
+$child = Start-Process -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -PassThru
+[System.IO.File]::WriteAllText(%s, [string]$child.Id)
+while ($true) { Start-Sleep -Milliseconds 100 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(childPath),
+		localAICandidatePowerShellLiteral(childPIDPath),
+	)
+	if err := os.WriteFile(parentPath, []byte(parent), 0o600); err != nil {
+		t.Fatalf("write hanging parent: %v", err)
+	}
+
+	resultPath := filepath.Join(tempDir, "result.json")
+	harnessPath := filepath.Join(tempDir, "deadline.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -WorkingDirectory %s -StdoutPath %s -StderrPath %s -TimeoutSeconds 3 -OutputMaximumBytes 4096
+$result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath %s -Encoding UTF8
+if (-not $result.timedOut -or $result.exitCode -ne 124) { exit 2 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(parentPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stdout.log")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write deadline harness: %v", err)
+	}
+	started := time.Now()
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("run command deadline harness: %v\n%s", err, output)
+	}
+	if elapsed := time.Since(started); elapsed > 15*time.Second {
+		t.Fatalf("deadline helper took %s, want at most 15s", elapsed)
+	}
+	pidBytes, err := os.ReadFile(childPIDPath)
+	if err != nil {
+		t.Fatalf("read hanging child PID: %v", err)
+	}
+	childPID, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
+	if err != nil {
+		t.Fatalf("parse hanging child PID: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		check := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command",
+			fmt.Sprintf("if (Get-Process -Id %d -ErrorAction SilentlyContinue) { exit 1 }", childPID))
+		if err := check.Run(); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hanging child process %d survived command deadline", childPID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestLocalAICandidateCommandBoundsRetainedOutput(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	writerPath := filepath.Join(tempDir, "writer.ps1")
+	if err := os.WriteFile(writerPath, []byte(`[Console]::Out.Write(('token=x ' * 1024)); exit 0`), 0o600); err != nil {
+		t.Fatalf("write output fixture: %v", err)
+	}
+	stdoutPath := filepath.Join(tempDir, "stdout.log")
+	resultPath := filepath.Join(tempDir, "result.json")
+	harnessPath := filepath.Join(tempDir, "output-limit.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -WorkingDirectory %s -StdoutPath %s -StderrPath %s -TimeoutSeconds 10 -OutputMaximumBytes 1024
+$result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath %s -Encoding UTF8
+if (-not $result.outputLimitExceeded -or $result.exitCode -ne 125) { exit 2 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(writerPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(stdoutPath),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write output-limit harness: %v", err)
+	}
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("run output-limit harness: %v\n%s", err, output)
+	}
+	info, err := os.Stat(stdoutPath)
+	if err != nil {
+		t.Fatalf("stat retained output: %v", err)
+	}
+	if info.Size() > 1024 {
+		t.Fatalf("retained output is %d bytes, want at most 1024", info.Size())
+	}
+	var result struct {
+		OutputLimitExceeded bool `json:"outputLimitExceeded"`
+		StdoutEvidence      struct {
+			TotalBytes int64 `json:"totalBytes"`
+			Truncated  bool  `json:"truncated"`
+		} `json:"stdoutEvidence"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if !result.OutputLimitExceeded || !result.StdoutEvidence.Truncated || result.StdoutEvidence.TotalBytes <= 1024 {
+		t.Fatalf("bounded output evidence = %#v", result)
+	}
+}
+
+func TestLocalAICandidateRootsRejectOverlapAndReparseAncestry(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	for _, directory := range []string{sourceDir, dependencyDir} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create path fixture: %v", err)
+		}
+	}
+	outputDir := filepath.Join(sourceDir, "output")
+	harnessPath := filepath.Join(tempDir, "paths.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+try {
+    Assert-SmokeCandidateRoots -SourcePath %s -DependencySourcePath %s -OutputDirectory %s -WorkDirectory %s -InstallDirectory %s -ReportPath %s | Out-Null
+    exit 2
+} catch {
+    if (-not $_.Exception.Message.Contains('must not overlap')) { throw }
+}
+$link = %s
+New-Item -ItemType Junction -Path $link -Target %s | Out-Null
+try {
+    Assert-SmokeCandidateRoots -SourcePath $link -DependencySourcePath %s -OutputDirectory %s -WorkDirectory %s -InstallDirectory %s -ReportPath %s | Out-Null
+    exit 3
+} catch {
+    if (-not $_.Exception.Message.Contains('reparse point in its ancestry')) { throw }
+}
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(outputDir, "report.json")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "source-link")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output", "report.json")),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write path-safety harness: %v", err)
+	}
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("validate candidate roots: %v\n%s", err, output)
+	}
+}
+
+func TestLocalAICandidateCleanupPreservesSharedDependencyCache(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "work")
+	junctionDir := filepath.Join(workDir, "src", "ui", "node_modules")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	if err := os.MkdirAll(filepath.Dir(junctionDir), 0o700); err != nil {
+		t.Fatalf("create work fixture: %v", err)
+	}
+	if err := os.MkdirAll(dependencyDir, 0o700); err != nil {
+		t.Fatalf("create dependency fixture: %v", err)
+	}
+	markerPath := filepath.Join(dependencyDir, "keep.txt")
+	if err := os.WriteFile(markerPath, []byte("shared cache"), 0o600); err != nil {
+		t.Fatalf("write shared cache marker: %v", err)
+	}
+	harnessPath := filepath.Join(tempDir, "cleanup.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+New-Item -ItemType Junction -Path %s -Target %s | Out-Null
+Remove-SmokeCandidateWork -WorkDirectory %s -DependencyJunctionPath %s
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(junctionDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(junctionDir),
+	)
+	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
+		t.Fatalf("write cleanup harness: %v", err)
+	}
+	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
+		t.Fatalf("clean candidate work: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
+		t.Fatalf("candidate work directory remains after cleanup: %v", err)
+	}
+	contents, err := os.ReadFile(markerPath)
+	if err != nil || string(contents) != "shared cache" {
+		t.Fatalf("shared dependency cache was modified: %v %q", err, contents)
 	}
 }
 

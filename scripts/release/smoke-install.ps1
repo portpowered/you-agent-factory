@@ -43,6 +43,71 @@ function Resolve-SmokePath {
     return [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $Path))
 }
 
+function Assert-SmokeNoReparseAncestry {
+    param([string]$Name, [string]$Path)
+    $current = Resolve-SmokePath $Path
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            Fail-Smoke "$Name has a reparse point in its ancestry: $($item.FullName)"
+        }
+        $parent = [System.IO.Directory]::GetParent($current)
+        if ($null -eq $parent -or $parent.FullName -eq $current) { break }
+        $current = $parent.FullName
+    }
+}
+
+function Test-SmokePathContains {
+    param([string]$Parent, [string]$Child)
+    $parentPath = (Resolve-SmokePath $Parent).TrimEnd('\') + '\'
+    $childPath = Resolve-SmokePath $Child
+    return $childPath.StartsWith($parentPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-SmokePathsDisjoint {
+    param([string]$FirstName, [string]$FirstPath, [string]$SecondName, [string]$SecondPath)
+    $first = Resolve-SmokePath $FirstPath
+    $second = Resolve-SmokePath $SecondPath
+    $equal = $first.TrimEnd('\').Equals($second.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    if ($equal -or (Test-SmokePathContains $first $second) -or (Test-SmokePathContains $second $first)) {
+        Fail-Smoke "$FirstName and $SecondName must not overlap: $first ; $second"
+    }
+}
+
+function Assert-SmokeCandidateRoots {
+    param(
+        [string]$SourcePath,
+        [string]$DependencySourcePath,
+        [string]$OutputDirectory,
+        [string]$WorkDirectory,
+        [string]$InstallDirectory,
+        [string]$ReportPath
+    )
+    $paths = [ordered]@{
+        source = Resolve-SmokePath $SourcePath
+        dependency = Resolve-SmokePath $DependencySourcePath
+        output = Resolve-SmokePath $OutputDirectory
+        work = Resolve-SmokePath $WorkDirectory
+        install = Resolve-SmokePath $InstallDirectory
+        report = Resolve-SmokePath $ReportPath
+    }
+    foreach ($entry in $paths.GetEnumerator()) {
+        Assert-SmokeNoReparseAncestry $entry.Key $entry.Value
+    }
+    foreach ($ownedName in @("output", "work", "install")) {
+        foreach ($readName in @("source", "dependency")) {
+            Assert-SmokePathsDisjoint $ownedName $paths[$ownedName] $readName $paths[$readName]
+        }
+    }
+    foreach ($pair in @(@("output", "work"), @("output", "install"), @("work", "install"))) {
+        Assert-SmokePathsDisjoint $pair[0] $paths[$pair[0]] $pair[1] $paths[$pair[1]]
+    }
+    if (-not (Test-SmokePathContains $paths.output $paths.report)) {
+        Fail-Smoke "candidate report must be inside the candidate output directory: $($paths.report)"
+    }
+    return [pscustomobject]$paths
+}
+
 function Assert-SmokeEmptyRoot {
     param([string]$Name, [string]$Path)
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
@@ -95,10 +160,66 @@ function Get-SmokeDirectoryBytes {
     return $total
 }
 
+function Remove-SmokeOwnedTree {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $root = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $root) { return }
+    if (-not $root.PSIsContainer -or (($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name cleanup root is not a regular directory: $resolved"
+    }
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($resolved)
+    while ($pending.Count -gt 0) {
+        foreach ($item in @(Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop)) {
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                Fail-Smoke "$Name cleanup refused unexpected reparse point: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+        }
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+function Remove-SmokeCandidateWork {
+    param([string]$WorkDirectory, [string]$DependencyJunctionPath)
+    $work = Resolve-SmokePath $WorkDirectory
+    if (-not [string]::IsNullOrWhiteSpace($DependencyJunctionPath)) {
+        $junction = Resolve-SmokePath $DependencyJunctionPath
+        if (-not (Test-SmokePathContains $work $junction)) {
+            Fail-Smoke "dependency junction is outside the candidate work directory: $junction"
+        }
+        $item = Get-Item -LiteralPath $junction -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item) {
+            if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+                Fail-Smoke "candidate dependency junction is not a directory reparse point: $junction"
+            }
+            # Directory.Delete removes the junction entry itself and never walks
+            # into the shared dependency cache it targets.
+            [System.IO.Directory]::Delete($junction)
+        }
+    }
+    Remove-SmokeOwnedTree "candidate work directory" $work
+}
+
 function Protect-SmokeOutput {
     param([string]$Path, [int]$MaximumBytes = 1048576)
-    $bytes = [System.IO.File]::ReadAllBytes($Path)
-    $count = [Math]::Min($bytes.Length, $MaximumBytes)
+    if ($MaximumBytes -le 0) { Fail-Smoke "command output limit must be positive" }
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $totalBytes = [int64]$stream.Length
+        $count = [int][Math]::Min($totalBytes, [int64]$MaximumBytes)
+        $bytes = New-Object byte[] $count
+        $offset = 0
+        while ($offset -lt $count) {
+            $read = $stream.Read($bytes, $offset, $count - $offset)
+            if ($read -eq 0) { break }
+            $offset += $read
+        }
+        if ($offset -ne $count) { $count = $offset }
+    } finally {
+        $stream.Dispose()
+    }
     if ($count -ge 2 -and $bytes[0] -eq 0xff -and $bytes[1] -eq 0xfe) {
         $text = [System.Text.Encoding]::Unicode.GetString($bytes, 2, $count - 2)
     } elseif ($count -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf) {
@@ -108,15 +229,23 @@ function Protect-SmokeOutput {
     }
     $pattern = '(?i)(token|password|secret|api[_-]?key|authorization)\s*([:=])\s*[^\s,;]+'
     $text = [System.Text.RegularExpressions.Regex]::Replace($text, $pattern, '$1$2<redacted>')
-    [System.IO.File]::WriteAllText($Path, $text, [System.Text.UTF8Encoding]::new($false))
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    $redactedBytes = $encoding.GetBytes($text)
+    if ($redactedBytes.Length -gt $MaximumBytes) {
+        $text = $encoding.GetString($redactedBytes, 0, $MaximumBytes)
+        while ($encoding.GetByteCount($text) -gt $MaximumBytes) {
+            $text = $text.Substring(0, $text.Length - 1)
+        }
+    }
+    [System.IO.File]::WriteAllText($Path, $text, $encoding)
     $fileEvidence = Get-SmokeFileEvidence "command-output" $Path
     $evidence = [ordered]@{
         role = $fileEvidence.role
         file = $fileEvidence.file
         bytes = $fileEvidence.bytes
         sha256 = $fileEvidence.sha256
-        totalBytes = [int64]$bytes.Length
-        truncated = $bytes.Length -gt $MaximumBytes
+        totalBytes = $totalBytes
+        truncated = $totalBytes -gt $MaximumBytes
     }
     return [pscustomobject]@{ text = $text; evidence = $evidence }
 }
@@ -127,35 +256,117 @@ function Invoke-CandidateCommand {
         [Parameter(Mandatory = $true)][string[]]$ArgumentList,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [Parameter(Mandatory = $true)][string]$StdoutPath,
-        [Parameter(Mandatory = $true)][string]$StderrPath
+        [Parameter(Mandatory = $true)][string]$StderrPath,
+        [int]$TimeoutSeconds = 7200,
+        [int]$OutputMaximumBytes = 1048576
     )
+    if ($TimeoutSeconds -le 0) { Fail-Smoke "command timeout must be positive" }
+    if ($OutputMaximumBytes -le 0) { Fail-Smoke "command output limit must be positive" }
     $workingDirectory = Resolve-SmokePath $WorkingDirectory
     $stdoutPath = Resolve-SmokePath $StdoutPath
     $stderrPath = Resolve-SmokePath $StderrPath
     foreach ($parent in @((Split-Path -Parent $stdoutPath), (Split-Path -Parent $stderrPath))) {
         [void][System.IO.Directory]::CreateDirectory($parent)
     }
-    $previousLocation = Get-Location
-    $previousErrorActionPreference = $ErrorActionPreference
-    $exitCode = $null
-    try {
-        Set-Location -LiteralPath $workingDirectory
-        # Windows PowerShell promotes native stderr to ErrorRecord when the
-        # caller uses Stop. Capture it as process output and decide by exit.
-        $ErrorActionPreference = "Continue"
-        if (Test-Path Variable:\PSNativeCommandUseErrorActionPreference) { $PSNativeCommandUseErrorActionPreference = $false }
-        & $FilePath @ArgumentList 1> $stdoutPath 2> $stderrPath
-        $exitCode = [int]$LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-        Set-Location -LiteralPath $previousLocation.Path
+    [System.IO.File]::WriteAllBytes($stdoutPath, [byte[]]@())
+    [System.IO.File]::WriteAllBytes($stderrPath, [byte[]]@())
+    $pidPath = Join-Path ([System.IO.Path]::GetDirectoryName($stdoutPath)) ("command-" + [System.Guid]::NewGuid().ToString("N") + ".pid")
+    $payload = [pscustomobject]@{
+        FilePath = $FilePath
+        Arguments = @($ArgumentList)
+        WorkingDirectory = $workingDirectory
+        StdoutPath = $stdoutPath
+        StderrPath = $stderrPath
+        PidPath = $pidPath
     }
-    $stdout = Protect-SmokeOutput $stdoutPath
-    $stderr = Protect-SmokeOutput $stderrPath
+    $job = $null
+    $exitCode = 125
+    $timedOut = $false
+    $outputLimitExceeded = $false
+    $terminationReason = ""
+    try {
+        $job = Start-Job -ScriptBlock {
+            param($Command)
+            $ErrorActionPreference = "Continue"
+            Set-Location -LiteralPath $Command.WorkingDirectory
+            [System.IO.File]::WriteAllText($Command.PidPath, [string]$PID, [System.Text.Encoding]::ASCII)
+            $arguments = @($Command.Arguments)
+            $commandPath = [string]$Command.FilePath
+            $commandStdout = [string]$Command.StdoutPath
+            $commandStderr = [string]$Command.StderrPath
+            $commandExitCode = 125
+            & $commandPath @arguments 1> $commandStdout 2> $commandStderr
+            if ($null -ne $LASTEXITCODE) { $commandExitCode = [int]$LASTEXITCODE }
+            return $commandExitCode
+        } -ArgumentList $payload
+        $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+        while ($job.State -notin @("Completed", "Failed", "Stopped")) {
+            Wait-Job -Job $job -Timeout 1 | Out-Null
+            foreach ($path in @($stdoutPath, $stderrPath)) {
+                $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+                if ($null -ne $item -and [int64]$item.Length -gt $OutputMaximumBytes) {
+                    $outputLimitExceeded = $true
+                    $terminationReason = "output exceeded $OutputMaximumBytes bytes"
+                    break
+                }
+            }
+            if ($outputLimitExceeded) { break }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                $timedOut = $true
+                $terminationReason = "deadline of $TimeoutSeconds seconds exceeded"
+                break
+            }
+        }
+        foreach ($path in @($stdoutPath, $stderrPath)) {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            if ($null -ne $item -and [int64]$item.Length -gt $OutputMaximumBytes) {
+                $outputLimitExceeded = $true
+                $terminationReason = "output exceeded $OutputMaximumBytes bytes"
+                break
+            }
+        }
+        if ($timedOut -or $outputLimitExceeded) {
+            $jobProcessID = 0
+            if (Test-Path -LiteralPath $pidPath -PathType Leaf) {
+                [void][int]::TryParse(([System.IO.File]::ReadAllText($pidPath).Trim()), [ref]$jobProcessID)
+            }
+            if ($jobProcessID -gt 0 -and $job.State -notin @("Completed", "Failed", "Stopped")) {
+                $taskkill = Join-Path $env:SystemRoot "System32\taskkill.exe"
+                $previousErrorActionPreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = "Continue"
+                    & $taskkill /PID $jobProcessID /T /F 1>$null 2>$null
+                } finally {
+                    $ErrorActionPreference = $previousErrorActionPreference
+                }
+            }
+            Wait-Job -Job $job -Timeout 10 | Out-Null
+            if ($job.State -notin @("Completed", "Failed", "Stopped")) {
+                Stop-Job -Job $job -ErrorAction SilentlyContinue
+            }
+            $exitCode = if ($timedOut) { 124 } else { 125 }
+        } elseif ($job.State -eq "Completed") {
+            $jobOutput = @(Receive-Job -Job $job -ErrorAction SilentlyContinue)
+            if ($jobOutput.Count -gt 0) { $exitCode = [int]$jobOutput[-1] }
+        } else {
+            $terminationReason = "command job ended in state $($job.State)"
+        }
+    } finally {
+        if ($null -ne $job) {
+            if ($job.State -notin @("Completed", "Failed", "Stopped")) { Stop-Job -Job $job -ErrorAction SilentlyContinue }
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+    }
+    $stdout = Protect-SmokeOutput $stdoutPath $OutputMaximumBytes
+    $stderr = Protect-SmokeOutput $stderrPath $OutputMaximumBytes
     return [pscustomobject][ordered]@{
         file = $FilePath
         arguments = @($ArgumentList)
         exitCode = $exitCode
+        timedOut = $timedOut
+        outputLimitExceeded = $outputLimitExceeded
+        terminationReason = $terminationReason
         stdout = $stdout.text
         stderr = $stderr.text
         stdoutEvidence = $stdout.evidence
@@ -408,9 +619,7 @@ function Invoke-InstalledCandidateSmoke {
         foreach ($name in $environmentNames) {
             [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
         }
-        if (Test-Path -LiteralPath $installDir) {
-            Remove-Item -LiteralPath $installDir -Recurse -Force
-        }
+        Remove-SmokeOwnedTree "install directory" $installDir
     }
 }
 
@@ -451,12 +660,16 @@ function Invoke-LocalCandidateSmoke {
     if ($EsbuildSHA256 -notmatch '^[0-9a-fA-F]{64}$') {
         Fail-Smoke "ExpectedEsbuildSHA256 must be a SHA-256 digest"
     }
-    $sourcePath = Resolve-SmokePath $SourcePath
-    $dependencySourcePath = Resolve-SmokePath $DependencySourcePath
-    $outputDirectory = Resolve-SmokePath $OutputDirectory
-    $workDirectory = Resolve-SmokePath $WorkDirectory
-    $installDirectory = Resolve-SmokePath $RequestedInstallDir
-    $reportPath = Resolve-SmokePath $RequestedReportPath
+    $roots = Assert-SmokeCandidateRoots -SourcePath $SourcePath `
+        -DependencySourcePath $DependencySourcePath -OutputDirectory $OutputDirectory `
+        -WorkDirectory $WorkDirectory -InstallDirectory $RequestedInstallDir `
+        -ReportPath $RequestedReportPath
+    $sourcePath = $roots.source
+    $dependencySourcePath = $roots.dependency
+    $outputDirectory = $roots.output
+    $workDirectory = $roots.work
+    $installDirectory = $roots.install
+    $reportPath = $roots.report
     $releaseToolPath = Resolve-SmokePath $ReleaseToolPath
     Assert-SmokeEmptyRoot "candidate output directory" $outputDirectory
     Assert-SmokeEmptyRoot "candidate work directory" $workDirectory
@@ -464,11 +677,6 @@ function Invoke-LocalCandidateSmoke {
     [void](Assert-SmokeRegularFile "GoReleaser" $releaseToolPath)
     if ($workDirectory.Length -gt 80) {
         Fail-Smoke "candidate work directory must be at most 80 characters so Windows native tools remain below path limits"
-    }
-    foreach ($pair in @(@($outputDirectory, $workDirectory), @($outputDirectory, $installDirectory), @($workDirectory, $installDirectory))) {
-        if ($pair[0].TrimEnd('\').Equals($pair[1].TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
-            Fail-Smoke "candidate output, work, and install directories must be distinct"
-        }
     }
     $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
         -Commit $SourceCommit -Repository $SourceRepository
@@ -496,6 +704,7 @@ function Invoke-LocalCandidateSmoke {
         error = ""
     }
     $failure = $null
+    $dependencyJunctionPath = $null
     try {
         $env:GOFLAGS = "-p=4"
         $env:GOMAXPROCS = "4"
@@ -529,6 +738,7 @@ function Invoke-LocalCandidateSmoke {
             Fail-Smoke "fresh candidate clone unexpectedly contains ui/node_modules"
         }
         [void](New-Item -ItemType Junction -Path $checkoutNodeModules -Target $dependencyNodeModules)
+        $dependencyJunctionPath = $checkoutNodeModules
         $esbuildPath = Join-Path $checkoutNodeModules "esbuild\lib\downloaded-@esbuild-win32-x64-esbuild.exe"
         $esbuildEvidence = Get-SmokeFileEvidence "esbuild" $esbuildPath
         if ($esbuildEvidence.sha256 -cne $EsbuildSHA256.ToLowerInvariant()) {
@@ -566,6 +776,9 @@ function Invoke-LocalCandidateSmoke {
             command = $releaseToolPath
             arguments = $releaseArguments
             exitCode = $releaseResult.exitCode
+            timedOut = $releaseResult.timedOut
+            outputLimitExceeded = $releaseResult.outputLimitExceeded
+            terminationReason = $releaseResult.terminationReason
             stdout = $releaseResult.stdoutEvidence
             stderr = $releaseResult.stderrEvidence
             goReleaser = $releaseToolEvidence
@@ -644,12 +857,8 @@ function Invoke-LocalCandidateSmoke {
             [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
         }
         try {
-            if (Test-Path -LiteralPath $installDirectory) {
-                Remove-Item -LiteralPath $installDirectory -Recurse -Force
-            }
-            if (Test-Path -LiteralPath $workDirectory) {
-                Remove-Item -LiteralPath $workDirectory -Recurse -Force
-            }
+            Remove-SmokeOwnedTree "install directory" $installDirectory
+            Remove-SmokeCandidateWork -WorkDirectory $workDirectory -DependencyJunctionPath $dependencyJunctionPath
             $report.cleanup = [ordered]@{
                 status = "PASS"
                 workDirectoryRemoved = -not (Test-Path -LiteralPath $workDirectory)
