@@ -877,6 +877,13 @@ func TestLocalAICandidateDependencyStageCopiesExactContainedClosure(t *testing.T
 	stageUI := filepath.Join(stageRepo, "ui")
 	sourceNodeModules := filepath.Join(sourceUI, "node_modules")
 	stageNodeModules := filepath.Join(stageUI, "node_modules")
+	linkPath := filepath.Join(sourceNodeModules, "workspace-link")
+	linkTarget := filepath.Join(sourceUI, "packages", "app")
+	linkCommand := exec.Command("cmd.exe", "/c", "mklink", "/J", linkPath, linkTarget)
+	if output, err := linkCommand.CombinedOutput(); err != nil {
+		t.Skipf("contained junction fixture unavailable: %v (%s)", err, output)
+	}
+	t.Cleanup(func() { _ = os.Remove(linkPath) })
 	stageEvidence := filepath.Join(fixtureRoot, "evidence")
 	if err := os.MkdirAll(stageEvidence, 0o700); err != nil {
 		t.Fatalf("create dependency evidence root: %v", err)
@@ -911,11 +918,17 @@ func TestLocalAICandidateDependencyStageCopiesExactContainedClosure(t *testing.T
 	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
 		t.Fatalf("decode dependency stage report: %v", err)
 	}
-	if report.SchemaVersion != "localai-windows-install-candidate-dependency-stage/v1" || report.Status != "PASS" || report.Phase != "stage" || report.PackageInstall != "NOT_RUN" || !report.Equality.SourceStageManifestEqual || report.SourceManifest.EntryCount != 4 || report.StageManifest.EntryCount != 4 || report.SourceManifest.ManifestSHA256 != report.StageManifest.ManifestSHA256 || report.Error != "" {
+	if report.SchemaVersion != "localai-windows-install-candidate-dependency-stage/v1" || report.Status != "PASS" || report.Phase != "stage" || report.PackageInstall != "NOT_RUN" || !report.Equality.SourceStageManifestEqual || report.SourceManifest.EntryCount != 5 || report.StageManifest.EntryCount != 5 || report.SourceManifest.JunctionCount != 1 || report.StageManifest.JunctionCount != 1 || report.SourceManifest.ManifestSHA256 != report.StageManifest.ManifestSHA256 || report.Error != "" {
 		t.Fatalf("dependency stage evidence = %#v, want exact no-install closure copy", report)
+	}
+	if copyEvidence, ok := report.Copy.(map[string]any); !ok || copyEvidence["rewrittenLinks"] != float64(1) {
+		t.Fatalf("dependency stage copy evidence = %#v, want one rewritten contained junction", report.Copy)
 	}
 	if _, err := os.Stat(filepath.Join(stageNodeModules, "dep", "index.js")); err != nil {
 		t.Fatalf("staged dependency content missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stageNodeModules, "workspace-link", "package.json")); err != nil {
+		t.Fatalf("staged contained junction target missing: %v", err)
 	}
 	indexPath := filepath.Join(stageNodeModules, "dep", "index.js")
 	originalIndex, err := os.ReadFile(indexPath)
@@ -993,6 +1006,70 @@ func TestLocalAICandidateDependencyStageCopiesExactContainedClosure(t *testing.T
 		t.Fatalf("post-build equality evidence = %#v, want source/stage/post-build equality", verifyReport)
 	}
 	t.Logf("LOCALAI-STAGE status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateDependencyStageRejectsExternalLink(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows dependency staging is only available on Windows")
+	}
+	fixtureRoot := t.TempDir()
+	sourceRepo := filepath.Join(fixtureRoot, "source-repo")
+	stageRepo := filepath.Join(fixtureRoot, "stage-repo")
+	for _, repository := range []string{sourceRepo, stageRepo} {
+		if err := os.MkdirAll(repository, 0o700); err != nil {
+			t.Fatalf("create fixture repository: %v", err)
+		}
+	}
+	localAICandidateWriteDependencyFixture(t, sourceRepo, true)
+	localAICandidateWriteDependencyFixture(t, stageRepo, false)
+	sourceUI := filepath.Join(sourceRepo, "ui")
+	externalTarget := filepath.Join(fixtureRoot, "external-target")
+	if err := os.MkdirAll(externalTarget, 0o700); err != nil {
+		t.Fatalf("create external link target: %v", err)
+	}
+	externalLink := filepath.Join(sourceUI, "node_modules", "external-link")
+	linkCommand := exec.Command("cmd.exe", "/c", "mklink", "/J", externalLink, externalTarget)
+	if output, err := linkCommand.CombinedOutput(); err != nil {
+		t.Skipf("external junction fixture unavailable: %v (%s)", err, output)
+	}
+	t.Cleanup(func() { _ = os.Remove(externalLink) })
+	lockPath := filepath.Join(sourceUI, "bun.lock")
+	lockSHA256, err := sha256File(lockPath)
+	if err != nil {
+		t.Fatalf("hash fixture lock: %v", err)
+	}
+	lockBlob := localAICandidateRunGit(t, sourceRepo, "rev-parse", "HEAD:ui/bun.lock")
+	evidenceRoot := filepath.Join(fixtureRoot, "evidence")
+	if err := os.MkdirAll(evidenceRoot, 0o700); err != nil {
+		t.Fatalf("create dependency evidence root: %v", err)
+	}
+	reportPath := filepath.Join(evidenceRoot, "stage-report.json")
+	command := localAICandidatePowerShellCommand(t,
+		"-InstallDir", evidenceRoot,
+		"-StageDependencyClosure",
+		"-DependencySourceRoot", filepath.Join(sourceUI, "node_modules"),
+		"-DependencyStageRoot", filepath.Join(stageRepo, "ui", "node_modules"),
+		"-DependencySourceManifestPath", filepath.Join(evidenceRoot, "source-manifest.jsonl"),
+		"-DependencyStageManifestPath", filepath.Join(evidenceRoot, "stage-manifest.jsonl"),
+		"-DependencyReportPath", reportPath,
+		"-DependencyExpectedLockSHA256", lockSHA256,
+		"-DependencyExpectedLockBlob", lockBlob,
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("external dependency junction unexpectedly passed\n%s", output)
+	}
+	var report localAICandidateDependencyReport
+	raw, readErr := os.ReadFile(reportPath)
+	if readErr != nil {
+		t.Fatalf("read external-link failure report: %v\n%s", readErr, output)
+	}
+	if decodeErr := decodeLocalAICandidateJSON(raw, &report); decodeErr != nil {
+		t.Fatalf("decode external-link failure report: %v", decodeErr)
+	}
+	if report.Status != "FAIL" || !strings.Contains(report.Error, "outside the contained root") {
+		t.Fatalf("external-link failure evidence = %#v, want containment rejection", report)
+	}
+	t.Logf("LOCALAI-STAGE-EXTERNAL-LINK status=PASS evidence=%s", raw)
 }
 func TestLocalAICandidateDependencyStageRejectsMissingRequiredPackage(t *testing.T) {
 	if runtime.GOOS != "windows" {

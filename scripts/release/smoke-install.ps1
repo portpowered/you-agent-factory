@@ -455,7 +455,9 @@ function Get-SmokeDependencyLinkTarget {
     )
 
     $targetProperty = $Item.PSObject.Properties["Target"]
-    $targets = if ($null -eq $targetProperty) { @() } else { @($targetProperty.Value) }
+    $targets = @(
+        if ($null -eq $targetProperty) { @() } else { @($targetProperty.Value) }
+    )
     if ($targets.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$targets[0])) {
         Fail-Smoke "dependency link has ambiguous or missing target: $($Item.FullName)"
     }
@@ -860,7 +862,7 @@ function Copy-SmokeDependencyTree {
     }
     $robocopyArguments = @(
         $sourcePath, $stagePath,
-        "/E", "/SL", "/COPY:DAT", "/DCOPY:DAT", "/R:0", "/W:0",
+        "/E", "/XJ", "/COPY:DAT", "/DCOPY:DAT", "/R:0", "/W:0",
         "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
     )
     $robocopyOutput = @(& robocopy.exe @robocopyArguments 2>&1)
@@ -977,7 +979,7 @@ function Invoke-SmokeDependencyStage {
         }
         $report.status = "PASS"
     } catch {
-        $report.error = $_.Exception.Message
+        $report.error = "line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
     }
     Write-SmokeJSONEvidence -RequestedPath $reportPath -Evidence $report | Out-Null
     if ($report.status -ne "PASS") {
@@ -1047,7 +1049,7 @@ function Invoke-SmokeDependencyVerification {
         }
         $report.status = "PASS"
     } catch {
-        $report.error = $_.Exception.Message
+        $report.error = "line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
     }
     Write-SmokeJSONEvidence -RequestedPath $reportPath -Evidence $report | Out-Null
     if ($report.status -ne "PASS") {
