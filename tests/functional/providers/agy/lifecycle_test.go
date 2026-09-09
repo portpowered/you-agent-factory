@@ -2,6 +2,7 @@ package agy
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -63,8 +64,12 @@ func TestAgySharedProcessFailureThenSuccessRecovers(t *testing.T) {
 // Work, Factory Event, Response Event or HTTP-server state.
 func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 	t.Parallel()
+	trace := newAgySharedLifecycleTrace()
+	t.Cleanup(func() { trace.log(t) })
 	fixture := agySharedProcess(t)
+	trace.record("host-start-request", "", "", "shared role host")
 	host := fixture.startRoleHost(t)
+	trace.record("host-ready", "", "", fmt.Sprintf("baseURL=%q homeDir=%q", host.baseURL, host.homeDir))
 	firstRoute := fixture.routes["concurrency-a"]
 	secondRoute := fixture.routes["concurrency-b"]
 	release := make(chan struct{})
@@ -73,6 +78,7 @@ func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 	secondRoute.setRelease(release)
 	t.Cleanup(func() {
 		if !released {
+			trace.record("release-forced", "", "", "test cleanup closed the shared release gate")
 			close(release)
 		}
 		firstRoute.setRelease(nil)
@@ -82,38 +88,86 @@ func TestAgySharedProcessConcurrentRoutesRemainIsolated(t *testing.T) {
 	firstCallStart := firstRoute.callCount()
 	secondCallStart := secondRoute.callCount()
 	openRoute := func(route *agySharedCommandRoute) (string, *support.FactoryResponseEventStream) {
+		if err := route.bindLifecycleTrace("", trace); err != nil {
+			t.Fatalf("bind concurrent AGY lifecycle trace before session open: %v", err)
+		}
+		trace.record("route-trace-bound", route.selector, "", "diagnostic binding installed before public session open")
+		t.Cleanup(func() { route.unbindLifecycleTrace(trace) })
+		trace.record(
+			"session-open-request",
+			route.selector,
+			"",
+			fmt.Sprintf("workDir=%q", route.workDir),
+		)
 		opened := support.OpenFactorySessionAt(t, host.baseURL, route.workDir)
 		sessionID := opened.Session.Id
+		trace.record("session-opened", route.selector, sessionID, "public Factory Session created")
 		if err := fixture.runner.registerScope(sessionID, route); err != nil {
 			t.Fatalf("register concurrent AGY route: %v", err)
 		}
+		if err := fixture.runner.registerScopeTrace(sessionID, trace); err != nil {
+			t.Fatalf("register concurrent AGY lifecycle trace: %v", err)
+		}
+		trace.record("route-bound", route.selector, sessionID, fmt.Sprintf("workDir=%q", route.workDir))
 		stream := support.OpenFactoryResponseEventStreamAt(
 			t, support.SessionResponseEventsURL(host.baseURL, sessionID),
 		)
+		trace.record("stream-ready", route.selector, sessionID, "Response Event stream opened")
 		t.Cleanup(func() {
+			trace.record("stream-close-request", route.selector, sessionID, "scenario cleanup")
 			stream.Close()
+			trace.record("stream-closed", route.selector, sessionID, "Response Event stream closed")
 			fixture.runner.unregisterScope(sessionID, route)
+			trace.record("route-unbound", route.selector, sessionID, "provider route unregistered")
 			support.CloseFactorySessionAt(t, host.baseURL, sessionID)
+			trace.record("session-closed", route.selector, sessionID, "public Factory Session closed")
 		})
 		return sessionID, stream
 	}
 	firstSessionID, firstStream := openRoute(firstRoute)
 	secondSessionID, secondStream := openRoute(secondRoute)
+	trace.record(
+		"rendezvous-wait",
+		"",
+		fmt.Sprintf("%s,%s", firstSessionID, secondSessionID),
+		fmt.Sprintf("aggregateRequestTarget=%d", runnerCallStart+2),
+	)
 	fixture.runner.waitForCallCount(t, runnerCallStart+2)
-	if got := fixture.runner.activeCallCount(); got != 2 {
-		t.Fatalf("active AGY calls while routes are held = %d, want 2", got)
+	active := fixture.runner.activeCallCount()
+	maxActive := fixture.runner.maxActiveCallCount()
+	traceActive, traceMaxActive := trace.activeCounts()
+	trace.record(
+		"rendezvous-observed",
+		"",
+		fmt.Sprintf("%s,%s", firstSessionID, secondSessionID),
+		fmt.Sprintf(
+			"aggregateRequests=%d aggregateActive=%d aggregateMaxActive=%d scenarioActive=%d scenarioMaxActive=%d routeCalls=%d,%d",
+			fixture.runner.callCount(),
+			active,
+			maxActive,
+			traceActive,
+			traceMaxActive,
+			firstRoute.callCount()-firstCallStart,
+			secondRoute.callCount()-secondCallStart,
+		),
+	)
+	if active != 2 {
+		t.Fatalf("active AGY calls while routes are held = %d, want 2", active)
 	}
-	if got := fixture.runner.maxActiveCallCount(); got < 2 {
-		t.Fatalf("maximum active AGY calls = %d, want overlap of both routes", got)
+	if maxActive < 2 {
+		t.Fatalf("maximum active AGY calls = %d, want overlap of both routes", maxActive)
 	}
 	close(release)
 	released = true
+	trace.record("released", "", fmt.Sprintf("%s,%s", firstSessionID, secondSessionID), "shared release gate closed")
 	firstSession, firstListed, firstEvents, firstResponseEvents := fixture.observeHostedSession(
 		t, host.baseURL, firstSessionID, firstStream,
 	)
+	trace.record("terminal-observed", firstRoute.selector, firstSessionID, "session/work/events/response events collected")
 	secondSession, secondListed, secondEvents, secondResponseEvents := fixture.observeHostedSession(
 		t, host.baseURL, secondSessionID, secondStream,
 	)
+	trace.record("terminal-observed", secondRoute.selector, secondSessionID, "session/work/events/response events collected")
 
 	assertAgyConcurrentInvocation(t, firstSession, firstListed, firstEvents, firstResponseEvents, firstRoute, firstCallStart, firstSessionID, "shared concurrency A COMPLETE", "shared concurrency B COMPLETE")
 	assertAgyConcurrentInvocation(t, secondSession, secondListed, secondEvents, secondResponseEvents, secondRoute, secondCallStart, secondSessionID, "shared concurrency B COMPLETE", "shared concurrency A COMPLETE")

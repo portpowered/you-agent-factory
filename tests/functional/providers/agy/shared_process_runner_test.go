@@ -19,6 +19,152 @@ type agySharedCommandOutcome struct {
 	release <-chan struct{}
 }
 
+type agySharedLifecycleEvent struct {
+	elapsed time.Duration
+	stage   string
+	route   string
+	scope   string
+	detail  string
+}
+
+type agySharedLifecycleTraceBinding struct {
+	trace   *agySharedLifecycleTrace
+	scopeID string
+}
+
+// agySharedLifecycleTrace records only the route and Factory Session identities
+// attached to one diagnostic scenario. It is deliberately observational: the
+// existing aggregate rendezvous and public assertions remain unchanged while
+// the trace distinguishes this scenario's provider calls from package peers.
+type agySharedLifecycleTrace struct {
+	mu          sync.Mutex
+	started     time.Time
+	events      []agySharedLifecycleEvent
+	active      int
+	maxActive   int
+	bothEntered bool
+}
+
+func newAgySharedLifecycleTrace() *agySharedLifecycleTrace {
+	return &agySharedLifecycleTrace{started: time.Now()}
+}
+
+func (trace *agySharedLifecycleTrace) record(
+	stage, route, scope, detail string,
+) {
+	if trace == nil {
+		return
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	trace.events = append(trace.events, agySharedLifecycleEvent{
+		elapsed: time.Since(trace.started),
+		stage:   stage,
+		route:   route,
+		scope:   scope,
+		detail:  detail,
+	})
+}
+
+func (trace *agySharedLifecycleTrace) providerEntered(
+	route, scope, requestScope string,
+) {
+	if trace == nil {
+		return
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	trace.active++
+	if trace.active > trace.maxActive {
+		trace.maxActive = trace.active
+	}
+	trace.events = append(trace.events, agySharedLifecycleEvent{
+		elapsed: time.Since(trace.started),
+		stage:   "provider-entered",
+		route:   route,
+		scope:   scope,
+		detail: fmt.Sprintf(
+			"active=%d maxActive=%d requestScope=%q",
+			trace.active,
+			trace.maxActive,
+			requestScope,
+		),
+	})
+	if trace.active == 2 && !trace.bothEntered {
+		trace.bothEntered = true
+		trace.events = append(trace.events, agySharedLifecycleEvent{
+			elapsed: time.Since(trace.started),
+			stage:   "both-entered",
+			route:   route,
+			scope:   scope,
+			detail: fmt.Sprintf(
+				"active=%d maxActive=%d requestScope=%q",
+				trace.active,
+				trace.maxActive,
+				requestScope,
+			),
+		})
+	}
+}
+
+func (trace *agySharedLifecycleTrace) providerReturned(
+	route, scope, requestScope string,
+	result platformprocess.CommandResult,
+	err error,
+) {
+	if trace == nil {
+		return
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	if trace.active > 0 {
+		trace.active--
+	}
+	outcome := fmt.Sprintf("active=%d exitCode=%d", trace.active, result.ExitCode)
+	if err != nil {
+		outcome = fmt.Sprintf("active=%d errorType=%T", trace.active, err)
+	}
+	outcome = fmt.Sprintf("%s requestScope=%q", outcome, requestScope)
+	trace.events = append(trace.events, agySharedLifecycleEvent{
+		elapsed: time.Since(trace.started),
+		stage:   "provider-returned",
+		route:   route,
+		scope:   scope,
+		detail:  outcome,
+	})
+}
+
+func (trace *agySharedLifecycleTrace) activeCounts() (int, int) {
+	if trace == nil {
+		return 0, 0
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	return trace.active, trace.maxActive
+}
+
+func (trace *agySharedLifecycleTrace) log(t testing.TB) {
+	t.Helper()
+	if trace == nil {
+		return
+	}
+	trace.mu.Lock()
+	events := append([]agySharedLifecycleEvent(nil), trace.events...)
+	active := trace.active
+	maxActive := trace.maxActive
+	trace.mu.Unlock()
+	t.Logf(
+		"AGY lifecycle trace: events=%d traceActive=%d traceMaxActive=%d",
+		len(events), active, maxActive,
+	)
+	for index, event := range events {
+		t.Logf(
+			"AGY lifecycle stage[%d]=%s elapsed=%s route=%q session=%q %s",
+			index, event.stage, event.elapsed, event.route, event.scope, event.detail,
+		)
+	}
+}
+
 // agySharedCommandRoute is immutable after the package-owned command router
 // freezes. Its request ledger is invocation-observable and remains separate
 // from the other routes' ledgers.
@@ -34,6 +180,7 @@ type agySharedCommandRoute struct {
 	mu            sync.Mutex
 	requests      []platformprocess.CommandRequest
 	outcomeCursor int
+	traceBinding  agySharedLifecycleTraceBinding
 }
 
 func (route *agySharedCommandRoute) record(
@@ -45,7 +192,16 @@ func (route *agySharedCommandRoute) record(
 	route.outcomeCursor++
 	route.requests = append(route.requests, cloneAgyCommandRequest(request))
 	outcome := route.outcome(index)
+	binding := route.traceBinding
 	route.mu.Unlock()
+	if binding.trace != nil {
+		binding.trace.record(
+			"route-record-entered",
+			route.selector,
+			binding.scopeID,
+			fmt.Sprintf("requestScope=%q", request.ExecutionScopeID),
+		)
+	}
 
 	if outcome.release != nil {
 		select {
@@ -96,6 +252,51 @@ func (route *agySharedCommandRoute) setRelease(release <-chan struct{}) {
 	}
 }
 
+func (route *agySharedCommandRoute) bindLifecycleTrace(
+	scopeID string,
+	trace *agySharedLifecycleTrace,
+) error {
+	if trace == nil {
+		return fmt.Errorf("AGY lifecycle trace is required")
+	}
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	if route.traceBinding.trace != nil {
+		return fmt.Errorf("AGY route %q already has a lifecycle trace", route.selector)
+	}
+	route.traceBinding = agySharedLifecycleTraceBinding{trace: trace, scopeID: scopeID}
+	return nil
+}
+
+func (route *agySharedCommandRoute) setLifecycleTraceScope(
+	scopeID string,
+	trace *agySharedLifecycleTrace,
+) error {
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	if route.traceBinding.trace != trace {
+		return fmt.Errorf("AGY route %q has a different lifecycle trace", route.selector)
+	}
+	route.traceBinding.scopeID = scopeID
+	return nil
+}
+
+func (route *agySharedCommandRoute) unbindLifecycleTrace(
+	trace *agySharedLifecycleTrace,
+) {
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	if route.traceBinding.trace == trace {
+		route.traceBinding = agySharedLifecycleTraceBinding{}
+	}
+}
+
+func (route *agySharedCommandRoute) lifecycleTraceBinding() agySharedLifecycleTraceBinding {
+	route.mu.Lock()
+	defer route.mu.Unlock()
+	return route.traceBinding
+}
+
 // agySharedCommandRunner selects solely from the normalized provider WorkDir.
 // Registration is closed before root.BuildProcess, so an invocation cannot
 // mutate routing or select a sibling through mutable session data.
@@ -134,11 +335,37 @@ func (runner *agySharedCommandRunner) registerScope(scopeID string, route *agySh
 	return nil
 }
 
+func (runner *agySharedCommandRunner) registerScopeTrace(
+	scopeID string,
+	trace *agySharedLifecycleTrace,
+) error {
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeID == "" || trace == nil {
+		return fmt.Errorf("AGY execution scope and lifecycle trace are required")
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if _, exists := runner.scopeRoutes[scopeID]; !exists {
+		return fmt.Errorf("AGY execution scope %q is not registered", scopeID)
+	}
+	route := runner.scopeRoutes[scopeID]
+	binding := route.lifecycleTraceBinding()
+	if binding.trace == nil {
+		return route.bindLifecycleTrace(scopeID, trace)
+	}
+	if binding.trace != trace {
+		return fmt.Errorf("AGY route %q already has a different lifecycle trace", route.selector)
+	}
+	return route.setLifecycleTraceScope(scopeID, trace)
+}
+
 func (runner *agySharedCommandRunner) unregisterScope(scopeID string, route *agySharedCommandRoute) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	if current := runner.scopeRoutes[strings.TrimSpace(scopeID)]; current == route {
-		delete(runner.scopeRoutes, strings.TrimSpace(scopeID))
+		scopeID = strings.TrimSpace(scopeID)
+		delete(runner.scopeRoutes, scopeID)
+		route.unbindLifecycleTrace(route.lifecycleTraceBinding().trace)
 	}
 }
 
@@ -230,7 +457,8 @@ func (runner *agySharedCommandRunner) Run(
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, fmt.Errorf("AGY route table is not frozen")
 	}
-	route := runner.scopeRoutes[strings.TrimSpace(request.ExecutionScopeID)]
+	scopeID := strings.TrimSpace(request.ExecutionScopeID)
+	route := runner.scopeRoutes[scopeID]
 	if route == nil {
 		route = runner.routes[normalized]
 	}
@@ -247,12 +475,18 @@ func (runner *agySharedCommandRunner) Run(
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, err
 	}
+	binding := route.lifecycleTraceBinding()
+	trace := binding.trace
+	traceScopeID := binding.scopeID
 	runner.requests = append(runner.requests, cloneAgyCommandRequest(request))
 	runner.active++
 	if runner.active > runner.maxActive {
 		runner.maxActive = runner.active
 	}
 	callSignal := runner.callSignal
+	if trace != nil {
+		trace.providerEntered(route.selector, traceScopeID, request.ExecutionScopeID)
+	}
 	runner.mu.Unlock()
 
 	select {
@@ -264,7 +498,11 @@ func (runner *agySharedCommandRunner) Run(
 		runner.active--
 		runner.mu.Unlock()
 	}()
-	return route.record(ctx, request)
+	result, runErr := route.record(ctx, request)
+	if trace != nil {
+		trace.providerReturned(route.selector, traceScopeID, request.ExecutionScopeID, result, runErr)
+	}
+	return result, runErr
 }
 
 func (runner *agySharedCommandRunner) activeCallCount() int {
