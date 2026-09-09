@@ -32,15 +32,33 @@ param(
     [switch]$PrepareReleaseCheckout,
     [string]$ReleaseCheckoutPath,
     [string]$ReleaseCheckoutReportPath,
+    [switch]$ValidateShortRoot,
+    [string]$ShortRootParent,
+    [string]$ShortRootPath,
+    [string]$ShortRootReportPath,
+    [int]$ShortRootMaximumPathLength = 220,
+    [switch]$NativeToolFixture,
+    [string]$NativeToolLongPath,
+    [string]$NativeToolShortPath,
+    [string]$NativeToolRoot,
+    [string]$NativeToolParent,
+    [string]$NativeToolReportPath,
+    [int]$NativeToolTimeoutMilliseconds = 10000,
     [int]$ObserverTimeoutSeconds = 20
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$expectedCandidateCycle = "070"
+$expectedCandidateCycle = "076"
 $expectedCandidateGoVersion = "go1.26.8"
 $expectedObserverQueryMode = "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
+$expectedNativeToolMaximumPathLength = 220
+$expectedNativeToolLongPathLength = 280
+$expectedNativeToolBytes = [int64]11386368
+$expectedNativeToolSHA256 = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
+$expectedNativeToolVersion = "0.27.7"
+$expectedNativeToolRelativePath = "ui/node_modules/esbuild/lib/downloaded-@esbuild-win32-x64-esbuild.exe"
 $expectedProcessNetworkGapMilliseconds = 2000
 $expectedDiskGapMilliseconds = 2000
 $expectedDescendantMaximum = 36
@@ -395,6 +413,96 @@ function Assert-SmokeDisposableRoot {
     if ($entries.Count -ne 0) {
         Fail-Smoke "declared root '$Name' is not empty: $((($entries | ForEach-Object Name) -join ', '))"
     }
+}
+
+function Assert-SmokeContainedShortRoot {
+    param(
+        [string]$Name,
+        [string]$Path,
+        [string]$ParentPath,
+        [int]$MaximumPathLength = $expectedNativeToolMaximumPathLength,
+        [switch]$RequireEmpty
+    )
+
+    $rootPath = Resolve-SmokeAbsolutePath $Path
+    $parentPath = Resolve-SmokeAbsolutePath $ParentPath
+    if ($MaximumPathLength -le 0 -or $rootPath.Length -gt $MaximumPathLength) {
+        Fail-Smoke "$Name path length = $($rootPath.Length), want at most $MaximumPathLength"
+    }
+    $parentItem = Get-Item -LiteralPath $parentPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $parentItem -or -not $parentItem.PSIsContainer -or (($parentItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name parent is missing, not a directory, or is a reparse point: $parentPath"
+    }
+    $relative = Get-SmokeRelativePath -RootPath $parentPath -CandidatePath $rootPath -Role "$Name root"
+    if ($relative -eq ".") {
+        Fail-Smoke "$Name root must be below its declared parent: $rootPath"
+    }
+    $item = Get-Item -LiteralPath $rootPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [ordered]@{
+            status = "PASS"
+            path = $rootPath
+            parent = $parentPath
+            relativePath = $relative
+            pathLength = $rootPath.Length
+            present = $false
+            empty = $true
+        }
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Fail-Smoke "$Name root is a reparse point: $rootPath"
+    }
+    if (-not $item.PSIsContainer) {
+        Fail-Smoke "$Name root is a file: $rootPath"
+    }
+    $entries = @(Get-ChildItem -LiteralPath $rootPath -Force -ErrorAction Stop)
+    if ($RequireEmpty -and $entries.Count -ne 0) {
+        Fail-Smoke "$Name root is not empty: $((($entries | ForEach-Object Name) -join ', '))"
+    }
+    return [ordered]@{
+        status = "PASS"
+        path = $rootPath
+        parent = $parentPath
+        relativePath = $relative
+        pathLength = $rootPath.Length
+        present = $true
+        empty = ($entries.Count -eq 0)
+    }
+}
+
+function Invoke-SmokeShortRootValidation {
+    param(
+        [string]$RequestedParentPath,
+        [string]$RequestedRootPath,
+        [string]$RequestedReportPath,
+        [int]$MaximumPathLength
+    )
+
+    $reportPath = Resolve-SmokeAbsolutePath $RequestedReportPath
+    $report = [ordered]@{
+        schemaVersion = "localai-windows-install-candidate-short-root/v1"
+        status = "FAIL"
+        cycle = $expectedCandidateCycle
+        property = "contained-collision-free-short-root"
+        root = $null
+        cleanup = [ordered]@{ status = "PASS"; remainingTaskPaths = @(); errors = @() }
+        error = ""
+    }
+    try {
+        $report.root = Assert-SmokeContainedShortRoot -Name "short" -Path $RequestedRootPath -ParentPath $RequestedParentPath -MaximumPathLength $MaximumPathLength -RequireEmpty
+        $report.status = "PASS"
+    } catch {
+        $report.error = "line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
+    }
+    $reportParent = Split-Path -Parent $reportPath
+    if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) {
+        Fail-Smoke "short-root report parent does not exist: $reportParent"
+    }
+    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 12), [System.Text.UTF8Encoding]::new($false))
+    if ($report.status -ne "PASS") {
+        throw "short-root validation failed; report=$reportPath"
+    }
+    Write-Output "short-root validation passed; report=$reportPath"
 }
 
 function Assert-SmokeNewEvidenceFile {
@@ -1438,6 +1546,151 @@ function New-SmokeProcessStartInfo {
     return $startInfo
 }
 
+function Invoke-SmokeNativeTool {
+    param(
+        [string]$Path,
+        [string]$WorkingDirectory,
+        [int]$TimeoutMilliseconds
+    )
+
+    $result = [ordered]@{
+        status = "FAIL"
+        path = $Path
+        pathLength = $Path.Length
+        exitCode = $null
+        stdout = ""
+        stderr = ""
+        error = ""
+    }
+    $process = $null
+    try {
+        $startInfo = New-SmokeProcessStartInfo -FilePath $Path -Arguments @("--version") -WorkingDirectory $WorkingDirectory
+        $process = [System.Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) {
+            throw "native tool process did not start"
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
+            throw "native tool exceeded ${TimeoutMilliseconds}ms"
+        }
+        $process.WaitForExit()
+        $result.exitCode = [int64]$process.ExitCode
+        $result.stdout = $stdoutTask.GetAwaiter().GetResult()
+        $result.stderr = $stderrTask.GetAwaiter().GetResult()
+        $result.status = "PASS"
+    } catch {
+        $result.error = $_.Exception.Message
+    } finally {
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
+    }
+    return $result
+}
+
+function Get-SmokeNativeToolFileEvidence {
+    param(
+        [string]$Path,
+        [string]$Role,
+        [int64]$ExpectedBytes,
+        [string]$ExpectedSHA256
+    )
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item -or $item.PSIsContainer) {
+        Fail-Smoke "$Role is missing or not a regular file: $Path"
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Fail-Smoke "$Role is a reparse point: $Path"
+    }
+    if ([int64]$item.Length -ne $ExpectedBytes) {
+        Fail-Smoke "$Role bytes = $($item.Length), want $ExpectedBytes"
+    }
+    $sha256 = Get-SmokeSHA256 -Path $Path
+    if ($sha256 -cne $ExpectedSHA256) {
+        Fail-Smoke "$Role SHA-256 = $sha256, want $ExpectedSHA256"
+    }
+    return [ordered]@{
+        path = [System.IO.Path]::GetFullPath($Path)
+        pathLength = ([System.IO.Path]::GetFullPath($Path)).Length
+        bytes = [int64]$item.Length
+        sha256 = $sha256
+    }
+}
+
+function Invoke-SmokeNativeToolFixture {
+    param(
+        [string]$RequestedLongPath,
+        [string]$RequestedShortPath,
+        [string]$RequestedRootPath,
+        [string]$RequestedParentPath,
+        [string]$RequestedReportPath,
+        [int]$TimeoutMilliseconds
+    )
+
+    $reportPath = Resolve-SmokeAbsolutePath $RequestedReportPath
+    $report = [ordered]@{
+        schemaVersion = "localai-windows-install-candidate-native-tool/v1"
+        status = "FAIL"
+        cycle = $expectedCandidateCycle
+        property = "exact-long-path-failure-and-short-clone-native-tool-readiness"
+        limits = [ordered]@{
+            maximumShortPathLength = $expectedNativeToolMaximumPathLength
+            characterizedLongPathLength = $expectedNativeToolLongPathLength
+        }
+        shortRoot = $null
+        longPath = $null
+        shortPath = $null
+        cleanup = [ordered]@{ status = "PASS"; remainingTaskPaths = @(); errors = @() }
+        error = ""
+    }
+    try {
+        if ($TimeoutMilliseconds -le 0) {
+            Fail-Smoke "native tool timeout must be positive"
+        }
+        $shortRootEvidence = Assert-SmokeContainedShortRoot -Name "native short" -Path $RequestedRootPath -ParentPath $RequestedParentPath -MaximumPathLength $expectedNativeToolMaximumPathLength
+        $shortRootPath = $shortRootEvidence.path
+        $longPath = [System.IO.Path]::GetFullPath($RequestedLongPath)
+        $shortPath = [System.IO.Path]::GetFullPath($RequestedShortPath)
+        if ($longPath.Length -ne $expectedNativeToolLongPathLength) {
+            Fail-Smoke "native long path length = $($longPath.Length), want $expectedNativeToolLongPathLength"
+        }
+        if ($shortPath.Length -gt $expectedNativeToolMaximumPathLength) {
+            Fail-Smoke "native short path length = $($shortPath.Length), want at most $expectedNativeToolMaximumPathLength"
+        }
+        $shortRelativePath = Get-SmokeRelativePath -RootPath $shortRootPath -CandidatePath $shortPath -Role "native short tool"
+        if ($shortRelativePath -cne $expectedNativeToolRelativePath) {
+            Fail-Smoke "native short tool relative path = $shortRelativePath, want $expectedNativeToolRelativePath"
+        }
+        $report.shortRoot = $shortRootEvidence
+        $report.longPath = Get-SmokeNativeToolFileEvidence -Path $longPath -Role "native long tool" -ExpectedBytes $expectedNativeToolBytes -ExpectedSHA256 $expectedNativeToolSHA256
+        $report.longPath.launch = Invoke-SmokeNativeTool -Path $longPath -WorkingDirectory (Split-Path -Parent $longPath) -TimeoutMilliseconds $TimeoutMilliseconds
+        if ($report.longPath.launch.status -eq "PASS") {
+            Fail-Smoke "native long tool unexpectedly launched; the characterized 280-character failure is required"
+        }
+        $report.shortPath = Get-SmokeNativeToolFileEvidence -Path $shortPath -Role "native short tool" -ExpectedBytes $expectedNativeToolBytes -ExpectedSHA256 $expectedNativeToolSHA256
+        $report.shortPath.launch = Invoke-SmokeNativeTool -Path $shortPath -WorkingDirectory $shortRootPath -TimeoutMilliseconds $TimeoutMilliseconds
+        if ($report.shortPath.launch.status -ne "PASS" -or $report.shortPath.launch.exitCode -ne 0 -or ([string]$report.shortPath.launch.stdout).Trim() -cne $expectedNativeToolVersion) {
+            Fail-Smoke "native short tool did not report $expectedNativeToolVersion with exit zero"
+        }
+        $report.status = "PASS"
+    } catch {
+        $report.error = "line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
+    }
+    $reportParent = Split-Path -Parent $reportPath
+    if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) {
+        Fail-Smoke "native tool report parent does not exist: $reportParent"
+    }
+    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 16), [System.Text.UTF8Encoding]::new($false))
+    if ($report.status -ne "PASS") {
+        throw "native tool fixture failed; report=$reportPath"
+    }
+    Write-Output "native tool fixture passed; report=$reportPath"
+}
+
 function New-SmokeLoopbackPort {
     $reservation = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     try {
@@ -1854,6 +2107,9 @@ function Invoke-CandidateSmoke {
         }
         if ([int]$manifest.attempts.cycle070BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle070BuildUsed -ne 1) {
             Fail-Smoke "candidate attempts must record cycle070BuildMaximum=1 and cycle070BuildUsed=1"
+        }
+        if ([int]$manifest.attempts.cycle076BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle076BuildUsed -ne 1) {
+            Fail-Smoke "candidate attempts must record cycle076BuildMaximum=1 and cycle076BuildUsed=1"
         }
         $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
         $installerArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-installer" })
@@ -3082,6 +3338,16 @@ if ($StageDependencyClosure) {
 
 if ($VerifyDependencyClosure) {
     Invoke-SmokeDependencyVerification -RequestedSourceRoot $DependencySourceRoot -RequestedStageRoot $DependencyStageRoot -RequestedExpectedManifestPath $DependencyExpectedManifestPath -RequestedPostBuildManifestPath $DependencyPostBuildManifestPath -RequestedSourceAfterManifestPath $DependencySourceAfterManifestPath -RequestedReportPath $DependencyReportPath -ExpectedLockSHA256 $DependencyExpectedLockSHA256 -ExpectedLockBlob $DependencyExpectedLockBlob
+    return
+}
+
+if ($ValidateShortRoot) {
+    Invoke-SmokeShortRootValidation -RequestedParentPath $ShortRootParent -RequestedRootPath $ShortRootPath -RequestedReportPath $ShortRootReportPath -MaximumPathLength $ShortRootMaximumPathLength
+    return
+}
+
+if ($NativeToolFixture) {
+    Invoke-SmokeNativeToolFixture -RequestedLongPath $NativeToolLongPath -RequestedShortPath $NativeToolShortPath -RequestedRootPath $NativeToolRoot -RequestedParentPath $NativeToolParent -RequestedReportPath $NativeToolReportPath -TimeoutMilliseconds $NativeToolTimeoutMilliseconds
     return
 }
 

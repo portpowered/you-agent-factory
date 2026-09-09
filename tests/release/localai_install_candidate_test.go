@@ -28,10 +28,12 @@ import (
 
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGoVersion, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS, localAICandidateObserverQueryMode                                                                                                                                                                                             = "070", "go1.26.8", "-p=4", "4", "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
+	localAICandidateCycle, localAICandidateGoVersion, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS, localAICandidateObserverQueryMode                                                                                                                                                                                             = "076", "go1.26.8", "-p=4", "4", "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
 	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "059474b2c00915865306a33ca5e3d02b618bb6f0", "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
 	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
+	localAICandidateNativeToolVersion, localAICandidateNativeToolSHA256                                                                                                                                                                                                                                                                  = "0.27.7", "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
 	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 2000
+	localAICandidateNativeToolBytes                                                                                                                                                                                                                                                                                                int64 = 11386368
 )
 
 var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -92,6 +94,8 @@ type localAICandidateAttempts struct {
 	Cycle068BuildUsed    *int64   `json:"cycle068BuildUsed"`
 	Cycle070BuildMaximum *int64   `json:"cycle070BuildMaximum"`
 	Cycle070BuildUsed    *int64   `json:"cycle070BuildUsed"`
+	Cycle076BuildMaximum *int64   `json:"cycle076BuildMaximum"`
+	Cycle076BuildUsed    *int64   `json:"cycle076BuildUsed"`
 }
 type localAICandidateArtifactEvidence struct {
 	Role   string `json:"role"`
@@ -239,6 +243,38 @@ type localAICandidateObserverReport struct {
 	Observation     localAICandidateObserverEvidence         `json:"observation"`
 	Cleanup         localAICandidateObserverCleanup          `json:"cleanup"`
 	ReleaseCheckout *localAICandidateReleaseCheckoutEvidence `json:"releaseCheckout"`
+}
+type localAICandidateNativeToolLaunch struct {
+	Status   string `json:"status"`
+	Path     string `json:"path"`
+	ExitCode *int64 `json:"exitCode"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	Error    string `json:"error"`
+}
+type localAICandidateNativeToolFile struct {
+	Path       string                           `json:"path"`
+	PathLength int                              `json:"pathLength"`
+	Bytes      int64                            `json:"bytes"`
+	SHA256     string                           `json:"sha256"`
+	Launch     localAICandidateNativeToolLaunch `json:"launch"`
+}
+type localAICandidateNativeToolReport struct {
+	SchemaVersion string `json:"schemaVersion"`
+	Status        string `json:"status"`
+	Cycle         string `json:"cycle"`
+	Property      string `json:"property"`
+	ShortRoot     struct {
+		Status     string `json:"status"`
+		Path       string `json:"path"`
+		Parent     string `json:"parent"`
+		PathLength int    `json:"pathLength"`
+		Present    bool   `json:"present"`
+		Empty      bool   `json:"empty"`
+	} `json:"shortRoot"`
+	LongPath  localAICandidateNativeToolFile  `json:"longPath"`
+	ShortPath localAICandidateNativeToolFile  `json:"shortPath"`
+	Cleanup   localAICandidateObserverCleanup `json:"cleanup"`
 }
 
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
@@ -471,7 +507,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			}
 		})
 	}
-	for _, cycle := range []string{"030", "040", "042", "045", "048", "050", "063", "067", "068"} {
+	for _, cycle := range []string{"030", "040", "042", "045", "048", "050", "063", "067", "068", "070", "074"} {
 		cycle := cycle
 		t.Run("historical cycle "+cycle, func(t *testing.T) {
 			fixture := newLocalAICandidateFixture(t)
@@ -670,6 +706,129 @@ func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T)
 	if err := validateLocalAICandidatePreconditions(fixture.taskPath, fixture.roots); err != nil {
 		t.Fatalf("validate empty roots: %v", err)
 	}
+}
+func TestLocalAICandidateShortRootValidation(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows short-root validation is only available on Windows")
+	}
+	parent := t.TempDir()
+	run := func(name, rootPath, wantError string) {
+		t.Run(name, func(t *testing.T) {
+			reportPath := filepath.Join(t.TempDir(), "short-root-report.json")
+			command := localAICandidatePowerShellCommand(t,
+				"-InstallDir", t.TempDir(),
+				"-ValidateShortRoot",
+				"-ShortRootParent", parent,
+				"-ShortRootPath", rootPath,
+				"-ShortRootReportPath", reportPath,
+				"-ShortRootMaximumPathLength", "220",
+			)
+			output, err := command.CombinedOutput()
+			raw, readErr := os.ReadFile(reportPath)
+			if readErr != nil {
+				t.Fatalf("read short-root report: %v\n%s", readErr, output)
+			}
+			var report struct {
+				SchemaVersion string `json:"schemaVersion"`
+				Status        string `json:"status"`
+				Cycle         string `json:"cycle"`
+				Property      string `json:"property"`
+				Root          struct {
+					Status       string `json:"status"`
+					Path         string `json:"path"`
+					Parent       string `json:"parent"`
+					RelativePath string `json:"relativePath"`
+					PathLength   int    `json:"pathLength"`
+					Present      bool   `json:"present"`
+					Empty        bool   `json:"empty"`
+				} `json:"root"`
+				Cleanup localAICandidateObserverCleanup `json:"cleanup"`
+				Error   string                          `json:"error"`
+			}
+			if decodeErr := decodeLocalAICandidateJSON(raw, &report); decodeErr != nil {
+				t.Fatalf("decode short-root report: %v", decodeErr)
+			}
+			if wantError == "" {
+				if err != nil || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.Root.Status != "PASS" || report.Root.PathLength > 220 || !report.Root.Empty {
+					t.Fatalf("short-root success = err=%v report=%#v output=%s, want PASS contained empty root", err, report, output)
+				}
+				return
+			}
+			if err == nil || report.Status != "FAIL" || !strings.Contains(report.Error, wantError) {
+				t.Fatalf("short-root failure = err=%v report=%#v output=%s, want %q", err, report, output, wantError)
+			}
+		})
+	}
+
+	run("absent root", filepath.Join(parent, "localai-c076-absent"), "")
+	emptyRoot := filepath.Join(parent, "localai-c076-empty")
+	if err := os.Mkdir(emptyRoot, 0o700); err != nil {
+		t.Fatalf("create empty short root: %v", err)
+	}
+	run("empty root", emptyRoot, "")
+	nonemptyRoot := filepath.Join(parent, "localai-c076-nonempty")
+	if err := os.Mkdir(nonemptyRoot, 0o700); err != nil {
+		t.Fatalf("create nonempty short root: %v", err)
+	}
+	markerPath := filepath.Join(nonemptyRoot, "ambient-marker.txt")
+	if err := os.WriteFile(markerPath, []byte("must remain"), 0o600); err != nil {
+		t.Fatalf("write short-root marker: %v", err)
+	}
+	run("nonempty collision", nonemptyRoot, "not empty")
+	longRoot := filepath.Join(parent, strings.Repeat("r", 230))
+	run("path length", longRoot, "path length")
+	run("outside parent", filepath.Join(t.TempDir(), "outside"), "outside the contained root")
+
+	reparseTarget := filepath.Join(t.TempDir(), "reparse-target")
+	if err := os.Mkdir(reparseTarget, 0o700); err != nil {
+		t.Fatalf("create reparse target: %v", err)
+	}
+	reparseRoot := filepath.Join(parent, "localai-c076-reparse")
+	linkCommand := exec.Command("cmd.exe", "/c", "mklink", "/J", reparseRoot, reparseTarget)
+	if output, err := linkCommand.CombinedOutput(); err != nil {
+		t.Skipf("short-root reparse fixture unavailable: %v (%s)", err, output)
+	}
+	t.Cleanup(func() { _ = os.Remove(reparseRoot) })
+	run("reparse collision", reparseRoot, "reparse point")
+}
+func TestLocalAICandidateNativeToolPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows native-tool readiness is only available on Windows")
+	}
+	longPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_NATIVE_LONG_PATH"))
+	shortPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_NATIVE_SHORT_PATH"))
+	shortRoot := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_NATIVE_SHORT_ROOT"))
+	shortParent := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_NATIVE_SHORT_PARENT"))
+	if longPath == "" || shortPath == "" || shortRoot == "" || shortParent == "" {
+		t.Skip("set INFINITE_YOU_LOCALAI_NATIVE_LONG_PATH, INFINITE_YOU_LOCALAI_NATIVE_SHORT_PATH, INFINITE_YOU_LOCALAI_NATIVE_SHORT_ROOT, and INFINITE_YOU_LOCALAI_NATIVE_SHORT_PARENT for the local-real native-tool witness")
+	}
+	reportPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_NATIVE_REPORT_PATH"))
+	if reportPath == "" {
+		reportPath = filepath.Join(t.TempDir(), "native-tool-report.json")
+	}
+	command := localAICandidatePowerShellCommand(t,
+		"-InstallDir", t.TempDir(),
+		"-NativeToolFixture",
+		"-NativeToolLongPath", longPath,
+		"-NativeToolShortPath", shortPath,
+		"-NativeToolRoot", shortRoot,
+		"-NativeToolParent", shortParent,
+		"-NativeToolReportPath", reportPath,
+		"-NativeToolTimeoutMilliseconds", "10000",
+	)
+	output, err := command.CombinedOutput()
+	raw, readErr := os.ReadFile(reportPath)
+	if readErr != nil {
+		t.Fatalf("read native-tool report: %v\n%s", readErr, output)
+	}
+	var report localAICandidateNativeToolReport
+	if decodeErr := decodeLocalAICandidateJSON(raw, &report); decodeErr != nil {
+		t.Fatalf("decode native-tool report: %v", decodeErr)
+	}
+	if err != nil || report.SchemaVersion != "localai-windows-install-candidate-native-tool/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.Property == "" || report.LongPath.PathLength != 280 || report.LongPath.Bytes != localAICandidateNativeToolBytes || report.LongPath.SHA256 != localAICandidateNativeToolSHA256 || report.LongPath.Launch.Status == "PASS" || report.ShortRoot.PathLength > 220 || report.ShortPath.PathLength > 220 || report.ShortPath.Bytes != localAICandidateNativeToolBytes || report.ShortPath.SHA256 != localAICandidateNativeToolSHA256 || report.ShortPath.Launch.Status != "PASS" || report.ShortPath.Launch.ExitCode == nil || *report.ShortPath.Launch.ExitCode != 0 || strings.TrimSpace(report.ShortPath.Launch.Stdout) != localAICandidateNativeToolVersion || report.Cleanup.Status != "PASS" {
+		t.Fatalf("native-tool witness = err=%v report=%#v output=%s, want exact long failure and short 0.27.7/exit0", err, report, output)
+	}
+	t.Logf("LOCALAI-NATIVE status=PASS evidence=%s", raw)
 }
 func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 	if runtime.GOOS != "windows" {
@@ -1657,6 +1816,7 @@ func validateLocalAICandidateAttempts(attempts localAICandidateAttempts) error {
 		{name: "cycle067", maximum: attempts.Cycle067BuildMaximum, used: attempts.Cycle067BuildUsed, wantMax: 2, wantUse: 2},
 		{name: "cycle068", maximum: attempts.Cycle068BuildMaximum, used: attempts.Cycle068BuildUsed, wantMax: 1, wantUse: 1},
 		{name: "cycle070", maximum: attempts.Cycle070BuildMaximum, used: attempts.Cycle070BuildUsed, wantMax: 1, wantUse: 1},
+		{name: "cycle076", maximum: attempts.Cycle076BuildMaximum, used: attempts.Cycle076BuildUsed, wantMax: 1, wantUse: 1},
 	} {
 		if attempt.maximum == nil || attempt.used == nil || *attempt.maximum != attempt.wantMax || *attempt.used != attempt.wantUse {
 			return fmt.Errorf("candidate attempts %sBuildMaximum/Used = %v/%v, want %d/%d", attempt.name, valueOrZero(attempt.maximum), valueOrZero(attempt.used), attempt.wantMax, attempt.wantUse)
@@ -1940,6 +2100,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			Cycle067BuildMaximum: candidateInt64Pointer(2), Cycle067BuildUsed: candidateInt64Pointer(2),
 			Cycle068BuildMaximum: candidateInt64Pointer(1), Cycle068BuildUsed: candidateInt64Pointer(1),
 			Cycle070BuildMaximum: candidateInt64Pointer(1), Cycle070BuildUsed: candidateInt64Pointer(1),
+			Cycle076BuildMaximum: candidateInt64Pointer(1), Cycle076BuildUsed: candidateInt64Pointer(1),
 		},
 	}
 	roots := make([]localAICandidateRoot, 0, 8)
