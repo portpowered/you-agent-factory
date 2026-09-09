@@ -208,20 +208,21 @@ and Recordings.
 
 ## Invoke A Model Directly
 
-Direct invocation requires a valid Current Factory at
-`./factory/factory.json`. The path is relative to the working directory.
-It does not start a full Factory workflow.
+Direct invocation of a built-in uses the local Models composition and does not
+require `./factory/factory.json`. If a valid Current Factory exists, its Models
+scope remains available for compatible Factory-backed model configuration.
 
-Without an explicit `--server`, direct invocation uses the local Models
-composition. An explicit `--server` must identify a reachable service.
+Without an explicit `--server`, direct invocation stays in the local process.
+An explicit `--server` must identify a reachable service and uses that service
+instead of local Models composition.
 
 Use an uppercase operation and bind inputs with repeatable
 `--input slot=value` flags. Legacy `--text` and unqualified `--output <path>`
 spellings remain supported for direct text and audio operations.
 
-If `./factory/factory.json` is missing, the command returns
-`CURRENT_FACTORY_NOT_FOUND` before it accesses model assets. Create a valid
-Current Factory, then retry.
+A missing implicit Current Factory is not an error for a built-in invocation.
+An explicitly supplied or malformed Factory still returns its typed Factory
+error; the command never creates or initializes a Factory as a workaround.
 
 Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
 operation and bind inputs with repeatable `--input slot=value` flags.
