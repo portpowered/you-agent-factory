@@ -13,7 +13,13 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$expectedCandidateCycle = "067"
+$expectedCandidateCycle = "068"
+$expectedCandidateGoVersion = "go1.26.8"
+$expectedObserverQueryMode = "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
+$expectedProcessNetworkGapMilliseconds = 2000
+$expectedDiskGapMilliseconds = 2000
+$expectedDescendantMaximum = 36
+$expectedTemporaryDiskBytesMaximum = [int64]4294967296
 $expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
 $expectedCandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
 $expectedCandidateSourceTree = "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
@@ -787,8 +793,8 @@ function Invoke-CandidateSmoke {
         if ([string]::IsNullOrWhiteSpace($version) -or $version -match '[\\/:*?"<>|\s]') {
             Fail-Smoke "candidate version is not a usable release version: $version"
         }
-        if ([string]::IsNullOrWhiteSpace([string]$manifest.build.cliVersion) -or [string]$manifest.build.goreleaserConfigSha256 -notmatch '^[0-9a-f]{64}$' -or $manifest.build.goreleaserVersion -ne "v2.12.7" -or $manifest.build.target.goos -ne "windows" -or $manifest.build.target.goarch -ne "amd64" -or $manifest.build.target.cgoEnabled -ne $false) {
-            Fail-Smoke "candidate build target/tool identity is not windows/amd64 with cgo disabled"
+        if ([string]::IsNullOrWhiteSpace([string]$manifest.build.cliVersion) -or $manifest.build.goVersion -ne $expectedCandidateGoVersion -or [string]$manifest.build.goreleaserConfigSha256 -notmatch '^[0-9a-f]{64}$' -or $manifest.build.goreleaserVersion -ne "v2.12.7" -or $manifest.build.target.goos -ne "windows" -or $manifest.build.target.goarch -ne "amd64" -or $manifest.build.target.cgoEnabled -ne $false) {
+            Fail-Smoke "candidate build identity is not Go $expectedCandidateGoVersion with GoReleaser v2.12.7, windows/amd64 and cgo disabled"
         }
         $requiredEnvironment = [ordered]@{
             GOSUMDB = "off"
@@ -830,13 +836,19 @@ function Invoke-CandidateSmoke {
                 Fail-Smoke "candidate control $($control.Key) = $actualControl, want $($control.Value)"
             }
         }
-        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050")
+        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050", "063", "067")
         $actualPriorCycles = @($manifest.attempts.priorCycles | ForEach-Object { [string]$_ })
         if ($actualPriorCycles.Count -ne $expectedPriorCycles.Count -or (Compare-Object -ReferenceObject $expectedPriorCycles -DifferenceObject $actualPriorCycles)) {
             Fail-Smoke "candidate attempts priorCycles = $($actualPriorCycles -join ', '), want $($expectedPriorCycles -join ', ')"
         }
         if ([int]$manifest.attempts.cycle063BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle063BuildUsed -ne 1) {
             Fail-Smoke "candidate attempts must record cycle063BuildMaximum=1 and cycle063BuildUsed=1"
+        }
+        if ([int]$manifest.attempts.cycle067BuildMaximum -ne 2 -or [int]$manifest.attempts.cycle067BuildUsed -ne 2) {
+            Fail-Smoke "candidate attempts must record cycle067BuildMaximum=2 and cycle067BuildUsed=2"
+        }
+        if ([int]$manifest.attempts.cycle068BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle068BuildUsed -ne 1) {
+            Fail-Smoke "candidate attempts must record cycle068BuildMaximum=1 and cycle068BuildUsed=1"
         }
         $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
         $installerArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-installer" })
@@ -1374,13 +1386,17 @@ function Invoke-ObserverFixture {
     $rootProcess = $null
     $rootExitCode = $null
     $failure = $null
+    $cleanupErrors = New-Object 'System.Collections.Generic.List[string]'
+    $remainingTaskPaths = @()
     $processObservation = [pscustomobject]@{
         status = "FAIL"; startedBeforeRoot = $false; continuedThroughDescendantExit = $false
-        maximumGapMilliseconds = 0; nonLoopbackConnections = 0; externalTransferBytes = 0; descendantHighWater = 0
+        maximumGapMilliseconds = [int64]0; nonLoopbackConnections = 0; externalTransferBytes = [int64]0; descendantHighWater = [int64]0
+        sampleCount = 0; tcpTableQueries = 0; zeroConnectionSamples = 0; ownedConnectionMatches = 0
+        ownedProcessIdentityCount = 0; queryMode = $expectedObserverQueryMode; forbiddenProcesses = @(); error = ""
     }
     $diskObservation = [pscustomobject]@{
         status = "FAIL"; independent = $false; startPeriodicFinal = $false
-        maximumGapMilliseconds = 0; peakDeltaBytes = 0
+        maximumGapMilliseconds = [int64]0; peakDeltaBytes = [int64]0; error = ""
     }
     $goEnvironment = [ordered]@{
         GOFLAGS = [string]$env:GOFLAGS
@@ -1391,81 +1407,225 @@ function Invoke-ObserverFixture {
         $processJob = Start-Job -ScriptBlock {
             param($ReadyPath, $PidPath, $DonePath)
             $ErrorActionPreference = "Stop"
-            $startedAt = [DateTime]::UtcNow
+            $processNetworkGapMaximumMilliseconds = [int64]2000
+            $descendantMaximum = [int64]36
+            $queryMode = "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
+            $forbiddenNamePatterns = @("localai", "local-ai", "llama-server", "llama-cli", "vibevoice", "whisper", "piper")
             [System.IO.File]::WriteAllText($ReadyPath, "ready")
-            function Get-ObserverTree {
+            function Convert-ObserverCreationTimeTicks {
+                param($Value)
+
+                if ($Value -is [DateTime]) {
+                    return [int64]$Value.ToUniversalTime().Ticks
+                }
+                try {
+                    $date = [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$Value)
+                } catch {
+                    throw "process creation time is not readable: $Value"
+                }
+                return [int64]$date.ToUniversalTime().Ticks
+            }
+            function Get-ObserverProcessSnapshot {
                 param([int]$RootId)
                 $all = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop)
+                $byId = @{}
                 $children = @{}
                 foreach ($item in $all) {
+                    $processId = [int]$item.ProcessId
+                    if ($byId.ContainsKey($processId)) {
+                        throw "process identity is ambiguous for PID $processId"
+                    }
+                    $creationTicks = Convert-ObserverCreationTimeTicks $item.CreationDate
+                    $record = [pscustomobject]@{
+                        processId = $processId
+                        parentProcessId = [int]$item.ParentProcessId
+                        identity = "$processId/$creationTicks"
+                        name = [string]$item.Name
+                    }
+                    $byId[$processId] = $record
                     $parent = [int]$item.ParentProcessId
                     if (-not $children.ContainsKey($parent)) { $children[$parent] = @() }
-                    $children[$parent] += [int]$item.ProcessId
+                    $children[$parent] = @($children[$parent]) + $processId
                 }
-                $pending = @($RootId)
-                $descendants = @()
-                while ($pending.Count -gt 0) {
-                    $parent = [int]$pending[0]
-                    $pending = if ($pending.Count -eq 1) { @() } else { @($pending[1..($pending.Count - 1)]) }
-                    if (-not $children.ContainsKey($parent)) { continue }
-                    foreach ($child in @($children[$parent])) {
-                        if ($descendants -notcontains [int]$child) {
-                            $descendants += [int]$child
-                            $pending += [int]$child
-                        }
+                if (-not $byId.ContainsKey($RootId)) {
+                    return [pscustomobject]@{
+                        rootPresent = $false
+                        root = $null
+                        descendants = @()
+                        ownedRecords = @()
                     }
                 }
+                $pending = [System.Collections.Generic.Queue[int]]::new()
+                $visited = @{$RootId = $true}
+                $descendants = New-Object 'System.Collections.Generic.List[object]'
+                $ownedRecords = New-Object 'System.Collections.Generic.List[object]'
+                $root = $byId[$RootId]
+                [void]$ownedRecords.Add($root)
+                $pending.Enqueue($RootId)
+                while ($pending.Count -gt 0) {
+                    $parent = $pending.Dequeue()
+                    if (-not $children.ContainsKey($parent)) { continue }
+                    foreach ($childId in @($children[$parent])) {
+                        $childId = [int]$childId
+                        if ($visited.ContainsKey($childId)) {
+                            throw "owned process tree is ambiguous at PID $childId"
+                        }
+                        if (-not $byId.ContainsKey($childId)) {
+                            throw "owned process tree lost PID $childId during enumeration"
+                        }
+                        $visited[$childId] = $true
+                        $child = $byId[$childId]
+                        [void]$descendants.Add($child)
+                        [void]$ownedRecords.Add($child)
+                        $pending.Enqueue($childId)
+                    }
+                }
+                if ($descendants.Count -gt $descendantMaximum) {
+                    throw "owned descendant count $($descendants.Count) exceeds $descendantMaximum"
+                }
                 [pscustomobject]@{
-                    rootPresent = @($all | Where-Object { [int]$_.ProcessId -eq $RootId }).Count -ne 0
-                    descendantIds = @($descendants)
+                    rootPresent = $true
+                    root = $root
+                    descendants = $descendants.ToArray()
+                    ownedRecords = $ownedRecords.ToArray()
                 }
             }
+            function Register-ObserverIdentities {
+                param(
+                    [object]$Snapshot,
+                    [hashtable]$IdentityByPid,
+                    [hashtable]$OwnedIdentityToPid,
+                    [hashtable]$State
+                )
+
+                foreach ($record in @($Snapshot.ownedRecords)) {
+                    $processId = [int]$record.processId
+                    $identity = [string]$record.identity
+                    if ($IdentityByPid.ContainsKey($processId) -and [string]$IdentityByPid[$processId] -cne $identity) {
+                        throw "owned process PID $processId changed identity from $($IdentityByPid[$processId]) to $identity"
+                    }
+                    if ($OwnedIdentityToPid.ContainsKey($identity) -and [int]$OwnedIdentityToPid[$identity] -ne $processId) {
+                        throw "owned process identity $identity is ambiguous across PIDs"
+                    }
+                    $IdentityByPid[$processId] = $identity
+                    $OwnedIdentityToPid[$identity] = $processId
+                }
+                if ($Snapshot.rootPresent) {
+                    $identity = [string]$Snapshot.root.identity
+                    if ($null -eq $State["rootIdentity"]) {
+                        $State["rootIdentity"] = $identity
+                    } elseif ([string]$State["rootIdentity"] -cne $identity) {
+                        throw "owned root identity changed from $($State['rootIdentity']) to $identity"
+                    }
+                }
+            }
+            function Test-ObserverLoopbackAddress {
+                param([string]$Address)
+
+                return $Address.Trim().ToLowerInvariant() -in @("127.0.0.1", "::1", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1")
+            }
             function Get-ObserverSample {
-                param([int]$RootId)
+                param(
+                    [int]$RootId,
+                    [hashtable]$IdentityByPid,
+                    [hashtable]$OwnedIdentityToPid,
+                    [hashtable]$State
+                )
                 if ($null -eq (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
                     throw "Get-NetTCPConnection is unavailable"
                 }
-                $tree = Get-ObserverTree $RootId
+                $before = Get-ObserverProcessSnapshot $RootId
+                Register-ObserverIdentities $before $IdentityByPid $OwnedIdentityToPid $State
+                # One complete TCP-table query is deliberately shared by every
+                # owned process in this interval; an empty table is a valid sample.
+                $connections = @(Get-NetTCPConnection -ErrorAction Stop)
+                $after = Get-ObserverProcessSnapshot $RootId
+                Register-ObserverIdentities $after $IdentityByPid $OwnedIdentityToPid $State
+                $ownedPids = @{}
+                foreach ($record in @($before.ownedRecords) + @($after.ownedRecords)) {
+                    $ownedPids[[int]$record.processId] = [string]$record.identity
+                }
                 $nonLoopback = 0
-                foreach ($processId in @($RootId) + @($tree.descendantIds)) {
-                    foreach ($connection in @(Get-NetTCPConnection -OwningProcess $processId -ErrorAction SilentlyContinue)) {
-                        $remote = [string]$connection.RemoteAddress
-                        if ($remote -notin @("127.0.0.1", "::1", "0:0:0:0:0:0:0:1")) { $nonLoopback++ }
+                $ownedMatches = 0
+                foreach ($connection in @($connections)) {
+                    if ($null -eq $connection.OwningProcess) {
+                        throw "TCP-table row has no owning process identity"
+                    }
+                    $processId = [int]$connection.OwningProcess
+                    if (-not $ownedPids.ContainsKey($processId)) {
+                        continue
+                    }
+                    $ownedMatches++
+                    if ([string]$connection.State -ne "Listen" -and -not (Test-ObserverLoopbackAddress ([string]$connection.RemoteAddress))) {
+                        $nonLoopback++
                     }
                 }
+                $forbiddenProcesses = @($before.ownedRecords + $after.ownedRecords | Where-Object {
+                    $name = ([string]$_.name).ToLowerInvariant()
+                    $forbiddenNamePatterns | Where-Object { $name -like "*$_*" }
+                } | ForEach-Object { "{0}:{1}" -f $_.processId, $_.name } | Sort-Object -Unique)
+                if ($forbiddenProcesses.Count -ne 0) {
+                    throw "forbidden owned process observed: $($forbiddenProcesses -join ', ')"
+                }
+                if ($nonLoopback -ne 0) {
+                    throw "non-loopback connection observed in owned TCP sample"
+                }
                 [pscustomobject]@{
-                    rootPresent = [bool]$tree.rootPresent
-                    descendantCount = [int]$tree.descendantIds.Count
-                    descendantIds = @($tree.descendantIds)
+                    rootPresent = [bool]$after.rootPresent
+                    descendantCount = [int]$after.descendants.Count
                     nonLoopbackConnections = [int]$nonLoopback
+                    ownedConnectionMatches = [int]$ownedMatches
+                    tcpRows = [int]$connections.Count
+                    tcpTableQueries = 1
+                    ownedProcessIdentityCount = [int]$OwnedIdentityToPid.Count
+                    forbiddenProcesses = $forbiddenProcesses
                 }
             }
+            $identityByPid = @{}
+            $ownedIdentityToPid = @{}
+            $observerState = @{rootIdentity = $null}
+            $maximumGap = [int64]0
+            $samples = 0
+            $descendantHighWater = [int64]0
+            $nonLoopbackConnections = 0
+            $tcpTableQueries = 0
+            $zeroConnectionSamples = 0
+            $ownedConnectionMatches = 0
             try {
                 $deadline = [DateTime]::UtcNow.AddSeconds(20)
                 while (-not (Test-Path -LiteralPath $PidPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
                 if (-not (Test-Path -LiteralPath $PidPath)) { throw "root PID was not published" }
                 $rootId = [int]([System.IO.File]::ReadAllText($PidPath)).Trim()
-                $previous = [DateTime]::UtcNow
-                $maximumGap = [int64]0
-                $samples = 0
-                $descendantHighWater = [int64]0
-                $nonLoopbackConnections = 0
+                $previous = $null
                 $rootExited = $false
                 $continuedThroughExit = $false
                 while ([DateTime]::UtcNow -lt $deadline) {
-                    $sample = Get-ObserverSample $rootId
+                    $sample = Get-ObserverSample $rootId $identityByPid $ownedIdentityToPid $observerState
                     $now = [DateTime]::UtcNow
-                    $gap = [int64]($now - $previous).TotalMilliseconds
-                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                    if ($null -ne $previous) {
+                        $gap = [int64]($now - $previous).TotalMilliseconds
+                        if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                        if ($gap -gt $processNetworkGapMaximumMilliseconds) {
+                            throw "process/network observer gap $gap ms exceeds $processNetworkGapMaximumMilliseconds ms"
+                        }
+                    }
                     $previous = $now
                     $samples++
                     if ($sample.descendantCount -gt $descendantHighWater) { $descendantHighWater = $sample.descendantCount }
+                    if ($sample.descendantCount -gt $descendantMaximum) { throw "owned descendant count $($sample.descendantCount) exceeds $descendantMaximum" }
                     $nonLoopbackConnections += [int]$sample.nonLoopbackConnections
+                    $tcpTableQueries += [int]$sample.tcpTableQueries
+                    $ownedConnectionMatches += [int]$sample.ownedConnectionMatches
+                    if ([int]$sample.ownedConnectionMatches -eq 0) { $zeroConnectionSamples++ }
+                    if ([int]$sample.nonLoopbackConnections -ne 0) { throw "non-loopback connection observed in owned TCP sample" }
                     if (Test-Path -LiteralPath $DonePath) { $rootExited = $true }
                     if ($rootExited -and -not $sample.rootPresent -and $sample.descendantCount -eq 0) {
+                        if ($null -eq $observerState["rootIdentity"]) { throw "root exited before its owned process identity was captured" }
                         $continuedThroughExit = $true
                         break
                     }
+                    # This is the measurement cadence, not a completion wait;
+                    # completion is decided from the next process/TCP sample.
                     Start-Sleep -Milliseconds 100
                 }
                 if (-not $continuedThroughExit) { throw "observer did not reach root and descendant exit" }
@@ -1473,12 +1633,19 @@ function Invoke-ObserverFixture {
                     status = "PASS"; startedBeforeRoot = $true; continuedThroughDescendantExit = $continuedThroughExit
                     maximumGapMilliseconds = $maximumGap; nonLoopbackConnections = $nonLoopbackConnections
                     externalTransferBytes = [int64]0; descendantHighWater = $descendantHighWater
+                    sampleCount = $samples; tcpTableQueries = $tcpTableQueries
+                    zeroConnectionSamples = $zeroConnectionSamples; ownedConnectionMatches = $ownedConnectionMatches
+                    ownedProcessIdentityCount = [int64]$ownedIdentityToPid.Count; queryMode = $queryMode
+                    forbiddenProcesses = @(); error = ""
                 }
             } catch {
                 [pscustomobject]@{
                     status = "FAIL"; startedBeforeRoot = $true; continuedThroughDescendantExit = $false
-                    maximumGapMilliseconds = [int64]0; nonLoopbackConnections = 0; externalTransferBytes = [int64]0
-                    descendantHighWater = $descendantHighWater
+                    maximumGapMilliseconds = $maximumGap; nonLoopbackConnections = $nonLoopbackConnections; externalTransferBytes = [int64]0
+                    descendantHighWater = $descendantHighWater; sampleCount = $samples; tcpTableQueries = $tcpTableQueries
+                    zeroConnectionSamples = $zeroConnectionSamples; ownedConnectionMatches = $ownedConnectionMatches
+                    ownedProcessIdentityCount = [int64]$ownedIdentityToPid.Count; queryMode = $queryMode
+                    forbiddenProcesses = @(); error = $_.Exception.Message
                 }
             }
         } -ArgumentList $processReadyPath, $pidPath, $donePath
@@ -1486,6 +1653,8 @@ function Invoke-ObserverFixture {
         $diskJob = Start-Job -ScriptBlock {
             param($RootPath, $ReadyPath, $DonePath)
             $ErrorActionPreference = "Stop"
+            $diskGapMaximumMilliseconds = [int64]2000
+            $temporaryDiskMaximum = [int64]4294967296
             function Get-ObserverDirectoryBytes {
                 $total = [int64]0
                 if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) { return $total }
@@ -1495,35 +1664,51 @@ function Invoke-ObserverFixture {
                 }
                 return $total
             }
+            $maximumGap = [int64]0
+            $peakBytes = [int64]0
+            $samples = 0
             try {
                 $startedAt = [DateTime]::UtcNow
                 [System.IO.File]::WriteAllText($ReadyPath, "ready")
-                $previous = $startedAt
+                $previous = $null
                 $initialBytes = $null
-                $peakBytes = [int64]0
-                $maximumGap = [int64]0
-                $samples = 0
                 $finalSample = $false
                 $deadline = $startedAt.AddSeconds(20)
                 while ([DateTime]::UtcNow -lt $deadline) {
                     $bytes = [int64](Get-ObserverDirectoryBytes)
                     $now = [DateTime]::UtcNow
-                    $gap = [int64]($now - $previous).TotalMilliseconds
-                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                    if ($null -ne $previous) {
+                        $gap = [int64]($now - $previous).TotalMilliseconds
+                        if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                        if ($gap -gt $diskGapMaximumMilliseconds) {
+                            throw "disk observer gap $gap ms exceeds $diskGapMaximumMilliseconds ms"
+                        }
+                    }
                     $previous = $now
                     if ($null -eq $initialBytes) { $initialBytes = $bytes }
                     if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
+                    if ($peakBytes - $initialBytes -gt $temporaryDiskMaximum) {
+                        throw "disk observer delta $($peakBytes - $initialBytes) exceeds $temporaryDiskMaximum bytes"
+                    }
                     $samples++
                     if (Test-Path -LiteralPath $DonePath) {
                         $bytes = [int64](Get-ObserverDirectoryBytes)
                         $now = [DateTime]::UtcNow
                         $gap = [int64]($now - $previous).TotalMilliseconds
                         if ($gap -gt $maximumGap) { $maximumGap = $gap }
+                        if ($gap -gt $diskGapMaximumMilliseconds) {
+                            throw "disk observer final gap $gap ms exceeds $diskGapMaximumMilliseconds ms"
+                        }
                         if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
+                        if ($peakBytes - $initialBytes -gt $temporaryDiskMaximum) {
+                            throw "disk observer delta $($peakBytes - $initialBytes) exceeds $temporaryDiskMaximum bytes"
+                        }
                         $samples++
                         $finalSample = $true
                         break
                     }
+                    # This is the disk measurement cadence; completion is
+                    # decided from the observed done marker and final sample.
                     Start-Sleep -Milliseconds 100
                 }
                 if ($null -eq $initialBytes -or -not $finalSample) { throw "disk observer did not produce periodic and final samples" }
@@ -1534,12 +1719,14 @@ function Invoke-ObserverFixture {
             } catch {
                 [pscustomobject]@{
                     status = "FAIL"; independent = $true; startPeriodicFinal = $false
-                    maximumGapMilliseconds = [int64]0; peakDeltaBytes = [int64]0; error = $_.Exception.Message
+                    maximumGapMilliseconds = $maximumGap; peakDeltaBytes = [int64]$peakBytes; error = $_.Exception.Message
                 }
             }
         } -ArgumentList $fixtureRoot, $diskReadyPath, $donePath
 
         $readyDeadline = [DateTime]::UtcNow.AddSeconds(10)
+        # Readiness is polled only until both independent observer jobs publish
+        # their ready markers; sampling cadence remains inside each observer.
         while ((-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) -and [DateTime]::UtcNow -lt $readyDeadline) { Start-Sleep -Milliseconds 25 }
         if (-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) { throw "observers did not start before root" }
 
@@ -1562,26 +1749,39 @@ function Invoke-ObserverFixture {
         $diskObservation = $diskResults[$diskResults.Count - 1]
     } catch {
         $failure = $_.Exception
+        if ($processObservation.error -eq "") { $processObservation.error = $failure.Message }
         $jobStates = @($processJob, $diskJob) | Where-Object { $null -ne $_ } | ForEach-Object { "$($_.Name)=$($_.State)" }
         if ($jobStates.Count -ne 0) { $failure = [System.Exception]::new("$($failure.Message); observer jobs: $($jobStates -join ', ')") }
     } finally {
         if ($null -ne $rootProcess) {
             try {
                 if (-not $rootProcess.HasExited) { & taskkill.exe /PID $rootProcess.Id /T /F | Out-Null }
+                if (-not $rootProcess.HasExited) { [void]$cleanupErrors.Add("root process $($rootProcess.Id) remained running") }
             } catch {
+                [void]$cleanupErrors.Add("root process cleanup: $($_.Exception.Message)")
             }
             try { $rootProcess.Dispose() } catch { }
         }
         foreach ($job in @($processJob, $diskJob)) {
             if ($null -ne $job) {
-                try { if ($job.State -eq "Running") { Stop-Job -Job $job -ErrorAction SilentlyContinue } } catch { }
-                try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { }
+                try { if ($job.State -eq "Running") { Stop-Job -Job $job -ErrorAction Stop } } catch { [void]$cleanupErrors.Add("observer job stop: $($_.Exception.Message)") }
+                try {
+                    Wait-Job -Job $job -Timeout 5 -ErrorAction Stop | Out-Null
+                    if ($job.State -in @("Running", "NotStarted")) { [void]$cleanupErrors.Add("observer job $($job.Name) remained $($job.State)") }
+                } catch { [void]$cleanupErrors.Add("observer job wait: $($_.Exception.Message)") }
+                try { Remove-Job -Job $job -Force -ErrorAction Stop } catch { [void]$cleanupErrors.Add("observer job removal: $($_.Exception.Message)") }
             }
         }
-        if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue }
+        try {
+            if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction Stop }
+        } catch { [void]$cleanupErrors.Add("fixture root cleanup: $($_.Exception.Message)") }
+        if (Test-Path -LiteralPath $fixtureRoot) { $remainingTaskPaths += $fixtureRoot }
     }
 
-    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal
+    if ($cleanupErrors.Count -ne 0 -and $processObservation.error -eq "") {
+        $processObservation.error = $cleanupErrors -join "; "
+    }
+    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $processObservation.sampleCount -gt 0 -and $processObservation.tcpTableQueries -eq $processObservation.sampleCount -and $processObservation.zeroConnectionSamples -gt 0 -and $processObservation.ownedProcessIdentityCount -gt 0 -and $processObservation.queryMode -eq $expectedObserverQueryMode -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal -and $processObservation.maximumGapMilliseconds -le $expectedProcessNetworkGapMilliseconds -and $diskObservation.maximumGapMilliseconds -le $expectedDiskGapMilliseconds -and $diskObservation.peakDeltaBytes -le $expectedTemporaryDiskBytesMaximum -and $cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
@@ -1596,6 +1796,14 @@ function Invoke-ObserverFixture {
                 status = [string]$processObservation.status
                 nonLoopbackConnections = [int]$processObservation.nonLoopbackConnections
                 externalTransferBytes = [int64]$processObservation.externalTransferBytes
+                sampleCount = [int]$processObservation.sampleCount
+                tcpTableQueries = [int]$processObservation.tcpTableQueries
+                zeroConnectionSamples = [int]$processObservation.zeroConnectionSamples
+                ownedConnectionMatches = [int]$processObservation.ownedConnectionMatches
+                ownedProcessIdentityCount = [int]$processObservation.ownedProcessIdentityCount
+                queryMode = [string]$processObservation.queryMode
+                forbiddenProcesses = @($processObservation.forbiddenProcesses)
+                error = [string]$processObservation.error
             }
             diskObserver = [ordered]@{
                 independent = [bool]$diskObservation.independent
@@ -1603,13 +1811,19 @@ function Invoke-ObserverFixture {
                 maximumGapMilliseconds = [int64]$diskObservation.maximumGapMilliseconds
                 status = [string]$diskObservation.status
                 peakDeltaBytes = [int64]$diskObservation.peakDeltaBytes
+                error = [string]$diskObservation.error
             }
-            descendantMaximum = [int64]36
+            descendantMaximum = $expectedDescendantMaximum
             descendantHighWater = [int64]$processObservation.descendantHighWater
             rootExitCode = $rootExitCode
-            failurePropagation = if ($null -eq $failure -and $rootExitCode -eq 0) { "PASS" } else { "FAIL" }
+            failurePropagation = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
             modelBackendBytes = [int64]0
             modelBackendCalls = [int64]0
+        }
+        cleanup = [ordered]@{
+            status = if ($cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0) { "PASS" } else { "FAIL" }
+            remainingTaskPaths = $remainingTaskPaths
+            errors = $cleanupErrors.ToArray()
         }
     }
     $reportParent = Split-Path -Parent $reportPath

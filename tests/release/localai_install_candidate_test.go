@@ -25,10 +25,10 @@ import (
 
 const (
 	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "067", "-p=4", "4"
+	localAICandidateCycle, localAICandidateGoVersion, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS, localAICandidateObserverQueryMode                                                                                                                                                                                             = "068", "go1.26.8", "-p=4", "4", "one-full-TCP-table-query-per-interval-filtered-to-owned-process-identities"
 	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "059474b2c00915865306a33ca5e3d02b618bb6f0", "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
 	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
-	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
+	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 2000
 )
 
 var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -41,7 +41,7 @@ type localAICandidateManifest struct {
 	Build         localAICandidateBuild      `json:"build"`
 	Artifacts     []localAICandidateArtifact `json:"artifacts"`
 	Limits        localAICandidateLimits     `json:"limits"`
-	Attempts      map[string]any             `json:"attempts"`
+	Attempts      localAICandidateAttempts   `json:"attempts"`
 }
 type localAICandidateSource struct {
 	Repository string `json:"repository"`
@@ -79,6 +79,15 @@ type localAICandidateLimits struct {
 	GOFLAGS                       string `json:"goflags"`
 	GOMAXPROCS                    string `json:"gomaxprocs"`
 }
+type localAICandidateAttempts struct {
+	PriorCycles          []string `json:"priorCycles"`
+	Cycle063BuildMaximum *int64   `json:"cycle063BuildMaximum"`
+	Cycle063BuildUsed    *int64   `json:"cycle063BuildUsed"`
+	Cycle067BuildMaximum *int64   `json:"cycle067BuildMaximum"`
+	Cycle067BuildUsed    *int64   `json:"cycle067BuildUsed"`
+	Cycle068BuildMaximum *int64   `json:"cycle068BuildMaximum"`
+	Cycle068BuildUsed    *int64   `json:"cycle068BuildUsed"`
+}
 type localAICandidateArtifactEvidence struct {
 	Role   string `json:"role"`
 	File   string `json:"file"`
@@ -106,12 +115,20 @@ type localAICandidateRoot struct {
 	Path string
 }
 type localAICandidateProcessNetworkObserver struct {
-	StartedBeforeRoot              bool   `json:"startedBeforeRoot"`
-	ContinuedThroughDescendantExit bool   `json:"continuedThroughDescendantExit"`
-	MaximumGapMilliseconds         int64  `json:"maximumGapMilliseconds"`
-	Status                         string `json:"status"`
-	NonLoopbackConnections         int    `json:"nonLoopbackConnections"`
-	ExternalTransferBytes          int64  `json:"externalTransferBytes"`
+	StartedBeforeRoot              bool     `json:"startedBeforeRoot"`
+	ContinuedThroughDescendantExit bool     `json:"continuedThroughDescendantExit"`
+	MaximumGapMilliseconds         int64    `json:"maximumGapMilliseconds"`
+	Status                         string   `json:"status"`
+	NonLoopbackConnections         int      `json:"nonLoopbackConnections"`
+	ExternalTransferBytes          int64    `json:"externalTransferBytes"`
+	SampleCount                    int      `json:"sampleCount"`
+	TCPTableQueries                int      `json:"tcpTableQueries"`
+	ZeroConnectionSamples          int      `json:"zeroConnectionSamples"`
+	OwnedConnectionMatches         int      `json:"ownedConnectionMatches"`
+	OwnedProcessIdentityCount      int      `json:"ownedProcessIdentityCount"`
+	QueryMode                      string   `json:"queryMode"`
+	ForbiddenProcesses             []string `json:"forbiddenProcesses"`
+	Error                          string   `json:"error"`
 }
 type localAICandidateDiskObserver struct {
 	Independent            bool   `json:"independent"`
@@ -119,6 +136,7 @@ type localAICandidateDiskObserver struct {
 	MaximumGapMilliseconds int64  `json:"maximumGapMilliseconds"`
 	Status                 string `json:"status"`
 	PeakDeltaBytes         int64  `json:"peakDeltaBytes"`
+	Error                  string `json:"error"`
 }
 type localAICandidateObserverEvidence struct {
 	Environment            map[string]string                      `json:"environment"`
@@ -131,12 +149,18 @@ type localAICandidateObserverEvidence struct {
 	ModelBackendBytes      int64                                  `json:"modelBackendBytes"`
 	ModelBackendCalls      int64                                  `json:"modelBackendCalls"`
 }
+type localAICandidateObserverCleanup struct {
+	Status             string   `json:"status"`
+	RemainingTaskPaths []string `json:"remainingTaskPaths"`
+	Errors             []string `json:"errors"`
+}
 type localAICandidateObserverReport struct {
 	SchemaVersion string                           `json:"schemaVersion"`
 	Status        string                           `json:"status"`
 	Cycle         string                           `json:"cycle"`
 	ReleaseStatus string                           `json:"releaseStatus"`
 	Observation   localAICandidateObserverEvidence `json:"observation"`
+	Cleanup       localAICandidateObserverCleanup  `json:"cleanup"`
 }
 
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
@@ -321,6 +345,10 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			fixture.manifest.Limits.GOMAXPROCS = "8"
 			fixture.writeManifest(t)
 		}, want: "candidate Go controls"},
+		{name: "changed Go version", edit: func(fixture *localAICandidateFixture) {
+			fixture.manifest.Build.GoVersion = "go1.25.0"
+			fixture.writeManifest(t)
+		}, want: "candidate Go version"},
 	}
 	for _, test := range tests {
 		test := test
@@ -333,7 +361,7 @@ func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T
 			}
 		})
 	}
-	for _, cycle := range []string{"030", "040", "042", "045", "048"} {
+	for _, cycle := range []string{"030", "040", "042", "045", "048", "050", "063", "067"} {
 		cycle := cycle
 		t.Run("historical cycle "+cycle, func(t *testing.T) {
 			fixture := newLocalAICandidateFixture(t)
@@ -562,15 +590,18 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 	if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
 		t.Fatalf("observer report evidence: %v", err)
 	}
+	if report.Cleanup.Status != "PASS" || len(report.Cleanup.RemainingTaskPaths) != 0 || len(report.Cleanup.Errors) != 0 {
+		t.Fatalf("observer cleanup evidence = %#v, want complete cleanup", report.Cleanup)
+	}
 	t.Logf("LOCALAI-OBSERVER status=PASS evidence=%s", raw)
 }
 func validateLocalAICandidateObserverEvidence(observation localAICandidateObserverEvidence) error {
 	process := observation.ProcessNetworkObserver
-	if process.Status != "PASS" || !process.StartedBeforeRoot || !process.ContinuedThroughDescendantExit || process.MaximumGapMilliseconds < 0 || process.MaximumGapMilliseconds > localAICandidateProcessNetworkGapMaximum || process.NonLoopbackConnections != 0 || process.ExternalTransferBytes != 0 {
+	if process.Status != "PASS" || !process.StartedBeforeRoot || !process.ContinuedThroughDescendantExit || process.MaximumGapMilliseconds < 0 || process.MaximumGapMilliseconds > localAICandidateProcessNetworkGapMaximum || process.NonLoopbackConnections != 0 || process.ExternalTransferBytes != 0 || process.SampleCount <= 0 || process.TCPTableQueries != process.SampleCount || process.ZeroConnectionSamples <= 0 || process.OwnedConnectionMatches < 0 || process.OwnedProcessIdentityCount <= 0 || process.QueryMode != localAICandidateObserverQueryMode || len(process.ForbiddenProcesses) != 0 || process.Error != "" {
 		return fmt.Errorf("invalid process/network observer evidence: %#v", process)
 	}
 	disk := observation.DiskObserver
-	if disk.Status != "PASS" || !disk.Independent || !disk.StartPeriodicFinal || disk.MaximumGapMilliseconds < 0 || disk.MaximumGapMilliseconds > localAICandidateDiskGapMaximum || disk.PeakDeltaBytes < 0 || disk.PeakDeltaBytes > localAICandidateTemporaryDiskMaximum {
+	if disk.Status != "PASS" || !disk.Independent || !disk.StartPeriodicFinal || disk.MaximumGapMilliseconds < 0 || disk.MaximumGapMilliseconds > localAICandidateDiskGapMaximum || disk.PeakDeltaBytes < 0 || disk.PeakDeltaBytes > localAICandidateTemporaryDiskMaximum || disk.Error != "" {
 		return fmt.Errorf("invalid disk observer evidence: %#v", disk)
 	}
 	if observation.DescendantMaximum != localAICandidateDescendantMaximum || observation.DescendantHighWater < 1 || observation.DescendantHighWater > observation.DescendantMaximum {
@@ -583,6 +614,54 @@ func validateLocalAICandidateObserverEvidence(observation localAICandidateObserv
 		return fmt.Errorf("invalid observer completion evidence: %#v", observation)
 	}
 	return nil
+}
+func TestLocalAICandidateObserverEvidenceRejectsUnprovenSamples(t *testing.T) {
+	rootExitCode := int64(0)
+	base := localAICandidateObserverEvidence{
+		ProcessNetworkObserver: localAICandidateProcessNetworkObserver{
+			StartedBeforeRoot: true, ContinuedThroughDescendantExit: true, MaximumGapMilliseconds: 1,
+			Status: "PASS", SampleCount: 3, TCPTableQueries: 3, ZeroConnectionSamples: 3,
+			OwnedProcessIdentityCount: 3, QueryMode: localAICandidateObserverQueryMode,
+		},
+		DiskObserver:        localAICandidateDiskObserver{Independent: true, StartPeriodicFinal: true, MaximumGapMilliseconds: 1, Status: "PASS"},
+		DescendantMaximum:   localAICandidateDescendantMaximum,
+		DescendantHighWater: 1,
+		RootExitCode:        &rootExitCode,
+		FailurePropagation:  "PASS",
+	}
+	tests := []struct {
+		name string
+		edit func(*localAICandidateObserverEvidence)
+	}{
+		{name: "query count drift", edit: func(evidence *localAICandidateObserverEvidence) { evidence.ProcessNetworkObserver.TCPTableQueries = 2 }},
+		{name: "zero row not recorded", edit: func(evidence *localAICandidateObserverEvidence) {
+			evidence.ProcessNetworkObserver.ZeroConnectionSamples = 0
+		}},
+		{name: "identity count missing", edit: func(evidence *localAICandidateObserverEvidence) {
+			evidence.ProcessNetworkObserver.OwnedProcessIdentityCount = 0
+		}},
+		{name: "query mode missing", edit: func(evidence *localAICandidateObserverEvidence) {
+			evidence.ProcessNetworkObserver.QueryMode = "per-pid"
+		}},
+		{name: "query error", edit: func(evidence *localAICandidateObserverEvidence) {
+			evidence.ProcessNetworkObserver.Error = "query failed"
+		}},
+		{name: "disk gap over limit", edit: func(evidence *localAICandidateObserverEvidence) {
+			evidence.DiskObserver.MaximumGapMilliseconds = localAICandidateDiskGapMaximum + 1
+		}},
+		{name: "disk error", edit: func(evidence *localAICandidateObserverEvidence) { evidence.DiskObserver.Error = "disk sample failed" }},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			evidence := base
+			test.edit(&evidence)
+			if err := validateLocalAICandidateObserverEvidence(evidence); err == nil {
+				t.Fatal("observer evidence unexpectedly passed")
+			}
+		})
+	}
 }
 func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEvidence, error) {
 	return validateLocalAICandidateWithBuildInfoReader(manifestPath, buildinfo.ReadFile)
@@ -778,6 +857,9 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 			return fmt.Errorf("candidate build.%s is required", name)
 		}
 	}
+	if manifest.Build.GoVersion != localAICandidateGoVersion {
+		return fmt.Errorf("candidate Go version = %q, want %q", manifest.Build.GoVersion, localAICandidateGoVersion)
+	}
 	if manifest.Build.GoReleaserVersion != localAICandidateGoReleaser {
 		return fmt.Errorf("candidate goreleaserVersion = %q, want %q", manifest.Build.GoReleaserVersion, localAICandidateGoReleaser)
 	}
@@ -821,7 +903,38 @@ func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
 	if strings.TrimSpace(manifest.Limits.GOFLAGS) == "" || manifest.Limits.GOFLAGS != localAICandidateGOFLAGS || strings.TrimSpace(manifest.Limits.GOMAXPROCS) == "" || manifest.Limits.GOMAXPROCS != localAICandidateGOMAXPROCS {
 		return fmt.Errorf("candidate Go controls = GOFLAGS=%q GOMAXPROCS=%q, want GOFLAGS=%q GOMAXPROCS=%q", manifest.Limits.GOFLAGS, manifest.Limits.GOMAXPROCS, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS)
 	}
+	if err := validateLocalAICandidateAttempts(manifest.Attempts); err != nil {
+		return err
+	}
 	return nil
+}
+func validateLocalAICandidateAttempts(attempts localAICandidateAttempts) error {
+	wantPriorCycles := []string{"030", "040", "042", "045", "048", "050", "063", "067"}
+	if !slices.Equal(attempts.PriorCycles, wantPriorCycles) {
+		return fmt.Errorf("candidate attempts priorCycles = %v, want %v", attempts.PriorCycles, wantPriorCycles)
+	}
+	for _, attempt := range []struct {
+		name    string
+		maximum *int64
+		used    *int64
+		wantMax int64
+		wantUse int64
+	}{
+		{name: "cycle063", maximum: attempts.Cycle063BuildMaximum, used: attempts.Cycle063BuildUsed, wantMax: 1, wantUse: 1},
+		{name: "cycle067", maximum: attempts.Cycle067BuildMaximum, used: attempts.Cycle067BuildUsed, wantMax: 2, wantUse: 2},
+		{name: "cycle068", maximum: attempts.Cycle068BuildMaximum, used: attempts.Cycle068BuildUsed, wantMax: 1, wantUse: 1},
+	} {
+		if attempt.maximum == nil || attempt.used == nil || *attempt.maximum != attempt.wantMax || *attempt.used != attempt.wantUse {
+			return fmt.Errorf("candidate attempts %sBuildMaximum/Used = %v/%v, want %d/%d", attempt.name, valueOrZero(attempt.maximum), valueOrZero(attempt.used), attempt.wantMax, attempt.wantUse)
+		}
+	}
+	return nil
+}
+func valueOrZero(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 func validateLocalAICandidateLimit(name string, actual *int64, want int64) error {
 	if actual == nil {
@@ -1064,7 +1177,7 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: localAICandidateSourceCommit, Tree: localAICandidateSourceTree},
 		Build: localAICandidateBuild{
 			CandidateVersion: "1.2.3-snapshot-test", CLIVersion: "1.2.3-snapshot-test",
-			GoVersion: "go1.25.0", GoReleaserVersion: localAICandidateGoReleaser,
+			GoVersion: localAICandidateGoVersion, GoReleaserVersion: localAICandidateGoReleaser,
 			GoReleaserConfigSHA256: strings.Repeat("c", sha256.Size*2),
 			Target: localAICandidateTarget{
 				GOOS: localAICandidateGOOS, GOARCH: localAICandidateGOARCH,
@@ -1087,7 +1200,12 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
 			GOFLAGS:                       localAICandidateGOFLAGS, GOMAXPROCS: localAICandidateGOMAXPROCS,
 		},
-		Attempts: map[string]any{"priorCycles": []string{"030", "040", "042", "045", "048", "050"}, "cycle063BuildMaximum": 1, "cycle063BuildUsed": 1},
+		Attempts: localAICandidateAttempts{
+			PriorCycles:          []string{"030", "040", "042", "045", "048", "050", "063", "067"},
+			Cycle063BuildMaximum: candidateInt64Pointer(1), Cycle063BuildUsed: candidateInt64Pointer(1),
+			Cycle067BuildMaximum: candidateInt64Pointer(2), Cycle067BuildUsed: candidateInt64Pointer(2),
+			Cycle068BuildMaximum: candidateInt64Pointer(1), Cycle068BuildUsed: candidateInt64Pointer(1),
+		},
 	}
 	roots := make([]localAICandidateRoot, 0, 8)
 	for _, name := range []string{"HOME", "USERPROFILE", "install", "config", "state", "models", "backend", "HF"} {
