@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -33,20 +34,48 @@ type agySharedLifecycleTraceBinding struct {
 }
 
 // agySharedLifecycleTrace records only the route and Factory Session identities
-// attached to one diagnostic scenario. It is deliberately observational: the
-// existing aggregate rendezvous and public assertions remain unchanged while
-// the trace distinguishes this scenario's provider calls from package peers.
+// attached to one diagnostic scenario. Its per-route signals are the scenario
+// rendezvous; aggregate runner counters remain diagnostics for package peers.
 type agySharedLifecycleTrace struct {
-	mu          sync.Mutex
-	started     time.Time
-	events      []agySharedLifecycleEvent
-	active      int
-	maxActive   int
-	bothEntered bool
+	mu                 sync.Mutex
+	started            time.Time
+	events             []agySharedLifecycleEvent
+	active             int
+	maxActive          int
+	entries            map[string]int
+	activeByRoute      map[string]int
+	expectedRouteGates map[string]chan struct{}
+	routeGateClosed    map[string]bool
+	bothEntered        chan struct{}
+	bothEnteredClosed  bool
 }
 
 func newAgySharedLifecycleTrace() *agySharedLifecycleTrace {
-	return &agySharedLifecycleTrace{started: time.Now()}
+	return &agySharedLifecycleTrace{
+		started:            time.Now(),
+		entries:            make(map[string]int),
+		activeByRoute:      make(map[string]int),
+		expectedRouteGates: make(map[string]chan struct{}),
+		routeGateClosed:    make(map[string]bool),
+		bothEntered:        make(chan struct{}),
+	}
+}
+
+func (trace *agySharedLifecycleTrace) expectRoute(route string) error {
+	if trace == nil {
+		return fmt.Errorf("AGY lifecycle trace is required")
+	}
+	route = strings.TrimSpace(route)
+	if route == "" {
+		return fmt.Errorf("AGY lifecycle route is required")
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	if _, exists := trace.expectedRouteGates[route]; exists {
+		return fmt.Errorf("AGY lifecycle route %q is already expected", route)
+	}
+	trace.expectedRouteGates[route] = make(chan struct{})
+	return nil
 }
 
 func (trace *agySharedLifecycleTrace) record(
@@ -74,7 +103,10 @@ func (trace *agySharedLifecycleTrace) providerEntered(
 	}
 	trace.mu.Lock()
 	defer trace.mu.Unlock()
+	route = strings.TrimSpace(route)
 	trace.active++
+	trace.entries[route]++
+	trace.activeByRoute[route]++
 	if trace.active > trace.maxActive {
 		trace.maxActive = trace.active
 	}
@@ -90,8 +122,24 @@ func (trace *agySharedLifecycleTrace) providerEntered(
 			requestScope,
 		),
 	})
-	if trace.active == 2 && !trace.bothEntered {
-		trace.bothEntered = true
+	if gate, expected := trace.expectedRouteGates[route]; expected && trace.activeByRoute[route] == 1 && !trace.routeGateClosed[route] {
+		trace.routeGateClosed[route] = true
+		close(gate)
+	}
+	if trace.active == 2 && len(trace.activeByRoute) == len(trace.expectedRouteGates) &&
+		len(trace.expectedRouteGates) == 2 && !trace.bothEnteredClosed {
+		valid := true
+		for expectedRoute := range trace.expectedRouteGates {
+			if trace.activeByRoute[expectedRoute] != 1 {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			return
+		}
+		trace.bothEnteredClosed = true
+		close(trace.bothEntered)
 		trace.events = append(trace.events, agySharedLifecycleEvent{
 			elapsed: time.Since(trace.started),
 			stage:   "both-entered",
@@ -117,8 +165,14 @@ func (trace *agySharedLifecycleTrace) providerReturned(
 	}
 	trace.mu.Lock()
 	defer trace.mu.Unlock()
+	route = strings.TrimSpace(route)
 	if trace.active > 0 {
 		trace.active--
+	}
+	if active := trace.activeByRoute[route]; active <= 1 {
+		delete(trace.activeByRoute, route)
+	} else {
+		trace.activeByRoute[route] = active - 1
 	}
 	outcome := fmt.Sprintf("active=%d exitCode=%d", trace.active, result.ExitCode)
 	if err != nil {
@@ -141,6 +195,96 @@ func (trace *agySharedLifecycleTrace) activeCounts() (int, int) {
 	trace.mu.Lock()
 	defer trace.mu.Unlock()
 	return trace.active, trace.maxActive
+}
+
+func (trace *agySharedLifecycleTrace) entryCounts() map[string]int {
+	if trace == nil {
+		return nil
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	entries := make(map[string]int, len(trace.entries))
+	for route, count := range trace.entries {
+		entries[route] = count
+	}
+	return entries
+}
+
+func (trace *agySharedLifecycleTrace) waitForBothEntered(ctx context.Context) error {
+	if trace == nil {
+		return fmt.Errorf("AGY lifecycle trace is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	trace.mu.Lock()
+	routes := make([]string, 0, len(trace.expectedRouteGates))
+	for route := range trace.expectedRouteGates {
+		routes = append(routes, route)
+	}
+	sort.Strings(routes)
+	routeGates := make([]<-chan struct{}, 0, len(routes))
+	for _, route := range routes {
+		routeGates = append(routeGates, trace.expectedRouteGates[route])
+	}
+	bothEntered := trace.bothEntered
+	trace.mu.Unlock()
+
+	for _, gate := range routeGates {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return fmt.Errorf("wait for AGY route provider entry: %w", ctx.Err())
+		}
+	}
+	select {
+	case <-bothEntered:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for both distinct AGY routes: %w", ctx.Err())
+	}
+}
+
+func (trace *agySharedLifecycleTrace) bothEnteredState() bool {
+	if trace == nil {
+		return false
+	}
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	return trace.bothEnteredClosed
+}
+
+func TestAgySharedLifecycleTraceRequiresTwoDistinctActiveRoutes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		entries []string
+		want    bool
+	}{
+		{name: "zero", want: false},
+		{name: "one", entries: []string{"route-a"}, want: false},
+		{name: "duplicate", entries: []string{"route-a", "route-a"}, want: false},
+		{name: "foreign", entries: []string{"route-a", "foreign-route"}, want: false},
+		{name: "two distinct", entries: []string{"route-a", "route-b"}, want: true},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			trace := newAgySharedLifecycleTrace()
+			for _, route := range []string{"route-a", "route-b"} {
+				if err := trace.expectRoute(route); err != nil {
+					t.Fatalf("expect route %q: %v", route, err)
+				}
+			}
+			for _, route := range test.entries {
+				trace.providerEntered(route, "session-"+route, "request-"+route)
+			}
+			if got := trace.bothEnteredState(); got != test.want {
+				t.Fatalf("both-entered = %t, want %t", got, test.want)
+			}
+		})
+	}
 }
 
 func (trace *agySharedLifecycleTrace) log(t testing.TB) {
@@ -309,7 +453,6 @@ type agySharedCommandRunner struct {
 	requests    []platformprocess.CommandRequest
 	active      int
 	maxActive   int
-	callSignal  chan struct{}
 }
 
 func newAgySharedCommandRunner() *agySharedCommandRunner {
@@ -317,7 +460,6 @@ func newAgySharedCommandRunner() *agySharedCommandRunner {
 		routes:      make(map[string]*agySharedCommandRoute),
 		scopeRoutes: make(map[string]*agySharedCommandRoute),
 		selectors:   make(map[string]struct{}),
-		callSignal:  make(chan struct{}, 64),
 	}
 }
 
@@ -439,7 +581,6 @@ func (runner *agySharedCommandRunner) clear() error {
 	runner.scopeRoutes = nil
 	runner.selectors = nil
 	runner.requests = nil
-	runner.callSignal = nil
 	return nil
 }
 
@@ -483,16 +624,11 @@ func (runner *agySharedCommandRunner) Run(
 	if runner.active > runner.maxActive {
 		runner.maxActive = runner.active
 	}
-	callSignal := runner.callSignal
 	if trace != nil {
 		trace.providerEntered(route.selector, traceScopeID, request.ExecutionScopeID)
 	}
 	runner.mu.Unlock()
 
-	select {
-	case callSignal <- struct{}{}:
-	default:
-	}
 	defer func() {
 		runner.mu.Lock()
 		runner.active--
@@ -515,26 +651,6 @@ func (runner *agySharedCommandRunner) maxActiveCallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.maxActive
-}
-
-func (runner *agySharedCommandRunner) waitForCallCount(t *testing.T, want int) {
-	t.Helper()
-	deadline := time.NewTimer(agySharedInvocationTimeout)
-	defer deadline.Stop()
-	for {
-		runner.mu.Lock()
-		got := len(runner.requests)
-		signal := runner.callSignal
-		runner.mu.Unlock()
-		if got >= want {
-			return
-		}
-		select {
-		case <-signal:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for %d AGY calls; got %d", want, got)
-		}
-	}
 }
 
 func normalizeAgyRoutePath(path string) (string, error) {
