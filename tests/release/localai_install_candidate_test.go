@@ -144,6 +144,22 @@ type localAICandidateDiskObserver struct {
 	PeakDeltaBytes         int64  `json:"peakDeltaBytes"`
 	Error                  string `json:"error"`
 }
+type localAICandidateRootOutputStream struct {
+	Status        string `json:"status"`
+	Path          string `json:"path"`
+	Present       bool   `json:"present"`
+	TotalBytes    int64  `json:"totalBytes"`
+	CapturedBytes int64  `json:"capturedBytes"`
+	Truncated     bool   `json:"truncated"`
+	RedactedBytes int64  `json:"redactedBytes"`
+	SHA256        string `json:"sha256"`
+}
+type localAICandidateRootOutput struct {
+	Status       string                           `json:"status"`
+	MaximumBytes int64                            `json:"maximumBytes"`
+	Stdout       localAICandidateRootOutputStream `json:"stdout"`
+	Stderr       localAICandidateRootOutputStream `json:"stderr"`
+}
 type localAICandidateObserverEvidence struct {
 	Environment            map[string]string                      `json:"environment"`
 	ProcessNetworkObserver localAICandidateProcessNetworkObserver `json:"processNetworkObserver"`
@@ -151,6 +167,7 @@ type localAICandidateObserverEvidence struct {
 	DescendantMaximum      int64                                  `json:"descendantMaximum"`
 	DescendantHighWater    int64                                  `json:"descendantHighWater"`
 	RootExitCode           *int64                                 `json:"rootExitCode"`
+	RootOutput             localAICandidateRootOutput             `json:"rootOutput"`
 	FailurePropagation     string                                 `json:"failurePropagation"`
 	ModelBackendBytes      int64                                  `json:"modelBackendBytes"`
 	ModelBackendCalls      int64                                  `json:"modelBackendCalls"`
@@ -177,6 +194,39 @@ type localAICandidateReleaseCheckoutEvidence struct {
 	StatusCleanDuringOutput     bool     `json:"statusCleanDuringOutput"`
 	StatusCleanAfterOutput      bool     `json:"statusCleanAfterOutput"`
 	StatusChecks                int      `json:"statusChecks"`
+}
+type localAICandidateDependencyManifestEvidence struct {
+	Status            string `json:"status"`
+	ManifestPath      string `json:"manifestPath"`
+	ManifestSHA256    string `json:"manifestSHA256"`
+	EntryCount        int64  `json:"entryCount"`
+	FileCount         int64  `json:"fileCount"`
+	DirectoryCount    int64  `json:"directoryCount"`
+	JunctionCount     int64  `json:"junctionCount"`
+	SymbolicLinkCount int64  `json:"symbolicLinkCount"`
+	TotalBytes        int64  `json:"totalBytes"`
+}
+type localAICandidateDependencyReport struct {
+	SchemaVersion  string                                     `json:"schemaVersion"`
+	Status         string                                     `json:"status"`
+	Phase          string                                     `json:"phase"`
+	SourceRoot     string                                     `json:"sourceRoot"`
+	StageRoot      string                                     `json:"stageRoot"`
+	PackageInstall string                                     `json:"packageInstallation"`
+	SourceManifest localAICandidateDependencyManifestEvidence `json:"sourceManifest"`
+	StageManifest  localAICandidateDependencyManifestEvidence `json:"stageManifest"`
+	SourceLock     any                                        `json:"sourceLockClosure"`
+	StageLock      any                                        `json:"stageLockClosure"`
+	Copy           any                                        `json:"copy"`
+	Equality       struct {
+		SourceStageManifestEqual  bool  `json:"sourceStageManifestEqual"`
+		SourceStagePostBuildEqual bool  `json:"sourceStagePostBuildEqual"`
+		SourceEntryCount          int64 `json:"sourceEntryCount"`
+		StageEntryCount           int64 `json:"stageEntryCount"`
+		SourceTotalBytes          int64 `json:"sourceTotalBytes"`
+		StageTotalBytes           int64 `json:"stageTotalBytes"`
+	} `json:"equality"`
+	Error string `json:"error"`
 }
 type localAICandidateObserverReport struct {
 	SchemaVersion   string                                   `json:"schemaVersion"`
@@ -639,7 +689,52 @@ func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
 	if report.Cleanup.Status != "PASS" || len(report.Cleanup.RemainingTaskPaths) != 0 || len(report.Cleanup.Errors) != 0 {
 		t.Fatalf("observer cleanup evidence = %#v, want complete cleanup", report.Cleanup)
 	}
+	for _, stream := range []localAICandidateRootOutputStream{report.Observation.RootOutput.Stdout, report.Observation.RootOutput.Stderr} {
+		contents, err := os.ReadFile(stream.Path)
+		if err != nil {
+			t.Fatalf("read retained root output %q: %v", stream.Path, err)
+		}
+		if strings.Contains(string(contents), "observer-secret") || !strings.Contains(string(contents), "<redacted>") {
+			t.Fatalf("retained root output %q was not redacted: %q", stream.Path, contents)
+		}
+	}
 	t.Logf("LOCALAI-OBSERVER status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateObserverRootFailureRetainsOutput(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows observer fixture is only available on Windows")
+	}
+	reportPath := filepath.Join(t.TempDir(), "observer-failure-report.json")
+	command := localAICandidatePowerShellCommand(t, "-InstallDir", t.TempDir(), "-ObserverFixture", "-ObserverRootExitCode", "7", "-ObserverReportPath", reportPath)
+	command.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("observer failure fixture unexpectedly succeeded: %s", output)
+	}
+	raw, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read observer failure report: %v\n%s", err, output)
+	}
+	var report localAICandidateObserverReport
+	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
+		t.Fatalf("decode observer failure report: %v", err)
+	}
+	if report.Status != "FAIL" || report.Observation.RootExitCode == nil || *report.Observation.RootExitCode != 7 || report.Observation.FailurePropagation != "FAIL" {
+		t.Fatalf("observer failure evidence = %#v, want exit 7 and failure propagation", report.Observation)
+	}
+	if report.Observation.RootOutput.Status != "PASS" || report.Cleanup.Status != "PASS" {
+		t.Fatalf("observer failure output/cleanup evidence = %#v / %#v, want retained output and cleanup", report.Observation.RootOutput, report.Cleanup)
+	}
+	for _, stream := range []localAICandidateRootOutputStream{report.Observation.RootOutput.Stdout, report.Observation.RootOutput.Stderr} {
+		contents, err := os.ReadFile(stream.Path)
+		if err != nil {
+			t.Fatalf("read retained failed-root output %q: %v", stream.Path, err)
+		}
+		if strings.Contains(string(contents), "observer-secret") || !strings.Contains(string(contents), "<redacted>") {
+			t.Fatalf("failed-root output %q was not redacted: %q", stream.Path, contents)
+		}
+	}
+	t.Logf("LOCALAI-OBSERVER-FAILURE status=PASS evidence=%s", raw)
 }
 func TestLocalAICandidateObserverIdentityFixture(t *testing.T) {
 	if runtime.GOOS != "windows" {
@@ -763,6 +858,239 @@ func TestLocalAICandidateReleaseCheckoutPreparation(t *testing.T) {
 	}
 	t.Logf("LOCALAI-CLONE status=PASS evidence=%s", raw)
 }
+func TestLocalAICandidateDependencyStageCopiesExactContainedClosure(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows dependency staging is only available on Windows")
+	}
+	fixtureRoot := t.TempDir()
+	sourceRepo := filepath.Join(fixtureRoot, "source-repo")
+	stageRepo := filepath.Join(fixtureRoot, "stage-repo")
+	if err := os.MkdirAll(sourceRepo, 0o700); err != nil {
+		t.Fatalf("create source repository: %v", err)
+	}
+	if err := os.MkdirAll(stageRepo, 0o700); err != nil {
+		t.Fatalf("create stage repository: %v", err)
+	}
+	localAICandidateWriteDependencyFixture(t, sourceRepo, true)
+	localAICandidateWriteDependencyFixture(t, stageRepo, false)
+	sourceUI := filepath.Join(sourceRepo, "ui")
+	stageUI := filepath.Join(stageRepo, "ui")
+	sourceNodeModules := filepath.Join(sourceUI, "node_modules")
+	stageNodeModules := filepath.Join(stageUI, "node_modules")
+	stageEvidence := filepath.Join(fixtureRoot, "evidence")
+	if err := os.MkdirAll(stageEvidence, 0o700); err != nil {
+		t.Fatalf("create dependency evidence root: %v", err)
+	}
+	lockPath := filepath.Join(sourceUI, "bun.lock")
+	lockSHA256, err := sha256File(lockPath)
+	if err != nil {
+		t.Fatalf("hash fixture lock: %v", err)
+	}
+	lockBlob := localAICandidateRunGit(t, sourceRepo, "rev-parse", "HEAD:ui/bun.lock")
+	command := localAICandidatePowerShellCommand(t,
+		"-InstallDir", stageEvidence,
+		"-StageDependencyClosure",
+		"-DependencySourceRoot", sourceNodeModules,
+		"-DependencyStageRoot", stageNodeModules,
+		"-DependencySourceManifestPath", filepath.Join(stageEvidence, "source-manifest.jsonl"),
+		"-DependencyStageManifestPath", filepath.Join(stageEvidence, "stage-manifest.jsonl"),
+		"-DependencyReportPath", filepath.Join(stageEvidence, "stage-report.json"),
+		"-DependencyExpectedLockSHA256", lockSHA256,
+		"-DependencyExpectedLockBlob", lockBlob,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		reportBytes, _ := os.ReadFile(filepath.Join(stageEvidence, "stage-report.json"))
+		t.Fatalf("exact dependency staging: %v\n%s\nreport=%s", err, output, reportBytes)
+	}
+	var report localAICandidateDependencyReport
+	raw, err := os.ReadFile(filepath.Join(stageEvidence, "stage-report.json"))
+	if err != nil {
+		t.Fatalf("read dependency stage report: %v", err)
+	}
+	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
+		t.Fatalf("decode dependency stage report: %v", err)
+	}
+	if report.SchemaVersion != "localai-windows-install-candidate-dependency-stage/v1" || report.Status != "PASS" || report.Phase != "stage" || report.PackageInstall != "NOT_RUN" || !report.Equality.SourceStageManifestEqual || report.SourceManifest.EntryCount != 4 || report.StageManifest.EntryCount != 4 || report.SourceManifest.ManifestSHA256 != report.StageManifest.ManifestSHA256 || report.Error != "" {
+		t.Fatalf("dependency stage evidence = %#v, want exact no-install closure copy", report)
+	}
+	if _, err := os.Stat(filepath.Join(stageNodeModules, "dep", "index.js")); err != nil {
+		t.Fatalf("staged dependency content missing: %v", err)
+	}
+	indexPath := filepath.Join(stageNodeModules, "dep", "index.js")
+	originalIndex, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("read staged dependency fixture before mutation: %v", err)
+	}
+	if err := os.WriteFile(indexPath, []byte("module.exports = false;\n"), 0o600); err != nil {
+		t.Fatalf("mutate staged dependency fixture: %v", err)
+	}
+	mutationReportPath := filepath.Join(stageEvidence, "post-build-mutation-report.json")
+	mutationCommand := localAICandidatePowerShellCommand(t,
+		"-InstallDir", stageEvidence,
+		"-VerifyDependencyClosure",
+		"-DependencySourceRoot", sourceNodeModules,
+		"-DependencyStageRoot", stageNodeModules,
+		"-DependencyExpectedManifestPath", filepath.Join(stageEvidence, "stage-manifest.jsonl"),
+		"-DependencyPostBuildManifestPath", filepath.Join(stageEvidence, "post-build-mutation-manifest.jsonl"),
+		"-DependencySourceAfterManifestPath", filepath.Join(stageEvidence, "source-after-mutation-manifest.jsonl"),
+		"-DependencyReportPath", mutationReportPath,
+		"-DependencyExpectedLockSHA256", lockSHA256,
+		"-DependencyExpectedLockBlob", lockBlob,
+	)
+	mutationOutput, mutationErr := mutationCommand.CombinedOutput()
+	if mutationErr == nil {
+		t.Fatalf("post-build dependency mutation unexpectedly passed\n%s", mutationOutput)
+	}
+	mutationReportBytes, err := os.ReadFile(mutationReportPath)
+	if err != nil {
+		t.Fatalf("read post-build mutation report: %v", err)
+	}
+	var mutationReport struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal(mutationReportBytes, &mutationReport); err != nil {
+		t.Fatalf("decode post-build mutation report: %v", err)
+	}
+	if mutationReport.Status != "FAIL" || !strings.Contains(mutationReport.Error, "differs") {
+		t.Fatalf("post-build mutation evidence = %#v, want fail-closed equality drift", mutationReport)
+	}
+	if err := os.WriteFile(indexPath, originalIndex, 0o600); err != nil {
+		t.Fatalf("restore staged dependency fixture: %v", err)
+	}
+	verifyCommand := localAICandidatePowerShellCommand(t,
+		"-InstallDir", stageEvidence,
+		"-VerifyDependencyClosure",
+		"-DependencySourceRoot", sourceNodeModules,
+		"-DependencyStageRoot", stageNodeModules,
+		"-DependencyExpectedManifestPath", filepath.Join(stageEvidence, "stage-manifest.jsonl"),
+		"-DependencyPostBuildManifestPath", filepath.Join(stageEvidence, "post-build-manifest.jsonl"),
+		"-DependencySourceAfterManifestPath", filepath.Join(stageEvidence, "source-after-manifest.jsonl"),
+		"-DependencyReportPath", filepath.Join(stageEvidence, "post-build-report.json"),
+		"-DependencyExpectedLockSHA256", lockSHA256,
+		"-DependencyExpectedLockBlob", lockBlob,
+	)
+	verifyOutput, err := verifyCommand.CombinedOutput()
+	if err != nil {
+		t.Fatalf("post-build dependency equality verification: %v\n%s", err, verifyOutput)
+	}
+	verifyReportBytes, err := os.ReadFile(filepath.Join(stageEvidence, "post-build-report.json"))
+	if err != nil {
+		t.Fatalf("read post-build report: %v", err)
+	}
+	var verifyReport struct {
+		Status   string `json:"status"`
+		Phase    string `json:"phase"`
+		Equality struct {
+			SourceStagePostBuildEqual bool `json:"sourceStagePostBuildEqual"`
+		} `json:"equality"`
+	}
+	if err := json.Unmarshal(verifyReportBytes, &verifyReport); err != nil {
+		t.Fatalf("decode post-build report: %v", err)
+	}
+	if verifyReport.Status != "PASS" || verifyReport.Phase != "post-build" || !verifyReport.Equality.SourceStagePostBuildEqual {
+		t.Fatalf("post-build equality evidence = %#v, want source/stage/post-build equality", verifyReport)
+	}
+	t.Logf("LOCALAI-STAGE status=PASS evidence=%s", raw)
+}
+func TestLocalAICandidateDependencyStageRejectsMissingRequiredPackage(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows dependency staging is only available on Windows")
+	}
+	fixtureRoot := t.TempDir()
+	sourceRepo := filepath.Join(fixtureRoot, "source-repo")
+	stageRepo := filepath.Join(fixtureRoot, "stage-repo")
+	for _, repository := range []string{sourceRepo, stageRepo} {
+		if err := os.MkdirAll(repository, 0o700); err != nil {
+			t.Fatalf("create fixture repository: %v", err)
+		}
+	}
+	localAICandidateWriteDependencyFixture(t, sourceRepo, true)
+	localAICandidateWriteDependencyFixture(t, stageRepo, false)
+	sourceUI := filepath.Join(sourceRepo, "ui")
+	missingManifest := filepath.Join(sourceUI, "node_modules", "dep", "package.json")
+	if err := os.Remove(missingManifest); err != nil {
+		t.Fatalf("remove required fixture package: %v", err)
+	}
+	localAICandidateRunGit(t, sourceRepo, "add", "-A")
+	localAICandidateRunGit(t, sourceRepo, "commit", "-m", "remove required package")
+	lockPath := filepath.Join(sourceUI, "bun.lock")
+	lockSHA256, err := sha256File(lockPath)
+	if err != nil {
+		t.Fatalf("hash fixture lock: %v", err)
+	}
+	lockBlob := localAICandidateRunGit(t, sourceRepo, "rev-parse", "HEAD:ui/bun.lock")
+	evidenceRoot := filepath.Join(fixtureRoot, "evidence")
+	if err := os.MkdirAll(evidenceRoot, 0o700); err != nil {
+		t.Fatalf("create failure evidence root: %v", err)
+	}
+	command := localAICandidatePowerShellCommand(t,
+		"-InstallDir", evidenceRoot,
+		"-StageDependencyClosure",
+		"-DependencySourceRoot", filepath.Join(sourceUI, "node_modules"),
+		"-DependencyStageRoot", filepath.Join(stageRepo, "ui", "node_modules"),
+		"-DependencySourceManifestPath", filepath.Join(evidenceRoot, "source-manifest.jsonl"),
+		"-DependencyStageManifestPath", filepath.Join(evidenceRoot, "stage-manifest.jsonl"),
+		"-DependencyReportPath", filepath.Join(evidenceRoot, "stage-report.json"),
+		"-DependencyExpectedLockSHA256", lockSHA256,
+		"-DependencyExpectedLockBlob", lockBlob,
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("missing required dependency unexpectedly passed\n%s", output)
+	}
+	var report localAICandidateDependencyReport
+	raw, readErr := os.ReadFile(filepath.Join(evidenceRoot, "stage-report.json"))
+	if readErr != nil {
+		t.Fatalf("read dependency failure report: %v\n%s", readErr, output)
+	}
+	if decodeErr := decodeLocalAICandidateJSON(raw, &report); decodeErr != nil {
+		t.Fatalf("decode dependency failure report: %v", decodeErr)
+	}
+	if report.Status != "FAIL" || !strings.Contains(report.Error, "missing required package") {
+		t.Fatalf("dependency failure evidence = %#v, want fail-closed missing package", report)
+	}
+	t.Logf("LOCALAI-STAGE-FAILURE status=PASS evidence=%s", raw)
+}
+func localAICandidateWriteDependencyFixture(t *testing.T, repository string, includeDependency bool) {
+	t.Helper()
+	uiRoot := filepath.Join(repository, "ui")
+	workspaceRoot := filepath.Join(uiRoot, "packages", "app")
+	if err := os.MkdirAll(workspaceRoot, 0o700); err != nil {
+		t.Fatalf("create fixture workspace: %v", err)
+	}
+	dependencyName := "dep"
+	rootPackage := fmt.Sprintf(`{"name":"fixture-root","private":true,"workspaces":["packages/*"],"dependencies":{"%s":"1.0.0"},"devDependencies":{},"optionalDependencies":{}}`, dependencyName)
+	workspacePackage := fmt.Sprintf(`{"name":"fixture-app","dependencies":{"%s":"1.0.0"},"devDependencies":{},"optionalDependencies":{}}`, dependencyName)
+	lock := fmt.Sprintf(`{"lockfileVersion":1,"configVersion":0,"workspaces":{"":{"name":"fixture-root","dependencies":{"%s":"1.0.0"},"devDependencies":{},"optionalDependencies":{}},"packages/app":{"name":"fixture-app","dependencies":{"%s":"1.0.0"},"devDependencies":{},"optionalDependencies":{}}},"packages":{"dep@1.0.0":["dep@1.0.0","",{},""]}}`, dependencyName, dependencyName)
+	for path, contents := range map[string]string{
+		filepath.Join(uiRoot, "package.json"):        rootPackage,
+		filepath.Join(workspaceRoot, "package.json"): workspacePackage,
+		filepath.Join(uiRoot, "bun.lock"):            lock,
+	} {
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatalf("write fixture file %s: %v", path, err)
+		}
+	}
+	if includeDependency {
+		dependencyRoot := filepath.Join(uiRoot, "node_modules", dependencyName)
+		if err := os.MkdirAll(dependencyRoot, 0o700); err != nil {
+			t.Fatalf("create fixture dependency: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dependencyRoot, "package.json"), []byte(`{"name":"dep","version":"1.0.0","dependencies":{},"optionalDependencies":{},"peerDependencies":{}}`), 0o600); err != nil {
+			t.Fatalf("write fixture dependency manifest: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dependencyRoot, "index.js"), []byte("module.exports = true;\n"), 0o600); err != nil {
+			t.Fatalf("write fixture dependency file: %v", err)
+		}
+	}
+	localAICandidateRunGit(t, repository, "init")
+	localAICandidateRunGit(t, repository, "config", "user.email", "fixture@example.invalid")
+	localAICandidateRunGit(t, repository, "config", "user.name", "dependency-fixture")
+	localAICandidateRunGit(t, repository, "add", ".")
+	localAICandidateRunGit(t, repository, "commit", "-m", "dependency fixture")
+}
 func validateLocalAICandidateObserverEvidence(observation localAICandidateObserverEvidence) error {
 	process := observation.ProcessNetworkObserver
 	if process.Status != "PASS" || !process.StartedBeforeRoot || !process.ContinuedThroughDescendantExit || process.MaximumGapMilliseconds < 0 || process.MaximumGapMilliseconds > localAICandidateProcessNetworkGapMaximum || process.NonLoopbackConnections != 0 || process.ExternalTransferBytes != 0 || process.SampleCount <= 0 || process.TCPTableQueries != process.SampleCount || process.ZeroConnectionSamples <= 0 || process.OwnedConnectionMatches < 0 || process.OwnedProcessIdentityCount <= 0 || process.QueryMode != localAICandidateObserverQueryMode || len(process.ForbiddenProcesses) != 0 || process.Error != "" {
@@ -778,6 +1106,18 @@ func validateLocalAICandidateObserverEvidence(observation localAICandidateObserv
 	if observation.RootExitCode == nil {
 		return errors.New("root exit code is required before process disposal")
 	}
+	rootOutput := observation.RootOutput
+	if rootOutput.Status != "PASS" || rootOutput.MaximumBytes <= 0 {
+		return fmt.Errorf("invalid root output evidence: %#v", rootOutput)
+	}
+	for name, stream := range map[string]localAICandidateRootOutputStream{"stdout": rootOutput.Stdout, "stderr": rootOutput.Stderr} {
+		if stream.Status != "PASS" || !stream.Present || !filepath.IsAbs(stream.Path) || stream.TotalBytes < 0 || stream.CapturedBytes < 0 || stream.CapturedBytes > stream.TotalBytes || stream.CapturedBytes > rootOutput.MaximumBytes || stream.RedactedBytes < 0 || !localAICandidateSHA256Pattern.MatchString(stream.SHA256) {
+			return fmt.Errorf("invalid root %s output evidence: %#v", name, stream)
+		}
+		if stream.Truncated != (stream.TotalBytes > rootOutput.MaximumBytes) {
+			return fmt.Errorf("root %s truncation metadata does not match byte counts: %#v", name, stream)
+		}
+	}
 	if *observation.RootExitCode != 0 || observation.FailurePropagation != "PASS" || observation.ModelBackendBytes != 0 || observation.ModelBackendCalls != 0 {
 		return fmt.Errorf("invalid observer completion evidence: %#v", observation)
 	}
@@ -785,6 +1125,7 @@ func validateLocalAICandidateObserverEvidence(observation localAICandidateObserv
 }
 func TestLocalAICandidateObserverEvidenceRejectsUnprovenSamples(t *testing.T) {
 	rootExitCode := int64(0)
+	rootOutputPath := filepath.Join(os.TempDir(), "localai-observer-output.txt")
 	base := localAICandidateObserverEvidence{
 		ProcessNetworkObserver: localAICandidateProcessNetworkObserver{
 			StartedBeforeRoot: true, ContinuedThroughDescendantExit: true, MaximumGapMilliseconds: 1,
@@ -795,7 +1136,13 @@ func TestLocalAICandidateObserverEvidenceRejectsUnprovenSamples(t *testing.T) {
 		DescendantMaximum:   localAICandidateDescendantMaximum,
 		DescendantHighWater: 1,
 		RootExitCode:        &rootExitCode,
-		FailurePropagation:  "PASS",
+		RootOutput: localAICandidateRootOutput{
+			Status:       "PASS",
+			MaximumBytes: 1024,
+			Stdout:       localAICandidateRootOutputStream{Status: "PASS", Path: rootOutputPath, Present: true, TotalBytes: 10, CapturedBytes: 10, SHA256: strings.Repeat("a", sha256.Size*2)},
+			Stderr:       localAICandidateRootOutputStream{Status: "PASS", Path: rootOutputPath, Present: true, TotalBytes: 10, CapturedBytes: 10, SHA256: strings.Repeat("b", sha256.Size*2)},
+		},
+		FailurePropagation: "PASS",
 	}
 	tests := []struct {
 		name string
@@ -818,6 +1165,8 @@ func TestLocalAICandidateObserverEvidenceRejectsUnprovenSamples(t *testing.T) {
 			evidence.DiskObserver.MaximumGapMilliseconds = localAICandidateDiskGapMaximum + 1
 		}},
 		{name: "disk error", edit: func(evidence *localAICandidateObserverEvidence) { evidence.DiskObserver.Error = "disk sample failed" }},
+		{name: "root output missing", edit: func(evidence *localAICandidateObserverEvidence) { evidence.RootOutput.Stdout.Present = false }},
+		{name: "root output hash missing", edit: func(evidence *localAICandidateObserverEvidence) { evidence.RootOutput.Stderr.SHA256 = "" }},
 	}
 	for _, test := range tests {
 		test := test

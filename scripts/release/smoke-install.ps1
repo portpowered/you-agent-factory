@@ -12,6 +12,22 @@ param(
     [string]$ObserverRootCommand,
     [string[]]$ObserverRootArgumentList,
     [string]$ObserverRootWorkingDirectory,
+    [string]$ObserverRootStdoutPath,
+    [string]$ObserverRootStderrPath,
+    [int]$ObserverRootOutputMaximumBytes = 1048576,
+    [int]$ObserverRootExitCode = 0,
+    [switch]$StageDependencyClosure,
+    [switch]$VerifyDependencyClosure,
+    [string]$DependencySourceRoot,
+    [string]$DependencyStageRoot,
+    [string]$DependencySourceManifestPath,
+    [string]$DependencyStageManifestPath,
+    [string]$DependencyExpectedManifestPath,
+    [string]$DependencyPostBuildManifestPath,
+    [string]$DependencySourceAfterManifestPath,
+    [string]$DependencyReportPath,
+    [string]$DependencyExpectedLockSHA256 = "45ca702f71dbd8fbf47855dcf8cdb86b13785a009b2c107153ba52e0b20157ad",
+    [string]$DependencyExpectedLockBlob = "d6e4b715db635497bfcac0db085163ea719d21ab",
     [string]$ObserverReleaseCheckoutPath,
     [switch]$PrepareReleaseCheckout,
     [string]$ReleaseCheckoutPath,
@@ -32,6 +48,8 @@ $expectedTemporaryDiskBytesMaximum = [int64]4294967296
 $expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
 $expectedCandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
 $expectedCandidateSourceTree = "ae5d9c87fbc99a898ad2c11e1409105d78e4a094"
+$expectedDependencyLockSHA256 = "45ca702f71dbd8fbf47855dcf8cdb86b13785a009b2c107153ba52e0b20157ad"
+$expectedDependencyLockBlob = "d6e4b715db635497bfcac0db085163ea719d21ab"
 
 $observerIdentityFunctionSource = @'
 function Register-ObserverIdentities {
@@ -134,6 +152,67 @@ function Get-ObserverGitStatus {
 function Fail-Smoke {
     param([string]$Message)
     throw "install smoke: $Message"
+}
+
+function Get-SmokeRootOutputEvidence {
+    param(
+        [string]$RawPath,
+        [string]$RetainedPath,
+        [int]$MaximumBytes
+    )
+
+    if ($MaximumBytes -le 0) {
+        Fail-Smoke "root output maximum must be positive"
+    }
+    Ensure-SmokeFileHashCommand
+    $rawItem = Get-Item -LiteralPath $RawPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $rawItem -or $rawItem.PSIsContainer -or (($rawItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "root output evidence is missing or not a regular file: $RawPath"
+    }
+    $retainedPath = Resolve-SmokeAbsolutePath $RetainedPath
+    $retainedParent = Split-Path -Parent $retainedPath
+    if (-not (Test-Path -LiteralPath $retainedParent -PathType Container)) {
+        Fail-Smoke "root output evidence parent does not exist: $retainedParent"
+    }
+    $rawBytes = [System.IO.File]::ReadAllBytes($RawPath)
+    $totalBytes = [int64]$rawBytes.Length
+    $capturedByteCount = [int][Math]::Min([int64]$MaximumBytes, $totalBytes)
+    $capturedBytes = New-Object byte[] $capturedByteCount
+    if ($capturedByteCount -gt 0) {
+        [System.Array]::Copy($rawBytes, $capturedBytes, $capturedByteCount)
+    }
+    $text = [System.Text.Encoding]::UTF8.GetString($capturedBytes)
+    $redactionPattern = '(?i)(token|password|secret|api[_-]?key|authorization)\s*([:=])\s*[^\s,;]+'
+    $redactedBytes = [int64]0
+    foreach ($match in [System.Text.RegularExpressions.Regex]::Matches($text, $redactionPattern)) {
+        $value = [string]$match.Value
+        $separatorIndex = $value.IndexOfAny([char[]]@(':', '='))
+        if ($separatorIndex -ge 0 -and $separatorIndex + 1 -lt $value.Length) {
+            $redactedValue = $value.Substring($separatorIndex + 1).Trim()
+            $redactedBytes += [int64][System.Text.Encoding]::UTF8.GetByteCount($redactedValue)
+        }
+    }
+    $redactedText = [System.Text.RegularExpressions.Regex]::Replace($text, $redactionPattern, '$1$2<redacted>')
+    [System.IO.File]::WriteAllText($retainedPath, $redactedText, [System.Text.UTF8Encoding]::new($false))
+    $retainedItem = Get-Item -LiteralPath $retainedPath -Force -ErrorAction Stop
+    if ($retainedItem.PSIsContainer -or (($retainedItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "retained root output evidence is not a regular file: $retainedPath"
+    }
+    try {
+        Remove-Item -LiteralPath $RawPath -Force -ErrorAction Stop
+    } catch {
+        Fail-Smoke "unredacted root output evidence could not be removed: $RawPath; $($_.Exception.Message)"
+    }
+    return [ordered]@{
+        status = "PASS"
+        path = $retainedPath
+        present = $true
+        totalBytes = $totalBytes
+        capturedBytes = [int64]$capturedByteCount
+        truncated = ($totalBytes -gt $MaximumBytes)
+        redactedBytes = $redactedBytes
+        sha256 = ((Get-FileHash -LiteralPath $retainedPath -Algorithm SHA256).Hash.ToLowerInvariant())
+    }
 }
 
 function Ensure-SmokeFileHashCommand {
@@ -316,6 +395,665 @@ function Assert-SmokeDisposableRoot {
     if ($entries.Count -ne 0) {
         Fail-Smoke "declared root '$Name' is not empty: $((($entries | ForEach-Object Name) -join ', '))"
     }
+}
+
+function Assert-SmokeNewEvidenceFile {
+    param(
+        [string]$Name,
+        [string]$RequestedPath
+    )
+
+    $path = Resolve-SmokeAbsolutePath $RequestedPath
+    $parent = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        Fail-Smoke "$Name parent does not exist: $parent"
+    }
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if ($null -ne $item) {
+        Fail-Smoke "$Name already exists; prior evidence cannot be reused: $path"
+    }
+    return $path
+}
+
+function Get-SmokeSHA256 {
+    param([string]$Path)
+
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $digest = $hasher.ComputeHash($stream)
+    } finally {
+        $stream.Dispose()
+        $hasher.Dispose()
+    }
+    return ([System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant())
+}
+
+function Get-SmokeRelativePath {
+    param(
+        [string]$RootPath,
+        [string]$CandidatePath,
+        [string]$Role = "path"
+    )
+
+    $root = [System.IO.Path]::GetFullPath($RootPath).TrimEnd([char[]]"\/")
+    $candidate = [System.IO.Path]::GetFullPath($CandidatePath)
+    if ($candidate.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "."
+    }
+    $prefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Fail-Smoke "$Role resolves outside the contained root: $candidate"
+    }
+    return $candidate.Substring($prefix.Length).Replace([System.IO.Path]::DirectorySeparatorChar, '/')
+}
+
+function Get-SmokeDependencyLinkTarget {
+    param(
+        [object]$Item,
+        [string]$ContainmentRoot
+    )
+
+    $targetProperty = $Item.PSObject.Properties["Target"]
+    $targets = if ($null -eq $targetProperty) { @() } else { @($targetProperty.Value) }
+    if ($targets.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$targets[0])) {
+        Fail-Smoke "dependency link has ambiguous or missing target: $($Item.FullName)"
+    }
+    $target = [string]$targets[0]
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path (Split-Path -Parent $Item.FullName) $target
+    }
+    $target = [System.IO.Path]::GetFullPath($target)
+    $targetItem = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+    if ($null -eq $targetItem) {
+        Fail-Smoke "dependency link target is missing: $($Item.FullName) -> $target"
+    }
+    $targetRelative = Get-SmokeRelativePath -RootPath $ContainmentRoot -CandidatePath $target -Role "dependency link target"
+    return [pscustomobject]@{
+        absolute = $target
+        relative = $targetRelative
+    }
+}
+
+function Get-SmokeDependencyLinkItems {
+    param([string]$RootPath)
+
+    $rootItem = Get-Item -LiteralPath $RootPath -Force -ErrorAction Stop
+    $pending = New-Object 'System.Collections.Generic.Queue[string]'
+    $links = New-Object 'System.Collections.Generic.List[object]'
+    $pending.Enqueue($rootItem.FullName)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Dequeue()
+        foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+            $isReparse = (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+            if ($isReparse) {
+                [void]$links.Add($item)
+                continue
+            }
+            if ($item.PSIsContainer) {
+                $pending.Enqueue($item.FullName)
+            }
+        }
+    }
+    return @($links.ToArray())
+}
+
+function Get-SmokeDependencyEntries {
+    param(
+        [string]$RootPath,
+        [string]$ContainmentRoot
+    )
+
+    $rootItem = Get-Item -LiteralPath $RootPath -Force -ErrorAction Stop
+    if (-not $rootItem.PSIsContainer -or (($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "dependency root is not a regular directory: $RootPath"
+    }
+    $rootFullPath = [System.IO.Path]::GetFullPath($rootItem.FullName)
+    $containmentFullPath = [System.IO.Path]::GetFullPath($ContainmentRoot)
+    $entries = New-Object 'System.Collections.Generic.List[object]'
+    [void]$entries.Add([ordered]@{
+            path = "."
+            type = "directory"
+            bytes = [int64]0
+            sha256 = ""
+            target = $null
+        })
+    $pending = New-Object 'System.Collections.Generic.Queue[string]'
+    $pending.Enqueue($rootFullPath)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Dequeue()
+        foreach ($item in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+            $relative = Get-SmokeRelativePath -RootPath $rootFullPath -CandidatePath $item.FullName -Role "dependency entry"
+            $isReparse = (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+            if ($isReparse) {
+                $linkTypeProperty = $item.PSObject.Properties["LinkType"]
+                $linkType = if ($null -eq $linkTypeProperty) { "" } else { [string]$linkTypeProperty.Value }
+                $link = Get-SmokeDependencyLinkTarget -Item $item -ContainmentRoot $containmentFullPath
+                $type = if ($linkType -eq "Junction") { "junction" } elseif ($linkType -eq "SymbolicLink") { "symlink" } else { "" }
+                if ([string]::IsNullOrWhiteSpace($type)) {
+                    Fail-Smoke "dependency entry has unsupported link type '$linkType': $($item.FullName)"
+                }
+                [void]$entries.Add([ordered]@{
+                        path = $relative
+                        type = $type
+                        bytes = [int64]0
+                        sha256 = ""
+                        target = $link.relative
+                    })
+                continue
+            }
+            if ($item.PSIsContainer) {
+                [void]$entries.Add([ordered]@{
+                        path = $relative
+                        type = "directory"
+                        bytes = [int64]0
+                        sha256 = ""
+                        target = $null
+                    })
+                $pending.Enqueue($item.FullName)
+                continue
+            }
+            $fileBytes = [int64]$item.Length
+            [void]$entries.Add([ordered]@{
+                    path = $relative
+                    type = "file"
+                    bytes = $fileBytes
+                    sha256 = (Get-SmokeSHA256 -Path $item.FullName)
+                    target = $null
+                })
+        }
+    }
+    return @($entries.ToArray())
+}
+
+function New-SmokeDependencyManifest {
+    param(
+        [string]$RootPath,
+        [string]$ContainmentRoot,
+        [string]$ManifestPath
+    )
+
+    $manifestPath = Assert-SmokeNewEvidenceFile -Name "dependency manifest" -RequestedPath $ManifestPath
+    $entries = @(Get-SmokeDependencyEntries -RootPath $RootPath -ContainmentRoot $ContainmentRoot)
+    $sortedEntries = @($entries | Sort-Object -Property path)
+    $writer = [System.IO.StreamWriter]::new($manifestPath, $false, [System.Text.UTF8Encoding]::new($false))
+    try {
+        foreach ($entry in $sortedEntries) {
+            $writer.WriteLine(($entry | ConvertTo-Json -Compress -Depth 5))
+        }
+    } finally {
+        $writer.Dispose()
+    }
+    $fileCount = [int64]0
+    $directoryCount = [int64]0
+    $junctionCount = [int64]0
+    $symbolicLinkCount = [int64]0
+    $totalBytes = [int64]0
+    foreach ($entry in $sortedEntries) {
+        switch ([string]$entry.type) {
+            "file" { $fileCount++; $totalBytes += [int64]$entry.bytes }
+            "directory" { $directoryCount++ }
+            "junction" { $junctionCount++ }
+            "symlink" { $symbolicLinkCount++ }
+        }
+    }
+    return [ordered]@{
+        status = "PASS"
+        manifestPath = $manifestPath
+        manifestSHA256 = Get-SmokeSHA256 -Path $manifestPath
+        entryCount = [int64]$sortedEntries.Count
+        fileCount = $fileCount
+        directoryCount = $directoryCount
+        junctionCount = $junctionCount
+        symbolicLinkCount = $symbolicLinkCount
+        totalBytes = $totalBytes
+    }
+}
+
+function Read-SmokeStructuredJSON {
+    param([string]$Path)
+
+    $raw = [System.IO.File]::ReadAllText($Path)
+    $normalized = [System.Text.RegularExpressions.Regex]::Replace($raw, ',(?=\s*[}\]])', '')
+    try {
+        [void][System.Reflection.Assembly]::LoadWithPartialName("System.Web.Extensions")
+        $serializer = [System.Web.Script.Serialization.JavaScriptSerializer]::new()
+        return $serializer.DeserializeObject($normalized)
+    } catch {
+        Fail-Smoke "dependency JSON could not be parsed: $Path; $($_.Exception.Message)"
+    }
+}
+
+function Get-SmokeMapValue {
+    param(
+        [object]$Map,
+        [string]$Name
+    )
+
+    if ($null -eq $Map) { return $null }
+    if ($Map -is [System.Collections.IDictionary]) {
+        if ($Map.ContainsKey($Name)) { return $Map[$Name] }
+        return $null
+    }
+    $property = $Map.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+function Get-SmokeMapEntries {
+    param([object]$Map)
+
+    if ($null -eq $Map -or -not ($Map -is [System.Collections.IDictionary])) { return @() }
+    return @($Map.GetEnumerator())
+}
+
+function Assert-SmokeDependencyMapsMatch {
+    param(
+        [object]$ManifestMap,
+        [object]$LockMap,
+        [string]$WorkspaceKey,
+        [string]$GroupName
+    )
+
+    $manifestEntries = @(Get-SmokeMapEntries $ManifestMap)
+    $lockEntries = @(Get-SmokeMapEntries $LockMap)
+    foreach ($entry in $manifestEntries) {
+        $lockValue = Get-SmokeMapValue -Map $LockMap -Name ([string]$entry.Key)
+        if ($null -eq $lockValue -or [string]$lockValue -cne [string]$entry.Value) {
+            Fail-Smoke "lock workspace '$WorkspaceKey' $GroupName drift for '$($entry.Key)'"
+        }
+    }
+    foreach ($entry in $lockEntries) {
+        $manifestValue = Get-SmokeMapValue -Map $ManifestMap -Name ([string]$entry.Key)
+        if ($null -eq $manifestValue) {
+            Fail-Smoke "lock workspace '$WorkspaceKey' has undeclared $GroupName dependency '$($entry.Key)'"
+        }
+    }
+}
+
+function Resolve-SmokeNodePackageManifest {
+    param(
+        [string]$DependencyName,
+        [string]$RequesterDirectory,
+        [string]$UIRoot
+    )
+
+    $current = [System.IO.Path]::GetFullPath($RequesterDirectory)
+    $uiFullPath = [System.IO.Path]::GetFullPath($UIRoot)
+    while ($true) {
+        $candidateDirectory = Join-Path (Join-Path $current "node_modules") $DependencyName
+        $candidateManifest = Join-Path $candidateDirectory "package.json"
+        $manifestItem = Get-Item -LiteralPath $candidateManifest -Force -ErrorAction SilentlyContinue
+        if ($null -ne $manifestItem -and -not $manifestItem.PSIsContainer -and (($manifestItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+            return $manifestItem.FullName
+        }
+        if ($current.Equals($uiFullPath, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+        if (-not ($current.StartsWith($uiFullPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))) { break }
+        $parent = [System.IO.DirectoryInfo]$current
+        $parent = $parent.Parent
+        if ($null -eq $parent) { break }
+        $current = $parent.FullName
+    }
+    return $null
+}
+
+function Get-SmokeDependencyLockClosure {
+    param(
+        [string]$DependencyRoot,
+        [string]$ExpectedLockSHA256,
+        [string]$ExpectedLockBlob
+    )
+
+    $rootPath = Resolve-SmokeAbsolutePath $DependencyRoot
+    $uiRoot = Split-Path -Parent $rootPath
+    $lockPath = Join-Path $uiRoot "bun.lock"
+    $lockItem = Get-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $lockItem -or $lockItem.PSIsContainer -or (($lockItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "dependency lock is missing or not a regular file: $lockPath"
+    }
+    $lockSHA256 = Get-SmokeSHA256 -Path $lockPath
+    if ($lockSHA256 -cne $ExpectedLockSHA256.ToLowerInvariant()) {
+        Fail-Smoke "dependency lock SHA-256 = $lockSHA256, want $ExpectedLockSHA256"
+    }
+    $lockBlob = (Invoke-SmokeGit $uiRoot @("rev-parse", "HEAD:ui/bun.lock") | Select-Object -Last 1).Trim()
+    if ($lockBlob -cne $ExpectedLockBlob.ToLowerInvariant()) {
+        Fail-Smoke "dependency lock Git blob = $lockBlob, want $ExpectedLockBlob"
+    }
+    $lock = Read-SmokeStructuredJSON $lockPath
+    $lockfileVersion = Get-SmokeMapValue -Map $lock -Name "lockfileVersion"
+    if ([int]$lockfileVersion -ne 1) {
+        Fail-Smoke "dependency lockfileVersion = $lockfileVersion, want 1"
+    }
+    $workspaces = Get-SmokeMapValue -Map $lock -Name "workspaces"
+    $packages = Get-SmokeMapValue -Map $lock -Name "packages"
+    $workspaceEntries = @(Get-SmokeMapEntries $workspaces)
+    $packageEntries = @(Get-SmokeMapEntries $packages)
+    if ($workspaceEntries.Count -eq 0 -or $packageEntries.Count -eq 0) {
+        Fail-Smoke "dependency lock has no workspace/package closure"
+    }
+
+    $workspaceManifestPaths = New-Object 'System.Collections.Generic.List[string]'
+    $rootManifestPath = Join-Path $uiRoot "package.json"
+    if (-not (Test-Path -LiteralPath $rootManifestPath -PathType Leaf)) {
+        Fail-Smoke "workspace root package manifest is missing: $rootManifestPath"
+    }
+    [void]$workspaceManifestPaths.Add($rootManifestPath)
+    $workspacePackagesRoot = Join-Path $uiRoot "packages"
+    if (-not (Test-Path -LiteralPath $workspacePackagesRoot -PathType Container)) {
+        Fail-Smoke "workspace packages root is missing: $workspacePackagesRoot"
+    }
+    foreach ($workspaceDirectory in @(Get-ChildItem -LiteralPath $workspacePackagesRoot -Directory -Force -ErrorAction Stop)) {
+        $workspaceManifestPath = Join-Path $workspaceDirectory.FullName "package.json"
+        if (Test-Path -LiteralPath $workspaceManifestPath -PathType Leaf) {
+            [void]$workspaceManifestPaths.Add($workspaceManifestPath)
+        }
+    }
+    $workspaceByName = @{}
+    $workspaceByPath = @{}
+    $workspaceRecords = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($workspaceManifestPath in @($workspaceManifestPaths.ToArray())) {
+        $manifest = Read-SmokeStructuredJSON $workspaceManifestPath
+        $workspaceName = [string](Get-SmokeMapValue -Map $manifest -Name "name")
+        if ([string]::IsNullOrWhiteSpace($workspaceName)) {
+            Fail-Smoke "workspace package name is missing: $workspaceManifestPath"
+        }
+        $workspaceDirectory = Split-Path -Parent $workspaceManifestPath
+        $workspaceKey = Get-SmokeRelativePath -RootPath $uiRoot -CandidatePath $workspaceDirectory -Role "workspace"
+        if ($workspaceKey -eq ".") { $workspaceKey = "" }
+        $lockWorkspace = Get-SmokeMapValue -Map $workspaces -Name $workspaceKey
+        if ($null -eq $lockWorkspace) {
+            Fail-Smoke "lock workspace '$workspaceKey' is missing"
+        }
+        foreach ($groupName in @("dependencies", "devDependencies", "optionalDependencies")) {
+            Assert-SmokeDependencyMapsMatch -ManifestMap (Get-SmokeMapValue -Map $manifest -Name $groupName) -LockMap (Get-SmokeMapValue -Map $lockWorkspace -Name $groupName) -WorkspaceKey $workspaceKey -GroupName $groupName
+        }
+        if ($workspaceByName.ContainsKey($workspaceName)) {
+            Fail-Smoke "duplicate workspace package name '$workspaceName'"
+        }
+        $workspaceByName[$workspaceName] = $workspaceManifestPath
+        $workspaceByPath[$workspaceKey] = $workspaceManifestPath
+        [void]$workspaceRecords.Add([pscustomobject]@{ key = $workspaceKey; name = $workspaceName; manifestPath = $workspaceManifestPath })
+    }
+    $expectedWorkspaceKeys = @($workspaceByPath.Keys | Sort-Object)
+    $actualWorkspaceKeys = @($workspaces.Keys | ForEach-Object { [string]$_ } | Sort-Object)
+    if (-not ([System.Linq.Enumerable]::SequenceEqual([string[]]$expectedWorkspaceKeys, [string[]]$actualWorkspaceKeys))) {
+        Fail-Smoke "lock workspace set differs from package manifests"
+    }
+
+    $queue = New-Object 'System.Collections.Generic.Queue[string]'
+    foreach ($record in @($workspaceRecords.ToArray())) { $queue.Enqueue($record.manifestPath) }
+    $visited = @{}
+    $optionalMissing = New-Object 'System.Collections.Generic.List[string]'
+    $reachablePackageCount = [int64]0
+    while ($queue.Count -gt 0) {
+        $manifestPath = $queue.Dequeue()
+        $manifestKey = [System.IO.Path]::GetFullPath($manifestPath).ToLowerInvariant()
+        if ($visited.ContainsKey($manifestKey)) { continue }
+        $visited[$manifestKey] = $true
+        $packageManifest = Read-SmokeStructuredJSON $manifestPath
+        $packageName = [string](Get-SmokeMapValue -Map $packageManifest -Name "name")
+        if ([string]::IsNullOrWhiteSpace($packageName)) {
+            Fail-Smoke "reachable package name is missing: $manifestPath"
+        }
+        $reachablePackageCount++
+        $requesterDirectory = Split-Path -Parent $manifestPath
+        foreach ($groupName in @("dependencies", "optionalDependencies", "peerDependencies")) {
+            $dependencyMap = Get-SmokeMapValue -Map $packageManifest -Name $groupName
+            foreach ($dependency in @(Get-SmokeMapEntries $dependencyMap)) {
+                $dependencyName = [string]$dependency.Key
+                $dependencySpec = [string]$dependency.Value
+                $resolvedManifest = $null
+                if ($dependencySpec -like "workspace:*") {
+                    if (-not $workspaceByName.ContainsKey($dependencyName)) {
+                        Fail-Smoke "workspace dependency '$dependencyName' from '$packageName' is not declared"
+                    }
+                    $resolvedManifest = $workspaceByName[$dependencyName]
+                } else {
+                    $resolvedManifest = Resolve-SmokeNodePackageManifest -DependencyName $dependencyName -RequesterDirectory $requesterDirectory -UIRoot $uiRoot
+                }
+                if ([string]::IsNullOrWhiteSpace([string]$resolvedManifest)) {
+                    if ($groupName -eq "optionalDependencies") {
+                        [void]$optionalMissing.Add("$packageName->$dependencyName")
+                        continue
+                    }
+                    Fail-Smoke "dependency closure is missing required package '$dependencyName' from '$packageName'"
+                }
+                $resolvedItem = Get-Item -LiteralPath $resolvedManifest -Force -ErrorAction Stop
+                [void](Get-SmokeRelativePath -RootPath $uiRoot -CandidatePath $resolvedItem.FullName -Role "resolved dependency")
+                $queue.Enqueue($resolvedItem.FullName)
+            }
+        }
+    }
+    return [ordered]@{
+        status = "PASS"
+        lockPath = $lockPath
+        lockSHA256 = $lockSHA256
+        lockBlob = $lockBlob
+        lockfileVersion = [int]$lockfileVersion
+        workspaceCount = [int64]$workspaceEntries.Count
+        lockPackageCount = [int64]$packageEntries.Count
+        reachablePackageCount = $reachablePackageCount
+        optionalMissingCount = [int64]$optionalMissing.Count
+        optionalMissing = @($optionalMissing.ToArray())
+    }
+}
+
+function Copy-SmokeDependencyTree {
+    param(
+        [string]$SourceRoot,
+        [string]$StageRoot,
+        [string]$SourceContainmentRoot,
+        [string]$StageContainmentRoot
+    )
+
+    $sourcePath = Resolve-SmokeAbsolutePath $SourceRoot
+    $stagePath = Resolve-SmokeAbsolutePath $StageRoot
+    $sourceContainmentPath = Resolve-SmokeAbsolutePath $SourceContainmentRoot
+    $stageContainmentPath = Resolve-SmokeAbsolutePath $StageContainmentRoot
+    $sourceItem = Get-Item -LiteralPath $sourcePath -Force -ErrorAction Stop
+    if (-not $sourceItem.PSIsContainer -or (($sourceItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "dependency source root is not a regular directory: $sourcePath"
+    }
+    Assert-SmokeDisposableRoot -Name "dependency stage" -Path $stagePath
+    if (-not (Test-Path -LiteralPath $stagePath -PathType Container)) {
+        [void][System.IO.Directory]::CreateDirectory($stagePath)
+    }
+    $robocopyArguments = @(
+        $sourcePath, $stagePath,
+        "/E", "/SL", "/COPY:DAT", "/DCOPY:DAT", "/R:0", "/W:0",
+        "/NFL", "/NDL", "/NJH", "/NJS", "/NP"
+    )
+    $robocopyOutput = @(& robocopy.exe @robocopyArguments 2>&1)
+    $robocopyExitCode = [int]$LASTEXITCODE
+    if ($robocopyExitCode -gt 7) {
+        $diagnostic = @($robocopyOutput | ForEach-Object { [string]$_ } | Select-Object -Last 20) -join " | "
+        Fail-Smoke "exact dependency copy failed with robocopy exit code ${robocopyExitCode}: $diagnostic"
+    }
+
+    $rewrittenLinks = [int64]0
+    foreach ($sourceLink in @(Get-SmokeDependencyLinkItems -RootPath $sourcePath)) {
+        $relative = Get-SmokeRelativePath -RootPath $sourcePath -CandidatePath $sourceLink.FullName -Role "dependency link"
+        $stageLinkPath = Join-Path $stagePath ($relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        $sourceLinkTarget = Get-SmokeDependencyLinkTarget -Item $sourceLink -ContainmentRoot $sourceContainmentPath
+        $stageTargetPath = Join-Path $stageContainmentPath ($sourceLinkTarget.relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
+        if (-not (Test-Path -LiteralPath $stageTargetPath)) {
+            Fail-Smoke "staged dependency link target is missing: $stageLinkPath -> $stageTargetPath"
+        }
+        $stageLinkItem = Get-Item -LiteralPath $stageLinkPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $stageLinkItem -and (($stageLinkItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+            Fail-Smoke "dependency copier followed a source reparse point: $stageLinkPath"
+        }
+        if ($null -ne $stageLinkItem) {
+            Remove-Item -LiteralPath $stageLinkPath -Force -ErrorAction Stop
+        }
+        $stageLinkParent = Split-Path -Parent $stageLinkPath
+        if (-not (Test-Path -LiteralPath $stageLinkParent -PathType Container)) {
+            [void][System.IO.Directory]::CreateDirectory($stageLinkParent)
+        }
+        $linkTypeProperty = $sourceLink.PSObject.Properties["LinkType"]
+        $linkType = if ($null -eq $linkTypeProperty) { "" } else { [string]$linkTypeProperty.Value }
+        if ($linkType -eq "Junction") {
+            [void](New-Item -ItemType Junction -Path $stageLinkPath -Target $stageTargetPath -ErrorAction Stop)
+        } elseif ($linkType -eq "SymbolicLink") {
+            [void](New-Item -ItemType SymbolicLink -Path $stageLinkPath -Target $stageTargetPath -ErrorAction Stop)
+        } else {
+            Fail-Smoke "dependency copier cannot reproduce link type '$linkType': $($sourceLink.FullName)"
+        }
+        $rewrittenLinks++
+    }
+    return [ordered]@{
+        status = "PASS"
+        robocopyExitCode = $robocopyExitCode
+        rewrittenLinks = $rewrittenLinks
+        outputLineCount = [int64]$robocopyOutput.Count
+    }
+}
+
+function Write-SmokeJSONEvidence {
+    param(
+        [string]$RequestedPath,
+        [object]$Evidence
+    )
+
+    $path = Assert-SmokeNewEvidenceFile -Name "dependency report" -RequestedPath $RequestedPath
+    [System.IO.File]::WriteAllText($path, ($Evidence | ConvertTo-Json -Depth 20), [System.Text.UTF8Encoding]::new($false))
+    return $path
+}
+
+function Invoke-SmokeDependencyStage {
+    param(
+        [string]$RequestedSourceRoot,
+        [string]$RequestedStageRoot,
+        [string]$RequestedSourceManifestPath,
+        [string]$RequestedStageManifestPath,
+        [string]$RequestedReportPath,
+        [string]$ExpectedLockSHA256,
+        [string]$ExpectedLockBlob
+    )
+
+    $reportPath = Resolve-SmokeAbsolutePath $RequestedReportPath
+    $report = [ordered]@{
+        schemaVersion = "localai-windows-install-candidate-dependency-stage/v1"
+        status = "FAIL"
+        phase = "stage"
+        sourceRoot = Resolve-SmokeAbsolutePath $RequestedSourceRoot
+        stageRoot = Resolve-SmokeAbsolutePath $RequestedStageRoot
+        packageInstallation = "NOT_RUN"
+        sourceManifest = $null
+        stageManifest = $null
+        sourceLockClosure = $null
+        stageLockClosure = $null
+        copy = $null
+        equality = $null
+        error = ""
+    }
+    try {
+        $sourceRoot = $report.sourceRoot
+        $stageRoot = $report.stageRoot
+        $sourceContainmentRoot = Split-Path -Parent $sourceRoot
+        $stageContainmentRoot = Split-Path -Parent $stageRoot
+        $sourceManifestPath = Assert-SmokeNewEvidenceFile -Name "source dependency manifest" -RequestedPath $RequestedSourceManifestPath
+        $stageManifestPath = Assert-SmokeNewEvidenceFile -Name "staged dependency manifest" -RequestedPath $RequestedStageManifestPath
+        $sourceClosure = Get-SmokeDependencyLockClosure -DependencyRoot $sourceRoot -ExpectedLockSHA256 $ExpectedLockSHA256 -ExpectedLockBlob $ExpectedLockBlob
+        $sourceManifest = New-SmokeDependencyManifest -RootPath $sourceRoot -ContainmentRoot $sourceContainmentRoot -ManifestPath $sourceManifestPath
+        $copy = Copy-SmokeDependencyTree -SourceRoot $sourceRoot -StageRoot $stageRoot -SourceContainmentRoot $sourceContainmentRoot -StageContainmentRoot $stageContainmentRoot
+        $stageClosure = Get-SmokeDependencyLockClosure -DependencyRoot $stageRoot -ExpectedLockSHA256 $ExpectedLockSHA256 -ExpectedLockBlob $ExpectedLockBlob
+        $stageManifest = New-SmokeDependencyManifest -RootPath $stageRoot -ContainmentRoot $stageContainmentRoot -ManifestPath $stageManifestPath
+        $manifestEqual = $sourceManifest.manifestSHA256 -ceq $stageManifest.manifestSHA256
+        if (-not $manifestEqual) {
+            Fail-Smoke "source and staged dependency manifests differ"
+        }
+        $report.sourceLockClosure = $sourceClosure
+        $report.stageLockClosure = $stageClosure
+        $report.sourceManifest = $sourceManifest
+        $report.stageManifest = $stageManifest
+        $report.copy = $copy
+        $report.equality = [ordered]@{
+            sourceStageManifestEqual = $manifestEqual
+            sourceEntryCount = $sourceManifest.entryCount
+            stageEntryCount = $stageManifest.entryCount
+            sourceTotalBytes = $sourceManifest.totalBytes
+            stageTotalBytes = $stageManifest.totalBytes
+        }
+        $report.status = "PASS"
+    } catch {
+        $report.error = $_.Exception.Message
+    }
+    Write-SmokeJSONEvidence -RequestedPath $reportPath -Evidence $report | Out-Null
+    if ($report.status -ne "PASS") {
+        throw "dependency staging failed; report=$reportPath"
+    }
+    Write-Output "dependency staging passed; report=$reportPath"
+}
+
+function Invoke-SmokeDependencyVerification {
+    param(
+        [string]$RequestedSourceRoot,
+        [string]$RequestedStageRoot,
+        [string]$RequestedExpectedManifestPath,
+        [string]$RequestedPostBuildManifestPath,
+        [string]$RequestedSourceAfterManifestPath,
+        [string]$RequestedReportPath,
+        [string]$ExpectedLockSHA256,
+        [string]$ExpectedLockBlob
+    )
+
+    $reportPath = Resolve-SmokeAbsolutePath $RequestedReportPath
+    $report = [ordered]@{
+        schemaVersion = "localai-windows-install-candidate-dependency-stage/v1"
+        status = "FAIL"
+        phase = "post-build"
+        sourceRoot = Resolve-SmokeAbsolutePath $RequestedSourceRoot
+        stageRoot = Resolve-SmokeAbsolutePath $RequestedStageRoot
+        packageInstallation = "NOT_RUN"
+        expectedManifest = $null
+        postBuildManifest = $null
+        sourceAfterBuildManifest = $null
+        sourceLockClosure = $null
+        stageLockClosure = $null
+        equality = $null
+        error = ""
+    }
+    try {
+        $sourceRoot = $report.sourceRoot
+        $stageRoot = $report.stageRoot
+        $sourceContainmentRoot = Split-Path -Parent $sourceRoot
+        $stageContainmentRoot = Split-Path -Parent $stageRoot
+        $expectedManifestPath = Resolve-SmokeAbsolutePath $RequestedExpectedManifestPath
+        if (-not (Test-Path -LiteralPath $expectedManifestPath -PathType Leaf)) {
+            Fail-Smoke "expected dependency manifest is missing: $expectedManifestPath"
+        }
+        $postBuildManifestPath = Assert-SmokeNewEvidenceFile -Name "post-build dependency manifest" -RequestedPath $RequestedPostBuildManifestPath
+        $sourceAfterManifestPath = Assert-SmokeNewEvidenceFile -Name "source-after-build dependency manifest" -RequestedPath $RequestedSourceAfterManifestPath
+        $sourceClosure = Get-SmokeDependencyLockClosure -DependencyRoot $sourceRoot -ExpectedLockSHA256 $ExpectedLockSHA256 -ExpectedLockBlob $ExpectedLockBlob
+        $stageClosure = Get-SmokeDependencyLockClosure -DependencyRoot $stageRoot -ExpectedLockSHA256 $ExpectedLockSHA256 -ExpectedLockBlob $ExpectedLockBlob
+        $postBuildManifest = New-SmokeDependencyManifest -RootPath $stageRoot -ContainmentRoot $stageContainmentRoot -ManifestPath $postBuildManifestPath
+        $sourceAfterManifest = New-SmokeDependencyManifest -RootPath $sourceRoot -ContainmentRoot $sourceContainmentRoot -ManifestPath $sourceAfterManifestPath
+        $expectedSHA256 = Get-SmokeSHA256 -Path $expectedManifestPath
+        $postBuildEqual = $expectedSHA256 -ceq $postBuildManifest.manifestSHA256
+        $sourceUnchanged = $expectedSHA256 -ceq $sourceAfterManifest.manifestSHA256
+        if (-not $postBuildEqual) { Fail-Smoke "post-build dependency manifest differs from staged manifest" }
+        if (-not $sourceUnchanged) { Fail-Smoke "source dependency manifest changed during build" }
+        $report.expectedManifest = [ordered]@{ path = $expectedManifestPath; manifestSHA256 = $expectedSHA256 }
+        $report.postBuildManifest = $postBuildManifest
+        $report.sourceAfterBuildManifest = $sourceAfterManifest
+        $report.sourceLockClosure = $sourceClosure
+        $report.stageLockClosure = $stageClosure
+        $report.equality = [ordered]@{
+            sourceStagePostBuildEqual = ($expectedSHA256 -ceq $postBuildManifest.manifestSHA256 -and $expectedSHA256 -ceq $sourceAfterManifest.manifestSHA256)
+            expectedManifestSHA256 = $expectedSHA256
+            postBuildManifestSHA256 = $postBuildManifest.manifestSHA256
+            sourceAfterBuildManifestSHA256 = $sourceAfterManifest.manifestSHA256
+        }
+        $report.status = "PASS"
+    } catch {
+        $report.error = $_.Exception.Message
+    }
+    Write-SmokeJSONEvidence -RequestedPath $reportPath -Evidence $report | Out-Null
+    if ($report.status -ne "PASS") {
+        throw "dependency post-build verification failed; report=$reportPath"
+    }
+    Write-Output "dependency post-build verification passed; report=$reportPath"
 }
 
 function Test-SmokePathResolvesYou {
@@ -645,6 +1383,36 @@ function Invoke-SmokeCommand {
     } finally {
         $process.Dispose()
     }
+}
+
+function Convert-SmokeProcessArgumentListToCommandLine {
+    param([string[]]$Arguments)
+
+    $quotedArguments = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($argument in @($Arguments)) {
+        $value = if ($null -eq $argument) { "" } else { [string]$argument }
+        $builder = [System.Text.StringBuilder]::new()
+        [void]$builder.Append('"')
+        $backslashCount = 0
+        foreach ($character in $value.ToCharArray()) {
+            if ($character -eq '\') {
+                $backslashCount++
+                continue
+            }
+            if ($character -eq '"') {
+                if ($backslashCount -gt 0) { [void]$builder.Append(('\' * ($backslashCount * 2))) }
+                [void]$builder.Append('\"')
+                $backslashCount = 0
+                continue
+            }
+            if ($backslashCount -gt 0) { [void]$builder.Append(('\' * $backslashCount)); $backslashCount = 0 }
+            [void]$builder.Append($character)
+        }
+        if ($backslashCount -gt 0) { [void]$builder.Append(('\' * ($backslashCount * 2))) }
+        [void]$builder.Append('"')
+        [void]$quotedArguments.Add($builder.ToString())
+    }
+    return [string]::Join(" ", $quotedArguments.ToArray())
 }
 
 function New-SmokeLoopbackPort {
@@ -1709,6 +2477,10 @@ function Invoke-ObserverFixture {
         [string]$RootCommand,
         [string[]]$RootArgumentList,
         [string]$RootWorkingDirectory,
+        [string]$RootStdoutPath,
+        [string]$RootStderrPath,
+        [int]$RootOutputMaximumBytes = 1048576,
+        [int]$RequestedRootExitCode = 0,
         [string]$ObserverReleaseCheckoutPath,
         [int]$TimeoutSeconds = 20
     )
@@ -1754,10 +2526,48 @@ function Invoke-ObserverFixture {
     $diskReadyPath = Join-Path $fixtureRoot "disk-ready"
     $pidPath = Join-Path $fixtureRoot "root.pid"
     $donePath = Join-Path $fixtureRoot "root.done"
+    $rootStdoutPath = if ([string]::IsNullOrWhiteSpace($RootStdoutPath)) {
+        Join-Path (Split-Path -Parent $reportPath) "observer-root.stdout.txt"
+    } else {
+        Resolve-SmokeAbsolutePath $RootStdoutPath
+    }
+    $rootStderrPath = if ([string]::IsNullOrWhiteSpace($RootStderrPath)) {
+        Join-Path (Split-Path -Parent $reportPath) "observer-root.stderr.txt"
+    } else {
+        Resolve-SmokeAbsolutePath $RootStderrPath
+    }
+    if ($RootOutputMaximumBytes -le 0) {
+        Fail-Smoke "observer root output maximum must be positive"
+    }
+    foreach ($retainedPath in @($rootStdoutPath, $rootStderrPath)) {
+        $retainedParent = Split-Path -Parent $retainedPath
+        if (-not (Test-Path -LiteralPath $retainedParent -PathType Container)) {
+            Fail-Smoke "observer root output parent does not exist: $retainedParent"
+        }
+        if (Test-Path -LiteralPath $retainedPath -PathType Leaf) {
+            Fail-Smoke "observer root output evidence already exists: $retainedPath"
+        }
+        if (Test-Path -LiteralPath $retainedPath -PathType Container) {
+            Fail-Smoke "observer root output evidence path is a directory: $retainedPath"
+        }
+    }
+    $rootStdoutCapturePath = $rootStdoutPath + ".capture"
+    $rootStderrCapturePath = $rootStderrPath + ".capture"
+    foreach ($capturePath in @($rootStdoutCapturePath, $rootStderrCapturePath)) {
+        if (Test-Path -LiteralPath $capturePath) {
+            Fail-Smoke "observer root output capture already exists: $capturePath"
+        }
+    }
     $processJob = $null
     $diskJob = $null
     $rootProcess = $null
     $rootExitCode = $null
+    $rootOutput = [ordered]@{
+        status = "FAIL"
+        maximumBytes = [int64]$RootOutputMaximumBytes
+        stdout = [ordered]@{ status = "FAIL"; path = $rootStdoutPath; present = $false; totalBytes = [int64]0; capturedBytes = [int64]0; truncated = $false; redactedBytes = [int64]0; sha256 = "" }
+        stderr = [ordered]@{ status = "FAIL"; path = $rootStderrPath; present = $false; totalBytes = [int64]0; capturedBytes = [int64]0; truncated = $false; redactedBytes = [int64]0; sha256 = "" }
+    }
     $failure = $null
     $cleanupErrors = New-Object 'System.Collections.Generic.List[string]'
     $remainingTaskPaths = @()
@@ -2099,19 +2909,42 @@ function Invoke-ObserverFixture {
         if (-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) { throw "observers did not start before root" }
 
         if ($externalRoot) {
-            $rootProcess = Start-Process -FilePath $RootCommand -WorkingDirectory $resolvedRootWorkingDirectory -WindowStyle Hidden -ArgumentList @($RootArgumentList) -PassThru
+            $rootFilePath = $RootCommand
+            $rootArguments = @($RootArgumentList)
         } else {
         $childOne = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 2500"))
         $childTwo = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 3000"))
         $fixtureFile = (Join-Path $fixtureRoot "fixture.txt").Replace("'", "''")
-        $rootScript = "`$ErrorActionPreference = 'Stop'; Set-Content -LiteralPath '$fixtureFile' -Value ('fixture' * 64); `$one = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childOne') -PassThru; `$two = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childTwo') -PassThru; Wait-Process -Id @(`$one.Id, `$two.Id); exit 0"
+        if ($RequestedRootExitCode -lt 0 -or $RequestedRootExitCode -gt 255) { throw "observer root exit code must be between 0 and 255" }
+        $rootExitCommand = "exit " + ([int]$RequestedRootExitCode)
+        $rootScript = "`$ErrorActionPreference = 'Stop'; Set-Content -LiteralPath '$fixtureFile' -Value ('fixture' * 64); Write-Output 'root stdout token=observer-secret'; [Console]::Error.WriteLine('root stderr api_key=observer-secret'); `$one = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childOne') -PassThru; `$two = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childTwo') -PassThru; Wait-Process -Id @(`$one.Id, `$two.Id); $rootExitCommand"
         $rootEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($rootScript))
-        $rootProcess = Start-Process -FilePath "powershell.exe" -WorkingDirectory $fixtureRoot -WindowStyle Hidden -ArgumentList @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded) -PassThru
+        $rootFilePath = "powershell.exe"
+        $rootArguments = @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded)
         }
+        $rootStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $rootStartInfo.FileName = $rootFilePath
+        $rootStartInfo.Arguments = Convert-SmokeProcessArgumentListToCommandLine $rootArguments
+        $rootStartInfo.WorkingDirectory = if ($externalRoot) { $resolvedRootWorkingDirectory } else { $fixtureRoot }
+        $rootStartInfo.UseShellExecute = $false
+        $rootStartInfo.CreateNoWindow = $true
+        $rootStartInfo.RedirectStandardOutput = $true
+        $rootStartInfo.RedirectStandardError = $true
+        $rootProcess = [System.Diagnostics.Process]::new()
+        $rootProcess.StartInfo = $rootStartInfo
+        if (-not $rootProcess.Start()) { throw "observer root could not start: $rootFilePath" }
+        $rootStdoutTask = $rootProcess.StandardOutput.ReadToEndAsync()
+        $rootStderrTask = $rootProcess.StandardError.ReadToEndAsync()
         [System.IO.File]::WriteAllText($pidPath, [string]$rootProcess.Id)
         $waitMilliseconds = [int][Math]::Min([int64]2147483647, [int64]$TimeoutSeconds * 1000)
         if (-not $rootProcess.WaitForExit($waitMilliseconds)) { throw "observer root timed out" }
+        $rootProcess.Refresh()
         $rootExitCode = [int64]$rootProcess.ExitCode
+        [System.IO.File]::WriteAllText($rootStdoutCapturePath, $rootStdoutTask.GetAwaiter().GetResult(), [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($rootStderrCapturePath, $rootStderrTask.GetAwaiter().GetResult(), [System.Text.UTF8Encoding]::new($false))
+        $rootOutput.stdout = Get-SmokeRootOutputEvidence -RawPath $rootStdoutCapturePath -RetainedPath $rootStdoutPath -MaximumBytes $RootOutputMaximumBytes
+        $rootOutput.stderr = Get-SmokeRootOutputEvidence -RawPath $rootStderrCapturePath -RetainedPath $rootStderrPath -MaximumBytes $RootOutputMaximumBytes
+        $rootOutput.status = if ($rootOutput.stdout.status -eq "PASS" -and $rootOutput.stderr.status -eq "PASS") { "PASS" } else { "FAIL" }
         [System.IO.File]::WriteAllText($donePath, "done")
         $completedJobs = @(Wait-Job -Job @($processJob, $diskJob) -Timeout 25)
         if ($completedJobs.Count -ne 2) { throw "observers did not complete after root exit" }
@@ -2154,6 +2987,11 @@ function Invoke-ObserverFixture {
         try {
             if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction Stop }
         } catch { [void]$cleanupErrors.Add("fixture root cleanup: $($_.Exception.Message)") }
+        foreach ($capturePath in @($rootStdoutCapturePath, $rootStderrCapturePath)) {
+            try {
+                if (Test-Path -LiteralPath $capturePath) { Remove-Item -LiteralPath $capturePath -Force -ErrorAction Stop }
+            } catch { [void]$cleanupErrors.Add("root output capture cleanup: $($_.Exception.Message)") }
+        }
         if (Test-Path -LiteralPath $fixtureRoot) { $remainingTaskPaths += $fixtureRoot }
     }
 
@@ -2161,7 +2999,8 @@ function Invoke-ObserverFixture {
         $processObservation.error = $cleanupErrors -join "; "
     }
     $checkoutPass = [string]::IsNullOrWhiteSpace($ObserverReleaseCheckoutPath) -or ($null -ne $releaseCheckoutEvidence -and [bool]$processObservation.releaseStatusCleanBeforeRoot -and [bool]$processObservation.releaseStatusCleanDuringRoot -and [bool]$processObservation.releaseStatusCleanAfterOutput -and [bool]$releaseCheckoutEvidence.statusCleanAfterOutput)
-    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $processObservation.sampleCount -gt 0 -and $processObservation.tcpTableQueries -eq $processObservation.sampleCount -and $processObservation.zeroConnectionSamples -gt 0 -and $processObservation.ownedProcessIdentityCount -gt 0 -and $processObservation.queryMode -eq $expectedObserverQueryMode -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal -and $processObservation.maximumGapMilliseconds -le $expectedProcessNetworkGapMilliseconds -and $diskObservation.maximumGapMilliseconds -le $expectedDiskGapMilliseconds -and $diskObservation.peakDeltaBytes -le $expectedTemporaryDiskBytesMaximum -and $checkoutPass -and $cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0
+    $rootOutputPass = $rootOutput.status -eq "PASS" -and $rootOutput.stdout.present -and $rootOutput.stderr.present -and $rootOutput.stdout.capturedBytes -le $RootOutputMaximumBytes -and $rootOutput.stderr.capturedBytes -le $RootOutputMaximumBytes
+    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $processObservation.sampleCount -gt 0 -and $processObservation.tcpTableQueries -eq $processObservation.sampleCount -and $processObservation.zeroConnectionSamples -gt 0 -and $processObservation.ownedProcessIdentityCount -gt 0 -and $processObservation.queryMode -eq $expectedObserverQueryMode -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal -and $processObservation.maximumGapMilliseconds -le $expectedProcessNetworkGapMilliseconds -and $diskObservation.maximumGapMilliseconds -le $expectedDiskGapMilliseconds -and $diskObservation.peakDeltaBytes -le $expectedTemporaryDiskBytesMaximum -and $rootOutputPass -and $checkoutPass -and $cleanupErrors.Count -eq 0 -and $remainingTaskPaths.Count -eq 0
     $report = [ordered]@{
         schemaVersion = "localai-windows-install-candidate-observer/v1"
         status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
@@ -2200,6 +3039,7 @@ function Invoke-ObserverFixture {
             descendantMaximum = $expectedDescendantMaximum
             descendantHighWater = [int64]$processObservation.descendantHighWater
             rootExitCode = $rootExitCode
+            rootOutput = $rootOutput
             failurePropagation = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
             modelBackendBytes = [int64]0
             modelBackendCalls = [int64]0
@@ -2216,6 +3056,16 @@ function Invoke-ObserverFixture {
     [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 12))
     if ($report.status -ne "PASS") { throw "observer fixture failed; report=$reportPath" }
     Write-Output "observer fixture passed; report=$reportPath"
+}
+
+if ($StageDependencyClosure) {
+    Invoke-SmokeDependencyStage -RequestedSourceRoot $DependencySourceRoot -RequestedStageRoot $DependencyStageRoot -RequestedSourceManifestPath $DependencySourceManifestPath -RequestedStageManifestPath $DependencyStageManifestPath -RequestedReportPath $DependencyReportPath -ExpectedLockSHA256 $DependencyExpectedLockSHA256 -ExpectedLockBlob $DependencyExpectedLockBlob
+    return
+}
+
+if ($VerifyDependencyClosure) {
+    Invoke-SmokeDependencyVerification -RequestedSourceRoot $DependencySourceRoot -RequestedStageRoot $DependencyStageRoot -RequestedExpectedManifestPath $DependencyExpectedManifestPath -RequestedPostBuildManifestPath $DependencyPostBuildManifestPath -RequestedSourceAfterManifestPath $DependencySourceAfterManifestPath -RequestedReportPath $DependencyReportPath -ExpectedLockSHA256 $DependencyExpectedLockSHA256 -ExpectedLockBlob $DependencyExpectedLockBlob
+    return
 }
 
 if ($PrepareReleaseCheckout) {
@@ -2243,7 +3093,7 @@ if ($ObserverIdentityFixture) {
 }
 
 if ($ObserverFixture) {
-    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath -RootCommand $ObserverRootCommand -RootArgumentList $ObserverRootArgumentList -RootWorkingDirectory $ObserverRootWorkingDirectory -ObserverReleaseCheckoutPath $ObserverReleaseCheckoutPath -TimeoutSeconds $ObserverTimeoutSeconds
+    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath -RootCommand $ObserverRootCommand -RootArgumentList $ObserverRootArgumentList -RootWorkingDirectory $ObserverRootWorkingDirectory -RootStdoutPath $ObserverRootStdoutPath -RootStderrPath $ObserverRootStderrPath -RootOutputMaximumBytes $ObserverRootOutputMaximumBytes -RequestedRootExitCode $ObserverRootExitCode -ObserverReleaseCheckoutPath $ObserverReleaseCheckoutPath -TimeoutSeconds $ObserverTimeoutSeconds
     return
 }
 
