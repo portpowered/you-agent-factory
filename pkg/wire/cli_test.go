@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,90 +34,179 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
-	"go.uber.org/zap"
 )
 
 type processCommandRunner struct{}
 
-type modelsCLICompositionRootStub struct {
-	modelservice.Service
-}
-
-type modelsCLICompositionScopeSourceStub struct {
-	factorysessionwire.InvocationOperation
-	request modelservice.PresentationScopeRequest
-	scope   modelservice.PresentationScope
-}
-
-func (stub *modelsCLICompositionScopeSourceStub) OpenModelsCatalogScope(
-	_ context.Context,
-) (modelservice.PresentationScope, error) {
-	return stub.scope, nil
-}
-
-func (stub *modelsCLICompositionScopeSourceStub) OpenModelsPresentationScope(
-	_ context.Context,
-	request modelservice.PresentationScopeRequest,
-) (modelservice.PresentationScope, error) {
-	stub.request = request
-	return stub.scope, nil
-}
-
-func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing.T) {
+func TestModelsInvokeUsesStandaloneScopeForImplicitMissingFactory(t *testing.T) {
 	t.Parallel()
 
-	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:invoke")
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:standalone")
 	if err != nil {
-		t.Fatalf("parse Models runtime scope: %v", err)
+		t.Fatalf("parse standalone Models runtime scope: %v", err)
 	}
-	logger := zap.NewNop()
-	source := &modelsCLICompositionScopeSourceStub{
-		scope: modelservice.PresentationScope{Scope: scope},
+	layoutErr := errors.Join(factorydefinitions.ErrFactoryLayoutNotFound, errors.New("implicit layout probe"))
+	var openRequest modelservice.OpenRuntimeScopeRequest
+	var closeContext context.Context
+	var closeRequest modelservice.CloseRuntimeScopeRequest
+	root := modelsCLICompositionRootStub{
+		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+			openRequest = request
+			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+		},
+		closeRuntime: func(ctx context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
+			closeContext = ctx
+			closeRequest = request
+			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		},
 	}
-	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source)
+	source := &modelsCLICompositionScopeSourceStub{err: layoutErr}
+	composition, err := provideModelsCLIComposition(root, source)
 	if err != nil {
 		t.Fatalf("provideModelsCLIComposition() error = %v", err)
 	}
-
-	config := modelscli.InvokeConfig{
-		FactoryDir:       "factory",
-		WorkingDirectory: "working",
-		HomeDir:          "home",
-		OperatorDefaults: operatorsettings.ResolvedDefaults{
-			WorkerModelProvider: "CODEX",
-			WorkerModel:         "gpt-test",
-		},
-		Logger:  logger,
-		Verbose: true,
-	}
-	cacheAware, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+	opener, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
 	if !ok {
-		t.Fatal("Models CLI composition does not expose optional cache-aware scope opener")
+		t.Fatal("Models CLI composition does not expose cache-aware invoke scope opener")
 	}
-	opened, err := cacheAware.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
-		Config:        config,
+	opened, err := opener.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+		Config: modelscli.InvokeConfig{
+			WorkingDirectory: t.TempDir(),
+			HomeDir:          t.TempDir(),
+		},
 		ModelCacheDir: "selected-model-cache",
 	})
 	if err != nil {
-		t.Fatalf("CompositionOpenInvokeScope() error = %v", err)
+		t.Fatalf("CompositionOpenInvokeScopeWithModelCache() error = %v", err)
+	}
+	if source.calls != 1 {
+		t.Fatalf("presentation scope source calls = %d, want one layout probe", source.calls)
 	}
 	if opened.Scope != scope {
-		t.Fatalf("opened scope = %q, want %q", opened.Scope, scope)
+		t.Fatalf("opened scope = %q, want standalone scope %q", opened.Scope, scope)
 	}
-	want := modelservice.PresentationScopeRequest{
-		FactoryDir:       config.FactoryDir,
-		WorkingDirectory: config.WorkingDirectory,
-		HomeDir:          config.HomeDir,
-		OperatorDefaults: modelservice.PresentationOperatorDefaults{
-			WorkerModelProvider: config.OperatorDefaults.WorkerModelProvider,
-			WorkerModel:         config.OperatorDefaults.WorkerModel,
+	if openRequest.Config.CacheDirectory != "selected-model-cache" || !reflect.DeepEqual(openRequest.Config.Runtime, modelservice.RuntimeConfig{}) {
+		t.Fatalf("standalone Models open request = %#v, want selected cache and zero runtime overrides", openRequest)
+	}
+
+	closeCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := opened.Close(closeCtx); err != nil {
+		t.Fatalf("standalone scope Close() error = %v", err)
+	}
+	if closeContext == nil {
+		t.Fatal("standalone scope close did not receive a context")
+	}
+	if closeContext.Err() != nil {
+		t.Fatalf("standalone scope close context error = %v, want cancellation-independent cleanup", closeContext.Err())
+	}
+	if closeRequest.Scope != scope {
+		t.Fatalf("standalone Models close request scope = %q, want %q", closeRequest.Scope, scope)
+	}
+}
+
+func TestModelsInvokePreservesExplicitAndNonLayoutFactoryFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name       string
+		factoryDir string
+		err        error
+	}{
+		{
+			name:       "explicit layout missing",
+			factoryDir: "explicit-factory",
+			err:        factorydefinitions.ErrFactoryLayoutNotFound,
 		},
-		Logger:        config.Logger,
-		Verbose:       config.Verbose,
-		ModelCacheDir: "selected-model-cache",
+		{
+			name: "implicit non-layout failure",
+			err:  errors.New("malformed Factory layout"),
+		},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			openCalls := 0
+			root := modelsCLICompositionRootStub{
+				openRuntime: func(context.Context, modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+					openCalls++
+					return modelservice.OpenRuntimeScopeResult{}, nil
+				},
+			}
+			source := &modelsCLICompositionScopeSourceStub{err: testCase.err}
+			composition, err := provideModelsCLIComposition(root, source)
+			if err != nil {
+				t.Fatalf("provideModelsCLIComposition() error = %v", err)
+			}
+			opener := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+			_, err = opener.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+				Config: modelscli.InvokeConfig{FactoryDir: testCase.factoryDir},
+			})
+			if !errors.Is(err, testCase.err) {
+				t.Fatalf("CompositionOpenInvokeScopeWithModelCache() error = %v, want %v", err, testCase.err)
+			}
+			if openCalls != 0 {
+				t.Fatalf("standalone Models scope opens = %d, want zero", openCalls)
+			}
+		})
 	}
-	if !reflect.DeepEqual(source.request, want) {
-		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)
+}
+
+func TestModelsInvokeStandaloneScopePreservesOpenAndCloseFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name      string
+		openErr   error
+		closeErr  error
+		closed    bool
+		wantError string
+	}{
+		{name: "open failure", openErr: errors.New("Models runtime unavailable")},
+		{name: "close failure", closeErr: errors.New("Models runtime close failed"), closed: true},
+		{name: "close reports open", closed: false, wantError: "scope was not closed"},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:failure")
+			if err != nil {
+				t.Fatalf("parse failure-test scope: %v", err)
+			}
+			source := &modelsCLICompositionScopeSourceStub{err: factorydefinitions.ErrFactoryLayoutNotFound}
+			root := modelsCLICompositionRootStub{
+				openRuntime: func(context.Context, modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+					return modelservice.OpenRuntimeScopeResult{Scope: scope}, testCase.openErr
+				},
+				closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
+					return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: testCase.closed}, testCase.closeErr
+				},
+			}
+			composition, err := provideModelsCLIComposition(root, source)
+			if err != nil {
+				t.Fatalf("provideModelsCLIComposition() error = %v", err)
+			}
+			opener := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+			opened, err := opener.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{})
+			if testCase.openErr != nil {
+				if !errors.Is(err, testCase.openErr) {
+					t.Fatalf("standalone open error = %v, want %v", err, testCase.openErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("standalone open error = %v", err)
+			}
+			err = opened.Close(context.Background())
+			if testCase.closeErr != nil && !errors.Is(err, testCase.closeErr) {
+				t.Fatalf("standalone close error = %v, want %v", err, testCase.closeErr)
+			}
+			if testCase.wantError != "" && (err == nil || !strings.Contains(err.Error(), testCase.wantError)) {
+				t.Fatalf("standalone close error = %v, want %q", err, testCase.wantError)
+			}
+		})
 	}
 }
 

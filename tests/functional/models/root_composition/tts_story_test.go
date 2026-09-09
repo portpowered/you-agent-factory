@@ -3,9 +3,6 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,6 +92,7 @@ func TestModelsDirectTTSKeepsConcurrentScenariosIsolatedThroughRootBuildProcess(
 				t.Fatalf("%s generic TTS backend calls = %d, want zero", scenario.name, got)
 			}
 			closeRootProcess(t, story.process, "close concurrent TTS root process")
+			waitForTTSHostLifecycle(t, story.host, scenario.name)
 			created, removed, duplicateRemoves := story.temp.Snapshot()
 			if created != 1 || removed != created || duplicateRemoves != 0 {
 				t.Fatalf("%s TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one isolated one-shot path", scenario.name, created, removed, duplicateRemoves)
@@ -140,6 +138,7 @@ func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
 		t.Fatalf("first default-scope invocation error = %v, want cancellation after overlap characterization", err)
 	}
 	closeRootProcess(t, story.process, "close non-reentrant TTS root process")
+	waitForTTSHostLifecycle(t, story.host, "non-reentrant")
 	created, removed, duplicateRemoves := story.temp.Snapshot()
 	if created != removed || duplicateRemoves != 0 {
 		t.Fatalf("non-reentrant TTS staging release = created:%d removed:%d duplicateRemoves:%d, want exactly-once cleanup", created, removed, duplicateRemoves)
@@ -566,6 +565,7 @@ func assertTTSIsolationAndRelease(t *testing.T, story ttsStory) {
 		t.Fatalf("generic TTS backend calls = %d, want zero private-route fallback calls", got)
 	}
 	closeRootProcess(t, story.process, "close TTS root process for release proof")
+	waitForTTSHostLifecycle(t, story.host, "sequential")
 	created, removed, duplicateRemoves := story.temp.Snapshot()
 	if created == 0 || created != removed || duplicateRemoves != 0 {
 		t.Fatalf("TTS staging release = created:%d removed:%d duplicateRemoves:%d, want one removal per staged path", created, removed, duplicateRemoves)
@@ -579,11 +579,6 @@ func assertTTSIsolationAndRelease(t *testing.T, story ttsStory) {
 		t.Fatalf("TTS protocol release = dials:%d invokes:%d closes:%d doubleCloses:%d, want exactly one close per invoked connection", dials, invokes, closes, doubleCloses)
 	}
 	t.Logf("functional evidence platform=%s root=BuildProcess stateHome=%s cacheState=%s tempState=%s network=asset-rejected/raw-local-edge budgets={modelBytes:0,realCalls:0,retries:0} fixture=private-raw-protobuf method=/backend.Backend/TTS dials=%d invokes=%d closes=%d hostStarts=%d hostStops=%d hostWaits=%d tempCreated=%d tempRemoved=%d genericFallbackCalls=%d", runtime.GOOS, story.home, filepath.Join(story.home, ".agent-factory", "models"), story.temp.directory, dials, invokes, closes, starts, stops, waits, created, removed, story.generic.Calls())
-}
-
-func ttsDigest(data []byte) string {
-	digest := sha256.Sum256(data)
-	return hex.EncodeToString(digest[:])
 }
 
 func assertEquivalentTTSRequests(t *testing.T, requests []ttsProtocolCall, tempDirectory string) {
@@ -859,12 +854,13 @@ func (effects *ttsTempEffects) Snapshot() (created, removed, duplicates int) {
 }
 
 type ttsHostLauncher struct {
-	mu       sync.Mutex
-	endpoint string
-	starts   int
-	stops    int
-	waits    int
-	active   int
+	mu        sync.Mutex
+	endpoint  string
+	processes []*ttsHostProcess
+	starts    int
+	stops     int
+	waits     int
+	active    int
 }
 
 func (launcher *ttsHostLauncher) Start(
@@ -879,8 +875,15 @@ func (launcher *ttsHostLauncher) Start(
 	launcher.starts++
 	launcher.active++
 	endpoint := launcher.endpoint
+	process := &ttsHostProcess{
+		launcher: launcher,
+		endpoint: endpoint,
+		stopped:  make(chan struct{}),
+		waited:   make(chan struct{}),
+	}
+	launcher.processes = append(launcher.processes, process)
 	launcher.mu.Unlock()
-	return &ttsHostProcess{launcher: launcher, endpoint: endpoint, stopped: make(chan struct{})}, nil
+	return process, nil
 }
 
 func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
@@ -889,20 +892,48 @@ func (launcher *ttsHostLauncher) Snapshot() (starts, stops, waits, active int) {
 	return launcher.starts, launcher.stops, launcher.waits, launcher.active
 }
 
+func waitForTTSHostLifecycle(t testing.TB, launcher *ttsHostLauncher, label string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := launcher.WaitForAll(ctx); err != nil {
+		t.Fatalf("%s TTS host wait completion = %v", label, err)
+	}
+}
+
+func (launcher *ttsHostLauncher) WaitForAll(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	launcher.mu.Lock()
+	processes := append([]*ttsHostProcess(nil), launcher.processes...)
+	launcher.mu.Unlock()
+	for _, process := range processes {
+		select {
+		case <-process.waited:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
 type ttsHostProcess struct {
 	launcher *ttsHostLauncher
 	endpoint string
 	stopped  chan struct{}
+	waited   chan struct{}
 	once     sync.Once
 }
 
 func (process *ttsHostProcess) HealthEndpoint() string { return process.endpoint }
 
 func (process *ttsHostProcess) Wait() error {
+	<-process.stopped
 	process.launcher.mu.Lock()
 	process.launcher.waits++
 	process.launcher.mu.Unlock()
-	<-process.stopped
+	close(process.waited)
 	return nil
 }
 
@@ -938,55 +969,6 @@ func assertRedactedTTSFailure(
 	if prompt != "" && strings.Contains(err.Error(), prompt) {
 		t.Fatalf("TTS failure leaked prompt %q: %q", prompt, err.Error())
 	}
-}
-
-func assertSemanticTTSAudio(t *testing.T, audio []byte, label string) {
-	t.Helper()
-	const (
-		wavHeaderSize  = 44
-		pcmFormat      = 1
-		monoChannels   = 1
-		bitsPerSample  = 16
-		minimumSamples = 1
-	)
-	if len(audio) < wavHeaderSize {
-		t.Fatalf("%s audio length = %d, want at least %d-byte WAV header", label, len(audio), wavHeaderSize)
-	}
-	if string(audio[0:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[12:16]) != "fmt " || string(audio[36:40]) != "data" {
-		t.Fatalf("%s audio has invalid RIFF/WAVE PCM chunk markers", label)
-	}
-	if got := uint64(binary.LittleEndian.Uint32(audio[4:8])) + 8; got != uint64(len(audio)) {
-		t.Fatalf("%s RIFF size = %d, want payload length %d", label, got, len(audio))
-	}
-	if got := binary.LittleEndian.Uint32(audio[16:20]); got != 16 {
-		t.Fatalf("%s fmt chunk size = %d, want PCM fmt size 16", label, got)
-	}
-	if got := binary.LittleEndian.Uint16(audio[20:22]); got != pcmFormat {
-		t.Fatalf("%s audio format = %d, want PCM format %d", label, got, pcmFormat)
-	}
-	channels := binary.LittleEndian.Uint16(audio[22:24])
-	if channels != monoChannels {
-		t.Fatalf("%s channels = %d, want %d", label, channels, monoChannels)
-	}
-	sampleRate := binary.LittleEndian.Uint32(audio[24:28])
-	byteRate := binary.LittleEndian.Uint32(audio[28:32])
-	blockAlign := binary.LittleEndian.Uint16(audio[32:34])
-	bits := binary.LittleEndian.Uint16(audio[34:36])
-	if sampleRate == 0 || blockAlign == 0 || bits != bitsPerSample {
-		t.Fatalf("%s PCM format = sampleRate:%d blockAlign:%d bits:%d, want nonzero/16-bit PCM", label, sampleRate, blockAlign, bits)
-	}
-	if want := sampleRate * uint32(blockAlign); byteRate != want {
-		t.Fatalf("%s byte rate = %d, want %d from sample rate and block alignment", label, byteRate, want)
-	}
-	dataSize := binary.LittleEndian.Uint32(audio[40:44])
-	if uint64(dataSize)+wavHeaderSize != uint64(len(audio)) || dataSize < minimumSamples*uint32(blockAlign) || dataSize%uint32(blockAlign) != 0 {
-		t.Fatalf("%s data chunk size = %d, want aligned nonempty payload for %d-byte samples", label, dataSize, blockAlign)
-	}
-	duration := time.Second * time.Duration(dataSize/uint32(blockAlign)) / time.Duration(sampleRate)
-	if duration <= 0 {
-		t.Fatalf("%s duration = %s, want nonzero duration", label, duration)
-	}
-	t.Logf("semantic audio baseline label=%s mediaType=audio/wav codec=PCM channels=%d sampleRate=%d bits=%d bytes=%d sha256=%s duration=%s", label, channels, sampleRate, bits, len(audio), ttsDigest(audio), duration)
 }
 
 func jsonUnmarshalFunctional(data string, target any) error {

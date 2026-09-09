@@ -162,12 +162,16 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"additional platform-specific backend and runtime files",
 		"`cacheBytes` reports the exact managed cache size",
 		"INFINITE_YOU_OMNIVOICE_CACHE_DIR",
-		"Direct invocation requires a valid Current Factory",
-		"./factory/factory.json",
-		"CURRENT_FACTORY_NOT_FOUND",
+		"Direct invocation of a built-in uses the local Models composition",
+		"does not\nrequire `./factory/factory.json`",
+		"its Models\nscope remains available",
+		"A missing implicit Current Factory is not an error for a built-in invocation.",
+		"An explicitly supplied or malformed Factory still returns its typed Factory\nerror",
+		"never creates or initializes a Factory as a workaround.",
 		"An explicit `--server` must identify a reachable service",
 		`you models invoke embed --operation EMBED --input text="Find similar work"`,
 		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
+		"Run this command from any directory; a Current Factory is not required:",
 		"does not provide an `--offline` flag",
 	} {
 		if !strings.Contains(markdown, want) {
@@ -188,6 +192,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"OMNIVOICE_Q4_K_M",
 		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
 		"Run this zero-configuration command",
+		"Run this command from a directory containing a valid Current Factory:",
 		"shared in-process bootstrap",
 	} {
 		if strings.Contains(markdown, stale) {

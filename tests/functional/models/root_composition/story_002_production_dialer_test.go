@@ -240,6 +240,7 @@ func assertProductionDialerRelease(
 ) {
 	t.Helper()
 	closeRootProcess(t, scenario.process, "close production dialer process")
+	waitForTTSHostLifecycle(t, scenario.host, "production dialer")
 	created, removed, duplicateRemoves := scenario.temp.Snapshot()
 	if created == 0 || created != removed || duplicateRemoves != 0 {
 		t.Fatalf("production dialer staging release for %s = created:%d removed:%d duplicateRemoves:%d, want exactly-once cleanup", outputPath, created, removed, duplicateRemoves)

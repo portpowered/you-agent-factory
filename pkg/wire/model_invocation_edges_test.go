@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -17,8 +19,13 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"go.uber.org/zap"
 )
 
 func TestModelsManagedProcessStopAfterNaturalExitIsClean(t *testing.T) {
@@ -814,4 +821,111 @@ func (connection *modelEdgeGRPCConnection) Negotiate(
 func (connection *modelEdgeGRPCConnection) Close() error {
 	connection.closed = true
 	return nil
+}
+
+type modelsCLICompositionRootStub struct {
+	modelservice.Service
+	openRuntime  func(context.Context, modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error)
+	closeRuntime func(context.Context, modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error)
+}
+
+func (stub modelsCLICompositionRootStub) OpenRuntimeScope(
+	ctx context.Context,
+	request modelservice.OpenRuntimeScopeRequest,
+) (modelservice.OpenRuntimeScopeResult, error) {
+	if stub.openRuntime == nil {
+		return modelservice.OpenRuntimeScopeResult{}, errors.New("unexpected standalone Models scope open")
+	}
+	return stub.openRuntime(ctx, request)
+}
+
+func (stub modelsCLICompositionRootStub) CloseRuntimeScope(
+	ctx context.Context,
+	request modelservice.CloseRuntimeScopeRequest,
+) (modelservice.CloseRuntimeScopeResult, error) {
+	if stub.closeRuntime == nil {
+		return modelservice.CloseRuntimeScopeResult{}, errors.New("unexpected standalone Models scope close")
+	}
+	return stub.closeRuntime(ctx, request)
+}
+
+type modelsCLICompositionScopeSourceStub struct {
+	factorysessionwire.InvocationOperation
+	request modelservice.PresentationScopeRequest
+	scope   modelservice.PresentationScope
+	err     error
+	calls   int
+}
+
+func (stub *modelsCLICompositionScopeSourceStub) OpenModelsCatalogScope(
+	_ context.Context,
+) (modelservice.PresentationScope, error) {
+	return stub.scope, nil
+}
+
+func (stub *modelsCLICompositionScopeSourceStub) OpenModelsPresentationScope(
+	_ context.Context,
+	request modelservice.PresentationScopeRequest,
+) (modelservice.PresentationScope, error) {
+	stub.calls++
+	stub.request = request
+	return stub.scope, stub.err
+}
+
+func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:invoke")
+	if err != nil {
+		t.Fatalf("parse Models runtime scope: %v", err)
+	}
+	logger := zap.NewNop()
+	source := &modelsCLICompositionScopeSourceStub{
+		scope: modelservice.PresentationScope{Scope: scope},
+	}
+	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source)
+	if err != nil {
+		t.Fatalf("provideModelsCLIComposition() error = %v", err)
+	}
+
+	config := modelscli.InvokeConfig{
+		FactoryDir:       "factory",
+		WorkingDirectory: "working",
+		HomeDir:          "home",
+		OperatorDefaults: operatorsettings.ResolvedDefaults{
+			WorkerModelProvider: "CODEX",
+			WorkerModel:         "gpt-test",
+		},
+		Logger:  logger,
+		Verbose: true,
+	}
+	cacheAware, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+	if !ok {
+		t.Fatal("Models CLI composition does not expose optional cache-aware scope opener")
+	}
+	opened, err := cacheAware.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+		Config:        config,
+		ModelCacheDir: "selected-model-cache",
+	})
+	if err != nil {
+		t.Fatalf("CompositionOpenInvokeScope() error = %v", err)
+	}
+	if opened.Scope != scope {
+		t.Fatalf("opened scope = %q, want %q", opened.Scope, scope)
+	}
+	want := modelservice.PresentationScopeRequest{
+		FactoryDir:       config.FactoryDir,
+		WorkingDirectory: config.WorkingDirectory,
+		HomeDir:          config.HomeDir,
+		OperatorDefaults: modelservice.PresentationOperatorDefaults{
+			WorkerModelProvider: config.OperatorDefaults.WorkerModelProvider,
+			WorkerModel:         config.OperatorDefaults.WorkerModel,
+		},
+		Logger:        config.Logger,
+		Verbose:       config.Verbose,
+		ModelCacheDir: "selected-model-cache",
+	}
+	if !reflect.DeepEqual(source.request, want) {
+		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)
+	}
 }
