@@ -245,12 +245,13 @@ type localAICandidateObserverReport struct {
 	ReleaseCheckout *localAICandidateReleaseCheckoutEvidence `json:"releaseCheckout"`
 }
 type localAICandidateNativeToolLaunch struct {
-	Status   string `json:"status"`
-	Path     string `json:"path"`
-	ExitCode *int64 `json:"exitCode"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
-	Error    string `json:"error"`
+	Status     string `json:"status"`
+	Path       string `json:"path"`
+	PathLength int    `json:"pathLength"`
+	ExitCode   *int64 `json:"exitCode"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	Error      string `json:"error"`
 }
 type localAICandidateNativeToolFile struct {
 	Path       string                           `json:"path"`
@@ -265,16 +266,22 @@ type localAICandidateNativeToolReport struct {
 	Cycle         string `json:"cycle"`
 	Property      string `json:"property"`
 	ShortRoot     struct {
-		Status     string `json:"status"`
-		Path       string `json:"path"`
-		Parent     string `json:"parent"`
-		PathLength int    `json:"pathLength"`
-		Present    bool   `json:"present"`
-		Empty      bool   `json:"empty"`
+		Status       string `json:"status"`
+		Path         string `json:"path"`
+		Parent       string `json:"parent"`
+		RelativePath string `json:"relativePath"`
+		PathLength   int    `json:"pathLength"`
+		Present      bool   `json:"present"`
+		Empty        bool   `json:"empty"`
 	} `json:"shortRoot"`
+	Limits struct {
+		MaximumShortPathLength      int `json:"maximumShortPathLength"`
+		CharacterizedLongPathLength int `json:"characterizedLongPathLength"`
+	} `json:"limits"`
 	LongPath  localAICandidateNativeToolFile  `json:"longPath"`
 	ShortPath localAICandidateNativeToolFile  `json:"shortPath"`
 	Cleanup   localAICandidateObserverCleanup `json:"cleanup"`
+	Error     string                          `json:"error"`
 }
 
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
