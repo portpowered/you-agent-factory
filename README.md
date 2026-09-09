@@ -36,7 +36,15 @@ curl -fsSL https://github.com/portpowered/you-agent-factory/releases/latest/down
 irm https://github.com/portpowered/you-agent-factory/releases/latest/download/install.ps1 | iex
 ```
 
-For custom install locations or pinned versions, see the [install script](./scripts/install.sh).
+For a custom install location or a pinned release, use the existing
+PowerShell inputs:
+
+```powershell
+$env:INFINITE_YOU_VERSION = "<version>"
+$env:INFINITE_YOU_INSTALL_BASE_URL = "<release-base-url>"
+$env:INFINITE_YOU_INSTALL_DIR = "<absolute-install-directory>"
+irm "<release-base-url>/download/v<version>/install.ps1" | iex
+```
 
 ### Run
 
