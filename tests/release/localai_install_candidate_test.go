@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
+
+const localAICandidateSourceCommit = "059474b2c00915865306a33ca5e3d02b618bb6f0"
 
 func TestLocalAICandidateScriptParses(t *testing.T) {
 	t.Parallel()
@@ -102,6 +105,7 @@ if ($result.exitCode -ne 23) { exit 2 }
 	}
 	var result struct {
 		ExitCode       int      `json:"exitCode"`
+		ElapsedMillis  int64    `json:"elapsedMilliseconds"`
 		Arguments      []string `json:"arguments"`
 		Stdout         string   `json:"stdout"`
 		Stderr         string   `json:"stderr"`
@@ -113,7 +117,7 @@ if ($result.exitCode -ne 23) { exit 2 }
 		} `json:"stderrEvidence"`
 	}
 	readJSONFile(t, resultPath, &result)
-	if result.ExitCode != 23 || len(result.Arguments) != len(wantArguments)+4 {
+	if result.ExitCode != 23 || result.ElapsedMillis < 0 || len(result.Arguments) != len(wantArguments)+4 {
 		t.Fatalf("command result = %#v", result)
 	}
 	if !strings.Contains(result.Stdout, "token=<redacted>") || !strings.Contains(result.Stderr, "api_key=<redacted>") {
@@ -294,6 +298,32 @@ try {
 } catch {
     if (-not $_.Exception.Message.Contains('reparse point in its ancestry')) { throw }
 }
+$longRoot = Join-Path %s ('x' * 230)
+$rootCases = @(
+    @{ Name = 'output'; OutputDirectory = $longRoot },
+    @{ Name = 'work'; WorkDirectory = $longRoot },
+    @{ Name = 'install'; InstallDirectory = $longRoot },
+    @{ Name = 'report'; ReportPath = (Join-Path $longRoot 'report.json') }
+)
+foreach ($case in $rootCases) {
+    $arguments = @{
+        SourcePath = %s
+        DependencySourcePath = %s
+        OutputDirectory = %s
+        WorkDirectory = %s
+        InstallDirectory = %s
+        ReportPath = %s
+    }
+    foreach ($key in $case.Keys) {
+        if ($key -ne 'Name') { $arguments[$key] = $case[$key] }
+    }
+    try {
+        Assert-SmokeCandidateRoots @arguments | Out-Null
+        exit 4
+    } catch {
+        if (-not $_.Exception.Message.Contains('at most 220 characters')) { throw }
+    }
+}
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
@@ -304,6 +334,13 @@ try {
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
 		localAICandidatePowerShellLiteral(filepath.Join(outputDir, "report.json")),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "source-link")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output", "report.json")),
+		localAICandidatePowerShellLiteral(tempDir),
 		localAICandidatePowerShellLiteral(sourceDir),
 		localAICandidatePowerShellLiteral(dependencyDir),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output")),
@@ -493,6 +530,11 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if !filepath.IsAbs(binaryPath) {
 		t.Fatalf("INFINITE_YOU_LOCALAI_PREBUILT_BINARY must be absolute: %s", binaryPath)
 	}
+	assertLocalAICandidateBuildInfo(t, binaryPath)
+	goPath, err := exec.LookPath("go.exe")
+	if err != nil {
+		t.Fatalf("locate Go for build-info inspection: %v", err)
+	}
 	versionOutput, err := exec.Command(binaryPath, "--version").CombinedOutput()
 	if err != nil {
 		t.Fatalf("read prebuilt candidate version: %v\n%s", err, versionOutput)
@@ -534,7 +576,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	harnessPath := filepath.Join(tempDir, "install.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$result = Invoke-InstalledCandidateSmoke -CandidateDirectory %s -ArchivePath %s -ChecksumPath %s -InstallerPath %s -ArchiveExecutablePath %s -Version %s -RequestedInstallDir %s -WorkDirectory %s
+$result = Invoke-InstalledCandidateSmoke -CandidateDirectory %s -ArchivePath %s -ChecksumPath %s -InstallerPath %s -ArchiveExecutablePath %s -Version %s -ExpectedSourceCommit %s -GoExecutablePath %s -RequestedInstallDir %s -WorkDirectory %s
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
@@ -545,6 +587,8 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(installerPath),
 		localAICandidatePowerShellLiteral(stagedBinary),
 		localAICandidatePowerShellLiteral(version),
+		localAICandidatePowerShellLiteral(localAICandidateSourceCommit),
+		localAICandidatePowerShellLiteral(goPath),
 		localAICandidatePowerShellLiteral(installDir),
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(resultPath),
@@ -559,10 +603,48 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		Status                    string `json:"status"`
 		ModelCalls                int    `json:"modelCalls"`
 		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
+		PathResolution            string `json:"pathResolution"`
+		ExecutableBuildInfo       struct {
+			SourceRevision string `json:"sourceRevision"`
+			VCSModified    bool   `json:"vcsModified"`
+		} `json:"executableBuildInfo"`
+		Commands []struct {
+			Arguments     []string `json:"arguments"`
+			ElapsedMillis int64    `json:"elapsedMilliseconds"`
+		} `json:"commands"`
 	}
 	readJSONFile(t, resultPath, &result)
 	if result.Status != "PASS" || result.ModelCalls != 0 || result.ModelBackendDownloadBytes != 0 {
 		t.Fatalf("public candidate install result = %#v", result)
+	}
+	if result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
+		t.Fatalf("public candidate PATH resolution = %q, want installed executable", result.PathResolution)
+	}
+	if result.ExecutableBuildInfo.SourceRevision != localAICandidateSourceCommit || result.ExecutableBuildInfo.VCSModified {
+		t.Fatalf("public candidate executable build info = %#v", result.ExecutableBuildInfo)
+	}
+	wantCommands := []string{
+		"--version",
+		"--help",
+		"docs models",
+		"models list",
+		"models --help",
+		"--json models inspect llm",
+		"--json models inspect asr",
+		"--json models inspect tts",
+		"--json models inspect embed",
+	}
+	seenCommands := make(map[string]bool, len(result.Commands))
+	for _, command := range result.Commands {
+		if command.ElapsedMillis < 0 {
+			t.Fatalf("candidate command has negative elapsed time: %#v", command)
+		}
+		seenCommands[strings.Join(command.Arguments, " ")] = true
+	}
+	for _, command := range wantCommands {
+		if !seenCommands[command] {
+			t.Fatalf("candidate install did not record command %q: %#v", command, result.Commands)
+		}
 	}
 	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
 		t.Fatalf("install directory remains after smoke: %v", err)
@@ -585,6 +667,24 @@ func localAICandidatePowerShell(t *testing.T) string {
 
 func localAICandidatePowerShellLiteral(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
+	t.Helper()
+	info, err := buildinfo.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("read candidate executable build info: %v", err)
+	}
+	settings := make(map[string]string, len(info.Settings))
+	for _, setting := range info.Settings {
+		if _, exists := settings[setting.Key]; exists {
+			t.Fatalf("candidate executable build info repeats %q", setting.Key)
+		}
+		settings[setting.Key] = setting.Value
+	}
+	if settings["vcs.revision"] != localAICandidateSourceCommit || settings["vcs.modified"] != "false" {
+		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, localAICandidateSourceCommit)
+	}
 }
 
 func localAICandidateGit(t *testing.T, directory string, arguments ...string) string {

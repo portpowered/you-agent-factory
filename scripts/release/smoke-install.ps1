@@ -30,6 +30,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$SmokeMaximumTaskRootPathLength = 220
 
 function Fail-Smoke {
     param([string]$Message)
@@ -74,6 +75,14 @@ function Assert-SmokePathsDisjoint {
     }
 }
 
+function Assert-SmokeTaskRootLength {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    if ($resolved.Length -gt $SmokeMaximumTaskRootPathLength) {
+        Fail-Smoke "$Name must be at most $SmokeMaximumTaskRootPathLength characters: $resolved"
+    }
+}
+
 function Assert-SmokeCandidateRoots {
     param(
         [string]$SourcePath,
@@ -93,6 +102,9 @@ function Assert-SmokeCandidateRoots {
     }
     foreach ($entry in $paths.GetEnumerator()) {
         Assert-SmokeNoReparseAncestry $entry.Key $entry.Value
+    }
+    foreach ($ownedName in @("output", "work", "install", "report")) {
+        Assert-SmokeTaskRootLength $ownedName $paths[$ownedName]
     }
     foreach ($ownedName in @("output", "work", "install")) {
         foreach ($readName in @("source", "dependency")) {
@@ -284,6 +296,7 @@ function Invoke-CandidateCommand {
     $timedOut = $false
     $outputLimitExceeded = $false
     $terminationReason = ""
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         $job = Start-Job -ScriptBlock {
             param($Command)
@@ -358,6 +371,7 @@ function Invoke-CandidateCommand {
         }
         Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
     }
+    $stopwatch.Stop()
     $stdout = Protect-SmokeOutput $stdoutPath $OutputMaximumBytes
     $stderr = Protect-SmokeOutput $stderrPath $OutputMaximumBytes
     return [pscustomobject][ordered]@{
@@ -367,10 +381,57 @@ function Invoke-CandidateCommand {
         timedOut = $timedOut
         outputLimitExceeded = $outputLimitExceeded
         terminationReason = $terminationReason
+        elapsedMilliseconds = [int64][Math]::Max(0, $stopwatch.ElapsedMilliseconds)
         stdout = $stdout.text
         stderr = $stderr.text
         stdoutEvidence = $stdout.evidence
         stderrEvidence = $stderr.evidence
+    }
+}
+
+function Get-SmokeExecutableBuildInfo {
+    param(
+        [string]$ExecutablePath,
+        [string]$ExpectedRevision,
+        [string]$GoExecutablePath,
+        [string]$WorkingDirectory,
+        [string]$OutputDirectory
+    )
+    $goPath = $GoExecutablePath
+    if ([string]::IsNullOrWhiteSpace($goPath)) {
+        $go = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $go) { Fail-Smoke "Go is required to inspect executable build info" }
+        $goPath = $go.Source
+    }
+    $result = Invoke-CandidateCommand -FilePath $goPath `
+        -ArgumentList @("version", "-m", (Resolve-SmokePath $ExecutablePath)) `
+        -WorkingDirectory $WorkingDirectory `
+        -StdoutPath (Join-Path $OutputDirectory "executable-build-info.stdout.log") `
+        -StderrPath (Join-Path $OutputDirectory "executable-build-info.stderr.log")
+    if ($result.exitCode -ne 0) {
+        Fail-Smoke "go version -m failed with exit $($result.exitCode): $($result.stderr)"
+    }
+    $settings = @{}
+    foreach ($line in ($result.stdout -split "`r?`n")) {
+        if ($line -match '^\s*build\s+(vcs\.(revision|modified))=(\S+)\s*$') {
+            $key = $Matches[1]
+            if ($settings.ContainsKey($key)) { Fail-Smoke "executable build info contains duplicate $key" }
+            $settings[$key] = $Matches[3]
+        }
+    }
+    foreach ($key in @("vcs.revision", "vcs.modified")) {
+        if (-not $settings.ContainsKey($key)) { Fail-Smoke "executable build info $key is missing" }
+    }
+    if ([string]$settings["vcs.revision"] -cne $ExpectedRevision) {
+        Fail-Smoke "executable build info vcs.revision = $($settings['vcs.revision']), want $ExpectedRevision"
+    }
+    if ([string]$settings["vcs.modified"] -cne "false") {
+        Fail-Smoke "executable build info vcs.modified = $($settings['vcs.modified']), want false"
+    }
+    return [ordered]@{
+        command = $result
+        sourceRevision = [string]$settings["vcs.revision"]
+        vcsModified = $false
     }
 }
 
@@ -475,10 +536,15 @@ function Invoke-InstalledCandidateSmoke {
         [string]$InstallerPath,
         [string]$ArchiveExecutablePath,
         [string]$Version,
+        [string]$ExpectedSourceCommit,
+        [string]$GoExecutablePath,
         [string]$RequestedInstallDir,
         [string]$WorkDirectory
     )
     $installDir = Resolve-SmokePath $RequestedInstallDir
+    Assert-SmokeTaskRootLength "install directory" $installDir
+    Assert-SmokeTaskRootLength "candidate output directory" $CandidateDirectory
+    Assert-SmokeTaskRootLength "candidate work directory" $WorkDirectory
     Assert-SmokeEmptyRoot "install directory" $installDir
     $smokeRoot = Join-Path $WorkDirectory "install-smoke"
     [void][System.IO.Directory]::CreateDirectory($smokeRoot)
@@ -563,7 +629,23 @@ function Invoke-InstalledCandidateSmoke {
         if ($installedEvidence.bytes -ne $archiveEvidence.bytes -or $installedEvidence.sha256 -ne $archiveEvidence.sha256) {
             Fail-Smoke "installed executable does not match the archive member"
         }
-        $versionCommand = Invoke-CandidateCommand -FilePath $installedBinary `
+        $env:PATH = "$installDir$([System.IO.Path]::PathSeparator)$pathRoot"
+        $resolvedCommand = Get-Command you.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $resolvedCommand) { Fail-Smoke "you.exe was not resolvable from PATH after installation" }
+        $resolvedPath = Resolve-SmokePath $resolvedCommand.Source
+        if (-not $resolvedPath.Equals((Resolve-SmokePath $installedBinary), [System.StringComparison]::OrdinalIgnoreCase)) {
+            Fail-Smoke "PATH resolved $resolvedPath instead of the installed executable $installedBinary"
+        }
+        $pathResolution = $resolvedPath
+        $buildInfo = $null
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedSourceCommit)) {
+            $buildInfo = Get-SmokeExecutableBuildInfo -ExecutablePath $resolvedPath `
+                -ExpectedRevision $ExpectedSourceCommit -GoExecutablePath $GoExecutablePath `
+                -WorkingDirectory $smokeRoot `
+                -OutputDirectory $CandidateDirectory
+            [void]$commands.Add($buildInfo.command)
+        }
+        $versionCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
             -ArgumentList @("--version") -WorkingDirectory $smokeRoot `
             -StdoutPath (Join-Path $smokeRoot "version.stdout") `
             -StderrPath (Join-Path $smokeRoot "version.stderr")
@@ -571,7 +653,31 @@ function Invoke-InstalledCandidateSmoke {
         if ($versionCommand.exitCode -ne 0 -or $versionCommand.stdout.Trim() -cne $Version) {
             Fail-Smoke "installed candidate version is '$($versionCommand.stdout.Trim())', want '$Version'"
         }
-        $helpCommand = Invoke-CandidateCommand -FilePath $installedBinary `
+        $rootHelpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("--help") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "root-help.stdout") `
+            -StderrPath (Join-Path $smokeRoot "root-help.stderr")
+        [void]$commands.Add($rootHelpCommand)
+        if ($rootHelpCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($rootHelpCommand.stdout)) {
+            Fail-Smoke "installed candidate root help failed"
+        }
+        $docsCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("docs", "models") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "models-docs.stdout") `
+            -StderrPath (Join-Path $smokeRoot "models-docs.stderr")
+        [void]$commands.Add($docsCommand)
+        if ($docsCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($docsCommand.stdout)) {
+            Fail-Smoke "installed candidate models docs failed"
+        }
+        $listCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("models", "list") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "models-list.stdout") `
+            -StderrPath (Join-Path $smokeRoot "models-list.stderr")
+        [void]$commands.Add($listCommand)
+        if ($listCommand.exitCode -ne 0) {
+            Fail-Smoke "installed candidate models list exited $($listCommand.exitCode)"
+        }
+        $helpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
             -ArgumentList @("models", "--help") -WorkingDirectory $smokeRoot `
             -StdoutPath (Join-Path $smokeRoot "models-help.stdout") `
             -StderrPath (Join-Path $smokeRoot "models-help.stderr")
@@ -583,7 +689,7 @@ function Invoke-InstalledCandidateSmoke {
             if (-not $helpCommand.stdout.Contains($name)) {
                 Fail-Smoke "installed candidate models help does not expose $name"
             }
-            $inspect = Invoke-CandidateCommand -FilePath $installedBinary `
+            $inspect = Invoke-CandidateCommand -FilePath $resolvedPath `
                 -ArgumentList @("--json", "models", "inspect", $name) `
                 -WorkingDirectory $smokeRoot `
                 -StdoutPath (Join-Path $smokeRoot "$name.stdout") `
@@ -610,6 +716,8 @@ function Invoke-InstalledCandidateSmoke {
         return [pscustomobject][ordered]@{
             status = "PASS"
             installedExecutable = $installedEvidence
+            pathResolution = $pathResolution
+            executableBuildInfo = $buildInfo
             commands = @($commands | ForEach-Object { $_ })
             modelCalls = 0
             modelBackendDownloadBytes = 0
@@ -759,8 +867,17 @@ function Invoke-LocalCandidateSmoke {
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $outputDirectory "goreleaser-version.stdout.log") `
             -StderrPath (Join-Path $outputDirectory "goreleaser-version.stderr.log")
-        if ($releaseToolResult.exitCode -ne 0 -or -not $releaseToolResult.stdout.Contains($ReleaseToolVersion)) {
+        if ($releaseToolResult.exitCode -ne 0 -or $releaseToolResult.stdout -notmatch ("(?m)\b" + [regex]::Escape($ReleaseToolVersion) + "\b")) {
             Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
+        }
+        $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $goCommand) { Fail-Smoke "Go 1.26.8 is required for candidate release" }
+        $goVersionResult = Invoke-CandidateCommand -FilePath $goCommand.Source `
+            -ArgumentList @("version") -WorkingDirectory $checkoutPath `
+            -StdoutPath (Join-Path $outputDirectory "go-version.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "go-version.stderr.log")
+        if ($goVersionResult.exitCode -ne 0 -or $goVersionResult.stdout -notmatch '(?m)\bgo1\.26\.8\b') {
+            Fail-Smoke "Go version check failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())', want go1.26.8"
         }
         $statusBefore = Invoke-SmokeGit @("-C", $checkoutPath, "status", "--porcelain=v1", "--untracked-files=all")
         if ($statusBefore -ne "") {
@@ -776,6 +893,7 @@ function Invoke-LocalCandidateSmoke {
             command = $releaseToolPath
             arguments = $releaseArguments
             exitCode = $releaseResult.exitCode
+            elapsedMilliseconds = $releaseResult.elapsedMilliseconds
             timedOut = $releaseResult.timedOut
             outputLimitExceeded = $releaseResult.outputLimitExceeded
             terminationReason = $releaseResult.terminationReason
@@ -783,6 +901,7 @@ function Invoke-LocalCandidateSmoke {
             stderr = $releaseResult.stderrEvidence
             goReleaser = $releaseToolEvidence
             goReleaserVersion = $ReleaseToolVersion
+            goVersion = $goVersionResult
             config = Get-SmokeFileEvidence "goreleaser-config" (Join-Path $checkoutPath ".goreleaser.yml")
             bunLock = $sourceLock
             esbuild = $esbuildEvidence
@@ -844,10 +963,13 @@ function Invoke-LocalCandidateSmoke {
             InstallerPath = $installerPath
             ArchiveExecutablePath = $archiveExecutablePath
             Version = $version
+            ExpectedSourceCommit = $sourceIdentity.commit
+            GoExecutablePath = $goCommand.Source
             RequestedInstallDir = $installDirectory
             WorkDirectory = $workDirectory
         }
         $report.install = Invoke-InstalledCandidateSmoke @installArguments
+        $report.build.executableBuildInfo = $report.install.executableBuildInfo
         $report.status = "PASS"
     } catch {
         $failure = $_.Exception
@@ -868,6 +990,23 @@ function Invoke-LocalCandidateSmoke {
             $report.cleanup = [ordered]@{ status = "FAIL"; error = $_.Exception.Message }
             if ($null -eq $failure) { $failure = $_.Exception }
             $report.status = "FAIL"
+        }
+        if ($report.cleanup.status -eq "PASS" -and @($report.artifacts).Count -gt 0) {
+            $retainedEvidenceStable = $true
+            foreach ($artifact in @($report.artifacts)) {
+                $artifactPath = Join-Path $outputDirectory ([string]$artifact.file)
+                $currentEvidence = Get-SmokeFileEvidence ([string]$artifact.role) $artifactPath
+                if ($currentEvidence.bytes -ne [int64]$artifact.bytes -or $currentEvidence.sha256 -cne [string]$artifact.sha256) {
+                    $retainedEvidenceStable = $false
+                    break
+                }
+            }
+            $report.cleanup.retainedEvidenceHashesStable = $retainedEvidenceStable
+            if (-not $retainedEvidenceStable) {
+                $report.cleanup.status = "FAIL"
+                if ($null -eq $failure) { $failure = [System.Exception]::new("retained candidate evidence changed during install smoke cleanup") }
+                $report.status = "FAIL"
+            }
         }
         [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $reportPath))
         $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding UTF8
