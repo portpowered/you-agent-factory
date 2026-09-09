@@ -133,6 +133,7 @@ type localAICandidateObserverReport struct {
 	ReleaseStatus string                           `json:"releaseStatus"`
 	Observation   localAICandidateObserverEvidence `json:"observation"`
 }
+
 func localAICandidateManifestPath(t *testing.T, purpose string) string {
 	t.Helper()
 	if runtime.GOOS != "windows" {
@@ -869,6 +870,7 @@ func sha256File(path string) (string, error) {
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
+
 type localAICandidateFixture struct {
 	root         string
 	manifestPath string
@@ -877,6 +879,7 @@ type localAICandidateFixture struct {
 	roots        []localAICandidateRoot
 	taskPath     string
 }
+
 func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 	t.Helper()
 	root := t.TempDir()
@@ -906,14 +909,11 @@ func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
 		Cycle:         localAICandidateCycle,
 		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: localAICandidateSourceCommit, Tree: localAICandidateSourceTree},
 		Build: localAICandidateBuild{
-			CandidateVersion:       "1.2.3-snapshot-test",
-			CLIVersion:             "1.2.3-snapshot-test",
-			GoVersion:              "go1.25.0",
-			GoReleaserVersion:      localAICandidateGoReleaser,
+			CandidateVersion: "1.2.3-snapshot-test", CLIVersion: "1.2.3-snapshot-test",
+			GoVersion: "go1.25.0", GoReleaserVersion: localAICandidateGoReleaser,
 			GoReleaserConfigSHA256: strings.Repeat("c", sha256.Size*2),
 			Target: localAICandidateTarget{
-				GOOS:       localAICandidateGOOS,
-				GOARCH:     localAICandidateGOARCH,
+				GOOS: localAICandidateGOOS, GOARCH: localAICandidateGOARCH,
 				CgoEnabled: &cgoDisabled,
 			},
 			Environment: map[string]string{"GOPROXY": "file:///C:/cache/download", "GOSUMDB": "off", "GOTOOLCHAIN": "go1.26.8", "npm_config_offline": "true", "GOFLAGS": localAICandidateGOFLAGS, "GOMAXPROCS": localAICandidateGOMAXPROCS},
