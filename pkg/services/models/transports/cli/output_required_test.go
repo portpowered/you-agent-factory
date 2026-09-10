@@ -845,8 +845,11 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 		catalog: modelinference.Detail{Summary: modelinference.Summary{
 			Name: "model",
 			Operations: []modelinference.Operation{{
-				Name:    "OMNI",
-				Inputs:  []modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+				Name: "OMNI",
+				Inputs: []modelinference.OperationSlot{
+					{Name: "first", Modality: modelinference.ModalityImage},
+					{Name: "second", Modality: modelinference.ModalityImage},
+				},
 				Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
 			}},
 		}},

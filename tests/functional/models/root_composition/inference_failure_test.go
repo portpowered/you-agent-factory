@@ -38,6 +38,10 @@ type genericCLICompatibilityChecker interface {
 type genericCLIOutputFailureEffects struct {
 	failedTarget string
 	failed       atomic.Bool
+	createCalls  atomic.Int32
+	inspectCalls atomic.Int32
+	removeCalls  atomic.Int32
+	renameCalls  atomic.Int32
 }
 
 func (effects *genericCLIOutputFailureEffects) CreateTemp(dir, pattern string) (interface {
@@ -45,22 +49,33 @@ func (effects *genericCLIOutputFailureEffects) CreateTemp(dir, pattern string) (
 	io.Closer
 	Name() string
 }, error) {
+	effects.createCalls.Add(1)
 	return os.CreateTemp(dir, pattern)
 }
 
-func (*genericCLIOutputFailureEffects) Inspect(path string) (os.FileInfo, error) {
+func (effects *genericCLIOutputFailureEffects) Inspect(path string) (os.FileInfo, error) {
+	effects.inspectCalls.Add(1)
 	return os.Stat(path)
 }
 
-func (*genericCLIOutputFailureEffects) Remove(path string) error {
+func (effects *genericCLIOutputFailureEffects) Remove(path string) error {
+	effects.removeCalls.Add(1)
 	return os.Remove(path)
 }
 
 func (effects *genericCLIOutputFailureEffects) Rename(oldPath, newPath string) error {
+	effects.renameCalls.Add(1)
 	if newPath == effects.failedTarget && effects.failed.CompareAndSwap(false, true) {
 		return fmt.Errorf("injected mapped publication failure for %s", newPath)
 	}
 	return os.Rename(oldPath, newPath)
+}
+
+func (effects *genericCLIOutputFailureEffects) Calls() [4]int {
+	return [4]int{
+		int(effects.createCalls.Load()), int(effects.inspectCalls.Load()),
+		int(effects.removeCalls.Load()), int(effects.renameCalls.Load()),
+	}
 }
 
 // TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly proves generic CLI inference emits exactly one stdout result.

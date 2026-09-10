@@ -288,6 +288,14 @@ func prepareGenericCLIInputsWithReader(
 	}
 	mappingValues, specValues := splitGenericCLIInputValues(rawValues)
 	var inputs []modelinference.InferenceInput
+	var specInputs []modelinference.InferenceInput
+	if len(specValues) > 0 {
+		var err error
+		specInputs, err = parseGenericCLIInputSpecs(specValues)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(mappingValues) > 0 {
 		mappings, err := parseGenericCLIInputMappings(mappingValues)
 		if err != nil {
@@ -306,13 +314,7 @@ func prepareGenericCLIInputsWithReader(
 			return nil, err
 		}
 	}
-	if len(specValues) > 0 {
-		specInputs, err := parseGenericCLIInputSpecs(specValues)
-		if err != nil {
-			return nil, err
-		}
-		inputs = append(inputs, specInputs...)
-	}
+	inputs = append(inputs, specInputs...)
 	return inputs, nil
 }
 
@@ -413,19 +415,19 @@ func bindGenericCLIInputsWithReader(
 
 func parseGenericCLIInputMappings(values []string) ([]genericCLIInputMapping, error) {
 	mappings := make([]genericCLIInputMapping, 0, len(values))
-	for _, value := range values {
+	for index, value := range values {
 		parts := strings.SplitN(value, "=", 2)
 		if len(parts) != 2 {
 			return nil, genericCLIInputFailure(
 				modelinference.InvocationFailureClassInvalidSlot,
-				fmt.Sprintf("invalid input mapping %q: expected slot=value", value), "", nil,
+				fmt.Sprintf("invalid input mapping %d: expected slot=value", index+1), "", nil,
 			)
 		}
 		slot := strings.TrimSpace(parts[0])
 		if slot == "" {
 			return nil, genericCLIInputFailure(
 				modelinference.InvocationFailureClassInvalidSlot,
-				fmt.Sprintf("invalid input mapping %q: slot is required", value), "", nil,
+				fmt.Sprintf("invalid input mapping %d: slot is required", index+1), "", nil,
 			)
 		}
 		if strings.TrimSpace(parts[1]) == "" {
