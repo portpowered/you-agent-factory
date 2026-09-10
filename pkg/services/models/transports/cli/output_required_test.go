@@ -804,31 +804,31 @@ func TestInvokeGenericInScopeClassifiesParsingAndBackendFailures(t *testing.T) {
 	base := InvokeConfig{Context: context.Background(), Output: io.Discard}
 
 	parseRoot := &rootService{models: &genericCLIModelsService{catalog: catalog}}
-	handled, err := parseRoot.invokeGenericInScope(
+	handled, err := parseRoot.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: base.Context, Output: base.Output, InputSpecs: []string{`{`}},
-		scope, "model", "OMNI", "prompt", catalog,
+		scope, "model", "OMNI", "prompt", catalog, false,
 	)
 	if !handled || err == nil || !strings.Contains(err.Error(), "parse --input 1") {
 		t.Fatalf("parse failure = handled:%v error:%v, want handled with actionable error", handled, err)
 	}
 
 	backendRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: errors.New("backend failed")}}
-	handled, err = backendRoot.invokeGenericInScope(
+	handled, err = backendRoot.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: base.Context, Output: base.Output, ParameterSpecs: []string{`{"name":"temperature","value":0.2}`}},
-		scope, "model", "OMNI", "prompt", catalog,
+		scope, "model", "OMNI", "prompt", catalog, false,
 	)
 	if !handled || err == nil || !strings.Contains(err.Error(), "backend failed") {
 		t.Fatalf("explicit backend failure = handled:%v error:%v, want handled with backend error", handled, err)
 	}
 
 	fallbackRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: modelinference.ErrUnsupportedOperation}}
-	handled, err = fallbackRoot.invokeGenericInScope(base, scope, "model", "OMNI", "prompt", catalog)
+	handled, err = fallbackRoot.invokeGenericInScopeWithOffline(base, scope, "model", "OMNI", "prompt", catalog, false)
 	if handled || err != nil {
 		t.Fatalf("unsupported fallback = handled:%v error:%v, want false, nil", handled, err)
 	}
 
 	nonFallbackRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: errors.New("unexpected backend failure")}}
-	handled, err = nonFallbackRoot.invokeGenericInScope(base, scope, "model", "OMNI", "prompt", catalog)
+	handled, err = nonFallbackRoot.invokeGenericInScopeWithOffline(base, scope, "model", "OMNI", "prompt", catalog, false)
 	if !handled || err == nil || !strings.Contains(err.Error(), "unexpected backend failure") {
 		t.Fatalf("unexpected backend failure = handled:%v error:%v, want handled error", handled, err)
 	}

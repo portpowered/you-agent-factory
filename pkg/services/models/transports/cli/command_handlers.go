@@ -194,7 +194,15 @@ func (h *CommandHandler) Invoke(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
-	if invokeInputs.offline {
+	return h.invokeWithSelectedCache(cfg, modelCacheDir, invokeInputs.offline)
+}
+
+func (h *CommandHandler) invokeWithSelectedCache(
+	cfg InvokeConfig,
+	modelCacheDir string,
+	offline bool,
+) error {
+	if offline {
 		invoker, ok := h.models.(InvokeScopeInvoker)
 		if !ok {
 			return fmt.Errorf("models invoke service does not support offline invocation")

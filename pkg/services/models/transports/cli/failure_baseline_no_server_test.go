@@ -213,9 +213,9 @@ func TestInvokeGenericEmitsMissingAssetEstimateBeforeInvocation(t *testing.T) {
 	}
 	service := &rootService{models: root}
 	var diagnostics bytes.Buffer
-	handled, err := service.invokeGenericInScope(
+	handled, err := service.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: context.Background(), Output: io.Discard, JSON: true, Diagnostics: &diagnostics},
-		scope, "model", modelinference.OperationOMNI, "hello", catalog,
+		scope, "model", modelinference.OperationOMNI, "hello", catalog, false,
 	)
 	if err != nil || !handled {
 		t.Fatalf("invokeGenericInScope = handled:%v error:%v, want handled success", handled, err)

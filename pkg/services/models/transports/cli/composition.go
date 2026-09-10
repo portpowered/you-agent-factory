@@ -15,6 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 const genericCLIInputMaxFileBytes int64 = 8 * 1024 * 1024
@@ -653,4 +655,210 @@ func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (strin
 		}
 	}
 	return "", fmt.Errorf("models invoke returned no streamed audio output")
+}
+
+func joinedCLIInvocationRequestFromInputs(
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	inputs []modelinference.InferenceInput,
+	parameters []modelinference.OperationParameter,
+	catalog modelinference.Detail,
+) modelinference.InvokeModelRequest {
+	request := modelinference.InvokeModelRequest{
+		Scope: scope, Holder: modelsCLIInvokeHolder,
+		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
+		Inputs: inputs, Parameters: parameters,
+	}
+	if len(inputs) > 0 {
+		return request
+	}
+
+	inputName := "input"
+	modality := modelinference.ModalityText
+	contentType := "text/plain"
+	if selected, ok := catalogOperationForName(catalog, operation); ok {
+		// Catalog projections sort slots by name; bind --text to the required
+		// text slot instead of assuming the first slot is the CLI input.
+		input := joinedCLITextInput(selected.Inputs)
+		if input == nil && len(selected.Inputs) > 0 {
+			input = &selected.Inputs[0]
+		}
+		if input != nil {
+			inputName = input.Name
+			if input.Modality != "" {
+				modality = input.Modality
+			}
+			if len(input.MediaTypes) > 0 {
+				contentType = input.MediaTypes[0]
+			}
+		}
+	}
+	request.Inputs = []modelinference.InferenceInput{{
+		Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
+	}}
+	return request
+}
+
+type genericCLIInputSpec struct {
+	Name        string `json:"name"`
+	Modality    string `json:"modality"`
+	ContentType string `json:"contentType"`
+	MediaType   string `json:"mediaType"`
+	Content     string `json:"content"`
+}
+
+func parseGenericCLIInputSpecs(values []string) ([]modelinference.InferenceInput, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	inputs := make([]modelinference.InferenceInput, 0, len(values))
+	for index, value := range values {
+		var spec genericCLIInputSpec
+		if err := json.Unmarshal([]byte(value), &spec); err != nil {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --input %d: invalid JSON", index+1), "", nil,
+			)
+		}
+		name := strings.TrimSpace(spec.Name)
+		if name == "" {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidSlot,
+				fmt.Sprintf("parse --input %d: name is required", index+1), "", nil,
+			)
+		}
+		modality := modelinference.Modality(strings.ToUpper(strings.TrimSpace(spec.Modality)))
+		if modality == "" {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassMediaCapability,
+				fmt.Sprintf("parse --input %d (%s): modality is required", index+1, name), name, nil,
+			)
+		}
+		if strings.TrimSpace(spec.Content) == "" {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --input %d (%s): content is required", index+1, name), name, nil,
+			)
+		}
+		inputs = append(inputs, modelinference.InferenceInput{
+			Name: name, Modality: modality,
+			ContentType: strings.TrimSpace(spec.ContentType),
+			MediaType:   strings.TrimSpace(spec.MediaType), Content: spec.Content,
+		})
+	}
+	return inputs, nil
+}
+
+type genericCLIParameterSpec struct {
+	Name  string          `json:"name"`
+	Value json.RawMessage `json:"value"`
+}
+
+func parseGenericCLIParameterSpecs(values []string) ([]modelinference.OperationParameter, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	parameters := make([]modelinference.OperationParameter, 0, len(values))
+	for index, value := range values {
+		var spec genericCLIParameterSpec
+		if err := json.Unmarshal([]byte(value), &spec); err != nil {
+			return nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --parameter %d: invalid JSON", index+1), "",
+			)
+		}
+		name := strings.TrimSpace(spec.Name)
+		if name == "" {
+			return nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --parameter %d: name is required", index+1), "",
+			)
+		}
+		if len(spec.Value) == 0 {
+			return nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --parameter %d (%s): value is required", index+1, name), name,
+			)
+		}
+		var parameterValue any
+		if err := json.Unmarshal(spec.Value, &parameterValue); err != nil {
+			return nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("parse --parameter %d (%s) value must be valid JSON", index+1, name), name,
+			)
+		}
+		parameters = append(parameters, modelinference.OperationParameter{Name: name, Value: parameterValue})
+	}
+	return parameters, nil
+}
+
+func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.OperationSlot {
+	var optionalText *modelinference.OperationSlot
+	for index := range inputs {
+		input := &inputs[index]
+		if input.Modality != modelinference.ModalityText {
+			continue
+		}
+		if input.Required != nil && *input.Required {
+			return input
+		}
+		if optionalText == nil {
+			optionalText = input
+		}
+	}
+	return optionalText
+}
+
+func modelInvocationResponseFromInferenceResult(
+	result modelinference.InvokeModelResult,
+	catalog modelinference.Detail,
+	inputText string,
+) factoryapi.ModelInvocationResponse {
+	worker, locality := catalogPresentationForOperation(catalog, result.Operation)
+	bindings := resolvedPresentationBindings(catalog, result.Operation, inputText)
+	content := contentcontract.GeneratedPtrFromParts(inferenceContentToWorkParts(result.Content))
+	return factoryapi.ModelInvocationResponse{
+		ModelName:        result.ModelName,
+		Worker:           worker,
+		Operation:        result.Operation,
+		ProviderLocality: factoryapi.WorkerModelLocality(locality),
+		Content:          derefGeneratedWorkContent(content),
+		Bindings:         generatedResolvedModelInvocationBindings(bindings),
+	}
+}
+
+func genericInvocationResponseFromInferenceResult(
+	result modelinference.InvokeModelResult,
+) factoryapi.GenericModelInvocationResponse {
+	outputs := make([]factoryapi.ModelInvocationOutput, len(result.Outputs))
+	for index, output := range result.Outputs {
+		projected := factoryapi.ModelInvocationOutput{
+			Name:     output.Name,
+			Modality: factoryapi.ModelInvocationContentType(output.Modality),
+		}
+		projected.ContentType = genericCLIStringPointer(output.ContentType)
+		projected.MediaType = genericCLIStringPointer(output.MediaType)
+		projected.Content = genericCLIStringPointer(output.Content)
+		if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
+			artifact := factoryapi.ModelInvocationArtifact{ArtifactRef: output.Artifact.Artifact.String()}
+			artifact.Name = genericCLIStringPointer(output.Artifact.Name)
+			artifact.MediaType = genericCLIStringPointer(output.Artifact.MediaType)
+			if output.Artifact.SizeBytes >= 0 {
+				size := output.Artifact.SizeBytes
+				artifact.SizeBytes = &size
+			}
+			if len(output.Artifact.Properties) > 0 {
+				properties := make(factoryapi.StringMap, len(output.Artifact.Properties))
+				for key, value := range output.Artifact.Properties {
+					properties[key] = value
+				}
+				artifact.Properties = &properties
+			}
+			projected.Artifact = &artifact
+		}
+		outputs[index] = projected
+	}
+	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
 }
