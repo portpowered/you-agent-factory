@@ -4,996 +4,994 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
+	"debug/buildinfo"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 const (
-	localAICandidateManifestEnv, localAICandidateSchemaVersion, localAICandidateProject                                                                                                                                                                                                                                                  = "INFINITE_YOU_LOCALAI_CANDIDATE_MANIFEST", "localai-windows-install-candidate/v1", "localai"
-	localAICandidateCycle, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS                                                                                                                                                                                                                                                           = "063", "-p=4", "4"
-	localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree                                                                                                                                                                                                                                                 = "https://github.com/portpowered/you-agent-factory", "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc", "2c00a0d213fbf878402b66895466053a832a9583"
-	localAICandidateGoReleaser, localAICandidateGOOS, localAICandidateGOARCH                                                                                                                                                                                                                                                             = "v2.12.7", "windows", "amd64"
-	localAICandidateTemporaryDiskMaximum, localAICandidateToolDownloadMaximum, localAICandidateModelDownloadMaximum, localAICandidateModelCallsMaximum, localAICandidatePaidUSDMaximum, localAICandidateDescendantMaximum, localAICandidateRerunsMaximum, localAICandidateProcessNetworkGapMaximum, localAICandidateDiskGapMaximum int64 = 4294967296, 0, 0, 0, 0, 36, 1, 2000, 15000
+	localAICandidateSourceCommit      = "059474b2c00915865306a33ca5e3d02b618bb6f0"
+	localAICandidateNativeToolVersion = "0.27.7"
+	localAICandidateNativeToolSHA256  = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
+	localAICandidateNativeToolBytes   = int64(11386368)
 )
 
-var localAICandidateSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
-
-type localAICandidateManifest struct {
-	SchemaVersion string                     `json:"schemaVersion"`
-	Project       string                     `json:"project"`
-	Cycle         string                     `json:"cycle"`
-	Source        localAICandidateSource     `json:"source"`
-	Build         localAICandidateBuild      `json:"build"`
-	Artifacts     []localAICandidateArtifact `json:"artifacts"`
-	Limits        localAICandidateLimits     `json:"limits"`
-	Attempts      map[string]any             `json:"attempts"`
-}
-type localAICandidateSource struct {
-	Repository string `json:"repository"`
-	Commit     string `json:"commit"`
-	Tree       string `json:"tree"`
-}
-type localAICandidateBuild struct {
-	CandidateVersion       string                 `json:"candidateVersion"`
-	CLIVersion             string                 `json:"cliVersion"`
-	GoVersion              string                 `json:"goVersion"`
-	GoReleaserVersion      string                 `json:"goreleaserVersion"`
-	GoReleaserConfigSHA256 string                 `json:"goreleaserConfigSha256"`
-	Target                 localAICandidateTarget `json:"target"`
-	Environment            map[string]string      `json:"environment"`
-}
-type localAICandidateTarget struct {
-	GOOS       string `json:"goos"`
-	GOARCH     string `json:"goarch"`
-	CgoEnabled *bool  `json:"cgoEnabled"`
-}
-type localAICandidateArtifact struct {
-	Role   string `json:"role"`
-	File   string `json:"file"`
-	Bytes  *int64 `json:"bytes"`
-	SHA256 string `json:"sha256"`
-}
-type localAICandidateLimits struct {
-	TemporaryDiskBytesMaximum     *int64 `json:"temporaryDiskBytesMaximum"`
-	OrdinaryToolDownloadMaximum   *int64 `json:"ordinaryToolDownloadBytesMaximum"`
-	ModelBackendDownloadMaximum   *int64 `json:"modelBackendDownloadBytesMaximum"`
-	ModelCallsMaximum             *int64 `json:"modelCallsMaximum"`
-	PaidUSDMaximum                *int64 `json:"paidUSDMaximum"`
-	DescendantMaximum             *int64 `json:"descendantMaximum"`
-	PackagingOrSmokeRerunsMaximum *int64 `json:"packagingOrSmokeRerunsMaximum"`
-	GOFLAGS                       string `json:"goflags"`
-	GOMAXPROCS                    string `json:"gomaxprocs"`
-}
-type localAICandidateArtifactEvidence struct {
-	Role   string `json:"role"`
-	File   string `json:"file"`
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
-}
-type localAICandidateValidationEvidence struct {
-	Status           string                           `json:"status"`
-	Property         string                           `json:"property"`
-	SchemaVersion    string                           `json:"schemaVersion"`
-	SourceCommit     string                           `json:"sourceCommit"`
-	SourceTree       string                           `json:"sourceTree"`
-	CandidateVersion string                           `json:"candidateVersion"`
-	CLIVersion       string                           `json:"cliVersion"`
-	Target           string                           `json:"target"`
-	Archive          localAICandidateArtifactEvidence `json:"archive"`
-	Installer        localAICandidateArtifactEvidence `json:"installer"`
-	Manifest         localAICandidateArtifactEvidence `json:"manifest"`
-	Preconditions    string                           `json:"preconditions"`
-}
-type localAICandidateRoot struct {
-	Name string
-	Path string
-}
-type localAICandidateProcessNetworkObserver struct {
-	StartedBeforeRoot              bool   `json:"startedBeforeRoot"`
-	ContinuedThroughDescendantExit bool   `json:"continuedThroughDescendantExit"`
-	MaximumGapMilliseconds         int64  `json:"maximumGapMilliseconds"`
-	Status                         string `json:"status"`
-	NonLoopbackConnections         int    `json:"nonLoopbackConnections"`
-	ExternalTransferBytes          int64  `json:"externalTransferBytes"`
-}
-type localAICandidateDiskObserver struct {
-	Independent            bool   `json:"independent"`
-	StartPeriodicFinal     bool   `json:"startPeriodicFinal"`
-	MaximumGapMilliseconds int64  `json:"maximumGapMilliseconds"`
-	Status                 string `json:"status"`
-	PeakDeltaBytes         int64  `json:"peakDeltaBytes"`
-}
-type localAICandidateObserverEvidence struct {
-	Environment            map[string]string                      `json:"environment"`
-	ProcessNetworkObserver localAICandidateProcessNetworkObserver `json:"processNetworkObserver"`
-	DiskObserver           localAICandidateDiskObserver           `json:"diskObserver"`
-	DescendantMaximum      int64                                  `json:"descendantMaximum"`
-	DescendantHighWater    int64                                  `json:"descendantHighWater"`
-	RootExitCode           *int64                                 `json:"rootExitCode"`
-	FailurePropagation     string                                 `json:"failurePropagation"`
-	ModelBackendBytes      int64                                  `json:"modelBackendBytes"`
-	ModelBackendCalls      int64                                  `json:"modelBackendCalls"`
-}
-type localAICandidateObserverReport struct {
-	SchemaVersion string                           `json:"schemaVersion"`
-	Status        string                           `json:"status"`
-	Cycle         string                           `json:"cycle"`
-	ReleaseStatus string                           `json:"releaseStatus"`
-	Observation   localAICandidateObserverEvidence `json:"observation"`
-}
-
-func localAICandidateManifestPath(t *testing.T, purpose string) string {
-	t.Helper()
+func TestLocalAICandidateScriptParses(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "windows" {
-		t.Skip("Windows " + purpose + " is only available on Windows")
+		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-	manifestPath := strings.TrimSpace(os.Getenv(localAICandidateManifestEnv))
-	if manifestPath == "" {
-		t.Skip("set " + localAICandidateManifestEnv + " to run the " + purpose)
+
+	scriptPath := localAICandidateScriptPath(t)
+	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command", fmt.Sprintf(`
+$errors = $null
+$tokens = $null
+[System.Management.Automation.Language.Parser]::ParseFile(%s, [ref]$tokens, [ref]$errors) | Out-Null
+if ($errors.Count -ne 0) { $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }
+`, localAICandidatePowerShellLiteral(scriptPath)))
+	command.Env = localAICandidatePowerShellEnvironment(t, t.TempDir(), nil)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("parse candidate delivery script: %v\n%s", err, output)
 	}
-	if !filepath.IsAbs(manifestPath) {
-		t.Fatalf("candidate manifest path %q is not absolute; %s must name an absolute path", manifestPath, localAICandidateManifestEnv)
-	}
-	return manifestPath
 }
-func TestLocalAICandidate_ValidatesOptInPrebuiltWindowsCandidate(t *testing.T) {
-	manifestPath := localAICandidateManifestPath(t, "candidate release cell")
-	evidence, err := validateLocalAICandidate(manifestPath)
-	if err != nil {
-		t.Logf("LOCALAI-CANDIDATE status=FAIL property=prebuilt-candidate-schema-source-target-artifact-and-detached-digest-identity reason=%q", err)
-		t.Fatalf("validate prebuilt Windows candidate: %v", err)
+func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-	encoded, err := json.Marshal(evidence)
-	if err != nil {
-		t.Fatalf("marshal candidate evidence: %v", err)
+
+	tempDir := filepath.Join(t.TempDir(), "path with spaces")
+	if err := os.MkdirAll(tempDir, 0o700); err != nil {
+		t.Fatalf("create fixture directory: %v", err)
 	}
-	t.Logf("LOCALAI-CANDIDATE status=PASS property=%s evidence=%s", evidence.Property, encoded)
+	recordPath := filepath.Join(tempDir, "arguments.json")
+	recorderPath := filepath.Join(tempDir, "record arguments.ps1")
+	recorder := `param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Values)
+[System.IO.File]::WriteAllText($env:LOCALAI_ARGUMENT_RECORD, ($Values | ConvertTo-Json -Compress))
+[Console]::Out.WriteLine("token=fixture-secret")
+[Console]::Out.Write("stdout retained")
+[Console]::Error.WriteLine("api_key=fixture-secret")
+[Console]::Error.Write("stderr retained")
+exit 23
+`
+	if err := os.WriteFile(recorderPath, []byte(recorder), 0o600); err != nil {
+		t.Fatalf("write argument recorder: %v", err)
+	}
+
+	stdoutPath := filepath.Join(tempDir, "stdout.log")
+	stderrPath := filepath.Join(tempDir, "stderr.log")
+	resultPath := filepath.Join(tempDir, "result.json")
+	installDir := filepath.Join(tempDir, "unused install")
+	wantArguments := []string{"release", "--snapshot", "--clean", "-f", ".goreleaser.yml", filepath.Join(tempDir, "value with spaces")}
+	argumentLiterals := make([]string, 0, len(wantArguments)+5)
+	for _, value := range append([]string{"-NoProfile", "-NonInteractive", "-File", recorderPath}, wantArguments...) {
+		argumentLiterals = append(argumentLiterals, localAICandidatePowerShellLiteral(value))
+	}
+	harnessPath := filepath.Join(tempDir, "invoke.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @(%s) -WorkingDirectory %s -StdoutPath %s -StderrPath %s
+$result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath %s -Encoding UTF8
+if ($result.exitCode -ne 23) { exit 2 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(installDir),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		strings.Join(argumentLiterals, ", "),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(stdoutPath),
+		localAICandidatePowerShellLiteral(stderrPath),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, append(os.Environ(), "LOCALAI_ARGUMENT_RECORD="+recordPath), "")
+
+	var gotArguments []string
+	readJSONFile(t, recordPath, &gotArguments)
+	if strings.Join(gotArguments, "\x00") != strings.Join(wantArguments, "\x00") {
+		t.Fatalf("recorded arguments = %#v, want %#v", gotArguments, wantArguments)
+	}
+	var result struct {
+		ExitCode       int      `json:"exitCode"`
+		ElapsedMillis  int64    `json:"elapsedMilliseconds"`
+		Arguments      []string `json:"arguments"`
+		Stdout         string   `json:"stdout"`
+		Stderr         string   `json:"stderr"`
+		StdoutEvidence struct {
+			SHA256 string `json:"sha256"`
+		} `json:"stdoutEvidence"`
+		StderrEvidence struct {
+			SHA256 string `json:"sha256"`
+		} `json:"stderrEvidence"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if result.ExitCode != 23 || result.ElapsedMillis < 0 || len(result.Arguments) != len(wantArguments)+4 {
+		t.Fatalf("command result = %#v", result)
+	}
+	if !strings.Contains(result.Stdout, "token=<redacted>") || !strings.Contains(result.Stderr, "api_key=<redacted>") {
+		t.Fatalf("redacted output = stdout %q stderr %q", result.Stdout, result.Stderr)
+	}
+	for _, path := range []string{stdoutPath, stderrPath} {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read retained output %s: %v", path, err)
+		}
+		if strings.Contains(string(contents), "fixture-secret") || !strings.Contains(string(contents), "<redacted>") {
+			t.Fatalf("retained output %s was not redacted: %q", path, contents)
+		}
+	}
+	if len(result.StdoutEvidence.SHA256) != 64 || len(result.StderrEvidence.SHA256) != 64 {
+		t.Fatalf("retained output hashes are missing: %#v", result)
+	}
 }
-func TestLocalAICandidate_PublicInstallDiscoveryAndCleanup(t *testing.T) {
-	manifestPath := localAICandidateManifestPath(t, "candidate release smoke")
-	if _, err := validateLocalAICandidate(manifestPath); err != nil {
-		t.Fatalf("validate candidate before public install smoke: %v", err)
+func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-	installDir := filepath.Join(t.TempDir(), "installed-bin")
-	reportPath := filepath.Join(t.TempDir(), "install-validation-report.json")
-	output, err := localAICandidateSmokeCommand(t, manifestPath, installDir, reportPath).CombinedOutput()
+
+	tempDir := t.TempDir()
+	childPIDPath := filepath.Join(tempDir, "child.pid")
+	childPath := filepath.Join(tempDir, "child.ps1")
+	parentPath := filepath.Join(tempDir, "parent.ps1")
+	if err := os.WriteFile(childPath, []byte(`[System.Threading.ManualResetEvent]::new($false).WaitOne()`), 0o600); err != nil {
+		t.Fatalf("write hanging child: %v", err)
+	}
+	parent := fmt.Sprintf(`
+$child = Start-Process -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -PassThru
+[System.IO.File]::WriteAllText(%s, [string]$child.Id)
+[System.Threading.ManualResetEvent]::new($false).WaitOne()
+`,
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(childPath),
+		localAICandidatePowerShellLiteral(childPIDPath),
+	)
+	if err := os.WriteFile(parentPath, []byte(parent), 0o600); err != nil {
+		t.Fatalf("write hanging parent: %v", err)
+	}
+
+	resultPath := filepath.Join(tempDir, "result.json")
+	harnessPath := filepath.Join(tempDir, "deadline.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -WorkingDirectory %s -StdoutPath %s -StderrPath %s -TimeoutSeconds 3 -OutputMaximumBytes 4096
+$result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath %s -Encoding UTF8
+if (-not $result.timedOut -or $result.exitCode -ne 124) { exit 2 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(parentPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stdout.log")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	started := time.Now()
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	if elapsed := time.Since(started); elapsed > 15*time.Second {
+		t.Fatalf("deadline helper took %s, want at most 15s", elapsed)
+	}
+	pidBytes, err := os.ReadFile(childPIDPath)
 	if err != nil {
-		t.Fatalf("public Windows candidate install smoke: %v\n%s", err, output)
+		t.Fatalf("read hanging child PID: %v", err)
 	}
-	reportBytes, err := os.ReadFile(reportPath)
+	childPID, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
 	if err != nil {
-		t.Fatalf("read candidate install smoke report: %v\n%s", err, output)
+		t.Fatalf("parse hanging child PID: %v", err)
 	}
-	var report map[string]any
-	if err := json.Unmarshal(reportBytes, &report); err != nil {
-		t.Fatalf("decode candidate install smoke report: %v\n%s", err, reportBytes)
+	check := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command",
+		fmt.Sprintf("if (Get-Process -Id %d -ErrorAction SilentlyContinue) { exit 1 }", childPID))
+	check.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
+	if output, err := check.CombinedOutput(); err != nil {
+		t.Fatalf("hanging child process %d survived command deadline: %v\n%s", childPID, err, output)
 	}
-	run, _ := report["run"].(map[string]any)
-	cleanup, _ := report["cleanup"].(map[string]any)
-	postCleanup, _ := report["postCleanup"].(map[string]any)
-	installer, _ := report["installer"].(map[string]any)
-	requests, _ := installer["requests"].([]any)
-	if report["status"] != "PASS" || report["property"] != "public-install-identity-discovery-zero-model-backend-activity-cleanup" ||
-		run["status"] != "PASS" || cleanup["status"] != "PASS" || len(requests) != 3 ||
-		postCleanup["candidateHashesStable"] != true {
-		t.Fatalf("candidate install smoke report = %#v, want PASS with complete run/install/cleanup evidence", report)
+}
+func TestLocalAICandidateCommandBoundsRetainedOutput(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-	reportBytes = regexp.MustCompile(`\s+`).ReplaceAll(reportBytes, nil)
-	for _, want := range []string{
-		`"powershell"`, `"commandMilliseconds"`, `"loopbackServerReadyMilliseconds"`,
-		`"loopbackCompletionMilliseconds"`, `"networkObserverSampleMilliseconds"`, `"observer"`,
-		`"networkSamples"`, `"unexpectedConnections": 0`, `"port7437Connections": 0`,
-		`"modelBackendDownloadBytes": 0`, `"modelCalls": 0`, `"backendRequestsObserved": 0`,
-		`"remainingTaskPaths": []`,
+
+	tempDir := t.TempDir()
+	writerPath := filepath.Join(tempDir, "writer.ps1")
+	if err := os.WriteFile(writerPath, []byte(`[Console]::Out.Write(('token=x ' * 1024)); exit 0`), 0o600); err != nil {
+		t.Fatalf("write output fixture: %v", err)
+	}
+	stdoutPath := filepath.Join(tempDir, "stdout.log")
+	resultPath := filepath.Join(tempDir, "result.json")
+	harnessPath := filepath.Join(tempDir, "output-limit.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -WorkingDirectory %s -StdoutPath %s -StderrPath %s -TimeoutSeconds 10 -OutputMaximumBytes 1024
+$result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath %s -Encoding UTF8
+if (-not $result.outputLimitExceeded -or $result.exitCode -ne 125) { exit 2 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(writerPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(stdoutPath),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	info, err := os.Stat(stdoutPath)
+	if err != nil {
+		t.Fatalf("stat retained output: %v", err)
+	}
+	if info.Size() > 1024 {
+		t.Fatalf("retained output is %d bytes, want at most 1024", info.Size())
+	}
+	var result struct {
+		OutputLimitExceeded bool `json:"outputLimitExceeded"`
+		StdoutEvidence      struct {
+			TotalBytes int64 `json:"totalBytes"`
+			Truncated  bool  `json:"truncated"`
+		} `json:"stdoutEvidence"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if !result.OutputLimitExceeded || !result.StdoutEvidence.Truncated || result.StdoutEvidence.TotalBytes <= 1024 {
+		t.Fatalf("bounded output evidence = %#v", result)
+	}
+}
+func TestLocalAICandidateModelActivityFailsClosed(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	modelRoot := filepath.Join(tempDir, "model-case")
+	backendRoot := filepath.Join(tempDir, "backend-case")
+	modelEvidencePath := filepath.Join(tempDir, "model-runtime.jsonl")
+	backendEvidencePath := filepath.Join(tempDir, "backend-runtime.jsonl")
+	for _, directory := range []string{
+		filepath.Join(modelRoot, "models"), filepath.Join(modelRoot, "hf"), filepath.Join(modelRoot, "cache"),
+		filepath.Join(backendRoot, "models"), filepath.Join(backendRoot, "hf"), filepath.Join(backendRoot, "cache"),
 	} {
-		if !bytes.Contains(reportBytes, []byte(strings.ReplaceAll(want, " ", ""))) {
-			t.Fatalf("candidate install report missing %q: %s", want, reportBytes)
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create activity fixture root: %v", err)
+		}
+	}
+	harnessPath := filepath.Join(tempDir, "activity.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$modelPaths = @(%s, %s, %s); $modelBefore = @(
+    Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
+$missingActivity = Get-SmokeModelActivity -Before $modelBefore -After $modelBefore -Commands @() -RuntimeEvidencePath %s; $missingRejected = $false
+try { Assert-SmokeNoModelActivity $missingActivity } catch { $missingRejected = $true }
+if ($missingActivity.runtimeEvidenceObserved -or -not $missingRejected) { exit 4 }
+[System.IO.File]::WriteAllBytes((Join-Path $modelPaths[2] "download.bin"), [byte[]](65, 66, 67)); $modelAfter = @(
+    Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
+$modelActivity = Get-SmokeModelActivity -Before $modelBefore -After $modelAfter -Commands @([pscustomobject]@{ arguments = @("models", "invoke", "llm") }) -RuntimeEvidencePath %s; $modelRejected = $false
+try { Assert-SmokeNoModelActivity $modelActivity } catch { $modelRejected = $true }
+if ($modelActivity.modelCalls -ne 1 -or $modelActivity.modelBackendDownloadBytes -ne 3 -or -not $modelRejected) { exit 2 }
+$backendPaths = @(%s, %s, %s); $backendBefore = @(
+    Get-SmokeActivitySnapshot models $backendPaths[0]; Get-SmokeActivitySnapshot hf $backendPaths[1]; Get-SmokeActivitySnapshot cache $backendPaths[2])
+[System.IO.File]::WriteAllText(%s, '{"kind":"MANAGED_CHILD","phase":"PROCESS_STARTED"}' + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)); $backendAfter = @(
+    Get-SmokeActivitySnapshot models $backendPaths[0]; Get-SmokeActivitySnapshot hf $backendPaths[1]; Get-SmokeActivitySnapshot cache $backendPaths[2])
+$backendActivity = Get-SmokeModelActivity -Before $backendBefore -After $backendAfter -Commands @() -RuntimeEvidencePath %s; $backendRejected = $false
+try { Assert-SmokeNoModelActivity $backendActivity } catch { $backendRejected = $true }
+if ($backendActivity.backendProcessStarts -ne 1 -or -not $backendRejected) { exit 3 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "models")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "hf")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "cache")),
+		localAICandidatePowerShellLiteral(modelEvidencePath),
+		localAICandidatePowerShellLiteral(modelEvidencePath),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "models")),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "hf")),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "cache")),
+		localAICandidatePowerShellLiteral(backendEvidencePath),
+		localAICandidatePowerShellLiteral(backendEvidencePath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+func TestLocalAICandidateFinalizationRetainsFailureReport(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	outputDir := filepath.Join(tempDir, "candidate-output")
+	reportPath := filepath.Join(outputDir, "candidate-report.json")
+	harnessPath := filepath.Join(tempDir, "finalization.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$report = [ordered]@{ status = "PASS"; error = ""; artifacts = @([ordered]@{ role = "missing-artifact"; file = "missing.zip"; bytes = 3; sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }); cleanup = [ordered]@{ status = "PASS" } }
+$result = Finalize-SmokeCandidateReport -OutputDirectory %s -ReportPath %s -Report $report -Failure $null
+if ($null -eq $result.failure -or $result.report.status -ne "FAIL" -or $result.report.cleanup.status -ne "FAIL" -or $result.report.cleanup.retainedEvidenceHashesStable) { exit 2 }
+$digestPath = Join-Path %s "candidate-report.sha256"; $hasher = [System.Security.Cryptography.SHA256]::Create()
+$reportHash = [System.BitConverter]::ToString($hasher.ComputeHash([System.IO.File]::ReadAllBytes(%s))).Replace("-", "").ToLowerInvariant(); $hasher.Dispose()
+$digestHash = (Get-Content -LiteralPath $digestPath -Raw).Trim().Split(' ')[0]
+if (-not (Test-Path -LiteralPath %s -PathType Leaf) -or -not (Test-Path -LiteralPath $digestPath -PathType Leaf) -or $reportHash -cne $digestHash) { exit 3 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(reportPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+func TestLocalAICandidateRootsRejectOverlapAndReparseAncestry(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	for _, directory := range []string{sourceDir, dependencyDir} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create path fixture: %v", err)
+		}
+	}
+	outputDir := filepath.Join(sourceDir, "output")
+	harnessPath := filepath.Join(tempDir, "paths.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+try {
+    Assert-SmokeCandidateRoots -SourcePath %s -DependencySourcePath %s -OutputDirectory %s -WorkDirectory %s -InstallDirectory %s -ReportPath %s | Out-Null
+    exit 2
+} catch {
+    if (-not $_.Exception.Message.Contains('must not overlap')) { throw }
+}
+$link = %s
+New-Item -ItemType Junction -Path $link -Target %s | Out-Null
+try {
+    Assert-SmokeCandidateRoots -SourcePath $link -DependencySourcePath %s -OutputDirectory %s -WorkDirectory %s -InstallDirectory %s -ReportPath %s | Out-Null
+    exit 3
+} catch {
+    if (-not $_.Exception.Message.Contains('reparse point in its ancestry')) { throw }
+}
+$longRoot = Join-Path %s ('x' * 230)
+$rootCases = @(
+    @{ Name = 'output'; OutputDirectory = $longRoot },
+    @{ Name = 'work'; WorkDirectory = $longRoot },
+    @{ Name = 'install'; InstallDirectory = $longRoot },
+    @{ Name = 'report'; ReportPath = (Join-Path $longRoot 'report.json') }
+)
+foreach ($case in $rootCases) {
+    $arguments = @{
+        SourcePath = %s
+        DependencySourcePath = %s
+        OutputDirectory = %s
+        WorkDirectory = %s
+        InstallDirectory = %s
+        ReportPath = %s
+    }
+    foreach ($key in $case.Keys) {
+        if ($key -ne 'Name') { $arguments[$key] = $case[$key] }
+    }
+    try {
+        Assert-SmokeCandidateRoots @arguments | Out-Null
+        exit 4
+    } catch {
+        if (-not $_.Exception.Message.Contains('at most 220 characters')) { throw }
+    }
+}
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(outputDir, "report.json")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "source-link")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output", "report.json")),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "work")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output", "report.json")),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+func TestLocalAICandidateCleanupPreservesSharedDependencyCache(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "work")
+	junctionDir := filepath.Join(workDir, "src", "ui", "node_modules")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	if err := os.MkdirAll(filepath.Dir(junctionDir), 0o700); err != nil {
+		t.Fatalf("create work fixture: %v", err)
+	}
+	if err := os.MkdirAll(dependencyDir, 0o700); err != nil {
+		t.Fatalf("create dependency fixture: %v", err)
+	}
+	markerPath := filepath.Join(dependencyDir, "keep.txt")
+	if err := os.WriteFile(markerPath, []byte("shared cache"), 0o600); err != nil {
+		t.Fatalf("write shared cache marker: %v", err)
+	}
+	harnessPath := filepath.Join(tempDir, "cleanup.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+New-Item -ItemType Junction -Path %s -Target %s | Out-Null
+Remove-SmokeCandidateWork -WorkDirectory %s -DependencyJunctionPath %s
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(junctionDir),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(junctionDir),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
+		t.Fatalf("candidate work directory remains after cleanup: %v", err)
+	}
+	contents, err := os.ReadFile(markerPath)
+	if err != nil || string(contents) != "shared cache" {
+		t.Fatalf("shared dependency cache was modified: %v %q", err, contents)
+	}
+}
+func TestLocalAICandidateSourceIdentityComesFromRuntimeInput(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	repoRoot := testutil.MustRepoRoot(t)
+	commit := localAICandidateGit(t, repoRoot, "rev-parse", "HEAD")
+	tree := localAICandidateGit(t, repoRoot, "rev-parse", "HEAD^{tree}")
+	repository := localAICandidateGit(t, repoRoot, "remote", "get-url", "origin")
+	tempDir := t.TempDir()
+	resultPath := filepath.Join(tempDir, "identity.json")
+	harnessPath := filepath.Join(tempDir, "identity.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository %s | ConvertTo-Json -Compress | Set-Content -LiteralPath %s -Encoding UTF8
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(repoRoot),
+		localAICandidatePowerShellLiteral(commit),
+		localAICandidatePowerShellLiteral(repository),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	var identity struct {
+		Repository string `json:"repository"`
+		Commit     string `json:"commit"`
+		Tree       string `json:"tree"`
+	}
+	readJSONFile(t, resultPath, &identity)
+	if identity.Repository != repository || identity.Commit != commit || identity.Tree != tree {
+		t.Fatalf("source identity = %#v, want repository %s commit %s tree %s", identity, repository, commit, tree)
+	}
+
+	badHarness := fmt.Sprintf(`
+. %s -InstallDir %s
+Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository 'https://example.invalid/different'
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(repoRoot),
+		localAICandidatePowerShellLiteral(commit),
+	)
+	badHarnessPath := filepath.Join(tempDir, "bad-identity.ps1")
+	if err := os.WriteFile(badHarnessPath, []byte(badHarness), 0o600); err != nil {
+		t.Fatalf("write rejected source identity harness: %v", err)
+	}
+	badCommand := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", badHarnessPath)
+	badCommand.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
+	output, err := badCommand.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "candidate source origin") {
+		t.Fatalf("mismatched repository result = %v\n%s", err, output)
+	}
+}
+func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "source")
+	cloneDir := filepath.Join(tempDir, "clone")
+	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
+		t.Fatalf("create source repository: %v", err)
+	}
+	localAICandidateRunGit(t, sourceDir, "init", "--quiet")
+	localAICandidateRunGit(t, sourceDir, "config", "user.email", "candidate@example.invalid")
+	localAICandidateRunGit(t, sourceDir, "config", "user.name", "candidate")
+	if err := os.WriteFile(filepath.Join(sourceDir, "tracked.txt"), []byte("candidate"), 0o600); err != nil {
+		t.Fatalf("write source repository: %v", err)
+	}
+	localAICandidateRunGit(t, sourceDir, "add", "tracked.txt")
+	localAICandidateRunGit(t, sourceDir, "commit", "--quiet", "-m", "fixture")
+
+	harnessPath := filepath.Join(tempDir, "clone.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-SmokeGit @('clone', '--local', '--no-checkout', '--', %s, %s)
+if (-not (Test-Path -LiteralPath %s -PathType Container)) { throw 'clone directory was not created' }
+if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retained' }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(cloneDir),
+		localAICandidatePowerShellLiteral(cloneDir),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+func localAICandidateRunGit(t *testing.T, directory string, arguments ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", arguments, err, output)
+	}
+}
+func TestLocalAICandidateCopiesNativeToolToShortPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	sourcePath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_ESBUILD_BINARY"))
+	if sourcePath == "" {
+		t.Skip("set INFINITE_YOU_LOCALAI_ESBUILD_BINARY to the verified esbuild executable")
+	}
+	if !filepath.IsAbs(sourcePath) {
+		t.Fatalf("INFINITE_YOU_LOCALAI_ESBUILD_BINARY must be absolute: %s", sourcePath)
+	}
+
+	tempDir := t.TempDir()
+	destinationPath := filepath.Join(tempDir, "esbuild-native.exe")
+	stdoutPath := filepath.Join(tempDir, "esbuild.stdout")
+	stderrPath := filepath.Join(tempDir, "esbuild.stderr")
+	harnessPath := filepath.Join(tempDir, "native-tool.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$evidence = Copy-SmokeNativeToolToShortPath -SourcePath %s -DestinationPath %s -ExpectedSHA256 %s
+if ($evidence.destination.sha256 -cne %s) { throw 'short native tool hash changed' }
+if ($evidence.pathLength -gt 220) { throw 'short native tool path exceeded the limit' }
+$result = Invoke-CandidateCommand -FilePath %s -ArgumentList @('--version') -WorkingDirectory %s -StdoutPath %s -StderrPath %s
+if ($result.exitCode -ne 0 -or $result.stdout.Trim() -cne %s) { throw "short native tool launch failed: $($result | ConvertTo-Json -Compress)" }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(sourcePath),
+		localAICandidatePowerShellLiteral(destinationPath),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolSHA256),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolSHA256),
+		localAICandidatePowerShellLiteral(destinationPath),
+		localAICandidatePowerShellLiteral(tempDir),
+		localAICandidatePowerShellLiteral(stdoutPath),
+		localAICandidatePowerShellLiteral(stderrPath),
+		localAICandidatePowerShellLiteral(localAICandidateNativeToolVersion),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	if info, err := os.Stat(destinationPath); err != nil || info.Size() != localAICandidateNativeToolBytes {
+		t.Fatalf("short native tool = %v, want %d bytes", err, localAICandidateNativeToolBytes)
+	}
+	if destinationPathLength := len(destinationPath); destinationPathLength > 220 {
+		t.Fatalf("short native tool path length = %d, want at most 220", destinationPathLength)
+	}
+}
+func TestLocalAICandidateWorkAccountingSkipsLinkedDependencyTree(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "work")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatalf("create work directory: %v", err)
+	}
+	if err := os.MkdirAll(dependencyDir, 0o700); err != nil {
+		t.Fatalf("create dependency directory: %v", err)
+	}
+	localBytes := []byte("tracked")
+	if err := os.WriteFile(filepath.Join(workDir, "local.txt"), localBytes, 0o600); err != nil {
+		t.Fatalf("write local work file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dependencyDir, "large-cache.bin"), make([]byte, 1<<20), 0o600); err != nil {
+		t.Fatalf("write linked dependency fixture: %v", err)
+	}
+
+	resultPath := filepath.Join(tempDir, "bytes.txt")
+	harnessPath := filepath.Join(tempDir, "measure.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+New-Item -ItemType Junction -Path %s -Target %s | Out-Null
+Get-SmokeDirectoryBytes %s | Set-Content -LiteralPath %s -Encoding ASCII
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(filepath.Join(workDir, "node_modules")),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	contents, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatalf("read measured work bytes: %v", err)
+	}
+	got, err := strconv.ParseInt(strings.TrimSpace(string(contents)), 10, 64)
+	if err != nil {
+		t.Fatalf("parse measured work bytes: %v", err)
+	}
+	if got != int64(len(localBytes)) {
+		t.Fatalf("measured work bytes = %d, want only local bytes %d", got, len(localBytes))
+	}
+}
+func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	binaryPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_PREBUILT_BINARY"))
+	if binaryPath == "" {
+		t.Skip("set INFINITE_YOU_LOCALAI_PREBUILT_BINARY to an already compiled you.exe")
+	}
+	if !filepath.IsAbs(binaryPath) {
+		t.Fatalf("INFINITE_YOU_LOCALAI_PREBUILT_BINARY must be absolute: %s", binaryPath)
+	}
+	assertLocalAICandidateBuildInfo(t, binaryPath)
+	goPath, err := exec.LookPath("go.exe")
+	if err != nil {
+		t.Fatalf("locate Go for build-info inspection: %v", err)
+	}
+	tempDir := t.TempDir()
+	versionRoot, isolatedEnvironment := localAICandidatePrepareIsolatedEnvironment(t, tempDir)
+	versionCommand := exec.Command(binaryPath, "--version")
+	versionCommand.Dir = versionRoot
+	versionCommand.Env = isolatedEnvironment
+	versionOutput, err := versionCommand.CombinedOutput()
+	if err != nil {
+		t.Fatalf("read prebuilt candidate version: %v\n%s", err, versionOutput)
+	}
+	version := strings.TrimSpace(string(versionOutput))
+	if version == "" {
+		t.Fatal("prebuilt candidate returned an empty version")
+	}
+	archiveVersion := strings.TrimPrefix(version, "v")
+	if archiveVersion == "" {
+		t.Fatal("prebuilt candidate returned an invalid archive version")
+	}
+
+	candidateDir := filepath.Join(tempDir, "candidate")
+	stageDir := filepath.Join(tempDir, "stage")
+	workDir := filepath.Join(tempDir, "work")
+	installDir := filepath.Join(tempDir, "install")
+	for _, directory := range []string{candidateDir, stageDir} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create fixture directory: %v", err)
+		}
+	}
+	stagedBinary := filepath.Join(stageDir, "you.exe")
+	copyLocalAICandidateFile(t, binaryPath, stagedBinary)
+	archiveName := "you_" + archiveVersion + "_windows_amd64.zip"
+	archivePath := filepath.Join(candidateDir, archiveName)
+	writeLocalAICandidateZip(t, archivePath, stagedBinary)
+	archiveBytes, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read candidate archive: %v", err)
+	}
+	archiveDigest := sha256.Sum256(archiveBytes)
+	checksumPath := filepath.Join(candidateDir, "you_"+archiveVersion+"_checksums.txt")
+	checksum := fmt.Sprintf("%x  %s\n", archiveDigest, archiveName)
+	if err := os.WriteFile(checksumPath, []byte(checksum), 0o600); err != nil {
+		t.Fatalf("write candidate checksums: %v", err)
+	}
+	installerPath := filepath.Join(candidateDir, "install.ps1")
+	copyLocalAICandidateFile(t, filepath.Join(testutil.MustRepoRoot(t), "scripts", "install.ps1"), installerPath)
+
+	resultPath := filepath.Join(tempDir, "install-result.json")
+	harnessPath := filepath.Join(tempDir, "install.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$result = Invoke-InstalledCandidateSmoke -CandidateDirectory %s -ArchivePath %s -ChecksumPath %s -InstallerPath %s -ArchiveExecutablePath %s -Version %s -ExpectedExecutableVersion %s -ExpectedSourceCommit %s -GoExecutablePath %s -RequestedInstallDir %s -WorkDirectory %s
+$result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(installDir),
+		localAICandidatePowerShellLiteral(candidateDir),
+		localAICandidatePowerShellLiteral(archivePath),
+		localAICandidatePowerShellLiteral(checksumPath),
+		localAICandidatePowerShellLiteral(installerPath),
+		localAICandidatePowerShellLiteral(stagedBinary),
+		localAICandidatePowerShellLiteral(archiveVersion),
+		localAICandidatePowerShellLiteral(version),
+		localAICandidatePowerShellLiteral(localAICandidateSourceCommit),
+		localAICandidatePowerShellLiteral(goPath),
+		localAICandidatePowerShellLiteral(installDir),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, isolatedEnvironment, tempDir)
+	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version)
+}
+func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version string) {
+	t.Helper()
+	var result struct {
+		Status                    string `json:"status"`
+		ModelCalls                int    `json:"modelCalls"`
+		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
+		Activity                  struct {
+			Observed                  bool     `json:"observed"`
+			CacheBytesBefore          int64    `json:"cacheBytesBefore"`
+			CacheBytesAfter           int64    `json:"cacheBytesAfter"`
+			CacheBytesDelta           int64    `json:"cacheBytesDelta"`
+			ModelCalls                int      `json:"modelCalls"`
+			ModelBackendDownloadBytes int64    `json:"modelBackendDownloadBytes"`
+			RuntimeEvidenceObserved   bool     `json:"runtimeEvidenceObserved"`
+			RuntimeEvidenceRecords    int      `json:"runtimeEvidenceRecords"`
+			BackendProcessStarts      int      `json:"backendProcessStarts"`
+			CacheRoots                []string `json:"cacheRoots"`
+		} `json:"activity"`
+		PathResolution      string `json:"pathResolution"`
+		Version             string `json:"version"`
+		ExpectedVersion     string `json:"expectedVersion"`
+		ExecutableBuildInfo struct {
+			SourceRevision string `json:"sourceRevision"`
+			VCSModified    bool   `json:"vcsModified"`
+		} `json:"executableBuildInfo"`
+		Commands []struct {
+			Arguments     []string `json:"arguments"`
+			ElapsedMillis int64    `json:"elapsedMilliseconds"`
+		} `json:"commands"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if result.Status != "PASS" || !result.Activity.Observed ||
+		result.ModelCalls != result.Activity.ModelCalls ||
+		result.ModelBackendDownloadBytes != result.Activity.ModelBackendDownloadBytes ||
+		result.Activity.ModelCalls != 0 || result.Activity.ModelBackendDownloadBytes != 0 ||
+		result.Activity.CacheBytesBefore != 0 || result.Activity.CacheBytesAfter != 0 ||
+		result.Activity.CacheBytesDelta != 0 || result.Activity.RuntimeEvidenceRecords != 0 ||
+		result.Activity.BackendProcessStarts != 0 || len(result.Activity.CacheRoots) != 3 {
+		t.Fatalf("public candidate install result = %#v", result)
+	}
+	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
+		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
+	}
+	if result.ExecutableBuildInfo.SourceRevision != localAICandidateSourceCommit || result.ExecutableBuildInfo.VCSModified {
+		t.Fatalf("public candidate executable build info = %#v", result.ExecutableBuildInfo)
+	}
+	wantCommands := []string{
+		"--version",
+		"--help",
+		"docs models",
+		"models list",
+		"models --help",
+		"--json models inspect llm",
+		"--json models inspect asr",
+		"--json models inspect tts",
+		"--json models inspect embed",
+	}
+	seenCommands := make(map[string]bool, len(result.Commands))
+	for _, command := range result.Commands {
+		if command.ElapsedMillis < 0 {
+			t.Fatalf("candidate command has negative elapsed time: %#v", command)
+		}
+		seenCommands[strings.Join(command.Arguments, " ")] = true
+	}
+	for _, command := range wantCommands {
+		if !seenCommands[command] {
+			t.Fatalf("candidate install did not record command %q: %#v", command, result.Commands)
 		}
 	}
 	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
-		t.Fatalf("install directory stat error = %v, want task-owned install directory removed", err)
+		t.Fatalf("install directory remains after smoke: %v", err)
 	}
 }
-func TestLocalAICandidate_PublicInstallPreconditionsRemainFailClosed(t *testing.T) {
-	manifestPath := localAICandidateManifestPath(t, "candidate release smoke")
-	installDir := filepath.Join(t.TempDir(), "installed-bin")
-	if err := os.MkdirAll(installDir, 0o700); err != nil {
-		t.Fatalf("create nonempty install directory: %v", err)
-	}
-	markerPath := filepath.Join(installDir, "ambient-marker.txt")
-	if err := os.WriteFile(markerPath, []byte("must remain untouched"), 0o600); err != nil {
-		t.Fatalf("write install precondition marker: %v", err)
-	}
-	reportPath := filepath.Join(t.TempDir(), "install-validation-report.json")
-	output, err := localAICandidateSmokeCommand(t, manifestPath, installDir, reportPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("nonempty install precondition unexpectedly passed\n%s", output)
-	}
-	if !strings.Contains(string(output), "declared root 'install' is not empty") {
-		t.Fatalf("precondition output = %q, want fail-closed install-root evidence", output)
-	}
-	if _, statErr := os.Stat(markerPath); statErr != nil {
-		t.Fatalf("precondition marker stat error = %v, want marker preserved", statErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(installDir, "you.exe")); !os.IsNotExist(statErr) {
-		t.Fatalf("installed binary stat error = %v, want no installation after precondition failure", statErr)
-	}
-	reportBytes, err := os.ReadFile(reportPath)
-	if err != nil {
-		t.Fatalf("read failed candidate install smoke report: %v", err)
-	}
-	var report map[string]any
-	if err := json.Unmarshal(reportBytes, &report); err != nil {
-		t.Fatalf("decode failed candidate install smoke report: %v", err)
-	}
-	cleanup, _ := report["cleanup"].(map[string]any)
-	remaining, _ := cleanup["remainingTaskPaths"].([]any)
-	if report["status"] != "FAIL" || cleanup["status"] != "PASS" || len(remaining) != 0 {
-		t.Fatalf("failed candidate install smoke report = %#v, want failed operation with clean task roots", report)
-	}
-}
-func localAICandidateSmokeCommand(t *testing.T, manifestPath, installDir, reportPath string) *exec.Cmd {
+func localAICandidateScriptPath(t *testing.T) string {
 	t.Helper()
-	pwsh, err := exec.LookPath("powershell.exe")
+	return filepath.Join(testutil.MustRepoRoot(t), "scripts", "release", "smoke-install.ps1")
+}
+func localAICandidatePowerShell(t *testing.T) string {
+	t.Helper()
+	path, err := exec.LookPath("powershell.exe")
 	if err != nil {
-		t.Fatalf("candidate release smoke requires Windows PowerShell (powershell.exe): %v", err)
+		t.Skip("Windows PowerShell is unavailable")
 	}
-	root := testutil.MustRepoRoot(t)
-	command := exec.Command(pwsh, "-NoProfile", "-File", filepath.Join(root, "scripts", "release", "smoke-install.ps1"), "-CandidateManifestPath", manifestPath, "-InstallDir", installDir, "-ReportPath", reportPath)
-	command.Dir = root
-	return command
+	return path
 }
-func TestLocalAICandidateManifestValidationRejectsDriftAndAmbiguity(t *testing.T) {
-	tests := []struct {
-		name string
-		edit func(*localAICandidateFixture)
-		want string
-	}{
-		{
-			name: "archive hash drift",
-			edit: func(fixture *localAICandidateFixture) {
-				fixture.manifest.Artifacts[0].SHA256 = strings.Repeat("d", sha256.Size*2)
-				fixture.writeManifest(t)
-			},
-			want: "sha256 mismatch",
-		},
-		{
-			name: "installer hash drift",
-			edit: func(fixture *localAICandidateFixture) {
-				fixture.manifest.Artifacts[1].SHA256 = strings.Repeat("d", sha256.Size*2)
-				fixture.writeManifest(t)
-			},
-			want: "sha256 mismatch",
-		},
-		{
-			name: "ambiguous archive",
-			edit: func(fixture *localAICandidateFixture) {
-				second := filepath.Join(fixture.root, "you_9.9.9_windows_amd64.zip")
-				if err := os.WriteFile(second, fixture.archiveBytes, 0o600); err != nil {
-					t.Fatalf("write ambiguous archive: %v", err)
-				}
-			},
-			want: "exactly one windows-amd64 ZIP",
-		},
-		{
-			name: "old descendant ceiling",
-			edit: func(fixture *localAICandidateFixture) {
-				fixture.manifest.Limits.DescendantMaximum = candidateInt64Pointer(12)
-				fixture.writeManifest(t)
-			},
-			want: "candidate limits.descendantMaximum = 12, want 36",
-		},
-		{
-			name: "ordinary download allowance",
-			edit: func(fixture *localAICandidateFixture) {
-				fixture.manifest.Limits.OrdinaryToolDownloadMaximum = candidateInt64Pointer(536870912)
-				fixture.writeManifest(t)
-			},
-			want: "candidate limits.ordinaryToolDownloadBytesMaximum = 536870912, want 0",
-		},
-		{name: "changed source commit", edit: func(fixture *localAICandidateFixture) {
-			fixture.manifest.Source.Commit = strings.Repeat("d", 40)
-			fixture.writeManifest(t)
-		}, want: "candidate source identity"},
-		{name: "changed source tree", edit: func(fixture *localAICandidateFixture) {
-			fixture.manifest.Source.Tree = strings.Repeat("e", 40)
-			fixture.writeManifest(t)
-		}, want: "candidate source identity"},
-		{name: "changed Go controls", edit: func(fixture *localAICandidateFixture) {
-			fixture.manifest.Limits.GOFLAGS = "-p=8"
-			fixture.manifest.Limits.GOMAXPROCS = "8"
-			fixture.writeManifest(t)
-		}, want: "candidate Go controls"},
+func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatalf("write PowerShell harness: %v", err)
 	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			fixture := newLocalAICandidateFixture(t)
-			test.edit(fixture)
-			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("validate candidate error = %v, want substring %q", err, test.want)
-			}
-		})
+	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", path)
+	taskRoot := directory
+	if taskRoot == "" {
+		taskRoot = filepath.Dir(path)
 	}
-	for _, cycle := range []string{"030", "040", "042", "045", "048"} {
-		cycle := cycle
-		t.Run("historical cycle "+cycle, func(t *testing.T) {
-			fixture := newLocalAICandidateFixture(t)
-			fixture.manifest.Cycle = cycle
-			fixture.writeManifest(t)
-			if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(err.Error(), `candidate cycle = "`+cycle+`", want "063"`) {
-				t.Fatalf("validate historical cycle error = %v, want cycle %s rejection", err, cycle)
-			}
-		})
+	command.Env = localAICandidatePowerShellEnvironment(t, taskRoot, environment)
+	if directory != "" {
+		command.Dir = directory
 	}
-}
-func TestLocalAICandidateManifestValidationRejectsReparseCandidateDirectory(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows junction fixture is only available on Windows")
-	}
-	fixture := newLocalAICandidateFixture(t)
-	linkRoot := filepath.Join(t.TempDir(), "candidate-link")
-	command := exec.Command("cmd.exe", "/c", "mklink", "/J", linkRoot, fixture.root)
 	if output, err := command.CombinedOutput(); err != nil {
-		t.Skipf("junction/reparse fixture unavailable: %v (%s)", err, output)
-	}
-	t.Cleanup(func() { _ = os.Remove(linkRoot) })
-	linkedManifest := filepath.Join(linkRoot, filepath.Base(fixture.manifestPath))
-	if _, err := validateLocalAICandidate(linkedManifest); err == nil || !strings.Contains(strings.ToLower(err.Error()), "symlink/reparse") {
-		t.Fatalf("validate reparse candidate directory error = %v, want symlink/reparse rejection", err)
-	}
-	externalArchive := filepath.Join(t.TempDir(), fixture.manifest.Artifacts[0].File)
-	if err := os.WriteFile(externalArchive, fixture.archiveBytes, 0o600); err != nil {
-		t.Fatalf("write external archive: %v", err)
-	}
-	retainedArchive := filepath.Join(fixture.root, fixture.manifest.Artifacts[0].File)
-	if err := os.Remove(retainedArchive); err != nil {
-		t.Fatalf("remove retained archive: %v", err)
-	}
-	if err := os.Symlink(externalArchive, retainedArchive); err != nil {
-		t.Logf("file symlink fixture unavailable: %v", err)
-		return
-	}
-	if _, err := validateLocalAICandidate(fixture.manifestPath); err == nil || !strings.Contains(strings.ToLower(err.Error()), "symlink/reparse") {
-		t.Fatalf("validate reparse artifact error = %v, want symlink/reparse rejection", err)
+		t.Fatalf("run PowerShell harness: %v\n%s", err, output)
 	}
 }
-func TestLocalAICandidateManifestValidationAcceptsMatchingArtifacts(t *testing.T) {
-	fixture := newLocalAICandidateFixture(t)
-	evidence, err := validateLocalAICandidate(fixture.manifestPath)
+func localAICandidatePowerShellEnvironment(t *testing.T, root string, base []string) []string {
+	t.Helper()
+	moduleRoot := filepath.Join(root, "module-analysis-cache")
+	if err := os.MkdirAll(moduleRoot, 0o700); err != nil {
+		t.Fatalf("create module analysis cache root: %v", err)
+	}
+	if base == nil {
+		base = os.Environ()
+	}
+	environment := slices.DeleteFunc(base, func(entry string) bool {
+		name, _, ok := strings.Cut(entry, "=")
+		return ok && strings.EqualFold(name, "PSModuleAnalysisCachePath")
+	})
+	return append(environment, "PSModuleAnalysisCachePath="+filepath.Join(moduleRoot, "ModuleAnalysisCache"))
+}
+func localAICandidatePrepareIsolatedEnvironment(t *testing.T, root string) (string, []string) {
+	t.Helper()
+	versionRoot := filepath.Join(root, "version-probe")
+	for _, directory := range []string{versionRoot, filepath.Join(root, "profile"), filepath.Join(root, "localappdata"), filepath.Join(root, "appdata"), filepath.Join(root, "temp"), filepath.Join(root, "config"), filepath.Join(root, "cache"), filepath.Join(root, "module-analysis-cache")} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create isolated probe directory: %v", err)
+		}
+	}
+	return versionRoot, localAICandidateIsolatedEnvironment(root)
+}
+func localAICandidateIsolatedEnvironment(root string) []string {
+	profile := filepath.Join(root, "profile")
+	volume := filepath.VolumeName(profile)
+	homePath := strings.TrimPrefix(profile, volume)
+	if homePath == "" {
+		homePath = string(filepath.Separator)
+	} else if !strings.HasPrefix(homePath, string(filepath.Separator)) {
+		homePath = string(filepath.Separator) + homePath
+	}
+	overrides := []string{
+		"HOME=" + profile,
+		"USERPROFILE=" + profile,
+		"HOMEDRIVE=" + volume,
+		"HOMEPATH=" + homePath,
+		"APPDATA=" + filepath.Join(root, "appdata"),
+		"LOCALAPPDATA=" + filepath.Join(root, "localappdata"),
+		"TEMP=" + filepath.Join(root, "temp"),
+		"TMP=" + filepath.Join(root, "temp"),
+		"XDG_CONFIG_HOME=" + filepath.Join(root, "config"),
+		"XDG_CACHE_HOME=" + filepath.Join(root, "cache"),
+		"PSModuleAnalysisCachePath=" + filepath.Join(root, "module-analysis-cache", "ModuleAnalysisCache"),
+		"INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE=" + filepath.Join(root, "model-runtime-evidence.jsonl"),
+		"HF_HUB_DISABLE_TELEMETRY=1",
+	}
+	overrideNames := make(map[string]struct{}, len(overrides))
+	for _, override := range overrides {
+		name, _, ok := strings.Cut(override, "=")
+		if ok {
+			overrideNames[strings.ToUpper(name)] = struct{}{}
+		}
+	}
+	environment := make([]string, 0, len(os.Environ())+len(overrides))
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if _, overridden := overrideNames[strings.ToUpper(name)]; !overridden {
+			environment = append(environment, entry)
+		}
+	}
+	return append(environment, overrides...)
+}
+func localAICandidatePowerShellLiteral(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
+	t.Helper()
+	info, err := buildinfo.ReadFile(binaryPath)
 	if err != nil {
-		t.Fatalf("validate matching candidate: %v", err)
+		t.Fatalf("read candidate executable build info: %v", err)
 	}
-	if evidence.Status != "PASS" || evidence.Property == "" || evidence.Archive.File != "you_1.2.3-snapshot-test_windows_amd64.zip" || evidence.Archive.Bytes != int64(len(fixture.archiveBytes)) || evidence.Installer.File != "install.ps1" || evidence.Installer.Bytes <= 0 {
-		t.Fatalf("candidate evidence = %#v, want PASS with matching archive, executable, and installer identity", evidence)
+	settings := make(map[string]string, len(info.Settings))
+	for _, setting := range info.Settings {
+		if _, exists := settings[setting.Key]; exists {
+			t.Fatalf("candidate executable build info repeats %q", setting.Key)
+		}
+		settings[setting.Key] = setting.Value
 	}
-}
-func TestLocalAICandidatePreconditionsFailClosedBeforeInstallation(t *testing.T) {
-	tests := []struct {
-		name string
-		edit func(*localAICandidateFixture)
-		want string
-	}{
-		{
-			name: "ambient you on task PATH",
-			edit: func(fixture *localAICandidateFixture) {
-				ambientDir := filepath.Join(fixture.root, "ambient-bin")
-				if err := os.MkdirAll(ambientDir, 0o700); err != nil {
-					t.Fatalf("create ambient bin: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(ambientDir, "you.exe"), []byte("ambient"), 0o600); err != nil {
-					t.Fatalf("write ambient you: %v", err)
-				}
-				fixture.taskPath = ambientDir
-			},
-			want: "task PATH already resolves you",
-		},
-		{
-			name: "nonempty declared state",
-			edit: func(fixture *localAICandidateFixture) {
-				stateDir := fixture.roots[0].Path
-				if err := os.MkdirAll(stateDir, 0o700); err != nil {
-					t.Fatalf("create state root: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(stateDir, "existing.json"), []byte("ambient state"), 0o600); err != nil {
-					t.Fatalf("write state: %v", err)
-				}
-			},
-			want: "declared root \"HOME\" is not empty",
-		},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			fixture := newLocalAICandidateFixture(t)
-			test.edit(fixture)
-			if err := validateLocalAICandidatePreconditions(fixture.taskPath, fixture.roots); err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("precondition error = %v, want substring %q", err, test.want)
-			}
-		})
-	}
-	fixture := newLocalAICandidateFixture(t)
-	if err := validateLocalAICandidatePreconditions(fixture.taskPath, fixture.roots); err != nil {
-		t.Fatalf("validate absent roots: %v", err)
-	}
-	if err := os.Mkdir(fixture.roots[0].Path, 0o700); err != nil {
-		t.Fatalf("create empty root: %v", err)
-	}
-	if err := validateLocalAICandidatePreconditions(fixture.taskPath, fixture.roots); err != nil {
-		t.Fatalf("validate empty roots: %v", err)
+	if settings["vcs.revision"] != localAICandidateSourceCommit || settings["vcs.modified"] != "false" {
+		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, localAICandidateSourceCommit)
 	}
 }
-func TestLocalAICandidateObserverEnvelopeFixture(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows observer fixture is only available on Windows")
-	}
-	pwsh, err := exec.LookPath("powershell.exe")
-	if err != nil {
-		t.Fatalf("observer fixture requires Windows PowerShell: %v", err)
-	}
-	reportPath := filepath.Join(t.TempDir(), "observer-report.json")
-	command := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-File", filepath.Join(testutil.MustRepoRoot(t), "scripts", "release", "smoke-install.ps1"), "-InstallDir", t.TempDir(), "-ObserverFixture", "-ObserverReportPath", reportPath)
-	command.Env = append(os.Environ(), "GOFLAGS="+localAICandidateGOFLAGS, "GOMAXPROCS="+localAICandidateGOMAXPROCS)
+func localAICandidateGit(t *testing.T, directory string, arguments ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
 	output, err := command.CombinedOutput()
 	if err != nil {
-		t.Fatalf("observer fixture: %v\n%s", err, output)
+		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
-	raw, err := os.ReadFile(reportPath)
-	if err != nil {
-		t.Fatalf("read observer report: %v", err)
-	}
-	var report localAICandidateObserverReport
-	if err := decodeLocalAICandidateJSON(raw, &report); err != nil {
-		t.Fatalf("decode observer report: %v", err)
-	}
-	if report.SchemaVersion != "localai-windows-install-candidate-observer/v1" || report.Status != "PASS" || report.Cycle != localAICandidateCycle || report.ReleaseStatus != "observer-fixture" {
-		t.Fatalf("observer report identity/status = %#v, want cycle-063 PASS observer-fixture", report)
-	}
-	if err := validateLocalAICandidateObserverEvidence(report.Observation); err != nil {
-		t.Fatalf("observer report evidence: %v", err)
-	}
-	t.Logf("LOCALAI-OBSERVER status=PASS evidence=%s", raw)
+	return strings.TrimSpace(string(output))
 }
-func validateLocalAICandidateObserverEvidence(observation localAICandidateObserverEvidence) error {
-	process := observation.ProcessNetworkObserver
-	if process.Status != "PASS" || !process.StartedBeforeRoot || !process.ContinuedThroughDescendantExit || process.MaximumGapMilliseconds < 0 || process.MaximumGapMilliseconds > localAICandidateProcessNetworkGapMaximum || process.NonLoopbackConnections != 0 || process.ExternalTransferBytes != 0 {
-		return fmt.Errorf("invalid process/network observer evidence: %#v", process)
-	}
-	disk := observation.DiskObserver
-	if disk.Status != "PASS" || !disk.Independent || !disk.StartPeriodicFinal || disk.MaximumGapMilliseconds < 0 || disk.MaximumGapMilliseconds > localAICandidateDiskGapMaximum || disk.PeakDeltaBytes < 0 || disk.PeakDeltaBytes > localAICandidateTemporaryDiskMaximum {
-		return fmt.Errorf("invalid disk observer evidence: %#v", disk)
-	}
-	if observation.DescendantMaximum != localAICandidateDescendantMaximum || observation.DescendantHighWater < 1 || observation.DescendantHighWater > observation.DescendantMaximum {
-		return fmt.Errorf("descendant observation = high-water %d maximum %d, want high-water 1..%d", observation.DescendantHighWater, observation.DescendantMaximum, localAICandidateDescendantMaximum)
-	}
-	if observation.RootExitCode == nil {
-		return errors.New("root exit code is required before process disposal")
-	}
-	if *observation.RootExitCode != 0 || observation.FailurePropagation != "PASS" || observation.ModelBackendBytes != 0 || observation.ModelBackendCalls != 0 {
-		return fmt.Errorf("invalid observer completion evidence: %#v", observation)
-	}
-	return nil
-}
-func validateLocalAICandidate(manifestPath string) (localAICandidateValidationEvidence, error) {
-	if !filepath.IsAbs(manifestPath) {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate manifest path %q must be absolute", manifestPath)
-	}
-	candidateDir := filepath.Dir(manifestPath)
-	if _, err := validateLocalAICandidatePath(candidateDir, "candidate directory"); err != nil {
-		return localAICandidateValidationEvidence{}, err
-	}
-	manifestInfo, err := validateLocalAICandidatePath(manifestPath, "candidate manifest")
+func readJSONFile(t *testing.T, path string, target any) {
+	t.Helper()
+	contents, err := os.ReadFile(path)
 	if err != nil {
-		return localAICandidateValidationEvidence{}, err
+		t.Fatalf("read %s: %v", path, err)
 	}
-	manifestBytes, manifest, err := readLocalAICandidateManifest(manifestPath)
-	if err != nil {
-		return localAICandidateValidationEvidence{}, err
+	contents = bytes.TrimPrefix(contents, []byte{0xef, 0xbb, 0xbf})
+	if err := json.Unmarshal(contents, target); err != nil {
+		t.Fatalf("decode %s: %v\n%s", path, err, contents)
 	}
-	if err := validateLocalAICandidateIdentity(manifest); err != nil {
-		return localAICandidateValidationEvidence{}, err
-	}
-	manifestDigest, err := sha256File(manifestPath)
-	if err != nil {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("hash candidate manifest: %w", err)
-	}
-	if int64(len(manifestBytes)) != manifestInfo.Size() {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate manifest changed while reading: read %d bytes, stat reported %d", len(manifestBytes), manifestInfo.Size())
-	}
-	if err := validateLocalAICandidateDetachedDigest(filepath.Dir(manifestPath), manifestDigest); err != nil {
-		return localAICandidateValidationEvidence{}, err
-	}
-	artifactByRole := make(map[string]localAICandidateArtifact, len(manifest.Artifacts))
-	for _, artifact := range manifest.Artifacts {
-		if _, exists := artifactByRole[artifact.Role]; exists {
-			return localAICandidateValidationEvidence{}, fmt.Errorf("candidate manifest contains duplicate artifact role %q", artifact.Role)
-		}
-		artifactByRole[artifact.Role] = artifact
-	}
-	archive, ok := artifactByRole["windows-amd64-archive"]
-	if !ok {
-		return localAICandidateValidationEvidence{}, errors.New("candidate manifest is missing windows-amd64-archive artifact")
-	}
-	installer, ok := artifactByRole["windows-installer"]
-	if !ok {
-		return localAICandidateValidationEvidence{}, errors.New("candidate manifest is missing windows-installer artifact")
-	}
-	archiveCandidates, err := localAICandidateArchiveCandidates(candidateDir)
-	if err != nil {
-		return localAICandidateValidationEvidence{}, err
-	}
-	if len(archiveCandidates) != 1 {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate archive selection: expected exactly one windows-amd64 ZIP, found %d (%s)", len(archiveCandidates), strings.Join(archiveCandidates, ", "))
-	}
-	if archiveCandidates[0] != archive.File {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("candidate archive selection: manifest names %q, retained archive is %q", archive.File, archiveCandidates[0])
-	}
-	archiveEvidence, err := validateLocalAICandidateArtifact(candidateDir, archive, true)
-	if err != nil {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("validate windows archive: %w", err)
-	}
-	installerEvidence, err := validateLocalAICandidateArtifact(candidateDir, installer, false)
-	if err != nil {
-		return localAICandidateValidationEvidence{}, fmt.Errorf("validate windows installer: %w", err)
-	}
-	return localAICandidateValidationEvidence{
-		Status:           "PASS",
-		Property:         "prebuilt-candidate-schema-source-target-artifact-and-detached-digest-identity",
-		SchemaVersion:    manifest.SchemaVersion,
-		SourceCommit:     manifest.Source.Commit,
-		SourceTree:       manifest.Source.Tree,
-		CandidateVersion: manifest.Build.CandidateVersion,
-		CLIVersion:       manifest.Build.CLIVersion,
-		Target:           manifest.Build.Target.GOOS + "/" + manifest.Build.Target.GOARCH,
-		Archive:          archiveEvidence,
-		Installer:        installerEvidence,
-		Manifest: localAICandidateArtifactEvidence{
-			Role:   "candidate-manifest",
-			File:   filepath.Base(manifestPath),
-			Bytes:  manifestInfo.Size(),
-			SHA256: manifestDigest,
-		},
-		Preconditions: "not-run-by-schema-cell; install cell must supply task-owned PATH and roots",
-	}, nil
-}
-func readLocalAICandidateManifest(manifestPath string) ([]byte, localAICandidateManifest, error) {
-	manifestBytes, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return nil, localAICandidateManifest{}, fmt.Errorf("read candidate manifest %q: %w", manifestPath, err)
-	}
-	var manifest localAICandidateManifest
-	if err := decodeLocalAICandidateJSON(manifestBytes, &manifest); err != nil {
-		return nil, localAICandidateManifest{}, fmt.Errorf("decode candidate manifest %q: %w", manifestPath, err)
-	}
-	return manifestBytes, manifest, nil
-}
-func decodeLocalAICandidateJSON(raw []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return errors.New("trailing JSON value")
-		}
-		return fmt.Errorf("trailing data: %w", err)
-	}
-	return nil
-}
-func validateLocalAICandidateIdentity(manifest localAICandidateManifest) error {
-	if manifest.SchemaVersion != localAICandidateSchemaVersion {
-		return fmt.Errorf("candidate schemaVersion = %q, want %q", manifest.SchemaVersion, localAICandidateSchemaVersion)
-	}
-	if manifest.Project != localAICandidateProject {
-		return fmt.Errorf("candidate project = %q, want %q", manifest.Project, localAICandidateProject)
-	}
-	if manifest.Cycle != localAICandidateCycle {
-		return fmt.Errorf("candidate cycle = %q, want %q", manifest.Cycle, localAICandidateCycle)
-	}
-	if manifest.Source.Repository != localAICandidateRepository ||
-		manifest.Source.Commit != localAICandidateSourceCommit ||
-		manifest.Source.Tree != localAICandidateSourceTree {
-		return fmt.Errorf("candidate source identity = repository=%q commit=%q tree=%q, want repository=%q commit=%q tree=%q", manifest.Source.Repository, manifest.Source.Commit, manifest.Source.Tree, localAICandidateRepository, localAICandidateSourceCommit, localAICandidateSourceTree)
-	}
-	if strings.TrimSpace(manifest.Build.CandidateVersion) == "" || strings.ContainsAny(manifest.Build.CandidateVersion, "/\\\\:*?\"<>|\t\r\n ") {
-		return fmt.Errorf("candidateVersion %q is not a usable release version", manifest.Build.CandidateVersion)
-	}
-	for name, value := range map[string]string{
-		"cliVersion":             manifest.Build.CLIVersion,
-		"goVersion":              manifest.Build.GoVersion,
-		"goreleaserVersion":      manifest.Build.GoReleaserVersion,
-		"goreleaserConfigSha256": manifest.Build.GoReleaserConfigSHA256,
-	} {
-		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("candidate build.%s is required", name)
-		}
-	}
-	if manifest.Build.GoReleaserVersion != localAICandidateGoReleaser {
-		return fmt.Errorf("candidate goreleaserVersion = %q, want %q", manifest.Build.GoReleaserVersion, localAICandidateGoReleaser)
-	}
-	if !localAICandidateSHA256Pattern.MatchString(manifest.Build.GoReleaserConfigSHA256) {
-		return fmt.Errorf("candidate goreleaserConfigSha256 = %q, want lowercase SHA-256", manifest.Build.GoReleaserConfigSHA256)
-	}
-	if manifest.Build.Target.GOOS != localAICandidateGOOS || manifest.Build.Target.GOARCH != localAICandidateGOARCH {
-		return fmt.Errorf("candidate target = %s/%s, want %s/%s", manifest.Build.Target.GOOS, manifest.Build.Target.GOARCH, localAICandidateGOOS, localAICandidateGOARCH)
-	}
-	if manifest.Build.Target.CgoEnabled == nil || *manifest.Build.Target.CgoEnabled {
-		return fmt.Errorf("candidate target.cgoEnabled = %v, want false", manifest.Build.Target.CgoEnabled != nil && *manifest.Build.Target.CgoEnabled)
-	}
-	if len(manifest.Artifacts) != 3 {
-		return fmt.Errorf("candidate artifacts count = %d, want exactly 3", len(manifest.Artifacts))
-	}
-	for _, artifact := range manifest.Artifacts {
-		if (artifact.Role != "windows-amd64-archive" && artifact.Role != "windows-installer" && artifact.Role != "windows-amd64-executable") || !isLocalAICandidateBasename(artifact.File) {
-			return fmt.Errorf("candidate artifact %q has an unsupported role or unsafe file %q", artifact.Role, artifact.File)
-		}
-		if artifact.Bytes == nil || *artifact.Bytes <= 0 || !localAICandidateSHA256Pattern.MatchString(artifact.SHA256) {
-			return fmt.Errorf("candidate artifact %q has invalid positive-byte/lowercase-SHA256 metadata", artifact.Role)
-		}
-	}
-	for _, limit := range []struct {
-		name   string
-		actual *int64
-		want   int64
-	}{
-		{"temporaryDiskBytesMaximum", manifest.Limits.TemporaryDiskBytesMaximum, localAICandidateTemporaryDiskMaximum},
-		{"ordinaryToolDownloadBytesMaximum", manifest.Limits.OrdinaryToolDownloadMaximum, localAICandidateToolDownloadMaximum},
-		{"modelBackendDownloadBytesMaximum", manifest.Limits.ModelBackendDownloadMaximum, localAICandidateModelDownloadMaximum},
-		{"modelCallsMaximum", manifest.Limits.ModelCallsMaximum, localAICandidateModelCallsMaximum},
-		{"paidUSDMaximum", manifest.Limits.PaidUSDMaximum, localAICandidatePaidUSDMaximum},
-		{"descendantMaximum", manifest.Limits.DescendantMaximum, localAICandidateDescendantMaximum},
-		{"packagingOrSmokeRerunsMaximum", manifest.Limits.PackagingOrSmokeRerunsMaximum, localAICandidateRerunsMaximum},
-	} {
-		if err := validateLocalAICandidateLimit(limit.name, limit.actual, limit.want); err != nil {
-			return err
-		}
-	}
-	if strings.TrimSpace(manifest.Limits.GOFLAGS) == "" || manifest.Limits.GOFLAGS != localAICandidateGOFLAGS || strings.TrimSpace(manifest.Limits.GOMAXPROCS) == "" || manifest.Limits.GOMAXPROCS != localAICandidateGOMAXPROCS {
-		return fmt.Errorf("candidate Go controls = GOFLAGS=%q GOMAXPROCS=%q, want GOFLAGS=%q GOMAXPROCS=%q", manifest.Limits.GOFLAGS, manifest.Limits.GOMAXPROCS, localAICandidateGOFLAGS, localAICandidateGOMAXPROCS)
-	}
-	return nil
-}
-func validateLocalAICandidateLimit(name string, actual *int64, want int64) error {
-	if actual == nil {
-		return fmt.Errorf("candidate limits.%s is required", name)
-	}
-	if *actual != want {
-		return fmt.Errorf("candidate limits.%s = %d, want %d", name, *actual, want)
-	}
-	return nil
-}
-func localAICandidateArchiveCandidates(directory string) ([]string, error) {
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, fmt.Errorf("read candidate directory: %w", err)
-	}
-	var candidates []string
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "you_") || !strings.HasSuffix(strings.ToLower(entry.Name()), "_windows_amd64.zip") {
-			continue
-		}
-		if _, err := validateLocalAICandidatePath(filepath.Join(directory, entry.Name()), "candidate archive"); err != nil {
-			return nil, err
-		}
-		candidates = append(candidates, entry.Name())
-	}
-	slices.Sort(candidates)
-	return candidates, nil
-}
-func validateLocalAICandidateArtifact(directory string, artifact localAICandidateArtifact, requireWindowsArchive bool) (localAICandidateArtifactEvidence, error) {
-	if !isLocalAICandidateBasename(artifact.File) {
-		return localAICandidateArtifactEvidence{}, fmt.Errorf("artifact file %q must be a basename", artifact.File)
-	}
-	path := filepath.Join(directory, filepath.FromSlash(artifact.File))
-	info, err := validateLocalAICandidatePath(path, fmt.Sprintf("artifact %s", artifact.Role))
-	if err != nil {
-		return localAICandidateArtifactEvidence{}, err
-	}
-	if artifact.Bytes == nil || info.Size() != *artifact.Bytes {
-		wantBytes := int64(0)
-		if artifact.Bytes != nil {
-			wantBytes = *artifact.Bytes
-		}
-		return localAICandidateArtifactEvidence{}, fmt.Errorf("artifact %s byte count = %d, want %d", artifact.File, info.Size(), wantBytes)
-	}
-	actualSHA256, err := sha256File(path)
-	if err != nil {
-		return localAICandidateArtifactEvidence{}, fmt.Errorf("hash %s: %w", artifact.File, err)
-	}
-	if actualSHA256 != artifact.SHA256 {
-		return localAICandidateArtifactEvidence{}, fmt.Errorf("artifact %s sha256 mismatch: manifest=%s actual=%s", artifact.File, artifact.SHA256, actualSHA256)
-	}
-	if requireWindowsArchive {
-		if err := validateLocalAICandidateArchive(path); err != nil {
-			return localAICandidateArtifactEvidence{}, err
-		}
-	}
-	return localAICandidateArtifactEvidence{Role: artifact.Role, File: artifact.File, Bytes: info.Size(), SHA256: actualSHA256}, nil
-}
-func validateLocalAICandidateArchive(path string) error {
-	archive, err := zip.OpenReader(path)
-	if err != nil {
-		return fmt.Errorf("open archive %s: %w", filepath.Base(path), err)
-	}
-	defer archive.Close()
-	entries := 0
-	for _, entry := range archive.File {
-		if entry.Name != "you.exe" || entry.FileInfo().IsDir() {
-			continue
-		}
-		entries++
-	}
-	if entries != 1 {
-		return fmt.Errorf("archive %s contains %d regular you.exe entries, want exactly 1", filepath.Base(path), entries)
-	}
-	return nil
-}
-func validateLocalAICandidateDetachedDigest(directory, expected string) error {
-	digestPath := filepath.Join(directory, "candidate-manifest.sha256")
-	if _, err := validateLocalAICandidatePath(digestPath, "detached candidate manifest digest"); err != nil {
-		return err
-	}
-	contents, err := os.ReadFile(digestPath)
-	if err != nil {
-		return fmt.Errorf("read detached candidate manifest digest: %w", err)
-	}
-	fields := strings.Fields(string(contents))
-	if len(fields) == 0 || len(fields) > 2 || !localAICandidateSHA256Pattern.MatchString(fields[0]) || fields[0] != expected {
-		return fmt.Errorf("detached candidate manifest digest does not match manifest: expected %s", expected)
-	}
-	if len(fields) == 2 && filepath.Base(filepath.FromSlash(fields[1])) != "candidate-manifest.json" {
-		return fmt.Errorf("detached candidate manifest digest names %q, want candidate-manifest.json", fields[1])
-	}
-	return nil
-}
-func validateLocalAICandidatePath(path, role string) (os.FileInfo, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, fmt.Errorf("inspect %s %q: %w", role, path, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("%s %q is a symlink/reparse point; candidate paths must be regular in-tree entries", role, path)
-	}
-	absolutePath, err := filepath.Abs(path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve %s %q: %w", role, path, err)
-	}
-	resolvedPath, err := filepath.EvalSymlinks(absolutePath)
-	if err != nil {
-		return nil, fmt.Errorf("resolve %s %q for reparse validation: %w", role, path, err)
-	}
-	absolutePath, resolvedPath = filepath.Clean(absolutePath), filepath.Clean(resolvedPath)
-	pathsEqual := absolutePath == resolvedPath
-	if runtime.GOOS == "windows" {
-		pathsEqual = strings.EqualFold(absolutePath, resolvedPath)
-	}
-	if !pathsEqual {
-		return nil, fmt.Errorf("%s %q resolves through a symlink/reparse point to %q; candidate paths must stay in place", role, path, resolvedPath)
-	}
-	if runtime.GOOS == "windows" && !info.IsDir() && !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s %q is a Windows symlink/reparse point or unsupported filesystem entry", role, path)
-	}
-	if info.IsDir() {
-		return info, nil
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s %q is not a regular file", role, path)
-	}
-	return info, nil
-}
-func validateLocalAICandidatePreconditions(taskPath string, roots []localAICandidateRoot) error {
-	if localAICandidatePathResolvesYou(taskPath) {
-		return errors.New("task PATH already resolves you; remove ambient you before installation")
-	}
-	seen := make(map[string]string, len(roots))
-	for _, root := range roots {
-		if strings.TrimSpace(root.Name) == "" {
-			return errors.New("declared precondition root has an empty name")
-		}
-		if !filepath.IsAbs(root.Path) {
-			return fmt.Errorf("declared root %q path %q is not absolute", root.Name, root.Path)
-		}
-		key := strings.ToLower(filepath.Clean(root.Path))
-		if previous, exists := seen[key]; exists {
-			return fmt.Errorf("declared roots %q and %q refer to the same path %q", previous, root.Name, root.Path)
-		}
-		seen[key] = root.Name
-		info, err := os.Lstat(root.Path)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("inspect declared root %q: %w", root.Name, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("declared root %q is a symlink; it must be absent or empty without following ambient state", root.Name)
-		}
-		if info.IsDir() {
-			entries, readErr := os.ReadDir(root.Path)
-			if readErr != nil {
-				return fmt.Errorf("inspect declared root %q: %w", root.Name, readErr)
-			}
-			if len(entries) != 0 {
-				return fmt.Errorf("declared root %q is not empty", root.Name)
-			}
-			continue
-		}
-		if info.Mode().IsRegular() && info.Size() == 0 {
-			continue
-		}
-		return fmt.Errorf("declared root %q is not absent or empty", root.Name)
-	}
-	return nil
-}
-func localAICandidatePathResolvesYou(pathValue string) bool {
-	for _, directory := range strings.Split(pathValue, string(filepath.ListSeparator)) {
-		directory = strings.TrimSpace(directory)
-		if directory == "" {
-			continue
-		}
-		for _, executable := range []string{"you.exe", "you.cmd", "you.bat", "you.com", "you"} {
-			if info, err := os.Stat(filepath.Join(directory, executable)); err == nil && info.Mode().IsRegular() {
-				return true
-			}
-		}
-	}
-	return false
-}
-func isLocalAICandidateBasename(value string) bool {
-	return value != "" && value == filepath.Base(filepath.FromSlash(value)) && !strings.ContainsAny(value, `/\\`)
-}
-func sha256File(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-type localAICandidateFixture struct {
-	root         string
-	manifestPath string
-	archiveBytes []byte
-	manifest     localAICandidateManifest
-	roots        []localAICandidateRoot
-	taskPath     string
+func copyLocalAICandidateFile(t *testing.T, sourcePath, destinationPath string) {
+	t.Helper()
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		t.Fatalf("open %s: %v", sourcePath, err)
+	}
+	defer source.Close()
+	destination, err := os.Create(destinationPath)
+	if err != nil {
+		t.Fatalf("create %s: %v", destinationPath, err)
+	}
+	if _, err := io.Copy(destination, source); err != nil {
+		destination.Close()
+		t.Fatalf("copy %s: %v", destinationPath, err)
+	}
+	if err := destination.Close(); err != nil {
+		t.Fatalf("close %s: %v", destinationPath, err)
+	}
 }
 
-func newLocalAICandidateFixture(t *testing.T) *localAICandidateFixture {
+func writeLocalAICandidateZip(t *testing.T, archivePath, binaryPath string) {
 	t.Helper()
-	root := t.TempDir()
-	archiveBytes := localAICandidateZip(t)
-	archiveName := "you_1.2.3-snapshot-test_windows_amd64.zip"
-	archivePath := filepath.Join(root, archiveName)
-	if err := os.WriteFile(archivePath, archiveBytes, 0o600); err != nil {
-		t.Fatalf("write candidate archive: %v", err)
-	}
-	installerBytes := []byte("Write-Output 'candidate installer'\n")
-	installerPath := filepath.Join(root, "install.ps1")
-	if err := os.WriteFile(installerPath, installerBytes, 0o600); err != nil {
-		t.Fatalf("write candidate installer: %v", err)
-	}
-	executableBytes := []byte("prebuilt-you-executable")
-	executablePath := filepath.Join(root, "you.exe")
-	if err := os.WriteFile(executablePath, executableBytes, 0o600); err != nil {
-		t.Fatalf("write candidate executable: %v", err)
-	}
-	cgoDisabled := false
-	archiveSize := int64(len(archiveBytes))
-	installerSize := int64(len(installerBytes))
-	executableSize := int64(len(executableBytes))
-	manifest := localAICandidateManifest{
-		SchemaVersion: localAICandidateSchemaVersion,
-		Project:       localAICandidateProject,
-		Cycle:         localAICandidateCycle,
-		Source:        localAICandidateSource{Repository: localAICandidateRepository, Commit: localAICandidateSourceCommit, Tree: localAICandidateSourceTree},
-		Build: localAICandidateBuild{
-			CandidateVersion: "1.2.3-snapshot-test", CLIVersion: "1.2.3-snapshot-test",
-			GoVersion: "go1.25.0", GoReleaserVersion: localAICandidateGoReleaser,
-			GoReleaserConfigSHA256: strings.Repeat("c", sha256.Size*2),
-			Target: localAICandidateTarget{
-				GOOS: localAICandidateGOOS, GOARCH: localAICandidateGOARCH,
-				CgoEnabled: &cgoDisabled,
-			},
-			Environment: map[string]string{"GOPROXY": "file:///C:/cache/download", "GOSUMDB": "off", "GOTOOLCHAIN": "go1.26.8", "npm_config_offline": "true", "GOFLAGS": localAICandidateGOFLAGS, "GOMAXPROCS": localAICandidateGOMAXPROCS},
-		},
-		Artifacts: []localAICandidateArtifact{
-			{Role: "windows-amd64-archive", File: archiveName, Bytes: &archiveSize, SHA256: localAICandidateSHA256(t, archivePath)},
-			{Role: "windows-installer", File: "install.ps1", Bytes: &installerSize, SHA256: localAICandidateSHA256(t, installerPath)},
-			{Role: "windows-amd64-executable", File: "you.exe", Bytes: &executableSize, SHA256: localAICandidateSHA256(t, executablePath)},
-		},
-		Limits: localAICandidateLimits{
-			TemporaryDiskBytesMaximum:     candidateInt64Pointer(localAICandidateTemporaryDiskMaximum),
-			OrdinaryToolDownloadMaximum:   candidateInt64Pointer(localAICandidateToolDownloadMaximum),
-			ModelBackendDownloadMaximum:   candidateInt64Pointer(localAICandidateModelDownloadMaximum),
-			ModelCallsMaximum:             candidateInt64Pointer(localAICandidateModelCallsMaximum),
-			PaidUSDMaximum:                candidateInt64Pointer(localAICandidatePaidUSDMaximum),
-			DescendantMaximum:             candidateInt64Pointer(localAICandidateDescendantMaximum),
-			PackagingOrSmokeRerunsMaximum: candidateInt64Pointer(localAICandidateRerunsMaximum),
-			GOFLAGS:                       localAICandidateGOFLAGS, GOMAXPROCS: localAICandidateGOMAXPROCS,
-		},
-		Attempts: map[string]any{"priorCycles": []string{"030", "040", "042", "045", "048", "050"}, "cycle063BuildMaximum": 1, "cycle063BuildUsed": 1},
-	}
-	roots := make([]localAICandidateRoot, 0, 8)
-	for _, name := range []string{"HOME", "USERPROFILE", "install", "config", "state", "models", "backend", "HF"} {
-		pathName := strings.Replace(strings.ToLower(name), "userprofile", "profile", 1)
-		roots = append(roots, localAICandidateRoot{Name: name, Path: filepath.Join(root, pathName)})
-	}
-	fixture := &localAICandidateFixture{
-		root:         root,
-		manifestPath: filepath.Join(root, "candidate-manifest.json"),
-		archiveBytes: archiveBytes,
-		manifest:     manifest,
-		roots:        roots,
-		taskPath:     "",
-	}
-	fixture.writeManifest(t)
-	return fixture
-}
-func (fixture *localAICandidateFixture) writeManifest(t *testing.T) {
-	t.Helper()
-	manifestBytes, err := json.MarshalIndent(fixture.manifest, "", "  ")
+	archive, err := os.Create(archivePath)
 	if err != nil {
-		t.Fatalf("marshal candidate fixture manifest: %v", err)
+		t.Fatalf("create candidate archive: %v", err)
 	}
-	manifestBytes = append(manifestBytes, '\n')
-	if err := os.WriteFile(fixture.manifestPath, manifestBytes, 0o600); err != nil {
-		t.Fatalf("write candidate fixture manifest: %v", err)
+	writer := zip.NewWriter(archive)
+	entry, err := writer.Create("you.exe")
+	if err != nil {
+		t.Fatalf("create candidate archive entry: %v", err)
 	}
-	digest := sha256.Sum256(manifestBytes)
-	digestPath := filepath.Join(fixture.root, "candidate-manifest.sha256")
-	if err := os.WriteFile(digestPath, []byte(hex.EncodeToString(digest[:])+"  candidate-manifest.json\n"), 0o600); err != nil {
-		t.Fatalf("write candidate fixture manifest digest: %v", err)
+	binary, err := os.Open(binaryPath)
+	if err != nil {
+		t.Fatalf("open staged candidate: %v", err)
 	}
-}
-func localAICandidateZip(t *testing.T) []byte {
-	t.Helper()
-	var buffer bytes.Buffer
-	writer := zip.NewWriter(&buffer)
-	for name, contents := range map[string][]byte{
-		"you.exe":   []byte("prebuilt-you-executable"),
-		"README.md": []byte("candidate documentation"),
-	} {
-		entry, err := writer.Create(name)
-		if err != nil {
-			t.Fatalf("create candidate ZIP entry %q: %v", name, err)
-		}
-		if _, err := entry.Write(contents); err != nil {
-			t.Fatalf("write candidate ZIP entry %q: %v", name, err)
-		}
+	if _, err := io.Copy(entry, binary); err != nil {
+		binary.Close()
+		t.Fatalf("write candidate archive entry: %v", err)
+	}
+	if err := binary.Close(); err != nil {
+		t.Fatalf("close staged candidate: %v", err)
 	}
 	if err := writer.Close(); err != nil {
-		t.Fatalf("close candidate ZIP: %v", err)
+		t.Fatalf("close candidate archive: %v", err)
 	}
-	return buffer.Bytes()
-}
-func localAICandidateSHA256(t *testing.T, path string) string {
-	t.Helper()
-	digest, err := sha256File(path)
-	if err != nil {
-		t.Fatalf("hash candidate fixture %q: %v", path, err)
+	if err := archive.Close(); err != nil {
+		t.Fatalf("close candidate archive file: %v", err)
 	}
-	return digest
 }
-func candidateInt64Pointer(value int64) *int64 { return &value }

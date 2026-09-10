@@ -1,613 +1,1467 @@
+<#
+.SYNOPSIS
+Smoke-tests a hosted release or builds and installs one local Windows candidate.
+
+.DESCRIPTION
+Candidate mode takes the source commit, repository, cached UI dependency tree,
+and native tool hashes as arguments. A new candidate identity does not require
+editing this script. The work directory must be short, absent or empty, and
+separate from the retained output and clean install directories.
+#>
 param(
     [string]$InstallScriptUrl,
     [string]$InstallVersion,
     [Parameter(Mandatory = $true)]
     [string]$InstallDir,
     [string]$BinaryName = "you.exe",
-    [string]$CandidateManifestPath,
-    [string]$ReportPath,
-    [switch]$ObserverFixture,
-    [string]$ObserverReportPath
+    [string]$CandidateSourcePath,
+    [string]$CandidateSourceCommit,
+    [string]$CandidateSourceRepository,
+    [string]$CandidateDependencySourcePath,
+    [string]$CandidateOutputDir,
+    [string]$CandidateWorkDir,
+    [string]$GoReleaserPath,
+    [string]$ExpectedGoReleaserVersion,
+    [string]$ExpectedEsbuildVersion,
+    [string]$ExpectedEsbuildSHA256,
+    [int64]$CandidateMaximumWorkBytes = 4294967296,
+    [string]$ReportPath
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$SmokeMaximumTaskRootPathLength = 220
 
-$expectedCandidateSourceRepository = "https://github.com/portpowered/you-agent-factory"
-$expectedCandidateSourceCommit = "f0092a8bebfb50d70fa2dff7dbb6d720eb28e3bc"
-$expectedCandidateSourceTree = "2c00a0d213fbf878402b66895466053a832a9583"
+if ($null -eq ([System.Management.Automation.PSTypeName]::new("InfiniteYou.ReleaseSmoke.ProcessRunner").Type)) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace InfiniteYou.ReleaseSmoke
+{
+    public sealed class CommandResult
+    {
+        public int ExitCode { get; set; }
+        public bool TimedOut { get; set; }
+        public bool OutputLimitExceeded { get; set; }
+    }
+
+    internal sealed class CaptureState
+    {
+        public long TotalBytes;
+        public int LimitExceeded;
+    }
+
+    public static class ProcessRunner
+    {
+        public static CommandResult Run(
+            string filePath,
+            string[] arguments,
+            string workingDirectory,
+            string stdoutPath,
+            string stderrPath,
+            int timeoutSeconds,
+            int outputMaximumBytes)
+        {
+            if (timeoutSeconds <= 0) throw new ArgumentOutOfRangeException("timeoutSeconds");
+            if (outputMaximumBytes <= 0) throw new ArgumentOutOfRangeException("outputMaximumBytes");
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = filePath,
+                Arguments = BuildArguments(arguments),
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            var process = new Process { StartInfo = startInfo };
+            var state = new CaptureState();
+            var terminationRequested = 0;
+            try
+            {
+                if (!process.Start()) throw new InvalidOperationException("process did not start");
+                Action stop = delegate
+                {
+                    if (Interlocked.Exchange(ref terminationRequested, 1) == 0)
+                    {
+                        KillProcessTree(process);
+                    }
+                };
+                Task stdoutTask = CaptureAsync(process.StandardOutput.BaseStream, stdoutPath, outputMaximumBytes, state, stop);
+                Task stderrTask = CaptureAsync(process.StandardError.BaseStream, stderrPath, outputMaximumBytes, state, stop);
+                Task processTask = Task.Run(delegate { process.WaitForExit(); });
+                Task all = Task.WhenAll(stdoutTask, stderrTask, processTask);
+                long timeoutMilliseconds = (long)timeoutSeconds * 1000L;
+                int waitMilliseconds = timeoutMilliseconds >= Int32.MaxValue ? Int32.MaxValue : (int)timeoutMilliseconds;
+                bool completed = all.Wait(waitMilliseconds);
+                bool timedOut = !completed;
+                if (timedOut)
+                {
+                    stop();
+                    try { all.Wait(10000); } catch (AggregateException) { }
+                }
+                if (!all.IsCompleted)
+                {
+                    throw new TimeoutException("process did not terminate after the bounded kill wait");
+                }
+                all.GetAwaiter().GetResult();
+                int exitCode = process.ExitCode;
+                bool outputLimitExceeded = Volatile.Read(ref state.LimitExceeded) != 0;
+                if (outputLimitExceeded) exitCode = 125;
+                else if (timedOut) exitCode = 124;
+                return new CommandResult
+                {
+                    ExitCode = exitCode,
+                    TimedOut = timedOut,
+                    OutputLimitExceeded = outputLimitExceeded
+                };
+            }
+            finally
+            {
+                try
+                {
+                    if (!process.HasExited) KillProcessTree(process);
+                }
+                catch (InvalidOperationException) { }
+                process.Dispose();
+            }
+        }
+
+        private static async Task CaptureAsync(
+            Stream input,
+            string path,
+            int maximumBytes,
+            CaptureState state,
+            Action limit)
+        {
+            using (var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite, 8192, true))
+            {
+                var buffer = new byte[8192];
+                long total = 0;
+                while (true)
+                {
+                    int read;
+                    try
+                    {
+                        read = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        if (Volatile.Read(ref state.LimitExceeded) != 0) return;
+                        throw;
+                    }
+                    if (read == 0) return;
+                    long previous = total;
+                    total += read;
+                    Interlocked.Exchange(ref state.TotalBytes, total);
+                    long retain = Math.Min((long)read, Math.Max(0L, (long)maximumBytes - previous + 1L));
+                    if (retain > 0) await output.WriteAsync(buffer, 0, (int)retain).ConfigureAwait(false);
+                    if (total > maximumBytes)
+                    {
+                        Interlocked.Exchange(ref state.LimitExceeded, 1);
+                        limit();
+                        return;
+                    }
+                }
+            }
+        }
+
+        private static void KillProcessTree(Process process)
+        {
+            try
+            {
+                string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
+                if (String.IsNullOrEmpty(systemRoot)) systemRoot = "C:\\Windows";
+                var killer = Process.Start(new ProcessStartInfo
+                {
+                    FileName = Path.Combine(systemRoot, "System32", "taskkill.exe"),
+                    Arguments = "/PID " + process.Id.ToString() + " /T /F",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                if (killer != null)
+                {
+                    try { killer.WaitForExit(5000); } finally { killer.Dispose(); }
+                }
+            }
+            catch (Exception) { }
+            try
+            {
+                if (!process.HasExited) process.Kill();
+            }
+            catch (Exception) { }
+        }
+
+        private static string BuildArguments(string[] arguments)
+        {
+            var values = new string[arguments == null ? 0 : arguments.Length];
+            for (int index = 0; index < values.Length; index++) values[index] = QuoteArgument(arguments[index]);
+            return String.Join(" ", values);
+        }
+
+        private static string QuoteArgument(string argument)
+        {
+            if (argument == null) argument = String.Empty;
+            bool needsQuotes = argument.Length == 0;
+            for (int index = 0; index < argument.Length && !needsQuotes; index++)
+            {
+                needsQuotes = Char.IsWhiteSpace(argument[index]) || argument[index] == '"';
+            }
+            if (!needsQuotes) return argument;
+            var result = new StringBuilder();
+            result.Append('"');
+            int slashes = 0;
+            foreach (char value in argument)
+            {
+                if (value == '\\')
+                {
+                    slashes++;
+                    continue;
+                }
+                if (value == '"')
+                {
+                    result.Append('\\', slashes * 2 + 1);
+                    result.Append('"');
+                    slashes = 0;
+                    continue;
+                }
+                result.Append('\\', slashes);
+                result.Append(value);
+                slashes = 0;
+            }
+            result.Append('\\', slashes * 2);
+            result.Append('"');
+            return result.ToString();
+        }
+    }
+}
+'@
+}
 
 function Fail-Smoke {
     param([string]$Message)
     throw "install smoke: $Message"
 }
 
-function Ensure-SmokeFileHashCommand {
-    if ($null -ne (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
-        return
-    }
-
-    function global:Get-FileHash {
-        param(
-            [string[]]$Path,
-            [string[]]$LiteralPath,
-            [string]$Algorithm = "SHA256"
-        )
-
-        $paths = if ($null -ne $LiteralPath -and $LiteralPath.Count -ne 0) {
-            $LiteralPath
-        } else {
-            @(Resolve-Path -Path $Path | ForEach-Object { $_.ProviderPath })
-        }
-        foreach ($filePath in $paths) {
-            $hasher = [System.Security.Cryptography.HashAlgorithm]::Create($Algorithm)
-            $stream = [System.IO.File]::OpenRead($filePath)
-            try {
-                $digest = $hasher.ComputeHash($stream)
-            } finally {
-                $stream.Dispose()
-                $hasher.Dispose()
-            }
-            [pscustomobject]@{
-                Algorithm = $Algorithm.ToUpperInvariant()
-                Hash = [System.BitConverter]::ToString($digest).Replace("-", "")
-                Path = $filePath
-            }
-        }
-    }
-
-    if ($null -eq (Get-Command Get-FileHash -ErrorAction SilentlyContinue)) {
-        Fail-Smoke "candidate mode could not establish the SHA-256 file-hash observer"
-    }
-}
-
-function Resolve-SmokeAbsolutePath {
-    param([string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Value)) {
-        Fail-Smoke "path is required"
-    }
-    if ([System.IO.Path]::IsPathRooted($Value)) {
-        return [System.IO.Path]::GetFullPath($Value)
-    }
-    return [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $Value))
-}
-
-function Assert-SmokeDisposableRoot {
-    param(
-        [string]$Name,
-        [string]$Path
-    )
-
-    if (-not [System.IO.Path]::IsPathRooted($Path)) {
-        Fail-Smoke "declared root '$Name' is not absolute: $Path"
-    }
-
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-    if ($null -eq $item) {
-        return
-    }
-    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-        Fail-Smoke "declared root '$Name' is a reparse point; it must be absent or empty"
-    }
-    if (-not $item.PSIsContainer) {
-        Fail-Smoke "declared root '$Name' is a file; it must be absent or an empty directory"
-    }
-
-    $entries = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)
-    if ($entries.Count -ne 0) {
-        Fail-Smoke "declared root '$Name' is not empty: $((($entries | ForEach-Object Name) -join ', '))"
-    }
-}
-
-function Test-SmokePathResolvesYou {
-    param([string]$PathValue)
-
-    if ([string]::IsNullOrWhiteSpace($PathValue)) {
-        return $false
-    }
-    foreach ($directory in $PathValue.Split([System.IO.Path]::PathSeparator, [System.StringSplitOptions]::RemoveEmptyEntries)) {
-        $trimmedDirectory = $directory.Trim()
-        if ([string]::IsNullOrWhiteSpace($trimmedDirectory)) {
-            continue
-        }
-        foreach ($executable in @("you.exe", "you.cmd", "you.bat", "you.com", "you")) {
-            $candidate = Join-Path $trimmedDirectory $executable
-            $item = Get-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
-            if ($null -ne $item -and -not $item.PSIsContainer -and (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
-                return $true
-            }
-        }
-    }
-    return $false
-}
-
-function Get-SmokeForbiddenProcesses {
-    $patterns = @("localai", "local-ai", "llama-server", "llama-cli", "vibevoice", "whisper", "piper")
-    $matches = @()
-    foreach ($process in @(Get-Process -ErrorAction SilentlyContinue)) {
-        $name = $process.ProcessName.ToLowerInvariant()
-        if ($patterns | Where-Object { $name -like "*$_*" }) {
-            $matches += "{0}:{1}" -f $process.Id, $process.ProcessName
-        }
-    }
-    return $matches
-}
-
-function Get-SmokeNetworkConnections {
-    param([int]$ProcessId)
-
-    if ($null -eq (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
-        Fail-Smoke "candidate mode requires the Get-NetTCPConnection network observer"
-    }
-    try {
-        $connections = @(Get-NetTCPConnection -OwningProcess $ProcessId -ErrorAction Stop)
-    } catch {
-        if ($_.Exception.Message -like "*No MSFT_NetTCPConnection objects found*" -or $_.Exception.Message -like "*No matching MSFT_NetTCPConnection*") {
-            return @()
-        }
-        throw
-    }
-    return @($connections | ForEach-Object {
-        [ordered]@{
-            processId = $ProcessId
-            localAddress = [string]$_.LocalAddress
-            localPort = [int]$_.LocalPort
-            remoteAddress = [string]$_.RemoteAddress
-            remotePort = [int]$_.RemotePort
-            state = [string]$_.State
-        }
-    })
-}
-
-function Get-SmokeDirectoryBytes {
+function Resolve-SmokePath {
     param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { Fail-Smoke "path is required" }
+    if ([System.IO.Path]::IsPathRooted($Path)) { return [System.IO.Path]::GetFullPath($Path) }
+    return [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $Path))
+}
 
-    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
-        return [int64]0
-    }
-    $total = [int64]0
-    foreach ($item in @(Get-ChildItem -LiteralPath $Path -File -Force -Recurse -ErrorAction Stop)) {
-        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-            Fail-Smoke "activity root contains a reparse point: $($item.FullName)"
+function Assert-SmokeNoReparseAncestry {
+    param([string]$Name, [string]$Path)
+    $current = Resolve-SmokePath $Path
+    while (-not [string]::IsNullOrWhiteSpace($current)) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            Fail-Smoke "$Name has a reparse point in its ancestry: $($item.FullName)"
         }
-        $total += [int64]$item.Length
+        $parent = [System.IO.Directory]::GetParent($current)
+        if ($null -eq $parent -or $parent.FullName -eq $current) { break }
+        $current = $parent.FullName
     }
-    return $total
 }
 
-function Test-SmokeLoopbackAddress {
-    param([string]$Address)
-
-    return $Address -eq "127.0.0.1" -or $Address -eq "::1" -or $Address -eq "0:0:0:0:0:0:0:1"
+function Test-SmokePathContains {
+    param([string]$Parent, [string]$Child)
+    $parentPath = (Resolve-SmokePath $Parent).TrimEnd('\') + '\'
+    $childPath = Resolve-SmokePath $Child
+    return $childPath.StartsWith($parentPath, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
-function Get-SmokeUnexpectedConnections {
+function Assert-SmokePathsDisjoint {
+    param([string]$FirstName, [string]$FirstPath, [string]$SecondName, [string]$SecondPath)
+    $first = Resolve-SmokePath $FirstPath
+    $second = Resolve-SmokePath $SecondPath
+    $equal = $first.TrimEnd('\').Equals($second.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    if ($equal -or (Test-SmokePathContains $first $second) -or (Test-SmokePathContains $second $first)) {
+        Fail-Smoke "$FirstName and $SecondName must not overlap: $first ; $second"
+    }
+}
+
+function Assert-SmokeTaskRootLength {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    if ($resolved.Length -gt $SmokeMaximumTaskRootPathLength) {
+        Fail-Smoke "$Name must be at most $SmokeMaximumTaskRootPathLength characters: $resolved"
+    }
+}
+
+function Assert-SmokeCandidateRoots {
     param(
-        [object[]]$Connections,
-        [int]$AllowedRemotePort = 0
+        [string]$SourcePath,
+        [string]$DependencySourcePath,
+        [string]$OutputDirectory,
+        [string]$WorkDirectory,
+        [string]$InstallDirectory,
+        [string]$ReportPath
     )
-
-    return @($Connections | Where-Object {
-        $loopback = Test-SmokeLoopbackAddress ([string]$_.remoteAddress)
-        $allowed = $loopback -and $AllowedRemotePort -gt 0 -and [int]$_.remotePort -eq $AllowedRemotePort
-        -not $allowed
-    })
+    $paths = [ordered]@{
+        source = Resolve-SmokePath $SourcePath
+        dependency = Resolve-SmokePath $DependencySourcePath
+        output = Resolve-SmokePath $OutputDirectory
+        work = Resolve-SmokePath $WorkDirectory
+        install = Resolve-SmokePath $InstallDirectory
+        report = Resolve-SmokePath $ReportPath
+    }
+    foreach ($entry in $paths.GetEnumerator()) {
+        Assert-SmokeNoReparseAncestry $entry.Key $entry.Value
+    }
+    foreach ($ownedName in @("output", "work", "install", "report")) {
+        Assert-SmokeTaskRootLength $ownedName $paths[$ownedName]
+    }
+    foreach ($ownedName in @("output", "work", "install")) {
+        foreach ($readName in @("source", "dependency")) {
+            Assert-SmokePathsDisjoint $ownedName $paths[$ownedName] $readName $paths[$readName]
+        }
+    }
+    foreach ($pair in @(@("output", "work"), @("output", "install"), @("work", "install"))) {
+        Assert-SmokePathsDisjoint $pair[0] $paths[$pair[0]] $pair[1] $paths[$pair[1]]
+    }
+    if (-not (Test-SmokePathContains $paths.output $paths.report)) {
+        Fail-Smoke "candidate report must be inside the candidate output directory: $($paths.report)"
+    }
+    return [pscustomobject]$paths
 }
 
-function Assert-SmokeCommandNetwork {
-    param(
-        [object]$Result,
-        [string]$CommandName
-    )
-
-    if ($null -eq $Result.network -or $Result.network.observerStatus -ne "PASS" -or [int]$Result.network.samples -le 0) {
-        Fail-Smoke "network observer did not produce a live sample for $CommandName"
+function Assert-SmokeEmptyRoot {
+    param([string]$Name, [string]$Path)
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) { return }
+    if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name must be absent or an empty regular directory: $Path"
     }
-    if (@($Result.network.unexpectedConnections).Count -ne 0) {
-        Fail-Smoke "unexpected network connection observed for $($CommandName): $($Result.network.unexpectedConnections | ConvertTo-Json -Compress)"
-    }
+    if (@(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop).Count -ne 0) { Fail-Smoke "$Name must be empty: $Path" }
 }
 
-function Record-SmokeCommandObservation {
-    param(
-        [object]$Result,
-        [System.Collections.Generic.List[object]]$NetworkObservations,
-        [System.Collections.Generic.List[string]]$ForbiddenProcessObservations
-    )
-
-    [void]$NetworkObservations.Add($Result.network)
-    foreach ($processName in @($Result.forbiddenProcesses)) {
-        [void]$ForbiddenProcessObservations.Add([string]$processName)
+function Assert-SmokeRegularFile {
+    param([string]$Name, [string]$Path)
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item -or $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name is missing or is not a regular file: $Path"
     }
+    return $item
 }
 
-function Get-SmokeArtifactEvidence {
-    param(
-        [string]$Role,
-        [string]$Path
-    )
-
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
-        Fail-Smoke "$Role is not a regular file: $Path"
-    }
+function Get-SmokeFileEvidence {
+    param([string]$Role, [string]$Path)
+    $item = Assert-SmokeRegularFile $Role $Path
     $hasher = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [System.IO.File]::OpenRead($Path)
+    $stream = [System.IO.File]::OpenRead($item.FullName)
     try {
         $digest = $hasher.ComputeHash($stream)
     } finally {
         $stream.Dispose()
         $hasher.Dispose()
     }
-    $hash = [System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant()
     return [ordered]@{
         role = $Role
         file = $item.Name
         bytes = [int64]$item.Length
-        sha256 = $hash
+        sha256 = [System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant()
     }
 }
 
-function Get-SmokeZipEntryEvidence {
-    param([string]$ArchivePath)
-
-    try {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
-    } catch {
-    }
-
-    $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
-    try {
-        $entries = @($archive.Entries | Where-Object { $_.FullName -eq "you.exe" })
-        if ($entries.Count -ne 1 -or $entries[0].Name -ne "you.exe") {
-            Fail-Smoke "candidate archive must contain exactly one regular you.exe entry"
-        }
-
-        $entry = $entries[0]
-        $hasher = [System.Security.Cryptography.SHA256]::Create()
-        $stream = $entry.Open()
-        try {
-            $digest = $hasher.ComputeHash($stream)
-        } finally {
-            $stream.Dispose()
-            $hasher.Dispose()
-        }
-        return [ordered]@{
-            file = $entry.FullName
-            bytes = [int64]$entry.Length
-            sha256 = ([System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant())
-        }
-    } finally {
-        $archive.Dispose()
-    }
-}
-
-function Invoke-SmokeCommand {
+function Copy-SmokeNativeToolToShortPath {
     param(
-        [string]$FilePath,
-        [string[]]$Arguments,
+        [string]$SourcePath,
+        [string]$DestinationPath,
+        [string]$ExpectedSHA256
+    )
+    if ($ExpectedSHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+        Fail-Smoke "native tool SHA-256 must be a 64-character digest"
+    }
+    $sourceEvidence = Get-SmokeFileEvidence "native tool" $SourcePath
+    if ($sourceEvidence.sha256 -cne $ExpectedSHA256.ToLowerInvariant()) {
+        Fail-Smoke "native tool SHA-256 is $($sourceEvidence.sha256), want $($ExpectedSHA256.ToLowerInvariant())"
+    }
+    $destination = Resolve-SmokePath $DestinationPath
+    if (Test-Path -LiteralPath $destination) {
+        Fail-Smoke "short native tool destination already exists: $destination"
+    }
+    if ($destination.Length -gt $SmokeMaximumTaskRootPathLength) {
+        Fail-Smoke "short native tool path is $($destination.Length) characters, want at most $SmokeMaximumTaskRootPathLength"
+    }
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+    Copy-Item -LiteralPath (Resolve-SmokePath $SourcePath) -Destination $destination -Force
+    $destinationEvidence = Get-SmokeFileEvidence "short native tool" $destination
+    if ($destinationEvidence.bytes -ne $sourceEvidence.bytes -or
+        $destinationEvidence.sha256 -cne $ExpectedSHA256.ToLowerInvariant()) {
+        Fail-Smoke "short native tool bytes or SHA-256 differ from the verified source"
+    }
+    return [ordered]@{
+        source = $sourceEvidence
+        destination = $destinationEvidence
+        path = $destination
+        pathLength = $destination.Length
+    }
+}
+
+function Get-SmokeDirectoryBytes {
+    param([string]$Path, [switch]$RejectReparsePoint)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return [int64]0 }
+    $total = [int64]0
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push((Resolve-SmokePath $Path))
+    while ($pending.Count -gt 0) {
+        foreach ($item in @(Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop)) {
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                if ($RejectReparsePoint) { Fail-Smoke "directory byte root contains a reparse point: $($item.FullName)" }
+                continue
+            }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName) } else { $total += [int64]$item.Length }
+        }
+    }
+    return $total
+}
+
+function Remove-SmokeOwnedTree {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $root = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $root) { return }
+    if (-not $root.PSIsContainer -or (($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name cleanup root is not a regular directory: $resolved"
+    }
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $pending.Push($resolved)
+    while ($pending.Count -gt 0) {
+        foreach ($item in @(Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop)) {
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                Fail-Smoke "$Name cleanup refused unexpected reparse point: $($item.FullName)"
+            }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+        }
+    }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+function Remove-SmokeCandidateWork {
+    param([string]$WorkDirectory, [string]$DependencyJunctionPath)
+    $work = Resolve-SmokePath $WorkDirectory
+    if (-not [string]::IsNullOrWhiteSpace($DependencyJunctionPath)) {
+        $junction = Resolve-SmokePath $DependencyJunctionPath
+        if (-not (Test-SmokePathContains $work $junction)) {
+            Fail-Smoke "dependency junction is outside the candidate work directory: $junction"
+        }
+        $item = Get-Item -LiteralPath $junction -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item) {
+            if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+                Fail-Smoke "candidate dependency junction is not a directory reparse point: $junction"
+            }
+            # Directory.Delete removes the junction entry itself and never walks
+            # into the shared dependency cache it targets.
+            [System.IO.Directory]::Delete($junction)
+        }
+    }
+    Remove-SmokeOwnedTree "candidate work directory" $work
+}
+
+function Protect-SmokeOutput {
+    param([string]$Path, [int]$MaximumBytes = 1048576)
+    if ($MaximumBytes -le 0) { Fail-Smoke "command output limit must be positive" }
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $totalBytes = [int64]$stream.Length
+        $count = [int][Math]::Min($totalBytes, [int64]$MaximumBytes)
+        $bytes = New-Object byte[] $count
+        $offset = 0
+        while ($offset -lt $count) {
+            $read = $stream.Read($bytes, $offset, $count - $offset)
+            if ($read -eq 0) { break }
+            $offset += $read
+        }
+        if ($offset -ne $count) { $count = $offset }
+    } finally {
+        $stream.Dispose()
+    }
+    if ($count -ge 2 -and $bytes[0] -eq 0xff -and $bytes[1] -eq 0xfe) {
+        $text = [System.Text.Encoding]::Unicode.GetString($bytes, 2, $count - 2)
+    } elseif ($count -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf) {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $count - 3)
+    } else {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 0, $count)
+    }
+    $pattern = '(?i)(token|password|secret|api[_-]?key|authorization)\s*([:=])\s*[^\s,;]+'
+    $text = [System.Text.RegularExpressions.Regex]::Replace($text, $pattern, '$1$2<redacted>')
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    $redactedBytes = $encoding.GetBytes($text)
+    if ($redactedBytes.Length -gt $MaximumBytes) {
+        $text = $encoding.GetString($redactedBytes, 0, $MaximumBytes)
+        while ($encoding.GetByteCount($text) -gt $MaximumBytes) {
+            $text = $text.Substring(0, $text.Length - 1)
+        }
+    }
+    [System.IO.File]::WriteAllText($Path, $text, $encoding)
+    $fileEvidence = Get-SmokeFileEvidence "command-output" $Path
+    $evidence = [ordered]@{
+        role = $fileEvidence.role
+        file = $fileEvidence.file
+        bytes = $fileEvidence.bytes
+        sha256 = $fileEvidence.sha256
+        totalBytes = $totalBytes
+        truncated = $totalBytes -gt $MaximumBytes
+    }
+    return [pscustomobject]@{ text = $text; evidence = $evidence }
+}
+
+function Invoke-CandidateCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$ArgumentList,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][string]$StderrPath,
+        [int]$TimeoutSeconds = 7200,
+        [int]$OutputMaximumBytes = 1048576
+    )
+    if ($TimeoutSeconds -le 0) { Fail-Smoke "command timeout must be positive" }
+    if ($OutputMaximumBytes -le 0) { Fail-Smoke "command output limit must be positive" }
+    $workingDirectory = Resolve-SmokePath $WorkingDirectory
+    $stdoutPath = Resolve-SmokePath $StdoutPath
+    $stderrPath = Resolve-SmokePath $StderrPath
+    foreach ($parent in @((Split-Path -Parent $stdoutPath), (Split-Path -Parent $stderrPath))) {
+        [void][System.IO.Directory]::CreateDirectory($parent)
+    }
+    [System.IO.File]::WriteAllBytes($stdoutPath, [byte[]]@())
+    [System.IO.File]::WriteAllBytes($stderrPath, [byte[]]@())
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $commandResult = [InfiniteYou.ReleaseSmoke.ProcessRunner]::Run(
+            $FilePath, @($ArgumentList), $workingDirectory, $stdoutPath, $stderrPath,
+            $TimeoutSeconds, $OutputMaximumBytes)
+    }
+    finally { $stopwatch.Stop() }
+    $stdout = Protect-SmokeOutput $stdoutPath $OutputMaximumBytes
+    $stderr = Protect-SmokeOutput $stderrPath $OutputMaximumBytes
+    $terminationReason = if ($commandResult.TimedOut) {
+        "deadline of $TimeoutSeconds seconds exceeded"
+    } elseif ($commandResult.OutputLimitExceeded) {
+        "output exceeded $OutputMaximumBytes bytes"
+    } else {
+        ""
+    }
+    return [pscustomobject][ordered]@{
+        file = $FilePath
+        arguments = @($ArgumentList)
+        exitCode = [int]$commandResult.ExitCode
+        timedOut = [bool]$commandResult.TimedOut
+        outputLimitExceeded = [bool]$commandResult.OutputLimitExceeded
+        terminationReason = $terminationReason
+        elapsedMilliseconds = [int64][Math]::Max(0, $stopwatch.ElapsedMilliseconds)
+        stdout = $stdout.text
+        stderr = $stderr.text
+        stdoutEvidence = $stdout.evidence
+        stderrEvidence = $stderr.evidence
+    }
+}
+
+function Get-SmokeExecutableBuildInfo {
+    param(
+        [string]$ExecutablePath,
+        [string]$ExpectedRevision,
+        [string]$GoExecutablePath,
         [string]$WorkingDirectory,
-        [int]$TimeoutMilliseconds = 60000,
-        [int]$NetworkObserverSampleMilliseconds = 50
+        [string]$OutputDirectory
     )
-
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $FilePath
-    $startInfo.Arguments = [string]::Join(" ", $Arguments)
-    $startInfo.WorkingDirectory = $WorkingDirectory
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-
-    $process = [System.Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    $networkSamples = New-Object 'System.Collections.Generic.List[object]'
-    $forbiddenProcessSamples = New-Object 'System.Collections.Generic.List[string]'
-    $observerErrors = New-Object 'System.Collections.Generic.List[string]'
-    $networkSampleCount = 0
-    try {
-        if (-not $process.Start()) {
-            Fail-Smoke "could not start $FilePath"
+    $goPath = $GoExecutablePath
+    if ([string]::IsNullOrWhiteSpace($goPath)) {
+        $go = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $go) { Fail-Smoke "Go is required to inspect executable build info" }
+        $goPath = [string]$go.Source
+    }
+    $result = Invoke-CandidateCommand -FilePath $goPath `
+        -ArgumentList @("version", "-m", (Resolve-SmokePath $ExecutablePath)) `
+        -WorkingDirectory $WorkingDirectory `
+        -StdoutPath (Join-Path $OutputDirectory "executable-build-info.stdout.log") `
+        -StderrPath (Join-Path $OutputDirectory "executable-build-info.stderr.log")
+    if ($result.exitCode -ne 0) {
+        Fail-Smoke "go version -m failed with exit $($result.exitCode): $($result.stderr)"
+    }
+    $settings = @{}
+    foreach ($line in ($result.stdout -split "`r?`n")) {
+        if ($line -match '^\s*build\s+(vcs\.(revision|modified))=(\S+)\s*$') {
+            $key = $Matches[1]
+            if ($settings.ContainsKey($key)) { Fail-Smoke "executable build info contains duplicate $key" }
+            $settings[$key] = $Matches[3]
         }
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-        $startedAt = [DateTime]::UtcNow
-        $deadline = $startedAt.AddMilliseconds($TimeoutMilliseconds)
+    }
+    foreach ($key in @("vcs.revision", "vcs.modified")) {
+        if (-not $settings.ContainsKey($key)) { Fail-Smoke "executable build info $key is missing" }
+    }
+    if ([string]$settings["vcs.revision"] -cne $ExpectedRevision) {
+        Fail-Smoke "executable build info vcs.revision = $($settings['vcs.revision']), want $ExpectedRevision"
+    }
+    if ([string]$settings["vcs.modified"] -cne "false") {
+        Fail-Smoke "executable build info vcs.modified = $($settings['vcs.modified']), want false"
+    }
+    return [ordered]@{
+        command = $result
+        sourceRevision = [string]$settings["vcs.revision"]
+        vcsModified = $false
+    }
+}
+
+function Invoke-SmokeGit {
+    param([string[]]$ArgumentList)
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell promotes native stderr to a terminating error when
+        # the caller uses Stop. Git writes normal clone progress there, so
+        # capture it as command evidence and classify failure by exit status.
+        $ErrorActionPreference = "Continue"
+        $output = @(& git.exe @ArgumentList 2>&1 | ForEach-Object { [string]$_ })
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) { Fail-Smoke "git $($ArgumentList -join ' ') failed: $($output -join ' ')" }
+    return ($output -join "`n").Trim()
+}
+
+function Normalize-CandidateRepository {
+    param([string]$Repository)
+    return $Repository.Trim().TrimEnd('/').Replace('\', '/').ToLowerInvariant() -replace '\.git$', ''
+}
+
+function Get-CandidateSourceIdentity {
+    param([string]$SourcePath, [string]$Commit, [string]$Repository)
+    $sourcePath = Resolve-SmokePath $SourcePath
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Container)) { Fail-Smoke "candidate source repository is missing: $sourcePath" }
+    if ($Commit -notmatch '^[0-9a-fA-F]{40}$') { Fail-Smoke "candidate source commit must be a full Git object ID" }
+    $resolvedCommit = Invoke-SmokeGit @("-C", $sourcePath, "rev-parse", "$Commit^{commit}")
+    if ($resolvedCommit -cne $Commit.ToLowerInvariant()) { Fail-Smoke "candidate source resolved to $resolvedCommit, want $Commit" }
+    $tree = Invoke-SmokeGit @("-C", $sourcePath, "rev-parse", "$resolvedCommit^{tree}")
+    $origin = Invoke-SmokeGit @("-C", $sourcePath, "remote", "get-url", "origin")
+    if (-not [string]::IsNullOrWhiteSpace($Repository) -and (Normalize-CandidateRepository $origin) -cne (Normalize-CandidateRepository $Repository)) {
+        Fail-Smoke "candidate source origin is $origin, want $Repository"
+    }
+    return [pscustomobject][ordered]@{ repository = $origin; commit = $resolvedCommit; tree = $tree }
+}
+
+function Get-SmokeAvailablePort {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    try { $listener.Start(); return [int]$listener.LocalEndpoint.Port } finally { $listener.Stop() }
+}
+
+function Get-SmokeActivitySnapshot {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $item = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [pscustomobject][ordered]@{
+            name = $Name
+            path = $resolved
+            exists = $false
+            bytes = [int64]0
+        }
+    }
+    if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name activity root is not a regular directory: $resolved"
+    }
+    return [pscustomobject][ordered]@{
+        name = $Name
+        path = $resolved
+        exists = $true
+        bytes = [int64](Get-SmokeDirectoryBytes -Path $resolved -RejectReparsePoint)
+    }
+}
+
+function Test-SmokeModelInvokeArguments {
+    param([string[]]$Arguments)
+    $values = @($Arguments)
+    for ($index = 0; $index -lt ($values.Count - 1); $index++) {
+        if ([string]$values[$index] -ieq "models" -and [string]$values[$index + 1] -ieq "invoke") {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-SmokeRuntimeActivity {
+    param([string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $item = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [pscustomobject][ordered]@{
+            path = $resolved
+            exists = $false
+            bytes = [int64]0
+            records = 0
+            backendProcessStarts = 0
+        }
+    }
+    [void](Assert-SmokeRegularFile "model runtime evidence" $resolved)
+    $records = 0
+    $backendProcessStarts = 0
+    foreach ($line in [System.IO.File]::ReadAllLines($resolved)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
         try {
-            $networkSampleCount++
-            foreach ($connection in @(Get-SmokeNetworkConnections -ProcessId $process.Id)) {
-                [void]$networkSamples.Add($connection)
-            }
-            foreach ($processName in @(Get-SmokeForbiddenProcesses)) {
-                [void]$forbiddenProcessSamples.Add($processName)
-            }
+            $record = $line | ConvertFrom-Json -ErrorAction Stop
         } catch {
-            [void]$observerErrors.Add($_.Exception.Message)
+            Fail-Smoke "model runtime evidence contains invalid JSON: $($_.Exception.Message)"
         }
-        while (-not $process.HasExited) {
-            try {
-                $networkSampleCount++
-                foreach ($connection in @(Get-SmokeNetworkConnections -ProcessId $process.Id)) {
-                    [void]$networkSamples.Add($connection)
-                }
-                foreach ($processName in @(Get-SmokeForbiddenProcesses)) {
-                    [void]$forbiddenProcessSamples.Add($processName)
-                }
-            } catch {
-                [void]$observerErrors.Add($_.Exception.Message)
-                break
-            }
-            if ([DateTime]::UtcNow -ge $deadline) {
-                try {
-                    $process.Kill($true)
-                } catch {
-                    try { $process.Kill() } catch { }
-                }
-                Fail-Smoke "$FilePath $([string]::Join(' ', $Arguments)) exceeded ${TimeoutMilliseconds}ms"
-            }
-            if ($process.WaitForExit($NetworkObserverSampleMilliseconds)) {
-                break
-            }
-        }
-        $process.WaitForExit()
-        if ($observerErrors.Count -ne 0) {
-            Fail-Smoke "network/process observer failed for $FilePath`: $($observerErrors -join '; ')"
-        }
-        $unexpectedConnections = @(Get-SmokeUnexpectedConnections -Connections $networkSamples.ToArray())
-        $port7437Connections = @($networkSamples.ToArray() | Where-Object { [int]$_.remotePort -eq 7437 })
-        return [pscustomobject]@{
-            exitCode = $process.ExitCode
-            stdout = $stdoutTask.GetAwaiter().GetResult()
-            stderr = $stderrTask.GetAwaiter().GetResult()
-            network = [ordered]@{
-                observerStatus = "PASS"
-                sampler = "Get-NetTCPConnection"
-                sampleIntervalMilliseconds = $NetworkObserverSampleMilliseconds
-                samples = [int]$networkSampleCount
-                connections = $networkSamples.ToArray()
-                unexpectedConnections = $unexpectedConnections
-                port7437Connections = $port7437Connections
-            }
-            forbiddenProcesses = @($forbiddenProcessSamples | Sort-Object -Unique)
-        }
-    } finally {
-        $process.Dispose()
+        if ($null -eq $record) { Fail-Smoke "model runtime evidence contains an empty record" }
+        $records++
+        $kindProperty = $record.PSObject.Properties["kind"]
+        $phaseProperty = $record.PSObject.Properties["phase"]
+        $kind = if ($null -eq $kindProperty) { "" } else { [string]$kindProperty.Value }
+        $phase = if ($null -eq $phaseProperty) { "" } else { [string]$phaseProperty.Value }
+        if ($kind -eq "MANAGED_CHILD" -and $phase -eq "PROCESS_STARTED") { $backendProcessStarts++ }
+    }
+    return [pscustomobject][ordered]@{
+        path = $resolved
+        exists = $true
+        bytes = [int64]$item.Length
+        records = [int]$records
+        backendProcessStarts = [int]$backendProcessStarts
     }
 }
 
-function New-SmokeLoopbackPort {
-    $reservation = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-    try {
-        $reservation.Start()
-        return ([System.Net.IPEndPoint]$reservation.LocalEndpoint).Port
-    } finally {
-        $reservation.Stop()
-    }
-}
-
-function Start-CandidateServer {
+function Get-SmokeModelActivity {
     param(
-        [string]$InstallerPath,
-        [string]$ArchivePath,
-        [string]$ArchiveName,
-        [string]$ArchiveSHA256,
-        [string]$Version,
-        [string]$LedgerPath
+        [object[]]$Before,
+        [object[]]$After,
+        [object[]]$Commands,
+        [string]$RuntimeEvidencePath
     )
+    $beforeSnapshots = @($Before)
+    $afterSnapshots = @($After)
+    if ($beforeSnapshots.Count -eq 0 -or $beforeSnapshots.Count -ne $afterSnapshots.Count) {
+        Fail-Smoke "model activity observation has incomplete cache boundaries"
+    }
+    $beforeBytes = [int64]0
+    $afterBytes = [int64]0
+    $cacheRoots = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($snapshot in $beforeSnapshots) { $beforeBytes += [int64]$snapshot.bytes }
+    foreach ($snapshot in $afterSnapshots) {
+        $afterBytes += [int64]$snapshot.bytes
+        [void]$cacheRoots.Add([string]$snapshot.path)
+    }
+    if ($afterBytes -lt $beforeBytes) {
+        Fail-Smoke "model activity cache bytes decreased during observation"
+    }
+    $modelInvokeCommands = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($command in @($Commands)) {
+        if (Test-SmokeModelInvokeArguments -Arguments @($command.arguments)) {
+            [void]$modelInvokeCommands.Add(([string[]]@($command.arguments) -join " "))
+        }
+    }
+    $runtime = Get-SmokeRuntimeActivity $RuntimeEvidencePath
+    $cacheDelta = [int64]($afterBytes - $beforeBytes)
+    return [pscustomobject][ordered]@{
+        observed = $true
+        cacheRoots = @($cacheRoots)
+        cacheBytesBefore = $beforeBytes
+        cacheBytesAfter = $afterBytes
+        cacheBytesDelta = $cacheDelta
+        modelCalls = [int]$modelInvokeCommands.Count
+        modelInvokeCommands = @($modelInvokeCommands)
+        modelBackendDownloadBytes = $cacheDelta
+        runtimeEvidencePath = $runtime.path
+        runtimeEvidenceObserved = [bool]$runtime.exists
+        runtimeEvidenceRecords = [int]$runtime.records
+        backendProcessStarts = [int]$runtime.backendProcessStarts
+    }
+}
 
-    $port = New-SmokeLoopbackPort
-    $baseUrl = "http://127.0.0.1:$port/releases"
-    $scriptRequestPath = "/releases/download/v$Version/install.ps1"
-    $archiveRequestPath = "/releases/download/v$Version/$ArchiveName"
-    $checksumName = "you_${Version}_checksums.txt"
-    $checksumRequestPath = "/releases/download/v$Version/$checksumName"
-    $expectedPaths = @($scriptRequestPath, $archiveRequestPath, $checksumRequestPath)
-    $checksumContents = "$ArchiveSHA256  $ArchiveName`n"
-    $eventName = "LocalAI-Candidate-Loopback-" + [System.Guid]::NewGuid().ToString("N")
+function Assert-SmokeNoModelActivity {
+    param([object]$Activity)
+    if ($null -eq $Activity -or -not [bool]$Activity.observed -or
+        -not [bool]$Activity.runtimeEvidenceObserved) {
+        Fail-Smoke "model activity observation was unavailable"
+    }
+    if ([int]$Activity.modelCalls -ne 0 -or
+        [int64]$Activity.modelBackendDownloadBytes -ne 0 -or
+        [int64]$Activity.cacheBytesAfter -ne 0 -or
+        [int]$Activity.runtimeEvidenceRecords -ne 0 -or
+        [int]$Activity.backendProcessStarts -ne 0) {
+        $details = $Activity | ConvertTo-Json -Compress -Depth 8
+        Fail-Smoke "unexpected model or backend activity was observed: $details"
+    }
+}
+
+function Start-CandidateFileServer {
+    param([string]$InstallerPath, [string]$ArchivePath, [string]$ChecksumPath, [string]$Version, [string]$ReadyPath)
+    $port = Get-SmokeAvailablePort
+    $eventName = "Infinite-You-Candidate-Ready-" + [System.Guid]::NewGuid().ToString("N")
     $createdNew = $false
     $readyEvent = [System.Threading.EventWaitHandle]::new(
-        $false,
-        [System.Threading.EventResetMode]::ManualReset,
-        $eventName,
-        [ref]$createdNew
-    )
-
-    $job = Start-Job -Name "localai-candidate-loopback" -ArgumentList @(
-        $port,
-        $InstallerPath,
-        $ArchivePath,
-        $LedgerPath,
-        $eventName,
-        $scriptRequestPath,
-        $archiveRequestPath,
-        $checksumRequestPath,
-        $checksumContents
-    ) -ScriptBlock {
-        param(
-            $port,
-            $scriptPath,
-            $archivePath,
-            $ledgerPath,
-            $eventName,
-            $scriptRequestPath,
-            $archiveRequestPath,
-            $checksumRequestPath,
-            $checksumContents
-        )
-
-        $server = [System.Net.HttpListener]::new()
-        [void]$server.Prefixes.Add("http://127.0.0.1:$port/")
-        $ready = [System.Threading.EventWaitHandle]::OpenExisting($eventName)
-        $servedExpected = 0
+        $false, [System.Threading.EventResetMode]::ManualReset, $eventName, [ref]$createdNew)
+    $job = Start-Job -ScriptBlock {
+        param($Port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath, $EventName)
+        $ErrorActionPreference = "Stop"
+        $listener = [System.Net.HttpListener]::new()
+        $ready = [System.Threading.EventWaitHandle]::OpenExisting($EventName)
+        $listener.Prefixes.Add("http://127.0.0.1:$Port/")
         try {
-            [void]$server.Start()
+            $listener.Start()
+            [System.IO.File]::WriteAllText($ReadyPath, "ready")
             [void]$ready.Set()
-            while ($servedExpected -lt 3) {
-                $context = $server.GetContext()
-                $path = $context.Request.Url.AbsolutePath
-                $status = 404
-                $contentType = "text/plain"
-                $body = [System.Text.Encoding]::UTF8.GetBytes("not found")
-                if ($path -eq $scriptRequestPath) {
-                    $status = 200
-                    $contentType = "text/plain"
-                    $body = [System.IO.File]::ReadAllBytes($scriptPath)
-                } elseif ($path -eq $archiveRequestPath) {
-                    $status = 200
-                    $contentType = "application/zip"
-                    $body = [System.IO.File]::ReadAllBytes($archivePath)
-                } elseif ($path -eq $checksumRequestPath) {
-                    $status = 200
-                    $contentType = "text/plain"
-                    $body = [System.Text.Encoding]::UTF8.GetBytes($checksumContents)
-                }
-
-                $record = [ordered]@{
-                    method = $context.Request.HttpMethod
-                    path = $path
-                    status = $status
-                    bytes = [int64]$body.Length
-                }
-                $record | ConvertTo-Json -Compress | Add-Content -LiteralPath $ledgerPath -Encoding utf8
-                $context.Response.StatusCode = $status
-                $context.Response.ContentType = $contentType
-                $context.Response.ContentLength64 = $body.LongLength
-                [void]$context.Response.OutputStream.Write($body, 0, $body.Length)
+            $routes = @{
+                "/download/v$Version/install.ps1" = $InstallerPath
+                "/releases/download/v$Version/$([System.IO.Path]::GetFileName($ArchivePath))" = $ArchivePath
+                "/releases/download/v$Version/$([System.IO.Path]::GetFileName($ChecksumPath))" = $ChecksumPath
+            }
+            while ($true) {
+                $context = $listener.GetContext()
+                $requestPath = [System.Uri]::UnescapeDataString($context.Request.Url.AbsolutePath)
+                if ($requestPath -eq "/stop") { $context.Response.StatusCode = 204; $context.Response.Close(); break }
+                if (-not $routes.ContainsKey($requestPath)) { $context.Response.StatusCode = 404; $context.Response.Close(); continue }
+                $bytes = [System.IO.File]::ReadAllBytes([string]$routes[$requestPath])
+                $context.Response.StatusCode = 200
+                $context.Response.ContentLength64 = $bytes.Length
+                $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
                 $context.Response.Close()
-                if ($status -eq 200 -and @($scriptRequestPath, $archiveRequestPath, $checksumRequestPath) -contains $path) {
-                    $servedExpected++
-                }
             }
         } catch {
-            [void]$ready.Set()
+            try { [void]$ready.Set() } catch { }
             throw
         } finally {
+            try { $ready.Close() } catch { }
+            if ($listener.IsListening) { $listener.Stop() }
+            $listener.Close()
+        }
+    } -ArgumentList $port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath, $eventName
+    if (-not $readyEvent.WaitOne(10000)) {
+        $details = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue | Out-String
+        Stop-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        $readyEvent.Close()
+        Fail-Smoke "candidate file server did not become ready: $details"
+    }
+    if (-not (Test-Path -LiteralPath $ReadyPath -PathType Leaf)) {
+        Stop-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        $readyEvent.Close()
+        Fail-Smoke "candidate file server signaled readiness without its marker"
+    }
+    return [pscustomobject]@{ job = $job; readyEvent = $readyEvent; port = $port; baseUrl = "http://127.0.0.1:$port" }
+}
+
+function Stop-CandidateFileServer {
+    param([object]$Server)
+    if ($null -eq $Server) { return }
+    try {
+        Invoke-WebRequest -Uri "$($Server.baseUrl)/stop" -UseBasicParsing | Out-Null
+        Wait-Job -Job $Server.job -Timeout 10 | Out-Null
+    } finally {
+        if ($Server.job.State -notin @("Completed", "Failed", "Stopped")) { Stop-Job -Job $Server.job -ErrorAction SilentlyContinue }
+        Remove-Job -Job $Server.job -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Server.readyEvent) { $Server.readyEvent.Close() }
+    }
+}
+
+function Invoke-InstalledCandidateSmoke {
+    param(
+        [string]$CandidateDirectory,
+        [string]$ArchivePath,
+        [string]$ChecksumPath,
+        [string]$InstallerPath,
+        [string]$ArchiveExecutablePath,
+        [string]$Version,
+        [string]$ExpectedExecutableVersion,
+        [string]$ExpectedSourceCommit,
+        [string]$GoExecutablePath,
+        [string]$RequestedInstallDir,
+        [string]$WorkDirectory
+    )
+    $installDir = Resolve-SmokePath $RequestedInstallDir
+    Assert-SmokeTaskRootLength "install directory" $installDir
+    Assert-SmokeTaskRootLength "candidate output directory" $CandidateDirectory
+    Assert-SmokeTaskRootLength "candidate work directory" $WorkDirectory
+    Assert-SmokeEmptyRoot "install directory" $installDir
+    $smokeRoot = Join-Path $WorkDirectory "install-smoke"
+    [void][System.IO.Directory]::CreateDirectory($smokeRoot)
+    $homeRoot = Join-Path $smokeRoot "home"
+    $profileRoot = Join-Path $smokeRoot "profile"
+    $tempRoot = Join-Path $smokeRoot "temp"
+    $pathRoot = Join-Path $smokeRoot "path"
+    $modelsRoot = Join-Path $smokeRoot "models"
+    $hfRoot = Join-Path $smokeRoot "hf"
+    $cacheRoot = Join-Path $smokeRoot "cache"
+    $moduleAnalysisCacheRoot = Join-Path $smokeRoot "module-analysis-cache"
+    $runtimeEvidencePath = Join-Path $smokeRoot "model-runtime-evidence.jsonl"
+    foreach ($path in @($homeRoot, $profileRoot, $tempRoot, $pathRoot, $modelsRoot, $hfRoot, $cacheRoot, $moduleAnalysisCacheRoot)) {
+        [void][System.IO.Directory]::CreateDirectory($path)
+    }
+    $readyPath = Join-Path $smokeRoot "server.ready"
+    $server = $null
+    $environmentNames = @(
+        "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+        "TEMP", "TMP", "PATH", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+        "INFINITE_YOU_VERSION", "INFINITE_YOU_INSTALL_DIR", "INFINITE_YOU_INSTALL_OS",
+        "INFINITE_YOU_INSTALL_ARCH", "INFINITE_YOU_INSTALL_BASE_URL",
+        "INFINITE_YOU_OMNIVOICE_CACHE_DIR", "HUGGINGFACE_HUB_CACHE", "HF_HOME",
+        "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE", "PSModuleAnalysisCachePath",
+        "HF_HUB_DISABLE_TELEMETRY"
+    )
+    $originalEnvironment = @{}
+    foreach ($name in $environmentNames) {
+        $originalEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, "Process")
+    }
+    $shell = (Get-Command powershell.exe -ErrorAction Stop).Source
+    $commands = New-Object 'System.Collections.Generic.List[object]'
+    try {
+        $serverArguments = @{
+            InstallerPath = $InstallerPath
+            ArchivePath = $ArchivePath
+            ChecksumPath = $ChecksumPath
+            Version = $Version
+            ReadyPath = $readyPath
+        }
+        $server = Start-CandidateFileServer @serverArguments
+        $env:HOME = $homeRoot
+        $env:USERPROFILE = $profileRoot
+        $profileDrive = [System.IO.Path]::GetPathRoot($profileRoot)
+        $env:HOMEDRIVE = $profileDrive.TrimEnd('\')
+        $env:HOMEPATH = $profileRoot.Substring($profileDrive.Length - 1)
+        $env:APPDATA = Join-Path $profileRoot "AppData\Roaming"
+        $env:LOCALAPPDATA = $cacheRoot
+        $env:TEMP = $tempRoot
+        $env:TMP = $tempRoot
+        $env:PATH = $pathRoot
+        $env:XDG_CONFIG_HOME = Join-Path $profileRoot ".you-agent-factory"
+        $env:XDG_CACHE_HOME = $env:LOCALAPPDATA
+        $env:INFINITE_YOU_VERSION = $Version
+        $env:INFINITE_YOU_INSTALL_DIR = $installDir
+        $env:INFINITE_YOU_INSTALL_OS = "windows"
+        $env:INFINITE_YOU_INSTALL_ARCH = "amd64"
+        $env:INFINITE_YOU_INSTALL_BASE_URL = "$($server.baseUrl)/releases"
+        $env:INFINITE_YOU_OMNIVOICE_CACHE_DIR = $modelsRoot
+        $env:HUGGINGFACE_HUB_CACHE = $hfRoot
+        $env:HF_HOME = $hfRoot
+        $env:INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE = $runtimeEvidencePath
+        $env:PSModuleAnalysisCachePath = Join-Path $moduleAnalysisCacheRoot "ModuleAnalysisCache"
+        $env:HF_HUB_DISABLE_TELEMETRY = "1"
+        $cacheRoots = @(
+            Get-SmokeActivitySnapshot "managed-model-cache" $modelsRoot
+            Get-SmokeActivitySnapshot "huggingface-backend-cache" $hfRoot
+            Get-SmokeActivitySnapshot "redirected-local-cache" $cacheRoot
+        )
+        $activityBefore = @($cacheRoots)
+        $downloadedInstaller = Join-Path $smokeRoot "install.ps1"
+        Invoke-WebRequest -Uri "$($server.baseUrl)/download/v$Version/install.ps1" -OutFile $downloadedInstaller -UseBasicParsing
+        $installerLiteral = "'" + $downloadedInstaller.Replace("'", "''") + "'"
+        $installerWrapper = Join-Path $smokeRoot "run-install.ps1"
+        $wrapperSource = @(
+            "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop"
+            "Import-Module Microsoft.PowerShell.Archive -ErrorAction Stop"
+            "& $installerLiteral"
+        ) -join "`n"
+        [System.IO.File]::WriteAllText($installerWrapper, $wrapperSource, [System.Text.UTF8Encoding]::new($false))
+        $installArguments = @{
+            FilePath = $shell
+            ArgumentList = @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $installerWrapper)
+            WorkingDirectory = $smokeRoot
+            StdoutPath = Join-Path $CandidateDirectory "install.stdout.log"
+            StderrPath = Join-Path $CandidateDirectory "install.stderr.log"
+        }
+        $install = Invoke-CandidateCommand @installArguments
+        [void]$commands.Add($install)
+        if ($install.exitCode -ne 0) {
+            Fail-Smoke "public installer exited $($install.exitCode): $($install.stderr)"
+        }
+        $installedBinary = Join-Path $installDir "you.exe"
+        $installedEvidence = Get-SmokeFileEvidence "installed-executable" $installedBinary
+        $archiveEvidence = Get-SmokeFileEvidence "archive-executable" $ArchiveExecutablePath
+        if ($installedEvidence.bytes -ne $archiveEvidence.bytes -or $installedEvidence.sha256 -ne $archiveEvidence.sha256) {
+            Fail-Smoke "installed executable does not match the archive member"
+        }
+        $env:PATH = "$installDir$([System.IO.Path]::PathSeparator)$pathRoot"
+        $resolvedCommand = Get-Command you.exe -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $resolvedCommand) { Fail-Smoke "you.exe was not resolvable from PATH after installation" }
+        $resolvedPath = Resolve-SmokePath $resolvedCommand.Source
+        if (-not $resolvedPath.Equals((Resolve-SmokePath $installedBinary), [System.StringComparison]::OrdinalIgnoreCase)) {
+            Fail-Smoke "PATH resolved $resolvedPath instead of the installed executable $installedBinary"
+        }
+        $pathResolution = $resolvedPath
+        $buildInfo = $null
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedSourceCommit)) {
+            $buildInfo = Get-SmokeExecutableBuildInfo -ExecutablePath $resolvedPath `
+                -ExpectedRevision $ExpectedSourceCommit -GoExecutablePath $GoExecutablePath `
+                -WorkingDirectory $smokeRoot `
+                -OutputDirectory $CandidateDirectory
+            [void]$commands.Add($buildInfo.command)
+        }
+        $versionCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("--version") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "version.stdout") `
+            -StderrPath (Join-Path $smokeRoot "version.stderr")
+        [void]$commands.Add($versionCommand)
+        $reportedVersion = $versionCommand.stdout.Trim()
+        $expectedVersion = if ([string]::IsNullOrWhiteSpace($ExpectedExecutableVersion)) { $Version } else { $ExpectedExecutableVersion }
+        if ($versionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($reportedVersion) -or
+            $reportedVersion -match '[\r\n]' -or $reportedVersion -cne $expectedVersion) {
+            Fail-Smoke "installed candidate version is '$reportedVersion', want '$expectedVersion'"
+        }
+        $rootHelpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("--help") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "root-help.stdout") `
+            -StderrPath (Join-Path $smokeRoot "root-help.stderr")
+        [void]$commands.Add($rootHelpCommand)
+        if ($rootHelpCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($rootHelpCommand.stdout)) {
+            Fail-Smoke "installed candidate root help failed"
+        }
+        $docsCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("docs", "models") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "models-docs.stdout") `
+            -StderrPath (Join-Path $smokeRoot "models-docs.stderr")
+        [void]$commands.Add($docsCommand)
+        if ($docsCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($docsCommand.stdout)) {
+            Fail-Smoke "installed candidate models docs failed"
+        }
+        $listCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("models", "list") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "models-list.stdout") `
+            -StderrPath (Join-Path $smokeRoot "models-list.stderr")
+        [void]$commands.Add($listCommand)
+        if ($listCommand.exitCode -ne 0) {
+            Fail-Smoke "installed candidate models list exited $($listCommand.exitCode)"
+        }
+        $helpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
+            -ArgumentList @("models", "--help") -WorkingDirectory $smokeRoot `
+            -StdoutPath (Join-Path $smokeRoot "models-help.stdout") `
+            -StderrPath (Join-Path $smokeRoot "models-help.stderr")
+        [void]$commands.Add($helpCommand)
+        if ($helpCommand.exitCode -ne 0) {
+            Fail-Smoke "installed candidate models help exited $($helpCommand.exitCode)"
+        }
+        foreach ($name in @("llm", "asr", "tts", "embed")) {
+            if (-not $helpCommand.stdout.Contains($name)) {
+                Fail-Smoke "installed candidate models help does not expose $name"
+            }
+            $inspect = Invoke-CandidateCommand -FilePath $resolvedPath `
+                -ArgumentList @("--json", "models", "inspect", $name) `
+                -WorkingDirectory $smokeRoot `
+                -StdoutPath (Join-Path $smokeRoot "$name.stdout") `
+                -StderrPath (Join-Path $smokeRoot "$name.stderr")
+            [void]$commands.Add($inspect)
+            if ($inspect.exitCode -ne 0) {
+                Fail-Smoke "installed candidate models inspect $name exited $($inspect.exitCode)"
+            }
+            $model = $inspect.stdout | ConvertFrom-Json
+            $unexpectedState = $model.name -ne $name -or
+                $model.managedRuntime.identity -ne $name -or
+                $model.managedRuntime.readinessState -ne "MISSING" -or
+                $model.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or
+                $model.loadState -ne "UNLOADED"
+            if ($unexpectedState) {
+                Fail-Smoke "installed candidate models inspect $name performed work or returned an unexpected identity/state"
+            }
+        }
+        foreach ($path in @($modelsRoot, $hfRoot)) {
+            if ((Test-Path -LiteralPath $path) -and @(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0) {
+                Fail-Smoke "discovery wrote model or backend content under $path"
+            }
+        }
+        $activityAfter = @(
+            Get-SmokeActivitySnapshot "managed-model-cache" $modelsRoot
+            Get-SmokeActivitySnapshot "huggingface-backend-cache" $hfRoot
+            Get-SmokeActivitySnapshot "redirected-local-cache" $cacheRoot
+        )
+        $activity = Get-SmokeModelActivity -Before $activityBefore -After $activityAfter `
+            -Commands @($commands | ForEach-Object { $_ }) -RuntimeEvidencePath $runtimeEvidencePath
+        Assert-SmokeNoModelActivity $activity
+        return [pscustomobject][ordered]@{
+            status = "PASS"
+            installedExecutable = $installedEvidence
+            pathResolution = $pathResolution
+            version = $reportedVersion
+            expectedVersion = $expectedVersion
+            executableBuildInfo = $buildInfo
+            commands = @($commands | ForEach-Object { $_ })
+            activity = $activity
+            modelCalls = [int]$activity.modelCalls
+            modelBackendDownloadBytes = [int64]$activity.modelBackendDownloadBytes
+        }
+    } finally {
+        Stop-CandidateFileServer $server
+        foreach ($name in $environmentNames) {
+            [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
+        }
+        Remove-SmokeOwnedTree "install directory" $installDir
+    }
+}
+
+function Finalize-SmokeCandidateReport {
+    param(
+        [string]$OutputDirectory,
+        [string]$ReportPath,
+        [System.Collections.IDictionary]$Report,
+        [System.Exception]$Failure
+    )
+    if ($Report.cleanup.status -eq "PASS" -and @($Report.artifacts).Count -gt 0) {
+        $retainedEvidenceStable = $true
+        $retainedEvidenceErrors = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($artifact in @($Report.artifacts)) {
             try {
-                if ($server.IsListening) {
-                    $server.Stop()
+                $artifactPath = Join-Path $OutputDirectory ([string]$artifact.file)
+                $currentEvidence = Get-SmokeFileEvidence ([string]$artifact.role) $artifactPath
+                if ($currentEvidence.bytes -ne [int64]$artifact.bytes -or
+                    $currentEvidence.sha256 -cne [string]$artifact.sha256) {
+                    $retainedEvidenceStable = $false
+                    [void]$retainedEvidenceErrors.Add("$($artifact.role) changed after retention")
                 }
             } catch {
-            }
-            try {
-                $server.Close()
-            } catch {
-            }
-            try {
-                $ready.Close()
-            } catch {
+                $retainedEvidenceStable = $false
+                [void]$retainedEvidenceErrors.Add("$($artifact.role): $($_.Exception.Message)")
             }
         }
-    }
-
-    if (-not $readyEvent.WaitOne(5000)) {
-        $reason = $job.ChildJobs[0].JobStateInfo.Reason
-        try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch { }
-        try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { }
-        $readyEvent.Close()
-        if ($null -ne $reason) {
-            Fail-Smoke "loopback candidate server did not become ready: $reason"
+        $Report.cleanup.retainedEvidenceHashesStable = $retainedEvidenceStable
+        if (-not $retainedEvidenceStable) {
+            $Report.cleanup.status = "FAIL"
+            $Report.cleanup.retainedEvidenceError = $retainedEvidenceErrors -join "; "
+            if ($null -eq $Failure) {
+                $Failure = [System.Exception]::new("retained candidate evidence was missing or changed during install smoke cleanup")
+            }
+            $Report.status = "FAIL"
+            if ([string]::IsNullOrWhiteSpace([string]$Report.error)) { $Report.error = $Failure.Message }
         }
-        Fail-Smoke "loopback candidate server did not become ready"
     }
-
-    return [pscustomobject]@{
-        baseUrl = $baseUrl
-        job = $job
-        readyEvent = $readyEvent
-        port = $port
-        ledgerPath = $LedgerPath
-        expectedPaths = $expectedPaths
-    }
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $ReportPath))
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+    $reportEvidence = Get-SmokeFileEvidence "candidate-report" $ReportPath
+    $reportDigestPath = Join-Path $OutputDirectory "candidate-report.sha256"
+    $reportDigest = "$($reportEvidence.sha256)  $([System.IO.Path]::GetFileName($ReportPath))`n"
+    [System.IO.File]::WriteAllText($reportDigestPath, $reportDigest, [System.Text.UTF8Encoding]::new($false))
+    return [pscustomobject][ordered]@{ report = $Report; failure = $Failure }
 }
 
-function Stop-CandidateServer {
-    param($ServerState)
-
-    if ($null -eq $ServerState) {
-        return
+function Invoke-LocalCandidateSmoke {
+    param(
+        [string]$SourcePath,
+        [string]$SourceCommit,
+        [string]$SourceRepository,
+        [string]$DependencySourcePath,
+        [string]$OutputDirectory,
+        [string]$WorkDirectory,
+        [string]$ReleaseToolPath,
+        [string]$ReleaseToolVersion,
+        [string]$EsbuildVersion,
+        [string]$EsbuildSHA256,
+        [int64]$MaximumWorkBytes,
+        [string]$RequestedInstallDir,
+        [string]$RequestedReportPath
+    )
+    $requiredValues = [ordered]@{
+        CandidateSourcePath = $SourcePath
+        CandidateSourceCommit = $SourceCommit
+        CandidateSourceRepository = $SourceRepository
+        CandidateDependencySourcePath = $DependencySourcePath
+        CandidateOutputDir = $OutputDirectory
+        CandidateWorkDir = $WorkDirectory
+        GoReleaserPath = $ReleaseToolPath
+        ExpectedGoReleaserVersion = $ReleaseToolVersion
+        ExpectedEsbuildVersion = $EsbuildVersion
+        ExpectedEsbuildSHA256 = $EsbuildSHA256
+        ReportPath = $RequestedReportPath
     }
-    if ($null -ne $ServerState.job) {
-        try {
-            if ($ServerState.job.State -eq "Running") {
-                Stop-Job -Job $ServerState.job -ErrorAction SilentlyContinue
-            }
-            Wait-Job -Job $ServerState.job -Timeout 5 | Out-Null
-        } catch {
+    foreach ($required in $requiredValues.GetEnumerator()) {
+        if ([string]::IsNullOrWhiteSpace([string]$required.Value)) {
+            Fail-Smoke "$($required.Key) is required in candidate mode"
         }
-        try { Receive-Job -Job $ServerState.job -ErrorAction SilentlyContinue | Out-Null } catch { }
-        try { Remove-Job -Job $ServerState.job -Force -ErrorAction SilentlyContinue } catch { }
     }
+    if ($EsbuildSHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+        Fail-Smoke "ExpectedEsbuildSHA256 must be a SHA-256 digest"
+    }
+    $roots = Assert-SmokeCandidateRoots -SourcePath $SourcePath `
+        -DependencySourcePath $DependencySourcePath -OutputDirectory $OutputDirectory `
+        -WorkDirectory $WorkDirectory -InstallDirectory $RequestedInstallDir `
+        -ReportPath $RequestedReportPath
+    $sourcePath = $roots.source
+    $dependencySourcePath = $roots.dependency
+    $outputDirectory = $roots.output
+    $workDirectory = $roots.work
+    $installDirectory = $roots.install
+    $reportPath = $roots.report
+    $releaseToolPath = Resolve-SmokePath $ReleaseToolPath
+    Assert-SmokeEmptyRoot "candidate output directory" $outputDirectory
+    Assert-SmokeEmptyRoot "candidate work directory" $workDirectory
+    Assert-SmokeEmptyRoot "install directory" $installDirectory
+    [void](Assert-SmokeRegularFile "GoReleaser" $releaseToolPath)
+    if ($workDirectory.Length -gt 80) {
+        Fail-Smoke "candidate work directory must be at most 80 characters so Windows native tools remain below path limits"
+    }
+    $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
+        -Commit $SourceCommit -Repository $SourceRepository
+    [void][System.IO.Directory]::CreateDirectory($outputDirectory)
+    [void][System.IO.Directory]::CreateDirectory($workDirectory)
+    $checkoutPath = Join-Path $workDirectory "src"
+    $extractPath = Join-Path $workDirectory "archive"
+    $environmentNames = @("GOFLAGS", "GOMAXPROCS", "GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "npm_config_offline", "ESBUILD_BINARY_PATH")
+    $originalEnvironment = @{}
+    foreach ($name in $environmentNames) {
+        $originalEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, "Process")
+    }
+    $report = [ordered]@{
+        schemaVersion = "local-windows-candidate/v1"
+        status = "FAIL"
+        source = [ordered]@{
+            repository = $SourceRepository
+            commit = $sourceIdentity.commit
+            tree = $sourceIdentity.tree
+        }
+        build = [ordered]@{}
+        artifacts = @()
+        install = [ordered]@{ status = "NOT_RUN" }
+        cleanup = [ordered]@{ status = "NOT_RUN" }
+        error = ""
+    }
+    $failure = $null
+    $dependencyJunctionPath = $null
     try {
-        if ($null -ne $ServerState.readyEvent) {
-            $ServerState.readyEvent.Close()
+        $env:GOFLAGS = "-p=4"
+        $env:GOMAXPROCS = "4"
+        $env:GOPROXY = "off"
+        $env:GOSUMDB = "off"
+        $env:GOTOOLCHAIN = "local"
+        $env:npm_config_offline = "true"
+        [void](Invoke-SmokeGit @("clone", "--local", "--no-checkout", "--", $sourcePath, $checkoutPath))
+        [void](Invoke-SmokeGit @("-C", $checkoutPath, "checkout", "--detach", $sourceIdentity.commit))
+        $gitDirectory = Get-Item -LiteralPath (Join-Path $checkoutPath ".git") -Force -ErrorAction Stop
+        if (-not $gitDirectory.PSIsContainer) {
+            Fail-Smoke "candidate clone must have a real .git directory"
         }
+        $checkoutCommit = Invoke-SmokeGit @("-C", $checkoutPath, "rev-parse", "HEAD")
+        $checkoutTree = Invoke-SmokeGit @("-C", $checkoutPath, "rev-parse", "HEAD^{tree}")
+        if ($checkoutCommit -cne $sourceIdentity.commit -or $checkoutTree -cne $sourceIdentity.tree) {
+            Fail-Smoke "candidate clone source identity changed"
+        }
+        [System.IO.File]::AppendAllText((Join-Path $checkoutPath ".git\info\exclude"), "`n/dist/`n", [System.Text.UTF8Encoding]::new($false))
+        $sourceLock = Get-SmokeFileEvidence "source-bun-lock" (Join-Path $checkoutPath "ui\bun.lock")
+        $dependencyLock = Get-SmokeFileEvidence "dependency-bun-lock" (Join-Path $dependencySourcePath "ui\bun.lock")
+        if ($sourceLock.sha256 -ne $dependencyLock.sha256) {
+            Fail-Smoke "candidate and dependency source bun.lock hashes differ"
+        }
+        $dependencyNodeModules = Join-Path $dependencySourcePath "ui\node_modules"
+        if (-not (Test-Path -LiteralPath $dependencyNodeModules -PathType Container)) {
+            Fail-Smoke "verified dependency source ui/node_modules is missing"
+        }
+        $checkoutNodeModules = Join-Path $checkoutPath "ui\node_modules"
+        if (Test-Path -LiteralPath $checkoutNodeModules) {
+            Fail-Smoke "fresh candidate clone unexpectedly contains ui/node_modules"
+        }
+        [void](New-Item -ItemType Junction -Path $checkoutNodeModules -Target $dependencyNodeModules)
+        $dependencyJunctionPath = $checkoutNodeModules
+        $esbuildPath = Join-Path $checkoutNodeModules "esbuild\lib\downloaded-@esbuild-win32-x64-esbuild.exe"
+        $esbuildEvidence = Get-SmokeFileEvidence "esbuild" $esbuildPath
+        if ($esbuildEvidence.sha256 -cne $EsbuildSHA256.ToLowerInvariant()) {
+            Fail-Smoke "esbuild SHA-256 is $($esbuildEvidence.sha256), want $($EsbuildSHA256.ToLowerInvariant())"
+        }
+        if ($esbuildPath.Length -gt 220) {
+            Fail-Smoke "staged esbuild path is $($esbuildPath.Length) characters, want at most 220"
+        }
+        $esbuildOverridePath = Join-Path $workDirectory "esbuild-native.exe"
+        $esbuildOverride = Copy-SmokeNativeToolToShortPath -SourcePath $esbuildPath `
+            -DestinationPath $esbuildOverridePath -ExpectedSHA256 $EsbuildSHA256
+        $esbuildResult = Invoke-CandidateCommand -FilePath $esbuildOverridePath `
+            -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
+            -StdoutPath (Join-Path $outputDirectory "esbuild.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "esbuild.stderr.log")
+        if ($esbuildResult.exitCode -ne 0 -or $esbuildResult.stdout.Trim() -cne $EsbuildVersion) {
+            Fail-Smoke "esbuild sanity check failed: exit=$($esbuildResult.exitCode) version='$($esbuildResult.stdout.Trim())'"
+        }
+        $env:ESBUILD_BINARY_PATH = $esbuildOverridePath
+        $releaseToolEvidence = Get-SmokeFileEvidence "goreleaser" $releaseToolPath
+        $releaseToolResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
+            -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
+            -StdoutPath (Join-Path $outputDirectory "goreleaser-version.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "goreleaser-version.stderr.log")
+        if ($releaseToolResult.exitCode -ne 0 -or $releaseToolResult.stdout -notmatch ("(?m)\b" + [regex]::Escape($ReleaseToolVersion) + "\b")) {
+            Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
+        }
+        $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $goCommand) { Fail-Smoke "Go 1.26.8 is required for candidate release" }
+        $goPath = [string]$goCommand.Source
+        $goVersionResult = Invoke-CandidateCommand -FilePath $goPath `
+            -ArgumentList @("version") -WorkingDirectory $checkoutPath `
+            -StdoutPath (Join-Path $outputDirectory "go-version.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "go-version.stderr.log")
+        if ($goVersionResult.exitCode -ne 0 -or $goVersionResult.stdout -notmatch '(?m)\bgo1\.26\.8\b') {
+            Fail-Smoke "Go version check failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())', want go1.26.8"
+        }
+        $statusBefore = Invoke-SmokeGit @("-C", $checkoutPath, "status", "--porcelain=v1", "--untracked-files=all")
+        if ($statusBefore -ne "") {
+            Fail-Smoke "candidate clone is dirty before release"
+        }
+        $releaseArguments = @("release", "--snapshot", "--clean", "-f", ".goreleaser.yml")
+        $releaseResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
+            -ArgumentList $releaseArguments -WorkingDirectory $checkoutPath `
+            -StdoutPath (Join-Path $outputDirectory "release.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "release.stderr.log")
+        $workBytes = Get-SmokeDirectoryBytes $workDirectory
+        $report.build = [ordered]@{
+            command = $releaseToolPath
+            arguments = $releaseArguments
+            exitCode = $releaseResult.exitCode
+            elapsedMilliseconds = $releaseResult.elapsedMilliseconds
+            timedOut = $releaseResult.timedOut
+            outputLimitExceeded = $releaseResult.outputLimitExceeded
+            terminationReason = $releaseResult.terminationReason
+            stdout = $releaseResult.stdoutEvidence
+            stderr = $releaseResult.stderrEvidence
+            goReleaser = $releaseToolEvidence
+            goReleaserVersion = $ReleaseToolVersion
+            goVersion = $goVersionResult
+            config = Get-SmokeFileEvidence "goreleaser-config" (Join-Path $checkoutPath ".goreleaser.yml")
+            bunLock = $sourceLock
+            esbuild = $esbuildEvidence
+            esbuildOverride = $esbuildOverride
+            esbuildVersion = $EsbuildVersion
+            esbuildPathLength = $esbuildPath.Length
+            esbuildOverridePathLength = $esbuildOverride.pathLength
+            workBytes = $workBytes
+            maximumWorkBytes = $MaximumWorkBytes
+            environment = [ordered]@{
+                GOFLAGS = $env:GOFLAGS
+                GOMAXPROCS = $env:GOMAXPROCS
+                GOPROXY = $env:GOPROXY
+                GOSUMDB = $env:GOSUMDB
+                GOTOOLCHAIN = $env:GOTOOLCHAIN
+                npm_config_offline = $env:npm_config_offline
+                ESBUILD_BINARY_PATH = $env:ESBUILD_BINARY_PATH
+            }
+        }
+        if ($releaseResult.exitCode -ne 0) {
+            Fail-Smoke "GoReleaser exited $($releaseResult.exitCode): $($releaseResult.stderr)"
+        }
+        if ($MaximumWorkBytes -le 0 -or $workBytes -gt $MaximumWorkBytes) {
+            Fail-Smoke "candidate work directory used $workBytes bytes, limit $MaximumWorkBytes"
+        }
+        $statusAfter = Invoke-SmokeGit @("-C", $checkoutPath, "status", "--porcelain=v1", "--untracked-files=all")
+        if ($statusAfter -ne "") {
+            Fail-Smoke "candidate clone is dirty after release"
+        }
+        $archives = @(Get-ChildItem -LiteralPath (Join-Path $checkoutPath "dist") -Filter "you_*_windows_amd64.zip" -File -ErrorAction Stop)
+        if ($archives.Count -ne 1) {
+            Fail-Smoke "release produced $($archives.Count) Windows amd64 archives, want exactly one"
+        }
+        $archiveMatch = [regex]::Match($archives[0].Name, '^you_(.+)_windows_amd64\.zip$')
+        if (-not $archiveMatch.Success) {
+            Fail-Smoke "release archive name does not expose its version: $($archives[0].Name)"
+        }
+        $version = $archiveMatch.Groups[1].Value
+        $checksumSource = Join-Path $checkoutPath "dist\you_${version}_checksums.txt"
+        $installerSource = Join-Path $checkoutPath "scripts\install.ps1"
+        foreach ($source in @($archives[0].FullName, $checksumSource, $installerSource)) {
+            [void](Assert-SmokeRegularFile "candidate artifact" $source)
+            Copy-Item -LiteralPath $source -Destination $outputDirectory
+        }
+        $archivePath = Join-Path $outputDirectory $archives[0].Name
+        $checksumPath = Join-Path $outputDirectory ([System.IO.Path]::GetFileName($checksumSource))
+        $installerPath = Join-Path $outputDirectory "install.ps1"
+        [void][System.IO.Directory]::CreateDirectory($extractPath)
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+        $archiveExecutablePath = Join-Path $extractPath "you.exe"
+        [void](Assert-SmokeRegularFile "archive executable" $archiveExecutablePath)
+        $archiveVersionCommand = Invoke-CandidateCommand -FilePath $archiveExecutablePath `
+            -ArgumentList @("--version") -WorkingDirectory $extractPath `
+            -StdoutPath (Join-Path $outputDirectory "archive-version.stdout.log") `
+            -StderrPath (Join-Path $outputDirectory "archive-version.stderr.log")
+        $expectedExecutableVersion = $archiveVersionCommand.stdout.Trim()
+        if ($archiveVersionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($expectedExecutableVersion) -or
+            $expectedExecutableVersion -match '[\r\n]') {
+            Fail-Smoke "archive executable version probe failed: exit=$($archiveVersionCommand.exitCode) output='$expectedExecutableVersion'"
+        }
+        $retainedExecutablePath = Join-Path $outputDirectory "you.exe"
+        Copy-Item -LiteralPath $archiveExecutablePath -Destination $retainedExecutablePath -Force
+        $archiveExecutableEvidence = Get-SmokeFileEvidence "archive executable" $archiveExecutablePath
+        $retainedExecutableEvidence = Get-SmokeFileEvidence "windows-amd64-executable" $retainedExecutablePath
+        if ($archiveExecutableEvidence.bytes -ne $retainedExecutableEvidence.bytes -or
+            $archiveExecutableEvidence.sha256 -cne $retainedExecutableEvidence.sha256) {
+            Fail-Smoke "retained executable does not match the archive member"
+        }
+        $report.artifacts = @(
+            Get-SmokeFileEvidence "windows-amd64-archive" $archivePath
+            Get-SmokeFileEvidence "checksums" $checksumPath
+            Get-SmokeFileEvidence "windows-installer" $installerPath
+            $retainedExecutableEvidence
+        )
+        $installArguments = @{
+            CandidateDirectory = $outputDirectory
+            ArchivePath = $archivePath
+            ChecksumPath = $checksumPath
+            InstallerPath = $installerPath
+            ArchiveExecutablePath = $archiveExecutablePath
+            Version = $version
+            ExpectedExecutableVersion = $expectedExecutableVersion
+            ExpectedSourceCommit = $sourceIdentity.commit
+            GoExecutablePath = $goPath
+            RequestedInstallDir = $installDirectory
+            WorkDirectory = $workDirectory
+        }
+        $report.install = Invoke-InstalledCandidateSmoke @installArguments
+        $report.build.executableBuildInfo = $report.install.executableBuildInfo
+        $report.status = "PASS"
     } catch {
-    }
-}
-
-function Read-CandidateRequestLedger {
-    param([string]$LedgerPath)
-
-    $records = @()
-    if (-not (Test-Path -LiteralPath $LedgerPath -PathType Leaf)) {
-        return $records
-    }
-    foreach ($line in @(Get-Content -LiteralPath $LedgerPath -ErrorAction Stop)) {
-        if (-not [string]::IsNullOrWhiteSpace($line)) {
-            $records += ($line | ConvertFrom-Json)
+        $failure = $_.Exception
+        $report.error = $failure.Message
+    } finally {
+        foreach ($name in $environmentNames) {
+            [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
         }
+        try {
+            Remove-SmokeOwnedTree "install directory" $installDirectory
+            Remove-SmokeCandidateWork -WorkDirectory $workDirectory -DependencyJunctionPath $dependencyJunctionPath
+            $report.cleanup = [ordered]@{
+                status = "PASS"
+                workDirectoryRemoved = -not (Test-Path -LiteralPath $workDirectory)
+                installDirectoryRemoved = -not (Test-Path -LiteralPath $installDirectory)
+            }
+        } catch {
+            $report.cleanup = [ordered]@{ status = "FAIL"; error = $_.Exception.Message }
+            if ($null -eq $failure) { $failure = $_.Exception }
+            $report.status = "FAIL"
+        }
+        $finalized = Finalize-SmokeCandidateReport -OutputDirectory $outputDirectory `
+            -ReportPath $reportPath -Report $report -Failure $failure
+        $failure = $finalized.failure
     }
-    return $records
+    if ($null -ne $failure) {
+        throw $failure
+    }
+    Write-Output "local candidate build and install smoke passed for $($sourceIdentity.commit); report: $reportPath"
 }
 
-function Invoke-LegacyHostedSmoke {
+function Invoke-HostedInstallSmoke {
     param(
         [string]$ScriptUrl,
         [string]$Version,
         [string]$RequestedInstallDir,
         [string]$RequestedBinaryName
     )
-
     if ([string]::IsNullOrWhiteSpace($ScriptUrl) -or [string]::IsNullOrWhiteSpace($Version)) {
         Fail-Smoke "InstallScriptUrl and InstallVersion are required outside candidate mode"
     }
-
     $tempHome = Join-Path ([System.IO.Path]::GetTempPath()) ("infinite-you-install-smoke-" + [System.Guid]::NewGuid().ToString("N"))
     try {
-        [void](New-Item -ItemType Directory -Path $tempHome -Force)
-        [void](New-Item -ItemType Directory -Path $RequestedInstallDir -Force)
-
+        New-Item -ItemType Directory -Path $tempHome -Force | Out-Null
+        New-Item -ItemType Directory -Path $RequestedInstallDir -Force | Out-Null
         $scriptPath = Join-Path $tempHome "install.ps1"
         Invoke-WebRequest -Uri $ScriptUrl -OutFile $scriptPath
-
         $env:HOME = $tempHome
-        $env:USERPROFILE = $tempHome
         $env:INFINITE_YOU_VERSION = $Version
         $env:INFINITE_YOU_INSTALL_DIR = $RequestedInstallDir
-
-        $downloadMarker = "/download/"
-        $downloadIndex = $ScriptUrl.IndexOf($downloadMarker, [System.StringComparison]::OrdinalIgnoreCase)
-        if ($downloadIndex -gt 0) {
-            $env:INFINITE_YOU_INSTALL_BASE_URL = $ScriptUrl.Substring(0, $downloadIndex)
-        }
-
         & $scriptPath
-
         $binaryPath = Join-Path $RequestedInstallDir $RequestedBinaryName
         if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
             Fail-Smoke "installed binary missing: $binaryPath"
         }
-
         & $binaryPath --help | Out-Null
         & $binaryPath --json factory list --dir (Join-Path $tempHome ".you-agent-factory" "factories") | Out-Null
-
-        $configPath = Join-Path $tempHome ".you-agent-factory" "config.json"
+        $configPath = Join-Path $tempHome ".you-agent-factory\config.json"
         if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
             Fail-Smoke "normal initializer did not create operator config at $configPath"
         }
-
         Write-Output "hosted install smoke passed for $binaryPath via $ScriptUrl"
     } finally {
         if (Test-Path -LiteralPath $tempHome) {
@@ -616,957 +1470,30 @@ function Invoke-LegacyHostedSmoke {
     }
 }
 
-function Invoke-CandidateSmoke {
-    param(
-        [string]$RequestedManifestPath,
-        [string]$RequestedInstallDir,
-        [string]$RequestedReportPath
-    )
-
-    $report = [ordered]@{
-        schemaVersion = "localai-windows-install-candidate-install/v1"
-        status = "FAIL"
-        property = "public-install-identity-discovery-zero-model-backend-activity-cleanup"
-        run = [ordered]@{
-            schemaVersion = "localai-windows-install-candidate-run/v1"
-            status = "NOT_STARTED"
-            startedAt = $null
-            endedAt = $null
-            durationMilliseconds = $null
-            platform = [ordered]@{
-                os = "windows"
-                architecture = "amd64"
-                powershell = [string]$PSVersionTable.PSVersion
-                edition = [string]$PSVersionTable.PSEdition
-            }
-            artifact = [ordered]@{}
-            isolation = [ordered]@{}
-            timeouts = [ordered]@{
-                commandMilliseconds = 60000
-                loopbackServerReadyMilliseconds = 5000
-                loopbackCompletionMilliseconds = 15000
-                networkObserverSampleMilliseconds = 50
-            }
-            processLifetime = [ordered]@{
-                command = "observed from process start until exit or command timeout"
-                descendantPolicy = "candidate smoke owns and cleans the loopback server job and installed CLI processes"
-            }
-            networkPolicy = [ordered]@{
-                allowed = "installer loopback requests recorded by the task server"
-                unexpected = "any non-loopback or unexpected loopback connection observed for the installed CLI fails the smoke"
-                port7437 = "must remain unobserved"
-                observer = "Get-NetTCPConnection by installed CLI process id"
-            }
-            budgets = [ordered]@{}
-            observed = [ordered]@{}
-        }
-        preconditions = [ordered]@{}
-        identity = [ordered]@{}
-        installer = [ordered]@{}
-        commands = @()
-        discovery = [ordered]@{}
-        activity = [ordered]@{}
-        cleanup = [ordered]@{ status = "NOT_RUN" }
-        postCleanup = [ordered]@{}
+if ($MyInvocation.InvocationName -eq ".") { return }
+if (-not [string]::IsNullOrWhiteSpace($CandidateSourcePath)) {
+    $candidateArguments = @{
+        SourcePath = $CandidateSourcePath
+        SourceCommit = $CandidateSourceCommit
+        SourceRepository = $CandidateSourceRepository
+        DependencySourcePath = $CandidateDependencySourcePath
+        OutputDirectory = $CandidateOutputDir
+        WorkDirectory = $CandidateWorkDir
+        ReleaseToolPath = $GoReleaserPath
+        ReleaseToolVersion = $ExpectedGoReleaserVersion
+        EsbuildVersion = $ExpectedEsbuildVersion
+        EsbuildSHA256 = $ExpectedEsbuildSHA256
+        MaximumWorkBytes = $CandidateMaximumWorkBytes
+        RequestedInstallDir = $InstallDir
+        RequestedReportPath = $ReportPath
     }
-    $failure = $null
-    $serverState = $null
-    $taskRoot = $null
-    $installRootSafe = $false
-    $manifestPath = $null
-    $candidateDirectory = $null
-    $installDirectory = $null
-    $reportPath = $null
-    $archivePath = $null
-    $installerPath = $null
-    $executablePath = $null
-    $digestPath = $null
-    $archiveEvidence = $null
-    $installerEvidence = $null
-    $executableEvidence = $null
-    $manifestEvidence = $null
-    $originalEnvironment = @{}
-    $runStartedAt = [DateTime]::UtcNow
-    $networkObservations = New-Object 'System.Collections.Generic.List[object]'
-    $forbiddenProcessObservations = New-Object 'System.Collections.Generic.List[string]'
-    $report.run.startedAt = $runStartedAt.ToString("o")
-    $report.run.status = "RUNNING"
-    $environmentNames = @(
-        "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "PATH", "TEMP", "TMP",
-        "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
-        "INFINITE_YOU_VERSION", "INFINITE_YOU_INSTALL_BASE_URL", "INFINITE_YOU_INSTALL_DIR",
-        "INFINITE_YOU_INSTALL_OS", "INFINITE_YOU_INSTALL_ARCH", "INFINITE_YOU_OMNIVOICE_CACHE_DIR",
-        "HUGGINGFACE_HUB_CACHE", "HF_HOME"
-    )
-
-    try {
-        Ensure-SmokeFileHashCommand
-        $manifestPath = Resolve-SmokeAbsolutePath $RequestedManifestPath
-        $candidateDirectory = Split-Path -Parent $manifestPath
-        $installDirectory = Resolve-SmokeAbsolutePath $RequestedInstallDir
-        $reportPath = if ([string]::IsNullOrWhiteSpace($RequestedReportPath)) {
-            Join-Path $candidateDirectory "install-validation-report.json"
-        } else {
-            Resolve-SmokeAbsolutePath $RequestedReportPath
-        }
-        $report.manifestPath = $manifestPath
-        $report.reportPath = $reportPath
-
-        $manifestBytes = [System.IO.File]::ReadAllBytes($manifestPath)
-        $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
-        if ($manifest.schemaVersion -ne "localai-windows-install-candidate/v1") {
-            Fail-Smoke "candidate schemaVersion is not localai-windows-install-candidate/v1"
-        }
-        if ($manifest.project -ne "localai" -or $manifest.cycle -ne "063") {
-            Fail-Smoke "candidate project/cycle does not identify LocalAI cycle 063"
-        }
-        if ([string]$manifest.source.repository -cne $expectedCandidateSourceRepository -or [string]$manifest.source.commit -cne $expectedCandidateSourceCommit -or [string]$manifest.source.tree -cne $expectedCandidateSourceTree) {
-            Fail-Smoke "candidate source identity = repository=$($manifest.source.repository) commit=$($manifest.source.commit) tree=$($manifest.source.tree), want repository=$expectedCandidateSourceRepository commit=$expectedCandidateSourceCommit tree=$expectedCandidateSourceTree"
-        }
-        $version = [string]$manifest.build.candidateVersion
-        if ([string]::IsNullOrWhiteSpace($version) -or $version -match '[\\/:*?"<>|\s]') {
-            Fail-Smoke "candidate version is not a usable release version: $version"
-        }
-        if ([string]::IsNullOrWhiteSpace([string]$manifest.build.cliVersion) -or [string]$manifest.build.goreleaserConfigSha256 -notmatch '^[0-9a-f]{64}$' -or $manifest.build.goreleaserVersion -ne "v2.12.7" -or $manifest.build.target.goos -ne "windows" -or $manifest.build.target.goarch -ne "amd64" -or $manifest.build.target.cgoEnabled -ne $false) {
-            Fail-Smoke "candidate build target/tool identity is not windows/amd64 with cgo disabled"
-        }
-        $requiredEnvironment = [ordered]@{
-            GOSUMDB = "off"
-            GOTOOLCHAIN = "go1.26.8"
-            npm_config_offline = "true"
-            GOFLAGS = "-p=4"
-            GOMAXPROCS = "4"
-        }
-        foreach ($environment in $requiredEnvironment.GetEnumerator()) {
-            if ([string]$manifest.build.environment.($environment.Key) -ne [string]$environment.Value) {
-                Fail-Smoke "candidate build environment $($environment.Key) = $($manifest.build.environment.($environment.Key)), want $($environment.Value)"
-            }
-        }
-        if ([string]$manifest.build.environment.GOPROXY -notmatch '^file://') {
-            Fail-Smoke "candidate build environment GOPROXY must be a file URL"
-        }
-        $requiredLimits = [ordered]@{
-            temporaryDiskBytesMaximum = 4294967296
-            ordinaryToolDownloadBytesMaximum = 0
-            modelBackendDownloadBytesMaximum = 0
-            modelCallsMaximum = 0
-            paidUSDMaximum = 0
-            descendantMaximum = 36
-            packagingOrSmokeRerunsMaximum = 1
-        }
-        foreach ($limit in $requiredLimits.GetEnumerator()) {
-            $actualLimit = $manifest.limits.($limit.Key)
-            if ($null -eq $actualLimit -or [int64]$actualLimit -ne [int64]$limit.Value) {
-                Fail-Smoke "candidate limit $($limit.Key) = $actualLimit, want $($limit.Value)"
-            }
-        }
-        $requiredControls = [ordered]@{
-            goflags = "-p=4"
-            gomaxprocs = "4"
-        }
-        foreach ($control in $requiredControls.GetEnumerator()) {
-            $actualControl = [string]$manifest.limits.($control.Key)
-            if ($actualControl -ne [string]$control.Value) {
-                Fail-Smoke "candidate control $($control.Key) = $actualControl, want $($control.Value)"
-            }
-        }
-        $expectedPriorCycles = @("030", "040", "042", "045", "048", "050")
-        $actualPriorCycles = @($manifest.attempts.priorCycles | ForEach-Object { [string]$_ })
-        if ($actualPriorCycles.Count -ne $expectedPriorCycles.Count -or (Compare-Object -ReferenceObject $expectedPriorCycles -DifferenceObject $actualPriorCycles)) {
-            Fail-Smoke "candidate attempts priorCycles = $($actualPriorCycles -join ', '), want $($expectedPriorCycles -join ', ')"
-        }
-        if ([int]$manifest.attempts.cycle063BuildMaximum -ne 1 -or [int]$manifest.attempts.cycle063BuildUsed -ne 1) {
-            Fail-Smoke "candidate attempts must record cycle063BuildMaximum=1 and cycle063BuildUsed=1"
-        }
-        $archiveArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-archive" })
-        $installerArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-installer" })
-        $executableArtifacts = @($manifest.artifacts | Where-Object { $_.role -eq "windows-amd64-executable" })
-        if (@($manifest.artifacts).Count -ne 3 -or $archiveArtifacts.Count -ne 1 -or $installerArtifacts.Count -ne 1 -or $executableArtifacts.Count -ne 1) {
-            Fail-Smoke "candidate manifest must contain one archive, one executable, and one installer artifact"
-        }
-        $archiveArtifact = $archiveArtifacts[0]
-        $installerArtifact = $installerArtifacts[0]
-        $executableArtifact = $executableArtifacts[0]
-        $archiveName = "you_${version}_windows_amd64.zip"
-        if ($archiveArtifact.file -ne $archiveName -or $installerArtifact.file -ne "install.ps1" -or $executableArtifact.file -ne "you.exe") {
-            Fail-Smoke "candidate artifact filenames do not match the declared version and executable identity"
-        }
-        foreach ($artifact in @($archiveArtifact, $installerArtifact, $executableArtifact)) {
-            if ([System.IO.Path]::GetFileName([string]$artifact.file) -ne [string]$artifact.file -or [int64]$artifact.bytes -le 0 -or [string]$artifact.sha256 -notmatch '^[0-9a-f]{64}$') {
-                Fail-Smoke "candidate artifact $($artifact.role) is incomplete or unsafe"
-            }
-        }
-
-        $archivePath = Join-Path $candidateDirectory $archiveArtifact.file
-        $installerPath = Join-Path $candidateDirectory $installerArtifact.file
-        $executablePath = Join-Path $candidateDirectory $executableArtifact.file
-        $archiveEvidence = Get-SmokeArtifactEvidence "windows-amd64-archive" $archivePath
-        $installerEvidence = Get-SmokeArtifactEvidence "windows-installer" $installerPath
-        $executableEvidence = Get-SmokeArtifactEvidence "windows-amd64-executable" $executablePath
-        if ($archiveEvidence.bytes -ne [int64]$archiveArtifact.bytes -or $archiveEvidence.sha256 -ne [string]$archiveArtifact.sha256) {
-            Fail-Smoke "candidate archive bytes or SHA-256 do not match the manifest"
-        }
-        if ($installerEvidence.bytes -ne [int64]$installerArtifact.bytes -or $installerEvidence.sha256 -ne [string]$installerArtifact.sha256) {
-            Fail-Smoke "candidate installer bytes or SHA-256 do not match the manifest"
-        }
-        if ($executableEvidence.bytes -ne [int64]$executableArtifact.bytes -or $executableEvidence.sha256 -ne [string]$executableArtifact.sha256) {
-            Fail-Smoke "candidate executable bytes or SHA-256 do not match the manifest"
-        }
-        $archiveCandidates = @(Get-ChildItem -LiteralPath $candidateDirectory -File -Force | Where-Object { $_.Name -match '^you_.+_windows_amd64\.zip$' })
-        if ($archiveCandidates.Count -ne 1 -or $archiveCandidates[0].Name -ne $archiveName) {
-            Fail-Smoke "candidate directory must retain exactly one archive named $archiveName"
-        }
-        $manifestEvidence = Get-SmokeArtifactEvidence "candidate-manifest" $manifestPath
-        $digestPath = Join-Path $candidateDirectory "candidate-manifest.sha256"
-        $digestFields = ([System.IO.File]::ReadAllText($digestPath)).Trim() -split '\s+'
-        if (($digestFields.Count -ne 1 -and $digestFields.Count -ne 2) -or $digestFields[0] -ne $manifestEvidence.sha256 -or ($digestFields.Count -eq 2 -and [System.IO.Path]::GetFileName($digestFields[1]) -ne "candidate-manifest.json")) {
-            Fail-Smoke "detached candidate manifest digest does not match the manifest"
-        }
-        $zipEntryEvidence = Get-SmokeZipEntryEvidence $archivePath
-        if ($executableEvidence.bytes -ne $zipEntryEvidence.bytes -or $executableEvidence.sha256 -ne $zipEntryEvidence.sha256) {
-            Fail-Smoke "candidate executable does not match the you.exe member in the declared archive"
-        }
-        $report.identity = [ordered]@{
-            schemaVersion = $manifest.schemaVersion
-            sourceCommit = $manifest.source.commit
-            sourceTree = $manifest.source.tree
-            candidateVersion = $version
-            cliVersion = [string]$manifest.build.cliVersion
-            target = "$($manifest.build.target.goos)/$($manifest.build.target.goarch)"
-            archive = $archiveEvidence
-            archiveYouEntry = $zipEntryEvidence
-            executable = $executableEvidence
-            installer = $installerEvidence
-            manifest = $manifestEvidence
-            detachedManifestDigest = $digestFields[0]
-        }
-        $report.run.status = "RUNNING"
-        $report.run.startedAt = $runStartedAt.ToString("o")
-        $report.run.artifact = [ordered]@{
-            candidateVersion = $version
-            cliVersion = [string]$manifest.build.cliVersion
-            sourceCommit = [string]$manifest.source.commit
-            sourceTree = [string]$manifest.source.tree
-            manifest = $manifestEvidence
-            archive = $archiveEvidence
-            installer = $installerEvidence
-        }
-        $report.run.budgets = [ordered]@{
-            temporaryDiskBytesMaximum = [int64]$manifest.limits.temporaryDiskBytesMaximum
-            ordinaryToolDownloadBytesMaximum = [int64]$manifest.limits.ordinaryToolDownloadBytesMaximum
-            modelBackendDownloadBytesMaximum = [int64]$manifest.limits.modelBackendDownloadBytesMaximum
-            modelCallsMaximum = [int64]$manifest.limits.modelCallsMaximum
-            paidUSDMaximum = [int64]$manifest.limits.paidUSDMaximum
-            descendantMaximum = [int64]$manifest.limits.descendantMaximum
-            packagingOrSmokeRerunsMaximum = [int64]$manifest.limits.packagingOrSmokeRerunsMaximum
-            goflags = [string]$manifest.limits.goflags
-            gomaxprocs = [string]$manifest.limits.gomaxprocs
-        }
-        $report.installer.archiveName = $archiveName
-        $report.installer.checksumName = "you_${version}_checksums.txt"
-
-        $taskRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("infinite-you-install-candidate-" + [System.Guid]::NewGuid().ToString("N"))
-        Assert-SmokeDisposableRoot "task" $taskRoot
-        [void](New-Item -ItemType Directory -Path $taskRoot -Force)
-        $homeRoot = Join-Path $taskRoot "home"
-        $profileRoot = Join-Path $taskRoot "profile"
-        $pathRoot = Join-Path $taskRoot "path"
-        $tempRoot = Join-Path $taskRoot "temp"
-        $modelsRoot = Join-Path $taskRoot "models"
-        $backendRoot = Join-Path $modelsRoot "backend-artifacts"
-        $hfRoot = Join-Path $taskRoot "hf"
-        $appDataRoot = Join-Path $profileRoot "AppData\Roaming"
-        $localAppDataRoot = Join-Path $profileRoot "AppData\Local"
-        $configRoot = Join-Path $profileRoot ".you-agent-factory"
-        $stateRoot = Join-Path $configRoot "recordings"
-        $roots = @(
-            [pscustomobject]@{ name = "HOME"; path = $homeRoot },
-            [pscustomobject]@{ name = "USERPROFILE"; path = $profileRoot },
-            [pscustomobject]@{ name = "APPDATA"; path = $appDataRoot },
-            [pscustomobject]@{ name = "LOCALAPPDATA"; path = $localAppDataRoot },
-            [pscustomobject]@{ name = "install"; path = $installDirectory },
-            [pscustomobject]@{ name = "config"; path = $configRoot },
-            [pscustomobject]@{ name = "state"; path = $stateRoot },
-            [pscustomobject]@{ name = "models"; path = $modelsRoot },
-            [pscustomobject]@{ name = "backend"; path = $backendRoot },
-            [pscustomobject]@{ name = "HF"; path = $hfRoot },
-            [pscustomobject]@{ name = "temporary"; path = $tempRoot }
-        )
-        $seenRoots = @{}
-        foreach ($root in $roots) {
-            $normalizedRoot = [System.IO.Path]::GetFullPath($root.path).TrimEnd('\\').ToLowerInvariant()
-            if ($seenRoots.ContainsKey($normalizedRoot)) {
-                Fail-Smoke "declared roots '$($seenRoots[$normalizedRoot])' and '$($root.name)' overlap"
-            }
-            $seenRoots[$normalizedRoot] = $root.name
-            Assert-SmokeDisposableRoot $root.name $root.path
-        }
-        $installRootSafe = $true
-        Import-Module Microsoft.PowerShell.Utility -Global -ErrorAction Stop
-        if ($installDirectory.StartsWith($candidateDirectory.TrimEnd('\\') + '\\', [System.StringComparison]::OrdinalIgnoreCase) -or $installDirectory.TrimEnd('\\').Equals($candidateDirectory.TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {
-            Fail-Smoke "install directory must not be inside the retained candidate directory"
-        }
-        if (Test-SmokePathResolvesYou $pathRoot) {
-            Fail-Smoke "task PATH already resolves you before installation"
-        }
-        $forbiddenBefore = @(Get-SmokeForbiddenProcesses)
-        if ($forbiddenBefore.Count -ne 0) {
-            Fail-Smoke "model/backend processes already exist before installation: $($forbiddenBefore -join ', ')"
-        }
-        $report.preconditions = [ordered]@{
-            taskPath = $pathRoot
-            pathResolvesYouBefore = $false
-            roots = @($roots | ForEach-Object { [ordered]@{ name = $_.name; path = $_.path; state = "ABSENT_OR_EMPTY" } })
-            forbiddenProcessesBefore = $forbiddenBefore
-            network = "loopback candidate listener only; no model/backend operation is admitted"
-            modelBackendDownloadBytesMaximum = 0
-            modelCallsMaximum = 0
-        }
-
-        foreach ($name in $environmentNames) {
-            $originalEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, "Process")
-        }
-        $env:HOME = $homeRoot
-        $env:USERPROFILE = $profileRoot
-        $profileDrive = [System.IO.Path]::GetPathRoot($profileRoot)
-        if ([string]::IsNullOrWhiteSpace($profileDrive) -or $profileRoot.Length -lt $profileDrive.Length - 1) {
-            Fail-Smoke "could not derive an isolated HOMEDRIVE/HOMEPATH from $profileRoot"
-        }
-        $env:HOMEDRIVE = $profileDrive.TrimEnd('\\')
-        $env:HOMEPATH = $profileRoot.Substring($profileDrive.Length - 1)
-        $env:PATH = $pathRoot
-        $env:TEMP = $tempRoot
-        $env:TMP = $tempRoot
-        $env:APPDATA = $appDataRoot
-        $env:LOCALAPPDATA = $localAppDataRoot
-        $env:XDG_CONFIG_HOME = $configRoot
-        $env:XDG_CACHE_HOME = $localAppDataRoot
-        $env:INFINITE_YOU_VERSION = $version
-        $env:INFINITE_YOU_INSTALL_DIR = $installDirectory
-        $env:INFINITE_YOU_INSTALL_OS = "windows"
-        $env:INFINITE_YOU_INSTALL_ARCH = "amd64"
-        $env:INFINITE_YOU_OMNIVOICE_CACHE_DIR = $modelsRoot
-        $env:HUGGINGFACE_HUB_CACHE = $hfRoot
-        $env:HF_HOME = $hfRoot
-
-        [void](New-Item -ItemType Directory -Path $tempRoot -Force)
-        $baselineNetworkConnections = @(Get-SmokeNetworkConnections -ProcessId $PID)
-        foreach ($processName in $forbiddenBefore) {
-            [void]$forbiddenProcessObservations.Add($processName)
-        }
-        $activityBytesBefore = [int64](Get-SmokeDirectoryBytes -Path $modelsRoot) + [int64](Get-SmokeDirectoryBytes -Path $hfRoot)
-        $report.run.isolation = [ordered]@{
-            manifest = $manifestPath
-            candidateDirectory = $candidateDirectory
-            taskRoot = $taskRoot
-            installDirectory = $installDirectory
-            home = $homeRoot
-            userProfile = $profileRoot
-            temporary = $tempRoot
-            models = $modelsRoot
-            backend = $backendRoot
-            huggingFace = $hfRoot
-        }
-        $report.run.observer = [ordered]@{
-            status = "PASS"
-            startedBeforeInstaller = $true
-            networkSampler = "Get-NetTCPConnection"
-            baselineSamples = 1
-            baselineConnections = $baselineNetworkConnections
-            processSampler = "Get-Process forbidden-name scan"
-            errors = @()
-        }
-        $ledgerPath = Join-Path $tempRoot "installer-request-ledger.jsonl"
-        $serverState = Start-CandidateServer -InstallerPath $installerPath -ArchivePath $archivePath -ArchiveName $archiveName -ArchiveSHA256 $archiveEvidence.sha256 -Version $version -LedgerPath $ledgerPath
-        $env:INFINITE_YOU_INSTALL_BASE_URL = $serverState.baseUrl
-        $scriptUrl = "$($serverState.baseUrl)/download/v$version/install.ps1"
-        $report.installer.baseUrl = $serverState.baseUrl
-        $report.installer.scriptUrl = $scriptUrl
-        $report.installer.requestLedger = $ledgerPath
-
-        # Keep the fetched public script outside the installer-owned temp
-        # directory. The installer is responsible for removing its own
-        # temporary extraction directory before this smoke cleans the task.
-        $downloadedScriptPath = Join-Path $taskRoot "downloaded-install.ps1"
-        Invoke-WebRequest -Uri $scriptUrl -OutFile $downloadedScriptPath
-        $installerOutput = @(& $downloadedScriptPath 2>&1 | ForEach-Object { $_.ToString() })
-        $report.installer.output = $installerOutput
-
-        $installedBinaryPath = Join-Path $installDirectory $BinaryName
-        if (-not (Test-Path -LiteralPath $installedBinaryPath -PathType Leaf)) {
-            Fail-Smoke "installed binary missing: $installedBinaryPath"
-        }
-        $installedEvidence = Get-SmokeArtifactEvidence "installed-binary" $installedBinaryPath
-        if ($installedEvidence.bytes -ne $zipEntryEvidence.bytes -or $installedEvidence.sha256 -ne $zipEntryEvidence.sha256) {
-            Fail-Smoke "installed binary does not match the you.exe member in the declared archive"
-        }
-        $env:PATH = $installDirectory
-        $resolvedCommand = Get-Command -Name $BinaryName -CommandType Application -ErrorAction Stop
-        $resolvedPath = [System.IO.Path]::GetFullPath($resolvedCommand.Source)
-        if (-not $resolvedPath.Equals([System.IO.Path]::GetFullPath($installedBinaryPath), [System.StringComparison]::OrdinalIgnoreCase)) {
-            Fail-Smoke "PATH resolved $resolvedPath instead of the installed candidate $installedBinaryPath"
-        }
-        $report.identity.installedBinary = $installedEvidence
-        $report.identity.pathResolvedBinary = $resolvedPath
-
-        $commandEvidence = @()
-        $versionResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("--version") -WorkingDirectory $tempRoot
-        Record-SmokeCommandObservation -Result $versionResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
-        Assert-SmokeCommandNetwork -Result $versionResult -CommandName "you --version"
-        $commandEvidence += [ordered]@{ command = "you --version"; exitCode = $versionResult.exitCode; stdout = $versionResult.stdout; stderr = $versionResult.stderr; network = $versionResult.network; forbiddenProcesses = $versionResult.forbiddenProcesses }
-        if ($versionResult.exitCode -ne 0 -or $versionResult.stdout.Trim() -ne [string]$manifest.build.cliVersion) {
-            Fail-Smoke "installed you --version was '$($versionResult.stdout.Trim())', want '$($manifest.build.cliVersion)'"
-        }
-        if (@(Get-SmokeForbiddenProcesses).Count -ne 0) {
-            Fail-Smoke "model/backend process observed after version command"
-        }
-
-        $helpResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("models", "--help") -WorkingDirectory $tempRoot
-        Record-SmokeCommandObservation -Result $helpResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
-        Assert-SmokeCommandNetwork -Result $helpResult -CommandName "you models --help"
-        $commandEvidence += [ordered]@{ command = "you models --help"; exitCode = $helpResult.exitCode; stdout = $helpResult.stdout; stderr = $helpResult.stderr; network = $helpResult.network; forbiddenProcesses = $helpResult.forbiddenProcesses }
-        if ($helpResult.exitCode -ne 0) {
-            Fail-Smoke "you models --help failed with exit code $($helpResult.exitCode)"
-        }
-        foreach ($modelName in @("llm", "asr", "tts", "embed")) {
-            if (-not $helpResult.stdout.Contains($modelName)) {
-                Fail-Smoke "you models --help did not expose built-in model '$modelName'"
-            }
-        }
-        if (@(Get-SmokeForbiddenProcesses).Count -ne 0) {
-            Fail-Smoke "model/backend process observed after models help"
-        }
-
-        $inspectionEvidence = @()
-        foreach ($modelName in @("llm", "asr", "tts", "embed")) {
-            $inspectResult = Invoke-SmokeCommand -FilePath $resolvedPath -Arguments @("--json", "models", "inspect", $modelName) -WorkingDirectory $tempRoot
-            Record-SmokeCommandObservation -Result $inspectResult -NetworkObservations $networkObservations -ForbiddenProcessObservations $forbiddenProcessObservations
-            Assert-SmokeCommandNetwork -Result $inspectResult -CommandName "you --json models inspect $modelName"
-            $commandEvidence += [ordered]@{ command = "you --json models inspect $modelName"; exitCode = $inspectResult.exitCode; stdout = $inspectResult.stdout; stderr = $inspectResult.stderr; network = $inspectResult.network; forbiddenProcesses = $inspectResult.forbiddenProcesses }
-            if ($inspectResult.exitCode -ne 0) {
-                Fail-Smoke "you --json models inspect $modelName failed with exit code $($inspectResult.exitCode)"
-            }
-            $inspection = $inspectResult.stdout | ConvertFrom-Json
-            if ($inspection.name -ne $modelName -or $inspection.managedRuntime.identity -ne $modelName) {
-                Fail-Smoke "models inspect $modelName returned an unexpected public name"
-            }
-            if ($inspection.managedRuntime.readinessState -ne "MISSING" -or $inspection.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or $inspection.loadState -ne "UNLOADED") {
-                Fail-Smoke "models inspect $modelName did not remain discovery-only (readiness=$($inspection.managedRuntime.readinessState), lifecycle=$($inspection.managedRuntime.lifecycleState), load=$($inspection.loadState))"
-            }
-            $inspectionEvidence += [ordered]@{
-                name = $inspection.name
-                readinessState = $inspection.managedRuntime.readinessState
-                lifecycleState = $inspection.managedRuntime.lifecycleState
-                loadState = $inspection.loadState
-            }
-            if (@(Get-SmokeForbiddenProcesses).Count -ne 0) {
-                Fail-Smoke "model/backend process observed after models inspect $modelName"
-            }
-        }
-        $report.commands = $commandEvidence
-        $report.discovery = [ordered]@{
-            help = "PASS"
-            inspections = $inspectionEvidence
-            modelNames = @("llm", "asr", "tts", "embed")
-            operation = "discovery-only"
-        }
-
-        $forbiddenAfter = @(Get-SmokeForbiddenProcesses)
-        foreach ($processName in $forbiddenAfter) {
-            [void]$forbiddenProcessObservations.Add($processName)
-        }
-        $nonEmptyActivityRoots = @()
-        foreach ($root in @(
-            [pscustomobject]@{ name = "models"; path = $modelsRoot },
-            [pscustomobject]@{ name = "backend"; path = $backendRoot },
-            [pscustomobject]@{ name = "HF"; path = $hfRoot }
-        )) {
-            $rootItem = Get-Item -LiteralPath $root.path -Force -ErrorAction SilentlyContinue
-            if ($null -ne $rootItem -and $rootItem.PSIsContainer -and @(Get-ChildItem -LiteralPath $root.path -Force -ErrorAction Stop).Count -ne 0) {
-                $nonEmptyActivityRoots += $root.name
-            }
-        }
-        if ($nonEmptyActivityRoots.Count -ne 0) {
-            Fail-Smoke "discovery created model/backend activity in: $($nonEmptyActivityRoots -join ', ')"
-        }
-        if ($forbiddenAfter.Count -ne 0) {
-            Fail-Smoke "model/backend processes remained after discovery: $($forbiddenAfter -join ', ')"
-        }
-        $allObservedConnections = New-Object 'System.Collections.Generic.List[object]'
-        $allUnexpectedConnections = New-Object 'System.Collections.Generic.List[object]'
-        $allPort7437Connections = New-Object 'System.Collections.Generic.List[object]'
-        $networkSampleCount = 0
-        foreach ($observation in $networkObservations) {
-            $networkSampleCount += [int]$observation.samples
-            foreach ($connection in @($observation.connections)) {
-                [void]$allObservedConnections.Add($connection)
-            }
-            foreach ($connection in @($observation.unexpectedConnections)) {
-                [void]$allUnexpectedConnections.Add($connection)
-            }
-            foreach ($connection in @($observation.port7437Connections)) {
-                [void]$allPort7437Connections.Add($connection)
-            }
-        }
-        if ($allUnexpectedConnections.Count -ne 0) {
-            Fail-Smoke "unexpected network activity was observed: $($allUnexpectedConnections | ConvertTo-Json -Compress)"
-        }
-        $activityBytesAfter = [int64](Get-SmokeDirectoryBytes -Path $modelsRoot) + [int64](Get-SmokeDirectoryBytes -Path $hfRoot)
-        $modelBackendDownloadBytes = [int64]$activityBytesAfter - [int64]$activityBytesBefore
-        if ($modelBackendDownloadBytes -lt 0) {
-            Fail-Smoke "model/backend activity byte observation moved backwards"
-        }
-        $observedForbiddenProcesses = @($forbiddenProcessObservations | Sort-Object -Unique)
-        $networkObserverEvidence = [ordered]@{
-            status = "PASS"
-            sampler = "Get-NetTCPConnection"
-            samples = $networkSampleCount
-            commandObservations = $networkObservations.ToArray()
-            connectionsObserved = $allObservedConnections.ToArray()
-            unexpectedConnectionsObserved = $allUnexpectedConnections.ToArray()
-            port7437ConnectionsObserved = $allPort7437Connections.ToArray()
-        }
-        $report.activity = [ordered]@{
-            modelBackendProcesses = $observedForbiddenProcesses
-            modelBackendActivityRoots = $nonEmptyActivityRoots
-            modelBackendDownloadBytes = $modelBackendDownloadBytes
-            modelCalls = [int]$allObservedConnections.Count
-            backendRequestsObserved = [int]$allPort7437Connections.Count
-            unexpectedNetworkConnectionsObserved = $allUnexpectedConnections.ToArray()
-            networkObserver = $networkObserverEvidence
-            conclusion = "PASS from live installed-CLI process/network observations and task-owned activity roots"
-        }
-        $report.run.observed = [ordered]@{
-            networkSamples = $networkSampleCount
-            connections = [int]$allObservedConnections.Count
-            unexpectedConnections = [int]$allUnexpectedConnections.Count
-            port7437Connections = [int]$allPort7437Connections.Count
-            forbiddenProcesses = $observedForbiddenProcesses
-            modelBackendDownloadBytes = $modelBackendDownloadBytes
-            modelCalls = [int]$allObservedConnections.Count
-        }
-
-        $completed = Wait-Job -Job $serverState.job -Timeout 15
-        if ($null -eq $completed -or $serverState.job.State -ne "Completed") {
-            Fail-Smoke "loopback candidate server did not finish its three expected installer requests"
-        }
-        $records = Read-CandidateRequestLedger $ledgerPath
-        $actualPaths = @($records | ForEach-Object { [string]$_.path } | Sort-Object)
-        $expectedPaths = @($serverState.expectedPaths | Sort-Object)
-        if ($records.Count -ne 3 -or (($actualPaths -join "`n") -ne ($expectedPaths -join "`n"))) {
-            Fail-Smoke "installer request ledger did not contain exactly the script, archive, and checksum paths: $($actualPaths -join ', ')"
-        }
-        foreach ($record in $records) {
-            if ($record.method -ne "GET" -or [int]$record.status -ne 200) {
-                Fail-Smoke "installer request ledger contains a non-success request: $($record | ConvertTo-Json -Compress)"
-            }
-        }
-        $report.installer.requests = $records
-        $report.status = "PASS"
-    } catch {
-        $failure = $_.Exception
-        $report.error = $failure.ToString()
-        $report.errorType = $failure.GetType().FullName
-        $report.errorInvocation = $_.InvocationInfo.PositionMessage
-    } finally {
-        try {
-            Stop-CandidateServer $serverState
-            $report.cleanup.listener = "STOPPED"
-        } catch {
-            $report.cleanup.listener = "ERROR: $($_.Exception.Message)"
-            if ($null -eq $failure) { $failure = $_.Exception }
-        }
-
-        $cleanupErrors = @()
-        if ($installRootSafe) {
-            try {
-                if (Test-Path -LiteralPath $installDirectory) {
-                    Remove-Item -LiteralPath $installDirectory -Recurse -Force -ErrorAction Stop
-                }
-            } catch {
-                $cleanupErrors += "install: $($_.Exception.Message)"
-            }
-        }
-        if ($null -ne $taskRoot) {
-            try {
-                if (Test-Path -LiteralPath $taskRoot) {
-                    Remove-Item -LiteralPath $taskRoot -Recurse -Force -ErrorAction Stop
-                }
-            } catch {
-                $cleanupErrors += "task: $($_.Exception.Message)"
-            }
-        }
-        $remainingPaths = @()
-        $preservedPreexistingPaths = @()
-        $cleanupPaths = @($taskRoot)
-        if ($installRootSafe) {
-            $cleanupPaths += $installDirectory
-        } elseif (-not [string]::IsNullOrWhiteSpace($installDirectory) -and (Test-Path -LiteralPath $installDirectory)) {
-            $preservedPreexistingPaths += $installDirectory
-        }
-        foreach ($path in $cleanupPaths) {
-            if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
-                $remainingPaths += $path
-            }
-        }
-        $report.cleanup.remainingTaskPaths = $remainingPaths
-        $report.cleanup.preservedPreexistingPaths = $preservedPreexistingPaths
-        $report.cleanup.errors = $cleanupErrors
-        if ($cleanupErrors.Count -ne 0 -or $remainingPaths.Count -ne 0) {
-            $report.cleanup.status = "FAIL"
-            if ($null -eq $failure) {
-                $failure = [System.Exception]::new("candidate cleanup left task-owned paths or reported errors")
-            }
-        } else {
-            $report.cleanup.status = "PASS"
-        }
-
-        try {
-            if ($originalEnvironment.Count -ne 0) {
-                foreach ($name in $environmentNames) {
-                    $value = $originalEnvironment[$name]
-                    if ($null -eq $value) {
-                        Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
-                    } else {
-                        [System.Environment]::SetEnvironmentVariable($name, $value, "Process")
-                    }
-                }
-            }
-        } catch {
-            $report.cleanup.environmentRestore = "ERROR: $($_.Exception.Message)"
-            if ($null -eq $failure) { $failure = $_.Exception }
-        }
-
-        try {
-            if ($null -ne $archiveEvidence -and $null -ne $installerEvidence -and $null -ne $executableEvidence -and $null -ne $manifestEvidence) {
-                $postArchive = Get-SmokeArtifactEvidence "windows-amd64-archive" $archivePath
-                $postInstaller = Get-SmokeArtifactEvidence "windows-installer" $installerPath
-                $postExecutable = Get-SmokeArtifactEvidence "windows-amd64-executable" $executablePath
-                $postManifest = Get-SmokeArtifactEvidence "candidate-manifest" $manifestPath
-                $postDigest = (([System.IO.File]::ReadAllText($digestPath)).Trim() -split '\s+')[0]
-                $report.postCleanup = [ordered]@{
-                    archive = $postArchive
-                    executable = $postExecutable
-                    installer = $postInstaller
-                    manifest = $postManifest
-                    detachedManifestDigest = $postDigest
-                    candidateHashesStable = ($postArchive.sha256 -eq $archiveEvidence.sha256 -and $postExecutable.sha256 -eq $executableEvidence.sha256 -and $postInstaller.sha256 -eq $installerEvidence.sha256 -and $postManifest.sha256 -eq $manifestEvidence.sha256 -and $postDigest -eq $manifestEvidence.sha256)
-                }
-                if (-not $report.postCleanup.candidateHashesStable) {
-                    if ($null -eq $failure) { $failure = [System.Exception]::new("candidate hashes changed during install smoke cleanup") }
-                    $report.cleanup.status = "FAIL"
-                }
-            } else {
-                $report.postCleanup = [ordered]@{ status = "NOT_AVAILABLE"; reason = "candidate artifacts were not fully validated" }
-            }
-        } catch {
-            $report.postCleanup = [ordered]@{ status = "ERROR"; error = $_.Exception.Message }
-            if ($null -eq $failure) { $failure = $_.Exception }
-        }
-        $runEndedAt = [DateTime]::UtcNow
-        $report.run.endedAt = $runEndedAt.ToString("o")
-        $report.run.durationMilliseconds = [int64]($runEndedAt - $runStartedAt).TotalMilliseconds
-        $report.run.status = if ($null -eq $failure) { "PASS" } else { "FAIL" }
-    }
-
-    if ($null -ne $failure) {
-        $report.status = "FAIL"
-    }
-    return [pscustomobject]@{
-        report = $report
-        error = $failure
-    }
+    Invoke-LocalCandidateSmoke @candidateArguments
+    exit 0
 }
-
-function Invoke-ObserverFixture {
-    param(
-        [string]$RequestedInstallDir,
-        [string]$RequestedReportPath
-    )
-
-    $reportPath = if ([string]::IsNullOrWhiteSpace($RequestedReportPath)) {
-        Join-Path (Resolve-SmokeAbsolutePath $RequestedInstallDir) "observer-report.json"
-    } else {
-        Resolve-SmokeAbsolutePath $RequestedReportPath
-    }
-    $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("infinite-you-observer-" + [System.Guid]::NewGuid().ToString("N"))
-    [void][System.IO.Directory]::CreateDirectory($fixtureRoot)
-    $processReadyPath = Join-Path $fixtureRoot "process-ready"
-    $diskReadyPath = Join-Path $fixtureRoot "disk-ready"
-    $pidPath = Join-Path $fixtureRoot "root.pid"
-    $donePath = Join-Path $fixtureRoot "root.done"
-    $processJob = $null
-    $diskJob = $null
-    $rootProcess = $null
-    $rootExitCode = $null
-    $failure = $null
-    $processObservation = [pscustomobject]@{
-        status = "FAIL"; startedBeforeRoot = $false; continuedThroughDescendantExit = $false
-        maximumGapMilliseconds = 0; nonLoopbackConnections = 0; externalTransferBytes = 0; descendantHighWater = 0
-    }
-    $diskObservation = [pscustomobject]@{
-        status = "FAIL"; independent = $false; startPeriodicFinal = $false
-        maximumGapMilliseconds = 0; peakDeltaBytes = 0
-    }
-    $goEnvironment = [ordered]@{
-        GOFLAGS = [string]$env:GOFLAGS
-        GOMAXPROCS = [string]$env:GOMAXPROCS
-    }
-
-    try {
-        $processJob = Start-Job -ScriptBlock {
-            param($ReadyPath, $PidPath, $DonePath)
-            $ErrorActionPreference = "Stop"
-            $startedAt = [DateTime]::UtcNow
-            [System.IO.File]::WriteAllText($ReadyPath, "ready")
-            function Get-ObserverTree {
-                param([int]$RootId)
-                $all = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop)
-                $children = @{}
-                foreach ($item in $all) {
-                    $parent = [int]$item.ParentProcessId
-                    if (-not $children.ContainsKey($parent)) { $children[$parent] = @() }
-                    $children[$parent] += [int]$item.ProcessId
-                }
-                $pending = @($RootId)
-                $descendants = @()
-                while ($pending.Count -gt 0) {
-                    $parent = [int]$pending[0]
-                    $pending = if ($pending.Count -eq 1) { @() } else { @($pending[1..($pending.Count - 1)]) }
-                    if (-not $children.ContainsKey($parent)) { continue }
-                    foreach ($child in @($children[$parent])) {
-                        if ($descendants -notcontains [int]$child) {
-                            $descendants += [int]$child
-                            $pending += [int]$child
-                        }
-                    }
-                }
-                [pscustomobject]@{
-                    rootPresent = @($all | Where-Object { [int]$_.ProcessId -eq $RootId }).Count -ne 0
-                    descendantIds = @($descendants)
-                }
-            }
-            function Get-ObserverSample {
-                param([int]$RootId)
-                if ($null -eq (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
-                    throw "Get-NetTCPConnection is unavailable"
-                }
-                $tree = Get-ObserverTree $RootId
-                $nonLoopback = 0
-                foreach ($processId in @($RootId) + @($tree.descendantIds)) {
-                    foreach ($connection in @(Get-NetTCPConnection -OwningProcess $processId -ErrorAction SilentlyContinue)) {
-                        $remote = [string]$connection.RemoteAddress
-                        if ($remote -notin @("127.0.0.1", "::1", "0:0:0:0:0:0:0:1")) { $nonLoopback++ }
-                    }
-                }
-                [pscustomobject]@{
-                    rootPresent = [bool]$tree.rootPresent
-                    descendantCount = [int]$tree.descendantIds.Count
-                    descendantIds = @($tree.descendantIds)
-                    nonLoopbackConnections = [int]$nonLoopback
-                }
-            }
-            try {
-                $deadline = [DateTime]::UtcNow.AddSeconds(20)
-                while (-not (Test-Path -LiteralPath $PidPath) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 25 }
-                if (-not (Test-Path -LiteralPath $PidPath)) { throw "root PID was not published" }
-                $rootId = [int]([System.IO.File]::ReadAllText($PidPath)).Trim()
-                $previous = [DateTime]::UtcNow
-                $maximumGap = [int64]0
-                $samples = 0
-                $descendantHighWater = [int64]0
-                $nonLoopbackConnections = 0
-                $rootExited = $false
-                $continuedThroughExit = $false
-                while ([DateTime]::UtcNow -lt $deadline) {
-                    $sample = Get-ObserverSample $rootId
-                    $now = [DateTime]::UtcNow
-                    $gap = [int64]($now - $previous).TotalMilliseconds
-                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
-                    $previous = $now
-                    $samples++
-                    if ($sample.descendantCount -gt $descendantHighWater) { $descendantHighWater = $sample.descendantCount }
-                    $nonLoopbackConnections += [int]$sample.nonLoopbackConnections
-                    if (Test-Path -LiteralPath $DonePath) { $rootExited = $true }
-                    if ($rootExited -and -not $sample.rootPresent -and $sample.descendantCount -eq 0) {
-                        $continuedThroughExit = $true
-                        break
-                    }
-                    Start-Sleep -Milliseconds 100
-                }
-                if (-not $continuedThroughExit) { throw "observer did not reach root and descendant exit" }
-                [pscustomobject]@{
-                    status = "PASS"; startedBeforeRoot = $true; continuedThroughDescendantExit = $continuedThroughExit
-                    maximumGapMilliseconds = $maximumGap; nonLoopbackConnections = $nonLoopbackConnections
-                    externalTransferBytes = [int64]0; descendantHighWater = $descendantHighWater
-                }
-            } catch {
-                [pscustomobject]@{
-                    status = "FAIL"; startedBeforeRoot = $true; continuedThroughDescendantExit = $false
-                    maximumGapMilliseconds = [int64]0; nonLoopbackConnections = 0; externalTransferBytes = [int64]0
-                    descendantHighWater = $descendantHighWater
-                }
-            }
-        } -ArgumentList $processReadyPath, $pidPath, $donePath
-
-        $diskJob = Start-Job -ScriptBlock {
-            param($RootPath, $ReadyPath, $DonePath)
-            $ErrorActionPreference = "Stop"
-            function Get-ObserverDirectoryBytes {
-                $total = [int64]0
-                if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) { return $total }
-                foreach ($item in @(Get-ChildItem -LiteralPath $RootPath -File -Force -Recurse -ErrorAction Stop)) {
-                    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "observer fixture saw a reparse point" }
-                    $total += [int64]$item.Length
-                }
-                return $total
-            }
-            try {
-                $startedAt = [DateTime]::UtcNow
-                [System.IO.File]::WriteAllText($ReadyPath, "ready")
-                $previous = $startedAt
-                $initialBytes = $null
-                $peakBytes = [int64]0
-                $maximumGap = [int64]0
-                $samples = 0
-                $finalSample = $false
-                $deadline = $startedAt.AddSeconds(20)
-                while ([DateTime]::UtcNow -lt $deadline) {
-                    $bytes = [int64](Get-ObserverDirectoryBytes)
-                    $now = [DateTime]::UtcNow
-                    $gap = [int64]($now - $previous).TotalMilliseconds
-                    if ($gap -gt $maximumGap) { $maximumGap = $gap }
-                    $previous = $now
-                    if ($null -eq $initialBytes) { $initialBytes = $bytes }
-                    if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
-                    $samples++
-                    if (Test-Path -LiteralPath $DonePath) {
-                        $bytes = [int64](Get-ObserverDirectoryBytes)
-                        $now = [DateTime]::UtcNow
-                        $gap = [int64]($now - $previous).TotalMilliseconds
-                        if ($gap -gt $maximumGap) { $maximumGap = $gap }
-                        if ($bytes -gt $peakBytes) { $peakBytes = $bytes }
-                        $samples++
-                        $finalSample = $true
-                        break
-                    }
-                    Start-Sleep -Milliseconds 100
-                }
-                if ($null -eq $initialBytes -or -not $finalSample) { throw "disk observer did not produce periodic and final samples" }
-                [pscustomobject]@{
-                    status = "PASS"; independent = $true; startPeriodicFinal = ($samples -ge 3 -and $finalSample)
-                    maximumGapMilliseconds = $maximumGap; peakDeltaBytes = [int64]($peakBytes - $initialBytes); samples = $samples; error = ""
-                }
-            } catch {
-                [pscustomobject]@{
-                    status = "FAIL"; independent = $true; startPeriodicFinal = $false
-                    maximumGapMilliseconds = [int64]0; peakDeltaBytes = [int64]0; error = $_.Exception.Message
-                }
-            }
-        } -ArgumentList $fixtureRoot, $diskReadyPath, $donePath
-
-        $readyDeadline = [DateTime]::UtcNow.AddSeconds(10)
-        while ((-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) -and [DateTime]::UtcNow -lt $readyDeadline) { Start-Sleep -Milliseconds 25 }
-        if (-not (Test-Path -LiteralPath $processReadyPath) -or -not (Test-Path -LiteralPath $diskReadyPath)) { throw "observers did not start before root" }
-
-        $childOne = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 2500"))
-        $childTwo = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Start-Sleep -Milliseconds 3000"))
-        $fixtureFile = (Join-Path $fixtureRoot "fixture.txt").Replace("'", "''")
-        $rootScript = "`$ErrorActionPreference = 'Stop'; Set-Content -LiteralPath '$fixtureFile' -Value ('fixture' * 64); `$one = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childOne') -PassThru; `$two = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand','$childTwo') -PassThru; Wait-Process -Id @(`$one.Id, `$two.Id); exit 0"
-        $rootEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($rootScript))
-        $rootProcess = Start-Process -FilePath "powershell.exe" -WorkingDirectory $fixtureRoot -WindowStyle Hidden -ArgumentList @("-NoProfile", "-NonInteractive", "-EncodedCommand", $rootEncoded) -PassThru
-        [System.IO.File]::WriteAllText($pidPath, [string]$rootProcess.Id)
-        if (-not $rootProcess.WaitForExit(15000)) { throw "observer fixture root timed out" }
-        $rootExitCode = [int64]$rootProcess.ExitCode
-        [System.IO.File]::WriteAllText($donePath, "done")
-        $completedJobs = @(Wait-Job -Job @($processJob, $diskJob) -Timeout 25)
-        if ($completedJobs.Count -ne 2) { throw "observers did not complete after root exit" }
-        $processResults = @(Receive-Job -Job $processJob -ErrorAction Stop)
-        $diskResults = @(Receive-Job -Job $diskJob -ErrorAction Stop)
-        if ($processResults.Count -eq 0 -or $diskResults.Count -eq 0) { throw "observers returned no result" }
-        $processObservation = $processResults[$processResults.Count - 1]
-        $diskObservation = $diskResults[$diskResults.Count - 1]
-    } catch {
-        $failure = $_.Exception
-        $jobStates = @($processJob, $diskJob) | Where-Object { $null -ne $_ } | ForEach-Object { "$($_.Name)=$($_.State)" }
-        if ($jobStates.Count -ne 0) { $failure = [System.Exception]::new("$($failure.Message); observer jobs: $($jobStates -join ', ')") }
-    } finally {
-        if ($null -ne $rootProcess) {
-            try {
-                if (-not $rootProcess.HasExited) { & taskkill.exe /PID $rootProcess.Id /T /F | Out-Null }
-            } catch {
-            }
-            try { $rootProcess.Dispose() } catch { }
-        }
-        foreach ($job in @($processJob, $diskJob)) {
-            if ($null -ne $job) {
-                try { if ($job.State -eq "Running") { Stop-Job -Job $job -ErrorAction SilentlyContinue } } catch { }
-                try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch { }
-            }
-        }
-        if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-
-    $observerPass = $goEnvironment.GOFLAGS -eq "-p=4" -and $goEnvironment.GOMAXPROCS -eq "4" -and $processObservation.status -eq "PASS" -and $diskObservation.status -eq "PASS" -and [bool]$diskObservation.startPeriodicFinal
-    $report = [ordered]@{
-        schemaVersion = "localai-windows-install-candidate-observer/v1"
-        status = if ($null -eq $failure -and $rootExitCode -eq 0 -and $observerPass) { "PASS" } else { "FAIL" }
-        cycle = "063"
-        releaseStatus = "observer-fixture"
-        observation = [ordered]@{
-            environment = $goEnvironment
-            processNetworkObserver = [ordered]@{
-                startedBeforeRoot = [bool]$processObservation.startedBeforeRoot
-                continuedThroughDescendantExit = [bool]$processObservation.continuedThroughDescendantExit
-                maximumGapMilliseconds = [int64]$processObservation.maximumGapMilliseconds
-                status = [string]$processObservation.status
-                nonLoopbackConnections = [int]$processObservation.nonLoopbackConnections
-                externalTransferBytes = [int64]$processObservation.externalTransferBytes
-            }
-            diskObserver = [ordered]@{
-                independent = [bool]$diskObservation.independent
-                startPeriodicFinal = [bool]$diskObservation.startPeriodicFinal
-                maximumGapMilliseconds = [int64]$diskObservation.maximumGapMilliseconds
-                status = [string]$diskObservation.status
-                peakDeltaBytes = [int64]$diskObservation.peakDeltaBytes
-            }
-            descendantMaximum = [int64]36
-            descendantHighWater = [int64]$processObservation.descendantHighWater
-            rootExitCode = $rootExitCode
-            failurePropagation = if ($null -eq $failure -and $rootExitCode -eq 0) { "PASS" } else { "FAIL" }
-            modelBackendBytes = [int64]0
-            modelBackendCalls = [int64]0
-        }
-    }
-    $reportParent = Split-Path -Parent $reportPath
-    if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) { Fail-Smoke "observer report parent does not exist: $reportParent" }
-    [System.IO.File]::WriteAllText($reportPath, ($report | ConvertTo-Json -Depth 12))
-    if ($report.status -ne "PASS") { throw "observer fixture failed; report=$reportPath" }
-    Write-Output "observer fixture passed; report=$reportPath"
+$hostedArguments = @{
+    ScriptUrl = $InstallScriptUrl
+    Version = $InstallVersion
+    RequestedInstallDir = $InstallDir
+    RequestedBinaryName = $BinaryName
 }
-
-if ($ObserverFixture) {
-    Invoke-ObserverFixture -RequestedInstallDir $InstallDir -RequestedReportPath $ObserverReportPath
-    return
-}
-
-if ([string]::IsNullOrWhiteSpace($CandidateManifestPath)) {
-    Invoke-LegacyHostedSmoke -ScriptUrl $InstallScriptUrl -Version $InstallVersion -RequestedInstallDir $InstallDir -RequestedBinaryName $BinaryName
-    return
-}
-
-$candidateResult = Invoke-CandidateSmoke -RequestedManifestPath $CandidateManifestPath -RequestedInstallDir $InstallDir -RequestedReportPath $ReportPath
-$candidateReportPath = if ([string]::IsNullOrWhiteSpace($ReportPath)) {
-    Join-Path (Split-Path -Parent (Resolve-SmokeAbsolutePath $CandidateManifestPath)) "install-validation-report.json"
-} else {
-    Resolve-SmokeAbsolutePath $ReportPath
-}
-$reportParent = Split-Path -Parent $candidateReportPath
-if (-not (Test-Path -LiteralPath $reportParent -PathType Container)) {
-    Fail-Smoke "report parent does not exist: $reportParent"
-}
-[System.IO.File]::WriteAllText($candidateReportPath, ($candidateResult.report | ConvertTo-Json -Depth 12))
-if ($null -ne $candidateResult.error) {
-    throw $candidateResult.error
-}
-Write-Output "candidate install smoke passed for $InstallDir; report=$candidateReportPath"
+Invoke-HostedInstallSmoke @hostedArguments
