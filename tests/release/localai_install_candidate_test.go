@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,11 +41,11 @@ $tokens = $null
 [System.Management.Automation.Language.Parser]::ParseFile(%s, [ref]$tokens, [ref]$errors) | Out-Null
 if ($errors.Count -ne 0) { $errors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }; exit 1 }
 `, localAICandidatePowerShellLiteral(scriptPath)))
+	command.Env = localAICandidatePowerShellEnvironment(t, t.TempDir(), nil)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("parse candidate delivery script: %v\n%s", err, output)
 	}
 }
-
 func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -94,14 +95,7 @@ if ($result.exitCode -ne 23) { exit 2 }
 		localAICandidatePowerShellLiteral(stderrPath),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write command harness: %v", err)
-	}
-	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath)
-	command.Env = append(os.Environ(), "LOCALAI_ARGUMENT_RECORD="+recordPath)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("run candidate command helper: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, append(os.Environ(), "LOCALAI_ARGUMENT_RECORD="+recordPath), "")
 
 	var gotArguments []string
 	readJSONFile(t, recordPath, &gotArguments)
@@ -141,7 +135,6 @@ if ($result.exitCode -ne 23) { exit 2 }
 		t.Fatalf("retained output hashes are missing: %#v", result)
 	}
 }
-
 func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
@@ -151,13 +144,13 @@ func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
 	childPIDPath := filepath.Join(tempDir, "child.pid")
 	childPath := filepath.Join(tempDir, "child.ps1")
 	parentPath := filepath.Join(tempDir, "parent.ps1")
-	if err := os.WriteFile(childPath, []byte(`while ($true) { Start-Sleep -Milliseconds 100 }`), 0o600); err != nil {
+	if err := os.WriteFile(childPath, []byte(`[System.Threading.ManualResetEvent]::new($false).WaitOne()`), 0o600); err != nil {
 		t.Fatalf("write hanging child: %v", err)
 	}
 	parent := fmt.Sprintf(`
 $child = Start-Process -FilePath %s -ArgumentList @('-NoProfile', '-NonInteractive', '-File', %s) -PassThru
 [System.IO.File]::WriteAllText(%s, [string]$child.Id)
-while ($true) { Start-Sleep -Milliseconds 100 }
+[System.Threading.ManualResetEvent]::new($false).WaitOne()
 `,
 		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
 		localAICandidatePowerShellLiteral(childPath),
@@ -184,13 +177,8 @@ if (-not $result.timedOut -or $result.exitCode -ne 124) { exit 2 }
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write deadline harness: %v", err)
-	}
 	started := time.Now()
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("run command deadline harness: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	if elapsed := time.Since(started); elapsed > 15*time.Second {
 		t.Fatalf("deadline helper took %s, want at most 15s", elapsed)
 	}
@@ -202,20 +190,13 @@ if (-not $result.timedOut -or $result.exitCode -ne 124) { exit 2 }
 	if err != nil {
 		t.Fatalf("parse hanging child PID: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		check := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command",
-			fmt.Sprintf("if (Get-Process -Id %d -ErrorAction SilentlyContinue) { exit 1 }", childPID))
-		if err := check.Run(); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("hanging child process %d survived command deadline", childPID)
-		}
-		time.Sleep(50 * time.Millisecond)
+	check := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command",
+		fmt.Sprintf("if (Get-Process -Id %d -ErrorAction SilentlyContinue) { exit 1 }", childPID))
+	check.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
+	if output, err := check.CombinedOutput(); err != nil {
+		t.Fatalf("hanging child process %d survived command deadline: %v\n%s", childPID, err, output)
 	}
 }
-
 func TestLocalAICandidateCommandBoundsRetainedOutput(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -245,12 +226,7 @@ if (-not $result.outputLimitExceeded -or $result.exitCode -ne 125) { exit 2 }
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "stderr.log")),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write output-limit harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("run output-limit harness: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	info, err := os.Stat(stdoutPath)
 	if err != nil {
 		t.Fatalf("stat retained output: %v", err)
@@ -270,7 +246,85 @@ if (-not $result.outputLimitExceeded -or $result.exitCode -ne 125) { exit 2 }
 		t.Fatalf("bounded output evidence = %#v", result)
 	}
 }
-
+func TestLocalAICandidateModelActivityFailsClosed(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	modelRoot := filepath.Join(tempDir, "model-case")
+	backendRoot := filepath.Join(tempDir, "backend-case")
+	modelEvidencePath := filepath.Join(tempDir, "model-runtime.jsonl")
+	backendEvidencePath := filepath.Join(tempDir, "backend-runtime.jsonl")
+	for _, directory := range []string{
+		filepath.Join(modelRoot, "models"), filepath.Join(modelRoot, "hf"), filepath.Join(modelRoot, "cache"),
+		filepath.Join(backendRoot, "models"), filepath.Join(backendRoot, "hf"), filepath.Join(backendRoot, "cache"),
+	} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create activity fixture root: %v", err)
+		}
+	}
+	harnessPath := filepath.Join(tempDir, "activity.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$modelPaths = @(%s, %s, %s); $modelBefore = @(
+    Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
+[System.IO.File]::WriteAllBytes((Join-Path $modelPaths[2] "download.bin"), [byte[]](65, 66, 67)); $modelAfter = @(
+    Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
+$modelActivity = Get-SmokeModelActivity -Before $modelBefore -After $modelAfter -Commands @([pscustomobject]@{ arguments = @("models", "invoke", "llm") }) -RuntimeEvidencePath %s; $modelRejected = $false
+try { Assert-SmokeNoModelActivity $modelActivity } catch { $modelRejected = $true }
+if ($modelActivity.modelCalls -ne 1 -or $modelActivity.modelBackendDownloadBytes -ne 3 -or -not $modelRejected) { exit 2 }
+$backendPaths = @(%s, %s, %s); $backendBefore = @(
+    Get-SmokeActivitySnapshot models $backendPaths[0]; Get-SmokeActivitySnapshot hf $backendPaths[1]; Get-SmokeActivitySnapshot cache $backendPaths[2])
+[System.IO.File]::WriteAllText(%s, '{"kind":"MANAGED_CHILD","phase":"PROCESS_STARTED"}' + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)); $backendAfter = @(
+    Get-SmokeActivitySnapshot models $backendPaths[0]; Get-SmokeActivitySnapshot hf $backendPaths[1]; Get-SmokeActivitySnapshot cache $backendPaths[2])
+$backendActivity = Get-SmokeModelActivity -Before $backendBefore -After $backendAfter -Commands @() -RuntimeEvidencePath %s; $backendRejected = $false
+try { Assert-SmokeNoModelActivity $backendActivity } catch { $backendRejected = $true }
+if ($backendActivity.backendProcessStarts -ne 1 -or -not $backendRejected) { exit 3 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "models")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "hf")),
+		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "cache")),
+		localAICandidatePowerShellLiteral(modelEvidencePath),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "models")),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "hf")),
+		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "cache")),
+		localAICandidatePowerShellLiteral(backendEvidencePath),
+		localAICandidatePowerShellLiteral(backendEvidencePath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+func TestLocalAICandidateFinalizationRetainsFailureReport(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	outputDir := filepath.Join(tempDir, "candidate-output")
+	reportPath := filepath.Join(outputDir, "candidate-report.json")
+	harnessPath := filepath.Join(tempDir, "finalization.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$report = [ordered]@{ status = "PASS"; error = ""; artifacts = @([ordered]@{ role = "missing-artifact"; file = "missing.zip"; bytes = 3; sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }); cleanup = [ordered]@{ status = "PASS" } }
+$result = Finalize-SmokeCandidateReport -OutputDirectory %s -ReportPath %s -Report $report -Failure $null
+if ($null -eq $result.failure -or $result.report.status -ne "FAIL" -or $result.report.cleanup.status -ne "FAIL" -or $result.report.cleanup.retainedEvidenceHashesStable) { exit 2 }
+$digestPath = Join-Path %s "candidate-report.sha256"; $hasher = [System.Security.Cryptography.SHA256]::Create()
+$reportHash = [System.BitConverter]::ToString($hasher.ComputeHash([System.IO.File]::ReadAllBytes(%s))).Replace("-", "").ToLowerInvariant(); $hasher.Dispose()
+$digestHash = (Get-Content -LiteralPath $digestPath -Raw).Trim().Split(' ')[0]
+if (-not (Test-Path -LiteralPath %s -PathType Leaf) -or -not (Test-Path -LiteralPath $digestPath -PathType Leaf) -or $reportHash -cne $digestHash) { exit 3 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(reportPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
 func TestLocalAICandidateRootsRejectOverlapAndReparseAncestry(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -353,14 +407,8 @@ foreach ($case in $rootCases) {
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "install")),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "output", "report.json")),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write path-safety harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("validate candidate roots: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 }
-
 func TestLocalAICandidateCleanupPreservesSharedDependencyCache(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -394,12 +442,7 @@ Remove-SmokeCandidateWork -WorkDirectory %s -DependencyJunctionPath %s
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(junctionDir),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write cleanup harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("clean candidate work: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
 		t.Fatalf("candidate work directory remains after cleanup: %v", err)
 	}
@@ -408,7 +451,6 @@ Remove-SmokeCandidateWork -WorkDirectory %s -DependencyJunctionPath %s
 		t.Fatalf("shared dependency cache was modified: %v %q", err, contents)
 	}
 }
-
 func TestLocalAICandidateSourceIdentityComesFromRuntimeInput(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -433,12 +475,7 @@ Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository %s | ConvertTo
 		localAICandidatePowerShellLiteral(repository),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write source identity harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("resolve candidate source identity: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	var identity struct {
 		Repository string `json:"repository"`
 		Commit     string `json:"commit"`
@@ -462,12 +499,13 @@ Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository 'https://examp
 	if err := os.WriteFile(badHarnessPath, []byte(badHarness), 0o600); err != nil {
 		t.Fatalf("write rejected source identity harness: %v", err)
 	}
-	output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", badHarnessPath).CombinedOutput()
+	badCommand := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", badHarnessPath)
+	badCommand.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
+	output, err := badCommand.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "candidate source origin") {
 		t.Fatalf("mismatched repository result = %v\n%s", err, output)
 	}
 }
-
 func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -502,14 +540,8 @@ if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retai
 		localAICandidatePowerShellLiteral(cloneDir),
 		localAICandidatePowerShellLiteral(cloneDir),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write clone harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("capture git clone progress: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 }
-
 func localAICandidateRunGit(t *testing.T, directory string, arguments ...string) {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
@@ -517,7 +549,6 @@ func localAICandidateRunGit(t *testing.T, directory string, arguments ...string)
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
 }
-
 func TestLocalAICandidateCopiesNativeToolToShortPath(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
@@ -555,12 +586,7 @@ if ($result.exitCode -ne 0 -or $result.stdout.Trim() -cne %s) { throw "short nat
 		localAICandidatePowerShellLiteral(stderrPath),
 		localAICandidatePowerShellLiteral(localAICandidateNativeToolVersion),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write native-tool harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("copy and launch short native tool: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	if info, err := os.Stat(destinationPath); err != nil || info.Size() != localAICandidateNativeToolBytes {
 		t.Fatalf("short native tool = %v, want %d bytes", err, localAICandidateNativeToolBytes)
 	}
@@ -568,7 +594,6 @@ if ($result.exitCode -ne 0 -or $result.stdout.Trim() -cne %s) { throw "short nat
 		t.Fatalf("short native tool path length = %d, want at most 220", destinationPathLength)
 	}
 }
-
 func TestLocalAICandidateWorkAccountingSkipsLinkedDependencyTree(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -606,12 +631,7 @@ Get-SmokeDirectoryBytes %s | Set-Content -LiteralPath %s -Encoding ASCII
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write work accounting harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("measure candidate work directory: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	contents, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatalf("read measured work bytes: %v", err)
@@ -624,7 +644,6 @@ Get-SmokeDirectoryBytes %s | Set-Content -LiteralPath %s -Encoding ASCII
 		t.Fatalf("measured work bytes = %d, want only local bytes %d", got, len(localBytes))
 	}
 }
-
 func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
@@ -641,7 +660,12 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("locate Go for build-info inspection: %v", err)
 	}
-	versionOutput, err := exec.Command(binaryPath, "--version").CombinedOutput()
+	tempDir := t.TempDir()
+	versionRoot, isolatedEnvironment := localAICandidatePrepareIsolatedEnvironment(t, tempDir)
+	versionCommand := exec.Command(binaryPath, "--version")
+	versionCommand.Dir = versionRoot
+	versionCommand.Env = isolatedEnvironment
+	versionOutput, err := versionCommand.CombinedOutput()
 	if err != nil {
 		t.Fatalf("read prebuilt candidate version: %v\n%s", err, versionOutput)
 	}
@@ -654,7 +678,6 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 		t.Fatal("prebuilt candidate returned an invalid archive version")
 	}
 
-	tempDir := t.TempDir()
 	candidateDir := filepath.Join(tempDir, "candidate")
 	stageDir := filepath.Join(tempDir, "stage")
 	workDir := filepath.Join(tempDir, "work")
@@ -704,25 +727,31 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
-	if err := os.WriteFile(harnessPath, []byte(harness), 0o600); err != nil {
-		t.Fatalf("write install harness: %v", err)
-	}
-	if output, err := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", harnessPath).CombinedOutput(); err != nil {
-		t.Fatalf("run public candidate install smoke: %v\n%s", err, output)
-	}
+	runLocalAICandidateHarness(t, harnessPath, harness, isolatedEnvironment, tempDir)
 	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version)
 }
-
 func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version string) {
 	t.Helper()
 	var result struct {
 		Status                    string `json:"status"`
 		ModelCalls                int    `json:"modelCalls"`
 		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
-		PathResolution            string `json:"pathResolution"`
-		Version                   string `json:"version"`
-		ExpectedVersion           string `json:"expectedVersion"`
-		ExecutableBuildInfo       struct {
+		Activity                  struct {
+			Observed                  bool     `json:"observed"`
+			CacheBytesBefore          int64    `json:"cacheBytesBefore"`
+			CacheBytesAfter           int64    `json:"cacheBytesAfter"`
+			CacheBytesDelta           int64    `json:"cacheBytesDelta"`
+			ModelCalls                int      `json:"modelCalls"`
+			ModelBackendDownloadBytes int64    `json:"modelBackendDownloadBytes"`
+			RuntimeEvidenceObserved   bool     `json:"runtimeEvidenceObserved"`
+			RuntimeEvidenceRecords    int      `json:"runtimeEvidenceRecords"`
+			BackendProcessStarts      int      `json:"backendProcessStarts"`
+			CacheRoots                []string `json:"cacheRoots"`
+		} `json:"activity"`
+		PathResolution      string `json:"pathResolution"`
+		Version             string `json:"version"`
+		ExpectedVersion     string `json:"expectedVersion"`
+		ExecutableBuildInfo struct {
 			SourceRevision string `json:"sourceRevision"`
 			VCSModified    bool   `json:"vcsModified"`
 		} `json:"executableBuildInfo"`
@@ -732,7 +761,13 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 		} `json:"commands"`
 	}
 	readJSONFile(t, resultPath, &result)
-	if result.Status != "PASS" || result.ModelCalls != 0 || result.ModelBackendDownloadBytes != 0 {
+	if result.Status != "PASS" || !result.Activity.Observed ||
+		result.ModelCalls != result.Activity.ModelCalls ||
+		result.ModelBackendDownloadBytes != result.Activity.ModelBackendDownloadBytes ||
+		result.Activity.ModelCalls != 0 || result.Activity.ModelBackendDownloadBytes != 0 ||
+		result.Activity.CacheBytesBefore != 0 || result.Activity.CacheBytesAfter != 0 ||
+		result.Activity.CacheBytesDelta != 0 || result.Activity.RuntimeEvidenceRecords != 0 ||
+		result.Activity.BackendProcessStarts != 0 || len(result.Activity.CacheRoots) != 3 {
 		t.Fatalf("public candidate install result = %#v", result)
 	}
 	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
@@ -768,12 +803,10 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 		t.Fatalf("install directory remains after smoke: %v", err)
 	}
 }
-
 func localAICandidateScriptPath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(testutil.MustRepoRoot(t), "scripts", "release", "smoke-install.ps1")
 }
-
 func localAICandidatePowerShell(t *testing.T) string {
 	t.Helper()
 	path, err := exec.LookPath("powershell.exe")
@@ -782,11 +815,95 @@ func localAICandidatePowerShell(t *testing.T) string {
 	}
 	return path
 }
-
+func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatalf("write PowerShell harness: %v", err)
+	}
+	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-File", path)
+	taskRoot := directory
+	if taskRoot == "" {
+		taskRoot = filepath.Dir(path)
+	}
+	command.Env = localAICandidatePowerShellEnvironment(t, taskRoot, environment)
+	if directory != "" {
+		command.Dir = directory
+	}
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("run PowerShell harness: %v\n%s", err, output)
+	}
+}
+func localAICandidatePowerShellEnvironment(t *testing.T, root string, base []string) []string {
+	t.Helper()
+	moduleRoot := filepath.Join(root, "module-analysis-cache")
+	if err := os.MkdirAll(moduleRoot, 0o700); err != nil {
+		t.Fatalf("create module analysis cache root: %v", err)
+	}
+	if base == nil {
+		base = os.Environ()
+	}
+	environment := slices.DeleteFunc(base, func(entry string) bool {
+		name, _, ok := strings.Cut(entry, "=")
+		return ok && strings.EqualFold(name, "PSModuleAnalysisCachePath")
+	})
+	return append(environment, "PSModuleAnalysisCachePath="+filepath.Join(moduleRoot, "ModuleAnalysisCache"))
+}
+func localAICandidatePrepareIsolatedEnvironment(t *testing.T, root string) (string, []string) {
+	t.Helper()
+	versionRoot := filepath.Join(root, "version-probe")
+	for _, directory := range []string{versionRoot, filepath.Join(root, "profile"), filepath.Join(root, "localappdata"), filepath.Join(root, "appdata"), filepath.Join(root, "temp"), filepath.Join(root, "config"), filepath.Join(root, "cache"), filepath.Join(root, "module-analysis-cache")} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create isolated probe directory: %v", err)
+		}
+	}
+	return versionRoot, localAICandidateIsolatedEnvironment(root)
+}
+func localAICandidateIsolatedEnvironment(root string) []string {
+	profile := filepath.Join(root, "profile")
+	volume := filepath.VolumeName(profile)
+	homePath := strings.TrimPrefix(profile, volume)
+	if homePath == "" {
+		homePath = string(filepath.Separator)
+	} else if !strings.HasPrefix(homePath, string(filepath.Separator)) {
+		homePath = string(filepath.Separator) + homePath
+	}
+	overrides := []string{
+		"HOME=" + profile,
+		"USERPROFILE=" + profile,
+		"HOMEDRIVE=" + volume,
+		"HOMEPATH=" + homePath,
+		"APPDATA=" + filepath.Join(root, "appdata"),
+		"LOCALAPPDATA=" + filepath.Join(root, "localappdata"),
+		"TEMP=" + filepath.Join(root, "temp"),
+		"TMP=" + filepath.Join(root, "temp"),
+		"XDG_CONFIG_HOME=" + filepath.Join(root, "config"),
+		"XDG_CACHE_HOME=" + filepath.Join(root, "cache"),
+		"PSModuleAnalysisCachePath=" + filepath.Join(root, "module-analysis-cache", "ModuleAnalysisCache"),
+		"INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE=" + filepath.Join(root, "model-runtime-evidence.jsonl"),
+		"HF_HUB_DISABLE_TELEMETRY=1",
+	}
+	overrideNames := make(map[string]struct{}, len(overrides))
+	for _, override := range overrides {
+		name, _, ok := strings.Cut(override, "=")
+		if ok {
+			overrideNames[strings.ToUpper(name)] = struct{}{}
+		}
+	}
+	environment := make([]string, 0, len(os.Environ())+len(overrides))
+	for _, entry := range os.Environ() {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if _, overridden := overrideNames[strings.ToUpper(name)]; !overridden {
+			environment = append(environment, entry)
+		}
+	}
+	return append(environment, overrides...)
+}
 func localAICandidatePowerShellLiteral(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
-
 func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
 	t.Helper()
 	info, err := buildinfo.ReadFile(binaryPath)
@@ -804,7 +921,6 @@ func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
 		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, localAICandidateSourceCommit)
 	}
 }
-
 func localAICandidateGit(t *testing.T, directory string, arguments ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
@@ -814,7 +930,6 @@ func localAICandidateGit(t *testing.T, directory string, arguments ...string) st
 	}
 	return strings.TrimSpace(string(output))
 }
-
 func readJSONFile(t *testing.T, path string, target any) {
 	t.Helper()
 	contents, err := os.ReadFile(path)

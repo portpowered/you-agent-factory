@@ -32,6 +32,218 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $SmokeMaximumTaskRootPathLength = 220
 
+if ($null -eq ([System.Management.Automation.PSTypeName]::new("InfiniteYou.ReleaseSmoke.ProcessRunner").Type)) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace InfiniteYou.ReleaseSmoke
+{
+    public sealed class CommandResult
+    {
+        public int ExitCode { get; set; }
+        public bool TimedOut { get; set; }
+        public bool OutputLimitExceeded { get; set; }
+    }
+
+    internal sealed class CaptureState
+    {
+        public long TotalBytes;
+        public int LimitExceeded;
+    }
+
+    public static class ProcessRunner
+    {
+        public static CommandResult Run(
+            string filePath,
+            string[] arguments,
+            string workingDirectory,
+            string stdoutPath,
+            string stderrPath,
+            int timeoutSeconds,
+            int outputMaximumBytes)
+        {
+            if (timeoutSeconds <= 0) throw new ArgumentOutOfRangeException("timeoutSeconds");
+            if (outputMaximumBytes <= 0) throw new ArgumentOutOfRangeException("outputMaximumBytes");
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = filePath,
+                Arguments = BuildArguments(arguments),
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            var process = new Process { StartInfo = startInfo };
+            var state = new CaptureState();
+            var terminationRequested = 0;
+            try
+            {
+                if (!process.Start()) throw new InvalidOperationException("process did not start");
+                Action stop = delegate
+                {
+                    if (Interlocked.Exchange(ref terminationRequested, 1) == 0)
+                    {
+                        KillProcessTree(process);
+                    }
+                };
+                Task stdoutTask = CaptureAsync(process.StandardOutput.BaseStream, stdoutPath, outputMaximumBytes, state, stop);
+                Task stderrTask = CaptureAsync(process.StandardError.BaseStream, stderrPath, outputMaximumBytes, state, stop);
+                Task processTask = Task.Run(delegate { process.WaitForExit(); });
+                Task all = Task.WhenAll(stdoutTask, stderrTask, processTask);
+                long timeoutMilliseconds = (long)timeoutSeconds * 1000L;
+                int waitMilliseconds = timeoutMilliseconds >= Int32.MaxValue ? Int32.MaxValue : (int)timeoutMilliseconds;
+                bool completed = all.Wait(waitMilliseconds);
+                bool timedOut = !completed;
+                if (timedOut)
+                {
+                    stop();
+                    try { all.Wait(10000); } catch (AggregateException) { }
+                }
+                if (!all.IsCompleted)
+                {
+                    throw new TimeoutException("process did not terminate after the bounded kill wait");
+                }
+                all.GetAwaiter().GetResult();
+                int exitCode = process.ExitCode;
+                bool outputLimitExceeded = Volatile.Read(ref state.LimitExceeded) != 0;
+                if (outputLimitExceeded) exitCode = 125;
+                else if (timedOut) exitCode = 124;
+                return new CommandResult
+                {
+                    ExitCode = exitCode,
+                    TimedOut = timedOut,
+                    OutputLimitExceeded = outputLimitExceeded
+                };
+            }
+            finally
+            {
+                try
+                {
+                    if (!process.HasExited) KillProcessTree(process);
+                }
+                catch (InvalidOperationException) { }
+                process.Dispose();
+            }
+        }
+
+        private static async Task CaptureAsync(
+            Stream input,
+            string path,
+            int maximumBytes,
+            CaptureState state,
+            Action limit)
+        {
+            using (var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite, 8192, true))
+            {
+                var buffer = new byte[8192];
+                long total = 0;
+                while (true)
+                {
+                    int read;
+                    try
+                    {
+                        read = await input.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        if (Volatile.Read(ref state.LimitExceeded) != 0) return;
+                        throw;
+                    }
+                    if (read == 0) return;
+                    long previous = total;
+                    total += read;
+                    Interlocked.Exchange(ref state.TotalBytes, total);
+                    long retain = Math.Min((long)read, Math.Max(0L, (long)maximumBytes - previous + 1L));
+                    if (retain > 0) await output.WriteAsync(buffer, 0, (int)retain).ConfigureAwait(false);
+                    if (total > maximumBytes)
+                    {
+                        Interlocked.Exchange(ref state.LimitExceeded, 1);
+                        limit();
+                        return;
+                    }
+                }
+            }
+        }
+
+        private static void KillProcessTree(Process process)
+        {
+            try
+            {
+                string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
+                if (String.IsNullOrEmpty(systemRoot)) systemRoot = "C:\\Windows";
+                var killer = Process.Start(new ProcessStartInfo
+                {
+                    FileName = Path.Combine(systemRoot, "System32", "taskkill.exe"),
+                    Arguments = "/PID " + process.Id.ToString() + " /T /F",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                if (killer != null)
+                {
+                    try { killer.WaitForExit(5000); } finally { killer.Dispose(); }
+                }
+            }
+            catch (Exception) { }
+            try
+            {
+                if (!process.HasExited) process.Kill();
+            }
+            catch (Exception) { }
+        }
+
+        private static string BuildArguments(string[] arguments)
+        {
+            var values = new string[arguments == null ? 0 : arguments.Length];
+            for (int index = 0; index < values.Length; index++) values[index] = QuoteArgument(arguments[index]);
+            return String.Join(" ", values);
+        }
+
+        private static string QuoteArgument(string argument)
+        {
+            if (argument == null) argument = String.Empty;
+            bool needsQuotes = argument.Length == 0;
+            for (int index = 0; index < argument.Length && !needsQuotes; index++)
+            {
+                needsQuotes = Char.IsWhiteSpace(argument[index]) || argument[index] == '"';
+            }
+            if (!needsQuotes) return argument;
+            var result = new StringBuilder();
+            result.Append('"');
+            int slashes = 0;
+            foreach (char value in argument)
+            {
+                if (value == '\\')
+                {
+                    slashes++;
+                    continue;
+                }
+                if (value == '"')
+                {
+                    result.Append('\\', slashes * 2 + 1);
+                    result.Append('"');
+                    slashes = 0;
+                    continue;
+                }
+                result.Append('\\', slashes);
+                result.Append(value);
+                slashes = 0;
+            }
+            result.Append('\\', slashes * 2);
+            result.Append('"');
+            return result.ToString();
+        }
+    }
+}
+'@
+}
+
 function Fail-Smoke {
     param([string]$Message)
     throw "install smoke: $Message"
@@ -194,13 +406,17 @@ function Copy-SmokeNativeToolToShortPath {
 }
 
 function Get-SmokeDirectoryBytes {
-    param([string]$Path)
+    param([string]$Path, [switch]$RejectReparsePoint)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return [int64]0 }
     $total = [int64]0
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
     $pending.Push((Resolve-SmokePath $Path))
     while ($pending.Count -gt 0) {
         foreach ($item in @(Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop)) {
-            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                if ($RejectReparsePoint) { Fail-Smoke "directory byte root contains a reparse point: $($item.FullName)" }
+                continue
+            }
             if ($item.PSIsContainer) { $pending.Push($item.FullName) } else { $total += [int64]$item.Length }
         }
     }
@@ -317,104 +533,28 @@ function Invoke-CandidateCommand {
     }
     [System.IO.File]::WriteAllBytes($stdoutPath, [byte[]]@())
     [System.IO.File]::WriteAllBytes($stderrPath, [byte[]]@())
-    $pidPath = Join-Path ([System.IO.Path]::GetDirectoryName($stdoutPath)) ("command-" + [System.Guid]::NewGuid().ToString("N") + ".pid")
-    $payload = [pscustomobject]@{
-        FilePath = $FilePath
-        Arguments = @($ArgumentList)
-        WorkingDirectory = $workingDirectory
-        StdoutPath = $stdoutPath
-        StderrPath = $stderrPath
-        PidPath = $pidPath
-    }
-    $job = $null
-    $exitCode = 125
-    $timedOut = $false
-    $outputLimitExceeded = $false
-    $terminationReason = ""
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-        $job = Start-Job -ScriptBlock {
-            param($Command)
-            $ErrorActionPreference = "Continue"
-            Set-Location -LiteralPath $Command.WorkingDirectory
-            [System.IO.File]::WriteAllText($Command.PidPath, [string]$PID, [System.Text.Encoding]::ASCII)
-            $arguments = @($Command.Arguments)
-            $commandPath = [string]$Command.FilePath
-            $commandStdout = [string]$Command.StdoutPath
-            $commandStderr = [string]$Command.StderrPath
-            $commandExitCode = 125
-            & $commandPath @arguments 1> $commandStdout 2> $commandStderr
-            if ($null -ne $LASTEXITCODE) { $commandExitCode = [int]$LASTEXITCODE }
-            return $commandExitCode
-        } -ArgumentList $payload
-        $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-        while ($job.State -notin @("Completed", "Failed", "Stopped")) {
-            Wait-Job -Job $job -Timeout 1 | Out-Null
-            foreach ($path in @($stdoutPath, $stderrPath)) {
-                $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-                if ($null -ne $item -and [int64]$item.Length -gt $OutputMaximumBytes) {
-                    $outputLimitExceeded = $true
-                    $terminationReason = "output exceeded $OutputMaximumBytes bytes"
-                    break
-                }
-            }
-            if ($outputLimitExceeded) { break }
-            if ([DateTime]::UtcNow -ge $deadline) {
-                $timedOut = $true
-                $terminationReason = "deadline of $TimeoutSeconds seconds exceeded"
-                break
-            }
-        }
-        foreach ($path in @($stdoutPath, $stderrPath)) {
-            $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-            if ($null -ne $item -and [int64]$item.Length -gt $OutputMaximumBytes) {
-                $outputLimitExceeded = $true
-                $terminationReason = "output exceeded $OutputMaximumBytes bytes"
-                break
-            }
-        }
-        if ($timedOut -or $outputLimitExceeded) {
-            $jobProcessID = 0
-            if (Test-Path -LiteralPath $pidPath -PathType Leaf) {
-                [void][int]::TryParse(([System.IO.File]::ReadAllText($pidPath).Trim()), [ref]$jobProcessID)
-            }
-            if ($jobProcessID -gt 0 -and $job.State -notin @("Completed", "Failed", "Stopped")) {
-                $taskkill = Join-Path $env:SystemRoot "System32\taskkill.exe"
-                $previousErrorActionPreference = $ErrorActionPreference
-                try {
-                    $ErrorActionPreference = "Continue"
-                    & $taskkill /PID $jobProcessID /T /F 1>$null 2>$null
-                } finally {
-                    $ErrorActionPreference = $previousErrorActionPreference
-                }
-            }
-            Wait-Job -Job $job -Timeout 10 | Out-Null
-            if ($job.State -notin @("Completed", "Failed", "Stopped")) {
-                Stop-Job -Job $job -ErrorAction SilentlyContinue
-            }
-            $exitCode = if ($timedOut) { 124 } else { 125 }
-        } elseif ($job.State -eq "Completed") {
-            $jobOutput = @(Receive-Job -Job $job -ErrorAction SilentlyContinue)
-            if ($jobOutput.Count -gt 0) { $exitCode = [int]$jobOutput[-1] }
-        } else {
-            $terminationReason = "command job ended in state $($job.State)"
-        }
-    } finally {
-        if ($null -ne $job) {
-            if ($job.State -notin @("Completed", "Failed", "Stopped")) { Stop-Job -Job $job -ErrorAction SilentlyContinue }
-            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        }
-        Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+        $commandResult = [InfiniteYou.ReleaseSmoke.ProcessRunner]::Run(
+            $FilePath, @($ArgumentList), $workingDirectory, $stdoutPath, $stderrPath,
+            $TimeoutSeconds, $OutputMaximumBytes)
     }
-    $stopwatch.Stop()
+    finally { $stopwatch.Stop() }
     $stdout = Protect-SmokeOutput $stdoutPath $OutputMaximumBytes
     $stderr = Protect-SmokeOutput $stderrPath $OutputMaximumBytes
+    $terminationReason = if ($commandResult.TimedOut) {
+        "deadline of $TimeoutSeconds seconds exceeded"
+    } elseif ($commandResult.OutputLimitExceeded) {
+        "output exceeded $OutputMaximumBytes bytes"
+    } else {
+        ""
+    }
     return [pscustomobject][ordered]@{
         file = $FilePath
         arguments = @($ArgumentList)
-        exitCode = $exitCode
-        timedOut = $timedOut
-        outputLimitExceeded = $outputLimitExceeded
+        exitCode = [int]$commandResult.ExitCode
+        timedOut = [bool]$commandResult.TimedOut
+        outputLimitExceeded = [bool]$commandResult.OutputLimitExceeded
         terminationReason = $terminationReason
         elapsedMilliseconds = [int64][Math]::Max(0, $stopwatch.ElapsedMilliseconds)
         stdout = $stdout.text
@@ -512,17 +652,159 @@ function Get-SmokeAvailablePort {
     try { $listener.Start(); return [int]$listener.LocalEndpoint.Port } finally { $listener.Stop() }
 }
 
+function Get-SmokeActivitySnapshot {
+    param([string]$Name, [string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $item = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [pscustomobject][ordered]@{
+            name = $Name
+            path = $resolved
+            exists = $false
+            bytes = [int64]0
+        }
+    }
+    if (-not $item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "$Name activity root is not a regular directory: $resolved"
+    }
+    return [pscustomobject][ordered]@{
+        name = $Name
+        path = $resolved
+        exists = $true
+        bytes = [int64](Get-SmokeDirectoryBytes -Path $resolved -RejectReparsePoint)
+    }
+}
+
+function Test-SmokeModelInvokeArguments {
+    param([string[]]$Arguments)
+    $values = @($Arguments)
+    for ($index = 0; $index -lt ($values.Count - 1); $index++) {
+        if ([string]$values[$index] -ieq "models" -and [string]$values[$index + 1] -ieq "invoke") {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-SmokeRuntimeActivity {
+    param([string]$Path)
+    $resolved = Resolve-SmokePath $Path
+    $item = Get-Item -LiteralPath $resolved -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return [pscustomobject][ordered]@{
+            path = $resolved
+            exists = $false
+            bytes = [int64]0
+            records = 0
+            backendProcessStarts = 0
+        }
+    }
+    [void](Assert-SmokeRegularFile "model runtime evidence" $resolved)
+    $records = 0
+    $backendProcessStarts = 0
+    foreach ($line in [System.IO.File]::ReadAllLines($resolved)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try {
+            $record = $line | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Fail-Smoke "model runtime evidence contains invalid JSON: $($_.Exception.Message)"
+        }
+        if ($null -eq $record) { Fail-Smoke "model runtime evidence contains an empty record" }
+        $records++
+        $kindProperty = $record.PSObject.Properties["kind"]
+        $phaseProperty = $record.PSObject.Properties["phase"]
+        $kind = if ($null -eq $kindProperty) { "" } else { [string]$kindProperty.Value }
+        $phase = if ($null -eq $phaseProperty) { "" } else { [string]$phaseProperty.Value }
+        if ($kind -eq "MANAGED_CHILD" -and $phase -eq "PROCESS_STARTED") { $backendProcessStarts++ }
+    }
+    return [pscustomobject][ordered]@{
+        path = $resolved
+        exists = $true
+        bytes = [int64]$item.Length
+        records = [int]$records
+        backendProcessStarts = [int]$backendProcessStarts
+    }
+}
+
+function Get-SmokeModelActivity {
+    param(
+        [object[]]$Before,
+        [object[]]$After,
+        [object[]]$Commands,
+        [string]$RuntimeEvidencePath
+    )
+    $beforeSnapshots = @($Before)
+    $afterSnapshots = @($After)
+    if ($beforeSnapshots.Count -eq 0 -or $beforeSnapshots.Count -ne $afterSnapshots.Count) {
+        Fail-Smoke "model activity observation has incomplete cache boundaries"
+    }
+    $beforeBytes = [int64]0
+    $afterBytes = [int64]0
+    $cacheRoots = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($snapshot in $beforeSnapshots) { $beforeBytes += [int64]$snapshot.bytes }
+    foreach ($snapshot in $afterSnapshots) {
+        $afterBytes += [int64]$snapshot.bytes
+        [void]$cacheRoots.Add([string]$snapshot.path)
+    }
+    if ($afterBytes -lt $beforeBytes) {
+        Fail-Smoke "model activity cache bytes decreased during observation"
+    }
+    $modelInvokeCommands = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($command in @($Commands)) {
+        if (Test-SmokeModelInvokeArguments -Arguments @($command.arguments)) {
+            [void]$modelInvokeCommands.Add(([string[]]@($command.arguments) -join " "))
+        }
+    }
+    $runtime = Get-SmokeRuntimeActivity $RuntimeEvidencePath
+    $cacheDelta = [int64]($afterBytes - $beforeBytes)
+    return [pscustomobject][ordered]@{
+        observed = $true
+        cacheRoots = @($cacheRoots)
+        cacheBytesBefore = $beforeBytes
+        cacheBytesAfter = $afterBytes
+        cacheBytesDelta = $cacheDelta
+        modelCalls = [int]$modelInvokeCommands.Count
+        modelInvokeCommands = @($modelInvokeCommands)
+        modelBackendDownloadBytes = $cacheDelta
+        runtimeEvidencePath = $runtime.path
+        runtimeEvidenceObserved = [bool]$runtime.exists
+        runtimeEvidenceRecords = [int]$runtime.records
+        backendProcessStarts = [int]$runtime.backendProcessStarts
+    }
+}
+
+function Assert-SmokeNoModelActivity {
+    param([object]$Activity)
+    if ($null -eq $Activity -or -not [bool]$Activity.observed) {
+        Fail-Smoke "model activity observation was unavailable"
+    }
+    if ([int]$Activity.modelCalls -ne 0 -or
+        [int64]$Activity.modelBackendDownloadBytes -ne 0 -or
+        [int64]$Activity.cacheBytesAfter -ne 0 -or
+        [int]$Activity.runtimeEvidenceRecords -ne 0 -or
+        [int]$Activity.backendProcessStarts -ne 0) {
+        $details = $Activity | ConvertTo-Json -Compress -Depth 8
+        Fail-Smoke "unexpected model or backend activity was observed: $details"
+    }
+}
+
 function Start-CandidateFileServer {
     param([string]$InstallerPath, [string]$ArchivePath, [string]$ChecksumPath, [string]$Version, [string]$ReadyPath)
     $port = Get-SmokeAvailablePort
+    $eventName = "Infinite-You-Candidate-Ready-" + [System.Guid]::NewGuid().ToString("N")
+    $createdNew = $false
+    $readyEvent = [System.Threading.EventWaitHandle]::new(
+        $false, [System.Threading.EventResetMode]::ManualReset, $eventName, [ref]$createdNew)
     $job = Start-Job -ScriptBlock {
-        param($Port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath)
+        param($Port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath, $EventName)
         $ErrorActionPreference = "Stop"
         $listener = [System.Net.HttpListener]::new()
+        $ready = [System.Threading.EventWaitHandle]::OpenExisting($EventName)
         $listener.Prefixes.Add("http://127.0.0.1:$Port/")
         try {
             $listener.Start()
             [System.IO.File]::WriteAllText($ReadyPath, "ready")
+            [void]$ready.Set()
             $routes = @{
                 "/download/v$Version/install.ps1" = $InstallerPath
                 "/releases/download/v$Version/$([System.IO.Path]::GetFileName($ArchivePath))" = $ArchivePath
@@ -539,26 +821,29 @@ function Start-CandidateFileServer {
                 $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
                 $context.Response.Close()
             }
+        } catch {
+            try { [void]$ready.Set() } catch { }
+            throw
         } finally {
+            try { $ready.Close() } catch { }
             if ($listener.IsListening) { $listener.Stop() }
             $listener.Close()
         }
-    } -ArgumentList $port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath
-    $deadline = [DateTime]::UtcNow.AddSeconds(10)
-    while (-not (Test-Path -LiteralPath $ReadyPath -PathType Leaf) -and [DateTime]::UtcNow -lt $deadline) {
-        if ($job.State -in @("Failed", "Completed", "Stopped")) {
-            $details = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue | Out-String
-            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-            Fail-Smoke "candidate file server stopped before readiness: $details"
-        }
-        Start-Sleep -Milliseconds 25
+    } -ArgumentList $port, $InstallerPath, $ArchivePath, $ChecksumPath, $Version, $ReadyPath, $eventName
+    if (-not $readyEvent.WaitOne(10000)) {
+        $details = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue | Out-String
+        Stop-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        $readyEvent.Close()
+        Fail-Smoke "candidate file server did not become ready: $details"
     }
     if (-not (Test-Path -LiteralPath $ReadyPath -PathType Leaf)) {
         Stop-Job -Job $job -ErrorAction SilentlyContinue
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        Fail-Smoke "candidate file server did not become ready"
+        $readyEvent.Close()
+        Fail-Smoke "candidate file server signaled readiness without its marker"
     }
-    return [pscustomobject]@{ job = $job; port = $port; baseUrl = "http://127.0.0.1:$port" }
+    return [pscustomobject]@{ job = $job; readyEvent = $readyEvent; port = $port; baseUrl = "http://127.0.0.1:$port" }
 }
 
 function Stop-CandidateFileServer {
@@ -570,6 +855,7 @@ function Stop-CandidateFileServer {
     } finally {
         if ($Server.job.State -notin @("Completed", "Failed", "Stopped")) { Stop-Job -Job $Server.job -ErrorAction SilentlyContinue }
         Remove-Job -Job $Server.job -Force -ErrorAction SilentlyContinue
+        if ($null -ne $Server.readyEvent) { $Server.readyEvent.Close() }
     }
 }
 
@@ -600,7 +886,10 @@ function Invoke-InstalledCandidateSmoke {
     $pathRoot = Join-Path $smokeRoot "path"
     $modelsRoot = Join-Path $smokeRoot "models"
     $hfRoot = Join-Path $smokeRoot "hf"
-    foreach ($path in @($homeRoot, $profileRoot, $tempRoot, $pathRoot)) {
+    $cacheRoot = Join-Path $smokeRoot "cache"
+    $moduleAnalysisCacheRoot = Join-Path $smokeRoot "module-analysis-cache"
+    $runtimeEvidencePath = Join-Path $smokeRoot "model-runtime-evidence.jsonl"
+    foreach ($path in @($homeRoot, $profileRoot, $tempRoot, $pathRoot, $modelsRoot, $hfRoot, $cacheRoot, $moduleAnalysisCacheRoot)) {
         [void][System.IO.Directory]::CreateDirectory($path)
     }
     $readyPath = Join-Path $smokeRoot "server.ready"
@@ -610,7 +899,9 @@ function Invoke-InstalledCandidateSmoke {
         "TEMP", "TMP", "PATH", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
         "INFINITE_YOU_VERSION", "INFINITE_YOU_INSTALL_DIR", "INFINITE_YOU_INSTALL_OS",
         "INFINITE_YOU_INSTALL_ARCH", "INFINITE_YOU_INSTALL_BASE_URL",
-        "INFINITE_YOU_OMNIVOICE_CACHE_DIR", "HUGGINGFACE_HUB_CACHE", "HF_HOME"
+        "INFINITE_YOU_OMNIVOICE_CACHE_DIR", "HUGGINGFACE_HUB_CACHE", "HF_HOME",
+        "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE", "PSModuleAnalysisCachePath",
+        "HF_HUB_DISABLE_TELEMETRY"
     )
     $originalEnvironment = @{}
     foreach ($name in $environmentNames) {
@@ -633,7 +924,7 @@ function Invoke-InstalledCandidateSmoke {
         $env:HOMEDRIVE = $profileDrive.TrimEnd('\')
         $env:HOMEPATH = $profileRoot.Substring($profileDrive.Length - 1)
         $env:APPDATA = Join-Path $profileRoot "AppData\Roaming"
-        $env:LOCALAPPDATA = Join-Path $profileRoot "AppData\Local"
+        $env:LOCALAPPDATA = $cacheRoot
         $env:TEMP = $tempRoot
         $env:TMP = $tempRoot
         $env:PATH = $pathRoot
@@ -647,6 +938,15 @@ function Invoke-InstalledCandidateSmoke {
         $env:INFINITE_YOU_OMNIVOICE_CACHE_DIR = $modelsRoot
         $env:HUGGINGFACE_HUB_CACHE = $hfRoot
         $env:HF_HOME = $hfRoot
+        $env:INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE = $runtimeEvidencePath
+        $env:PSModuleAnalysisCachePath = Join-Path $moduleAnalysisCacheRoot "ModuleAnalysisCache"
+        $env:HF_HUB_DISABLE_TELEMETRY = "1"
+        $cacheRoots = @(
+            Get-SmokeActivitySnapshot "managed-model-cache" $modelsRoot
+            Get-SmokeActivitySnapshot "huggingface-backend-cache" $hfRoot
+            Get-SmokeActivitySnapshot "redirected-local-cache" $cacheRoot
+        )
+        $activityBefore = @($cacheRoots)
         $downloadedInstaller = Join-Path $smokeRoot "install.ps1"
         Invoke-WebRequest -Uri "$($server.baseUrl)/download/v$Version/install.ps1" -OutFile $downloadedInstaller -UseBasicParsing
         $installerLiteral = "'" + $downloadedInstaller.Replace("'", "''") + "'"
@@ -762,6 +1062,14 @@ function Invoke-InstalledCandidateSmoke {
                 Fail-Smoke "discovery wrote model or backend content under $path"
             }
         }
+        $activityAfter = @(
+            Get-SmokeActivitySnapshot "managed-model-cache" $modelsRoot
+            Get-SmokeActivitySnapshot "huggingface-backend-cache" $hfRoot
+            Get-SmokeActivitySnapshot "redirected-local-cache" $cacheRoot
+        )
+        $activity = Get-SmokeModelActivity -Before $activityBefore -After $activityAfter `
+            -Commands @($commands | ForEach-Object { $_ }) -RuntimeEvidencePath $runtimeEvidencePath
+        Assert-SmokeNoModelActivity $activity
         return [pscustomobject][ordered]@{
             status = "PASS"
             installedExecutable = $installedEvidence
@@ -770,8 +1078,9 @@ function Invoke-InstalledCandidateSmoke {
             expectedVersion = $expectedVersion
             executableBuildInfo = $buildInfo
             commands = @($commands | ForEach-Object { $_ })
-            modelCalls = 0
-            modelBackendDownloadBytes = 0
+            activity = $activity
+            modelCalls = [int]$activity.modelCalls
+            modelBackendDownloadBytes = [int64]$activity.modelBackendDownloadBytes
         }
     } finally {
         Stop-CandidateFileServer $server
@@ -780,6 +1089,50 @@ function Invoke-InstalledCandidateSmoke {
         }
         Remove-SmokeOwnedTree "install directory" $installDir
     }
+}
+
+function Finalize-SmokeCandidateReport {
+    param(
+        [string]$OutputDirectory,
+        [string]$ReportPath,
+        [System.Collections.IDictionary]$Report,
+        [System.Exception]$Failure
+    )
+    if ($Report.cleanup.status -eq "PASS" -and @($Report.artifacts).Count -gt 0) {
+        $retainedEvidenceStable = $true
+        $retainedEvidenceErrors = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($artifact in @($Report.artifacts)) {
+            try {
+                $artifactPath = Join-Path $OutputDirectory ([string]$artifact.file)
+                $currentEvidence = Get-SmokeFileEvidence ([string]$artifact.role) $artifactPath
+                if ($currentEvidence.bytes -ne [int64]$artifact.bytes -or
+                    $currentEvidence.sha256 -cne [string]$artifact.sha256) {
+                    $retainedEvidenceStable = $false
+                    [void]$retainedEvidenceErrors.Add("$($artifact.role) changed after retention")
+                }
+            } catch {
+                $retainedEvidenceStable = $false
+                [void]$retainedEvidenceErrors.Add("$($artifact.role): $($_.Exception.Message)")
+            }
+        }
+        $Report.cleanup.retainedEvidenceHashesStable = $retainedEvidenceStable
+        if (-not $retainedEvidenceStable) {
+            $Report.cleanup.status = "FAIL"
+            $Report.cleanup.retainedEvidenceError = $retainedEvidenceErrors -join "; "
+            if ($null -eq $Failure) {
+                $Failure = [System.Exception]::new("retained candidate evidence was missing or changed during install smoke cleanup")
+            }
+            $Report.status = "FAIL"
+            if ([string]::IsNullOrWhiteSpace([string]$Report.error)) { $Report.error = $Failure.Message }
+        }
+    }
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $ReportPath))
+    $Report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+    $reportEvidence = Get-SmokeFileEvidence "candidate-report" $ReportPath
+    $reportDigestPath = Join-Path $OutputDirectory "candidate-report.sha256"
+    $reportDigest = "$($reportEvidence.sha256)  $([System.IO.Path]::GetFileName($ReportPath))`n"
+    [System.IO.File]::WriteAllText($reportDigestPath, $reportDigest, [System.Text.UTF8Encoding]::new($false))
+    return [pscustomobject][ordered]@{ report = $Report; failure = $Failure }
 }
 
 function Invoke-LocalCandidateSmoke {
@@ -1068,29 +1421,9 @@ function Invoke-LocalCandidateSmoke {
             if ($null -eq $failure) { $failure = $_.Exception }
             $report.status = "FAIL"
         }
-        if ($report.cleanup.status -eq "PASS" -and @($report.artifacts).Count -gt 0) {
-            $retainedEvidenceStable = $true
-            foreach ($artifact in @($report.artifacts)) {
-                $artifactPath = Join-Path $outputDirectory ([string]$artifact.file)
-                $currentEvidence = Get-SmokeFileEvidence ([string]$artifact.role) $artifactPath
-                if ($currentEvidence.bytes -ne [int64]$artifact.bytes -or $currentEvidence.sha256 -cne [string]$artifact.sha256) {
-                    $retainedEvidenceStable = $false
-                    break
-                }
-            }
-            $report.cleanup.retainedEvidenceHashesStable = $retainedEvidenceStable
-            if (-not $retainedEvidenceStable) {
-                $report.cleanup.status = "FAIL"
-                if ($null -eq $failure) { $failure = [System.Exception]::new("retained candidate evidence changed during install smoke cleanup") }
-                $report.status = "FAIL"
-            }
-        }
-        [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $reportPath))
-        $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding UTF8
-        $reportEvidence = Get-SmokeFileEvidence "candidate-report" $reportPath
-        $reportDigestPath = Join-Path $outputDirectory "candidate-report.sha256"
-        $reportDigest = "$($reportEvidence.sha256)  $([System.IO.Path]::GetFileName($reportPath))`n"
-        [System.IO.File]::WriteAllText($reportDigestPath, $reportDigest, [System.Text.UTF8Encoding]::new($false))
+        $finalized = Finalize-SmokeCandidateReport -OutputDirectory $outputDirectory `
+            -ReportPath $reportPath -Report $report -Failure $failure
+        $failure = $finalized.failure
     }
     if ($null -ne $failure) {
         throw $failure
