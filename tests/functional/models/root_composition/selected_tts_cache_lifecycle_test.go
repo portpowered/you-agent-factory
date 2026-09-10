@@ -20,6 +20,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const (
+	selectedTTSSiblingBody  = "preserve unrelated revision"
+	selectedTTSExternalBody = "preserve outside selected cache"
+)
+
 // TestModelsSelectedTTSCatalogLifecycleUsesOneCacheRoot proves the complete
 // selected-root path through the public root.BuildProcess command boundary:
 // invoke, list, inspect, remove, and typed missing-state observations all use
@@ -32,6 +37,29 @@ func TestModelsSelectedTTSCatalogLifecycleUsesOneCacheRoot(t *testing.T) {
 	environment := selectedModelCacheEnvironment(story.environment, selectedRoot)
 	defaultRoot := filepath.Join(story.home, ".agent-factory", "models")
 	defaultBefore := snapshotSelectedTTSFiles(t, defaultRoot)
+	observation := observeSelectedTTSCatalog(t, story, environment, selectedRoot)
+	siblingPath, externalSentinel := seedSelectedTTSRemovalSentinels(t, story.home, observation.cachePath)
+	removed := executeSelectedTTSCommand(t, story.process, story.dir, environment,
+		"you", "--json", "models", "remove", "tTs")
+	assertSelectedTTSRemoval(t, removed, observation, siblingPath, externalSentinel)
+	assertSelectedTTSMissingState(t, story, environment, selectedRoot, defaultRoot, defaultBefore, observation)
+
+	t.Logf("selected-root TTS lifecycle passed: cachePath=%s revision=%s bytesRemoved=%d selectedRoot=%s defaultRootUnchanged=true networkCalls=%d", observation.cachePath, observation.revision, observation.beforeRemoveBytes, selectedRoot, story.network.Calls())
+}
+
+type selectedTTSObservation struct {
+	cachePath         string
+	revision          string
+	beforeRemoveBytes int64
+}
+
+func observeSelectedTTSCatalog(
+	t *testing.T,
+	story ttsStory,
+	environment []string,
+	selectedRoot string,
+) selectedTTSObservation {
+	t.Helper()
 
 	outputPath := filepath.Join(story.dir, "selected-tts.wav")
 	invoke := executeSelectedTTSCommand(t, story.process, story.dir, environment,
@@ -83,31 +111,42 @@ func TestModelsSelectedTTSCatalogLifecycleUsesOneCacheRoot(t *testing.T) {
 	}
 
 	cachePath := *inspectResponse.ManagedRuntime.CachePath
-	beforeRemoveBytes := story003RegularFileBytes(t, cachePath)
-	if beforeRemoveBytes <= 0 {
-		t.Fatalf("selected TTS cache bytes before remove = %d, want positive regular-file sum", beforeRemoveBytes)
+	bytes := story003RegularFileBytes(t, cachePath)
+	if bytes <= 0 {
+		t.Fatalf("selected TTS cache bytes before remove = %d, want positive regular-file sum", bytes)
 	}
 	if !pathWithinRoot(cachePath, selectedRoot) {
 		t.Fatalf("selected TTS cache path = %q, escaped selected root %q", cachePath, selectedRoot)
 	}
+	revision := *inspectResponse.ManagedRuntime.Revision
+	return selectedTTSObservation{cachePath: cachePath, revision: revision, beforeRemoveBytes: bytes}
+}
+
+func seedSelectedTTSRemovalSentinels(t *testing.T, home, cachePath string) (string, string) {
+	t.Helper()
 	modelRoot := filepath.Dir(cachePath)
 	siblingRevision := filepath.Join(modelRoot, "unrelated-revision")
 	if err := os.MkdirAll(siblingRevision, 0o755); err != nil {
 		t.Fatalf("create unrelated revision: %v", err)
 	}
 	siblingPath := filepath.Join(siblingRevision, "sentinel.bin")
-	const siblingBody = "preserve unrelated revision"
-	if err := os.WriteFile(siblingPath, []byte(siblingBody), 0o644); err != nil {
+	if err := os.WriteFile(siblingPath, []byte(selectedTTSSiblingBody), 0o644); err != nil {
 		t.Fatalf("write unrelated revision sentinel: %v", err)
 	}
-	externalSentinel := filepath.Join(story.home, "outside-selected-cache-sentinel.txt")
-	const externalBody = "preserve outside selected cache"
-	if err := os.WriteFile(externalSentinel, []byte(externalBody), 0o644); err != nil {
+	externalSentinel := filepath.Join(home, "outside-selected-cache-sentinel.txt")
+	if err := os.WriteFile(externalSentinel, []byte(selectedTTSExternalBody), 0o644); err != nil {
 		t.Fatalf("write external sentinel: %v", err)
 	}
+	return siblingPath, externalSentinel
+}
 
-	removed := executeSelectedTTSCommand(t, story.process, story.dir, environment,
-		"you", "--json", "models", "remove", "tTs")
+func assertSelectedTTSRemoval(
+	t *testing.T,
+	removed selectedTTSCommandCapture,
+	observation selectedTTSObservation,
+	siblingPath, externalSentinel string,
+) {
+	t.Helper()
 	if removed.err != nil {
 		t.Fatalf("Process.Execute(models remove tTs) error = %v\nstdout:\n%s", removed.err, removed.stdout)
 	}
@@ -115,21 +154,31 @@ func TestModelsSelectedTTSCatalogLifecycleUsesOneCacheRoot(t *testing.T) {
 	decodeSelectedTTSJSON(t, removed.stdout, &removeResponse)
 	if removeResponse.ModelName != strings.ToUpper(models.BuiltInModelNameTTS) ||
 		removeResponse.Outcome != factoryapi.REMOVED ||
-		removeResponse.Revision != *inspectResponse.ManagedRuntime.Revision ||
-		removeResponse.CachePath != cachePath ||
-		removeResponse.BytesRemoved != beforeRemoveBytes {
-		t.Fatalf("models remove response = %#v, want TTS/%s/%s/%d", removeResponse, cachePath, *inspectResponse.ManagedRuntime.Revision, beforeRemoveBytes)
+		removeResponse.Revision != observation.revision ||
+		removeResponse.CachePath != observation.cachePath ||
+		removeResponse.BytesRemoved != observation.beforeRemoveBytes {
+		t.Fatalf("models remove response = %#v, want TTS/%s/%s/%d", removeResponse, observation.cachePath, observation.revision, observation.beforeRemoveBytes)
 	}
-	if _, err := os.Stat(cachePath); !os.IsNotExist(err) {
+	if _, err := os.Stat(observation.cachePath); !os.IsNotExist(err) {
 		t.Fatalf("removed selected TTS cache stat = %v, want absent", err)
 	}
-	if got, err := os.ReadFile(siblingPath); err != nil || string(got) != siblingBody {
-		t.Fatalf("unrelated revision sentinel = %q/%v, want %q", got, err, siblingBody)
+	if got, err := os.ReadFile(siblingPath); err != nil || string(got) != selectedTTSSiblingBody {
+		t.Fatalf("unrelated revision sentinel = %q/%v, want %q", got, err, selectedTTSSiblingBody)
 	}
-	if got, err := os.ReadFile(externalSentinel); err != nil || string(got) != externalBody {
-		t.Fatalf("external sentinel = %q/%v, want %q", got, err, externalBody)
+	if got, err := os.ReadFile(externalSentinel); err != nil || string(got) != selectedTTSExternalBody {
+		t.Fatalf("external sentinel = %q/%v, want %q", got, err, selectedTTSExternalBody)
 	}
+}
 
+func assertSelectedTTSMissingState(
+	t *testing.T,
+	story ttsStory,
+	environment []string,
+	selectedRoot, defaultRoot string,
+	defaultBefore map[string]string,
+	observation selectedTTSObservation,
+) {
+	t.Helper()
 	selectedAfterRemove := snapshotSelectedTTSFiles(t, selectedRoot)
 	_, repeatedRemoveErr := executeSelectedTTSCommandResult(t, story.process, story.dir, environment,
 		"you", "--json", "models", "remove", "tts")
@@ -169,8 +218,9 @@ func TestModelsSelectedTTSCatalogLifecycleUsesOneCacheRoot(t *testing.T) {
 		t.Fatalf("selected TTS lifecycle network calls = %d, want zero", got)
 	}
 	assertSelectedTTSAssetTrace(t, story.assetTrace.snapshot(), selectedRoot, defaultRoot)
-
-	t.Logf("selected-root TTS lifecycle passed: cachePath=%s revision=%s bytesRemoved=%d selectedRoot=%s defaultRootUnchanged=true networkCalls=%d", cachePath, removeResponse.Revision, removeResponse.BytesRemoved, selectedRoot, story.network.Calls())
+	if observation.beforeRemoveBytes <= 0 || strings.TrimSpace(observation.revision) == "" {
+		t.Fatal("selected TTS observation lost canonical removal facts")
+	}
 }
 
 // TestModelsSelectedTTSPullThenCatalogUsesOneCacheRoot proves that the
