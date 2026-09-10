@@ -35,6 +35,19 @@ type CompositionOpenCatalogScope interface {
 	CompositionOpenCatalogScope(context.Context) (InvokeRuntimeScope, error)
 }
 
+// CatalogScopeRequest carries the detached cache selection needed to open a
+// local catalog scope without changing the legacy no-argument opener.
+type CatalogScopeRequest struct {
+	ModelCacheDir string
+}
+
+// CompositionCatalogScopeWithModelCacheOpener is the optional additive
+// composition port for local catalog commands that need an explicit managed
+// model cache root.
+type CompositionCatalogScopeWithModelCacheOpener interface {
+	CompositionOpenCatalogScopeWithModelCache(context.Context, CatalogScopeRequest) (InvokeRuntimeScope, error)
+}
+
 // CompositionInvokeScopeOpener exposes invoke-scope opening from injected
 // composition collaborators when the invocation operation can supply it.
 type CompositionInvokeScopeOpener interface {
@@ -56,6 +69,16 @@ type CompositionScopeProvider interface {
 	CompositionModelsRoot
 	CompositionOpenCatalogScope
 	CompositionInvokeScopeOpener
+}
+
+// ModelCacheCatalog is an optional additive capability for local catalog
+// commands. Service keeps the legacy operations source-compatible for callers
+// that do not select a cache root.
+type ModelCacheCatalog interface {
+	ListWithModelCache(ListConfig, string) error
+	InspectWithModelCache(InspectConfig, string) error
+	PullWithModelCache(PullConfig, string) error
+	RemoveWithModelCache(RemoveConfig, string) error
 }
 
 // BindService returns the composition-facing Models CLI adapter Service

@@ -613,6 +613,13 @@ func (composition modelsCLIComposition) CompositionOpenCatalogScope(
 	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
 }
 
+func (composition modelsCLIComposition) CompositionOpenCatalogScopeWithModelCache(
+	ctx context.Context,
+	request modelscli.CatalogScopeRequest,
+) (modelscli.InvokeRuntimeScope, error) {
+	return composition.openStandaloneModelsScope(ctx, request.ModelCacheDir)
+}
+
 func (composition modelsCLIComposition) CompositionOpenInvokeScope(
 	ctx context.Context,
 	cfg modelscli.InvokeConfig,

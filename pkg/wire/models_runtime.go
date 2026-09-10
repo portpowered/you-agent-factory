@@ -791,7 +791,10 @@ func (composition modelsCLIComposition) openStandaloneModelsScope(
 	modelCacheDir string,
 ) (modelscli.InvokeRuntimeScope, error) {
 	opened, err := composition.root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
-		Config: models.RuntimeScopeConfig{CacheDirectory: modelCacheDir},
+		Config: models.RuntimeScopeConfig{
+			CacheDirectory: modelCacheDir,
+			Runtime:        models.RuntimeConfig{},
+		},
 	})
 	if err != nil {
 		return modelscli.InvokeRuntimeScope{}, err

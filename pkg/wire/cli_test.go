@@ -105,6 +105,48 @@ func TestModelsInvokeUsesStandaloneScopeForImplicitMissingFactory(t *testing.T) 
 	}
 }
 
+func TestModelsCatalogUsesSelectedStandaloneCacheScope(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:catalog-cache")
+	if err != nil {
+		t.Fatalf("parse catalog cache scope: %v", err)
+	}
+	var openRequest modelservice.OpenRuntimeScopeRequest
+	root := modelsCLICompositionRootStub{
+		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+			openRequest = request
+			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+		},
+		closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
+			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		},
+	}
+	composition, err := provideModelsCLIComposition(root, &modelsCLICompositionScopeSourceStub{})
+	if err != nil {
+		t.Fatalf("provideModelsCLIComposition() error = %v", err)
+	}
+	opener, ok := composition.(modelscli.CompositionCatalogScopeWithModelCacheOpener)
+	if !ok {
+		t.Fatal("Models CLI composition does not expose optional cache-aware catalog opener")
+	}
+	opened, err := opener.CompositionOpenCatalogScopeWithModelCache(context.Background(), modelscli.CatalogScopeRequest{
+		ModelCacheDir: "selected-model-cache",
+	})
+	if err != nil {
+		t.Fatalf("CompositionOpenCatalogScopeWithModelCache() error = %v", err)
+	}
+	if opened.Scope != scope {
+		t.Fatalf("opened scope = %q, want %q", opened.Scope, scope)
+	}
+	if openRequest.Config.CacheDirectory != "selected-model-cache" || !reflect.DeepEqual(openRequest.Config.Runtime, modelservice.RuntimeConfig{}) {
+		t.Fatalf("standalone catalog open request = %#v, want selected cache and zero runtime overrides", openRequest)
+	}
+	if err := opened.Close(context.Background()); err != nil {
+		t.Fatalf("close selected catalog scope: %v", err)
+	}
+}
+
 func TestModelsInvokePreservesExplicitAndNonLayoutFactoryFailures(t *testing.T) {
 	t.Parallel()
 

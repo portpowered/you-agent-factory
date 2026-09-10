@@ -26,7 +26,24 @@ func (service *rootService) List(cfg ListConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.listRemote(cfg)
 	}
-	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+	return service.listLocal(cfg, "")
+}
+
+func (service *rootService) ListWithModelCache(cfg ListConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.List(cfg)
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	return service.listLocal(cfg, modelCacheDir)
+}
+
+func (service *rootService) listLocal(cfg ListConfig, modelCacheDir string) error {
+	return service.withCatalogScopeForModelCache(cfg.Context, modelCacheDir, func(scope modelinference.RuntimeScopeRef) error {
 		listed, err := service.models.ListCatalog(cfg.Context, modelinference.ListModelsRequest{Scope: scope})
 		if err != nil {
 			return mapModelsRootError(err)
@@ -50,7 +67,28 @@ func (service *rootService) Inspect(cfg InspectConfig) error {
 		return service.inspectRemote(cfg)
 	}
 	modelName := strings.TrimSpace(cfg.ModelName)
-	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+	return service.inspectLocal(cfg, modelName, "")
+}
+
+func (service *rootService) InspectWithModelCache(cfg InspectConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Inspect(cfg)
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	return service.inspectLocal(cfg, strings.TrimSpace(cfg.ModelName), modelCacheDir)
+}
+
+func (service *rootService) inspectLocal(
+	cfg InspectConfig,
+	modelName string,
+	modelCacheDir string,
+) error {
+	return service.withCatalogScopeForModelCache(cfg.Context, modelCacheDir, func(scope modelinference.RuntimeScopeRef) error {
 		result, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
 			Scope: scope, Name: modelName,
 		})
@@ -79,7 +117,32 @@ func (service *rootService) Pull(cfg PullConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.pullRemote(cfg)
 	}
-	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+	return service.pullLocal(cfg, modelName, "")
+}
+
+func (service *rootService) PullWithModelCache(cfg PullConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Pull(cfg)
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	return service.pullLocal(cfg, modelName, modelCacheDir)
+}
+
+func (service *rootService) pullLocal(
+	cfg PullConfig,
+	modelName string,
+	modelCacheDir string,
+) error {
+	return service.withCatalogScopeForModelCache(cfg.Context, modelCacheDir, func(scope modelinference.RuntimeScopeRef) error {
 		// Preserve the established catalog boundary before resolving generic
 		// asset sources. A built-in definition can be resolvable without being
 		// present in the selected Factory's customer-facing model catalog.
@@ -191,7 +254,32 @@ func (service *rootService) Remove(cfg RemoveConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.removeRemote(cfg)
 	}
-	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+	return service.removeLocal(cfg, modelName, "")
+}
+
+func (service *rootService) RemoveWithModelCache(cfg RemoveConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Remove(cfg)
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	return service.removeLocal(cfg, modelName, modelCacheDir)
+}
+
+func (service *rootService) removeLocal(
+	cfg RemoveConfig,
+	modelName string,
+	modelCacheDir string,
+) error {
+	return service.withCatalogScopeForModelCache(cfg.Context, modelCacheDir, func(scope modelinference.RuntimeScopeRef) error {
 		result, err := service.models.RemoveModelAssets(cfg.Context, modelinference.RemoveModelAssetsRequest{
 			Scope: scope,
 			Name:  modelName,
@@ -277,14 +365,34 @@ func generatedModelSupportsOperation(model factoryapi.ModelDetail, operation str
 	return false
 }
 
-func (service *rootService) withCatalogScope(
+func (service *rootService) withCatalogScopeForModelCache(
 	ctx context.Context,
+	modelCacheDir string,
 	run func(modelinference.RuntimeScopeRef) error,
 ) error {
-	if service.openCatalogScope == nil {
+	opener := service.openCatalogScope
+	if strings.TrimSpace(modelCacheDir) != "" {
+		if service.openCatalogScopeWithCache == nil {
+			return fmt.Errorf("models catalog scope opener does not support model cache selection")
+		}
+		opener = func(openCtx context.Context) (InvokeRuntimeScope, error) {
+			return service.openCatalogScopeWithCache(openCtx, CatalogScopeRequest{
+				ModelCacheDir: modelCacheDir,
+			})
+		}
+	}
+	return service.withCatalogScopeOpener(ctx, opener, run)
+}
+
+func (service *rootService) withCatalogScopeOpener(
+	ctx context.Context,
+	opener func(context.Context) (InvokeRuntimeScope, error),
+	run func(modelinference.RuntimeScopeRef) error,
+) error {
+	if opener == nil {
 		return fmt.Errorf("models catalog scope opener is required")
 	}
-	scope, err := service.openCatalogScope(ctx)
+	scope, err := opener(ctx)
 	if err != nil {
 		return mapModelsRootError(err)
 	}

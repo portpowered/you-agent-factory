@@ -36,6 +36,7 @@ func bindCompositionService(
 	cfg.InputFileReader = inputFileReader
 	cfg.Clock = now
 	var openInvokeScopeWithCache func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
+	var openCatalogScopeWithCache func(context.Context, CatalogScopeRequest) (InvokeRuntimeScope, error)
 	compositionCandidates := make([]interface{}, 0, 2)
 	if len(providers) > 0 {
 		compositionCandidates = append(compositionCandidates, providers[0])
@@ -44,6 +45,11 @@ func bindCompositionService(
 	for _, candidate := range compositionCandidates {
 		if opener, ok := candidate.(CompositionInvokeScopeWithModelCacheOpener); ok {
 			openInvokeScopeWithCache = opener.CompositionOpenInvokeScopeWithModelCache
+		}
+		if opener, ok := candidate.(CompositionCatalogScopeWithModelCacheOpener); ok {
+			openCatalogScopeWithCache = opener.CompositionOpenCatalogScopeWithModelCache
+		}
+		if openInvokeScopeWithCache != nil && openCatalogScopeWithCache != nil {
 			break
 		}
 	}
@@ -63,6 +69,7 @@ func bindCompositionService(
 	}
 	if root, ok := owned.(*rootService); ok {
 		root.openInvokeScopeWithCache = openInvokeScopeWithCache
+		root.openCatalogScopeWithCache = openCatalogScopeWithCache
 	}
 	return &compositionService{owned: owned, legacy: legacy}
 }
@@ -93,6 +100,50 @@ func (service *compositionService) Remove(cfg RemoveConfig) error {
 		return service.owned.Remove(cfg)
 	}
 	return service.legacy.Remove(cfg)
+}
+
+func (service *compositionService) ListWithModelCache(cfg ListConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.List(cfg)
+	}
+	catalog, ok := service.owned.(ModelCacheCatalog)
+	if !ok {
+		return fmt.Errorf("Models owned service does not support catalog model cache selection")
+	}
+	return catalog.ListWithModelCache(cfg, modelCacheDir)
+}
+
+func (service *compositionService) InspectWithModelCache(cfg InspectConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Inspect(cfg)
+	}
+	catalog, ok := service.owned.(ModelCacheCatalog)
+	if !ok {
+		return fmt.Errorf("Models owned service does not support catalog model cache selection")
+	}
+	return catalog.InspectWithModelCache(cfg, modelCacheDir)
+}
+
+func (service *compositionService) PullWithModelCache(cfg PullConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Pull(cfg)
+	}
+	catalog, ok := service.owned.(ModelCacheCatalog)
+	if !ok {
+		return fmt.Errorf("Models owned service does not support catalog model cache selection")
+	}
+	return catalog.PullWithModelCache(cfg, modelCacheDir)
+}
+
+func (service *compositionService) RemoveWithModelCache(cfg RemoveConfig, modelCacheDir string) error {
+	if strings.TrimSpace(modelCacheDir) == "" || strings.TrimSpace(cfg.Server) != "" {
+		return service.Remove(cfg)
+	}
+	catalog, ok := service.owned.(ModelCacheCatalog)
+	if !ok {
+		return fmt.Errorf("Models owned service does not support catalog model cache selection")
+	}
+	return catalog.RemoveWithModelCache(cfg, modelCacheDir)
 }
 
 func (service *compositionService) Invoke(cfg InvokeConfig) error {

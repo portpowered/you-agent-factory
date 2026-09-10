@@ -82,16 +82,17 @@ type Config struct {
 }
 
 type rootService struct {
-	models                   models.Service
-	http                     clihttp.Protocol
-	pullHTTP                 clihttp.Protocol
-	artifacts                ArtifactExporter
-	outputFileSystem         OutputFileSystem
-	inputFileReader          InputFileReader
-	openInvokeScope          func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
-	openInvokeScopeWithCache func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
-	openCatalogScope         func(context.Context) (InvokeRuntimeScope, error)
-	now                      func() time.Time
+	models                    models.Service
+	http                      clihttp.Protocol
+	pullHTTP                  clihttp.Protocol
+	artifacts                 ArtifactExporter
+	outputFileSystem          OutputFileSystem
+	inputFileReader           InputFileReader
+	openInvokeScope           func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	openInvokeScopeWithCache  func(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
+	openCatalogScope          func(context.Context) (InvokeRuntimeScope, error)
+	openCatalogScopeWithCache func(context.Context, CatalogScopeRequest) (InvokeRuntimeScope, error)
+	now                       func() time.Time
 }
 
 // NewService constructs the Models-owned CLI service from the accepted Models root.

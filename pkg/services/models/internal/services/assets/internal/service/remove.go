@@ -31,13 +31,95 @@ func (s *service) RemoveModelAssets(
 	}
 	spec, source, err := s.resolveRemovalSource(scope.Runtime, request.Name)
 	if err != nil {
-		return result, err
+		if !errors.Is(err, models.ErrModelCacheNotFound) {
+			return result, err
+		}
+		return s.removeGenericModelAssets(ctx, request, result, scope)
 	}
 	result.ModelName = spec.modelName
 	if err := assetContextError(ctx); err != nil {
 		return result, err
 	}
 	return s.removeResolvedModelAssets(ctx, request, result, scope, spec, source)
+}
+
+func (s *service) removeGenericModelAssets(
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
+	result models.RemoveModelAssetsResult,
+	scope models.RuntimeScopeConfig,
+) (models.RemoveModelAssetsResult, error) {
+	source, err := s.resolveGenericSource(ctx, scope, request.Name)
+	if err != nil {
+		if contextErr := assetContextError(ctx); contextErr != nil {
+			return result, contextErr
+		}
+		return result, modelCacheNotFound(request.Name)
+	}
+	inspection, present, err := s.inspectGenericRuntimeCache(
+		ctx, scope.CacheDirectory, request.Name, source,
+	)
+	if err != nil {
+		return result, err
+	}
+	if !present || !inspection.Installed ||
+		strings.TrimSpace(inspection.Revision) == "" ||
+		strings.TrimSpace(inspection.CachePath) == "" {
+		return result, modelCacheNotFound(request.Name)
+	}
+
+	modelName := canonicalModelName(request.Name)
+	modelRoot, err := s.modelCacheRoot(scope.CacheDirectory, modelName)
+	if err != nil {
+		return result, fmt.Errorf("resolve managed model cache: %w", err)
+	}
+	if err := s.requireManagedDirectoryChild(
+		ctx,
+		filepath.Dir(modelRoot),
+		filepath.Base(modelRoot),
+		"model",
+	); err != nil {
+		return result, err
+	}
+	revisionPath, err := managedCacheChildPath(modelRoot, inspection.Revision, "revision")
+	if err != nil {
+		return result, fmt.Errorf("%w: %v", models.ErrModelCacheUnsafe, err)
+	}
+	if filepath.Clean(inspection.CachePath) != filepath.Clean(revisionPath) {
+		return result, fmt.Errorf(
+			"%w: managed cache revision path does not match its manifest",
+			models.ErrModelCacheUnsafe,
+		)
+	}
+	if err := s.requireManagedDirectoryChild(ctx, modelRoot, inspection.Revision, "revision"); err != nil {
+		return result, err
+	}
+
+	bytesRemoved, err := s.measureRevisionBytes(ctx, revisionPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return result, modelCacheNotFound(request.Name)
+	}
+	if err != nil {
+		return result, err
+	}
+	if err := s.removeManagedTree(ctx, revisionPath); err != nil {
+		return result, err
+	}
+	if err := s.verifyManagedPathRemoved(ctx, modelRoot, inspection.Revision); err != nil {
+		return result, err
+	}
+
+	s.preparedRuntimeMu.Lock()
+	delete(s.preparedRuntime, preparedRuntimeKey(request.Scope, request.Name))
+	s.preparedRuntimeMu.Unlock()
+	return models.RemoveModelAssetsResult{
+		ModelName:    modelName,
+		Revision:     inspection.Revision,
+		CachePath:    revisionPath,
+		BytesRemoved: bytesRemoved,
+		Readiness:    models.AssetReadinessMissing,
+		Outcome:      models.AssetRemovalRemoved,
+	}, nil
 }
 
 func (s *service) resolveRemovalSource(

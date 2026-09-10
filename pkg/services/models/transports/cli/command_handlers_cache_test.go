@@ -9,6 +9,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -23,6 +24,104 @@ func (fake cacheAwareCommandServiceFake) InvokeWithModelCache(cfg InvokeConfig, 
 		return errors.New("unexpected invocation-local model cache call")
 	}
 	return fake.invokeWithModelCache(cfg, modelCacheDir)
+}
+
+type cacheAwareCatalogCommandServiceFake struct {
+	commandServiceFake
+	listWithModelCache    func(ListConfig, string) error
+	inspectWithModelCache func(InspectConfig, string) error
+	pullWithModelCache    func(PullConfig, string) error
+	removeWithModelCache  func(RemoveConfig, string) error
+}
+
+func (fake cacheAwareCatalogCommandServiceFake) ListWithModelCache(cfg ListConfig, cache string) error {
+	return fake.listWithModelCache(cfg, cache)
+}
+
+func (fake cacheAwareCatalogCommandServiceFake) InspectWithModelCache(cfg InspectConfig, cache string) error {
+	return fake.inspectWithModelCache(cfg, cache)
+}
+
+func (fake cacheAwareCatalogCommandServiceFake) PullWithModelCache(cfg PullConfig, cache string) error {
+	return fake.pullWithModelCache(cfg, cache)
+}
+
+func (fake cacheAwareCatalogCommandServiceFake) RemoveWithModelCache(cfg RemoveConfig, cache string) error {
+	return fake.removeWithModelCache(cfg, cache)
+}
+
+func TestCommandHandlerCatalogCommandsSelectOneResolvedCache(t *testing.T) {
+	t.Parallel()
+
+	const selectedCache = "/selected/model-cache"
+	calls := map[string]string{}
+	service := cacheAwareCatalogCommandServiceFake{
+		listWithModelCache: func(_ ListConfig, cache string) error {
+			calls["list"] = cache
+			return nil
+		},
+		inspectWithModelCache: func(_ InspectConfig, cache string) error {
+			calls["inspect"] = cache
+			return nil
+		},
+		pullWithModelCache: func(_ PullConfig, cache string) error {
+			calls["pull"] = cache
+			return nil
+		},
+		removeWithModelCache: func(_ RemoveConfig, cache string) error {
+			calls["remove"] = cache
+			return nil
+		},
+	}
+	resolverCalls := 0
+	handler := NewCommandHandler(
+		service,
+		nil,
+		nil,
+		nil,
+		nil,
+		func() (string, error) {
+			resolverCalls++
+			return selectedCache, nil
+		},
+	)
+	cmd := &cobra.Command{Use: "models"}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(io.Discard)
+	inspectInputs, pullInputs, inherited := resolvedModelsHandlerInputs(t, "")
+	if err := handler.List(cmd, resolvedinput.Inputs{}, inherited); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if err := handler.Inspect(cmd, inspectInputs, inherited); err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	if err := handler.Pull(cmd, pullInputs, inherited); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	removeInputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-a"),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("resolve remove inputs: %v", err)
+	}
+	if err := handler.Remove(cmd, removeInputs, inherited); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if resolverCalls != 4 {
+		t.Fatalf("model cache resolver calls = %d, want 4", resolverCalls)
+	}
+	for _, operation := range []string{"list", "inspect", "pull", "remove"} {
+		if calls[operation] != selectedCache {
+			t.Fatalf("%s selected cache = %q, want %q", operation, calls[operation], selectedCache)
+		}
+	}
 }
 
 func TestCommandHandlerInvokeWithCacheResolverPreservesLegacyConfigAndSelectsCache(t *testing.T) {
