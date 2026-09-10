@@ -344,11 +344,31 @@ func writeBuiltinModelCache(t *testing.T, home string) {
 	}
 }
 
+func writeOmniModelOverrideAt(home string) error {
+	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return fmt.Errorf("create operator config directory: %w", err)
+	}
+	config := map[string]any{
+		"models": map[string]any{
+			"llm": map[string]string{"source": omniFixtureModelSource},
+		},
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal controlled llm source override: %w", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		return fmt.Errorf("write controlled llm source override: %w", err)
+	}
+	return nil
+}
+
 func writeBuiltinModelCacheAt(home string) error {
 	name := "gemma-4-E4B-it-Q4_K_M.gguf"
 	body := []byte("functional model fixture")
 	digest := fmt.Sprintf("%x", sha256.Sum256(body))
-	identity := fmt.Sprintf("model|%s|%s:%d:%s", omniModelSource, name, len(body), digest)
+	identity := fmt.Sprintf("model|%s|%s:%d:%s", omniFixtureModelSource, name, len(body), digest)
 	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
 	snapshot := filepath.Join(home, ".agent-factory", "models", ".you-content-addressed", "model", identityHash)
 	if err := os.MkdirAll(snapshot, 0o755); err != nil {
@@ -358,7 +378,7 @@ func writeBuiltinModelCacheAt(home string) error {
 		return fmt.Errorf("write model snapshot: %w", err)
 	}
 	metadata := map[string]any{
-		"kind": "model", "identity": identity, "source": omniModelSource, "sourceKey": omniModelSource,
+		"kind": "model", "identity": identity, "source": omniFixtureModelSource, "sourceKey": omniFixtureModelSource,
 		"artifacts": []map[string]any{{"Name": name, "Bytes": len(body), "SHA256": digest}},
 	}
 	data, err := json.Marshal(metadata)
