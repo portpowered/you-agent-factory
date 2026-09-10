@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
@@ -784,6 +785,36 @@ func (composition modelsCLIComposition) openModelsPresentationScope(
 		return modelscli.InvokeRuntimeScope{}, err
 	}
 	return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+}
+
+func (composition modelsCLIComposition) openCatalogModelsScope(
+	ctx context.Context,
+	modelCacheDir string,
+) (modelscli.InvokeRuntimeScope, error) {
+	workingDirectory := startupcli.WorkingDirectory(ctx)
+	homeDirectory := startupcli.HomeDirectory(ctx)
+	if strings.TrimSpace(workingDirectory) == "" || strings.TrimSpace(homeDirectory) == "" ||
+		!catalogOperatorConfigPresent(homeDirectory) {
+		return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+	}
+	opened, err := composition.source.OpenModelsPresentationScope(ctx, models.PresentationScopeRequest{
+		WorkingDirectory: workingDirectory,
+		HomeDir:          homeDirectory,
+		ModelCacheDir:    modelCacheDir,
+	})
+	if err == nil {
+		return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	}
+	if !errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+}
+
+func catalogOperatorConfigPresent(homeDirectory string) bool {
+	path := filepath.Join(strings.TrimSpace(homeDirectory), ".you-agent-factory", "config.json")
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func (composition modelsCLIComposition) openStandaloneModelsScope(

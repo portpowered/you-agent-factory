@@ -216,6 +216,9 @@ func (p *Process) Execute(input Input) error {
 		return fmt.Errorf("execute application process: command factory is required")
 	}
 	ctx = processcontract.WithWorkingDirectory(ctx, normalized.workingDir)
+	if home, homeErr := homeDir(normalized); homeErr == nil {
+		ctx = processcontract.WithHomeDirectory(ctx, home)
+	}
 	ctx = processcontract.WithStdinTTY(ctx, normalized.stdinIsTTY)
 	ctx = processcontract.WithStdoutTTY(ctx, normalized.stdoutIsTTY)
 	ctx = processcontract.WithStderrTTY(ctx, normalized.stderrIsTTY)

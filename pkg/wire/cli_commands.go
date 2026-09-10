@@ -617,7 +617,7 @@ func (composition modelsCLIComposition) CompositionOpenCatalogScopeWithModelCach
 	ctx context.Context,
 	request modelscli.CatalogScopeRequest,
 ) (modelscli.InvokeRuntimeScope, error) {
-	return composition.openStandaloneModelsScope(ctx, request.ModelCacheDir)
+	return composition.openCatalogModelsScope(ctx, request.ModelCacheDir)
 }
 
 func (composition modelsCLIComposition) CompositionOpenInvokeScope(

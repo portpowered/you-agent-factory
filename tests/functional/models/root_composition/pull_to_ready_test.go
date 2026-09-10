@@ -279,7 +279,7 @@ func assertPullToReadySuccess(t *testing.T, capture pullToReadyCapture, assetBod
 	if response.ManagedRuntimePull.CachePath == nil || *response.ManagedRuntimePull.CachePath == "" {
 		t.Fatalf("models pull managed cache path = %#v, want installed path", response.ManagedRuntimePull.CachePath)
 	}
-	if !strings.HasPrefix(*response.ManagedRuntimePull.CachePath, cacheRoot) {
+	if !pathWithinRoot(*response.ManagedRuntimePull.CachePath, cacheRoot) {
 		t.Fatalf("models pull cache path = %q, want selected root %q", *response.ManagedRuntimePull.CachePath, cacheRoot)
 	}
 	if capture.downloadedBytes != int64(len(assetBody)) {
@@ -308,7 +308,7 @@ func assertPullToReadyAlreadyPresent(t *testing.T, capture pullToReadyCapture, a
 	if response.ManagedRuntimePull.CachePath == nil || *response.ManagedRuntimePull.CachePath == "" {
 		t.Fatalf("warm models pull cache path = %#v, want persisted path", response.ManagedRuntimePull.CachePath)
 	}
-	if !strings.HasPrefix(*response.ManagedRuntimePull.CachePath, cacheRoot) {
+	if !pathWithinRoot(*response.ManagedRuntimePull.CachePath, cacheRoot) {
 		t.Fatalf("warm models pull cache path = %q, want selected root %q", *response.ManagedRuntimePull.CachePath, cacheRoot)
 	}
 }
@@ -333,7 +333,7 @@ func assertPullToReadyInspect(t *testing.T, capture pullToReadyCapture, cacheRoo
 		response.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
 		t.Fatalf("models inspect response = %#v, want asr READY/INSTALLED", response)
 	}
-	if response.ManagedRuntime.CachePath == nil || !strings.HasPrefix(*response.ManagedRuntime.CachePath, cacheRoot) {
+	if response.ManagedRuntime.CachePath == nil || !pathWithinRoot(*response.ManagedRuntime.CachePath, cacheRoot) {
 		t.Fatalf("models inspect cache path = %#v, want selected cache root %q", response.ManagedRuntime.CachePath, cacheRoot)
 	}
 	if response.ManagedRuntime.CacheBytes == nil || *response.ManagedRuntime.CacheBytes != int64(len(assetBody)) {
@@ -356,7 +356,7 @@ func assertPullToReadyList(t *testing.T, capture pullToReadyCapture, assetBody [
 		if model.ManagedRuntime.CacheBytes == nil || *model.ManagedRuntime.CacheBytes != int64(len(assetBody)) {
 			t.Fatalf("models list ASR cache bytes = %#v, want %d", model.ManagedRuntime.CacheBytes, len(assetBody))
 		}
-		if model.ManagedRuntime.CachePath == nil || !strings.HasPrefix(*model.ManagedRuntime.CachePath, cacheRoot) {
+		if model.ManagedRuntime.CachePath == nil || !pathWithinRoot(*model.ManagedRuntime.CachePath, cacheRoot) {
 			t.Fatalf("models list ASR cache path = %#v, want selected cache root %q", model.ManagedRuntime.CachePath, cacheRoot)
 		}
 		return
@@ -372,7 +372,7 @@ func assertPullToReadyRemoved(t *testing.T, capture pullToReadyCapture, cacheRoo
 		response.Outcome != factoryapi.REMOVED || response.BytesRemoved != beforeBytes {
 		t.Fatalf("models remove response = %#v, want selected %s/%d bytes", response, cacheRoot, beforeBytes)
 	}
-	if strings.TrimSpace(response.CachePath) == "" || !strings.HasPrefix(response.CachePath, cacheRoot) {
+	if strings.TrimSpace(response.CachePath) == "" || !pathWithinRoot(response.CachePath, cacheRoot) {
 		t.Fatalf("models remove cache path = %#v, want selected cache root %q", response.CachePath, cacheRoot)
 	}
 }
