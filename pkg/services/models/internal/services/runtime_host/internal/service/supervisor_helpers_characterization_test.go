@@ -91,7 +91,14 @@ func TestBuiltInLLMRejectsInvalidProjectorMetadataBeforeHostStart(t *testing.T) 
 		},
 		IntegrityVerified: true,
 	}
-	identity := supervisedIdentity{Name: models.BuiltInModelNameLLM, Backend: "localai-llamacpp"}
+	definition, ok := models.BuiltInCatalog{}.ModelDefinitionFor(models.BuiltInModelNameLLM)
+	if !ok {
+		t.Fatal("built-in llm definition is missing")
+	}
+	identity := supervisedIdentity{
+		Name: models.BuiltInModelNameLLM, Backend: "localai-llamacpp",
+		Source: definition.Source,
+	}
 	worker := &models.RuntimeWorker{Command: "fake-localai"}
 	for _, testCase := range []struct {
 		name   string

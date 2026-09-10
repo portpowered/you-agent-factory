@@ -26,6 +26,7 @@ type supervisedIdentity struct {
 	Name       string
 	Backend    string
 	LoadPolicy string
+	Source     string
 	Revision   string
 }
 
@@ -120,6 +121,7 @@ func supervisedIdentityForModel(
 	if definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName); ok {
 		identity.Backend = strings.TrimSpace(definition.Backend)
 		identity.LoadPolicy = string(definition.LoadPolicy)
+		identity.Source = strings.TrimSpace(definition.Source)
 	}
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil {
 		if backend := strings.TrimSpace(resource.Backend); backend != "" {
@@ -130,6 +132,9 @@ func supervisedIdentityForModel(
 		}
 	}
 	if overlay, ok := modelOverlay(overlays, modelName); ok {
+		if overlay.Source != nil {
+			identity.Source = strings.TrimSpace(*overlay.Source)
+		}
 		if overlay.Backend != nil {
 			identity.Backend = strings.TrimSpace(*overlay.Backend)
 		}
@@ -141,6 +146,7 @@ func supervisedIdentityForModel(
 		Name:       identity.Name,
 		Backend:    identity.Backend,
 		LoadPolicy: identity.LoadPolicy,
+		Source:     identity.Source,
 		Revision:   identity.Revision,
 	}
 }
@@ -324,7 +330,11 @@ func defaultGRPCServerStartBuilderWithSymlinkResolver(
 }
 
 func isBuiltInLLMIdentity(identity supervisedIdentity) bool {
-	return strings.EqualFold(strings.TrimSpace(identity.Name), models.BuiltInModelNameLLM)
+	if !strings.EqualFold(strings.TrimSpace(identity.Name), models.BuiltInModelNameLLM) {
+		return false
+	}
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
+	return ok && strings.TrimSpace(identity.Source) == strings.TrimSpace(definition.Source)
 }
 
 func builtInLLMArtifactPaths(

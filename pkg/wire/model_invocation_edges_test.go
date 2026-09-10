@@ -485,7 +485,7 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	gotProcess, err := launcher.Start(context.Background(), modelswire.HostProcessStartSpec{
 		Command: "model-host", Args: []string{"serve"}, Env: []string{"MODEL=seal"},
 		WorkDir: "runtime", HealthEndpoint: process.healthEndpoint,
-		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf",
+		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
 		BackendFiles: []string{"runtime/backend.zip"},
 	})
 	if err != nil {
@@ -494,7 +494,7 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	if gotSpec.Command != "model-host" || len(gotSpec.Args) != 1 || gotSpec.Args[0] != "serve" ||
 		len(gotSpec.Env) != 1 || gotSpec.Env[0] != "MODEL=seal" || gotSpec.WorkDir != "runtime" ||
 		gotSpec.HealthEndpoint != process.healthEndpoint || gotSpec.Backend != "localai-llamacpp" ||
-		gotSpec.ModelPath != "runtime/model.gguf" || len(gotSpec.BackendFiles) != 1 ||
+		gotSpec.ModelPath != "runtime/model.gguf" || gotSpec.MMProjPath != "runtime/mmproj.gguf" || len(gotSpec.BackendFiles) != 1 ||
 		gotSpec.BackendFiles[0] != "runtime/backend.zip" {
 		t.Fatalf("adapted process spec = %#v, want exact edge projection", gotSpec)
 	}
@@ -603,7 +603,8 @@ func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
 		Revision:  "revision-1",
 		Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
-		ModelPath: "runtime/model.gguf", ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
+		ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
+		ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
 	}
 }
 
@@ -618,7 +619,8 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
 		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
 		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform ||
-		protocol.request.ModelPath != request.ModelPath || !equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
+		protocol.request.ModelPath != request.ModelPath || protocol.request.MMProjPath != request.MMProjPath ||
+		!equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
 		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
 	}
 	if result != (modelswire.HostProtocolNegotiationResult{
@@ -657,6 +659,7 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 		t.Fatalf("close model host connection: %v", err)
 	}
 	if connection.request.Backend != request.Backend || connection.request.ModelPath != request.ModelPath ||
+		connection.request.MMProjPath != request.MMProjPath ||
 		!equalStringSlices(connection.request.ModelFiles, request.ModelFiles) || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}

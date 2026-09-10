@@ -450,6 +450,7 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		MMProjPath:      request.MMProjPath,
 		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
@@ -489,6 +490,7 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 		Revision:        request.Revision,
 		Platform:        request.Platform,
 		ModelPath:       request.ModelPath,
+		MMProjPath:      request.MMProjPath,
 		ModelFiles:      append([]string(nil), request.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{

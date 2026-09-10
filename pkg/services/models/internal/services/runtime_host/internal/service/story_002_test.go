@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -130,6 +131,66 @@ func TestManagedBuiltinLLMRejectsInvalidProjectorBeforeHostEffects(t *testing.T)
 				t.Fatalf("host effects = launcher starts %d, protocol call %#v, want no launcher or negotiator effect", launcher.startCount(), protocol.call())
 			}
 		})
+	}
+}
+
+func TestOperatorLLMSourceOverrideUsesGenericVerifiedModelPath(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "story-002-source-override")
+	config := story002BuiltinLLMConfig()
+	config.Workers[0].Command = ""
+	customSource := "hf://operator/custom-model/custom-model.gguf@" + strings.Repeat("a", 40)
+	ref := openScopeWithOverlays(t, scopes, cacheDirectory, config, map[string]models.ModelOverlay{
+		models.BuiltInModelNameLLM: {Source: &customSource},
+	})
+	launcher := &controlledProcessLauncher{}
+	protocol := &testProtocolNegotiator{}
+	const customModelName = "custom-model.gguf"
+	const customModelBytes = int64(17)
+	const customModelSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	assets := &backendRuntimeInspectionAssets{
+		Service: mustAssetsService(t, scopes),
+		inspection: scopedassets.RuntimeCacheInspection{
+			Supported: true, Installed: true, CachePath: cacheDirectory,
+			ManifestPresent: true, ManifestValid: true, IntegrityVerified: true,
+			BackendRequired: true, BackendFiles: []string{"backend.zip"},
+			ExpectedArtifacts: []models.AssetRequirement{{
+				Name: customModelName, Bytes: customModelBytes, SHA256: customModelSHA256,
+			}},
+			ObservedArtifacts: []models.AssetArtifact{{
+				Name: customModelName, Bytes: customModelBytes, SHA256: customModelSHA256,
+			}},
+		},
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
+		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: &testCompatibilityChecker{},
+			ProtocolNegotiator:   protocol,
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref,
+		Name:  models.BuiltInModelNameLLM,
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	wantModelPath := filepath.Join(cacheDirectory, customModelName)
+	spec := launcher.spec(0)
+	if spec.ModelPath != wantModelPath || spec.MMProjPath != "" ||
+		len(spec.ModelFiles) != 1 || spec.ModelFiles[0] != wantModelPath {
+		t.Fatalf("override host paths = model %q projector %q files %#v, want generic model path %q without projector", spec.ModelPath, spec.MMProjPath, spec.ModelFiles, wantModelPath)
+	}
+	call := protocol.call()
+	if call.request.ModelPath != wantModelPath || call.request.MMProjPath != "" ||
+		len(call.request.ModelFiles) != 1 || call.request.ModelFiles[0] != wantModelPath {
+		t.Fatalf("override protocol paths = model %q projector %q files %#v, want generic model path %q without projector", call.request.ModelPath, call.request.MMProjPath, call.request.ModelFiles, wantModelPath)
 	}
 }
 
