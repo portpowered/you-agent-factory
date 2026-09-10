@@ -924,14 +924,18 @@ func newProductionModelsCommand(
 	if operatorDefaults == nil {
 		operatorDefaults = &cliOperatorDefaultsOptions{}
 	}
-	modelCacheDirResolvers := []func() (string, error){
-		func() (string, error) {
-			modelCacheDir, _, err := lookupProcessEnvironment(
-				rootOptions,
-				runcli.ModelCacheDirEnvironment,
-			)
-			return modelCacheDir, err
-		},
+	modelCacheDirResolver := func() (string, error) {
+		modelCacheDir, _, err := lookupProcessEnvironment(
+			rootOptions,
+			runcli.ModelCacheDirEnvironment,
+		)
+		return modelCacheDir, err
+	}
+	catalogModelCacheDirResolver := func() (string, error) {
+		if rootOptions.lookupEnv == nil {
+			return "", nil
+		}
+		return modelCacheDirResolver()
 	}
 	handler := modelscli.NewCommandHandler(
 		rootOptions.ModelsCLI,
@@ -944,7 +948,8 @@ func newProductionModelsCommand(
 			policy := diagnostics.resolvePolicy(false)
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
-		modelCacheDirResolvers...,
+		modelCacheDirResolver,
+		catalogModelCacheDirResolver,
 	)
 	return climanifestcobra.NewModelsCommand(handler)
 }

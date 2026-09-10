@@ -66,6 +66,114 @@ func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing
 	}
 }
 
+func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	scopes := newScopes(t, "remove-generic-success")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("generic removal used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  strings.ToLower(fixture.definition.Name),
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets generic: %v", err)
+	}
+	assertGenericRemovalResult(t, result, fixture)
+	if _, err := os.Stat(fixture.revisionPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed generic revision stat error = %v, want not-exist", err)
+	}
+	assertGenericRemovalSibling(t, fixture.siblingPath)
+	if _, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  fixture.definition.Name,
+	}); !errors.Is(err, models.ErrModelCacheNotFound) {
+		t.Fatalf("repeated generic removal error = %v, want ErrModelCacheNotFound", err)
+	}
+}
+
+type genericRemovalFixture struct {
+	cacheDirectory string
+	definition     models.ModelDefinition
+	body           []byte
+	revisionPath   string
+	siblingPath    string
+	source         genericSource
+}
+
+func writeGenericRemovalFixture(t *testing.T) genericRemovalFixture {
+	t.Helper()
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	if !ok {
+		t.Fatal("built-in catalog did not publish ASR")
+	}
+	source, err := parseGenericSource(definition.Source)
+	if err != nil {
+		t.Fatalf("parse built-in ASR source: %v", err)
+	}
+	cacheDirectory := t.TempDir()
+	modelRoot := filepath.Join(cacheDirectory, canonicalModelName(definition.Name))
+	revisionPath := filepath.Join(modelRoot, source.revision)
+	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
+		t.Fatalf("create generic revision: %v", err)
+	}
+	body := []byte("generic managed model")
+	if err := os.WriteFile(filepath.Join(revisionPath, source.file), body, 0o644); err != nil {
+		t.Fatalf("write generic revision: %v", err)
+	}
+	siblingPath := filepath.Join(modelRoot, "unrelated-revision", "sibling.bin")
+	if err := os.MkdirAll(filepath.Dir(siblingPath), 0o755); err != nil {
+		t.Fatalf("create generic sibling: %v", err)
+	}
+	if err := os.WriteFile(siblingPath, []byte("sibling"), 0o644); err != nil {
+		t.Fatalf("write generic sibling: %v", err)
+	}
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: definition.Name,
+		Revision:  source.revision,
+		Files: []metadataFile{{
+			Path: source.file, Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal generic runtime metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelRoot, metadataFileName), metadata, 0o644); err != nil {
+		t.Fatalf("write generic runtime metadata: %v", err)
+	}
+	return genericRemovalFixture{
+		cacheDirectory: cacheDirectory,
+		definition:     definition,
+		body:           body,
+		revisionPath:   revisionPath,
+		siblingPath:    siblingPath,
+		source:         source,
+	}
+}
+
+func assertGenericRemovalResult(t *testing.T, result models.RemoveModelAssetsResult, fixture genericRemovalFixture) {
+	t.Helper()
+	if result.ModelName != canonicalModelName(fixture.definition.Name) ||
+		result.Revision != fixture.source.revision ||
+		result.CachePath != fixture.revisionPath ||
+		result.BytesRemoved != int64(len(fixture.body)) ||
+		result.Readiness != models.AssetReadinessMissing ||
+		result.Outcome != models.AssetRemovalRemoved {
+		t.Fatalf("RemoveModelAssets generic result = %#v", result)
+	}
+}
+
+func assertGenericRemovalSibling(t *testing.T, siblingPath string) {
+	t.Helper()
+	if sibling, err := os.ReadFile(siblingPath); err != nil || string(sibling) != "sibling" {
+		t.Fatalf("generic sibling changed: body=%q error=%v", sibling, err)
+	}
+}
+
 func TestRemoveModelAssetsReportsMissingCacheWithoutFilesystemMutation(t *testing.T) {
 	t.Parallel()
 

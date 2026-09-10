@@ -181,12 +181,22 @@ func writeGenericBackendCache(
 	body []byte,
 ) {
 	t.Helper()
+	writeGenericBackendCacheAtRoot(t, filepath.Join(home, ".agent-factory", "models"), backend, selection, body)
+}
+
+func writeGenericBackendCacheAtRoot(
+	t *testing.T,
+	cacheRoot, backend string,
+	selection serviceedges.ModelBackendArtifactSelection,
+	body []byte,
+) {
+	t.Helper()
 	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
 	source := "backend://" + backend + "/release://" + urlHash
 	digest := selection.SHA256
 	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, digest)
 	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
-	snapshot := filepath.Join(home, ".agent-factory", "models", "backend-artifacts", ".you-content-addressed", "backend", identityHash)
+	snapshot := filepath.Join(cacheRoot, "backend-artifacts", ".you-content-addressed", "backend", identityHash)
 	if err := os.MkdirAll(snapshot, 0o755); err != nil {
 		t.Fatalf("create generic backend snapshot: %v", err)
 	}

@@ -22,6 +22,7 @@ type CommandHandler struct {
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error)
 	buildLogger             func() (*zap.Logger, error)
 	modelCacheDir           func() (string, error)
+	catalogModelCacheDir    func() (string, error)
 }
 
 // NewCommandHandler constructs the Models-owned CLI handler from injected dependencies.
@@ -34,13 +35,18 @@ func NewCommandHandler(
 	modelCacheDirResolvers ...func() (string, error),
 ) *CommandHandler {
 	var modelCacheDir func() (string, error)
+	var catalogModelCacheDir func() (string, error)
 	if len(modelCacheDirResolvers) > 0 {
 		modelCacheDir = modelCacheDirResolvers[0]
+		catalogModelCacheDir = modelCacheDir
+	}
+	if len(modelCacheDirResolvers) > 1 {
+		catalogModelCacheDir = modelCacheDirResolvers[1]
 	}
 	return &CommandHandler{
 		models: models, diagnosticsWriter: diagnosticsWriter, homeDir: homeDir,
 		resolveOperatorDefaults: resolveOperatorDefaults, buildLogger: buildLogger,
-		modelCacheDir: modelCacheDir,
+		modelCacheDir: modelCacheDir, catalogModelCacheDir: catalogModelCacheDir,
 	}
 }
 
@@ -73,7 +79,11 @@ func (h *CommandHandler) List(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models list inputs: %w", err)
 	}
-	return h.models.List(cfg)
+	return h.runLocalCatalogWithSelectedCache(cfg.Server, "list",
+		func() error { return h.models.List(cfg) },
+		func(catalog ModelCacheCatalog, modelCacheDir string) error {
+			return catalog.ListWithModelCache(cfg, modelCacheDir)
+		})
 }
 
 func (h *CommandHandler) Inspect(
@@ -94,7 +104,11 @@ func (h *CommandHandler) Inspect(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models inspect inputs: %w", err)
 	}
-	return h.models.Inspect(cfg)
+	return h.runLocalCatalogWithSelectedCache(cfg.Server, "inspect",
+		func() error { return h.models.Inspect(cfg) },
+		func(catalog ModelCacheCatalog, modelCacheDir string) error {
+			return catalog.InspectWithModelCache(cfg, modelCacheDir)
+		})
 }
 
 func (h *CommandHandler) applyResolvedCommon(
@@ -330,7 +344,11 @@ func (h *CommandHandler) Pull(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models pull inputs: %w", err)
 	}
-	return h.models.Pull(cfg)
+	return h.runLocalCatalogWithSelectedCache(cfg.Server, "pull",
+		func() error { return h.models.Pull(cfg) },
+		func(catalog ModelCacheCatalog, modelCacheDir string) error {
+			return catalog.PullWithModelCache(cfg, modelCacheDir)
+		})
 }
 
 func (h *CommandHandler) Remove(
@@ -351,5 +369,33 @@ func (h *CommandHandler) Remove(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models remove inputs: %w", err)
 	}
-	return h.models.Remove(cfg)
+	return h.runLocalCatalogWithSelectedCache(cfg.Server, "remove",
+		func() error { return h.models.Remove(cfg) },
+		func(catalog ModelCacheCatalog, modelCacheDir string) error {
+			return catalog.RemoveWithModelCache(cfg, modelCacheDir)
+		})
+}
+
+func (h *CommandHandler) runLocalCatalogWithSelectedCache(
+	server string,
+	operation string,
+	legacy func() error,
+	selected func(ModelCacheCatalog, string) error,
+) error {
+	if strings.TrimSpace(server) != "" || h.catalogModelCacheDir == nil {
+		return legacy()
+	}
+	modelCacheDir, err := h.catalogModelCacheDir()
+	if err != nil {
+		return fmt.Errorf("resolve model cache directory: %w", err)
+	}
+	modelCacheDir = strings.TrimSpace(modelCacheDir)
+	if modelCacheDir == "" {
+		return legacy()
+	}
+	catalog, ok := h.models.(ModelCacheCatalog)
+	if !ok {
+		return fmt.Errorf("models %s service does not support local model cache selection", operation)
+	}
+	return selected(catalog, modelCacheDir)
 }

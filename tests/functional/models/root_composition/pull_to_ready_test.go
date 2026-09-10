@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -17,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -39,26 +42,51 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	backendSelection := pullToReadyBackendSelection(backendBody)
 	assetClient := newPullToReadyAssetClient(assetBody, backendBody, backendSelection.Location)
 	homeDirectory := functionalTempDir(t)
+	selectedCache := filepath.Join(homeDirectory, "managed-cache")
 	edges := pullToReadyEdges(assetClient, homeDirectory, backendSelection)
 
 	firstProcess := buildPullToReadyProcess(t, edges)
 	pull := executePullToReadyCommand(t, firstProcess, homeDirectory, "models", "pull", pullToReadyModelName)
-	assertPullToReadySuccess(t, pull, assetBody)
+	assertPullToReadySuccess(t, pull, assetBody, selectedCache)
 	inspect := executePullToReadyCommand(t, firstProcess, homeDirectory, "models", "inspect", pullToReadyModelName)
-	assertPullToReadyInspect(t, inspect, homeDirectory, assetBody)
+	assertPullToReadyInspect(t, inspect, selectedCache, assetBody)
 	listed := executePullToReadyCommand(t, firstProcess, homeDirectory, "models", "list")
-	assertPullToReadyList(t, listed, assetBody)
+	assertPullToReadyList(t, listed, assetBody, selectedCache)
 	closePullToReadyProcess(t, firstProcess)
 
 	assetClient.SetOffline()
 	secondProcess := buildPullToReadyProcess(t, pullToReadyEdges(assetClient, homeDirectory, backendSelection))
 	warmPull := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "pull", pullToReadyModelName)
-	assertPullToReadyAlreadyPresent(t, warmPull, assetBody)
+	assertPullToReadyAlreadyPresent(t, warmPull, assetBody, selectedCache)
 	secondInspect := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "inspect", pullToReadyModelName)
-	assertPullToReadyInspect(t, secondInspect, homeDirectory, assetBody)
+	assertPullToReadyInspect(t, secondInspect, selectedCache, assetBody)
 	secondList := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "list")
-	assertPullToReadyList(t, secondList, assetBody)
+	assertPullToReadyList(t, secondList, assetBody, selectedCache)
+	var pulled factoryapi.ModelPullResponse
+	decodePullToReadyJSON(t, pull.raw, &pulled)
+	if pulled.ManagedRuntimePull.CachePath == nil {
+		t.Fatal("initial pull did not publish a cache path for removal accounting")
+	}
+	beforeRemoveBytes := story003RegularFileBytes(t, *pulled.ManagedRuntimePull.CachePath)
+	t.Logf("selected-root removal setup: model=%q cachePath=%q bytes=%d selectedRoot=%q", pulled.ModelName, *pulled.ManagedRuntimePull.CachePath, beforeRemoveBytes, selectedCache)
+	removed := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "remove", pullToReadyModelName)
+	assertPullToReadyRemoved(t, removed, selectedCache, beforeRemoveBytes)
+	_, repeatedRemoveErr := executePullToReadyCommandResult(t, secondProcess, homeDirectory, "models", "remove", pullToReadyModelName)
+	if repeatedRemoveErr == nil || !errors.Is(repeatedRemoveErr, modelscli.ErrModelCacheNotFound) {
+		t.Fatalf("repeated selected-root remove error = %v, want ErrModelCacheNotFound", repeatedRemoveErr)
+	}
+	missingList := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "list")
+	assertPullToReadyMissingList(t, missingList)
+	missingInspect, missingInspectErr := executePullToReadyCommandResult(t, secondProcess, homeDirectory, "models", "inspect", pullToReadyModelName)
+	if missingInspectErr == nil {
+		assertPullToReadyMissingInspect(t, missingInspect)
+	} else if !errors.Is(missingInspectErr, modelscli.ErrModelCacheNotFound) {
+		t.Fatalf("selected-root missing inspect error = %v, want ErrModelCacheNotFound or missing projection", missingInspectErr)
+	}
 	closePullToReadyProcess(t, secondProcess)
+	if _, err := os.Stat(filepath.Join(homeDirectory, ".agent-factory", "models")); !os.IsNotExist(err) {
+		t.Fatalf("default cache root stat = %v, want absent after selected-root lifecycle", err)
+	}
 	assertPullToReadySafeOutput(t, map[string]string{
 		"pull":            pull.raw,
 		"inspect":         inspect.raw,
@@ -66,6 +94,9 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 		"warm pull":       warmPull.raw,
 		"restart inspect": secondInspect.raw,
 		"restart list":    secondList.raw,
+		"remove":          removed.raw,
+		"missing list":    missingList.raw,
+		"missing inspect": missingInspect.raw,
 	}, []string{
 		backendSelection.Location,
 		"https://assets.invalid",
@@ -94,7 +125,7 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	t.Logf(
 		"pull-to-ready commands passed: downloadedBytes=%d inspectCacheBytes=%d restartInspectCacheBytes=%d warmPullBytes=%d cacheRoot=%s assetRequests=%d transferBytes=%d",
 		pull.downloadedBytes, inspect.cacheBytes, secondInspect.cacheBytes,
-		warmPull.downloadedBytes, filepath.Join(homeDirectory, ".agent-factory", "models"), assetClient.Calls(), assetClient.TransferBytes(),
+		warmPull.downloadedBytes, selectedCache, assetClient.Calls(), assetClient.TransferBytes(),
 	)
 }
 
@@ -151,6 +182,20 @@ func executePullToReadyCommand(
 	arguments ...string,
 ) pullToReadyCapture {
 	t.Helper()
+	capture, err := executePullToReadyCommandResult(t, process, homeDirectory, arguments...)
+	if err != nil {
+		t.Fatalf("Process.Execute(%s) error = %v\nstdout:\n%s", strings.Join(arguments, " "), err, capture.raw)
+	}
+	return capture
+}
+
+func executePullToReadyCommandResult(
+	t *testing.T,
+	process rootProcess,
+	homeDirectory string,
+	arguments ...string,
+) (pullToReadyCapture, error) {
+	t.Helper()
 	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--json"}, arguments...))
 	inputs.Input.Env = append(inputs.Input.Env,
 		"HOME="+homeDirectory,
@@ -158,13 +203,8 @@ func executePullToReadyCommand(
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDirectory, "managed-cache"),
 	)
 	inputs.Input.WorkingDirectory = functionalTempDir(t)
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(%s) error = %v\nstdout:\n%s\nstderr:\n%s",
-			strings.Join(arguments, " "), err, inputs.Stdout(), inputs.Stderr(),
-		)
-	}
-	return pullToReadyCapture{raw: inputs.Stdout(), downloadedBytes: pullToReadyDownloadedBytes(t, arguments, inputs.Stdout()), cacheBytes: pullToReadyCacheBytes(t, arguments, inputs.Stdout())}
+	err := process.Execute(inputs.Input)
+	return pullToReadyCapture{raw: inputs.Stdout(), downloadedBytes: pullToReadyDownloadedBytes(t, arguments, inputs.Stdout()), cacheBytes: pullToReadyCacheBytes(t, arguments, inputs.Stdout())}, err
 }
 
 func closePullToReadyProcess(t *testing.T, process rootProcess) {
@@ -221,7 +261,7 @@ func decodePullToReadyJSON(t *testing.T, raw string, target any) {
 	}
 }
 
-func assertPullToReadySuccess(t *testing.T, capture pullToReadyCapture, assetBody []byte) {
+func assertPullToReadySuccess(t *testing.T, capture pullToReadyCapture, assetBody []byte, cacheRoot string) {
 	t.Helper()
 	var response factoryapi.ModelPullResponse
 	decodePullToReadyJSON(t, capture.raw, &response)
@@ -239,12 +279,15 @@ func assertPullToReadySuccess(t *testing.T, capture pullToReadyCapture, assetBod
 	if response.ManagedRuntimePull.CachePath == nil || *response.ManagedRuntimePull.CachePath == "" {
 		t.Fatalf("models pull managed cache path = %#v, want installed path", response.ManagedRuntimePull.CachePath)
 	}
+	if !pathWithinRoot(*response.ManagedRuntimePull.CachePath, cacheRoot) {
+		t.Fatalf("models pull cache path = %q, want selected root %q", *response.ManagedRuntimePull.CachePath, cacheRoot)
+	}
 	if capture.downloadedBytes != int64(len(assetBody)) {
 		t.Fatalf("models pull downloaded bytes = %d, want %d", capture.downloadedBytes, len(assetBody))
 	}
 }
 
-func assertPullToReadyAlreadyPresent(t *testing.T, capture pullToReadyCapture, assetBody []byte) {
+func assertPullToReadyAlreadyPresent(t *testing.T, capture pullToReadyCapture, assetBody []byte, cacheRoot string) {
 	t.Helper()
 	var response factoryapi.ModelPullResponse
 	decodePullToReadyJSON(t, capture.raw, &response)
@@ -265,6 +308,9 @@ func assertPullToReadyAlreadyPresent(t *testing.T, capture pullToReadyCapture, a
 	if response.ManagedRuntimePull.CachePath == nil || *response.ManagedRuntimePull.CachePath == "" {
 		t.Fatalf("warm models pull cache path = %#v, want persisted path", response.ManagedRuntimePull.CachePath)
 	}
+	if !pathWithinRoot(*response.ManagedRuntimePull.CachePath, cacheRoot) {
+		t.Fatalf("warm models pull cache path = %q, want selected root %q", *response.ManagedRuntimePull.CachePath, cacheRoot)
+	}
 }
 
 func assertPullToReadySafeOutput(t *testing.T, outputs map[string]string, forbidden ...string) {
@@ -278,7 +324,7 @@ func assertPullToReadySafeOutput(t *testing.T, outputs map[string]string, forbid
 	}
 }
 
-func assertPullToReadyInspect(t *testing.T, capture pullToReadyCapture, homeDirectory string, assetBody []byte) {
+func assertPullToReadyInspect(t *testing.T, capture pullToReadyCapture, cacheRoot string, assetBody []byte) {
 	t.Helper()
 	var response factoryapi.ModelDetail
 	decodePullToReadyJSON(t, capture.raw, &response)
@@ -287,15 +333,15 @@ func assertPullToReadyInspect(t *testing.T, capture pullToReadyCapture, homeDire
 		response.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
 		t.Fatalf("models inspect response = %#v, want asr READY/INSTALLED", response)
 	}
-	if response.ManagedRuntime.CachePath == nil || !strings.HasPrefix(*response.ManagedRuntime.CachePath, filepath.Join(homeDirectory, ".agent-factory", "models")) {
-		t.Fatalf("models inspect cache path = %#v, want isolated home cache", response.ManagedRuntime.CachePath)
+	if response.ManagedRuntime.CachePath == nil || !pathWithinRoot(*response.ManagedRuntime.CachePath, cacheRoot) {
+		t.Fatalf("models inspect cache path = %#v, want selected cache root %q", response.ManagedRuntime.CachePath, cacheRoot)
 	}
 	if response.ManagedRuntime.CacheBytes == nil || *response.ManagedRuntime.CacheBytes != int64(len(assetBody)) {
 		t.Fatalf("models inspect cache bytes = %#v, want %d", response.ManagedRuntime.CacheBytes, len(assetBody))
 	}
 }
 
-func assertPullToReadyList(t *testing.T, capture pullToReadyCapture, assetBody []byte) {
+func assertPullToReadyList(t *testing.T, capture pullToReadyCapture, assetBody []byte, cacheRoot string) {
 	t.Helper()
 	var response factoryapi.ListModelsResponse
 	decodePullToReadyJSON(t, capture.raw, &response)
@@ -310,9 +356,52 @@ func assertPullToReadyList(t *testing.T, capture pullToReadyCapture, assetBody [
 		if model.ManagedRuntime.CacheBytes == nil || *model.ManagedRuntime.CacheBytes != int64(len(assetBody)) {
 			t.Fatalf("models list ASR cache bytes = %#v, want %d", model.ManagedRuntime.CacheBytes, len(assetBody))
 		}
+		if model.ManagedRuntime.CachePath == nil || !pathWithinRoot(*model.ManagedRuntime.CachePath, cacheRoot) {
+			t.Fatalf("models list ASR cache path = %#v, want selected cache root %q", model.ManagedRuntime.CachePath, cacheRoot)
+		}
 		return
 	}
 	t.Fatalf("models list did not contain %q: %#v", pullToReadyModelName, response.Results)
+}
+
+func assertPullToReadyRemoved(t *testing.T, capture pullToReadyCapture, cacheRoot string, beforeBytes int64) {
+	t.Helper()
+	var response factoryapi.ModelRemoveResponse
+	decodePullToReadyJSON(t, capture.raw, &response)
+	if response.ModelName != strings.ToUpper(strings.TrimSpace(pullToReadyModelName)) ||
+		response.Outcome != factoryapi.REMOVED || response.BytesRemoved != beforeBytes {
+		t.Fatalf("models remove response = %#v, want selected %s/%d bytes", response, cacheRoot, beforeBytes)
+	}
+	if strings.TrimSpace(response.CachePath) == "" || !pathWithinRoot(response.CachePath, cacheRoot) {
+		t.Fatalf("models remove cache path = %#v, want selected cache root %q", response.CachePath, cacheRoot)
+	}
+}
+
+func assertPullToReadyMissingList(t *testing.T, capture pullToReadyCapture) {
+	t.Helper()
+	var response factoryapi.ListModelsResponse
+	decodePullToReadyJSON(t, capture.raw, &response)
+	for _, model := range response.Results {
+		if model.Name != pullToReadyModelName {
+			continue
+		}
+		if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
+			model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+			t.Fatalf("missing models list runtime = %#v, want MISSING/NOT_INSTALLED", model.ManagedRuntime)
+		}
+		return
+	}
+	t.Fatalf("missing models list did not contain %q: %#v", pullToReadyModelName, response.Results)
+}
+
+func assertPullToReadyMissingInspect(t *testing.T, capture pullToReadyCapture) {
+	t.Helper()
+	var response factoryapi.ModelDetail
+	decodePullToReadyJSON(t, capture.raw, &response)
+	if response.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
+		response.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+		t.Fatalf("missing models inspect runtime = %#v, want MISSING/NOT_INSTALLED", response.ManagedRuntime)
+	}
 }
 
 type pullToReadyAssetClient struct {

@@ -179,6 +179,18 @@ type compositionInvocation struct {
 	openScope func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error)
 }
 
+type cacheAwareCompositionInvocation struct {
+	compositionInvocation
+	openCatalogScope func(context.Context, modelscli.CatalogScopeRequest) (modelscli.InvokeRuntimeScope, error)
+}
+
+func (inv cacheAwareCompositionInvocation) CompositionOpenCatalogScopeWithModelCache(
+	ctx context.Context,
+	request modelscli.CatalogScopeRequest,
+) (modelscli.InvokeRuntimeScope, error) {
+	return inv.openCatalogScope(ctx, request)
+}
+
 func (inv compositionInvocation) InvokeModel(
 	context.Context,
 	modelscli.InvocationTarget,
@@ -321,6 +333,41 @@ func TestNewPreservesCompositionStableCollaboratorShapes(t *testing.T) {
 	}
 	if service := modelscli.New(compositionHTTPProtocol(t), nil); service != nil {
 		t.Fatalf("New(http, nil) = %T, want nil without invocation operation", service)
+	}
+}
+
+func TestNewCatalogCacheCapabilityUsesSelectedScope(t *testing.T) {
+	t.Parallel()
+
+	var selectedCache string
+	root := compositionModelsRoot{
+		listModels: func(context.Context) (modelinference.List, error) {
+			return modelinference.List{Results: []modelinference.Summary{{Name: "selected-model"}}}, nil
+		},
+	}
+	invocation := cacheAwareCompositionInvocation{
+		compositionInvocation: compositionInvocation{root: root},
+		openCatalogScope: func(_ context.Context, request modelscli.CatalogScopeRequest) (modelscli.InvokeRuntimeScope, error) {
+			selectedCache = request.ModelCacheDir
+			return compositionCatalogScope()
+		},
+	}
+	service := modelscli.New(compositionHTTPProtocol(t), invocation)
+	catalog, ok := service.(modelscli.ModelCacheCatalog)
+	if !ok {
+		t.Fatal("New() service does not expose optional ModelCacheCatalog capability")
+	}
+	var output bytes.Buffer
+	if err := catalog.ListWithModelCache(modelscli.ListConfig{
+		Context: context.Background(), Output: &output,
+	}, "/selected/model-cache"); err != nil {
+		t.Fatalf("ListWithModelCache() error = %v", err)
+	}
+	if selectedCache != "/selected/model-cache" {
+		t.Fatalf("selected cache = %q, want /selected/model-cache", selectedCache)
+	}
+	if !strings.Contains(output.String(), "selected-model") {
+		t.Fatalf("ListWithModelCache() output = %q, want selected model", output.String())
 	}
 }
 

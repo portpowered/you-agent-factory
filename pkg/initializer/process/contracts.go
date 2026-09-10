@@ -11,6 +11,7 @@ import (
 )
 
 type workingDirectoryContextKey struct{}
+type homeDirectoryContextKey struct{}
 type stdinTTYContextKey struct{}
 type stdoutTTYContextKey struct{}
 type stderrTTYContextKey struct{}
@@ -21,6 +22,15 @@ func WithWorkingDirectory(ctx context.Context, dir string) context.Context {
 
 func WorkingDirectory(ctx context.Context) string {
 	value, _ := ctx.Value(workingDirectoryContextKey{}).(string)
+	return value
+}
+
+func WithHomeDirectory(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, homeDirectoryContextKey{}, dir)
+}
+
+func HomeDirectory(ctx context.Context) string {
+	value, _ := ctx.Value(homeDirectoryContextKey{}).(string)
 	return value
 }
 

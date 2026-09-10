@@ -27,12 +27,16 @@ import (
 )
 
 type modelsCLIServiceFunctions struct {
-	list                 func(modelscli.ListConfig) error
-	inspect              func(modelscli.InspectConfig) error
-	invoke               func(modelscli.InvokeConfig) error
-	invokeWithModelCache func(modelscli.InvokeConfig, string) error
-	pull                 func(modelscli.PullConfig) error
-	remove               func(modelscli.RemoveConfig) error
+	list                  func(modelscli.ListConfig) error
+	inspect               func(modelscli.InspectConfig) error
+	invoke                func(modelscli.InvokeConfig) error
+	invokeWithModelCache  func(modelscli.InvokeConfig, string) error
+	pull                  func(modelscli.PullConfig) error
+	remove                func(modelscli.RemoveConfig) error
+	listWithModelCache    func(modelscli.ListConfig, string) error
+	inspectWithModelCache func(modelscli.InspectConfig, string) error
+	pullWithModelCache    func(modelscli.PullConfig, string) error
+	removeWithModelCache  func(modelscli.RemoveConfig, string) error
 }
 
 func (service modelsCLIServiceFunctions) List(cfg modelscli.ListConfig) error {
@@ -70,6 +74,30 @@ func (service modelsCLIServiceFunctions) Remove(cfg modelscli.RemoveConfig) erro
 		return service.remove(cfg)
 	}
 	return nil
+}
+func (service modelsCLIServiceFunctions) ListWithModelCache(cfg modelscli.ListConfig, cache string) error {
+	if service.listWithModelCache != nil {
+		return service.listWithModelCache(cfg, cache)
+	}
+	return service.List(cfg)
+}
+func (service modelsCLIServiceFunctions) InspectWithModelCache(cfg modelscli.InspectConfig, cache string) error {
+	if service.inspectWithModelCache != nil {
+		return service.inspectWithModelCache(cfg, cache)
+	}
+	return service.Inspect(cfg)
+}
+func (service modelsCLIServiceFunctions) PullWithModelCache(cfg modelscli.PullConfig, cache string) error {
+	if service.pullWithModelCache != nil {
+		return service.pullWithModelCache(cfg, cache)
+	}
+	return service.Pull(cfg)
+}
+func (service modelsCLIServiceFunctions) RemoveWithModelCache(cfg modelscli.RemoveConfig, cache string) error {
+	if service.removeWithModelCache != nil {
+		return service.removeWithModelCache(cfg, cache)
+	}
+	return service.Remove(cfg)
 }
 
 func TestProductionModelsCommandWiresInjectedHandlers(t *testing.T) {
@@ -154,6 +182,59 @@ func TestProductionModelsInvokeCacheEnvironmentLookupFailureShortCircuitsService
 	}
 	if serviceCalls != 0 {
 		t.Fatalf("Models service calls = %d, want zero after environment lookup failure", serviceCalls)
+	}
+}
+
+func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing.T) {
+	t.Parallel()
+
+	const selectedCache = "selected-model-cache"
+	received := map[string]string{}
+	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+		listWithModelCache: func(_ modelscli.ListConfig, cache string) error {
+			received["list"] = cache
+			return nil
+		},
+		inspectWithModelCache: func(_ modelscli.InspectConfig, cache string) error {
+			received["inspect"] = cache
+			return nil
+		},
+		pullWithModelCache: func(_ modelscli.PullConfig, cache string) error {
+			received["pull"] = cache
+			return nil
+		},
+		removeWithModelCache: func(_ modelscli.RemoveConfig, cache string) error {
+			received["remove"] = cache
+			return nil
+		},
+	}}))
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(name string) (string, bool) {
+			if name == runcli.ModelCacheDirEnvironment {
+				return selectedCache, true
+			}
+			return "", false
+		},
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	for _, args := range [][]string{
+		{"models", "list"},
+		{"models", "inspect", "model-a"},
+		{"models", "pull", "model-a"},
+		{"models", "remove", "model-a"},
+	} {
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute %v: %v", args, err)
+		}
+	}
+	for _, operation := range []string{"list", "inspect", "pull", "remove"} {
+		if received[operation] != selectedCache {
+			t.Fatalf("%s selected cache = %q, want %q", operation, received[operation], selectedCache)
+		}
 	}
 }
 
