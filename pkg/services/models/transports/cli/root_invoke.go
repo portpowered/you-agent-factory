@@ -195,9 +195,9 @@ func (service *rootService) invokeGenericInScopeWithOffline(
 // generic CLI request before asset estimation. The Models root repeats this
 // validation before backend execution; doing the same pure check here keeps
 // invalid CLI requests from producing estimate, download, runtime, or output
-// effects. Parameter support is left to the existing Models request contract
-// so lightweight catalog projections remain source-compatible with callers
-// that preserve named parameter values for the root.
+// effects. Preserve named parameters so the existing operation-level contract
+// rejects them before heavyweight effects when the selected operation does not
+// accept a parameters slot.
 func preflightGenericCLIInvocation(
 	cfg InvokeConfig,
 	request modelinference.InvokeModelRequest,
@@ -217,7 +217,6 @@ func preflightGenericCLIInvocation(
 		return request, nil
 	}
 	validationRequest := request
-	validationRequest.Parameters = nil
 	validationRequest.Inputs = genericCLIValidationInputs(request.Inputs, operation.Inputs)
 	prepared, _, err := modelinference.PrepareGenericInvocation(
 		validationRequest,

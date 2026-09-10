@@ -798,7 +798,10 @@ func TestInvokeGenericInScopeClassifiesParsingAndBackendFailures(t *testing.T) {
 		t.Fatalf("parse runtime scope: %v", err)
 	}
 	catalog := modelinference.Detail{Summary: modelinference.Summary{Operations: []modelinference.Operation{{
-		Name: "OMNI", Inputs: []modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+		Name: "OMNI", Inputs: []modelinference.OperationSlot{
+			{Name: "prompt", Modality: modelinference.ModalityText},
+			{Name: "parameters", Modality: modelinference.ModalityJSON},
+		},
 		Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
 	}}}}
 	base := InvokeConfig{Context: context.Background(), Output: io.Discard}
@@ -849,6 +852,7 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 				Inputs: []modelinference.OperationSlot{
 					{Name: "first", Modality: modelinference.ModalityImage},
 					{Name: "second", Modality: modelinference.ModalityImage},
+					{Name: "parameters", Modality: modelinference.ModalityJSON},
 				},
 				Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
 			}},

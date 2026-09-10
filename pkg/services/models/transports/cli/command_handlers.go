@@ -159,7 +159,7 @@ func (h *CommandHandler) Invoke(
 	}
 	invokeInputs, err := readModelsInvokeInputs(inputs)
 	if err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	logger, err := h.buildLogger()
 	if err != nil {
@@ -334,7 +334,11 @@ func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, err
 			continue
 		}
 		if outputPath != "" {
-			return "", nil, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
+			return "", nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				"repeatable --output values must use slot=path mappings after the first unqualified path",
+				"output",
+			)
 		}
 		outputPath = value
 	}
@@ -347,7 +351,11 @@ func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, err
 		outputMappings = append(outputMappings, legacyMappings...)
 	}
 	if outputPath != "" && len(outputMappings) > 0 {
-		return "", nil, fmt.Errorf("--output path cannot be combined with named output mappings")
+		return "", nil, genericCLIParameterFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			"--output path cannot be combined with named output mappings",
+			"output",
+		)
 	}
 	return outputPath, outputMappings, nil
 }

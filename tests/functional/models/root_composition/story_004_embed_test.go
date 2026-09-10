@@ -99,7 +99,15 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	if stdout != "" {
 		t.Fatalf("unknown EMBED input stdout = %q, want empty", stdout)
 	}
-	support.RequireSafeCLIDiagnostic(t, stderr)
+	var diagnostic factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); err != nil {
+		t.Fatalf("decode unknown EMBED input diagnostic: %v; stderr=%q", err, stderr)
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") ||
+		diagnostic.Family != factoryapi.ErrorFamilyBadRequest ||
+		!strings.Contains(diagnostic.Message, "unknown input slot") {
+		t.Fatalf("unknown EMBED input diagnostic = %#v, want BAD_REQUEST/unknown input slot", diagnostic)
+	}
 	if fixture.Calls() != beforeCalls || launcher.Calls() != beforeStarts {
 		t.Fatalf("unknown EMBED input effects = backend %d->%d starts %d->%d, want no post-preflight effects", beforeCalls, fixture.Calls(), beforeStarts, launcher.Calls())
 	}
