@@ -21,6 +21,13 @@ const (
 	assetMetadataName     = ".you-assets.json"
 	assetKindModel        = "model"
 	assetKindBackend      = "backend"
+
+	builtInGemmaLLMModelName       = "gemma-4-E4B-it-Q4_K_M.gguf"
+	builtInGemmaLLMModelBytes      = int64(4977171584)
+	builtInGemmaLLMModelSHA256     = "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"
+	builtInGemmaLLMProjectorName   = "mmproj-F16.gguf"
+	builtInGemmaLLMProjectorBytes  = int64(990372672)
+	builtInGemmaLLMProjectorSHA256 = "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51"
 )
 
 type genericSourceKind string
@@ -400,6 +407,20 @@ func (s *service) genericModelRequirements(
 	source genericSource,
 	explicit []models.AssetRequirement,
 ) ([]genericArtifact, error) {
+	if isBuiltInGemmaLLMSource(source) {
+		return s.genericArtifactsFromRequirements(source, []models.AssetRequirement{
+			{
+				Name:   builtInGemmaLLMModelName,
+				Bytes:  builtInGemmaLLMModelBytes,
+				SHA256: builtInGemmaLLMModelSHA256,
+			},
+			{
+				Name:   builtInGemmaLLMProjectorName,
+				Bytes:  builtInGemmaLLMProjectorBytes,
+				SHA256: builtInGemmaLLMProjectorSHA256,
+			},
+		}), nil
+	}
 	if len(explicit) > 0 {
 		return s.genericArtifactsFromRequirements(source, explicit), nil
 	}
@@ -417,6 +438,62 @@ func (s *service) genericModelRequirements(
 		return nil, err
 	}
 	return nil, nil
+}
+
+func isBuiltInGemmaLLMSource(source genericSource) bool {
+	if source.kind != genericSourceHF ||
+		!strings.EqualFold(strings.TrimSpace(source.modelName), models.BuiltInModelNameLLM) ||
+		!isImmutableGenericRevision(source.revision) {
+		return false
+	}
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
+	if !ok {
+		return false
+	}
+	expected, err := parseGenericSource(definition.Source)
+	if err != nil {
+		return false
+	}
+	return source.owner == expected.owner &&
+		source.repository == expected.repository &&
+		source.file == expected.file &&
+		source.revision == expected.revision
+}
+
+// mergeDiscoveredGenericArtifacts treats content-addressed metadata as
+// optional cache facts. A legacy snapshot may contain only a subset of a new
+// complete requirement set; the requested requirements remain authoritative
+// for any members that were not present in that snapshot.
+func mergeDiscoveredGenericArtifacts(
+	requested []genericArtifact,
+	discovered []genericArtifact,
+) ([]genericArtifact, error) {
+	if len(requested) == 0 {
+		return discovered, nil
+	}
+	if len(discovered) == 0 {
+		return requested, nil
+	}
+	byName := make(map[string]genericArtifact, len(discovered))
+	for _, artifact := range discovered {
+		byName[artifact.requirement.Name] = artifact
+	}
+	result := make([]genericArtifact, 0, len(requested))
+	for _, artifact := range requested {
+		found, ok := byName[artifact.requirement.Name]
+		if !ok {
+			result = append(result, artifact)
+			continue
+		}
+		merged, err := mergeGenericManifest(
+			[]genericArtifact{artifact}, []genericArtifact{found},
+		)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, merged[0])
+	}
+	return result, nil
 }
 
 func (s *service) genericArtifactsFromRequirements(

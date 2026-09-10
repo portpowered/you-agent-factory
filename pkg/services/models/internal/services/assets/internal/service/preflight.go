@@ -269,7 +269,7 @@ func (s *service) resolveGenericPreflightArtifacts(
 		if len(resolved) == 0 {
 			resolved = discoveredArtifacts
 		} else {
-			merged, err := mergeGenericManifest(resolved, discoveredArtifacts)
+			merged, err := mergeDiscoveredGenericArtifacts(resolved, discoveredArtifacts)
 			if err != nil {
 				return nil, err
 			}
