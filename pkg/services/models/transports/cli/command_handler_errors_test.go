@@ -876,6 +876,34 @@ func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
 	}
 }
 
+func TestAssetPreflightInvocationErrorPreservesOfflineMissingArtifacts(t *testing.T) {
+	t.Parallel()
+
+	cause := &modelinference.AssetOfflineError{Missing: []string{"model.bin", "backend.bin"}}
+	failure := assetPreflightInvocationError("llm", "OMNI", cause)
+	var invocationFailure *modelinference.InvocationFailure
+	if !errors.As(failure, &invocationFailure) || invocationFailure == nil {
+		t.Fatalf("asset preflight failure = %v, want typed invocation failure", failure)
+	}
+	wantMessage := "required model assets are unavailable offline; missing artifacts: backend.bin, model.bin"
+	if invocationFailure.Message != wantMessage {
+		t.Fatalf("offline invocation message = %q, want %q", invocationFailure.Message, wantMessage)
+	}
+	mapped := mapModelsClientError(failure)
+	coded, ok := mapped.(interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	})
+	if !ok || coded.CLIErrorCode() != "MODEL_OFFLINE_CACHE_UNAVAILABLE" ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyConflict || coded.CLIErrorMessage() != wantMessage {
+		t.Fatalf("mapped offline failure = %#v, want conflict with complete missing set", mapped)
+	}
+	if !errors.Is(mapped, cause) {
+		t.Fatalf("mapped offline failure = %v, want original AssetOfflineError cause", mapped)
+	}
+}
+
 func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
 	t.Parallel()
 

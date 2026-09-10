@@ -151,34 +151,42 @@ func TestModelsInvokeOfflineMissingArtifactsReportsCompleteSetThroughRootBuildPr
 	t.Parallel()
 	story := newOfflineLLMStory(t, false)
 
-	stdout, stderr, err := runStory004CLI(t, story.process, story.dir, story.environment, []string{
-		"you", "models", "invoke", models.BuiltInModelNameLLM, "--offline", "--input", "prompt=offline miss",
-	})
-	if err == nil {
-		t.Fatal("offline missing-artifact invocation error = nil, want deterministic cache-unavailable failure")
-	}
-	if stdout != "" {
-		t.Fatalf("offline missing-artifact stdout = %q, want empty", stdout)
-	}
-	t.Logf("offline missing-artifact returned %T: %v", err, err)
-	var diagnostic factoryapi.ErrorResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); decodeErr != nil {
-		t.Fatalf("decode offline missing-artifact diagnostic: %v\nstderr=%q", decodeErr, stderr)
-	}
-	if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_OFFLINE_CACHE_UNAVAILABLE") || diagnostic.Family != factoryapi.ErrorFamilyConflict {
-		t.Fatalf("offline missing-artifact diagnostic = %#v, want MODEL_OFFLINE_CACHE_UNAVAILABLE/CONFLICT", diagnostic)
-	}
-	var offline *models.AssetOfflineError
-	if !errors.As(err, &offline) || offline == nil {
-		t.Fatalf("offline missing-artifact error = %v, want AssetOfflineError with complete missing set", err)
-	}
 	wantMissing := []string{offlineModelArtifactName(story.modelDefinition.Source), story.selection.Name}
 	sort.Strings(wantMissing)
-	if strings.Join(offline.Missing, "\x00") != strings.Join(wantMissing, "\x00") {
-		t.Fatalf("offline missing artifacts = %#v, want sorted complete set %#v", offline.Missing, wantMissing)
-	}
-	if story.network.Calls() != 0 || story.launcher.Calls() != 0 || story.protocol.Calls() != 0 || story.compatibility.Calls() != 0 {
-		t.Fatalf("offline missing-artifact effects = network:%d host:%d protocol:%d compatibility:%d; want all zero", story.network.Calls(), story.launcher.Calls(), story.protocol.Calls(), story.compatibility.Calls())
+	wantMessage := "required model assets are unavailable offline; missing artifacts: " + strings.Join(wantMissing, ", ")
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "default diagnostics", args: []string{"you"}},
+		{name: "json diagnostics", args: []string{"you", "--json"}},
+	} {
+		stdout, stderr, err := runStory004CLI(t, story.process, story.dir, story.environment, append(test.args,
+			"models", "invoke", models.BuiltInModelNameLLM, "--offline", "--input", "prompt=offline miss",
+		))
+		if err == nil {
+			t.Fatalf("%s error = nil, want deterministic cache-unavailable failure", test.name)
+		}
+		if stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty", test.name, stdout)
+		}
+		var diagnostic factoryapi.ErrorResponse
+		if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); decodeErr != nil {
+			t.Fatalf("decode %s diagnostic: %v\nstderr=%q", test.name, decodeErr, stderr)
+		}
+		if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_OFFLINE_CACHE_UNAVAILABLE") || diagnostic.Family != factoryapi.ErrorFamilyConflict || diagnostic.Message != wantMessage {
+			t.Fatalf("%s diagnostic = %#v, want code/family/message %q", test.name, diagnostic, wantMessage)
+		}
+		var offline *models.AssetOfflineError
+		if !errors.As(err, &offline) || offline == nil {
+			t.Fatalf("%s error = %v, want AssetOfflineError with complete missing set", test.name, err)
+		}
+		if strings.Join(offline.Missing, "\x00") != strings.Join(wantMissing, "\x00") {
+			t.Fatalf("%s missing artifacts = %#v, want sorted complete set %#v", test.name, offline.Missing, wantMissing)
+		}
+		if story.network.Calls() != 0 || story.launcher.Calls() != 0 || story.protocol.Calls() != 0 || story.compatibility.Calls() != 0 {
+			t.Fatalf("%s effects = network:%d host:%d protocol:%d compatibility:%d; want all zero", test.name, story.network.Calls(), story.launcher.Calls(), story.protocol.Calls(), story.compatibility.Calls())
+		}
 	}
 	closeRootProcess(t, story.process, "close offline missing-artifact root process")
 }
