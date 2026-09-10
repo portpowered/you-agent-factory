@@ -105,6 +105,7 @@ func testModelsInvokeOfflineTTSThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("offline TTS effects = generic:%d privateProtocolDelta:%d networkDelta:%d; want 0/1/0", story.generic.Calls(), len(story.protocol.Calls())-protocolBefore, story.network.Calls()-networkBefore)
 	}
 	closeRootProcess(t, story.process, "close offline TTS root process")
+	waitForTTSHostLifecycle(t, story.host, "offline TTS")
 	starts, stops, waits, active := story.host.Snapshot()
 	if starts == 0 || starts != stops || stops != waits || active != 0 {
 		t.Fatalf("offline TTS host lifecycle = starts:%d stops:%d waits:%d active:%d; want a fully closed cached invocation", starts, stops, waits, active)
