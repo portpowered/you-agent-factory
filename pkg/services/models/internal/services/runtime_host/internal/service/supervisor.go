@@ -389,6 +389,7 @@ func (r *supervisedRuntime) checkReadiness(
 				Revision:        identity.Revision,
 				Platform:        r.cfg.Platform,
 				ModelPath:       strings.TrimSpace(spec.ModelPath),
+				MMProjPath:      strings.TrimSpace(spec.MMProjPath),
 				ModelFiles:      append([]string(nil), spec.ModelFiles...),
 			},
 		)

@@ -63,6 +63,7 @@ type ModelOptions struct {
 	NBatch        int32                  `protobuf:"varint,4,opt,name=NBatch,proto3" json:"NBatch,omitempty"`
 	Embeddings    bool                   `protobuf:"varint,10,opt,name=Embeddings,proto3" json:"Embeddings,omitempty"`
 	ModelFile     string                 `protobuf:"bytes,21,opt,name=ModelFile,proto3" json:"ModelFile,omitempty"`
+	MMProj        string                 `protobuf:"bytes,41,opt,name=MMProj,proto3" json:"MMProj,omitempty"`
 	ModelPath     string                 `protobuf:"bytes,59,opt,name=ModelPath,proto3" json:"ModelPath,omitempty"`
 	Options       []string               `protobuf:"bytes,62,rep,name=Options,proto3" json:"Options,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -123,6 +124,13 @@ func (x *ModelOptions) GetEmbeddings() bool {
 func (x *ModelOptions) GetModelFile() string {
 	if x != nil {
 		return x.ModelFile
+	}
+	return ""
+}
+
+func (x *ModelOptions) GetMMProj() string {
+	if x != nil {
+		return x.MMProj
 	}
 	return ""
 }
@@ -866,7 +874,7 @@ var File_pkg_services_models_internal_backends_localai_backend_subset_proto prot
 const file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc = "" +
 	"\n" +
 	"Bpkg/services/models/internal/backends/localai/backend_subset.proto\x12\abackend\"\x0f\n" +
-	"\rHealthMessage\"\xb2\x01\n" +
+	"\rHealthMessage\"\xca\x01\n" +
 	"\fModelOptions\x12\x14\n" +
 	"\x05Model\x18\x01 \x01(\tR\x05Model\x12\x16\n" +
 	"\x06NBatch\x18\x04 \x01(\x05R\x06NBatch\x12\x1e\n" +
@@ -874,7 +882,8 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"Embeddings\x18\n" +
 	" \x01(\bR\n" +
 	"Embeddings\x12\x1c\n" +
-	"\tModelFile\x18\x15 \x01(\tR\tModelFile\x12\x1c\n" +
+	"\tModelFile\x18\x15 \x01(\tR\tModelFile\x12\x16\n" +
+	"\x06MMProj\x18) \x01(\tR\x06MMProj\x12\x1c\n" +
 	"\tModelPath\x18; \x01(\tR\tModelPath\x12\x18\n" +
 	"\aOptions\x18> \x03(\tR\aOptions\"<\n" +
 	"\x06Result\x12\x18\n" +

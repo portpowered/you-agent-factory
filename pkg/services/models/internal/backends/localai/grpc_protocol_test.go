@@ -31,6 +31,11 @@ func TestPinnedLocalAIModelOptionsDescriptorMatchesField62Contract(t *testing.T)
 		options.Cardinality() != protoreflect.Repeated || options.Kind() != protoreflect.StringKind {
 		t.Fatalf("Options descriptor = %#v, want repeated string field 62", options)
 	}
+	mmproj := fields.ByName("MMProj")
+	if mmproj == nil || mmproj.Number() != 41 ||
+		mmproj.Cardinality() != protoreflect.Optional || mmproj.Kind() != protoreflect.StringKind {
+		t.Fatalf("MMProj descriptor = %#v, want optional string field 41", mmproj)
+	}
 	for _, number := range []protoreflect.FieldNumber{15, 38} {
 		if field := fields.ByNumber(number); field != nil {
 			t.Fatalf("unexpected speculative ModelOptions field %d: %v", number, field)
@@ -253,11 +258,13 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 	modelFile := filepath.Join("models", "llm", "model.gguf")
+	mmprojFile := filepath.Join("models", "llm", "mmproj-F16.gguf")
 	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         "localai-llamacpp",
 		ModelName:       "llm",
 		ModelPath:       modelFile,
+		MMProjPath:      mmprojFile,
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -268,17 +275,19 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	if connection.loadRequest.GetModel() != "llm" ||
 		connection.loadRequest.GetEmbeddings() ||
 		connection.loadRequest.GetModelFile() != modelFile ||
+		connection.loadRequest.GetMMProj() != mmprojFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
 		len(connection.loadRequest.GetOptions()) != 0 {
 		t.Fatalf(
-			"load request model=%q modelFile=%q modelPath=%q nBatch=%d options=%v, want model name, file path, model directory, nonzero batch size, and no VibeVoice option",
-			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
+			"load request model=%q modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want model name, file/projector paths, model directory, nonzero batch size, and no VibeVoice option",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetMMProj(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
 		)
 	}
 	expected := appendStringField(nil, 1, "llm")
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
 	expected = appendStringField(expected, 21, modelFile)
+	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	if !bytes.Equal(connection.loadPayload, expected) {
 		t.Fatalf("non-TTS LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
