@@ -34,6 +34,19 @@ type commandServiceFake struct {
 	pull    func(PullConfig) error
 	remove  func(RemoveConfig) error
 }
+
+type scopeAwareCommandServiceFake struct {
+	commandServiceFake
+	invokeWithScope func(InvokeScopeRequest) error
+}
+
+func (fake scopeAwareCommandServiceFake) InvokeWithScope(request InvokeScopeRequest) error {
+	if fake.invokeWithScope == nil {
+		return errors.New("unexpected invocation scope request")
+	}
+	return fake.invokeWithScope(request)
+}
+
 type modelsPullDoer func(*http.Request) (*http.Response, error)
 
 func (doer modelsPullDoer) Do(request *http.Request) (*http.Response, error) {
@@ -89,15 +102,51 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	}
 }
 
+func TestCommandHandlerPropagatesOfflineInvokeFlag(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	handler := NewCommandHandler(
+		scopeAwareCommandServiceFake{invokeWithScope: func(request InvokeScopeRequest) error {
+			if !request.Offline {
+				t.Fatal("InvokeScopeRequest.Offline = false, want true")
+			}
+			return nil
+		}},
+		nil,
+		func() (string, error) { return "/home/tester", nil },
+		func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error) {
+			return operatorconfig.ResolvedDefaults{}, nil
+		},
+		func() (*zap.Logger, error) { return logger, nil },
+	)
+	cmd := &cobra.Command{Use: "invoke"}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(io.Discard)
+	invokeInputs, inherited := resolvedInvokeHandlerInputsWithOffline(t, "", true)
+	if err := handler.Invoke(cmd, invokeInputs, inherited); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+}
+
 func resolvedInvokeHandlerInputs(
 	t *testing.T,
 	server string,
+) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	return resolvedInvokeHandlerInputsWithOffline(t, server, false)
+}
+
+func resolvedInvokeHandlerInputsWithOffline(
+	t *testing.T,
+	server string,
+	offline bool,
 ) (resolvedinput.Inputs, resolvedinput.Inputs) {
 	t.Helper()
 	local, err := resolvedinput.Resolve(
 		[]resolvedinput.Definition{
 			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
 			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeOfflineID, Kind: resolvedinput.ValueKindBool, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeParameterID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
@@ -106,6 +155,7 @@ func resolvedInvokeHandlerInputs(
 		[]resolvedinput.Candidate{
 			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
 			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
+			{InputID: modelsInvokeOfflineID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.BoolValue(offline)},
 			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
 			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"prompt","modality":"TEXT","contentType":"text/plain","mediaType":"text/plain","content":"hello"}`})},
 			{InputID: modelsInvokeParameterID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"temperature","value":0.2}`})},

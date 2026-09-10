@@ -862,14 +862,17 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 	}
 
 	var output strings.Builder
-	err = service.Invoke(InvokeConfig{
-		Context: context.Background(), ModelName: "model", Operation: "OMNI",
-		InputSpecs: []string{
-			`{"name":"first","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"one"}`,
-			`{"name":"second","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"two"}`,
+	err = service.(InvokeScopeInvoker).InvokeWithScope(InvokeScopeRequest{
+		Config: InvokeConfig{
+			Context: context.Background(), ModelName: "model", Operation: "OMNI",
+			InputSpecs: []string{
+				`{"name":"first","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"one"}`,
+				`{"name":"second","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"two"}`,
+			},
+			ParameterSpecs: []string{`{"name":"temperature","value":0.2}`},
+			JSON:           true, Output: &output,
 		},
-		ParameterSpecs: []string{`{"name":"temperature","value":0.2}`},
-		JSON:           true, Output: &output,
+		Offline: true,
 	})
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
@@ -879,6 +882,9 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 	}
 	if len(root.request.Parameters) != 1 || root.request.Parameters[0].Name != "temperature" {
 		t.Fatalf("Models request parameters = %#v, want explicit parameter", root.request.Parameters)
+	}
+	if !root.request.Offline {
+		t.Fatal("Models request Offline = false, want true")
 	}
 	if !strings.Contains(output.String(), "fixture result") {
 		t.Fatalf("Invoke() output = %q, want generic result", output.String())

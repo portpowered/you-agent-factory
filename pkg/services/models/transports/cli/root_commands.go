@@ -210,9 +210,20 @@ func (service *rootService) emitAssetEstimate(
 	modelName string,
 	diagnostics io.Writer,
 ) error {
+	return service.emitAssetEstimateWithOffline(ctx, scope, modelName, diagnostics, false)
+}
+
+func (service *rootService) emitAssetEstimateWithOffline(
+	ctx context.Context,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	diagnostics io.Writer,
+	offline bool,
+) error {
 	result, err := service.models.PreflightModelAssets(ctx, modelinference.PrepareModelAssetsRequest{
-		Scope: scope,
-		Name:  modelName,
+		Scope:   scope,
+		Name:    modelName,
+		Offline: offline,
 	})
 	if err != nil {
 		// Lightweight embedded Models roots may implement the older operation

@@ -381,12 +381,12 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 	if invoke.Use != "invoke <model-name>" {
 		t.Fatalf("invoke use = %q", invoke.Use)
 	}
-	for _, name := range []string{"operation", "input", "text", "output", "output-map", "port"} {
+	for _, name := range []string{"operation", "offline", "input", "text", "output", "output-map", "port"} {
 		if invoke.Flags().Lookup(name) == nil {
 			t.Fatalf("manifest flag %q was not registered", name)
 		}
 	}
-	if err := invoke.ParseFlags([]string{"--operation", "TTS", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--text", "hello", "--output", "speech.wav"}); err != nil {
+	if err := invoke.ParseFlags([]string{"--operation", "TTS", "--offline", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--text", "hello", "--output", "speech.wav"}); err != nil {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{"operation": "TTS", "text": "hello"} {
@@ -403,8 +403,55 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 	if inputErr != nil || !reflect.DeepEqual(inputValues, []string{"audio=@meeting.wav", "prompt=hint"}) {
 		t.Fatalf("input flag = %#v, %v; want ordered mappings", inputValues, inputErr)
 	}
+	offline, offlineErr := invoke.Flags().GetBool("offline")
+	if offlineErr != nil || !offline {
+		t.Fatalf("offline flag = %t, %v; want true", offline, offlineErr)
+	}
 	if err := invoke.ParseFlags([]string{"--operation", "INVALID"}); err == nil {
 		t.Fatal("invalid manifest operation choice was accepted")
+	}
+}
+
+func TestModelsInvokeManifestDeclaresOneOfflineFlagAndBinding(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	invoke, err := manifest.CommandByID("you.models.invoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	offline, ok := invoke.FlagByLong("offline")
+	if !ok {
+		t.Fatal("models invoke manifest is missing the offline flag")
+	}
+	if offline.ID != "you.models.invoke.flag.offline" || offline.Scope != "local" || offline.ValueType != "bool" || offline.Required || offline.Repeatable || offline.Visibility != "visible" {
+		t.Fatalf("offline flag = %#v; want one visible local optional bool flag", offline)
+	}
+	if offline.HandlerBindingID != "you.models.invoke.binding.offline" {
+		t.Fatalf("offline flag handler binding = %q", offline.HandlerBindingID)
+	}
+	if offline.DefaultValue == nil || offline.DefaultValue.Boolean == nil || *offline.DefaultValue.Boolean {
+		t.Fatalf("offline default = %#v; want typed false", offline.DefaultValue)
+	}
+	if offline.NoOptionValue == nil || offline.NoOptionValue.Boolean == nil || !*offline.NoOptionValue.Boolean {
+		t.Fatalf("offline no-option value = %#v; want typed true", offline.NoOptionValue)
+	}
+
+	visibleOfflineFlags := 0
+	for _, flag := range invoke.Flags {
+		if flag.Visibility == "visible" && flag.Long == "offline" {
+			visibleOfflineFlags++
+		}
+	}
+	if visibleOfflineFlags != 1 {
+		t.Fatalf("visible offline flags = %d; want exactly one", visibleOfflineFlags)
+	}
+
+	binding, ok := invoke.HandlerBindings["you.models.invoke.binding.offline"]
+	if !ok || binding.InputID != offline.ID {
+		t.Fatalf("offline handler binding = %#v; want input %q", binding, offline.ID)
 	}
 }
 

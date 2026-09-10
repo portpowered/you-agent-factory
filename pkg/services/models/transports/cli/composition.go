@@ -55,9 +55,9 @@ type CompositionInvokeScopeOpener interface {
 }
 
 // CompositionInvokeScopeWithModelCacheOpener is the optional additive
-// composition port for an invocation-local managed-model cache selection. It
-// deliberately sits beside the legacy opener so existing composition
-// providers remain source-compatible.
+// composition port for invocation-local scope policy, including managed-model
+// cache selection and offline mode. It deliberately sits beside the legacy
+// opener so existing composition providers remain source-compatible.
 type CompositionInvokeScopeWithModelCacheOpener interface {
 	CompositionOpenInvokeScopeWithModelCache(context.Context, InvokeScopeRequest) (InvokeRuntimeScope, error)
 }

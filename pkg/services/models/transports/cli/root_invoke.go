@@ -33,7 +33,7 @@ func (service *rootService) invoke(request InvokeScopeRequest) error {
 			_ = scope.Close(cfg.Context)
 		}()
 	}
-	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text)
+	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text, request.Offline)
 }
 
 func (service *rootService) invokeInScope(
@@ -42,6 +42,7 @@ func (service *rootService) invokeInScope(
 	modelName string,
 	operation string,
 	text string,
+	offline bool,
 ) error {
 	catalog, err := service.catalogForInvoke(cfg, scope, modelName, operation)
 	if err != nil {
@@ -63,16 +64,16 @@ func (service *rootService) invokeInScope(
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
-		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog, offline)
 	}
-	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, catalog)
+	handled, err := service.invokeGenericInScopeWithOffline(cfg, scope, modelName, operation, text, catalog, offline)
 	if err != nil {
 		return err
 	}
 	if handled {
 		return nil
 	}
-	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog, offline)
 }
 
 func (service *rootService) catalogForInvoke(
@@ -147,6 +148,18 @@ func (service *rootService) invokeGenericInScope(
 	text string,
 	catalog modelinference.Detail,
 ) (bool, error) {
+	return service.invokeGenericInScopeWithOffline(cfg, scope, modelName, operation, text, catalog, false)
+}
+
+func (service *rootService) invokeGenericInScopeWithOffline(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	catalog modelinference.Detail,
+	offline bool,
+) (bool, error) {
 	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
 	if err != nil {
 		return true, err
@@ -160,10 +173,11 @@ func (service *rootService) invokeGenericInScope(
 	if err != nil {
 		return true, err
 	}
-	if err := service.emitAssetEstimate(cfg.Context, scope, modelName, cfg.Diagnostics); err != nil {
+	if err := service.emitAssetEstimateWithOffline(cfg.Context, scope, modelName, cfg.Diagnostics, offline); err != nil {
 		return true, mapModelsClientError(assetPreflightInvocationError(modelName, operation, err))
 	}
 	request := joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog)
+	request.Offline = offline
 	result, err := service.models.InvokeModel(cfg.Context, request)
 	if err == nil {
 		return true, service.writeGenericCLIInvocationResult(cfg, result, catalog, operation, text)
@@ -717,6 +731,7 @@ func (service *rootService) invokePreparedLease(
 	operation string,
 	text string,
 	catalog modelinference.Detail,
+	offline bool,
 ) error {
 	if runtime := catalog.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
@@ -735,6 +750,7 @@ func (service *rootService) invokePreparedLease(
 		Holder:    modelsCLIInvokeHolder,
 		ModelName: modelName,
 		Operation: operation,
+		Offline:   offline,
 		Input: modelinference.InferenceInput{
 			ContentType: "text/plain",
 			Content:     text,
