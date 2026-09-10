@@ -269,6 +269,9 @@ func TestLocalAICandidateModelActivityFailsClosed(t *testing.T) {
 . %s -InstallDir %s
 $modelPaths = @(%s, %s, %s); $modelBefore = @(
     Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
+$missingActivity = Get-SmokeModelActivity -Before $modelBefore -After $modelBefore -Commands @() -RuntimeEvidencePath %s; $missingRejected = $false
+try { Assert-SmokeNoModelActivity $missingActivity } catch { $missingRejected = $true }
+if ($missingActivity.runtimeEvidenceObserved -or -not $missingRejected) { exit 4 }
 [System.IO.File]::WriteAllBytes((Join-Path $modelPaths[2] "download.bin"), [byte[]](65, 66, 67)); $modelAfter = @(
     Get-SmokeActivitySnapshot models $modelPaths[0]; Get-SmokeActivitySnapshot hf $modelPaths[1]; Get-SmokeActivitySnapshot cache $modelPaths[2])
 $modelActivity = Get-SmokeModelActivity -Before $modelBefore -After $modelAfter -Commands @([pscustomobject]@{ arguments = @("models", "invoke", "llm") }) -RuntimeEvidencePath %s; $modelRejected = $false
@@ -287,6 +290,7 @@ if ($backendActivity.backendProcessStarts -ne 1 -or -not $backendRejected) { exi
 		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "models")),
 		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "hf")),
 		localAICandidatePowerShellLiteral(filepath.Join(modelRoot, "cache")),
+		localAICandidatePowerShellLiteral(modelEvidencePath),
 		localAICandidatePowerShellLiteral(modelEvidencePath),
 		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "models")),
 		localAICandidatePowerShellLiteral(filepath.Join(backendRoot, "hf")),

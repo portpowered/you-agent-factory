@@ -775,7 +775,8 @@ function Get-SmokeModelActivity {
 
 function Assert-SmokeNoModelActivity {
     param([object]$Activity)
-    if ($null -eq $Activity -or -not [bool]$Activity.observed) {
+    if ($null -eq $Activity -or -not [bool]$Activity.observed -or
+        -not [bool]$Activity.runtimeEvidenceObserved) {
         Fail-Smoke "model activity observation was unavailable"
     }
     if ([int]$Activity.modelCalls -ne 0 -or
