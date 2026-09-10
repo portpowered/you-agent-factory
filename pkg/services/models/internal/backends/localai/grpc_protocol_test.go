@@ -319,8 +319,8 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 			if err != nil {
 				t.Fatalf("Negotiate() error = %v", err)
 			}
-			if len(connection.loadRequest.GetOptions()) != 0 {
-				t.Fatalf("%s LoadModel options = %#v, want no VibeVoice option", modelName, connection.loadRequest.GetOptions())
+			if len(connection.loadRequest.GetOptions()) != 0 || connection.loadRequest.GetMMProj() != "" {
+				t.Fatalf("%s LoadModel options/mmproj = %#v/%q, want no private option or projector", modelName, connection.loadRequest.GetOptions(), connection.loadRequest.GetMMProj())
 			}
 		})
 	}
@@ -514,7 +514,23 @@ func TestPinnedGRPCProtocolServerProvesProjectorLoadBeforeImagePredict(t *testin
 	negotiateControlledImageHost(t, ctx, endpoint, modelFile, mmprojFile)
 	result := invokeControlledImage(t, ctx, endpoint, imageBytes)
 	assertControlledImageResult(t, result)
-	assertControlledImageObservation(t, backend.snapshot(), modelRoot, modelFile, mmprojFile)
+	assertControlledImageObservation(t, backend.snapshot(), modelRoot, modelFile, mmprojFile, 1, controlledImagePNGHash)
+}
+
+func TestPinnedGRPCProtocolServerKeepsTextOnlyPredictImageFree(t *testing.T) {
+	t.Parallel()
+
+	endpoint, backend := startControlledImageServer(t)
+	modelRoot := t.TempDir()
+	modelFile := filepath.Join(modelRoot, "gemma-4-E4B-it-Q4_K_M.gguf")
+	mmprojFile := filepath.Join(modelRoot, "mmproj-F16.gguf")
+	ctx, cancel := context.WithTimeout(context.Background(), testProtocolDeadline)
+	defer cancel()
+
+	negotiateControlledImageHost(t, ctx, endpoint, modelFile, mmprojFile)
+	result := invokeControlledTextOnly(t, ctx, endpoint)
+	assertControlledImageResult(t, result)
+	assertControlledImageObservation(t, backend.snapshot(), modelRoot, modelFile, mmprojFile, 0, "")
 }
 
 func controlledImageBytes(t *testing.T) []byte {
@@ -568,6 +584,21 @@ func negotiateControlledImageHost(t *testing.T, ctx context.Context, endpoint, m
 
 func invokeControlledImage(t *testing.T, ctx context.Context, endpoint string, imageBytes []byte) OmniInvocationResult {
 	t.Helper()
+	return invokeControlledOmni(t, ctx, endpoint, []models.InferenceInput{
+		{Name: "prompt", Modality: models.ModalityText, Content: "describe this image"},
+		{Name: "image", Modality: models.ModalityImage, ContentType: "image/png", MediaType: "image/png", Content: string(imageBytes)},
+	})
+}
+
+func invokeControlledTextOnly(t *testing.T, ctx context.Context, endpoint string) OmniInvocationResult {
+	t.Helper()
+	return invokeControlledOmni(t, ctx, endpoint, []models.InferenceInput{
+		{Name: "prompt", Modality: models.ModalityText, Content: "describe this image"},
+	})
+}
+
+func invokeControlledOmni(t *testing.T, ctx context.Context, endpoint string, inputs []models.InferenceInput) OmniInvocationResult {
+	t.Helper()
 	codec := NewPinnedOmniCodec(NewPinnedGRPCProtocolClient(platformgrpc.NetworkDialer{}))
 	scope, err := (models.RuntimeScopeRef{}).Parse("scope:controlled-image")
 	if err != nil {
@@ -578,10 +609,7 @@ func invokeControlledImage(t *testing.T, ctx context.Context, endpoint string, i
 		Holder:    "controlled-image-test",
 		Model:     models.ModelReference{NameOrURI: models.BuiltInModelNameLLM},
 		Operation: models.OperationOMNI,
-		Inputs: []models.InferenceInput{
-			{Name: "prompt", Modality: models.ModalityText, Content: "describe this image"},
-			{Name: "image", Modality: models.ModalityImage, ContentType: "image/png", MediaType: "image/png", Content: string(imageBytes)},
-		},
+		Inputs:    inputs,
 	})
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
@@ -600,6 +628,8 @@ func assertControlledImageObservation(
 	t *testing.T,
 	observation controlledImageObservation,
 	modelRoot, modelFile, mmprojFile string,
+	wantImageCount int,
+	wantImageSHA256 string,
 ) {
 	t.Helper()
 	if !equalStrings(observation.calls, []string{localAIHealthMethod, localAILoadModelMethod, localAIPredictMethod}) {
@@ -609,8 +639,8 @@ func assertControlledImageObservation(
 		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM {
 		t.Fatalf("server LoadModel = %#v, want exact model/projector paths", observation.load)
 	}
-	if observation.imageCount != 1 || observation.imageSHA256 != controlledImagePNGHash {
-		t.Fatalf("server image observation = count:%d sha256:%q, want count:1 sha256:%q", observation.imageCount, observation.imageSHA256, controlledImagePNGHash)
+	if observation.imageCount != wantImageCount || observation.imageSHA256 != wantImageSHA256 {
+		t.Fatalf("server image observation = count:%d sha256:%q, want count:%d sha256:%q", observation.imageCount, observation.imageSHA256, wantImageCount, wantImageSHA256)
 	}
 }
 
