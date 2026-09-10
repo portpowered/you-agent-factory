@@ -125,7 +125,7 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	t.Logf(
 		"pull-to-ready commands passed: downloadedBytes=%d inspectCacheBytes=%d restartInspectCacheBytes=%d warmPullBytes=%d cacheRoot=%s assetRequests=%d transferBytes=%d",
 		pull.downloadedBytes, inspect.cacheBytes, secondInspect.cacheBytes,
-		warmPull.downloadedBytes, filepath.Join(homeDirectory, ".agent-factory", "models"), assetClient.Calls(), assetClient.TransferBytes(),
+		warmPull.downloadedBytes, selectedCache, assetClient.Calls(), assetClient.TransferBytes(),
 	)
 }
 
