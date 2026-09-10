@@ -335,11 +335,25 @@ func builtInLLMArtifactPaths(
 	if err != nil {
 		return "", "", nil, err
 	}
-	if !inspection.IntegrityVerified || len(inspection.ExpectedArtifacts) != 2 ||
-		len(inspection.ObservedArtifacts) != 2 || len(paths) != 2 {
+	wanted := builtInLLMArtifactRequirements()
+	if !inspection.IntegrityVerified {
 		return "", "", nil, invalidModelArtifactLayout()
 	}
-	wanted := map[string]models.AssetRequirement{
+	if len(inspection.ExpectedArtifacts) != len(wanted) || len(inspection.ObservedArtifacts) != len(wanted) || len(paths) != len(wanted) {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	if !validBuiltInLLMRequirements(inspection.ExpectedArtifacts, wanted) {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	modelPath, mmProjPath, valid := builtInLLMObservedPaths(inspection.ObservedArtifacts, paths, wanted)
+	if !valid {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	return modelPath, mmProjPath, []string{modelPath, mmProjPath}, nil
+}
+
+func builtInLLMArtifactRequirements() map[string]models.AssetRequirement {
+	return map[string]models.AssetRequirement{
 		builtInLLMModelArtifactName: {
 			Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes,
 			SHA256: builtInLLMModelArtifactSHA256,
@@ -349,46 +363,71 @@ func builtInLLMArtifactPaths(
 			SHA256: builtInLLMProjectorArtifactSHA256,
 		},
 	}
-	seenExpected := make(map[string]struct{}, len(inspection.ExpectedArtifacts))
-	for _, requirement := range inspection.ExpectedArtifacts {
-		name := strings.TrimSpace(requirement.Name)
-		want, ok := wanted[name]
-		if !ok || name != requirement.Name || requirement.Bytes != want.Bytes ||
-			!strings.EqualFold(strings.TrimSpace(requirement.SHA256), want.SHA256) {
-			return "", "", nil, invalidModelArtifactLayout()
+}
+
+func validBuiltInLLMRequirements(
+	requirements []models.AssetRequirement,
+	wanted map[string]models.AssetRequirement,
+) bool {
+	seen := make(map[string]struct{}, len(requirements))
+	for _, requirement := range requirements {
+		if !matchesBuiltInLLMRequirement(requirement.Name, requirement.Bytes, requirement.SHA256, wanted) {
+			return false
 		}
-		if _, duplicate := seenExpected[name]; duplicate {
-			return "", "", nil, invalidModelArtifactLayout()
+		if _, duplicate := seen[requirement.Name]; duplicate {
+			return false
 		}
-		seenExpected[name] = struct{}{}
+		seen[requirement.Name] = struct{}{}
 	}
-	if len(seenExpected) != len(wanted) {
-		return "", "", nil, invalidModelArtifactLayout()
+	return len(seen) == len(wanted)
+}
+
+func matchesBuiltInLLMRequirement(
+	name string,
+	bytes int64,
+	sha256 string,
+	wanted map[string]models.AssetRequirement,
+) bool {
+	trimmedName := strings.TrimSpace(name)
+	want, ok := wanted[trimmedName]
+	if !ok {
+		return false
 	}
+	if trimmedName != name {
+		return false
+	}
+	if bytes != want.Bytes {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(sha256), want.SHA256)
+}
+
+func builtInLLMObservedPaths(
+	artifacts []models.AssetArtifact,
+	paths []string,
+	wanted map[string]models.AssetRequirement,
+) (string, string, bool) {
+	seen := make(map[string]struct{}, len(artifacts))
 	var modelPath, mmProjPath string
-	seenObserved := make(map[string]struct{}, len(inspection.ObservedArtifacts))
-	for index, artifact := range inspection.ObservedArtifacts {
-		name := strings.TrimSpace(artifact.Name)
-		want, ok := wanted[name]
-		if !ok || name != artifact.Name || artifact.Bytes != want.Bytes ||
-			!strings.EqualFold(strings.TrimSpace(artifact.SHA256), want.SHA256) {
-			return "", "", nil, invalidModelArtifactLayout()
+	for index, artifact := range artifacts {
+		if !matchesBuiltInLLMRequirement(artifact.Name, artifact.Bytes, artifact.SHA256, wanted) {
+			return "", "", false
 		}
-		if _, duplicate := seenObserved[name]; duplicate {
-			return "", "", nil, invalidModelArtifactLayout()
+		if _, duplicate := seen[artifact.Name]; duplicate {
+			return "", "", false
 		}
-		seenObserved[name] = struct{}{}
-		switch name {
+		seen[artifact.Name] = struct{}{}
+		switch artifact.Name {
 		case builtInLLMModelArtifactName:
 			modelPath = paths[index]
 		case builtInLLMProjectorArtifactName:
 			mmProjPath = paths[index]
 		}
 	}
-	if modelPath == "" || mmProjPath == "" || len(seenObserved) != len(wanted) {
-		return "", "", nil, invalidModelArtifactLayout()
+	if len(seen) != len(wanted) {
+		return "", "", false
 	}
-	return modelPath, mmProjPath, []string{modelPath, mmProjPath}, nil
+	return modelPath, mmProjPath, true
 }
 
 func modelArtifactPaths(

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
@@ -42,6 +43,16 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
+	assertBuiltInLLMStartSpec(t, spec, identity, inspection)
+}
+
+func assertBuiltInLLMStartSpec(
+	t *testing.T,
+	spec modelseffects.HostProcessStartSpec,
+	identity supervisedIdentity,
+	inspection cacheInspection,
+) {
+	t.Helper()
 	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
 		t.Fatalf("packaged backend start spec = %#v, want no authored process or endpoint", spec)
 	}
