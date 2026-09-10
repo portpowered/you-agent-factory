@@ -69,6 +69,44 @@ func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing
 func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *testing.T) {
 	t.Parallel()
 
+	fixture := writeGenericRemovalFixture(t)
+	scopes := newScopes(t, "remove-generic-success")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("generic removal used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  strings.ToLower(fixture.definition.Name),
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets generic: %v", err)
+	}
+	assertGenericRemovalResult(t, result, fixture)
+	if _, err := os.Stat(fixture.revisionPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed generic revision stat error = %v, want not-exist", err)
+	}
+	assertGenericRemovalSibling(t, fixture.siblingPath)
+	if _, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  fixture.definition.Name,
+	}); !errors.Is(err, models.ErrModelCacheNotFound) {
+		t.Fatalf("repeated generic removal error = %v, want ErrModelCacheNotFound", err)
+	}
+}
+
+type genericRemovalFixture struct {
+	cacheDirectory string
+	definition     models.ModelDefinition
+	body           []byte
+	revisionPath   string
+	siblingPath    string
+	source         genericSource
+}
+
+func writeGenericRemovalFixture(t *testing.T) genericRemovalFixture {
+	t.Helper()
 	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
 	if !ok {
 		t.Fatal("built-in catalog did not publish ASR")
@@ -107,39 +145,32 @@ func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *t
 	if err := os.WriteFile(filepath.Join(modelRoot, metadataFileName), metadata, 0o644); err != nil {
 		t.Fatalf("write generic runtime metadata: %v", err)
 	}
-
-	scopes := newScopes(t, "remove-generic-success")
-	ref := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
-	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		t.Fatal("generic removal used the source")
-		return nil, nil
-	}), func(string) string { return "" })
-	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: ref,
-		Name:  strings.ToLower(definition.Name),
-	})
-	if err != nil {
-		t.Fatalf("RemoveModelAssets generic: %v", err)
+	return genericRemovalFixture{
+		cacheDirectory: cacheDirectory,
+		definition:     definition,
+		body:           body,
+		revisionPath:   revisionPath,
+		siblingPath:    siblingPath,
+		source:         source,
 	}
-	if result.ModelName != canonicalModelName(definition.Name) ||
-		result.Revision != source.revision ||
-		result.CachePath != revisionPath ||
-		result.BytesRemoved != int64(len(body)) ||
+}
+
+func assertGenericRemovalResult(t *testing.T, result models.RemoveModelAssetsResult, fixture genericRemovalFixture) {
+	t.Helper()
+	if result.ModelName != canonicalModelName(fixture.definition.Name) ||
+		result.Revision != fixture.source.revision ||
+		result.CachePath != fixture.revisionPath ||
+		result.BytesRemoved != int64(len(fixture.body)) ||
 		result.Readiness != models.AssetReadinessMissing ||
 		result.Outcome != models.AssetRemovalRemoved {
 		t.Fatalf("RemoveModelAssets generic result = %#v", result)
 	}
-	if _, err := os.Stat(revisionPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("removed generic revision stat error = %v, want not-exist", err)
-	}
+}
+
+func assertGenericRemovalSibling(t *testing.T, siblingPath string) {
+	t.Helper()
 	if sibling, err := os.ReadFile(siblingPath); err != nil || string(sibling) != "sibling" {
 		t.Fatalf("generic sibling changed: body=%q error=%v", sibling, err)
-	}
-	if _, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: ref,
-		Name:  definition.Name,
-	}); !errors.Is(err, models.ErrModelCacheNotFound) {
-		t.Fatalf("repeated generic removal error = %v, want ErrModelCacheNotFound", err)
 	}
 }
 
