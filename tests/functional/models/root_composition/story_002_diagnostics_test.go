@@ -16,6 +16,12 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+type invalidGenericCLIRequestCase struct {
+	name        string
+	arguments   func(string) []string
+	wantMessage string
+}
+
 // TestModelsGenericCLIInvalidRequestsAreTypedAndEffectFree proves the public
 // Process.Execute boundary classifies the selected invalid request forms as
 // BAD_REQUEST before asset estimation, backend lifecycle, invocation, or
@@ -23,11 +29,7 @@ import (
 func TestModelsGenericCLIInvalidRequestsAreTypedAndEffectFree(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name        string
-		arguments   func(string) []string
-		wantMessage string
-	}{
+	cases := []invalidGenericCLIRequestCase{
 		{
 			name: "unsupported operation",
 			arguments: func(_ string) []string {
@@ -102,45 +104,57 @@ func TestModelsGenericCLIInvalidRequestsAreTypedAndEffectFree(t *testing.T) {
 			directory := functionalScaffoldFactory(t, invalidGenericCLIModelFactoryConfig(fixture.modelServerURL))
 			outputDir := functionalTempDir(t)
 			environment := functionalHomeEnvironment(home)
-			before := fixture.effectSnapshot()
-			for _, jsonMode := range []bool{false, true} {
-				args := []string{"you"}
-				if jsonMode {
-					args = append(args, "--json")
-				}
-				args = append(args, "models", "invoke", "llm")
-				args = append(args, testCase.arguments(outputDir)...)
-
-				var stdout, stderr bytes.Buffer
-				inputs := support.FakeInputs(context.Background(), args)
-				inputs.Input.Env = environment
-				inputs.Input.WorkingDirectory = directory
-				inputs.Input.Stdout = &stdout
-				inputs.Input.Stderr = &stderr
-				err := fixture.execute(func() error { return fixture.process.Execute(inputs.Input) })
-				if err == nil {
-					t.Fatalf("Process.Execute(%s) returned nil, want invalid-request failure", map[bool]string{false: "human", true: "json"}[jsonMode])
-				}
-				if stdout.Len() != 0 {
-					t.Fatalf("invalid request stdout = %q, want empty", stdout.String())
-				}
-				var diagnostic factoryapi.ErrorResponse
-				if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr.String())), &diagnostic); decodeErr != nil {
-					t.Fatalf("decode invalid-request diagnostic: %v; stderr=%q; error=%v", decodeErr, stderr.String(), err)
-				}
-				if diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") || diagnostic.Family != factoryapi.ErrorFamilyBadRequest {
-					t.Fatalf("invalid-request diagnostic = %#v, want BAD_REQUEST/BAD_REQUEST", diagnostic)
-				}
-				if !strings.Contains(diagnostic.Message, testCase.wantMessage) {
-					t.Fatalf("invalid-request message = %q, want %q", diagnostic.Message, testCase.wantMessage)
-				}
-				if strings.Contains(diagnostic.Message, "CLI_COMMAND_FAILED") || strings.Contains(diagnostic.Message, "INTERNAL_SERVER_ERROR") {
-					t.Fatalf("invalid-request diagnostic used generic fallback: %#v", diagnostic)
-				}
-			}
-			fixture.assertNoEffectsSince(t, before)
+			assertInvalidGenericCLIRequest(t, fixture, testCase, directory, environment, outputDir)
 		})
 	}
+}
+
+func assertInvalidGenericCLIRequest(
+	t *testing.T,
+	fixture invalidGenericCLIProcess,
+	testCase invalidGenericCLIRequestCase,
+	directory string,
+	environment []string,
+	outputDir string,
+) {
+	t.Helper()
+	before := fixture.effectSnapshot()
+	for _, jsonMode := range []bool{false, true} {
+		args := []string{"you"}
+		if jsonMode {
+			args = append(args, "--json")
+		}
+		args = append(args, "models", "invoke", "llm")
+		args = append(args, testCase.arguments(outputDir)...)
+
+		var stdout, stderr bytes.Buffer
+		inputs := support.FakeInputs(context.Background(), args)
+		inputs.Input.Env = environment
+		inputs.Input.WorkingDirectory = directory
+		inputs.Input.Stdout = &stdout
+		inputs.Input.Stderr = &stderr
+		err := fixture.execute(func() error { return fixture.process.Execute(inputs.Input) })
+		if err == nil {
+			t.Fatalf("Process.Execute(%s) returned nil, want invalid-request failure", map[bool]string{false: "human", true: "json"}[jsonMode])
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("invalid request stdout = %q, want empty", stdout.String())
+		}
+		var diagnostic factoryapi.ErrorResponse
+		if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr.String())), &diagnostic); decodeErr != nil {
+			t.Fatalf("decode invalid-request diagnostic: %v; stderr=%q; error=%v", decodeErr, stderr.String(), err)
+		}
+		if diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") || diagnostic.Family != factoryapi.ErrorFamilyBadRequest {
+			t.Fatalf("invalid-request diagnostic = %#v, want BAD_REQUEST/BAD_REQUEST", diagnostic)
+		}
+		if !strings.Contains(diagnostic.Message, testCase.wantMessage) {
+			t.Fatalf("invalid-request message = %q, want %q", diagnostic.Message, testCase.wantMessage)
+		}
+		if strings.Contains(diagnostic.Message, "CLI_COMMAND_FAILED") || strings.Contains(diagnostic.Message, "INTERNAL_SERVER_ERROR") {
+			t.Fatalf("invalid-request diagnostic used generic fallback: %#v", diagnostic)
+		}
+	}
+	fixture.assertNoEffectsSince(t, before)
 }
 
 type invalidGenericCLIProcess struct {
