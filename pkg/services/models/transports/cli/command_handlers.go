@@ -54,6 +54,7 @@ const (
 	modelsInspectNameInputID = "you.models.inspect.arg.0"
 	modelsInvokeNameInputID  = "you.models.invoke.arg.0"
 	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
+	modelsInvokeOfflineID    = "you.models.invoke.flag.offline"
 	modelsInvokeTextID       = "you.models.invoke.flag.text"
 	modelsInvokeInputID      = "you.models.invoke.flag.input"
 	modelsInvokeParameterID  = "you.models.invoke.flag.parameter"
@@ -158,7 +159,7 @@ func (h *CommandHandler) Invoke(
 	}
 	invokeInputs, err := readModelsInvokeInputs(inputs)
 	if err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	logger, err := h.buildLogger()
 	if err != nil {
@@ -193,6 +194,23 @@ func (h *CommandHandler) Invoke(
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
+	return h.invokeWithSelectedCache(cfg, modelCacheDir, invokeInputs.offline)
+}
+
+func (h *CommandHandler) invokeWithSelectedCache(
+	cfg InvokeConfig,
+	modelCacheDir string,
+	offline bool,
+) error {
+	if offline {
+		invoker, ok := h.models.(InvokeScopeInvoker)
+		if !ok {
+			return fmt.Errorf("models invoke service does not support offline invocation")
+		}
+		return invoker.InvokeWithScope(InvokeScopeRequest{
+			Config: cfg, ModelCacheDir: modelCacheDir, Offline: true,
+		})
+	}
 	if strings.TrimSpace(modelCacheDir) == "" {
 		return h.models.Invoke(cfg)
 	}
@@ -206,6 +224,7 @@ func (h *CommandHandler) Invoke(
 type modelsInvokeInputs struct {
 	modelName      string
 	operation      string
+	offline        bool
 	text           string
 	inputMappings  []string
 	parameterSpecs []string
@@ -237,6 +256,13 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke operation: %w", err)
 	}
+	offline := false
+	if _, present := inputs.State(modelsInvokeOfflineID); present {
+		offline, err = inputs.Bool(modelsInvokeOfflineID)
+		if err != nil {
+			return modelsInvokeInputs{}, fmt.Errorf("read models invoke offline: %w", err)
+		}
+	}
 	text, err := inputs.String(modelsInvokeTextID)
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
@@ -263,7 +289,7 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 		return modelsInvokeInputs{}, err
 	}
 	return modelsInvokeInputs{
-		modelName: modelName, operation: operation, text: text,
+		modelName: modelName, operation: operation, offline: offline, text: text,
 		inputMappings:  inputMappings,
 		parameterSpecs: parameterSpecs, outputPath: outputPath,
 		outputMappings: outputMappings,
@@ -308,7 +334,11 @@ func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, err
 			continue
 		}
 		if outputPath != "" {
-			return "", nil, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
+			return "", nil, genericCLIParameterFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				"repeatable --output values must use slot=path mappings after the first unqualified path",
+				"output",
+			)
 		}
 		outputPath = value
 	}
@@ -321,7 +351,11 @@ func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, err
 		outputMappings = append(outputMappings, legacyMappings...)
 	}
 	if outputPath != "" && len(outputMappings) > 0 {
-		return "", nil, fmt.Errorf("--output path cannot be combined with named output mappings")
+		return "", nil, genericCLIParameterFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			"--output path cannot be combined with named output mappings",
+			"output",
+		)
 	}
 	return outputPath, outputMappings, nil
 }

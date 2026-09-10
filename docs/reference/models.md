@@ -231,6 +231,10 @@ Use `@path` to bind file bytes. Models detects the media type from the path and
 file content, then validates it against the input slot before model execution.
 Use inline values for text, and valid JSON values for JSON slots.
 
+Use `--offline` to require verified cached model and backend artifacts. It never
+accesses the network. If an artifact is missing, pull the model with
+`you models pull <name>`, then retry the invocation.
+
 ### Operation contracts
 
 | Operation | Required inputs | Optional inputs | Outputs |
@@ -298,8 +302,17 @@ array:
 }
 ```
 
-After a successful invocation, verified cache entries are reused. The command
-does not provide an `--offline` flag.
+After a successful invocation, verified cache entries are reused. Add
+`--offline` when a run must remain cache-only:
+
+```bash
+you models invoke embed --offline --operation EMBED \
+  --input text="Use only verified local assets"
+```
+
+If required model or backend artifacts are missing, the command returns
+`MODEL_OFFLINE_CACHE_UNAVAILABLE` with the complete missing set. Pull the model
+while online, then retry with `--offline`.
 
 Malformed input syntax, missing `text`, unknown slots, duplicate slots,
 malformed JSON, and unsupported parameters fail before download or backend

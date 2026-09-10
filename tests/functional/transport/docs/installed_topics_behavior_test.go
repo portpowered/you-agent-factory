@@ -172,7 +172,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		`you models invoke embed --operation EMBED --input text="Find similar work"`,
 		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
 		"Run this command from any directory; a Current Factory is not required:",
-		"does not provide an `--offline` flag",
+		"Use `--offline` to require verified cached model and backend artifacts",
 	} {
 		if !strings.Contains(markdown, want) {
 			t.Fatalf("installed Models topic missing %q", want)
@@ -190,7 +190,6 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"issue #2201",
 		"The placement is therefore not proven intentional",
 		"OMNIVOICE_Q4_K_M",
-		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
 		"Run this zero-configuration command",
 		"Run this command from a directory containing a valid Current Factory:",
 		"shared in-process bootstrap",
@@ -213,6 +212,7 @@ func testModelsInvokeHelp(t *testing.T, process support.Process) {
 		"tts for voice synthesis",
 		"embed for embeddings",
 		"An explicit --server must identify a reachable service",
+		"--offline",
 		"you models invoke embed --operation EMBED",
 		"you models invoke llm --operation OMNI",
 	} {
@@ -220,7 +220,7 @@ func testModelsInvokeHelp(t *testing.T, process support.Process) {
 			t.Fatalf("Models invoke help missing %q", want)
 		}
 	}
-	for _, stale := range []string{"OMNIVOICE_Q4_K_M", "--offline", "zero-configuration", "shared in-process bootstrap"} {
+	for _, stale := range []string{"OMNIVOICE_Q4_K_M", "zero-configuration", "shared in-process bootstrap"} {
 		if strings.Contains(help, stale) {
 			t.Fatalf("Models invoke help contains stale text %q", stale)
 		}

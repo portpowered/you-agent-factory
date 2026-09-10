@@ -12745,13 +12745,14 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one local model through the Current Factory at ./factory/factory.json. Use a shipped model name: llm for OMNI, asr for speech recognition, tts for voice synthesis, or embed for embeddings. An explicit --server must identify a reachable service. Repeatable --input and --output values preserve the existing named-slot contract."
+            "canonicalEnglish": "Invoke one local model through the Current Factory at ./factory/factory.json. Use shipped model names: llm for OMNI, asr for speech recognition, tts for voice synthesis, or embed for embeddings. Use --offline to require verified cached model and backend artifacts without network access. An explicit --server must identify a reachable service. Repeatable --input and --output values preserve the existing named-slot contract."
           }
         },
         "examples": [
           "you models invoke embed --operation EMBED --input text=\"Find similar work\"",
           "you models invoke llm --operation OMNI --input prompt=\"Summarize this.\"",
-          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
+          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json",
+          "you models invoke embed --offline --operation EMBED --input text=\"Use only verified local assets\""
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -12766,7 +12767,7 @@
       "runnable": true,
       "placement": "remote-only",
       "usage": {
-        "line": "invoke <model-name>",
+        "line": "invoke <model-name> [--offline]",
         "example": "  # Generate an embedding.\n  you models invoke embed --operation EMBED --input text=\"Find similar work\"\n\n  # Run the Omni operation.\n  you models invoke llm --operation OMNI --input prompt=\"Summarize this.\"\n\n  # Transcribe audio into named output files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
       },
       "arguments": {
@@ -12989,6 +12990,41 @@
           "valueType": "string",
           "visibility": "visible"
         },
+        "you.models.invoke.flag.offline": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.models.invoke.binding.offline",
+          "id": "you.models.invoke.flag.offline",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.offline",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "long": "offline",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "use only verified cached model and backend artifacts; never access the network",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.models.invoke.flag.text": {
           "acceptedSources": [
             "cli",
@@ -13187,6 +13223,10 @@
           "id": "you.models.invoke.binding.operation",
           "inputId": "you.models.invoke.flag.operation"
         },
+        "you.models.invoke.binding.offline": {
+          "id": "you.models.invoke.binding.offline",
+          "inputId": "you.models.invoke.flag.offline"
+        },
         "you.models.invoke.binding.output": {
           "id": "you.models.invoke.binding.output",
           "inputId": "you.models.invoke.flag.output"
@@ -13230,6 +13270,14 @@
         }
       },
       "errors": {
+        "you.models.invoke.error.bad-request": {
+          "id": "you.models.invoke.error.bad-request",
+          "code": "BAD_REQUEST"
+        },
+        "you.models.invoke.error.offline-cache-unavailable": {
+          "id": "you.models.invoke.error.offline-cache-unavailable",
+          "code": "MODEL_OFFLINE_CACHE_UNAVAILABLE"
+        },
         "you.models.invoke.error.backend-not-ready": {
           "id": "you.models.invoke.error.backend-not-ready",
           "code": "MODEL_BACKEND_NOT_READY"

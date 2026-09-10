@@ -89,20 +89,7 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 		t.Fatalf("fixture EMBED calls = %d, want two completed root invocations", fixture.Calls())
 	}
 
-	beforeCalls := fixture.Calls()
-	beforeStarts := launcher.Calls()
-	stdout, stderr, err = runStory004CLI(t, process, factoryDir, environment,
-		[]string{"you", "models", "invoke", "embed", "--input", "unknown=not sent"})
-	if err == nil {
-		t.Fatal("unknown EMBED input error = nil, want preflight failure")
-	}
-	if stdout != "" {
-		t.Fatalf("unknown EMBED input stdout = %q, want empty", stdout)
-	}
-	support.RequireSafeCLIDiagnostic(t, stderr)
-	if fixture.Calls() != beforeCalls || launcher.Calls() != beforeStarts {
-		t.Fatalf("unknown EMBED input effects = backend %d->%d starts %d->%d, want no post-preflight effects", beforeCalls, fixture.Calls(), beforeStarts, launcher.Calls())
-	}
+	assertStory004UnknownInput(t, process, factoryDir, environment, fixture, launcher)
 
 	fixture.SetFailure(errors.New("backend endpoint https://private.invalid token=secret cache=/private/cache: fixture failure"))
 	stdout, stderr, err = runStory004CLI(t, process, factoryDir, environment,
@@ -125,6 +112,39 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 		[]string{"you", "models", "invoke", "embed", "--input", "text=Find similar work"})
 	if err != nil || stdout != `[0.1,0.2,0.3,0.4]` || stderr != "" {
 		t.Fatalf("EMBED after failure = err %v stdout %q stderr %q, want released successful invocation", err, stdout, stderr)
+	}
+}
+
+func assertStory004UnknownInput(
+	t *testing.T,
+	process support.Process,
+	factoryDir string,
+	environment []string,
+	fixture *story004EmbedFixture,
+	launcher *recordingModelHostLauncher,
+) {
+	t.Helper()
+	beforeCalls := fixture.Calls()
+	beforeStarts := launcher.Calls()
+	stdout, stderr, err := runStory004CLI(t, process, factoryDir, environment,
+		[]string{"you", "models", "invoke", "embed", "--input", "unknown=not sent"})
+	if err == nil {
+		t.Fatal("unknown EMBED input error = nil, want preflight failure")
+	}
+	if stdout != "" {
+		t.Fatalf("unknown EMBED input stdout = %q, want empty", stdout)
+	}
+	var diagnostic factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); err != nil {
+		t.Fatalf("decode unknown EMBED input diagnostic: %v; stderr=%q", err, stderr)
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") ||
+		diagnostic.Family != factoryapi.ErrorFamilyBadRequest ||
+		!strings.Contains(diagnostic.Message, "unknown input slot") {
+		t.Fatalf("unknown EMBED input diagnostic = %#v, want BAD_REQUEST/unknown input slot", diagnostic)
+	}
+	if fixture.Calls() != beforeCalls || launcher.Calls() != beforeStarts {
+		t.Fatalf("unknown EMBED input effects = backend %d->%d starts %d->%d, want no post-preflight effects", beforeCalls, fixture.Calls(), beforeStarts, launcher.Calls())
 	}
 }
 

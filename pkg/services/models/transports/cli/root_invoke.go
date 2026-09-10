@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 func (service *rootService) invoke(request InvokeScopeRequest) error {
@@ -33,7 +31,7 @@ func (service *rootService) invoke(request InvokeScopeRequest) error {
 			_ = scope.Close(cfg.Context)
 		}()
 	}
-	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text)
+	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text, request.Offline)
 }
 
 func (service *rootService) invokeInScope(
@@ -42,6 +40,7 @@ func (service *rootService) invokeInScope(
 	modelName string,
 	operation string,
 	text string,
+	offline bool,
 ) error {
 	catalog, err := service.catalogForInvoke(cfg, scope, modelName, operation)
 	if err != nil {
@@ -57,22 +56,22 @@ func (service *rootService) invokeInScope(
 		return err
 	}
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	if validationOnlyModelInvoke(cfg) {
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
-		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog, offline)
 	}
-	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, catalog)
+	handled, err := service.invokeGenericInScopeWithOffline(cfg, scope, modelName, operation, text, catalog, offline)
 	if err != nil {
 		return err
 	}
 	if handled {
 		return nil
 	}
-	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog, offline)
 }
 
 func (service *rootService) catalogForInvoke(
@@ -88,7 +87,16 @@ func (service *rootService) catalogForInvoke(
 		return result.Model, nil
 	}
 	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
-		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
+		return modelinference.Detail{}, mapModelsClientError(genericCLIInvocationFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			"--output is required unless --json is set", modelName, operation, "", nil,
+		))
+	}
+	if errors.Is(err, modelinference.ErrUnsupportedOperation) {
+		return modelinference.Detail{}, mapModelsClientError(genericCLIInvocationFailure(
+			modelinference.InvocationFailureClassInvalidOperation,
+			fmt.Sprintf("unknown operation %q", operation), modelName, operation, "", nil,
+		))
 	}
 	return modelinference.Detail{}, mapModelsClientError(err)
 }
@@ -139,31 +147,37 @@ func genericCLIOutputPathOperation(catalog modelinference.Detail, operation stri
 	return false
 }
 
-func (service *rootService) invokeGenericInScope(
+func (service *rootService) invokeGenericInScopeWithOffline(
 	cfg InvokeConfig,
 	scope modelinference.RuntimeScopeRef,
 	modelName string,
 	operation string,
 	text string,
 	catalog modelinference.Detail,
+	offline bool,
 ) (bool, error) {
+	parameters, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs)
+	if err != nil {
+		return true, mapModelsClientError(err)
+	}
 	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
 	if err != nil {
-		return true, err
+		return true, mapModelsClientError(err)
 	}
 	if len(inputs) == 0 && len(cfg.ParameterSpecs) == 0 && !cfg.JSON &&
 		len(cfg.OutputMappings) == 0 && strings.TrimSpace(cfg.OutputPath) == "" &&
 		!genericCLIStdoutOutput(cfg, catalog, operation) {
 		return false, nil
 	}
-	parameters, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs)
+	request := joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog)
+	request.Offline = offline
+	request, err = preflightGenericCLIInvocation(cfg, request, catalog)
 	if err != nil {
-		return true, err
+		return true, mapModelsClientError(err)
 	}
-	if err := service.emitAssetEstimate(cfg.Context, scope, modelName, cfg.Diagnostics); err != nil {
+	if err := service.emitAssetEstimateWithOffline(cfg.Context, scope, modelName, cfg.Diagnostics, offline); err != nil {
 		return true, mapModelsClientError(assetPreflightInvocationError(modelName, operation, err))
 	}
-	request := joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog)
 	result, err := service.models.InvokeModel(cfg.Context, request)
 	if err == nil {
 		return true, service.writeGenericCLIInvocationResult(cfg, result, catalog, operation, text)
@@ -175,6 +189,128 @@ func (service *rootService) invokeGenericInScope(
 		return true, mapModelsClientError(err)
 	}
 	return false, nil
+}
+
+// preflightGenericCLIInvocation validates the catalog-backed part of a
+// generic CLI request before asset estimation. The Models root repeats this
+// validation before backend execution; doing the same pure check here keeps
+// invalid CLI requests from producing estimate, download, runtime, or output
+// effects. Preserve named parameters so the existing operation-level contract
+// rejects them before heavyweight effects when the selected operation does not
+// accept a parameters slot.
+func preflightGenericCLIInvocation(
+	cfg InvokeConfig,
+	request modelinference.InvokeModelRequest,
+	catalog modelinference.Detail,
+) (modelinference.InvokeModelRequest, error) {
+	operation, ok := catalogCLIOutputOperation(cfg, catalog, request.Operation)
+	if !ok {
+		// A legacy embedded root may expose no operation detail and rely on
+		// the existing generic-to-prepared fallback. A real catalog rejects an
+		// unsupported operation before this helper is reached.
+		return request, nil
+	}
+	if !genericCLIInputContractComplete(operation.Inputs) {
+		// Some embedded peers publish output-only detail while still accepting
+		// the detached generic request. Preserve that historical capability;
+		// a complete generic catalog always exposes named, typed input slots.
+		return request, nil
+	}
+	validationRequest := request
+	validationRequest.Inputs = genericCLIValidationInputs(request.Inputs, operation.Inputs)
+	prepared, _, err := modelinference.PrepareGenericInvocation(
+		validationRequest,
+		modelinference.ModelDefinition{
+			Name:       request.Model.NameOrURI,
+			Operations: []modelinference.Operation{operation},
+		},
+	)
+	if err != nil {
+		return request, err
+	}
+	request.Operation = prepared.Operation
+	return request, nil
+}
+
+func genericCLIValidationInputs(
+	inputs []modelinference.InferenceInput,
+	slots []modelinference.OperationSlot,
+) []modelinference.InferenceInput {
+	declared := make(map[string]modelinference.OperationSlot, len(slots))
+	for _, slot := range slots {
+		name := strings.TrimSpace(slot.Name)
+		if name != "" {
+			declared[name] = slot
+		}
+	}
+	validated := make([]modelinference.InferenceInput, len(inputs))
+	for index, input := range inputs {
+		validated[index] = input.Clone()
+		slot, ok := declared[strings.TrimSpace(input.Name)]
+		if !ok {
+			continue
+		}
+		// Older catalog fixtures omit content/media declarations. Do not
+		// manufacture a rejection for metadata that the catalog did not
+		// promise; complete declarations remain fully checked by Models.
+		if len(slot.ContentTypes) == 0 || genericCLIContentTypesAreModalityOnly(slot) {
+			validated[index].ContentType = ""
+		}
+		if len(slot.MediaTypes) == 0 {
+			validated[index].MediaType = ""
+		}
+	}
+	return validated
+}
+
+func genericCLIInputContractComplete(slots []modelinference.OperationSlot) bool {
+	if len(slots) == 0 {
+		return false
+	}
+	for _, slot := range slots {
+		if strings.TrimSpace(slot.Name) == "" || strings.TrimSpace(string(slot.Modality)) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func genericCLIContentTypesAreModalityOnly(slot modelinference.OperationSlot) bool {
+	if len(slot.ContentTypes) == 0 {
+		return true
+	}
+	for _, contentType := range slot.ContentTypes {
+		if !strings.EqualFold(strings.TrimSpace(contentType), string(slot.Modality)) {
+			return false
+		}
+	}
+	return true
+}
+
+func genericCLIInvocationFailure(
+	class modelinference.InvocationFailureClass,
+	message string,
+	modelName string,
+	operation string,
+	slot string,
+	validNames []string,
+) error {
+	return &modelinference.InvocationFailure{
+		Class: class, Message: message,
+		Model:     modelinference.ModelReference{NameOrURI: strings.TrimSpace(modelName)},
+		Operation: strings.TrimSpace(operation), Slot: strings.TrimSpace(slot),
+		ValidNames: append([]string(nil), validNames...),
+	}
+}
+
+func genericCLIParameterFailure(
+	class modelinference.InvocationFailureClass,
+	message string,
+	parameter string,
+) error {
+	return &modelinference.InvocationFailure{
+		Class: class, Message: message, Parameter: strings.TrimSpace(parameter),
+	}
 }
 
 func genericCLIInvocationFallbackError(err error) bool {
@@ -216,7 +352,10 @@ func validateCLIOutputShape(
 	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
 	if len(cfg.OutputMappings) > 0 {
 		if strings.TrimSpace(cfg.OutputPath) != "" {
-			return fmt.Errorf("--output cannot be combined with explicit output mappings")
+			return genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				"--output cannot be combined with explicit output mappings", operation, nil,
+			)
 		}
 		return validateGenericCLIOutputMappings(cfg.OutputMappings, selected, ok)
 	}
@@ -225,18 +364,34 @@ func validateCLIOutputShape(
 	}
 	outputSlots := genericCLIOutputSlots(selected.Outputs)
 	if ok && len(outputSlots) > 1 {
-		return fmt.Errorf(
-			"multiple model outputs require --json or explicit output mappings: %s",
-			genericOutputSlotNames(outputSlots),
+		return genericCLIOutputFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			fmt.Sprintf("multiple model outputs require --json or explicit output mappings: %s", genericOutputSlotNames(outputSlots)),
+			operation, nil,
 		)
 	}
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return nil
 	}
 	if !ok || len(outputSlots) != 1 || !genericCLIStdoutModality(outputSlots[0].Modality) {
-		return fmt.Errorf("--output is required unless --json is set")
+		return genericCLIOutputFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			"--output is required unless --json is set", operation, nil,
+		)
 	}
 	return nil
+}
+
+func genericCLIOutputFailure(
+	class modelinference.InvocationFailureClass,
+	message string,
+	operation string,
+	validNames []string,
+) error {
+	return &modelinference.InvocationFailure{
+		Class: class, Message: message, Operation: strings.TrimSpace(operation),
+		ValidNames: append([]string(nil), validNames...),
+	}
 }
 
 func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
@@ -300,6 +455,16 @@ func genericOutputSlotNames(outputs []modelinference.OperationSlot) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+func genericCLIOutputNames(outputs []modelinference.OperationSlot) []string {
+	names := make([]string, 0, len(outputs))
+	for _, output := range outputs {
+		if name := strings.TrimSpace(output.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func genericCLIJSONResult(
@@ -436,28 +601,46 @@ func parseGenericCLIOutputMappings(values []string) ([]genericCLIOutputMapping, 
 	mappings := make([]genericCLIOutputMapping, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
 	paths := make(map[string]string, len(values))
-	for _, value := range values {
+	for index, value := range values {
 		parts := strings.SplitN(value, "=", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid output mapping %q: expected slot=path", value)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("invalid output mapping %d: expected slot=path", index+1), "", nil,
+			)
 		}
 		slot := strings.TrimSpace(parts[0])
 		path := strings.TrimSpace(parts[1])
 		if slot == "" || path == "" {
-			return nil, fmt.Errorf("invalid output mapping %q: slot and path are required", value)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("invalid output mapping %d: slot and path are required", index+1), "", nil,
+			)
 		}
 		if path == "-" {
-			return nil, fmt.Errorf("invalid output mapping for slot %q: path '-' is not supported", slot)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("invalid output mapping for slot %q: path '-' is not supported", slot), "", nil,
+			)
 		}
 		if _, exists := seen[slot]; exists {
-			return nil, fmt.Errorf("duplicate output mapping for slot %q", slot)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassSlotArity,
+				fmt.Sprintf("duplicate output mapping for slot %q", slot), "", nil,
+			)
 		}
 		canonicalPath, err := filepath.Abs(path)
 		if err != nil {
-			return nil, fmt.Errorf("resolve output mapping for slot %q: %w", slot, err)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("resolve output mapping for slot %q", slot), "", nil,
+			)
 		}
 		if priorSlot, exists := paths[canonicalPath]; exists {
-			return nil, fmt.Errorf("output mappings for slots %q and %q use the same path", priorSlot, slot)
+			return nil, genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("output mappings for slots %q and %q use the same path", priorSlot, slot), "", nil,
+			)
 		}
 		seen[slot] = struct{}{}
 		paths[canonicalPath] = slot
@@ -476,12 +659,16 @@ func validateGenericCLIOutputMappings(
 		return err
 	}
 	if !found {
-		return fmt.Errorf("cannot map outputs for unknown operation")
+		return genericCLIOutputFailure(
+			modelinference.InvocationFailureClassInvalidOperation,
+			"cannot map outputs for unknown operation", operation.Name, nil,
+		)
 	}
 	if len(mappings) != len(operation.Outputs) {
-		return fmt.Errorf(
-			"explicit output mappings must cover every output slot: %s",
-			genericOutputSlotNames(operation.Outputs),
+		return genericCLIOutputFailure(
+			modelinference.InvocationFailureClassInvalidSlot,
+			fmt.Sprintf("explicit output mappings must cover every output slot: %s", genericOutputSlotNames(operation.Outputs)),
+			operation.Name, genericCLIOutputNames(operation.Outputs),
 		)
 	}
 	declared := make(map[string]struct{}, len(operation.Outputs))
@@ -490,7 +677,11 @@ func validateGenericCLIOutputMappings(
 	}
 	for _, mapping := range mappings {
 		if _, exists := declared[mapping.slot]; !exists {
-			return fmt.Errorf("output mapping names unknown slot %q; valid slots: %s", mapping.slot, genericOutputSlotNames(operation.Outputs))
+			return genericCLIOutputFailure(
+				modelinference.InvocationFailureClassInvalidSlot,
+				fmt.Sprintf("output mapping names unknown slot %q; valid slots: %s", mapping.slot, genericOutputSlotNames(operation.Outputs)),
+				operation.Name, genericCLIOutputNames(operation.Outputs),
+			)
 		}
 	}
 	return nil
@@ -717,6 +908,7 @@ func (service *rootService) invokePreparedLease(
 	operation string,
 	text string,
 	catalog modelinference.Detail,
+	offline bool,
 ) error {
 	if runtime := catalog.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
@@ -735,6 +927,7 @@ func (service *rootService) invokePreparedLease(
 		Holder:    modelsCLIInvokeHolder,
 		ModelName: modelName,
 		Operation: operation,
+		Offline:   offline,
 		Input: modelinference.InferenceInput{
 			ContentType: "text/plain",
 			Content:     text,
@@ -767,52 +960,6 @@ func (service *rootService) invokePreparedLease(
 	return err
 }
 
-func joinedCLIInvocationRequestFromInputs(
-	scope modelinference.RuntimeScopeRef,
-	modelName string,
-	operation string,
-	text string,
-	inputs []modelinference.InferenceInput,
-	parameters []modelinference.OperationParameter,
-	catalog modelinference.Detail,
-) modelinference.InvokeModelRequest {
-	if len(inputs) > 0 || len(parameters) > 0 {
-		return modelinference.InvokeModelRequest{
-			Scope: scope, Holder: modelsCLIInvokeHolder,
-			Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
-			Inputs: inputs, Parameters: parameters,
-		}
-	}
-
-	inputName := "input"
-	modality := modelinference.ModalityText
-	contentType := "text/plain"
-	if selected, ok := catalogOperationForName(catalog, operation); ok {
-		// Catalog projections sort slots by name; bind --text to the required
-		// text slot instead of assuming the first slot is the CLI input.
-		input := joinedCLITextInput(selected.Inputs)
-		if input == nil && len(selected.Inputs) > 0 {
-			input = &selected.Inputs[0]
-		}
-		if input != nil {
-			inputName = input.Name
-			if input.Modality != "" {
-				modality = input.Modality
-			}
-			if len(input.MediaTypes) > 0 {
-				contentType = input.MediaTypes[0]
-			}
-		}
-	}
-	return modelinference.InvokeModelRequest{
-		Scope: scope, Holder: modelsCLIInvokeHolder,
-		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
-		Inputs: []modelinference.InferenceInput{{
-			Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
-		}},
-	}
-}
-
 func joinedCLIInvocationRequest(
 	scope modelinference.RuntimeScopeRef,
 	modelName string,
@@ -831,142 +978,4 @@ func joinedCLIInvocationRequest(
 		return modelinference.InvokeModelRequest{}, err
 	}
 	return joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog), nil
-}
-
-type genericCLIInputSpec struct {
-	Name        string `json:"name"`
-	Modality    string `json:"modality"`
-	ContentType string `json:"contentType"`
-	MediaType   string `json:"mediaType"`
-	Content     string `json:"content"`
-}
-
-func parseGenericCLIInputSpecs(values []string) ([]modelinference.InferenceInput, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	inputs := make([]modelinference.InferenceInput, 0, len(values))
-	for index, value := range values {
-		var spec genericCLIInputSpec
-		if err := json.Unmarshal([]byte(value), &spec); err != nil {
-			return nil, fmt.Errorf("parse --input %d: %w", index+1, err)
-		}
-		name := strings.TrimSpace(spec.Name)
-		if name == "" {
-			return nil, fmt.Errorf("parse --input %d: name is required", index+1)
-		}
-		modality := modelinference.Modality(strings.ToUpper(strings.TrimSpace(spec.Modality)))
-		if modality == "" {
-			return nil, fmt.Errorf("parse --input %d (%s): modality is required", index+1, name)
-		}
-		if strings.TrimSpace(spec.Content) == "" {
-			return nil, fmt.Errorf("parse --input %d (%s): content is required", index+1, name)
-		}
-		inputs = append(inputs, modelinference.InferenceInput{
-			Name: name, Modality: modality,
-			ContentType: strings.TrimSpace(spec.ContentType),
-			MediaType:   strings.TrimSpace(spec.MediaType), Content: spec.Content,
-		})
-	}
-	return inputs, nil
-}
-
-type genericCLIParameterSpec struct {
-	Name  string          `json:"name"`
-	Value json.RawMessage `json:"value"`
-}
-
-func parseGenericCLIParameterSpecs(values []string) ([]modelinference.OperationParameter, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	parameters := make([]modelinference.OperationParameter, 0, len(values))
-	for index, value := range values {
-		var spec genericCLIParameterSpec
-		if err := json.Unmarshal([]byte(value), &spec); err != nil {
-			return nil, fmt.Errorf("parse --parameter %d: %w", index+1, err)
-		}
-		name := strings.TrimSpace(spec.Name)
-		if name == "" {
-			return nil, fmt.Errorf("parse --parameter %d: name is required", index+1)
-		}
-		if len(spec.Value) == 0 {
-			return nil, fmt.Errorf("parse --parameter %d (%s): value is required", index+1, name)
-		}
-		var parameterValue any
-		if err := json.Unmarshal(spec.Value, &parameterValue); err != nil {
-			return nil, fmt.Errorf("parse --parameter %d (%s) value: %w", index+1, name, err)
-		}
-		parameters = append(parameters, modelinference.OperationParameter{Name: name, Value: parameterValue})
-	}
-	return parameters, nil
-}
-
-func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.OperationSlot {
-	var optionalText *modelinference.OperationSlot
-	for index := range inputs {
-		input := &inputs[index]
-		if input.Modality != modelinference.ModalityText {
-			continue
-		}
-		if input.Required != nil && *input.Required {
-			return input
-		}
-		if optionalText == nil {
-			optionalText = input
-		}
-	}
-	return optionalText
-}
-
-func modelInvocationResponseFromInferenceResult(
-	result modelinference.InvokeModelResult,
-	catalog modelinference.Detail,
-	inputText string,
-) factoryapi.ModelInvocationResponse {
-	worker, locality := catalogPresentationForOperation(catalog, result.Operation)
-	bindings := resolvedPresentationBindings(catalog, result.Operation, inputText)
-	content := contentcontract.GeneratedPtrFromParts(inferenceContentToWorkParts(result.Content))
-	return factoryapi.ModelInvocationResponse{
-		ModelName:        result.ModelName,
-		Worker:           worker,
-		Operation:        result.Operation,
-		ProviderLocality: factoryapi.WorkerModelLocality(locality),
-		Content:          derefGeneratedWorkContent(content),
-		Bindings:         generatedResolvedModelInvocationBindings(bindings),
-	}
-}
-
-func genericInvocationResponseFromInferenceResult(
-	result modelinference.InvokeModelResult,
-) factoryapi.GenericModelInvocationResponse {
-	outputs := make([]factoryapi.ModelInvocationOutput, len(result.Outputs))
-	for index, output := range result.Outputs {
-		projected := factoryapi.ModelInvocationOutput{
-			Name:     output.Name,
-			Modality: factoryapi.ModelInvocationContentType(output.Modality),
-		}
-		projected.ContentType = genericCLIStringPointer(output.ContentType)
-		projected.MediaType = genericCLIStringPointer(output.MediaType)
-		projected.Content = genericCLIStringPointer(output.Content)
-		if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
-			artifact := factoryapi.ModelInvocationArtifact{ArtifactRef: output.Artifact.Artifact.String()}
-			artifact.Name = genericCLIStringPointer(output.Artifact.Name)
-			artifact.MediaType = genericCLIStringPointer(output.Artifact.MediaType)
-			if output.Artifact.SizeBytes >= 0 {
-				size := output.Artifact.SizeBytes
-				artifact.SizeBytes = &size
-			}
-			if len(output.Artifact.Properties) > 0 {
-				properties := make(factoryapi.StringMap, len(output.Artifact.Properties))
-				for key, value := range output.Artifact.Properties {
-					properties[key] = value
-				}
-				artifact.Properties = &properties
-			}
-			projected.Artifact = &artifact
-		}
-		outputs[index] = projected
-	}
-	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
 }

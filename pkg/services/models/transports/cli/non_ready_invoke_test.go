@@ -259,9 +259,9 @@ func TestInvokeGenericMapsBackendPreflightFailure(t *testing.T) {
 		preflightErr: fmt.Errorf("controlled HEAD failed: %w", managedruntime.ErrAssetBackendNotReady),
 	}
 	service := &rootService{models: root}
-	handled, err := service.invokeGenericInScope(
+	handled, err := service.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: context.Background(), Output: io.Discard, JSON: true},
-		scope, "model", managedruntime.OperationOMNI, "hello", catalog,
+		scope, "model", managedruntime.OperationOMNI, "hello", catalog, false,
 	)
 	if !handled || err == nil {
 		t.Fatalf("invokeGenericInScope = handled:%v error:%v, want typed failure", handled, err)

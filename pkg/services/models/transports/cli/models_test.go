@@ -34,6 +34,7 @@ type commandServiceFake struct {
 	pull    func(PullConfig) error
 	remove  func(RemoveConfig) error
 }
+
 type modelsPullDoer func(*http.Request) (*http.Response, error)
 
 func (doer modelsPullDoer) Do(request *http.Request) (*http.Response, error) {
@@ -89,34 +90,8 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	}
 }
 
-func resolvedInvokeHandlerInputs(
-	t *testing.T,
-	server string,
-) (resolvedinput.Inputs, resolvedinput.Inputs) {
-	t.Helper()
-	local, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{
-			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
-			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeParameterID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-		},
-		[]resolvedinput.Candidate{
-			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
-			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
-			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
-			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"prompt","modality":"TEXT","contentType":"text/plain","mediaType":"text/plain","content":"hello"}`})},
-			{InputID: modelsInvokeParameterID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"temperature","value":0.2}`})},
-			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _, inherited := resolvedModelsHandlerInputs(t, server)
-	return local, inherited
+func resolvedInvokeHandlerInputs(t *testing.T, server string) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	return resolvedInvokeHandlerInputsWithOffline(t, server, false)
 }
 func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 	server := "http://127.0.0.1:7437"

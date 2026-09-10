@@ -153,6 +153,23 @@ func (service *compositionService) Invoke(cfg InvokeConfig) error {
 	return service.legacy.Invoke(cfg)
 }
 
+func (service *compositionService) InvokeWithScope(request InvokeScopeRequest) error {
+	if service.owned == nil {
+		if request.Offline {
+			return fmt.Errorf("offline models invoke requires the local Models composition")
+		}
+		return service.legacy.Invoke(request.Config)
+	}
+	invoker, ok := service.owned.(InvokeScopeInvoker)
+	if !ok {
+		return fmt.Errorf("Models owned service does not support invocation scope policy")
+	}
+	if request.Offline || service.canInvokeThroughOwned(request.Config) {
+		return invoker.InvokeWithScope(request)
+	}
+	return service.legacy.Invoke(request.Config)
+}
+
 func (service *compositionService) InvokeWithModelCache(cfg InvokeConfig, modelCacheDir string) error {
 	if strings.TrimSpace(modelCacheDir) == "" {
 		return service.Invoke(cfg)

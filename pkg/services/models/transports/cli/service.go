@@ -58,6 +58,10 @@ type InvokeRuntimeScope struct {
 type InvokeScopeRequest struct {
 	Config        InvokeConfig
 	ModelCacheDir string
+	// Offline requires model and backend resolution to use only verified local
+	// cache artifacts. It is carried beside InvokeConfig so the latter retains
+	// its historical positional source shape for embedded callers.
+	Offline bool
 }
 
 // ModelCacheInvoker is an optional additive capability for Models CLI
@@ -66,6 +70,14 @@ type InvokeScopeRequest struct {
 // selected.
 type ModelCacheInvoker interface {
 	InvokeWithModelCache(InvokeConfig, string) error
+}
+
+// InvokeScopeInvoker is an optional additive capability for the Models CLI
+// service. It carries invocation-local policy beside the compatibility-stable
+// InvokeConfig, allowing the command handler to express offline mode without
+// changing existing positional callers.
+type InvokeScopeInvoker interface {
+	InvokeWithScope(InvokeScopeRequest) error
 }
 
 // Config carries accepted Models-root collaborators for adapter construction.
@@ -101,11 +113,15 @@ func NewService(cfg Config) Service {
 }
 
 func (service *rootService) Invoke(cfg InvokeConfig) error {
-	return service.invoke(InvokeScopeRequest{Config: cfg})
+	return service.InvokeWithScope(InvokeScopeRequest{Config: cfg})
 }
 
 func (service *rootService) InvokeWithModelCache(cfg InvokeConfig, modelCacheDir string) error {
-	return service.invoke(InvokeScopeRequest{Config: cfg, ModelCacheDir: modelCacheDir})
+	return service.InvokeWithScope(InvokeScopeRequest{Config: cfg, ModelCacheDir: modelCacheDir})
+}
+
+func (service *rootService) InvokeWithScope(request InvokeScopeRequest) error {
+	return service.invoke(request)
 }
 
 func (service *rootService) openInvokeScopeForRequest(

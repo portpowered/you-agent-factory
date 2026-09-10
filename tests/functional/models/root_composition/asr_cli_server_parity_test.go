@@ -107,6 +107,66 @@ func TestModelsASRControlledCLIHTTPAndExplicitServerParity(t *testing.T) {
 	}
 }
 
+// TestModelsASRIncompleteOutputSelectionIsTypedAndEffectFree proves the
+// customer-facing root composition rejects both an unselected and a partial
+// ASR output set before reading inputs, resolving assets, starting a host, or
+// invoking the backend. The two cases share the production catalog shape but
+// each owns its complete Process.Execute fixture and effect observers.
+func TestModelsASRIncompleteOutputSelectionIsTypedAndEffectFree(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		outputSlot string
+		wantClass  models.InvocationFailureClass
+	}{
+		{name: "no output selection", outputSlot: "", wantClass: models.InvocationFailureClassInvalidParameter},
+		{name: "partial output selection", outputSlot: "transcript", wantClass: models.InvocationFailureClassInvalidSlot},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newInvalidGenericCLIProcess(t, genericConformanceFactoryConfig)
+			defer fixture.close(t)
+
+			args := []string{
+				"you", "models", "invoke", models.BuiltInModelNameASR,
+				"--operation", models.OperationASR,
+				"--input", `{"name":"audio","modality":"AUDIO","contentType":"audio/wav","mediaType":"audio/wav","content":"RIFF-ASR-FIXTURE"}`,
+			}
+			if testCase.outputSlot != "" {
+				args = append(args, "--output-map", testCase.outputSlot+"="+filepath.Join(t.TempDir(), testCase.outputSlot+".out"))
+			}
+			inputs := support.FakeInputs(t.Context(), args)
+			inputs.Input.Env = fixture.environment
+			inputs.Input.WorkingDirectory = fixture.directory
+			err := fixture.process.Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute returned nil, want incomplete-output BAD_REQUEST")
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("incomplete ASR output stdout = %q, want empty", inputs.Stdout())
+			}
+			var typed *models.InvocationFailure
+			if !errors.As(err, &typed) || typed == nil || typed.Class != testCase.wantClass || typed.Operation != models.OperationASR {
+				t.Fatalf("incomplete ASR output error = %#v, want %s ASR failure", err, testCase.wantClass)
+			}
+			if !strings.Contains(typed.Message, "transcript") || !strings.Contains(typed.Message, "segments") {
+				t.Fatalf("incomplete ASR output message = %q, want every required output name", typed.Message)
+			}
+			var diagnostic factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &diagnostic); decodeErr != nil {
+				t.Fatalf("decode incomplete ASR diagnostic: %v; stderr=%q; error=%v", decodeErr, inputs.Stderr(), err)
+			}
+			if diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != typed.Message {
+				t.Fatalf("incomplete ASR diagnostic = %#v, want BAD_REQUEST with typed message", diagnostic)
+			}
+			fixture.assertNoEffects(t)
+		})
+	}
+}
+
 func localAIASRParityCases(t *testing.T) []localAIASRParityCase {
 	t.Helper()
 	return []localAIASRParityCase{

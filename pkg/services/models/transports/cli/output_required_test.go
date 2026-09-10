@@ -11,6 +11,7 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -798,37 +799,40 @@ func TestInvokeGenericInScopeClassifiesParsingAndBackendFailures(t *testing.T) {
 		t.Fatalf("parse runtime scope: %v", err)
 	}
 	catalog := modelinference.Detail{Summary: modelinference.Summary{Operations: []modelinference.Operation{{
-		Name: "OMNI", Inputs: []modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+		Name: "OMNI", Inputs: []modelinference.OperationSlot{
+			{Name: "prompt", Modality: modelinference.ModalityText},
+			{Name: "parameters", Modality: modelinference.ModalityJSON},
+		},
 		Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
 	}}}}
 	base := InvokeConfig{Context: context.Background(), Output: io.Discard}
 
 	parseRoot := &rootService{models: &genericCLIModelsService{catalog: catalog}}
-	handled, err := parseRoot.invokeGenericInScope(
+	handled, err := parseRoot.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: base.Context, Output: base.Output, InputSpecs: []string{`{`}},
-		scope, "model", "OMNI", "prompt", catalog,
+		scope, "model", "OMNI", "prompt", catalog, false,
 	)
 	if !handled || err == nil || !strings.Contains(err.Error(), "parse --input 1") {
 		t.Fatalf("parse failure = handled:%v error:%v, want handled with actionable error", handled, err)
 	}
 
 	backendRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: errors.New("backend failed")}}
-	handled, err = backendRoot.invokeGenericInScope(
+	handled, err = backendRoot.invokeGenericInScopeWithOffline(
 		InvokeConfig{Context: base.Context, Output: base.Output, ParameterSpecs: []string{`{"name":"temperature","value":0.2}`}},
-		scope, "model", "OMNI", "prompt", catalog,
+		scope, "model", "OMNI", "prompt", catalog, false,
 	)
 	if !handled || err == nil || !strings.Contains(err.Error(), "backend failed") {
 		t.Fatalf("explicit backend failure = handled:%v error:%v, want handled with backend error", handled, err)
 	}
 
 	fallbackRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: modelinference.ErrUnsupportedOperation}}
-	handled, err = fallbackRoot.invokeGenericInScope(base, scope, "model", "OMNI", "prompt", catalog)
+	handled, err = fallbackRoot.invokeGenericInScopeWithOffline(base, scope, "model", "OMNI", "prompt", catalog, false)
 	if handled || err != nil {
 		t.Fatalf("unsupported fallback = handled:%v error:%v, want false, nil", handled, err)
 	}
 
 	nonFallbackRoot := &rootService{models: &genericCLIModelsService{catalog: catalog, invokeErr: errors.New("unexpected backend failure")}}
-	handled, err = nonFallbackRoot.invokeGenericInScope(base, scope, "model", "OMNI", "prompt", catalog)
+	handled, err = nonFallbackRoot.invokeGenericInScopeWithOffline(base, scope, "model", "OMNI", "prompt", catalog, false)
 	if !handled || err == nil || !strings.Contains(err.Error(), "unexpected backend failure") {
 		t.Fatalf("unexpected backend failure = handled:%v error:%v, want handled error", handled, err)
 	}
@@ -845,8 +849,12 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 		catalog: modelinference.Detail{Summary: modelinference.Summary{
 			Name: "model",
 			Operations: []modelinference.Operation{{
-				Name:    "OMNI",
-				Inputs:  []modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+				Name: "OMNI",
+				Inputs: []modelinference.OperationSlot{
+					{Name: "first", Modality: modelinference.ModalityImage},
+					{Name: "second", Modality: modelinference.ModalityImage},
+					{Name: "parameters", Modality: modelinference.ModalityJSON},
+				},
 				Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
 			}},
 		}},
@@ -862,14 +870,17 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 	}
 
 	var output strings.Builder
-	err = service.Invoke(InvokeConfig{
-		Context: context.Background(), ModelName: "model", Operation: "OMNI",
-		InputSpecs: []string{
-			`{"name":"first","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"one"}`,
-			`{"name":"second","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"two"}`,
+	err = service.(InvokeScopeInvoker).InvokeWithScope(InvokeScopeRequest{
+		Config: InvokeConfig{
+			Context: context.Background(), ModelName: "model", Operation: "OMNI",
+			InputSpecs: []string{
+				`{"name":"first","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"one"}`,
+				`{"name":"second","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"two"}`,
+			},
+			ParameterSpecs: []string{`{"name":"temperature","value":0.2}`},
+			JSON:           true, Output: &output,
 		},
-		ParameterSpecs: []string{`{"name":"temperature","value":0.2}`},
-		JSON:           true, Output: &output,
+		Offline: true,
 	})
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
@@ -879,6 +890,9 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 	}
 	if len(root.request.Parameters) != 1 || root.request.Parameters[0].Name != "temperature" {
 		t.Fatalf("Models request parameters = %#v, want explicit parameter", root.request.Parameters)
+	}
+	if !root.request.Offline {
+		t.Fatal("Models request Offline = false, want true")
 	}
 	if !strings.Contains(output.String(), "fixture result") {
 		t.Fatalf("Invoke() output = %q, want generic result", output.String())
@@ -921,5 +935,33 @@ func assertInvokeDependencyValues(t *testing.T, cfg InvokeConfig, logger *zap.Lo
 	t.Helper()
 	if cfg.FactoryDir != "" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
 		t.Fatalf("InvokeConfig dependencies = %#v", cfg)
+	}
+}
+
+func TestAssetPreflightInvocationErrorPreservesOfflineMissingArtifacts(t *testing.T) {
+	t.Parallel()
+
+	cause := &modelinference.AssetOfflineError{Missing: []string{"model.bin", "backend.bin"}}
+	failure := assetPreflightInvocationError("llm", "OMNI", cause)
+	var invocationFailure *modelinference.InvocationFailure
+	if !errors.As(failure, &invocationFailure) || invocationFailure == nil {
+		t.Fatalf("asset preflight failure = %v, want typed invocation failure", failure)
+	}
+	wantMessage := "required model assets are unavailable offline; missing artifacts: backend.bin, model.bin"
+	if invocationFailure.Message != wantMessage {
+		t.Fatalf("offline invocation message = %q, want %q", invocationFailure.Message, wantMessage)
+	}
+	mapped := mapModelsClientError(failure)
+	coded, ok := mapped.(interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	})
+	if !ok || coded.CLIErrorCode() != "MODEL_OFFLINE_CACHE_UNAVAILABLE" ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyConflict || coded.CLIErrorMessage() != wantMessage {
+		t.Fatalf("mapped offline failure = %#v, want conflict with complete missing set", mapped)
+	}
+	if !errors.Is(mapped, cause) {
+		t.Fatalf("mapped offline failure = %v, want original AssetOfflineError cause", mapped)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -224,7 +225,7 @@ func assetPreflightInvocationError(modelName, operation string, err error) error
 		message = "managed model backend is unavailable"
 	case errors.Is(err, modelinference.ErrAssetOffline):
 		class = modelinference.InvocationFailureClassOfflineCache
-		message = "required model assets are unavailable offline"
+		message = offlineAssetPreflightMessage(err)
 	case errors.Is(err, modelinference.ErrModelRevisionUnresolved):
 		class = modelinference.InvocationFailureClassRevisionResolution
 		message = "model source revision could not be resolved to an immutable commit"
@@ -234,6 +235,17 @@ func assetPreflightInvocationError(modelName, operation string, err error) error
 		Model:     modelinference.ModelReference{NameOrURI: strings.TrimSpace(modelName)},
 		Operation: strings.TrimSpace(operation), Cause: err,
 	}
+}
+
+func offlineAssetPreflightMessage(err error) string {
+	const prefix = "required model assets are unavailable offline"
+	var offline *modelinference.AssetOfflineError
+	if !errors.As(err, &offline) || offline == nil || len(offline.Missing) == 0 {
+		return prefix
+	}
+	missing := append([]string(nil), offline.Missing...)
+	sort.Strings(missing)
+	return fmt.Sprintf("%s; missing artifacts: %s", prefix, strings.Join(missing, ", "))
 }
 
 func mapModelsClientError(err error) error {

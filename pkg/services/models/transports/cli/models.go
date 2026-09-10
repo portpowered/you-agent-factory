@@ -801,7 +801,7 @@ func (service *httpService) invokeRemoteGeneric(
 	}
 	inputFileReader, err := preflightGenericCLIInputsWithReader(cfg, service.inputFileReader)
 	if err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	model, err := queryModel(queryOptions{
 		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
@@ -812,11 +812,11 @@ func (service *httpService) invokeRemoteGeneric(
 	}
 	catalog := genericCLIModelDetailFromGenerated(model)
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	inputs, err := prepareGenericCLIInputsWithReader(cfg, operation, catalog, inputFileReader)
 	if err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return fmt.Errorf("--output is not supported with explicit generic inputs")
