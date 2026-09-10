@@ -110,6 +110,15 @@ func (s *service) acquireGenericCacheOnce(
 		return cacheResultFromPaths(artifactKind, artifacts, cached), inspectErr
 	}
 	if len(missing) == 0 {
+		// Verified members may have been recovered from different partial
+		// content-addressed records. Do not expose that combination as a
+		// complete revision: copy every verified member into one newly published
+		// snapshot before returning a successful result.
+		if cacheResultFromPaths(artifactKind, artifacts, cached).snapshotPath == "" {
+			return s.publishGenericCache(
+				ctx, kind, artifactKind, source, artifacts, cached, nil, roots,
+			)
+		}
 		cached, err = s.repairLegacyGenericCache(ctx, kind, source, artifacts, cached, roots)
 		if err != nil {
 			return cacheResultFromPaths(artifactKind, artifacts, cached), err

@@ -413,6 +413,117 @@ func TestPrepareGenericAssetsRepairsPartialContentAddressedSnapshot(t *testing.T
 	assertFileBody(t, filepath.Join(legacySnapshot, modelRequirement.Name), modelBody)
 }
 
+func TestPrepareGenericAssetsPublishesMixedPartialMembersAsOneSnapshot(t *testing.T) {
+	t.Parallel()
+
+	modelBody := []byte("mixed partial model")
+	projectorBody := []byte("mixed partial projector")
+	source := genericSource{
+		kind: genericSourceHF, safe: "hf://owner/repo@" + genericTestRevision,
+		owner: "owner", repository: "repo", revision: genericTestRevision,
+	}
+	modelRequirement := models.AssetRequirement{
+		Name: "model.bin", Bytes: int64(len(modelBody)), SHA256: sha256Hex(modelBody),
+	}
+	projectorRequirement := models.AssetRequirement{
+		Name: "projector.bin", Bytes: int64(len(projectorBody)), SHA256: sha256Hex(projectorBody),
+	}
+	cacheDirectory := t.TempDir()
+	modelSnapshot := writePartialGenericRecord(
+		t, cacheDirectory, source, modelRequirement, modelBody,
+	)
+	projectorSnapshot := writePartialGenericRecord(
+		t, cacheDirectory, source, projectorRequirement, projectorBody,
+	)
+
+	serviceScopes := newScopes(t, "generic-mixed-partial-repair")
+	scope := openScope(t, serviceScopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, serviceScopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("mixed partial cache repair used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	request := models.PrepareModelAssetsRequest{
+		Scope: scope, Name: "mixed-partial-model",
+		Reference: models.ModelReference{NameOrURI: source.safe},
+		Artifacts: []models.AssetRequirement{modelRequirement, projectorRequirement},
+	}
+
+	result, err := service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("mixed partial repair: %v", err)
+	}
+	if result.Outcome != models.AssetPreparationPrepared || len(result.Asset.Artifacts) != 2 {
+		t.Fatalf("mixed partial result = %#v, want one prepared model snapshot", result)
+	}
+
+	newIdentity := genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{
+		{requirement: modelRequirement}, {requirement: projectorRequirement},
+	})
+	newSnapshot := filepath.Join(cacheDirectory, assetContentDirectory, assetKindModel, newIdentity)
+	if _, err := os.Stat(newSnapshot); err != nil {
+		t.Fatalf("new complete snapshot: %v", err)
+	}
+	metadataBody, err := os.ReadFile(filepath.Join(newSnapshot, assetMetadataName))
+	if err != nil {
+		t.Fatalf("read new snapshot metadata: %v", err)
+	}
+	var metadata genericCacheMetadata
+	if err := json.Unmarshal(metadataBody, &metadata); err != nil {
+		t.Fatalf("decode new snapshot metadata: %v", err)
+	}
+	if metadata.Identity != genericCacheKey(assetKindModel, source, []genericArtifact{
+		{requirement: modelRequirement}, {requirement: projectorRequirement},
+	}) || len(metadata.Artifacts) != 2 {
+		t.Fatalf("new snapshot metadata = %#v, want complete identity", metadata)
+	}
+	assertFileBody(t, filepath.Join(newSnapshot, modelRequirement.Name), modelBody)
+	assertFileBody(t, filepath.Join(newSnapshot, projectorRequirement.Name), projectorBody)
+	assertFileBody(t, filepath.Join(modelSnapshot, modelRequirement.Name), modelBody)
+	assertFileBody(t, filepath.Join(projectorSnapshot, projectorRequirement.Name), projectorBody)
+
+	entries, err := os.ReadDir(filepath.Join(cacheDirectory, assetContentDirectory, assetKindModel))
+	if err != nil {
+		t.Fatalf("read model snapshots: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".partial") {
+			t.Fatalf("mixed partial repair left staging entry %q", entry.Name())
+		}
+	}
+}
+
+func writePartialGenericRecord(
+	t *testing.T,
+	cacheDirectory string,
+	source genericSource,
+	requirement models.AssetRequirement,
+	body []byte,
+) string {
+	t.Helper()
+	artifact := genericArtifact{requirement: requirement}
+	identity := genericArtifactIdentityHash(assetKindModel, source, []genericArtifact{artifact})
+	snapshot := filepath.Join(cacheDirectory, assetContentDirectory, assetKindModel, identity)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create partial snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, requirement.Name), body, 0o644); err != nil {
+		t.Fatalf("write partial artifact: %v", err)
+	}
+	metadataBody, err := json.Marshal(genericCacheMetadata{
+		Kind:     assetKindModel,
+		Identity: genericCacheKey(assetKindModel, source, []genericArtifact{artifact}),
+		Source:   source.safe, SourceKey: genericSourceIdentity(source),
+		Artifacts: []models.AssetRequirement{requirement},
+	})
+	if err != nil {
+		t.Fatalf("marshal partial metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, assetMetadataName), metadataBody, 0o644); err != nil {
+		t.Fatalf("write partial metadata: %v", err)
+	}
+	return snapshot
+}
+
 func TestPrepareGenericAssetsOfflinePartialSnapshotReportsOnlyMissingMembers(t *testing.T) {
 	t.Parallel()
 
