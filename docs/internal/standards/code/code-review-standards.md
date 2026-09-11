@@ -28,6 +28,7 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Request changes when backend operations bypass service interfaces, operational behavior is exposed as floating functions, dependencies are hidden in constructor bags, services are constructed outside `wire/`, or a secondary injection path is introduced.
 - Request changes when new or changed service operations lack structured, safe, actionable operation logs without a documented high-volume exception.
 - Reject feature changes that do meta file checking, such as those that implement a secondary filesystem check to conform shapes, since those tend to be expensive to execute.
+- Reviewers **MUST** reject redundant conversion chains, pass-through wrappers, and duplicated domain models unless the PR documents the qualifying external boundary and preserved invariant described in [Minimal Internal Transformations](./general-backend-standards.md#minimal-internal-transformations).
 
 ### functional tests
 - Request changes when a functional-test PR violates any of the five functional-test construction preferences in [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) without a documented, in-scope exception.
