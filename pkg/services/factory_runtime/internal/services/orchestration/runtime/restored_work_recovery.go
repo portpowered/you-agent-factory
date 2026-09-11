@@ -235,37 +235,74 @@ func restoredWorkWasConsumed(restored *interfaces.FactoryWorldState, workID stri
 	if restored == nil || workID == "" || restoredWorkHasRecordedOccupancy(restored, workID) {
 		return false
 	}
-	for _, dispatch := range restored.ActiveDispatches {
+	if restoredWorkInActiveDispatches(restored.ActiveDispatches, workID) ||
+		restoredWorkInFailedDispatches(restored.FailedDispatches, workID) {
+		return false
+	}
+	completion, found := latestRestoredCompletionForWork(restored.CompletedDispatches, workID)
+	return found && restoredCompletionConsumesWork(completion, workID)
+}
+
+func restoredWorkInActiveDispatches(dispatches map[string]interfaces.FactoryWorldDispatch, workID string) bool {
+	for _, dispatch := range dispatches {
 		if restoredActiveDispatchContainsWork(dispatch, workID) {
-			return false
+			return true
 		}
 	}
-	for _, completion := range restored.FailedDispatches {
+	return false
+}
+
+func restoredWorkInFailedDispatches(completions []interfaces.FactoryWorldDispatchCompletion, workID string) bool {
+	for _, completion := range completions {
 		if restoredDispatchContainsWork(completion.WorkItemIDs, workID) {
-			return false
+			return true
 		}
 	}
-	for index := len(restored.CompletedDispatches) - 1; index >= 0; index-- {
-		completion := restored.CompletedDispatches[index]
-		if !restoredDispatchContainsWork(completion.WorkItemIDs, workID) {
-			continue
+	return false
+}
+
+func latestRestoredCompletionForWork(
+	completions []interfaces.FactoryWorldDispatchCompletion,
+	workID string,
+) (interfaces.FactoryWorldDispatchCompletion, bool) {
+	for index := len(completions) - 1; index >= 0; index-- {
+		completion := completions[index]
+		if restoredDispatchContainsWork(completion.WorkItemIDs, workID) {
+			return completion, true
 		}
-		if strings.TrimSpace(completion.DispatchID) == "" || strings.TrimSpace(completion.TransitionID) == "" {
-			return false
+	}
+	return interfaces.FactoryWorldDispatchCompletion{}, false
+}
+
+func restoredCompletionConsumesWork(completion interfaces.FactoryWorldDispatchCompletion, workID string) bool {
+	if strings.TrimSpace(completion.DispatchID) == "" || strings.TrimSpace(completion.TransitionID) == "" {
+		return false
+	}
+	if !restoredCompletionHasConsumableOutcome(completion.Result.Outcome) {
+		return false
+	}
+	if restoredOutputContainsWork(completion.OutputWorkItems, workID) {
+		return false
+	}
+	return completion.TerminalWork == nil || completion.TerminalWork.WorkItem.ID != workID
+}
+
+func restoredCompletionHasConsumableOutcome(outcome string) bool {
+	switch outcome {
+	case string(workerexecution.OutcomeAccepted),
+		string(workerexecution.OutcomeRejected),
+		string(workerexecution.OutcomeContinue):
+		return true
+	default:
+		return false
+	}
+}
+
+func restoredOutputContainsWork(items []work.FactoryWorkItem, workID string) bool {
+	for _, item := range items {
+		if item.ID == workID {
+			return true
 		}
-		switch completion.Result.Outcome {
-		case string(workerexecution.OutcomeAccepted),
-			string(workerexecution.OutcomeRejected),
-			string(workerexecution.OutcomeContinue):
-		default:
-			return false
-		}
-		for _, output := range completion.OutputWorkItems {
-			if output.ID == workID {
-				return false
-			}
-		}
-		return completion.TerminalWork == nil || completion.TerminalWork.WorkItem.ID != workID
 	}
 	return false
 }
@@ -351,57 +388,107 @@ func restoredRetryExhaustedPlacements(
 	if len(recordedWorkstations) == 0 {
 		return nil
 	}
-	activeWorkIDs := make(map[string]struct{})
-	for _, dispatch := range restored.ActiveDispatches {
-		addRestoredDispatchWorkIDs(activeWorkIDs, dispatch.WorkItemIDs)
-		for _, input := range dispatch.Inputs {
-			if workID, ok := restoredDispatchWorkID(input); ok {
-				addHistoricalWorkID(activeWorkIDs, workID)
-			}
-		}
-	}
+	activeWorkIDs := restoredActiveWorkIDs(restored)
 	strikes := make(map[string]map[string]int)
 	exhausted := make(map[string]string)
 	latestMoves := latestRestoredWorkStateChanges(restored.WorkStateChangesByWorkID)
 	for _, completion := range restored.CompletedDispatches {
-		workID := firstRestoredCompletionWorkID(completion)
-		if workID == "" || !completionFollowsRestoredMove(completion, latestMoves[workID]) {
-			continue
-		}
-		if _, active := activeWorkIDs[workID]; active {
-			continue
-		}
-		transition := net.Transitions[completion.TransitionID]
-		if transition == nil {
-			continue
-		}
-		workstation := recordedWorkstations[transition.Name]
-		maxRetries := subsystems.EffectiveWorkstationMaxRetries(workstation)
-		if maxRetries <= 0 {
-			continue
-		}
-		if strikes[workID] == nil {
-			strikes[workID] = make(map[string]int)
-		}
-		if completion.Result.Outcome != string(workerexecution.OutcomeFailed) {
-			strikes[workID][completion.TransitionID] = 0
-			delete(exhausted, workID)
-			continue
-		}
-		strikes[workID][completion.TransitionID]++
-		if strikes[workID][completion.TransitionID] < maxRetries ||
-			!completionRoutesRestoredWork(completion, workID) ||
-			restored.FailureDetailsByWorkID[workID].DispatchID != completion.DispatchID {
-			continue
-		}
-		if failedPlaceID := restoredFailedPlaceID(net, items[workID].WorkTypeID); failedPlaceID != "" {
-			exhausted[workID] = failedPlaceID
-		}
+		recordRestoredRetryCompletion(restored, net, items, recordedWorkstations, activeWorkIDs, strikes, exhausted, latestMoves, completion)
 	}
 	if len(exhausted) == 0 {
 		return nil
 	}
 	return exhausted
+}
+
+func restoredActiveWorkIDs(restored *interfaces.FactoryWorldState) map[string]struct{} {
+	workIDs := make(map[string]struct{})
+	if restored == nil {
+		return workIDs
+	}
+	for _, dispatch := range restored.ActiveDispatches {
+		addRestoredDispatchWorkIDs(workIDs, dispatch.WorkItemIDs)
+		for _, input := range dispatch.Inputs {
+			if workID, ok := restoredDispatchWorkID(input); ok {
+				addHistoricalWorkID(workIDs, workID)
+			}
+		}
+	}
+	return workIDs
+}
+
+func recordRestoredRetryCompletion(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	items map[string]work.FactoryWorkItem,
+	recordedWorkstations map[string]*interfaces.FactoryWorkstationConfig,
+	activeWorkIDs map[string]struct{},
+	strikes map[string]map[string]int,
+	exhausted map[string]string,
+	latestMoves map[string]interfaces.FactoryWorldWorkStateChangeRecord,
+	completion interfaces.FactoryWorldDispatchCompletion,
+) {
+	workID, ok := restoredRetryCompletionWorkID(completion, latestMoves)
+	if !ok || restoredWorkIDIsActive(activeWorkIDs, workID) {
+		return
+	}
+	maxRetries, ok := restoredRetryLimit(net, recordedWorkstations, completion)
+	if !ok {
+		return
+	}
+	if strikes[workID] == nil {
+		strikes[workID] = make(map[string]int)
+	}
+	if completion.Result.Outcome != string(workerexecution.OutcomeFailed) {
+		strikes[workID][completion.TransitionID] = 0
+		delete(exhausted, workID)
+		return
+	}
+	strikes[workID][completion.TransitionID]++
+	if !restoredRetryIsExhausted(restored, completion, workID, strikes[workID][completion.TransitionID], maxRetries) {
+		return
+	}
+	if failedPlaceID := restoredFailedPlaceID(net, items[workID].WorkTypeID); failedPlaceID != "" {
+		exhausted[workID] = failedPlaceID
+	}
+}
+
+func restoredRetryCompletionWorkID(
+	completion interfaces.FactoryWorldDispatchCompletion,
+	latestMoves map[string]interfaces.FactoryWorldWorkStateChangeRecord,
+) (string, bool) {
+	workID := firstRestoredCompletionWorkID(completion)
+	return workID, workID != "" && completionFollowsRestoredMove(completion, latestMoves[workID])
+}
+
+func restoredWorkIDIsActive(activeWorkIDs map[string]struct{}, workID string) bool {
+	_, active := activeWorkIDs[workID]
+	return active
+}
+
+func restoredRetryLimit(
+	net *state.Net,
+	recordedWorkstations map[string]*interfaces.FactoryWorkstationConfig,
+	completion interfaces.FactoryWorldDispatchCompletion,
+) (int, bool) {
+	transition := net.Transitions[completion.TransitionID]
+	if transition == nil {
+		return 0, false
+	}
+	maxRetries := subsystems.EffectiveWorkstationMaxRetries(recordedWorkstations[transition.Name])
+	return maxRetries, maxRetries > 0
+}
+
+func restoredRetryIsExhausted(
+	restored *interfaces.FactoryWorldState,
+	completion interfaces.FactoryWorldDispatchCompletion,
+	workID string,
+	strikes, maxRetries int,
+) bool {
+	if strikes < maxRetries || !completionRoutesRestoredWork(completion, workID) {
+		return false
+	}
+	return restored.FailureDetailsByWorkID[workID].DispatchID == completion.DispatchID
 }
 
 func restoredFactoryWorkstations(snapshot *interfaces.FactorySnapshot) map[string]*interfaces.FactoryWorkstationConfig {

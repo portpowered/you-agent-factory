@@ -760,29 +760,6 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 	return snapshot, mutated, nil
 }
 
-func (e *FactoryEngine) reserveHistoricalSubmissions(submissions []workdomain.SubmitRequest) {
-	if e.historicalWorkIDs == nil {
-		e.historicalWorkIDs = make(map[string]struct{}, len(submissions))
-	}
-	workIDs := make([]string, 0, len(submissions))
-	for _, submission := range submissions {
-		if submission.WorkID != "" {
-			e.historicalWorkIDs[submission.WorkID] = struct{}{}
-			workIDs = append(workIDs, submission.WorkID)
-		}
-	}
-	e.transformer.ReserveWorkIDs(workIDs...)
-}
-
-func (e *FactoryEngine) reserveHistoricalMutations(mutations []interfaces.MarkingMutation) {
-	for _, mutation := range mutations {
-		if mutation.NewToken == nil || mutation.NewToken.Color.DataType == factorytoken.DataTypeResource {
-			continue
-		}
-		e.reserveHistoricalSubmissions([]workdomain.SubmitRequest{{WorkID: mutation.NewToken.Color.WorkID}})
-	}
-}
-
 func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfaces.DispatchRecord, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (bool, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	if len(records) == 0 {
 		return false, snapshot, nil

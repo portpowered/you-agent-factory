@@ -32,13 +32,44 @@ const (
 
 var exactLedgerCurrentDependencyWorkIDs = []string{"work-task-19", "work-task-22", "work-task-15"}
 
+type exactLedgerInitialState struct {
+	sessionID             string
+	lastEventSequence     int
+	currentWorkerSessions []factoryapi.WorkerSessionObservation
+}
+
 // TestResumeExactLedgerCurrentProjectCycle exercises the immutable authority
 // prefix through root.BuildProcess and the public Factory Session surfaces. The
 // task-owned artifact is intentionally not committed; ordinary CI runs this
 // cell as a documented skip unless the operator supplies the exact artifact.
 func TestResumeExactLedgerCurrentProjectCycle(t *testing.T) {
 	acquireRootCompositionFixtureSlot(t)
+	snapshotPath, snapshotPayload := loadExactLedgerSnapshot(t)
+	successorPath := filepath.Join(t.TempDir(), "exact-ledger-successor.jsonl")
+	factoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("factory fixture: %v", err)
+	}
+	server := startExactLedgerServer(t, factoryDir, snapshotPath, snapshotPayload, successorPath)
+	initial := prepareExactLedgerInitialState(t, server)
+	completeExactLedgerCurrentCycle(t, server, initial)
+	recoverExactLedgerParent(t, server, initial.sessionID)
+	eventsAfter := exactLedgerEventsAfterSequence(server.GetFactoryEvents(t), initial.lastEventSequence)
+	assertExactLedgerFeedback(t, eventsAfter)
 
+	server.Stop(t)
+	successorStat, err := os.Stat(successorPath)
+	if err != nil {
+		t.Fatalf("successor recording was not created: %v", err)
+	}
+	if successorStat.Size() == 0 {
+		t.Fatal("successor recording is empty")
+	}
+	verifyExactLedgerIdentity(t, snapshotPath)
+}
+
+func loadExactLedgerSnapshot(t *testing.T) (string, []byte) {
+	t.Helper()
 	sourcePath := strings.TrimSpace(os.Getenv(exactLedgerSnapshotEnv))
 	if sourcePath == "" {
 		sourcePath = testpath.MustRepoPathFromCaller(t, 0, exactLedgerSnapshotDefault)
@@ -46,18 +77,17 @@ func TestResumeExactLedgerCurrentProjectCycle(t *testing.T) {
 	if _, err := os.Stat(sourcePath); err != nil {
 		t.Skipf("exact-ledger artifact unavailable: set %s or provide %s", exactLedgerSnapshotEnv, sourcePath)
 	}
-
 	snapshotPath := copyAndVerifyExactLedger(t, sourcePath)
 	snapshotPayload, err := os.ReadFile(snapshotPath)
 	if err != nil {
 		t.Fatalf("read verified exact-ledger copy: %v", err)
 	}
-	successorPath := filepath.Join(t.TempDir(), "exact-ledger-successor.jsonl")
-	factoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
-	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
-		t.Fatalf("factory fixture: %v", err)
-	}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	return snapshotPath, snapshotPayload
+}
+
+func startExactLedgerServer(t *testing.T, factoryDir, snapshotPath string, snapshotPayload []byte, successorPath string) *support.FunctionalAPIServer {
+	t.Helper()
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		ServerReadyTimeout:        90 * time.Second,
 		WaitForServiceModeRuntime: true,
@@ -71,7 +101,10 @@ func TestResumeExactLedgerCurrentProjectCycle(t *testing.T) {
 			ScriptCommandRunner:   support.NewStaticSuccessCommandRunner("blocked"),
 		},
 	})
+}
 
+func prepareExactLedgerInitialState(t *testing.T, server *support.FunctionalAPIServer) exactLedgerInitialState {
+	t.Helper()
 	status := support.WaitForStatus(t, server.URL(), 90*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.RuntimeStatus != ""
 	})
@@ -93,41 +126,84 @@ func TestResumeExactLedgerCurrentProjectCycle(t *testing.T) {
 	if len(eventsBefore) == 0 {
 		t.Fatal("resumed Factory Event history is empty")
 	}
-	lastBefore := eventsBefore[len(eventsBefore)-1].Context.Sequence
+	return exactLedgerInitialState{
+		sessionID:             session.Id,
+		lastEventSequence:     eventsBefore[len(eventsBefore)-1].Context.Sequence,
+		currentWorkerSessions: support.ListSessionWorkerSessions(t, server.URL(), session.Id, exactLedgerCurrentWorkID()).Sessions,
+	}
+}
+
+func completeExactLedgerCurrentCycle(t *testing.T, server *support.FunctionalAPIServer, initial exactLedgerInitialState) {
+	t.Helper()
 	for _, dependencyID := range exactLedgerCurrentDependencyWorkIDs {
 		completed := moveExactLedgerWork(t, server.URL(), dependencyID, "complete")
 		if completed.State == nil || completed.State.Name != "complete" {
 			t.Fatalf("dependency Work %q state = %#v, want complete", dependencyID, completed.State)
 		}
 	}
-	currentFailed := waitForExactLedgerWorkState(t, server.URL(), exactLedgerCurrentWorkID(), "blocked", 90*time.Second)
+	waitForExactLedgerWorkerSessionCompletion(t, server.URL(), initial.sessionID, exactLedgerCurrentWorkID(), initial.currentWorkerSessions, 90*time.Second)
+	currentFailed := support.GetDefaultSessionWorkByID(t, server.URL(), exactLedgerCurrentWorkID())
 	assertExactLedgerWorkIdentity(t, currentFailed, exactLedgerCurrentCycleID, "project-cycle", "blocked")
 	if len(support.FactoryRelationsValue(currentFailed.Relations)) == 0 {
 		t.Fatalf("current failed cycle relations = %#v, want retained public relationships", currentFailed.Relations)
 	}
+}
 
+func recoverExactLedgerParent(t *testing.T, server *support.FunctionalAPIServer, sessionID string) {
+	t.Helper()
+	parentWorkerSessionsBefore := support.ListSessionWorkerSessions(t, server.URL(), sessionID, exactLedgerParentWorkID).Sessions
 	moved := moveExactLedgerWork(t, server.URL(), exactLedgerParentWorkID, "init")
 	assertExactLedgerWorkIdentity(t, moved, exactLedgerParentWorkID, "project", "init")
-	parentAfter := waitForExactLedgerWorkState(t, server.URL(), exactLedgerParentWorkID, "blocked", 90*time.Second)
+	waitForExactLedgerWorkerSessionCompletion(t, server.URL(), sessionID, exactLedgerParentWorkID, parentWorkerSessionsBefore, 90*time.Second)
+	parentAfter := support.GetDefaultSessionWorkByID(t, server.URL(), exactLedgerParentWorkID)
 	assertExactLedgerWorkIdentity(t, parentAfter, exactLedgerParentWorkID, "project", "blocked")
 	historicalAfter := support.GetDefaultSessionWorkByID(t, server.URL(), exactLedgerHistoricalCycleID)
 	assertExactLedgerWorkIdentity(t, historicalAfter, exactLedgerHistoricalCycleID, "project-cycle", "blocked")
 	if len(support.FactoryRelationsValue(historicalAfter.Relations)) == 0 {
 		t.Fatalf("historical cycle relations after recovery = %#v, want retained public relationships", historicalAfter.Relations)
 	}
+}
 
-	eventsAfter := exactLedgerEventsAfterSequence(server.GetFactoryEvents(t), lastBefore)
-	assertExactLedgerFeedback(t, eventsAfter)
+func waitForExactLedgerWorkerSessionCompletion(
+	t *testing.T,
+	baseURL, sessionID, workID string,
+	previous []factoryapi.WorkerSessionObservation,
+	timeout time.Duration,
+) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	previousStates := make(map[string]factoryapi.WorkerSessionObservationState, len(previous))
+	for _, observation := range previous {
+		previousStates[observation.WorkerSessionId] = observation.State
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		observations := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID).Sessions
+		for _, observation := range observations {
+			previousState, existed := previousStates[observation.WorkerSessionId]
+			if existed && isExactLedgerWorkerSessionTerminal(previousState) {
+				continue
+			}
+			if isExactLedgerWorkerSessionTerminal(observation.State) {
+				return observation
+			}
+		}
+		if remaining := time.Until(deadline); remaining <= 0 {
+			t.Fatalf("timed out waiting for public Worker Session completion before Work %q advanced", workID)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
 
-	server.Stop(t)
-	successorStat, err := os.Stat(successorPath)
-	if err != nil {
-		t.Fatalf("successor recording was not created: %v", err)
+func isExactLedgerWorkerSessionTerminal(state factoryapi.WorkerSessionObservationState) bool {
+	switch state {
+	case factoryapi.WorkerSessionObservationStateCompleted,
+		factoryapi.WorkerSessionObservationStateFailed,
+		factoryapi.WorkerSessionObservationStateCanceled,
+		factoryapi.WorkerSessionObservationStateTerminated:
+		return true
+	default:
+		return false
 	}
-	if successorStat.Size() == 0 {
-		t.Fatal("successor recording is empty")
-	}
-	verifyExactLedgerIdentity(t, snapshotPath)
 }
 
 func exactLedgerCurrentWorkID() string {
@@ -178,52 +254,6 @@ func moveExactLedgerWork(t *testing.T, baseURL, workID, state string) factoryapi
 		t.Fatalf("decode exact-ledger recovery move: %v", err)
 	}
 	return moved
-}
-
-func waitForExactLedgerWorkState(t *testing.T, baseURL, workID, state string, timeout time.Duration) factoryapi.Work {
-	t.Helper()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	timeoutTimer := time.NewTimer(timeout)
-	defer timeoutTimer.Stop()
-	last := factoryapi.Work{}
-	for {
-		item, found := tryGetExactLedgerWork(t, baseURL, workID)
-		if found {
-			last = item
-		}
-		if found && item.State != nil && item.State.Name == state {
-			return item
-		}
-		select {
-		case <-ticker.C:
-		case <-timeoutTimer.C:
-			t.Fatalf("Work %q did not reach state %q within %s; last=%#v", workID, state, timeout, last)
-			return factoryapi.Work{}
-		}
-	}
-}
-
-func tryGetExactLedgerWork(t *testing.T, baseURL, workID string) (factoryapi.Work, bool) {
-	t.Helper()
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+url.PathEscape(workID))
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode == http.StatusNotFound {
-		return factoryapi.Work{}, false
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var item factoryapi.Work
-	if err := json.NewDecoder(response.Body).Decode(&item); err != nil {
-		t.Fatalf("decode GET %s: %v", endpoint, err)
-	}
-	return item, true
 }
 
 func assertExactLedgerFeedback(t *testing.T, events []factoryapi.FactoryEvent) {

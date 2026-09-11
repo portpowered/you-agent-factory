@@ -77,6 +77,29 @@ func copyHookState(state map[string]string) map[string]string {
 	return copied
 }
 
+func (e *FactoryEngine) reserveHistoricalSubmissions(submissions []workdomain.SubmitRequest) {
+	if e.historicalWorkIDs == nil {
+		e.historicalWorkIDs = make(map[string]struct{}, len(submissions))
+	}
+	workIDs := make([]string, 0, len(submissions))
+	for _, submission := range submissions {
+		if submission.WorkID != "" {
+			e.historicalWorkIDs[submission.WorkID] = struct{}{}
+			workIDs = append(workIDs, submission.WorkID)
+		}
+	}
+	e.transformer.ReserveWorkIDs(workIDs...)
+}
+
+func (e *FactoryEngine) reserveHistoricalMutations(mutations []interfaces.MarkingMutation) {
+	for _, mutation := range mutations {
+		if mutation.NewToken == nil || mutation.NewToken.Color.DataType == factorytoken.DataTypeResource {
+			continue
+		}
+		e.reserveHistoricalSubmissions([]workdomain.SubmitRequest{{WorkID: mutation.NewToken.Color.WorkID}})
+	}
+}
+
 func submissionRecordID(tick int, hookName string, index int) string {
 	return fmt.Sprintf("tick-%d:%s:%d", tick, hookName, index)
 }
