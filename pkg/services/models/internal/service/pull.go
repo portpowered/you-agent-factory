@@ -126,22 +126,26 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 		o.assets,
 		request.Scope,
 		func(ctx context.Context, modelName string, scope models.RuntimeScopeRef) (models.PrepareModelAssetsRequest, error) {
-			var backendArtifact modelseffects.BackendArtifactSelection
-			if o.resolveBackendArtifact != nil && isJoinedPinnedBackend(resolved.Definition.Backend) {
-				var resolveErr error
-				backendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
-				if resolveErr != nil {
-					return models.PrepareModelAssetsRequest{}, resolveErr
-				}
-			}
-			return joinedAssetPreparationRequestWithBackend(
+			configuration := joinedHostConfiguration(
 				models.InvokeModelRequest{
 					Scope: scope,
 					Model: models.ModelReference{NameOrURI: modelName},
 				},
-				modelName,
 				resolved,
-				backendArtifact,
+				o.process.BackendArtifactPlatform,
+			)
+			if o.resolveBackendArtifact != nil && isJoinedPinnedBackend(resolved.Definition.Backend) {
+				var resolveErr error
+				configuration.BackendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, configuration)
+				if resolveErr != nil {
+					return models.PrepareModelAssetsRequest{}, resolveErr
+				}
+			}
+			return joinedAssetPreparationRequestWithConfiguration(
+				models.InvokeModelRequest{
+					Scope: scope,
+					Model: models.ModelReference{NameOrURI: modelName},
+				}, configuration, resolved,
 			)
 		},
 	)

@@ -241,8 +241,10 @@ func TestPinnedGRPCHostProtocolNegotiatorUsesHealthRPC(t *testing.T) {
 	connection := &recordingGRPCConnection{}
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         "localai-llamacpp",
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-llamacpp",
+		},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -265,11 +267,13 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	modelFile := filepath.Join("models", "llm", "model.gguf")
 	mmprojFile := filepath.Join("models", "llm", "mmproj-F16.gguf")
 	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         "localai-llamacpp",
-		ModelName:       "llm",
-		ModelPath:       modelFile,
-		MMProjPath:      mmprojFile,
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-llamacpp",
+			ModelName:       "llm",
+			ModelPath:       modelFile,
+			MMProjPath:      mmprojFile,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -311,10 +315,12 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 			modelFile := filepath.Join(t.TempDir(), "model.gguf")
 			_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-				Backend:         "localai-llamacpp",
-				ModelName:       modelName,
-				ModelPath:       modelFile,
+				Configuration: modelseffects.ResolvedHostConfiguration{
+					ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+					Backend:         "localai-llamacpp",
+					ModelName:       modelName,
+					ModelPath:       modelFile,
+				},
 			})
 			if err != nil {
 				t.Fatalf("Negotiate() error = %v", err)
@@ -345,12 +351,14 @@ func TestPinnedGRPCHostProtocolNegotiatorSerializesConfinedVibeVoiceRoleOptions(
 	tokenizerFile := filepath.Join(modelRoot, definition.Artifacts[1].Path)
 	voiceFile := filepath.Join(modelRoot, definition.Artifacts[2].Path)
 	_, err = negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         "localai-vibevoice",
-		ModelName:       models.BuiltInModelNameTTS,
-		Revision:        definition.Publication.Revision,
-		ModelPath:       modelFile,
-		ModelFiles:      []string{modelFile, tokenizerFile, voiceFile},
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-vibevoice",
+			ModelName:       models.BuiltInModelNameTTS,
+			Revision:        definition.Publication.Revision,
+			ModelPath:       modelFile,
+			ModelFiles:      []string{modelFile, tokenizerFile, voiceFile},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -401,12 +409,14 @@ func TestPinnedGRPCHostProtocolNegotiatorRejectsInvalidVibeVoiceLayoutBeforeLoad
 			connection := &recordingGRPCConnection{}
 			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 			_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-				Backend:         "localai-vibevoice",
-				ModelName:       models.BuiltInModelNameTTS,
-				Revision:        definition.Publication.Revision,
-				ModelPath:       modelFile,
-				ModelFiles:      testCase.files,
+				Configuration: modelseffects.ResolvedHostConfiguration{
+					ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+					Backend:         "localai-vibevoice",
+					ModelName:       models.BuiltInModelNameTTS,
+					Revision:        definition.Publication.Revision,
+					ModelPath:       modelFile,
+					ModelFiles:      testCase.files,
+				},
 			})
 			if !errors.Is(err, models.ErrHostProtocolIncompatible) {
 				t.Fatalf("Negotiate() error = %v, want typed protocol incompatibility", err)
@@ -428,10 +438,12 @@ func TestPinnedGRPCHostProtocolNegotiatorEnablesEmbeddingModeForBuiltinEmbed(t *
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 	_, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         "localai-llamacpp",
-		ModelName:       models.BuiltInModelNameEmbed,
-		ModelPath:       `C:\models\embed\model.gguf`,
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-llamacpp",
+			ModelName:       models.BuiltInModelNameEmbed,
+			ModelPath:       `C:\models\embed\model.gguf`,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -459,10 +471,12 @@ func TestPinnedGRPCHostProtocolNegotiatorRejectsFailedOrMalformedLoadModel(t *te
 			connection := &recordingGRPCConnection{response: test.response}
 			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 			result, err := negotiator.Negotiate(context.Background(), "127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-				Backend:         "localai-llamacpp",
-				ModelName:       "llm",
-				ModelPath:       `C:\models\llm\model.gguf`,
+				Configuration: modelseffects.ResolvedHostConfiguration{
+					ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+					Backend:         "localai-llamacpp",
+					ModelName:       "llm",
+					ModelPath:       `C:\models\llm\model.gguf`,
+				},
 			})
 			if result.Ready || !errors.Is(err, models.ErrHostProtocolIncompatible) {
 				t.Fatalf("Negotiate() = result %#v, error %v, want typed protocol failure", result, err)
@@ -568,11 +582,13 @@ func negotiateControlledImageHost(t *testing.T, ctx context.Context, endpoint, m
 	t.Helper()
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(platformgrpc.NetworkDialer{})
 	negotiated, err := negotiator.Negotiate(ctx, endpoint, modelseffects.HostProtocolNegotiationRequest{
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         "localai-llamacpp",
-		ModelName:       models.BuiltInModelNameLLM,
-		ModelPath:       modelFile,
-		MMProjPath:      mmprojFile,
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-llamacpp",
+			ModelName:       models.BuiltInModelNameLLM,
+			ModelPath:       modelFile,
+			MMProjPath:      mmprojFile,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)

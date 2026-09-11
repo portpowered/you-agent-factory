@@ -29,7 +29,7 @@ func TestNewDefaultBackendArtifactResolverSelectsPinnedMatrix(t *testing.T) {
 		{name: "vibevoice linux", backend: "localai-vibevoice", platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			selection, err := resolver(context.Background(), BackendArtifactSelectionRequest{
+			selection, err := resolver(context.Background(), ResolvedHostConfiguration{
 				Backend: test.backend, Platform: test.platform,
 				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 			})
@@ -50,19 +50,19 @@ func TestNewDefaultBackendArtifactResolverRejectsIncompatibleRequests(t *testing
 	if err != nil {
 		t.Fatalf("NewDefaultBackendArtifactResolver: %v", err)
 	}
-	base := BackendArtifactSelectionRequest{
+	base := ResolvedHostConfiguration{
 		Backend: "localai-vibevoice", Platform: models.AssetHostPlatform{
 			OperatingSystem: "linux", Architecture: "amd64",
 		}, ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 	}
 	tests := []struct {
 		name string
-		edit func(*BackendArtifactSelectionRequest)
+		edit func(*ResolvedHostConfiguration)
 		want error
 	}{
-		{name: "protocol", edit: func(request *BackendArtifactSelectionRequest) { request.ProtocolVersion = "localai-backend-v0" }, want: artifacts.ErrIncompatibleProtocol},
-		{name: "platform", edit: func(request *BackendArtifactSelectionRequest) { request.Platform.OperatingSystem = "freebsd" }, want: artifacts.ErrUnsupportedPlatform},
-		{name: "backend", edit: func(request *BackendArtifactSelectionRequest) { request.Backend = "localai-unknown" }, want: artifacts.ErrUnknownBackend},
+		{name: "protocol", edit: func(request *ResolvedHostConfiguration) { request.ProtocolVersion = "localai-backend-v0" }, want: artifacts.ErrIncompatibleProtocol},
+		{name: "platform", edit: func(request *ResolvedHostConfiguration) { request.Platform.OperatingSystem = "freebsd" }, want: artifacts.ErrUnsupportedPlatform},
+		{name: "backend", edit: func(request *ResolvedHostConfiguration) { request.Backend = "localai-unknown" }, want: artifacts.ErrUnknownBackend},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -90,16 +90,20 @@ func TestNewDefaultHostCompatibilityCheckerUsesPinnedArtifactMatrix(t *testing.T
 		t.Fatalf("NewDefaultHostCompatibilityChecker: %v", err)
 	}
 	if err := checker.Check(context.Background(), HostCompatibilityRequest{
-		Backend:   "localai-llamacpp",
-		ModelName: "llm",
-		Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		Configuration: ResolvedHostConfiguration{
+			Backend:   "localai-llamacpp",
+			ModelName: "llm",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		},
 	}); err != nil {
 		t.Fatalf("supported pinned host: %v", err)
 	}
 	if err := checker.Check(context.Background(), HostCompatibilityRequest{
-		Backend:   "localai-llamacpp",
-		ModelName: "llm",
-		Platform:  models.AssetHostPlatform{OperatingSystem: "freebsd", Architecture: "amd64"},
+		Configuration: ResolvedHostConfiguration{
+			Backend:   "localai-llamacpp",
+			ModelName: "llm",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "freebsd", Architecture: "amd64"},
+		},
 	}); err == nil {
 		t.Fatal("unsupported pinned host unexpectedly passed compatibility")
 	}

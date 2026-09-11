@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,6 +34,7 @@ func TestManagedBuiltinLLMPropagatesVerifiedProjectorPath(t *testing.T) {
 	ref := openScope(t, scopes, cacheDirectory, story002BuiltinLLMConfig())
 	launcher := &controlledProcessLauncher{}
 	protocol := &testProtocolNegotiator{}
+	compatibility := &testCompatibilityChecker{}
 	assets := &backendRuntimeInspectionAssets{
 		Service: mustAssetsService(t, scopes),
 		inspection: story002BuiltinLLMInspection(cacheDirectory, []models.AssetArtifact{
@@ -44,7 +47,7 @@ func TestManagedBuiltinLLMPropagatesVerifiedProjectorPath(t *testing.T) {
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
 		runtimehost.Options{
 			Platform:             managedHostPlatform(),
-			CompatibilityChecker: &testCompatibilityChecker{},
+			CompatibilityChecker: compatibility,
 			ProtocolNegotiator:   protocol,
 		},
 	)
@@ -59,14 +62,179 @@ func TestManagedBuiltinLLMPropagatesVerifiedProjectorPath(t *testing.T) {
 	wantModelPath := filepath.Join(cacheDirectory, story002ModelName)
 	wantProjectorPath := filepath.Join(cacheDirectory, story002ProjectorName)
 	spec := launcher.spec(0)
-	if spec.ModelPath != wantModelPath || spec.MMProjPath != wantProjectorPath ||
-		len(spec.ModelFiles) != 2 || spec.ModelFiles[0] != wantModelPath || spec.ModelFiles[1] != wantProjectorPath {
-		t.Fatalf("host start paths = model %q projector %q files %#v, want %q/%q in canonical order", spec.ModelPath, spec.MMProjPath, spec.ModelFiles, wantModelPath, wantProjectorPath)
+	if spec.Configuration.ModelPath != wantModelPath || spec.Configuration.MMProjPath != wantProjectorPath ||
+		len(spec.Configuration.ModelFiles) != 2 || spec.Configuration.ModelFiles[0] != wantModelPath || spec.Configuration.ModelFiles[1] != wantProjectorPath {
+		t.Fatalf("host start paths = model %q projector %q files %#v, want %q/%q in canonical order", spec.Configuration.ModelPath, spec.Configuration.MMProjPath, spec.Configuration.ModelFiles, wantModelPath, wantProjectorPath)
 	}
 	call := protocol.call()
-	if call.request.ModelPath != wantModelPath || call.request.MMProjPath != wantProjectorPath ||
-		len(call.request.ModelFiles) != 2 || call.request.ModelFiles[0] != wantModelPath || call.request.ModelFiles[1] != wantProjectorPath {
-		t.Fatalf("protocol paths = model %q projector %q files %#v, want %q/%q in canonical order", call.request.ModelPath, call.request.MMProjPath, call.request.ModelFiles, wantModelPath, wantProjectorPath)
+	if call.request.Configuration.ModelPath != wantModelPath || call.request.Configuration.MMProjPath != wantProjectorPath ||
+		len(call.request.Configuration.ModelFiles) != 2 || call.request.Configuration.ModelFiles[0] != wantModelPath || call.request.Configuration.ModelFiles[1] != wantProjectorPath {
+		t.Fatalf("protocol paths = model %q projector %q files %#v, want %q/%q in canonical order", call.request.Configuration.ModelPath, call.request.Configuration.MMProjPath, call.request.Configuration.ModelFiles, wantModelPath, wantProjectorPath)
+	}
+}
+
+func TestResolvedHostConfigurationHandoffReachesHostAndProtocolExactly(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "story-002-private-handoff")
+	ref := openScope(t, scopes, cacheDirectory, story002BuiltinLLMConfig())
+	launcher := &controlledProcessLauncher{}
+	protocol := &testProtocolNegotiator{}
+	compatibility := &testCompatibilityChecker{}
+	assets := &backendRuntimeInspectionAssets{
+		Service: mustAssetsService(t, scopes),
+		inspection: story002BuiltinLLMInspection(cacheDirectory, []models.AssetArtifact{
+			{Name: story002ModelName, Bytes: story002ModelBytes, SHA256: story002ModelSHA256},
+			{Name: story002ProjectorName, Bytes: story002ProjectorBytes, SHA256: story002ProjectorSHA256},
+		}),
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
+		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: compatibility,
+			ProtocolNegotiator:   protocol,
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope:            ref,
+		ModelName:        models.BuiltInModelNameLLM,
+		Source:           models.ModelReference{NameOrURI: "hf://operator/exact-model.gguf@revision-2"},
+		Revision:         "revision-2",
+		Backend:          "localai-llamacpp",
+		Platform:         managedHostPlatform(),
+		ProtocolVersion:  modelseffects.PinnedHostProtocolVersion,
+		ModelCachePath:   cacheDirectory,
+		BackendCachePath: filepath.Join(cacheDirectory, "backend"),
+		ModelPath:        filepath.Join(cacheDirectory, story002ModelName),
+		MMProjPath:       filepath.Join(cacheDirectory, story002ProjectorName),
+		ModelFiles: []string{
+			filepath.Join(cacheDirectory, story002ModelName),
+			filepath.Join(cacheDirectory, story002ProjectorName),
+		},
+		BackendFiles: []string{filepath.Join(cacheDirectory, "backend", "backend.zip")},
+		BackendArtifact: modelseffects.BackendArtifactSelection{
+			Name: "backend.zip", Location: "https://example.invalid/backend.zip", Bytes: 17,
+			SHA256: strings.Repeat("a", 64),
+		},
+	}
+	handoff, ok := host.(interface {
+		EnsureModelHostWithConfiguration(
+			context.Context,
+			modelseffects.ResolvedHostConfiguration,
+		) (models.EnsureModelHostResult, error)
+	})
+	if !ok {
+		t.Fatal("Runtime Host does not expose the parent-private configuration handoff")
+	}
+	if _, err := handoff.EnsureModelHostWithConfiguration(context.Background(), configuration); err != nil {
+		t.Fatalf("EnsureModelHostWithConfiguration: %v", err)
+	}
+	if got := launcher.spec(0).Configuration; !reflect.DeepEqual(got, configuration) {
+		t.Fatalf("process configuration = %#v, want exact %#v", got, configuration)
+	}
+	if got := protocol.call().request.Configuration; !reflect.DeepEqual(got, configuration) {
+		t.Fatalf("protocol configuration = %#v, want exact %#v", got, configuration)
+	}
+	compatibility.mu.Lock()
+	defer compatibility.mu.Unlock()
+	if len(compatibility.requests) != 1 || !reflect.DeepEqual(compatibility.requests[0].Configuration, configuration) {
+		t.Fatalf("compatibility configuration = %#v, want exact %#v", compatibility.requests, configuration)
+	}
+}
+
+func TestResolvedHostConfigurationHandoffRejectsEscapingModelSymlinkBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	outsideDirectory := t.TempDir()
+	outsideModel := filepath.Join(outsideDirectory, story002ModelName)
+	if err := os.WriteFile(outsideModel, []byte("outside model"), 0o600); err != nil {
+		t.Fatalf("write outside model: %v", err)
+	}
+	escapingModel := filepath.Join(cacheDirectory, story002ModelName)
+	if err := os.Symlink(outsideModel, escapingModel); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	projector := filepath.Join(cacheDirectory, story002ProjectorName)
+	if err := os.WriteFile(projector, []byte("projector"), 0o600); err != nil {
+		t.Fatalf("write projector: %v", err)
+	}
+
+	scopes := newScopes(t, "story-002-handoff-symlink-escape")
+	ref := openScope(t, scopes, cacheDirectory, story002BuiltinLLMConfig())
+	launcher := &controlledProcessLauncher{}
+	compatibility := &testCompatibilityChecker{}
+	protocol := &testProtocolNegotiator{}
+	assets := &backendRuntimeInspectionAssets{
+		Service: mustAssetsService(t, scopes),
+		inspection: story002BuiltinLLMInspection(cacheDirectory, []models.AssetArtifact{
+			{Name: story002ModelName, Bytes: story002ModelBytes, SHA256: story002ModelSHA256},
+			{Name: story002ProjectorName, Bytes: story002ProjectorBytes, SHA256: story002ProjectorSHA256},
+		}),
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
+		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: compatibility,
+			ProtocolNegotiator:   protocol,
+			ResolveSymlinks:      filepath.EvalSymlinks,
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope:           ref,
+		ModelName:       models.BuiltInModelNameLLM,
+		Source:          models.ModelReference{NameOrURI: "hf://operator/symlink-model.gguf@revision-escape"},
+		Revision:        "revision-escape",
+		Backend:         "localai-llamacpp",
+		Platform:        managedHostPlatform(),
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		ModelCachePath:  cacheDirectory,
+		ModelPath:       escapingModel,
+		MMProjPath:      projector,
+		ModelFiles:      []string{escapingModel, projector},
+	}
+	handoff, ok := host.(interface {
+		EnsureModelHostWithConfiguration(
+			context.Context,
+			modelseffects.ResolvedHostConfiguration,
+		) (models.EnsureModelHostResult, error)
+	})
+	if !ok {
+		t.Fatal("Runtime Host does not expose the parent-private configuration handoff")
+	}
+	_, err := handoff.EnsureModelHostWithConfiguration(context.Background(), configuration)
+	if !errors.Is(err, models.ErrHostMissingAssets) {
+		t.Fatalf("escaping handoff error = %v, want ErrHostMissingAssets", err)
+	}
+	if launcher.startCount() != 0 {
+		t.Fatalf("launcher starts = %d, want no process effect", launcher.startCount())
+	}
+	if call := protocol.call(); call.endpoint != "" {
+		t.Fatalf("protocol call = %#v, want no protocol effect", call)
+	}
+	compatibility.mu.Lock()
+	compatibilityCalls := compatibility.calls
+	compatibility.mu.Unlock()
+	if compatibilityCalls != 0 {
+		t.Fatalf("compatibility calls = %d, want no compatibility effect", compatibilityCalls)
+	}
+	lease, leaseErr := (models.ModelLeaseRef{}).Parse("model-lease-1")
+	if leaseErr != nil {
+		t.Fatalf("parse lease probe: %v", leaseErr)
+	}
+	if _, leaseErr = internalservice.LeasesService(host).GetModelLease(
+		context.Background(), models.GetModelLeaseRequest{Scope: ref, Lease: lease},
+	); !errors.Is(leaseErr, models.ErrHostLeaseNotFound) {
+		t.Fatalf("lease probe error = %v, want no lease side effect", leaseErr)
 	}
 }
 
@@ -183,14 +351,14 @@ func TestOperatorLLMSourceOverrideUsesGenericVerifiedModelPath(t *testing.T) {
 	}
 	wantModelPath := filepath.Join(cacheDirectory, customModelName)
 	spec := launcher.spec(0)
-	if spec.ModelPath != wantModelPath || spec.MMProjPath != "" ||
-		len(spec.ModelFiles) != 1 || spec.ModelFiles[0] != wantModelPath {
-		t.Fatalf("override host paths = model %q projector %q files %#v, want generic model path %q without projector", spec.ModelPath, spec.MMProjPath, spec.ModelFiles, wantModelPath)
+	if spec.Configuration.ModelPath != wantModelPath || spec.Configuration.MMProjPath != "" ||
+		len(spec.Configuration.ModelFiles) != 1 || spec.Configuration.ModelFiles[0] != wantModelPath {
+		t.Fatalf("override host paths = model %q projector %q files %#v, want generic model path %q without projector", spec.Configuration.ModelPath, spec.Configuration.MMProjPath, spec.Configuration.ModelFiles, wantModelPath)
 	}
 	call := protocol.call()
-	if call.request.ModelPath != wantModelPath || call.request.MMProjPath != "" ||
-		len(call.request.ModelFiles) != 1 || call.request.ModelFiles[0] != wantModelPath {
-		t.Fatalf("override protocol paths = model %q projector %q files %#v, want generic model path %q without projector", call.request.ModelPath, call.request.MMProjPath, call.request.ModelFiles, wantModelPath)
+	if call.request.Configuration.ModelPath != wantModelPath || call.request.Configuration.MMProjPath != "" ||
+		len(call.request.Configuration.ModelFiles) != 1 || call.request.Configuration.ModelFiles[0] != wantModelPath {
+		t.Fatalf("override protocol paths = model %q projector %q files %#v, want generic model path %q without projector", call.request.Configuration.ModelPath, call.request.Configuration.MMProjPath, call.request.Configuration.ModelFiles, wantModelPath)
 	}
 }
 

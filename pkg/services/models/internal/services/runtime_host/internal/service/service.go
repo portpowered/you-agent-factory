@@ -167,6 +167,65 @@ func (s *service) EnsureModelHost(
 	if err != nil {
 		return models.EnsureModelHostResult{}, err
 	}
+	runtimeCfg := binding.RuntimeConfig()
+	identity := supervisedIdentityForModel(runtimeCfg, binding.OperatorModels, request.Name)
+	configuration, err := resolvedHostConfigurationFromInspection(
+		request.Scope,
+		identity,
+		cacheInspectionFromAssets(inspection),
+		s.supervisor.Platform,
+		s.supervisor.ResolveSymlinks,
+	)
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	return s.ensureModelHostWithResolvedConfiguration(ctx, binding, inspection, configuration)
+}
+
+// EnsureModelHostWithConfiguration is the narrow parent-private handoff used
+// by the Models root after artifact preparation. It deliberately sits outside
+// runtimehost.Service so public callers retain the compatibility operation
+// above while a joined invocation can carry one resolved fact set through
+// process start, compatibility checks, and protocol negotiation.
+func (s *service) EnsureModelHostWithConfiguration(
+	ctx context.Context,
+	configuration modelseffects.ResolvedHostConfiguration,
+) (models.EnsureModelHostResult, error) {
+	request := models.EnsureModelHostRequest{
+		Scope: configuration.Scope,
+		Name:  configuration.ModelName,
+	}
+	if err := request.Validate(); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if err := hostContextError(ctx); err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	if s == nil || s.scopes == nil || s.assets == nil {
+		return models.EnsureModelHostResult{}, models.ErrUnavailable
+	}
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+	if err != nil {
+		return models.EnsureModelHostResult{}, scopeError(err)
+	}
+	inspection, err := s.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: request.Scope,
+		Name:  request.Name,
+	})
+	if err != nil {
+		return models.EnsureModelHostResult{}, err
+	}
+	return s.ensureModelHostWithResolvedConfiguration(
+		ctx, binding, inspection, configuration.Clone(),
+	)
+}
+
+func (s *service) ensureModelHostWithResolvedConfiguration(
+	ctx context.Context,
+	binding models.RuntimeBinding,
+	inspection scopedassets.RuntimeCacheInspection,
+	configuration modelseffects.ResolvedHostConfiguration,
+) (models.EnsureModelHostResult, error) {
 	cacheInspection := cacheInspectionFromAssets(inspection)
 	cacheProjection := projectAssetCacheState(inspection)
 	if cacheProjection.ReadinessState != models.ReadinessStateReady {
@@ -177,8 +236,20 @@ func (s *service) EnsureModelHost(
 	}
 
 	runtimeCfg := binding.RuntimeConfig()
-	identity := supervisedIdentityForModel(runtimeCfg, binding.OperatorModels, request.Name)
-	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
+	identity := supervisedIdentityForModel(runtimeCfg, binding.OperatorModels, configuration.ModelName)
+	identity = identityWithResolvedHostConfiguration(identity, configuration, inspection)
+	if requiresRuntimeHostBackend(identity.Backend) {
+		if err := validateResolvedHostConfigurationPaths(
+			configuration,
+			identity,
+			cacheInspection,
+			configuration.Platform,
+			s.supervisor.ResolveSymlinks,
+		); err != nil {
+			return models.EnsureModelHostResult{}, err
+		}
+	}
+	baseSnapshot := hostSnapshotFromAssets(configuration.Scope, configuration.ModelName, inspection)
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 
 	if !requiresRuntimeHostBackend(identity.Backend) {
@@ -188,7 +259,7 @@ func (s *service) EnsureModelHost(
 		}, nil
 	}
 
-	worker, err := localWorkerForModel(runtimeCfg, request.Name)
+	worker, err := localWorkerForModel(runtimeCfg, configuration.ModelName)
 	if err != nil {
 		return models.EnsureModelHostResult{}, err
 	}
@@ -198,11 +269,11 @@ func (s *service) EnsureModelHost(
 
 	var spec modelseffects.HostProcessStartSpec
 	if requiresPinnedGRPCBackend(identity.Backend) {
-		if err := s.validatePinnedBackend(ctx, identity); err != nil {
+		if err := s.validatePinnedBackend(ctx, identity, configuration); err != nil {
 			return models.EnsureModelHostResult{}, err
 		}
 		spec, err = defaultGRPCServerStartBuilderWithSymlinkResolver(
-			identity, cacheInspection, worker, s.supervisor.ResolveSymlinks,
+			configuration, worker,
 		)
 	} else {
 		if !workerDeclaresSupervisedHealthEndpoint(worker) {
@@ -211,19 +282,19 @@ func (s *service) EnsureModelHost(
 				Outcome: models.HostEnsureAlreadyReady,
 			}, nil
 		}
-		spec, err = s.supervisor.ServerStartBuilder(identity, cacheInspection, worker)
+		spec, err = s.supervisor.ServerStartBuilder(configuration, worker)
 	}
 	if err != nil {
 		return models.EnsureModelHostResult{}, err
 	}
 
-	if err := s.evictIdleRuntimesForCapacity(ctx, request.Scope, request.Name, identity); err != nil {
+	if err := s.evictIdleRuntimesForCapacity(ctx, configuration.Scope, configuration.ModelName, identity); err != nil {
 		return models.EnsureModelHostResult{}, err
 	}
 
-	slotKey := runtimeSlotKey(request.Scope, request.Name)
+	slotKey := runtimeSlotKey(configuration.Scope, configuration.ModelName)
 	s.cancelIdleUnload(slotKey)
-	slot := s.runtimeSlot(slotKey, request.Scope, request.Name)
+	slot := s.runtimeSlot(slotKey, configuration.Scope, configuration.ModelName)
 	wasReady := slot.isReady()
 	if err := slot.ensureReady(ctx, identity, spec); err != nil {
 		return models.EnsureModelHostResult{}, err
@@ -232,7 +303,7 @@ func (s *service) EnsureModelHost(
 		return models.EnsureModelHostResult{}, slot.failureOutcome()
 	}
 
-	snapshot := slot.hostSnapshotOverlay(request.Scope, request.Name, baseSnapshot)
+	snapshot := slot.hostSnapshotOverlay(configuration.Scope, configuration.ModelName, baseSnapshot)
 	outcome := models.HostEnsureBecameReady
 	if wasReady {
 		outcome = models.HostEnsureAlreadyReady
@@ -560,8 +631,13 @@ func (s *service) revokeHostLeases(scope models.RuntimeScopeRef, modelName strin
 func (s *service) validatePinnedBackend(
 	ctx context.Context,
 	identity supervisedIdentity,
+	configuration modelseffects.ResolvedHostConfiguration,
 ) error {
-	platform := s.supervisor.Platform
+	platform := configuration.Platform
+	if strings.TrimSpace(platform.OperatingSystem) == "" && strings.TrimSpace(s.supervisor.Platform.OperatingSystem) != "" {
+		platform = s.supervisor.Platform
+	}
+	configuration.Platform = platform
 	if strings.TrimSpace(platform.OperatingSystem) == "" ||
 		strings.TrimSpace(platform.Architecture) == "" {
 		return s.pinnedBackendFailure(
@@ -578,10 +654,7 @@ func (s *service) validatePinnedBackend(
 		)
 	}
 	if err := s.supervisor.CompatibilityChecker.Check(ctx, modelseffects.HostCompatibilityRequest{
-		Backend:   identity.Backend,
-		ModelName: identity.Name,
-		Revision:  identity.Revision,
-		Platform:  platform,
+		Configuration: configuration.Clone(),
 	}); err != nil {
 		return s.pinnedBackendFailure(
 			identity,

@@ -213,19 +213,28 @@ func (o *Root) normalizeAssetPreflightRequest(
 	if err != nil {
 		return models.PrepareModelAssetsRequest{}, err
 	}
-	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolution.Resolved.Definition)
-	if err != nil {
-		return models.PrepareModelAssetsRequest{}, err
-	}
-	return joinedAssetPreparationRequestWithBackend(
+	configuration := joinedHostConfiguration(
 		models.InvokeModelRequest{
 			Scope:   request.Scope,
 			Model:   models.ModelReference{NameOrURI: request.Name},
 			Offline: request.Offline,
 		},
-		resolution.Resolved.Definition.Name,
 		resolution.Resolved,
-		backendArtifact,
+		o.process.BackendArtifactPlatform,
+	)
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration)
+	if err != nil {
+		return models.PrepareModelAssetsRequest{}, err
+	}
+	configuration.BackendArtifact = backendArtifact
+	return joinedAssetPreparationRequestWithConfiguration(
+		models.InvokeModelRequest{
+			Scope:   request.Scope,
+			Model:   models.ModelReference{NameOrURI: request.Name},
+			Offline: request.Offline,
+		},
+		configuration,
+		resolution.Resolved,
 	)
 }
 
@@ -256,6 +265,28 @@ func joinedInvocationAssetError(
 		Operation: strings.TrimSpace(request.Operation),
 		Cause:     err,
 	}
+}
+
+func runtimeHostEvidenceAlreadyRecorded(err error) bool {
+	stage, _, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok {
+		return false
+	}
+	switch stage {
+	case modelseffects.RuntimeStageBackendExtract,
+		modelseffects.RuntimeStageBackendStart,
+		modelseffects.RuntimeStageProtocolLoad:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateJoinedRoot(o *Root) error {
+	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
+		return models.ErrUnsupportedOperation
+	}
+	return nil
 }
 
 func resolveModelReference(

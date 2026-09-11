@@ -88,7 +88,8 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 	endpoint string,
 	request modelseffects.HostProtocolNegotiationRequest,
 ) (modelseffects.HostProtocolNegotiationResult, error) {
-	if request.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
+	configuration := request.Configuration.Clone()
+	if configuration.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		return modelseffects.HostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
 	}
 	if ctx == nil {
@@ -123,14 +124,14 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 			"%w: LocalAI health request failed: %v", models.ErrHostProtocolIncompatible, err,
 		)
 	}
-	if strings.TrimSpace(request.ModelPath) != "" {
-		if err := loadModel(ctx, connection, request, negotiator.resolveSymlinks); err != nil {
+	if strings.TrimSpace(configuration.ModelPath) != "" {
+		if err := loadModel(ctx, connection, configuration, negotiator.resolveSymlinks); err != nil {
 			return modelseffects.HostProtocolNegotiationResult{}, err
 		}
 	}
 	return modelseffects.HostProtocolNegotiationResult{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Backend:         request.Backend,
+		Backend:         configuration.Backend,
 		Ready:           true,
 	}, nil
 }
@@ -138,11 +139,11 @@ func (negotiator grpcHostProtocolNegotiator) Negotiate(
 func loadModel(
 	ctx context.Context,
 	connection platformgrpc.Connection,
-	request modelseffects.HostProtocolNegotiationRequest,
+	configuration modelseffects.ResolvedHostConfiguration,
 	resolveSymlinks modelseffects.HostResolveSymlinks,
 ) error {
-	modelFile := strings.TrimSpace(request.ModelPath)
-	options, err := vibeVoiceLoadOptions(request, resolveSymlinks)
+	modelFile := strings.TrimSpace(configuration.ModelPath)
+	options, err := vibeVoiceLoadOptions(configuration, resolveSymlinks)
 	if err != nil {
 		return fmt.Errorf(
 			"%w: LocalAI VibeVoice model layout is invalid",
@@ -150,11 +151,11 @@ func loadModel(
 		)
 	}
 	payload, err := proto.Marshal(&ModelOptions{
-		Model:      request.ModelName,
+		Model:      configuration.ModelName,
 		NBatch:     localAIModelBatchSize,
-		Embeddings: strings.EqualFold(request.ModelName, models.BuiltInModelNameEmbed),
+		Embeddings: strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed),
 		ModelFile:  modelFile,
-		MMProj:     strings.TrimSpace(request.MMProjPath),
+		MMProj:     strings.TrimSpace(configuration.MMProjPath),
 		ModelPath:  filepath.Dir(modelFile),
 		Options:    options,
 	})

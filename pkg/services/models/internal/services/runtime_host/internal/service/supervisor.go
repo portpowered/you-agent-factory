@@ -33,8 +33,7 @@ type supervisorSettings struct {
 	Platform             models.AssetHostPlatform
 	Clock                modelseffects.HostClock
 	ServerStartBuilder   func(
-		supervisedIdentity,
-		cacheInspection,
+		modelseffects.ResolvedHostConfiguration,
 		*models.RuntimeWorker,
 	) (modelseffects.HostProcessStartSpec, error)
 	Diagnostics               hostDiagnostics
@@ -379,25 +378,22 @@ func (r *supervisedRuntime) checkReadiness(
 		if r.cfg.ProtocolNegotiator == nil {
 			return false, models.ErrHostProtocolIncompatible
 		}
+		configuration := spec.Configuration.Clone()
+		if strings.TrimSpace(configuration.ProtocolVersion) == "" {
+			configuration.ProtocolVersion = modelseffects.PinnedHostProtocolVersion
+		}
 		negotiated, err := r.cfg.ProtocolNegotiator.Negotiate(
 			ctx,
 			process.HealthEndpoint(),
 			modelseffects.HostProtocolNegotiationRequest{
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-				Backend:         identity.Backend,
-				ModelName:       identity.Name,
-				Revision:        identity.Revision,
-				Platform:        r.cfg.Platform,
-				ModelPath:       strings.TrimSpace(spec.ModelPath),
-				MMProjPath:      strings.TrimSpace(spec.MMProjPath),
-				ModelFiles:      append([]string(nil), spec.ModelFiles...),
+				Configuration: configuration,
 			},
 		)
 		if err != nil {
 			return false, err
 		}
-		if negotiated.ProtocolVersion != modelseffects.PinnedHostProtocolVersion ||
-			!sameBackend(negotiated.Backend, identity.Backend) {
+		if negotiated.ProtocolVersion != configuration.ProtocolVersion ||
+			!sameBackend(negotiated.Backend, configuration.Backend) {
 			return false, models.ErrHostProtocolIncompatible
 		}
 		return negotiated.Ready, nil

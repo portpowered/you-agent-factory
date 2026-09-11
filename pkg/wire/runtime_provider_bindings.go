@@ -222,17 +222,18 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 	ctx context.Context,
 	spec modelswire.HostProcessStartSpec,
 ) (modelswire.HostManagedProcess, error) {
+	configuration := spec.Configuration.Clone()
 	process, err := adapter.next.Start(ctx, serviceedges.HostProcessStartSpec{
 		Command:        spec.Command,
 		Args:           spec.Args,
 		Env:            spec.Env,
 		WorkDir:        spec.WorkDir,
 		HealthEndpoint: spec.HealthEndpoint,
-		Backend:        spec.Backend,
-		ModelPath:      spec.ModelPath,
-		MMProjPath:     spec.MMProjPath,
-		ModelFiles:     append([]string(nil), spec.ModelFiles...),
-		BackendFiles:   append([]string(nil), spec.BackendFiles...),
+		Backend:        configuration.Backend,
+		ModelPath:      configuration.ModelPath,
+		MMProjPath:     configuration.MMProjPath,
+		ModelFiles:     append([]string(nil), configuration.ModelFiles...),
+		BackendFiles:   append([]string(nil), configuration.BackendFiles...),
 	})
 	if err != nil || process == nil {
 		return modelswire.HostManagedProcess(process), err

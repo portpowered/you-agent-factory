@@ -156,13 +156,40 @@ type ProcessDependencies struct {
 	BackendArtifactPlatform    models.AssetHostPlatform
 }
 
-// BackendArtifactSelectionRequest contains only the facts needed to select a
-// pinned backend archive. The selector owns the immutable publication manifest;
-// Models receives detached archive facts and never exposes that manifest.
-type BackendArtifactSelectionRequest struct {
-	Backend         string
-	Platform        models.AssetHostPlatform
-	ProtocolVersion string
+// ResolvedHostConfiguration is the single Models-owned private fact set for
+// selecting and supervising one resolved host. Offline is intentionally absent:
+// cache-only invocation policy remains on models.PrepareModelAssetsRequest.
+//
+// The value is ephemeral and is never serialized, persisted, or exposed by the
+// public Models contract. Private consumers must use Clone when retaining it
+// across an effect boundary.
+type ResolvedHostConfiguration struct {
+	Scope            models.RuntimeScopeRef
+	ModelName        string
+	Source           models.ModelReference
+	Revision         string
+	Backend          string
+	Platform         models.AssetHostPlatform
+	ProtocolVersion  string
+	ModelCachePath   string
+	BackendCachePath string
+	ModelPath        string
+	MMProjPath       string
+	ModelFiles       []string
+	BackendFiles     []string
+	BackendArtifact  BackendArtifactSelection
+}
+
+// Clone returns a detached configuration suitable for an injected effect or
+// another private owner. The source is value-only today; explicitly assigning
+// it here keeps that ownership rule visible if the reference gains fields.
+func (configuration ResolvedHostConfiguration) Clone() ResolvedHostConfiguration {
+	configuration.Source = models.ModelReference{
+		NameOrURI: configuration.Source.NameOrURI,
+	}
+	configuration.ModelFiles = append([]string(nil), configuration.ModelFiles...)
+	configuration.BackendFiles = append([]string(nil), configuration.BackendFiles...)
+	return configuration
 }
 
 // BackendArtifactSelection is the provider-neutral archive identity consumed
@@ -180,7 +207,7 @@ type BackendArtifactSelection struct {
 // production can obtain the published P3 artifact set without live probing.
 type BackendArtifactResolver func(
 	context.Context,
-	BackendArtifactSelectionRequest,
+	ResolvedHostConfiguration,
 ) (BackendArtifactSelection, error)
 
 type AssetHTTPDoer interface {
@@ -211,11 +238,7 @@ type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
 	WorkDir, HealthEndpoint string
-	Backend                 string
-	ModelPath               string
-	MMProjPath              string
-	ModelFiles              []string
-	BackendFiles            []string
+	Configuration           ResolvedHostConfiguration
 }
 
 type HostManagedProcess interface {
@@ -251,18 +274,11 @@ type HostClock interface {
 // Models effects seam; callers never import generated backend types.
 const PinnedHostProtocolVersion = "localai-backend-v1"
 
-// HostProtocolNegotiationRequest contains only provider-neutral facts needed
-// to negotiate a managed backend. It deliberately excludes endpoints,
-// credentials, cache paths, process handles, and backend-native messages.
+// HostProtocolNegotiationRequest carries the exact resolved configuration
+// selected by Models to negotiate a managed backend. The endpoint, process
+// handle, and backend-native messages remain outside this seam.
 type HostProtocolNegotiationRequest struct {
-	ProtocolVersion string
-	Backend         string
-	ModelName       string
-	Revision        string
-	Platform        models.AssetHostPlatform
-	ModelPath       string
-	MMProjPath      string
-	ModelFiles      []string
+	Configuration ResolvedHostConfiguration
 }
 
 // HostProtocolNegotiationResult is the detached result of one pinned
@@ -317,13 +333,10 @@ func (negotiator PinnedGRPCNegotiator) Negotiate(
 	return connection.Negotiate(ctx, request)
 }
 
-// HostCompatibilityRequest carries provider-neutral compatibility facts to a
+// HostCompatibilityRequest carries the exact resolved configuration to a
 // platform/accelerator policy implementation.
 type HostCompatibilityRequest struct {
-	Backend   string
-	ModelName string
-	Revision  string
-	Platform  models.AssetHostPlatform
+	Configuration ResolvedHostConfiguration
 }
 
 // HostCompatibilityChecker validates platform and accelerator support before

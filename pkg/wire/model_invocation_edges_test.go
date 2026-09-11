@@ -486,8 +486,12 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	gotProcess, err := launcher.Start(context.Background(), modelswire.HostProcessStartSpec{
 		Command: "model-host", Args: []string{"serve"}, Env: []string{"MODEL=seal"},
 		WorkDir: "runtime", HealthEndpoint: process.healthEndpoint,
-		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
-		BackendFiles: []string{"runtime/backend.zip"},
+		Configuration: modelswire.ResolvedHostConfiguration{
+			Backend:      "localai-llamacpp",
+			ModelPath:    "runtime/model.gguf",
+			MMProjPath:   "runtime/mmproj.gguf",
+			BackendFiles: []string{"runtime/backend.zip"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("adapted process launcher: %v", err)
@@ -601,11 +605,13 @@ func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 
 func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 	return modelswire.HostProtocolNegotiationRequest{
-		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
-		Revision:  "revision-1",
-		Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
-		ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
-		ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
+		Configuration: modelswire.ResolvedHostConfiguration{
+			ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
+			Revision:  "revision-1",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
+			ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
+			ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
+		},
 	}
 }
 
@@ -617,15 +623,15 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 	if err != nil {
 		t.Fatalf("protocol negotiation: %v", err)
 	}
-	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
-		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
-		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform ||
-		protocol.request.ModelPath != request.ModelPath || protocol.request.MMProjPath != request.MMProjPath ||
-		!equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
+	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.Configuration.ProtocolVersion ||
+		protocol.request.Backend != request.Configuration.Backend || protocol.request.ModelName != request.Configuration.ModelName ||
+		protocol.request.Revision != request.Configuration.Revision || protocol.request.Platform != request.Configuration.Platform ||
+		protocol.request.ModelPath != request.Configuration.ModelPath || protocol.request.MMProjPath != request.Configuration.MMProjPath ||
+		!equalStringSlices(protocol.request.ModelFiles, request.Configuration.ModelFiles) {
 		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
 	}
 	if result != (modelswire.HostProtocolNegotiationResult{
-		ProtocolVersion: "model-host.v1", Backend: request.Backend, Ready: true,
+		ProtocolVersion: "model-host.v1", Backend: request.Configuration.Backend, Ready: true,
 	}) {
 		t.Fatalf("protocol result = %#v, want ready pinned result", result)
 	}
@@ -635,12 +641,12 @@ func assertAdaptedCompatibility(t *testing.T, request modelswire.HostProtocolNeg
 	t.Helper()
 	compatibility := &modelEdgeCompatibilityChecker{}
 	if err := adaptModelHostCompatibilityChecker(compatibility).Check(context.Background(), modelswire.HostCompatibilityRequest{
-		Backend: request.Backend, ModelName: request.ModelName, Revision: request.Revision, Platform: request.Platform,
+		Configuration: request.Configuration,
 	}); err != nil {
 		t.Fatalf("compatibility check: %v", err)
 	}
-	if compatibility.request.Backend != request.Backend || compatibility.request.ModelName != request.ModelName ||
-		compatibility.request.Revision != request.Revision || compatibility.request.Platform != request.Platform {
+	if compatibility.request.Backend != request.Configuration.Backend || compatibility.request.ModelName != request.Configuration.ModelName ||
+		compatibility.request.Revision != request.Configuration.Revision || compatibility.request.Platform != request.Configuration.Platform {
 		t.Fatalf("edge compatibility request = %#v, want exact projection", compatibility.request)
 	}
 }
@@ -659,9 +665,9 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 	if err := adaptedConnection.Close(); err != nil {
 		t.Fatalf("close model host connection: %v", err)
 	}
-	if connection.request.Backend != request.Backend || connection.request.ModelPath != request.ModelPath ||
-		connection.request.MMProjPath != request.MMProjPath ||
-		!equalStringSlices(connection.request.ModelFiles, request.ModelFiles) || !connection.closed {
+	if connection.request.Backend != request.Configuration.Backend || connection.request.ModelPath != request.Configuration.ModelPath ||
+		connection.request.MMProjPath != request.Configuration.MMProjPath ||
+		!equalStringSlices(connection.request.ModelFiles, request.Configuration.ModelFiles) || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
 }

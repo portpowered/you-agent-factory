@@ -677,9 +677,14 @@ func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.
 		Name: "localai-backend.tar.gz", Location: "https://github.com/owner/repo/releases/download/v1/localai-backend.tar.gz",
 		Bytes: 22, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
 	}
-	prepared, err := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope: request.Scope, ModelName: "tts",
+		Source:  joinedAssetReference(request.Model, resolved),
+		Backend: resolved.Definition.Backend, BackendArtifact: selection,
+	}
+	prepared, err := joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
 	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequestWithBackend: %v", err)
+		t.Fatalf("joinedAssetPreparationRequestWithConfiguration: %v", err)
 	}
 	if prepared.Backend != resolved.Definition.Backend ||
 		prepared.BackendReference.NameOrURI != selection.Location || len(prepared.BackendArtifacts) != 1 {
@@ -723,14 +728,25 @@ func newJoinedInvocationRoot(
 	events *[]string,
 	inference *joinedInferenceService,
 ) (*Root, models.RuntimeScopeRef, *joinedHostService) {
+	return newJoinedInvocationRootWithModel(
+		t, events, inference, "./fixture.gguf", "fixture-backend", nil,
+	)
+}
+
+func newJoinedInvocationRootWithModel(
+	t *testing.T,
+	events *[]string,
+	inference *joinedInferenceService,
+	source string,
+	backend string,
+	assetRequests *[]models.PrepareModelAssetsRequest,
+) (*Root, models.RuntimeScopeRef, *joinedHostService) {
 	t.Helper()
 	baseScopes, err := runtimescopeswire.NewService(func() string { return "joined-invocation-test" })
 	if err != nil {
 		t.Fatalf("construct runtime scopes: %v", err)
 	}
 	scopes := &joinedRecordingScopes{delegate: baseScopes, events: events}
-	source := "./fixture.gguf"
-	backend := "fixture-backend"
 	loadPolicy := models.LoadPolicyOnDemand
 	ref, err := scopes.Open(models.RuntimeBinding{
 		OperatorModels: map[string]models.ModelOverlay{
@@ -749,7 +765,7 @@ func newJoinedInvocationRoot(
 		t.Fatalf("parse runtime scope: %v", err)
 	}
 	host := &joinedHostService{events: events}
-	assets := &joinedAssetsService{events: events}
+	assets := &joinedAssetsService{events: events, requests: assetRequests}
 	root := &Root{
 		runtimeScopes:  scopes,
 		assets:         assets,
@@ -779,7 +795,8 @@ func (scopes *joinedRecordingScopes) Close(ref runtimescopes.Reference) error {
 }
 
 type joinedAssetsService struct {
-	events *[]string
+	events   *[]string
+	requests *[]models.PrepareModelAssetsRequest
 }
 
 func (assets *joinedAssetsService) PreflightModelAssets(
@@ -791,9 +808,14 @@ func (assets *joinedAssetsService) PreflightModelAssets(
 }
 
 func (assets *joinedAssetsService) PrepareModelAssets(
-	context.Context,
-	models.PrepareModelAssetsRequest,
+	_ context.Context,
+	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
+	if assets.requests != nil {
+		request.Artifacts = append([]models.AssetRequirement(nil), request.Artifacts...)
+		request.BackendArtifacts = append([]models.AssetRequirement(nil), request.BackendArtifacts...)
+		*assets.requests = append(*assets.requests, request)
+	}
 	*assets.events = append(*assets.events, "assets")
 	return models.PrepareModelAssetsResult{}, nil
 }

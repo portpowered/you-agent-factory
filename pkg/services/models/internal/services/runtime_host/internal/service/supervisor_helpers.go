@@ -151,6 +151,28 @@ func supervisedIdentityForModel(
 	}
 }
 
+func identityWithResolvedHostConfiguration(
+	identity supervisedIdentity,
+	configuration modelseffects.ResolvedHostConfiguration,
+	inspection scopedassets.RuntimeCacheInspection,
+) supervisedIdentity {
+	if name := strings.TrimSpace(configuration.ModelName); name != "" {
+		identity.Name = name
+	}
+	if backend := strings.TrimSpace(configuration.Backend); backend != "" {
+		identity.Backend = backend
+	}
+	if source := strings.TrimSpace(configuration.Source.NameOrURI); source != "" {
+		identity.Source = source
+	}
+	if revision := strings.TrimSpace(configuration.Revision); revision != "" {
+		identity.Revision = revision
+	} else if revision := strings.TrimSpace(inspection.Revision); revision != "" {
+		identity.Revision = revision
+	}
+	return identity
+}
+
 func modelOverlay(
 	overlays map[string]models.ModelOverlay,
 	modelName string,
@@ -207,15 +229,118 @@ type cacheInspection struct {
 	ObservedArtifacts     []models.AssetArtifact
 }
 
-func defaultServerStartBuilder(
+func resolvedHostConfigurationFromInspection(
+	scope models.RuntimeScopeRef,
 	identity supervisedIdentity,
 	inspection cacheInspection,
+	platform models.AssetHostPlatform,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (modelseffects.ResolvedHostConfiguration, error) {
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope:            scope,
+		ModelName:        strings.TrimSpace(identity.Name),
+		Source:           models.ModelReference{NameOrURI: strings.TrimSpace(identity.Source)},
+		Revision:         strings.TrimSpace(identity.Revision),
+		Backend:          strings.TrimSpace(identity.Backend),
+		Platform:         platform,
+		ProtocolVersion:  modelseffects.PinnedHostProtocolVersion,
+		ModelCachePath:   strings.TrimSpace(inspection.CachePath),
+		BackendCachePath: strings.TrimSpace(inspection.BackendCachePath),
+		BackendFiles:     append([]string(nil), inspection.BackendFiles...),
+	}
+	if configuration.Revision == "" {
+		configuration.Revision = strings.TrimSpace(inspection.Revision)
+	}
+	if len(inspection.ObservedArtifacts) == 0 {
+		return configuration, nil
+	}
+
+	var (
+		modelFiles []string
+		err        error
+	)
+	if isBuiltInLLMIdentity(identity) {
+		_, _, modelFiles, err = builtInLLMArtifactPaths(inspection, resolveSymlinks)
+	} else {
+		modelFiles, err = modelArtifactPaths(inspection, resolveSymlinks)
+	}
+	if err != nil {
+		return modelseffects.ResolvedHostConfiguration{}, err
+	}
+	configuration.ModelFiles = append([]string(nil), modelFiles...)
+	configuration.ModelPath, configuration.MMProjPath = hostModelPaths(modelFiles)
+	return configuration, nil
+}
+
+func validateResolvedHostConfigurationPaths(
+	configuration modelseffects.ResolvedHostConfiguration,
+	identity supervisedIdentity,
+	inspection cacheInspection,
+	platform models.AssetHostPlatform,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) error {
+	if !hasResolvedHostModelPathFacts(configuration) && len(inspection.ObservedArtifacts) == 0 {
+		return nil
+	}
+	validated, err := resolvedHostConfigurationFromInspection(
+		configuration.Scope,
+		identity,
+		inspection,
+		platform,
+		resolveSymlinks,
+	)
+	if err != nil {
+		return err
+	}
+	if !sameHostPath(configuration.ModelCachePath, validated.ModelCachePath) ||
+		!sameHostPath(configuration.ModelPath, validated.ModelPath) ||
+		!sameHostPath(configuration.MMProjPath, validated.MMProjPath) ||
+		!sameHostPathSlice(configuration.ModelFiles, validated.ModelFiles) {
+		return invalidModelArtifactLayout()
+	}
+	return nil
+}
+
+func hasResolvedHostModelPathFacts(configuration modelseffects.ResolvedHostConfiguration) bool {
+	return strings.TrimSpace(configuration.ModelCachePath) != "" ||
+		strings.TrimSpace(configuration.ModelPath) != "" ||
+		strings.TrimSpace(configuration.MMProjPath) != "" ||
+		len(configuration.ModelFiles) > 0
+}
+
+func sameHostPath(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return left == right
+	}
+	leftPath := filepath.FromSlash(left)
+	rightPath := filepath.FromSlash(right)
+	return leftPath == rightPath &&
+		leftPath == filepath.Clean(leftPath) &&
+		rightPath == filepath.Clean(rightPath)
+}
+
+func sameHostPathSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !sameHostPath(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func defaultServerStartBuilder(
+	configuration modelseffects.ResolvedHostConfiguration,
 	worker *models.RuntimeWorker,
 ) (modelseffects.HostProcessStartSpec, error) {
 	if worker == nil {
 		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"local model worker is required for supervised backend %q",
-			identity.Backend,
+			configuration.Backend,
 		)
 	}
 	command := strings.TrimSpace(worker.Command)
@@ -226,107 +351,116 @@ func defaultServerStartBuilder(
 	if err != nil {
 		return modelseffects.HostProcessStartSpec{}, err
 	}
-	if strings.TrimSpace(inspection.CachePath) == "" {
+	if strings.TrimSpace(configuration.ModelCachePath) == "" {
 		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"%w: cache path is required for supervised runtime %q",
 			models.ErrHostMissingAssets,
-			identity.Name,
+			configuration.ModelName,
 		)
 	}
 	args = append([]string{"serve"}, args...)
-	args = append(args, "--cache-path", inspection.CachePath)
-	if inspection.BackendRequired {
-		if strings.TrimSpace(inspection.BackendCachePath) == "" {
+	args = append(args, "--cache-path", configuration.ModelCachePath)
+	if configuration.BackendCachePath != "" || len(configuration.BackendFiles) > 0 || configuration.BackendArtifact.Name != "" {
+		if strings.TrimSpace(configuration.BackendCachePath) == "" {
 			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 				"%w: pinned backend assets are not installed for runtime %q",
 				models.ErrHostMissingAssets,
-				identity.Name,
+				configuration.ModelName,
 			)
 		}
-		args = append(args, "--backend-cache-path", inspection.BackendCachePath)
+		args = append(args, "--backend-cache-path", configuration.BackendCachePath)
 	}
 	return modelseffects.HostProcessStartSpec{
 		Command:        command,
 		Args:           args,
 		HealthEndpoint: healthEndpoint,
+		Configuration:  configuration.Clone(),
 	}, nil
 }
 
 func defaultGRPCServerStartBuilderWithSymlinkResolver(
-	identity supervisedIdentity,
-	inspection cacheInspection,
+	configuration modelseffects.ResolvedHostConfiguration,
 	worker *models.RuntimeWorker,
-	resolveSymlinks modelseffects.HostResolveSymlinks,
 ) (modelseffects.HostProcessStartSpec, error) {
 	if worker == nil {
 		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"local model worker is required for supervised backend %q",
-			identity.Backend,
+			configuration.Backend,
 		)
-	}
-	var err error
-	var modelPath, mmProjPath string
-	var modelFiles []string
-	if isBuiltInLLMIdentity(identity) {
-		modelPath, mmProjPath, modelFiles, err = builtInLLMArtifactPaths(inspection, resolveSymlinks)
-		if err != nil {
-			return modelseffects.HostProcessStartSpec{}, err
-		}
 	}
 	command := strings.TrimSpace(worker.Command)
 	if command == "" {
-		if !inspection.BackendRequired || len(inspection.BackendFiles) == 0 {
+		if len(configuration.BackendFiles) == 0 {
 			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 				"%w: managed backend executable is not installed for model %q",
-				models.ErrHostMissingAssets, identity.Name,
+				models.ErrHostMissingAssets, configuration.ModelName,
 			)
 		}
-		if modelFiles == nil {
-			modelFiles, err = modelArtifactPaths(inspection, resolveSymlinks)
-			if err != nil {
-				return modelseffects.HostProcessStartSpec{}, err
-			}
-			modelPath = modelFiles[0]
-		}
 		return modelseffects.HostProcessStartSpec{
-			Backend:      identity.Backend,
-			ModelPath:    modelPath,
-			MMProjPath:   mmProjPath,
-			ModelFiles:   modelFiles,
-			BackendFiles: append([]string(nil), inspection.BackendFiles...),
+			Configuration: configuration.Clone(),
 		}, nil
 	}
 	endpoint, args, err := supervisedGRPCEndpointAndArgs(worker.Args)
 	if err != nil {
 		return modelseffects.HostProcessStartSpec{}, err
 	}
-	if strings.TrimSpace(inspection.CachePath) == "" {
+	if strings.TrimSpace(configuration.ModelCachePath) == "" {
 		return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 			"%w: cache path is required for supervised runtime %q",
 			models.ErrHostMissingAssets,
-			identity.Name,
+			configuration.ModelName,
 		)
 	}
 	args = append([]string{"serve"}, args...)
-	args = append(args, "--cache-path", inspection.CachePath)
-	if inspection.BackendRequired {
-		if strings.TrimSpace(inspection.BackendCachePath) == "" {
+	args = append(args, "--cache-path", configuration.ModelCachePath)
+	if configuration.BackendCachePath != "" || len(configuration.BackendFiles) > 0 || configuration.BackendArtifact.Name != "" {
+		if strings.TrimSpace(configuration.BackendCachePath) == "" {
 			return modelseffects.HostProcessStartSpec{}, fmt.Errorf(
 				"%w: pinned backend assets are not installed for runtime %q",
 				models.ErrHostMissingAssets,
-				identity.Name,
+				configuration.ModelName,
 			)
 		}
-		args = append(args, "--backend-cache-path", inspection.BackendCachePath)
+		args = append(args, "--backend-cache-path", configuration.BackendCachePath)
 	}
 	return modelseffects.HostProcessStartSpec{
 		Command:        command,
 		Args:           args,
 		HealthEndpoint: endpoint,
-		ModelPath:      modelPath,
-		MMProjPath:     mmProjPath,
-		ModelFiles:     modelFiles,
+		Configuration:  configuration.Clone(),
 	}, nil
+}
+
+func hostModelPaths(files []string) (string, string) {
+	var modelPath, mmProjPath string
+	for _, raw := range files {
+		file := strings.TrimSpace(raw)
+		if file == "" {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(filepath.Clean(file)))
+		if strings.Contains(base, "mmproj") {
+			if mmProjPath == "" {
+				mmProjPath = file
+			}
+			continue
+		}
+		if modelPath == "" && !strings.Contains(base, "tokenizer") && !strings.HasPrefix(base, "voice") {
+			modelPath = file
+		}
+	}
+	if modelPath == "" {
+		for _, raw := range files {
+			file := strings.TrimSpace(raw)
+			base := strings.ToLower(filepath.Base(filepath.Clean(file)))
+			if file == "" || strings.Contains(base, "mmproj") {
+				continue
+			}
+			modelPath = file
+			break
+		}
+	}
+	return modelPath, mmProjPath
 }
 
 func isBuiltInLLMIdentity(identity supervisedIdentity) bool {
