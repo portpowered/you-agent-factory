@@ -175,23 +175,24 @@ func waitForExactLedgerWorkerSessionCompletion(
 	for _, observation := range previous {
 		previousStates[observation.WorkerSessionId] = observation.State
 	}
-	deadline := time.Now().Add(timeout)
-	for {
-		observations := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID).Sessions
-		for _, observation := range observations {
-			previousState, existed := previousStates[observation.WorkerSessionId]
-			if existed && isExactLedgerWorkerSessionTerminal(previousState) {
-				continue
-			}
-			if isExactLedgerWorkerSessionTerminal(observation.State) {
-				return observation
-			}
+	observations := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID).Sessions
+	for _, observation := range observations {
+		previousState, existed := previousStates[observation.WorkerSessionId]
+		if existed && isExactLedgerWorkerSessionTerminal(previousState) {
+			continue
 		}
-		if remaining := time.Until(deadline); remaining <= 0 {
-			t.Fatalf("timed out waiting for public Worker Session completion before Work %q advanced", workID)
+		if observation.WorkerSessionId == "" {
+			continue
 		}
-		time.Sleep(25 * time.Millisecond)
+		support.WaitForWorkerSessionTerminalAt(t, baseURL, sessionID, observation.WorkerSessionId, timeout)
+		terminal := support.GetSessionWorkerSessionByID(t, baseURL, sessionID, observation.WorkerSessionId)
+		if !isExactLedgerWorkerSessionTerminal(terminal.State) {
+			t.Fatalf("Worker Session %q state = %q after terminal event, want terminal", terminal.WorkerSessionId, terminal.State)
+		}
+		return terminal
 	}
+	t.Fatalf("no new public Worker Session observation was available for Work %q", workID)
+	return factoryapi.WorkerSessionObservation{}
 }
 
 func isExactLedgerWorkerSessionTerminal(state factoryapi.WorkerSessionObservationState) bool {

@@ -89,20 +89,8 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		return interfaces.EnabledTransition{}, false
 	}
 
-	if singleTokenGuardedTransition(tr) {
-		if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
-			return et, true
-		}
-		// The backtracking evaluator is the only binding path that can honor
-		// peer guards whose authored guard lives on a different input arc. The
-		// legacy phased fallback would bind an arbitrary unguarded peer first,
-		// allowing a historical same-name child when the canonical current child
-		// is in another state.
-		e.logger.Debug("enablement: transition disabled",
-			"transitionID", tr.ID,
-			"transitionName", tr.Name,
-			"reason", "guard failed for single-token binding")
-		return interfaces.EnabledTransition{}, false
+	if et, enabled, handled := e.checkSingleTokenGuardedTransition(tr, snapshot); handled {
+		return et, enabled
 	}
 
 	// Separate unguarded and guarded arcs.
@@ -174,6 +162,32 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		Bindings:     workerBindings(result),
 		ArcModes:     arcModes,
 	}, true
+}
+
+func (e *EnablementEvaluator) checkSingleTokenGuardedTransition(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) (interfaces.EnabledTransition, bool, bool) {
+	if !singleTokenGuardedTransition(tr) {
+		return interfaces.EnabledTransition{}, false, false
+	}
+	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
+		return et, true, true
+	}
+	if !shouldFailClosedSameNameJoin(tr, snapshot) {
+		return interfaces.EnabledTransition{}, false, false
+	}
+	// The backtracking evaluator is the only binding path that can honor peer
+	// guards whose authored guard lives on a different input arc. The legacy
+	// phased fallback would bind an arbitrary unguarded peer first, allowing a
+	// historical same-name child when the canonical current child is in another
+	// state. Fail closed only when the canonical registration projection proves
+	// that the current registered child is elsewhere.
+	e.logger.Debug("enablement: transition disabled",
+		"transitionID", tr.ID,
+		"transitionName", tr.Name,
+		"reason", "guard failed for registered single-token binding")
+	return interfaces.EnabledTransition{}, false, true
 }
 
 func (e *EnablementEvaluator) evaluateGuardedArc(
@@ -401,6 +415,116 @@ func guardUsesDependencyGuard(guard petri.Guard) bool {
 		}
 	}
 	return false
+}
+
+func transitionUsesSameNameGuard(tr *petri.Transition) bool {
+	if tr == nil {
+		return false
+	}
+	for i := range tr.InputArcs {
+		if guardUsesSameNameGuard(tr.InputArcs[i].Guard) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldFailClosedSameNameJoin(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) bool {
+	return transitionUsesSameNameGuard(tr) && sameNameJoinHasMissingCurrentChild(tr, snapshot)
+}
+
+func guardUsesSameNameGuard(guard petri.Guard) bool {
+	switch typed := guard.(type) {
+	case *petri.SameNameGuard:
+		return typed != nil
+	case *petri.AllGuard:
+		if typed == nil {
+			return false
+		}
+		for _, nested := range typed.Guards {
+			if guardUsesSameNameGuard(nested) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sameNameJoinHasMissingCurrentChild(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) bool {
+	if tr == nil || snapshot == nil {
+		return false
+	}
+	for i := range tr.InputArcs {
+		matchBinding, ok := sameNameMatchBinding(tr.InputArcs[i].Guard)
+		if !ok {
+			continue
+		}
+		var peerArc *petri.Arc
+		for peerIndex := range tr.InputArcs {
+			candidate := &tr.InputArcs[peerIndex]
+			if arcKey(candidate) == matchBinding {
+				peerArc = candidate
+				break
+			}
+		}
+		if peerArc == nil {
+			continue
+		}
+		if sameNameParentHasMissingCurrentChild(
+			snapshot,
+			stableTokens(snapshot.Marking.TokensInPlace(tr.InputArcs[i].PlaceID)),
+			stableTokens(snapshot.Marking.TokensInPlace(peerArc.PlaceID)),
+		) || sameNameParentHasMissingCurrentChild(
+			snapshot,
+			stableTokens(snapshot.Marking.TokensInPlace(peerArc.PlaceID)),
+			stableTokens(snapshot.Marking.TokensInPlace(tr.InputArcs[i].PlaceID)),
+		) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameNameParentHasMissingCurrentChild(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	parentCandidates, childCandidates []factorytoken.Token,
+) bool {
+	for _, parentCandidate := range parentCandidates {
+		parentWorkID := parentCandidate.Color.WorkID
+		if parentWorkID == "" {
+			continue
+		}
+		registration, registered := snapshot.Marking.ParentChildRegistrations[parentWorkID]
+		if !registered || !registration.Complete || len(registration.Children) == 0 {
+			continue
+		}
+		for index := len(registration.Children) - 1; index >= 0; index-- {
+			child := registration.Children[index]
+			if child.Color.ParentID != parentWorkID || child.Color.Name != parentCandidate.Color.Name {
+				continue
+			}
+			for _, candidate := range childCandidates {
+				if sameNameTokenIdentity(candidate, child) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func sameNameTokenIdentity(left, right factorytoken.Token) bool {
+	if left.Color.WorkID != "" && right.Color.WorkID != "" {
+		return left.Color.WorkID == right.Color.WorkID
+	}
+	return left.ID != "" && left.ID == right.ID
 }
 
 func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []factorytoken.Token) []factorytoken.Token {
