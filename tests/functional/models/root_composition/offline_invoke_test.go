@@ -152,7 +152,7 @@ func TestModelsInvokeOfflineMissingArtifactsReportsCompleteSetThroughRootBuildPr
 	t.Parallel()
 	story := newOfflineLLMStory(t, false)
 
-	wantMissing := []string{offlineModelArtifactName(story.modelDefinition.Source), story.selection.Name}
+	wantMissing := []string{offlineModelArtifactName(story.modelDefinition.Source), "mmproj-F16.gguf", story.selection.Name}
 	sort.Strings(wantMissing)
 	wantMessage := "required model assets are unavailable offline; missing artifacts: " + strings.Join(wantMissing, ", ")
 	for _, test := range []struct {
