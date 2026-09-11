@@ -272,6 +272,67 @@ func resolvedHostConfigurationFromInspection(
 	return configuration, nil
 }
 
+func validateResolvedHostConfigurationPaths(
+	configuration modelseffects.ResolvedHostConfiguration,
+	identity supervisedIdentity,
+	inspection cacheInspection,
+	platform models.AssetHostPlatform,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) error {
+	if !hasResolvedHostModelPathFacts(configuration) && len(inspection.ObservedArtifacts) == 0 {
+		return nil
+	}
+	validated, err := resolvedHostConfigurationFromInspection(
+		configuration.Scope,
+		identity,
+		inspection,
+		platform,
+		resolveSymlinks,
+	)
+	if err != nil {
+		return err
+	}
+	if !sameHostPath(configuration.ModelCachePath, validated.ModelCachePath) ||
+		!sameHostPath(configuration.ModelPath, validated.ModelPath) ||
+		!sameHostPath(configuration.MMProjPath, validated.MMProjPath) ||
+		!sameHostPathSlice(configuration.ModelFiles, validated.ModelFiles) {
+		return invalidModelArtifactLayout()
+	}
+	return nil
+}
+
+func hasResolvedHostModelPathFacts(configuration modelseffects.ResolvedHostConfiguration) bool {
+	return strings.TrimSpace(configuration.ModelCachePath) != "" ||
+		strings.TrimSpace(configuration.ModelPath) != "" ||
+		strings.TrimSpace(configuration.MMProjPath) != "" ||
+		len(configuration.ModelFiles) > 0
+}
+
+func sameHostPath(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" {
+		return left == right
+	}
+	leftPath := filepath.FromSlash(left)
+	rightPath := filepath.FromSlash(right)
+	return leftPath == rightPath &&
+		leftPath == filepath.Clean(leftPath) &&
+		rightPath == filepath.Clean(rightPath)
+}
+
+func sameHostPathSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if !sameHostPath(left[index], right[index]) {
+			return false
+		}
+	}
+	return true
+}
+
 func defaultServerStartBuilder(
 	configuration modelseffects.ResolvedHostConfiguration,
 	worker *models.RuntimeWorker,

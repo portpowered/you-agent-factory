@@ -238,6 +238,17 @@ func (s *service) ensureModelHostWithResolvedConfiguration(
 	runtimeCfg := binding.RuntimeConfig()
 	identity := supervisedIdentityForModel(runtimeCfg, binding.OperatorModels, configuration.ModelName)
 	identity = identityWithResolvedHostConfiguration(identity, configuration, inspection)
+	if requiresRuntimeHostBackend(identity.Backend) {
+		if err := validateResolvedHostConfigurationPaths(
+			configuration,
+			identity,
+			cacheInspection,
+			configuration.Platform,
+			s.supervisor.ResolveSymlinks,
+		); err != nil {
+			return models.EnsureModelHostResult{}, err
+		}
+	}
 	baseSnapshot := hostSnapshotFromAssets(configuration.Scope, configuration.ModelName, inspection)
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 

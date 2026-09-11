@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -143,6 +144,97 @@ func TestResolvedHostConfigurationHandoffReachesHostAndProtocolExactly(t *testin
 	defer compatibility.mu.Unlock()
 	if len(compatibility.requests) != 1 || !reflect.DeepEqual(compatibility.requests[0].Configuration, configuration) {
 		t.Fatalf("compatibility configuration = %#v, want exact %#v", compatibility.requests, configuration)
+	}
+}
+
+func TestResolvedHostConfigurationHandoffRejectsEscapingModelSymlinkBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	outsideDirectory := t.TempDir()
+	outsideModel := filepath.Join(outsideDirectory, story002ModelName)
+	if err := os.WriteFile(outsideModel, []byte("outside model"), 0o600); err != nil {
+		t.Fatalf("write outside model: %v", err)
+	}
+	escapingModel := filepath.Join(cacheDirectory, story002ModelName)
+	if err := os.Symlink(outsideModel, escapingModel); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+	projector := filepath.Join(cacheDirectory, story002ProjectorName)
+	if err := os.WriteFile(projector, []byte("projector"), 0o600); err != nil {
+		t.Fatalf("write projector: %v", err)
+	}
+
+	scopes := newScopes(t, "story-002-handoff-symlink-escape")
+	ref := openScope(t, scopes, cacheDirectory, story002BuiltinLLMConfig())
+	launcher := &controlledProcessLauncher{}
+	compatibility := &testCompatibilityChecker{}
+	protocol := &testProtocolNegotiator{}
+	assets := &backendRuntimeInspectionAssets{
+		Service: mustAssetsService(t, scopes),
+		inspection: story002BuiltinLLMInspection(cacheDirectory, []models.AssetArtifact{
+			{Name: story002ModelName, Bytes: story002ModelBytes, SHA256: story002ModelSHA256},
+			{Name: story002ProjectorName, Bytes: story002ProjectorBytes, SHA256: story002ProjectorSHA256},
+		}),
+	}
+	host := internalservice.NewWithHostTestConfig(
+		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
+		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: compatibility,
+			ProtocolNegotiator:   protocol,
+			ResolveSymlinks:      filepath.EvalSymlinks,
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope:           ref,
+		ModelName:       models.BuiltInModelNameLLM,
+		Source:          models.ModelReference{NameOrURI: "hf://operator/symlink-model.gguf@revision-escape"},
+		Revision:        "revision-escape",
+		Backend:         "localai-llamacpp",
+		Platform:        managedHostPlatform(),
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		ModelCachePath:  cacheDirectory,
+		ModelPath:       escapingModel,
+		MMProjPath:      projector,
+		ModelFiles:      []string{escapingModel, projector},
+	}
+	handoff, ok := host.(interface {
+		EnsureModelHostWithConfiguration(
+			context.Context,
+			modelseffects.ResolvedHostConfiguration,
+		) (models.EnsureModelHostResult, error)
+	})
+	if !ok {
+		t.Fatal("Runtime Host does not expose the parent-private configuration handoff")
+	}
+	_, err := handoff.EnsureModelHostWithConfiguration(context.Background(), configuration)
+	if !errors.Is(err, models.ErrHostMissingAssets) {
+		t.Fatalf("escaping handoff error = %v, want ErrHostMissingAssets", err)
+	}
+	if launcher.startCount() != 0 {
+		t.Fatalf("launcher starts = %d, want no process effect", launcher.startCount())
+	}
+	if call := protocol.call(); call.endpoint != "" {
+		t.Fatalf("protocol call = %#v, want no protocol effect", call)
+	}
+	compatibility.mu.Lock()
+	compatibilityCalls := compatibility.calls
+	compatibility.mu.Unlock()
+	if compatibilityCalls != 0 {
+		t.Fatalf("compatibility calls = %d, want no compatibility effect", compatibilityCalls)
+	}
+	lease, leaseErr := (models.ModelLeaseRef{}).Parse("model-lease-1")
+	if leaseErr != nil {
+		t.Fatalf("parse lease probe: %v", leaseErr)
+	}
+	if _, leaseErr = internalservice.LeasesService(host).GetModelLease(
+		context.Background(), models.GetModelLeaseRequest{Scope: ref, Lease: lease},
+	); !errors.Is(leaseErr, models.ErrHostLeaseNotFound) {
+		t.Fatalf("lease probe error = %v, want no lease side effect", leaseErr)
 	}
 }
 
