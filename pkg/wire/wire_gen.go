@@ -467,7 +467,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	invocationOperation := provideModelsCLIInvocationOperation(v71)
-	compositionScopeProvider, err := provideModelsCLIComposition(modelsService, v71)
+	compositionScopeProvider, err := provideModelsCLIComposition(modelsService, v71, configLoader)
 	if err != nil {
 		return nil, err
 	}

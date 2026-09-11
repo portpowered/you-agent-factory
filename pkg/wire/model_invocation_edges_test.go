@@ -886,7 +886,7 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 	source := &modelsCLICompositionScopeSourceStub{
 		scope: modelservice.PresentationScope{Scope: scope},
 	}
-	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source)
+	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source, nil)
 	if err != nil {
 		t.Fatalf("provideModelsCLIComposition() error = %v", err)
 	}

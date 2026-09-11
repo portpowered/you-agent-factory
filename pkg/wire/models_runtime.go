@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
@@ -786,7 +787,7 @@ func (composition modelsCLIComposition) openModelsPresentationScope(
 		!errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
 		return modelscli.InvokeRuntimeScope{}, err
 	}
-	return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+	return composition.openStandaloneModelsScope(ctx, modelCacheDir, cfg.HomeDir)
 }
 
 func (composition modelsCLIComposition) openCatalogModelsScope(
@@ -797,7 +798,7 @@ func (composition modelsCLIComposition) openCatalogModelsScope(
 	homeDirectory := startupcli.HomeDirectory(ctx)
 	if strings.TrimSpace(workingDirectory) == "" || strings.TrimSpace(homeDirectory) == "" ||
 		!catalogOperatorConfigPresent(homeDirectory) {
-		return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+		return composition.openStandaloneModelsScope(ctx, modelCacheDir, homeDirectory)
 	}
 	opened, err := composition.source.OpenModelsPresentationScope(ctx, models.PresentationScopeRequest{
 		WorkingDirectory: workingDirectory,
@@ -810,7 +811,7 @@ func (composition modelsCLIComposition) openCatalogModelsScope(
 	if !errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
 		return modelscli.InvokeRuntimeScope{}, err
 	}
-	return composition.openStandaloneModelsScope(ctx, modelCacheDir)
+	return composition.openStandaloneModelsScope(ctx, modelCacheDir, homeDirectory)
 }
 
 func catalogOperatorConfigPresent(homeDirectory string) bool {
@@ -822,11 +823,17 @@ func catalogOperatorConfigPresent(homeDirectory string) bool {
 func (composition modelsCLIComposition) openStandaloneModelsScope(
 	ctx context.Context,
 	modelCacheDir string,
+	homeDirectory string,
 ) (modelscli.InvokeRuntimeScope, error) {
+	operatorModels, err := composition.loadStandaloneOperatorModels(homeDirectory)
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
 	opened, err := composition.root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
 		Config: models.RuntimeScopeConfig{
 			CacheDirectory: modelCacheDir,
 			Runtime:        models.RuntimeConfig{},
+			OperatorModels: operatorModels,
 		},
 	})
 	if err != nil {
@@ -848,4 +855,47 @@ func (composition modelsCLIComposition) openStandaloneModelsScope(
 			return nil
 		},
 	}, nil
+}
+
+func (composition modelsCLIComposition) loadStandaloneOperatorModels(
+	homeDirectory string,
+) (map[string]models.ModelOverlay, error) {
+	if composition.loadOperatorConfig == nil || strings.TrimSpace(homeDirectory) == "" {
+		return nil, nil
+	}
+	config, err := composition.loadOperatorConfig(operatorsettings.DefaultConfigPath(homeDirectory))
+	if err != nil {
+		return nil, fmt.Errorf("load standalone Models operator config: %w", err)
+	}
+	return projectModelsOperatorOverlays(config.Models), nil
+}
+
+func projectModelsOperatorOverlays(
+	configured map[string]operatorsettings.ModelConfig,
+) map[string]models.ModelOverlay {
+	if len(configured) == 0 {
+		return nil
+	}
+	projected := make(map[string]models.ModelOverlay, len(configured))
+	for name, config := range configured {
+		overlay := models.ModelOverlay{
+			Source:     cloneModelsOperatorString(config.Source),
+			Backend:    cloneModelsOperatorString(config.Backend),
+			Operations: append([]string(nil), config.Operations...),
+		}
+		if config.LoadPolicy != nil {
+			policy := models.LoadPolicy(*config.LoadPolicy)
+			overlay.LoadPolicy = &policy
+		}
+		projected[name] = overlay
+	}
+	return projected
+}
+
+func cloneModelsOperatorString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

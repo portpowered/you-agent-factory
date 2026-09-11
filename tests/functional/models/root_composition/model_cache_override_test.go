@@ -98,7 +98,7 @@ func newCacheSelectionScenario(
 	if !useOverride {
 		cacheRoot = modelRoot
 	}
-	writeCacheSelectionFixtures(t, cacheRoot)
+	writeCacheSelectionFixtures(t, home, cacheRoot)
 	if err := os.MkdirAll(ambientRoot, 0o755); err != nil {
 		t.Fatalf("create ambient cache root: %v", err)
 	}
@@ -148,7 +148,7 @@ func runCacheSelectionServerParity(
 
 	serverHome := functionalTempDir(t)
 	serverCache := filepath.Join(functionalTempDir(t), "server", "cache-root")
-	writeCacheSelectionFixtures(t, serverCache)
+	writeCacheSelectionFixtures(t, serverHome, serverCache)
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -481,13 +481,13 @@ func pathWithinRoot(path, root string) bool {
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func writeCacheSelectionFixtures(t *testing.T, root string) {
+func writeCacheSelectionFixtures(t *testing.T, home, root string) {
 	t.Helper()
 	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
 	if !ok {
 		t.Fatal("built-in LLM definition is unavailable")
 	}
-	writeCacheSelectionModelFixture(t, root, definition.Source)
+	writeCacheSelectionModelFixture(t, root, genericModelFixtureSource(t, home, definition.Source))
 	writeCacheSelectionBackendFixture(t, root, definition.Backend, genericLlamaBackendSelection(), []byte("localai-llamacpp/linux-amd64"))
 }
 
