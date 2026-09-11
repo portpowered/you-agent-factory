@@ -1,11 +1,18 @@
 package oneshot_test
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -422,3 +429,791 @@ func btrcOneShotStringSlice(value *[]string) []string {
 
 var _ platformprocess.CommandRunner = (*support.RecordingCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*support.ShapedProviderCommandRunner)(nil)
+
+const (
+	localAIFactoryInferenceSuccess      = "factory LocalAI inference COMPLETE"
+	localAIFactoryInferenceFailure      = "controlled LocalAI backend protocol failure"
+	localAIFactoryInferenceSource       = "hf://characterization/localai-factory-llm.gguf"
+	localAIFactoryInferenceRevision     = "0123456789abcdef0123456789abcdef01234567"
+	localAIFactoryInferenceBackend      = "localai-llamacpp"
+	localAIFactoryInferencePlatformOS   = "linux"
+	localAIFactoryInferencePlatformArch = "amd64"
+)
+
+// TestLocalAIFactoryInferenceCharacterization freezes the smallest Factory
+// inference journey that reaches the managed LocalAI Models path. The test
+// replaces only published model effects, then observes the caller-facing
+// result and the canonical event ledger produced by Process.Execute.
+func TestLocalAIFactoryInferenceCharacterization(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		response    string
+		failure     error
+		wantStatus  factoryapi.InvocationTerminalStatus
+		wantSession interfaces.FactorySessionLifecycleStatus
+	}{
+		{
+			name: "success", response: localAIFactoryInferenceSuccess,
+			wantStatus:  factoryapi.InvocationTerminalStatusCompleted,
+			wantSession: interfaces.FactorySessionLifecycleStatusSucceeded,
+		},
+		{
+			name: "backend protocol failure", failure: errors.New(localAIFactoryInferenceFailure),
+			wantStatus:  factoryapi.InvocationTerminalStatusFailed,
+			wantSession: interfaces.FactorySessionLifecycleStatusSucceeded,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			const prompt = "Factory LocalAI characterization prompt"
+			run := runLocalAIFactoryInference(t, prompt, test.response, test.failure)
+			if test.failure == nil {
+				if run.executeErr != nil {
+					t.Fatalf("Process.Execute(Factory LocalAI success) error = %v\nstdout:\n%s\nstderr:\n%s", run.executeErr, run.stdout, run.stderr)
+				}
+				assertBTRCOneShotResponse(t, run.response, test.wantStatus, run.response.RequestId, run.response.TraceId, test.response)
+				assertLocalAIFactoryAcceptedDispatch(t, run.artifact.Events, test.response)
+			} else {
+				if run.executeErr == nil {
+					t.Fatal("Process.Execute(Factory LocalAI protocol failure) error = nil, want terminal invocation error")
+				}
+				if run.response.ErrorCode == nil || *run.response.ErrorCode != factoryapi.INVOCATIONRUNTIMEFAILURE {
+					t.Fatalf("Factory LocalAI failure errorCode = %#v, want INVOCATION_RUNTIME_FAILURE", run.response.ErrorCode)
+				}
+				if run.response.PrimaryResult != nil {
+					t.Fatalf("Factory LocalAI failure primaryResult = %#v, want nil", run.response.PrimaryResult)
+				}
+				if strings.Contains(run.stderr, localAIFactoryInferenceFailure) {
+					t.Fatalf("raw model protocol failure leaked through Factory diagnostics: %q", run.stderr)
+				}
+				assertLocalAIFactoryFailedDispatch(t, run.artifact.Events)
+			}
+
+			if run.response.RequestId == "" || run.response.TraceId == "" {
+				t.Fatalf("Factory LocalAI response identity = %#v, want request and trace IDs", run.response)
+			}
+			requestID, traceID, workID, dispatchID := assertBTRCOneShotCorrelation(t, run.artifact.Events, run.response)
+			assertLocalAIFactoryModelEvents(t, run.artifact.Events, requestID, traceID, workID, dispatchID, test.failure == nil, test.response)
+			assertLocalAIFactoryEventSpine(t, run.artifact.Events)
+			assertLocalAIFactoryTerminalSession(t, run.artifact.Events, test.wantSession)
+			assertBTRCOneShotResponseStreamHasOneTerminalRecord(t, run.stdout)
+			assertLocalAIFactoryConfigurationFacts(t, run, prompt, test.failure == nil)
+		})
+	}
+}
+
+type localAIFactoryInferenceRun struct {
+	artifact       *interfaces.ReplayArtifact
+	response       factoryapi.InvocationResponse
+	stdout         string
+	stderr         string
+	executeErr     error
+	modelCacheRoot string
+	source         string
+	revision       string
+	backend        string
+	platform       modelprovider.AssetHostPlatform
+	assetNetwork   *localAIFactoryAssetHTTP
+	resolver       *localAIFactoryRevisionRecorder
+	backendSelect  *localAIFactoryBackendSelectionRecorder
+	launcher       *localAIFactoryHostLauncher
+	negotiator     *localAIFactoryHostProtocolRecorder
+	compatibility  *localAIFactoryHostCompatibilityRecorder
+	invocation     *localAIFactoryInvocationProtocolRecorder
+}
+
+func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure error) localAIFactoryInferenceRun {
+	t.Helper()
+
+	home := t.TempDir()
+	factoryDir := support.ScaffoldFactory(t, localAIFactoryInferenceFactoryConfig("http://localai-factory-characterization.invalid"))
+	support.WriteWorkstationConfig(t, factoryDir, "execute-llm", "---\ntype: INFERENCE_RUN\n---\nReturn the model result.\n")
+	writeLocalAIFactoryModelOverlay(t, home, localAIFactoryInferenceSource)
+	writeLocalAIFactoryModelCache(t, home, localAIFactoryInferenceSource+"@"+localAIFactoryInferenceRevision)
+	selection := localAIFactoryBackendSelection()
+	writeLocalAIFactoryBackendCache(t, home, selection)
+
+	assetNetwork := &localAIFactoryAssetHTTP{}
+	resolver := &localAIFactoryRevisionRecorder{revision: localAIFactoryInferenceRevision}
+	backendSelect := &localAIFactoryBackendSelectionRecorder{selection: selection}
+	launcher := &localAIFactoryHostLauncher{endpoint: "http://localai-factory-characterization.invalid"}
+	negotiator := &localAIFactoryHostProtocolRecorder{}
+	compatibility := &localAIFactoryHostCompatibilityRecorder{}
+	invocation := &localAIFactoryInvocationProtocolRecorder{response: response, failure: failure}
+	assetFiles := localAIFactoryAssetFileSystem{home: home}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:            assetNetwork,
+		ModelAssetMakeDirectories:       assetFiles.MkdirAll,
+		ModelAssetInspectPath:           assetFiles.Stat,
+		ModelAssetResolveHomeDirectory:  assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:    func(string) string { return "" },
+		ModelAssetWriteFile:             assetFiles.WriteFile,
+		ModelAssetRenamePath:            assetFiles.Rename,
+		ModelAssetRemovePath:            assetFiles.Remove,
+		ModelAssetReadFile:              assetFiles.ReadFile,
+		ModelAssetReadDirectory:         assetFiles.ReadDir,
+		ModelAssetCreateFile:            assetFiles.Create,
+		ModelAssetOpenFile:              assetFiles.Open,
+		ModelHostProcessLauncher:        launcher,
+		ModelHostProtocolNegotiator:     negotiator,
+		ModelHostCompatibilityChecker:   compatibility,
+		ModelAssetHostPlatform:          modelprovider.AssetHostPlatform{OperatingSystem: localAIFactoryInferencePlatformOS, Architecture: localAIFactoryInferencePlatformArch},
+		ModelResolveBackendArtifact:     backendSelect.Resolve,
+		ModelResolveHuggingFaceRevision: resolver.Resolve,
+		ModelHostHTTPClient:             assetNetwork,
+		ModelRuntimeHTTPClient:          assetNetwork,
+		ModelInvocationProtocolClient:   invocation,
+	})
+	support.CleanupProcess(t, process)
+
+	artifactPath := filepath.Join(t.TempDir(), "localai-factory-inference.replay.json")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		"--record", artifactPath,
+		"--output", "response-stream",
+		prompt,
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = factoryDir
+	executeErr := process.Execute(inputs.Input)
+	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("close Factory LocalAI characterization process: %v", err)
+	}
+
+	return localAIFactoryInferenceRun{
+		artifact: artifact, response: support.DecodeInvocationResponseJSON(t, inputs.Stdout()),
+		stdout: inputs.Stdout(), stderr: inputs.Stderr(), executeErr: executeErr,
+		modelCacheRoot: filepath.Join(home, ".agent-factory", "models"),
+		source:         localAIFactoryInferenceSource, revision: localAIFactoryInferenceRevision,
+		backend:      localAIFactoryInferenceBackend,
+		platform:     modelprovider.AssetHostPlatform{OperatingSystem: localAIFactoryInferencePlatformOS, Architecture: localAIFactoryInferencePlatformArch},
+		assetNetwork: assetNetwork, resolver: resolver, backendSelect: backendSelect,
+		launcher: launcher, negotiator: negotiator, compatibility: compatibility,
+		invocation: invocation,
+	}
+}
+
+func localAIFactoryInferenceFactoryConfig(endpoint string) map[string]any {
+	return map[string]any{
+		"name": "localai-factory-inference-characterization",
+		"invocationSignature": map[string]any{
+			"parameters": []map[string]any{{
+				"name": "prompt", "externalName": "prompt", "required": true,
+				"bindings": []map[string]any{{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}, {"kind": "NAMED"}},
+			}},
+		},
+		"workTypes": []map[string]any{{
+			"name": "task", "handlingBehavior": []string{"DEFAULT"},
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"resources": []map[string]any{{
+			"name": "llm-cache", "type": interfaces.ResourceTypeModel, "capacity": 1,
+			"model": modelprovider.BuiltInModelNameLLM, "backend": localAIFactoryInferenceBackend, "loadPolicy": "ON_DEMAND",
+		}},
+		"workers": []map[string]any{{
+			"name": "llm-worker", "type": interfaces.WorkerTypeInference,
+			"model": modelprovider.BuiltInModelNameLLM, "modelProvider": "CODEX",
+			"modelLocality": interfaces.ModelLocalityLocal, "command": "llama-cpp",
+			"args":      []string{"--grpc-endpoint", endpoint},
+			"resources": []map[string]any{{"name": "llm-cache", "capacity": 1}},
+			"operations": []map[string]any{{
+				"name":    modelprovider.OperationOMNI,
+				"inputs":  []map[string]any{{"name": "prompt", "contentTypes": []string{"TEXT"}, "required": true}},
+				"outputs": []map[string]any{{"name": "text", "contentTypes": []string{"TEXT"}, "required": true}},
+			}},
+		}},
+		"workstations": []map[string]any{{
+			"name": "execute-llm", "type": interfaces.WorkstationTypeInference,
+			"operation": modelprovider.OperationOMNI, "worker": "llm-worker",
+			"body":              "Return the model result.",
+			"operationBindings": []map[string]any{{"slot": "prompt", "selector": map[string]any{"type": "TEXT"}}},
+			"inputs":            []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":           []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure":         []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
+func assertLocalAIFactoryEventSpine(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatal("Factory LocalAI replay has no canonical events")
+	}
+	for index, event := range events {
+		if event.Context.Sequence != index || strings.TrimSpace(event.Id) == "" {
+			t.Fatalf("Factory LocalAI event[%d] = sequence:%d id:%q, want contiguous sequence and ID", index, event.Context.Sequence, event.Id)
+		}
+	}
+	wantOrder := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeRunRequest,
+		interfaces.FactoryEventTypeInitialStructureRequest,
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeWorkRequest,
+		interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+		interfaces.FactoryEventTypeModelRequest,
+		interfaces.FactoryEventTypeModelResponse,
+		interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventTypeRunResponse,
+		interfaces.FactoryEventTypeSessionResultUpdated,
+		interfaces.FactoryEventTypeSessionCompleted,
+	}
+	previous := -1
+	for _, eventType := range wantOrder {
+		positions := make([]int, 0, 1)
+		for index, event := range events {
+			if event.Type == eventType {
+				positions = append(positions, index)
+			}
+		}
+		if len(positions) != 1 || positions[0] <= previous {
+			t.Fatalf("Factory LocalAI event %s positions = %#v, want one after %d; types=%v", eventType, positions, previous, localAIFactoryEventTypes(events))
+		}
+		previous = positions[0]
+	}
+}
+
+func localAIFactoryEventTypes(events []interfaces.FactoryEvent) []interfaces.FactoryEventType {
+	result := make([]interfaces.FactoryEventType, len(events))
+	for index, event := range events {
+		result[index] = event.Type
+	}
+	return result
+}
+
+func assertLocalAIFactoryModelEvents(t *testing.T, events []interfaces.FactoryEvent, requestID, traceID, workID, dispatchID string, success bool, wantText string) {
+	t.Helper()
+	var modelRequestEvent, modelResponseEvent *interfaces.FactoryEvent
+	for index := range events {
+		switch events[index].Type {
+		case interfaces.FactoryEventTypeModelRequest:
+			if modelRequestEvent != nil {
+				t.Fatalf("duplicate MODEL_REQUEST events")
+			}
+			modelRequestEvent = &events[index]
+		case interfaces.FactoryEventTypeModelResponse:
+			if modelResponseEvent != nil {
+				t.Fatalf("duplicate MODEL_RESPONSE events")
+			}
+			modelResponseEvent = &events[index]
+		}
+	}
+	if modelRequestEvent == nil || modelResponseEvent == nil {
+		t.Fatalf("Factory LocalAI model events = request:%v response:%v, want both", modelRequestEvent != nil, modelResponseEvent != nil)
+	}
+	for _, event := range []*interfaces.FactoryEvent{modelRequestEvent, modelResponseEvent} {
+		if event.Context.RequestID == nil || *event.Context.RequestID != requestID ||
+			event.Context.DispatchID == nil || *event.Context.DispatchID != dispatchID ||
+			!reflect.DeepEqual(btrcOneShotStringSlice(event.Context.TraceIDs), []string{traceID}) ||
+			!reflect.DeepEqual(btrcOneShotStringSlice(event.Context.WorkIDs), []string{workID}) {
+			t.Fatalf("Factory LocalAI model event correlation = %#v, want request:%q trace:%q work:%q dispatch:%q", event.Context, requestID, traceID, workID, dispatchID)
+		}
+	}
+	var requestPayload workerexecution.ModelRequestEventPayload
+	if err := modelRequestEvent.DecodePayload(&requestPayload); err != nil {
+		t.Fatalf("decode Factory LocalAI MODEL_REQUEST: %v", err)
+	}
+	if requestPayload.ModelRequestID == "" || requestPayload.Model != modelprovider.BuiltInModelNameLLM ||
+		requestPayload.Operation != modelprovider.OperationOMNI || requestPayload.Worker != "llm-worker" ||
+		requestPayload.ProviderLocality != string(interfaces.ModelLocalityLocal) {
+		t.Fatalf("Factory LocalAI MODEL_REQUEST payload = %#v, want llm/OMNI/local worker facts", requestPayload)
+	}
+	var responsePayload workerexecution.ModelResponseEventPayload
+	if err := modelResponseEvent.DecodePayload(&responsePayload); err != nil {
+		t.Fatalf("decode Factory LocalAI MODEL_RESPONSE: %v", err)
+	}
+	if responsePayload.ModelRequestID != requestPayload.ModelRequestID || responsePayload.Model != requestPayload.Model ||
+		responsePayload.Operation != requestPayload.Operation || responsePayload.Worker != requestPayload.Worker {
+		t.Fatalf("Factory LocalAI MODEL_RESPONSE identity = %#v, want request payload identity %#v", responsePayload, requestPayload)
+	}
+	if success {
+		if responsePayload.Outcome != workerexecution.InferenceOutcomeSucceeded || responsePayload.OutputContent == nil || len(*responsePayload.OutputContent) != 1 {
+			t.Fatalf("successful Factory LocalAI MODEL_RESPONSE = %#v, want one output part", responsePayload)
+		}
+		part := (*responsePayload.OutputContent)[0]
+		if string(part.Type.Normalized()) != workexecutionTextType || part.Text != wantText {
+			t.Fatalf("successful Factory LocalAI MODEL_RESPONSE content = %#v, want text %q", part, wantText)
+		}
+	} else if responsePayload.Outcome != workerexecution.InferenceOutcomeFailed || responsePayload.FailureDetail == nil || responsePayload.OutputContent != nil {
+		t.Fatalf("failed Factory LocalAI MODEL_RESPONSE = %#v, want typed failure without output", responsePayload)
+	}
+}
+
+const workexecutionTextType = "text"
+
+func assertLocalAIFactoryAcceptedDispatch(t *testing.T, events []interfaces.FactoryEvent, wantText string) {
+	t.Helper()
+	var payload workerexecution.DispatchResponseEventPayload
+	count := 0
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		count++
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatalf("decode accepted Factory LocalAI DISPATCH_RESPONSE: %v", err)
+		}
+	}
+	if count != 1 || payload.Outcome != workerexecution.OutcomeAccepted || payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+		t.Fatalf("accepted Factory LocalAI dispatch = %#v, want one accepted output Work", payload)
+	}
+	outputWork := (*payload.OutputWork)[0]
+	if outputWork.State == nil || outputWork.State.Name != "complete" || outputWork.Content == nil || len(outputWork.Content) != 1 || outputWork.Content[0].Text != wantText {
+		t.Fatalf("accepted Factory LocalAI output Work = %#v, want complete text %q", outputWork, wantText)
+	}
+}
+
+func assertLocalAIFactoryFailedDispatch(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	var payload workerexecution.DispatchResponseEventPayload
+	count := 0
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		count++
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatalf("decode failed Factory LocalAI DISPATCH_RESPONSE: %v", err)
+		}
+	}
+	if count != 1 || payload.Outcome != workerexecution.OutcomeFailed || payload.FailureDetail == nil || payload.ProviderFailure == nil {
+		t.Fatalf("failed Factory LocalAI dispatch = %#v, want terminal typed failure", payload)
+	}
+	if payload.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown ||
+		payload.ProviderFailure.Family != workerexecution.WorkFailureFamilyTerminal ||
+		payload.ProviderFailure.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("failed Factory LocalAI classification = detail:%#v provider:%#v, want terminal unknown provider-neutral metadata", payload.FailureDetail, payload.ProviderFailure)
+	}
+	if payload.OutputWork == nil || len(*payload.OutputWork) != 1 || (*payload.OutputWork)[0].State == nil || (*payload.OutputWork)[0].State.Name != "failed" {
+		t.Fatalf("failed Factory LocalAI output Work = %#v, want one failed Work", payload.OutputWork)
+	}
+}
+
+func assertLocalAIFactoryTerminalSession(t *testing.T, events []interfaces.FactoryEvent, wantStatus interfaces.FactorySessionLifecycleStatus) {
+	t.Helper()
+	resultCount, completedCount := 0, 0
+	var resultPayload interfaces.FactorySessionResultUpdatedEventPayload
+	var completedPayload interfaces.FactorySessionCompletedEventPayload
+	for _, event := range events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeSessionStarted:
+			if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
+				t.Fatalf("Factory LocalAI %s session ID = %#v, want ~default", event.Type, event.Context.SessionID)
+			}
+		case interfaces.FactoryEventTypeSessionResultUpdated:
+			if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
+				t.Fatalf("Factory LocalAI %s session ID = %#v, want ~default", event.Type, event.Context.SessionID)
+			}
+			resultCount++
+			if err := event.DecodePayload(&resultPayload); err != nil {
+				t.Fatalf("decode Factory LocalAI SESSION_RESULT_UPDATED: %v", err)
+			}
+		case interfaces.FactoryEventTypeSessionCompleted:
+			if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
+				t.Fatalf("Factory LocalAI %s session ID = %#v, want ~default", event.Type, event.Context.SessionID)
+			}
+			completedCount++
+			if err := event.DecodePayload(&completedPayload); err != nil {
+				t.Fatalf("decode Factory LocalAI SESSION_COMPLETED: %v", err)
+			}
+		}
+	}
+	if resultCount != 1 || completedCount != 1 || resultPayload.ResultStatus != interfaces.FactorySessionResultStatusFinal || completedPayload.FinalStatus != wantStatus || completedPayload.ResultStatus == nil || *completedPayload.ResultStatus != interfaces.FactorySessionResultStatusFinal {
+		t.Fatalf("Factory LocalAI terminal session = result:%d/%#v completed:%d/%#v, want one FINAL and %s", resultCount, resultPayload, completedCount, completedPayload, wantStatus)
+	}
+}
+
+func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInferenceRun, prompt string, success bool) {
+	t.Helper()
+	if got := run.resolver.Sources(); len(got) == 0 || got[0] != run.source {
+		t.Fatalf("Factory LocalAI resolved sources = %#v, want %q", got, run.source)
+	}
+	requests := run.backendSelect.Requests()
+	if len(requests) == 0 || requests[0].Backend != run.backend || requests[0].ProtocolVersion != "localai-backend-v1" || requests[0].Platform != run.platform {
+		t.Fatalf("Factory LocalAI backend selection requests = %#v, want backend/protocol/platform facts", requests)
+	}
+	spec, ok := run.launcher.LastSpec()
+	modelCachePath := filepath.Join(run.modelCacheRoot, "LLM", run.revision)
+	backendCachePath := filepath.Join(run.modelCacheRoot, "backend-artifacts")
+	if !ok || !localAIFactoryArgsContainPath(spec.Args, "--cache-path", modelCachePath) || !localAIFactoryArgsContainPath(spec.Args, "--backend-cache-path", backendCachePath) {
+		t.Fatalf("Factory LocalAI host start spec = %#v, want materialized model/backend cache-path propagation", spec)
+	}
+	negotiation := run.negotiator.Requests()
+	if len(negotiation) == 0 || negotiation[0].ProtocolVersion != "localai-backend-v1" || negotiation[0].Backend != run.backend || negotiation[0].ModelName != modelprovider.BuiltInModelNameLLM || negotiation[0].Revision != run.revision || negotiation[0].Platform != run.platform {
+		t.Fatalf("Factory LocalAI protocol negotiation = %#v, want propagated model facts", negotiation)
+	}
+	compatibility := run.compatibility.Requests()
+	if len(compatibility) == 0 || compatibility[0].Backend != run.backend || compatibility[0].ModelName != modelprovider.BuiltInModelNameLLM || compatibility[0].Revision != run.revision || compatibility[0].Platform != run.platform {
+		t.Fatalf("Factory LocalAI compatibility = %#v, want backend/model/revision/platform facts", compatibility)
+	}
+	invocation := run.invocation.Request()
+	if run.invocation.Calls() != 1 || invocation.Operation != modelprovider.OperationOMNI || len(invocation.Inputs) != 1 || invocation.Inputs[0].Slot != "prompt" || invocation.Inputs[0].Content != prompt {
+		t.Fatalf("Factory LocalAI invocation = calls:%d request:%#v, want one OMNI prompt", run.invocation.Calls(), invocation)
+	}
+	if run.assetNetwork.Calls() != 0 {
+		t.Fatalf("Factory LocalAI model network calls = %d, want zero from selected cache", run.assetNetwork.Calls())
+	}
+	if run.launcher.Active() || run.launcher.Starts() != run.launcher.Stops() || run.launcher.Stops() != run.launcher.Waits() {
+		t.Fatalf("Factory LocalAI host lifecycle = starts:%d stops:%d waits:%d active:%t, want fully released", run.launcher.Starts(), run.launcher.Stops(), run.launcher.Waits(), run.launcher.Active())
+	}
+	if !success && run.response.PrimaryResult != nil {
+		t.Fatalf("failed Factory LocalAI response primary result = %#v, want nil", run.response.PrimaryResult)
+	}
+}
+
+func localAIFactoryArgsContainPath(args []string, flag, want string) bool {
+	for index, arg := range args {
+		if arg == flag && index+1 < len(args) && strings.Contains(filepath.Clean(args[index+1]), filepath.Clean(want)) {
+			return true
+		}
+	}
+	return false
+}
+
+func writeLocalAIFactoryModelOverlay(t *testing.T, home, source string) {
+	t.Helper()
+	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create Factory LocalAI operator config directory: %v", err)
+	}
+	data, err := json.Marshal(map[string]any{"models": map[string]any{modelprovider.BuiltInModelNameLLM: map[string]any{"source": source}}})
+	if err != nil {
+		t.Fatalf("marshal Factory LocalAI operator config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write Factory LocalAI operator config: %v", err)
+	}
+}
+
+func writeLocalAIFactoryModelCache(t *testing.T, home, source string) {
+	t.Helper()
+	name := "localai-llm.gguf"
+	body := []byte("factory LocalAI model fixture")
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
+	identity := fmt.Sprintf("model|%s|%s:%d:%s", source, name, len(body), digest)
+	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+	snapshot := filepath.Join(home, ".agent-factory", "models", ".you-content-addressed", "model", identityHash)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create Factory LocalAI model cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, name), body, 0o644); err != nil {
+		t.Fatalf("write Factory LocalAI model cache: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "model", "identity": identity, "source": source, "sourceKey": source,
+		"artifacts": []map[string]any{{"Name": name, "Bytes": len(body), "SHA256": digest}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Factory LocalAI model metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write Factory LocalAI model metadata: %v", err)
+	}
+}
+
+func localAIFactoryBackendSelection() serviceedges.ModelBackendArtifactSelection {
+	return serviceedges.ModelBackendArtifactSelection{
+		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		Bytes:    28, SHA256: "9285e7ffc76aaadf4dfcc6b2de5e23c6b01d4e7068e8f2dd65673626cc5de4ed",
+	}
+}
+
+func writeLocalAIFactoryBackendCache(t *testing.T, home string, selection serviceedges.ModelBackendArtifactSelection) {
+	t.Helper()
+	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
+	source := "backend://" + localAIFactoryInferenceBackend + "/release://" + urlHash
+	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, selection.SHA256)
+	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+	snapshot := filepath.Join(home, ".agent-factory", "models", "backend-artifacts", ".you-content-addressed", "backend", identityHash)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create Factory LocalAI backend cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), []byte("localai-llamacpp/linux-amd64"), 0o644); err != nil {
+		t.Fatalf("write Factory LocalAI backend cache: %v", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "backend", "identity": identity, "source": source, "sourceKey": source,
+		"artifacts": []map[string]any{{"Name": selection.Name, "Bytes": selection.Bytes, "SHA256": selection.SHA256}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Factory LocalAI backend metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write Factory LocalAI backend metadata: %v", err)
+	}
+}
+
+type localAIFactoryAssetHTTP struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (client *localAIFactoryAssetHTTP) Do(*http.Request) (*http.Response, error) {
+	client.mu.Lock()
+	client.calls++
+	client.mu.Unlock()
+	return nil, errors.New("unexpected Factory LocalAI model network request")
+}
+
+func (client *localAIFactoryAssetHTTP) Calls() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.calls
+}
+
+type localAIFactoryAssetFileSystem struct{ home string }
+
+func (filesystem localAIFactoryAssetFileSystem) MkdirAll(path string, mode os.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+func (filesystem localAIFactoryAssetFileSystem) Stat(path string) (os.FileInfo, error) {
+	return os.Stat(path)
+}
+func (filesystem localAIFactoryAssetFileSystem) UserHomeDir() (string, error) {
+	return filesystem.home, nil
+}
+func (filesystem localAIFactoryAssetFileSystem) WriteFile(path string, data []byte, mode os.FileMode) error {
+	return os.WriteFile(path, data, mode)
+}
+func (filesystem localAIFactoryAssetFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+func (filesystem localAIFactoryAssetFileSystem) Remove(path string) error { return os.Remove(path) }
+func (filesystem localAIFactoryAssetFileSystem) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+func (filesystem localAIFactoryAssetFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
+	return os.ReadDir(path)
+}
+func (filesystem localAIFactoryAssetFileSystem) Create(path string) (io.WriteCloser, error) {
+	return os.Create(path)
+}
+func (filesystem localAIFactoryAssetFileSystem) Open(path string) (io.ReadCloser, error) {
+	return os.Open(path)
+}
+
+type localAIFactoryRevisionRecorder struct {
+	mu       sync.Mutex
+	revision string
+	sources  []string
+}
+
+func (recorder *localAIFactoryRevisionRecorder) Resolve(_ context.Context, source string) (string, error) {
+	recorder.mu.Lock()
+	recorder.sources = append(recorder.sources, source)
+	revision := recorder.revision
+	recorder.mu.Unlock()
+	return revision, nil
+}
+
+func (recorder *localAIFactoryRevisionRecorder) Sources() []string {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return append([]string(nil), recorder.sources...)
+}
+
+type localAIFactoryBackendSelectionRecorder struct {
+	mu        sync.Mutex
+	selection serviceedges.ModelBackendArtifactSelection
+	requests  []serviceedges.ModelBackendArtifactSelectionRequest
+}
+
+func (recorder *localAIFactoryBackendSelectionRecorder) Resolve(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+	recorder.mu.Lock()
+	recorder.requests = append(recorder.requests, request)
+	selection := recorder.selection
+	recorder.mu.Unlock()
+	return selection, nil
+}
+
+func (recorder *localAIFactoryBackendSelectionRecorder) Requests() []serviceedges.ModelBackendArtifactSelectionRequest {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return append([]serviceedges.ModelBackendArtifactSelectionRequest(nil), recorder.requests...)
+}
+
+type localAIFactoryHostLauncher struct {
+	mu       sync.Mutex
+	endpoint string
+	specs    []serviceedges.HostProcessStartSpec
+	active   int
+	starts   int
+	stops    int
+	waits    int
+}
+
+func (launcher *localAIFactoryHostLauncher) Start(_ context.Context, spec serviceedges.HostProcessStartSpec) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
+	launcher.mu.Lock()
+	launcher.specs = append(launcher.specs, cloneLocalAIFactoryHostSpec(spec))
+	launcher.starts++
+	launcher.active++
+	endpoint := launcher.endpoint
+	launcher.mu.Unlock()
+	return &localAIFactoryHostProcess{endpoint: endpoint, stopped: make(chan struct{}), launcher: launcher}, nil
+}
+
+func (launcher *localAIFactoryHostLauncher) recordStop() {
+	launcher.mu.Lock()
+	launcher.stops++
+	launcher.active--
+	launcher.mu.Unlock()
+}
+
+func (launcher *localAIFactoryHostLauncher) recordWait() {
+	launcher.mu.Lock()
+	launcher.waits++
+	launcher.mu.Unlock()
+}
+
+func (launcher *localAIFactoryHostLauncher) LastSpec() (serviceedges.HostProcessStartSpec, bool) {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	if len(launcher.specs) == 0 {
+		return serviceedges.HostProcessStartSpec{}, false
+	}
+	return cloneLocalAIFactoryHostSpec(launcher.specs[len(launcher.specs)-1]), true
+}
+
+func (launcher *localAIFactoryHostLauncher) Active() bool {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.active != 0
+}
+func (launcher *localAIFactoryHostLauncher) Starts() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.starts
+}
+func (launcher *localAIFactoryHostLauncher) Stops() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.stops
+}
+func (launcher *localAIFactoryHostLauncher) Waits() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.waits
+}
+
+type localAIFactoryHostProcess struct {
+	endpoint string
+	stopped  chan struct{}
+	launcher *localAIFactoryHostLauncher
+	once     sync.Once
+}
+
+func (process *localAIFactoryHostProcess) HealthEndpoint() string { return process.endpoint }
+func (process *localAIFactoryHostProcess) Wait() error {
+	<-process.stopped
+	process.launcher.recordWait()
+	return nil
+}
+func (process *localAIFactoryHostProcess) Stop(context.Context) error {
+	process.once.Do(func() { close(process.stopped); process.launcher.recordStop() })
+	return nil
+}
+
+func cloneLocalAIFactoryHostSpec(spec serviceedges.HostProcessStartSpec) serviceedges.HostProcessStartSpec {
+	spec.Args = append([]string(nil), spec.Args...)
+	spec.Env = append([]string(nil), spec.Env...)
+	spec.ModelFiles = append([]string(nil), spec.ModelFiles...)
+	spec.BackendFiles = append([]string(nil), spec.BackendFiles...)
+	return spec
+}
+
+type localAIFactoryHostProtocolRecorder struct {
+	mu       sync.Mutex
+	requests []serviceedges.ModelHostProtocolNegotiationRequest
+}
+
+func (recorder *localAIFactoryHostProtocolRecorder) Negotiate(_ context.Context, _ string, request serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	recorder.mu.Lock()
+	request.ModelFiles = append([]string(nil), request.ModelFiles...)
+	recorder.requests = append(recorder.requests, request)
+	recorder.mu.Unlock()
+	return serviceedges.ModelHostProtocolNegotiationResult{ProtocolVersion: request.ProtocolVersion, Backend: request.Backend, Ready: true}, nil
+}
+
+func (recorder *localAIFactoryHostProtocolRecorder) Requests() []serviceedges.ModelHostProtocolNegotiationRequest {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	requests := make([]serviceedges.ModelHostProtocolNegotiationRequest, len(recorder.requests))
+	for index, request := range recorder.requests {
+		request.ModelFiles = append([]string(nil), request.ModelFiles...)
+		requests[index] = request
+	}
+	return requests
+}
+
+type localAIFactoryHostCompatibilityRecorder struct {
+	mu       sync.Mutex
+	requests []serviceedges.ModelHostCompatibilityRequest
+}
+
+func (recorder *localAIFactoryHostCompatibilityRecorder) Check(_ context.Context, request serviceedges.ModelHostCompatibilityRequest) error {
+	recorder.mu.Lock()
+	recorder.requests = append(recorder.requests, request)
+	recorder.mu.Unlock()
+	return nil
+}
+
+func (recorder *localAIFactoryHostCompatibilityRecorder) Requests() []serviceedges.ModelHostCompatibilityRequest {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return append([]serviceedges.ModelHostCompatibilityRequest(nil), recorder.requests...)
+}
+
+type localAIFactoryInvocationProtocolRecorder struct {
+	mu       sync.Mutex
+	response string
+	failure  error
+	request  modelprovider.InvocationProtocolRequest
+	calls    int
+}
+
+func (recorder *localAIFactoryInvocationProtocolRecorder) Predict(ctx context.Context, request modelprovider.InvocationProtocolRequest) (modelprovider.InvocationProtocolResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return modelprovider.InvocationProtocolResponse{}, err
+	}
+	recorder.mu.Lock()
+	recorder.request = cloneLocalAIFactoryInvocationProtocolRequest(request)
+	recorder.calls++
+	response, failure := recorder.response, recorder.failure
+	recorder.mu.Unlock()
+	if failure != nil {
+		return modelprovider.InvocationProtocolResponse{}, failure
+	}
+	return modelprovider.InvocationProtocolResponse{Text: response}, nil
+}
+
+func (recorder *localAIFactoryInvocationProtocolRecorder) Calls() int {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return recorder.calls
+}
+func (recorder *localAIFactoryInvocationProtocolRecorder) Request() modelprovider.InvocationProtocolRequest {
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	return cloneLocalAIFactoryInvocationProtocolRequest(recorder.request)
+}
+
+func cloneLocalAIFactoryInvocationProtocolRequest(request modelprovider.InvocationProtocolRequest) modelprovider.InvocationProtocolRequest {
+	request.Inputs = append([]modelprovider.InvocationProtocolInput(nil), request.Inputs...)
+	request.Parameters = append([]modelprovider.OperationParameter(nil), request.Parameters...)
+	return request
+}
