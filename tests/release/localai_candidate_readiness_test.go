@@ -262,10 +262,16 @@ func TestLocalAICandidateArtifactsRetained(t *testing.T) {
 	}
 	resultPath := filepath.Join(tempDir, "promotion.json")
 	harnessPath := filepath.Join(tempDir, "promotion.ps1")
+	commandEvidenceSource := filepath.Join(tempDir, "command-evidence")
+	commandEvidenceOutput := filepath.Join(tempDir, "command-evidence-output")
+	commandEvidenceFile := filepath.Join(commandEvidenceSource, "release.stderr.log")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
 $promotion = Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourcePath %s -OutputDirectory %s
-[ordered]@{ version = $promotion.version; windowsAmd64Path = $promotion.windowsAmd64Path; artifacts = @($promotion.artifacts) } |
+[void][System.IO.Directory]::CreateDirectory(%s)
+[System.IO.File]::WriteAllText(%s, 'release evidence')
+$commandEvidence = Promote-SmokeCommandEvidence -SourceDirectory %s -OutputDirectory %s
+[ordered]@{ version = $promotion.version; windowsAmd64Path = $promotion.windowsAmd64Path; artifacts = @($promotion.artifacts); commandEvidence = @($commandEvidence) } |
     ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
@@ -273,10 +279,30 @@ $promotion = Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourceP
 		localAICandidatePowerShellLiteral(distDir),
 		localAICandidatePowerShellLiteral(installerSource),
 		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(commandEvidenceSource),
+		localAICandidatePowerShellLiteral(commandEvidenceFile),
+		localAICandidatePowerShellLiteral(commandEvidenceSource),
+		localAICandidatePowerShellLiteral(commandEvidenceOutput),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 	assertLocalAICandidatePromotedArtifacts(t, resultPath, outputDir, version, artifacts)
+	var result struct {
+		CommandEvidence []struct {
+			Role   string `json:"role"`
+			File   string `json:"file"`
+			Bytes  int64  `json:"bytes"`
+			SHA256 string `json:"sha256"`
+		} `json:"commandEvidence"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if len(result.CommandEvidence) != 1 || result.CommandEvidence[0].Role != "command-output" || result.CommandEvidence[0].File != "release.stderr.log" || result.CommandEvidence[0].Bytes != int64(len("release evidence")) {
+		t.Fatalf("promoted command evidence = %#v", result.CommandEvidence)
+	}
+	contents, err := os.ReadFile(filepath.Join(commandEvidenceOutput, "release.stderr.log"))
+	if err != nil || string(contents) != "release evidence" {
+		t.Fatalf("promoted command evidence contents = %v/%q", err, contents)
+	}
 }
 
 func assertLocalAICandidatePromotedArtifacts(t *testing.T, resultPath, outputDir, version string, artifacts []localAICandidateArchiveFixture) {

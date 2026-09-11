@@ -484,6 +484,36 @@ function Promote-SmokeCandidateArtifacts {
     }
 }
 
+function Promote-SmokeCommandEvidence {
+    param(
+        [string]$SourceDirectory,
+        [string]$OutputDirectory
+    )
+    $source = Resolve-SmokePath $SourceDirectory
+    $output = Resolve-SmokePath $OutputDirectory
+    if (-not (Test-Path -LiteralPath $source)) { return @() }
+    $sourceItem = Get-Item -LiteralPath $source -Force -ErrorAction Stop
+    if (-not $sourceItem.PSIsContainer -or (($sourceItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "candidate command evidence directory must be a regular directory: $source"
+    }
+    $entries = @(Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop)
+    foreach ($entry in $entries) {
+        if (-not $entry.PSIsContainer -and (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) { continue }
+        Fail-Smoke "candidate command evidence must contain only regular files: $($entry.FullName)"
+    }
+    [void][System.IO.Directory]::CreateDirectory($output)
+    $retained = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($entry in $entries) {
+        $destination = Join-Path $output $entry.Name
+        if (Test-Path -LiteralPath $destination) {
+            Fail-Smoke "candidate command evidence destination already exists: $destination"
+        }
+        [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "command-output" `
+            -SourcePath $entry.FullName -DestinationPath $destination))
+    }
+    return @($retained | ForEach-Object { $_ })
+}
+
 function Copy-SmokeNativeToolToShortPath {
     param(
         [string]$SourcePath,
@@ -1398,6 +1428,8 @@ function Invoke-LocalCandidateSmoke {
     [void][System.IO.Directory]::CreateDirectory($workDirectory)
     $checkoutPath = Join-Path $workDirectory "src"
     $extractPath = Join-Path $workDirectory "archive"
+    $commandEvidenceDirectory = Join-Path $workDirectory "command-evidence"
+    [void][System.IO.Directory]::CreateDirectory($commandEvidenceDirectory)
     $environmentNames = @("GOFLAGS", "GOMAXPROCS", "GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "npm_config_offline", "ESBUILD_BINARY_PATH")
     $originalEnvironment = @{}
     foreach ($name in $environmentNames) {
@@ -1472,8 +1504,8 @@ function Invoke-LocalCandidateSmoke {
             -DestinationPath $esbuildOverridePath -ExpectedSHA256 $EsbuildSHA256
         $esbuildResult = Invoke-CandidateCommand -FilePath $esbuildOverridePath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "esbuild.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "esbuild.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "esbuild.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "esbuild.stderr.log")
         if ($esbuildResult.exitCode -ne 0 -or $esbuildResult.stdout.Trim() -cne $EsbuildVersion) {
             Fail-Smoke "esbuild sanity check failed: exit=$($esbuildResult.exitCode) version='$($esbuildResult.stdout.Trim())'"
         }
@@ -1481,8 +1513,8 @@ function Invoke-LocalCandidateSmoke {
         $releaseToolEvidence = Get-SmokeFileEvidence "goreleaser" $releaseToolPath
         $releaseToolResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "goreleaser-version.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "goreleaser-version.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "goreleaser-version.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "goreleaser-version.stderr.log")
         if ($releaseToolResult.exitCode -ne 0 -or $releaseToolResult.stdout -notmatch ("(?m)\b" + [regex]::Escape($ReleaseToolVersion) + "\b")) {
             Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
         }
@@ -1491,8 +1523,8 @@ function Invoke-LocalCandidateSmoke {
         $goPath = [string]$goCommand.Source
         $goVersionResult = Invoke-CandidateCommand -FilePath $goPath `
             -ArgumentList @("version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "go-version.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "go-version.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "go-version.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "go-version.stderr.log")
         if ($goVersionResult.exitCode -ne 0 -or $goVersionResult.stdout -notmatch '(?m)\bgo1\.26\.8\b') {
             Fail-Smoke "Go version check failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())', want go1.26.8"
         }
@@ -1503,8 +1535,8 @@ function Invoke-LocalCandidateSmoke {
         $releaseArguments = @("release", "--snapshot", "--clean", "-f", ".goreleaser.yml")
         $releaseResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList $releaseArguments -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "release.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "release.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "release.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "release.stderr.log")
         $workBytes = Get-SmokeDirectoryBytes $workDirectory
         $report.build = [ordered]@{
             command = $releaseToolPath
@@ -1603,6 +1635,8 @@ function Invoke-LocalCandidateSmoke {
             [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
         }
         try {
+            [void](Promote-SmokeCommandEvidence -SourceDirectory $commandEvidenceDirectory `
+                -OutputDirectory $outputDirectory)
             Remove-SmokeOwnedTree "install directory" $installDirectory
             Remove-SmokeCandidateWork -WorkDirectory $workDirectory -DependencyJunctionPath $dependencyJunctionPath
             $report.cleanup = [ordered]@{
