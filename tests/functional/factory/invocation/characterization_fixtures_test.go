@@ -102,13 +102,16 @@ func (recorder *localAIFactoryBackendSelectionRecorder) Requests() []serviceedge
 }
 
 type localAIFactoryHostLauncher struct {
-	mu       sync.Mutex
-	endpoint string
-	specs    []serviceedges.HostProcessStartSpec
-	active   int
-	starts   int
-	stops    int
-	waits    int
+	mu              sync.Mutex
+	endpoint        string
+	specs           []serviceedges.HostProcessStartSpec
+	active          int
+	starts          int
+	stops           int
+	waits           int
+	waitDone        chan struct{}
+	waitRelease     chan struct{}
+	releaseWaitOnce sync.Once
 }
 
 func (launcher *localAIFactoryHostLauncher) Start(_ context.Context, spec serviceedges.HostProcessStartSpec) (interface {
@@ -116,13 +119,23 @@ func (launcher *localAIFactoryHostLauncher) Start(_ context.Context, spec servic
 	Wait() error
 	Stop(context.Context) error
 }, error) {
+	waitDone := make(chan struct{})
+	waitRelease := make(chan struct{})
 	launcher.mu.Lock()
 	launcher.specs = append(launcher.specs, cloneLocalAIFactoryHostSpec(spec))
 	launcher.starts++
 	launcher.active++
+	launcher.waitDone = waitDone
+	launcher.waitRelease = waitRelease
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()
-	return &localAIFactoryHostProcess{endpoint: endpoint, stopped: make(chan struct{}), launcher: launcher}, nil
+	return &localAIFactoryHostProcess{
+		endpoint:    endpoint,
+		stopped:     make(chan struct{}),
+		waitDone:    waitDone,
+		waitRelease: waitRelease,
+		launcher:    launcher,
+	}, nil
 }
 
 func (launcher *localAIFactoryHostLauncher) recordStop() {
@@ -136,6 +149,31 @@ func (launcher *localAIFactoryHostLauncher) recordWait() {
 	launcher.mu.Lock()
 	launcher.waits++
 	launcher.mu.Unlock()
+}
+
+func (launcher *localAIFactoryHostLauncher) releaseWait() {
+	launcher.mu.Lock()
+	waitRelease := launcher.waitRelease
+	launcher.mu.Unlock()
+	if waitRelease == nil {
+		return
+	}
+	launcher.releaseWaitOnce.Do(func() { close(waitRelease) })
+}
+
+func (launcher *localAIFactoryHostLauncher) awaitWait(ctx context.Context) error {
+	launcher.mu.Lock()
+	waitDone := launcher.waitDone
+	launcher.mu.Unlock()
+	if waitDone == nil {
+		return errors.New("Factory LocalAI host was not started")
+	}
+	select {
+	case <-waitDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (launcher *localAIFactoryHostLauncher) LastSpec() (serviceedges.HostProcessStartSpec, bool) {
@@ -169,16 +207,23 @@ func (launcher *localAIFactoryHostLauncher) Waits() int {
 }
 
 type localAIFactoryHostProcess struct {
-	endpoint string
-	stopped  chan struct{}
-	launcher *localAIFactoryHostLauncher
-	once     sync.Once
+	endpoint    string
+	stopped     chan struct{}
+	waitDone    chan struct{}
+	waitRelease chan struct{}
+	launcher    *localAIFactoryHostLauncher
+	once        sync.Once
+	waitOnce    sync.Once
 }
 
 func (process *localAIFactoryHostProcess) HealthEndpoint() string { return process.endpoint }
 func (process *localAIFactoryHostProcess) Wait() error {
 	<-process.stopped
-	process.launcher.recordWait()
+	<-process.waitRelease
+	process.waitOnce.Do(func() {
+		process.launcher.recordWait()
+		close(process.waitDone)
+	})
 	return nil
 }
 func (process *localAIFactoryHostProcess) Stop(context.Context) error {
