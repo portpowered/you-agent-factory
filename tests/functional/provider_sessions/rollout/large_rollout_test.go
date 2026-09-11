@@ -32,6 +32,7 @@ const (
 	rolloutSuccessProviderID    = "rollout-controlled-success-provider"
 	rolloutFailureProviderID    = "rollout-controlled-failure-provider"
 	rolloutSuccessFinalResponse = "Codex fixture answer COMPLETE"
+	rolloutFixtureLLMSource     = "hf://fixture/provider-sessions-rollout/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
 	rolloutScenarioTimeout      = 60 * time.Second
 )
 
@@ -135,6 +136,7 @@ func newRolloutSharedFixture(t *testing.T) *rolloutSharedFixture {
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatalf("create controlled rollout shared home: %v", err)
 	}
+	support.WriteOperatorModelSourceOverride(t, homeDir, "llm", rolloutFixtureLLMSource)
 	support.WriteAgentConfig(t, hostFactory, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
 
 	runner := newRolloutCommandRunner(t)
@@ -218,6 +220,7 @@ func runControlledRolloutCase(t *testing.T, fixture *rolloutSharedFixture, testC
 		t.Fatalf("copy %s Factory: %v", testCase.name, err)
 	}
 	homeDir := t.TempDir()
+	support.WriteOperatorModelSourceOverride(t, homeDir, "llm", rolloutFixtureLLMSource)
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
 	support.WriteWorkstationConfig(t, factoryDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n"+rolloutRoutePrefix+"{{ (index .Inputs 0).Name }}\n")
 
