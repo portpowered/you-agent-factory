@@ -834,6 +834,15 @@ func restoredWorkToken(
 	relations []work.FactoryRelation,
 	now time.Time,
 ) *factorytoken.Token {
+	parentID := item.ParentID
+	if parentID == "" {
+		for _, relation := range relations {
+			if relation.Type == string(work.WorkRelationParentChild) && relation.TargetWorkID != "" {
+				parentID = relation.TargetWorkID
+				break
+			}
+		}
+	}
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID
@@ -855,7 +864,7 @@ func restoredWorkToken(
 			CurrentChainingTraceID:   currentChainingTraceID,
 			PreviousChainingTraceIDs: work.CanonicalChainingTraceIDs(item.PreviousChainingTraceIDs),
 			TraceID:                  item.TraceID,
-			ParentID:                 item.ParentID,
+			ParentID:                 parentID,
 			Tags:                     work.CloneTags(item.Tags),
 			Relations:                restoredWorkRelations(relations),
 			Content:                  work.CloneWorkContentParts(item.Content),

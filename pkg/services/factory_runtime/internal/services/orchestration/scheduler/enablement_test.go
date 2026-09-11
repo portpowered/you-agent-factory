@@ -480,6 +480,75 @@ func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *tes
 	}
 }
 
+func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"project:waiting":       {ID: "project:waiting"},
+			"project-cycle:blocked": {ID: "project-cycle:blocked"},
+			"project-cycle:init":    {ID: "project-cycle:init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"block-project": {
+				ID:   "block-project",
+				Name: "block-project",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "project-in",
+						Name:        "project",
+						PlaceID:     "project:waiting",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameNameGuard{MatchBinding: "project-cycle"},
+					},
+					{
+						ID:          "cycle-in",
+						Name:        "project-cycle",
+						PlaceID:     "project-cycle:blocked",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					},
+				},
+			},
+		},
+	}
+	historical := &factorytoken.Token{
+		ID:      "a-token-history",
+		PlaceID: "project-cycle:blocked",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "cycle-44",
+			WorkTypeID: "project-cycle",
+			ParentID:   "project-work",
+		},
+	}
+	current := *historical
+	current.ID = "z-token-current"
+	current.PlaceID = "project-cycle:init"
+	current.Color.WorkID = "cycle-93"
+	parent := &factorytoken.Token{
+		ID:      "project-token",
+		PlaceID: "project:waiting",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "project-work",
+			WorkTypeID: "project",
+		},
+	}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parent.ID:     parent,
+		historical.ID: historical,
+		current.ID:    &current,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
+	}
+
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+		t.Fatalf("historical child enabled block-project while current child was in init: %#v", enabled)
+	}
+}
+
 func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 

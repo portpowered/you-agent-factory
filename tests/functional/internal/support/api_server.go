@@ -617,6 +617,10 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 	go func() {
 		defer response.Body.Close()
 		scanner := bufio.NewScanner(response.Body)
+		// A resumed Factory Event can carry a large recorded structure or
+		// preserved Work payload. Keep the public observer bounded while allowing
+		// it to consume the largest real event fixture.
+		scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data:") {

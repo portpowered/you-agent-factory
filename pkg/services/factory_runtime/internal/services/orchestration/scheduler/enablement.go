@@ -89,8 +89,20 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		return interfaces.EnabledTransition{}, false
 	}
 
-	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
-		return et, true
+	if singleTokenGuardedTransition(tr) {
+		if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
+			return et, true
+		}
+		// The backtracking evaluator is the only binding path that can honor
+		// peer guards whose authored guard lives on a different input arc. The
+		// legacy phased fallback would bind an arbitrary unguarded peer first,
+		// allowing a historical same-name child when the canonical current child
+		// is in another state.
+		e.logger.Debug("enablement: transition disabled",
+			"transitionID", tr.ID,
+			"transitionName", tr.Name,
+			"reason", "guard failed for single-token binding")
+		return interfaces.EnabledTransition{}, false
 	}
 
 	// Separate unguarded and guarded arcs.
