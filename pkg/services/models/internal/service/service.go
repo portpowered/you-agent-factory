@@ -267,6 +267,28 @@ func joinedInvocationAssetError(
 	}
 }
 
+func runtimeHostEvidenceAlreadyRecorded(err error) bool {
+	stage, _, ok := modelseffects.ClassifyRuntimeFailure(err)
+	if !ok {
+		return false
+	}
+	switch stage {
+	case modelseffects.RuntimeStageBackendExtract,
+		modelseffects.RuntimeStageBackendStart,
+		modelseffects.RuntimeStageProtocolLoad:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateJoinedRoot(o *Root) error {
+	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
+		return models.ErrUnsupportedOperation
+	}
+	return nil
+}
+
 func resolveModelReference(
 	ctx context.Context,
 	reference models.ModelReference,

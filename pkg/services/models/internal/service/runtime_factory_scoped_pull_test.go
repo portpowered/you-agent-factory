@@ -677,9 +677,14 @@ func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.
 		Name: "localai-backend.tar.gz", Location: "https://github.com/owner/repo/releases/download/v1/localai-backend.tar.gz",
 		Bytes: 22, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
 	}
-	prepared, err := joinedAssetPreparationRequestWithBackend(request, "tts", resolved, selection)
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope: request.Scope, ModelName: "tts",
+		Source:  joinedAssetReference(request.Model, resolved),
+		Backend: resolved.Definition.Backend, BackendArtifact: selection,
+	}
+	prepared, err := joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
 	if err != nil {
-		t.Fatalf("joinedAssetPreparationRequestWithBackend: %v", err)
+		t.Fatalf("joinedAssetPreparationRequestWithConfiguration: %v", err)
 	}
 	if prepared.Backend != resolved.Definition.Backend ||
 		prepared.BackendReference.NameOrURI != selection.Location || len(prepared.BackendArtifacts) != 1 {

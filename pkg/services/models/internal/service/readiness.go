@@ -240,22 +240,6 @@ func joinedAssetReference(
 	return reference
 }
 
-func joinedAssetPreparationRequestWithBackend(
-	request models.InvokeModelRequest,
-	modelName string,
-	resolved models.ResolvedModelReference,
-	backendArtifact modelseffects.BackendArtifactSelection,
-) (models.PrepareModelAssetsRequest, error) {
-	configuration := modelseffects.ResolvedHostConfiguration{
-		Scope:           request.Scope,
-		ModelName:       modelName,
-		Source:          joinedAssetReference(request.Model, resolved),
-		Backend:         strings.TrimSpace(resolved.Definition.Backend),
-		BackendArtifact: backendArtifact,
-	}
-	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
-}
-
 func joinedAssetPreparationRequestWithConfiguration(
 	request models.InvokeModelRequest,
 	configuration modelseffects.ResolvedHostConfiguration,

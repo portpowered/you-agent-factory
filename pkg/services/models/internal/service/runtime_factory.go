@@ -578,28 +578,6 @@ func (o *Root) InvokeModel(
 	return finish(result, joinedInvocationContextError(ctx, err))
 }
 
-func runtimeHostEvidenceAlreadyRecorded(err error) bool {
-	stage, _, ok := modelseffects.ClassifyRuntimeFailure(err)
-	if !ok {
-		return false
-	}
-	switch stage {
-	case modelseffects.RuntimeStageBackendExtract,
-		modelseffects.RuntimeStageBackendStart,
-		modelseffects.RuntimeStageProtocolLoad:
-		return true
-	default:
-		return false
-	}
-}
-
-func validateJoinedRoot(o *Root) error {
-	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
-		return models.ErrUnsupportedOperation
-	}
-	return nil
-}
-
 func (o *Root) prepareJoinedInvocation(
 	ctx context.Context,
 	request models.InvokeModelRequest,
@@ -966,9 +944,12 @@ func joinedAssetPreparationRequest(
 	modelName string,
 	resolved models.ResolvedModelReference,
 ) (models.PrepareModelAssetsRequest, error) {
-	return joinedAssetPreparationRequestWithBackend(
-		request, modelName, resolved, modelseffects.BackendArtifactSelection{},
-	)
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope: request.Scope, ModelName: modelName,
+		Source:  joinedAssetReference(request.Model, resolved),
+		Backend: strings.TrimSpace(resolved.Definition.Backend),
+	}
+	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
 }
 
 func (o *Root) CancelInvocation(
