@@ -540,6 +540,209 @@ Remove-SmokeCandidateWork -WorkDirectory %s -DependencyJunctionPath $junction
 	}
 }
 
+func TestLocalAICandidateInstalledDiscoveryRecordsRequiredCommands(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	fixturePath := filepath.Join(tempDir, "discovery-fixture.ps1")
+	writeLocalAICandidateDiscoveryFixture(t, fixturePath)
+	workDir := filepath.Join(tempDir, "work")
+	outputDir := filepath.Join(tempDir, "output")
+	resultPath := filepath.Join(tempDir, "discovery.json")
+	harnessPath := filepath.Join(tempDir, "discovery.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$work = %s
+$output = %s
+$models = Join-Path $work 'models'
+$hf = Join-Path $work 'hf'
+$cache = Join-Path $work 'cache'
+$runtimeEvidence = Join-Path $work 'runtime.jsonl'
+$marker = Join-Path $work 'activity.marker'
+foreach ($path in @($work, $output, $models, $hf, $cache)) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+[System.IO.File]::WriteAllText($runtimeEvidence, '')
+$env:LOCALAI_DISCOVERY_ACTIVITY_MARKER = $marker
+$before = @(
+    Get-SmokeActivitySnapshot 'managed-model-cache' $models
+    Get-SmokeActivitySnapshot 'huggingface-backend-cache' $hf
+    Get-SmokeActivitySnapshot 'redirected-local-cache' $cache
+)
+$commands = New-Object 'System.Collections.Generic.List[object]'
+$discovery = Invoke-InstalledCandidateDiscovery -ExecutablePath %s -WorkingDirectory $work -OutputDirectory $output -ExpectedVersion 'v1.0.1' -Commands $commands -CommandPrefix @('-NoProfile', '-NonInteractive', '-File', %s)
+$after = @(
+    Get-SmokeActivitySnapshot 'managed-model-cache' $models
+    Get-SmokeActivitySnapshot 'huggingface-backend-cache' $hf
+    Get-SmokeActivitySnapshot 'redirected-local-cache' $cache
+)
+$activity = Get-SmokeModelActivity -Before $before -After $after -Commands @($commands | ForEach-Object { $_ }) -RuntimeEvidencePath $runtimeEvidence
+Assert-SmokeNoModelActivity $activity
+[ordered]@{
+    status = $discovery.status
+    version = $discovery.version
+    commands = @($commands | ForEach-Object { $_ })
+    activity = $activity
+    markerExists = Test-Path -LiteralPath $marker -PathType Leaf
+} | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath %s -Encoding UTF8
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(fixturePath),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	var result localAICandidateDiscoverySuccess
+	readJSONFile(t, resultPath, &result)
+	wantCommands := []string{
+		"--version",
+		"--help",
+		"docs models",
+		"docs agents",
+		"models list",
+		"models --help",
+		"--json models inspect llm",
+		"--json models inspect asr",
+		"--json models inspect tts",
+		"--json models inspect embed",
+	}
+	seen := make(map[string]bool, len(result.Commands))
+	for _, command := range result.Commands {
+		identity := strings.Join(command.Arguments, " ")
+		if command.ExitCode != 0 || strings.TrimSpace(command.Stdout) == "" {
+			t.Fatalf("successful discovery command = %#v", command)
+		}
+		seen[identity] = true
+	}
+	for _, identity := range wantCommands {
+		if !seen[identity] {
+			t.Fatalf("discovery did not record %q: %#v", identity, result.Commands)
+		}
+	}
+	if result.Status != "PASS" || result.Version != "v1.0.1" || len(result.Commands) != len(wantCommands) ||
+		!result.Activity.Observed || result.Activity.ModelCalls != 0 ||
+		result.Activity.ModelBackendDownloadBytes != 0 || result.Activity.CacheBytesDelta != 0 ||
+		result.Activity.RuntimeEvidenceRecords != 0 || result.Activity.BackendProcessStarts != 0 || result.MarkerExists {
+		t.Fatalf("installed discovery result = %#v", result)
+	}
+}
+
+func TestLocalAICandidateInstalledDiscoveryFailsClosed(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir := t.TempDir()
+	fixturePath := filepath.Join(tempDir, "discovery-fixture.ps1")
+	writeLocalAICandidateDiscoveryFixture(t, fixturePath)
+	workDir := filepath.Join(tempDir, "work")
+	outputDir := filepath.Join(tempDir, "output")
+	resultPath := filepath.Join(tempDir, "discovery-failures.json")
+	harnessPath := filepath.Join(tempDir, "discovery-failures.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$work = %s
+$output = %s
+New-Item -ItemType Directory -Path $work -Force | Out-Null
+New-Item -ItemType Directory -Path $output -Force | Out-Null
+$prefix = @('-NoProfile', '-NonInteractive', '-File', %s)
+$required = @('--version', '--help', 'docs models', 'docs agents', 'models list', 'models --help', '--json models inspect llm')
+$nonzero = [ordered]@{}
+foreach ($identity in $required) {
+    $env:LOCALAI_DISCOVERY_FAIL_COMMAND = $identity
+    $env:LOCALAI_DISCOVERY_EMPTY_COMMAND = ''
+    $commands = New-Object 'System.Collections.Generic.List[object]'
+    $caught = ''
+    try {
+        Invoke-InstalledCandidateDiscovery -ExecutablePath %s -WorkingDirectory $work -OutputDirectory $output -ExpectedVersion 'v1.0.1' -Commands $commands -CommandPrefix $prefix | Out-Null
+        $caught = 'UNEXPECTED_PASS'
+    } catch { $caught = $_.Exception.Message }
+    $nonzero[$identity] = [ordered]@{ caught = $caught; commands = @($commands | ForEach-Object { $_ }) }
+}
+$empty = [ordered]@{}
+foreach ($identity in $required) {
+    $env:LOCALAI_DISCOVERY_FAIL_COMMAND = ''
+    $env:LOCALAI_DISCOVERY_EMPTY_COMMAND = $identity
+    $commands = New-Object 'System.Collections.Generic.List[object]'
+    $caught = ''
+    try {
+        Invoke-InstalledCandidateDiscovery -ExecutablePath %s -WorkingDirectory $work -OutputDirectory $output -ExpectedVersion 'v1.0.1' -Commands $commands -CommandPrefix $prefix | Out-Null
+        $caught = 'UNEXPECTED_PASS'
+    } catch { $caught = $_.Exception.Message }
+    $empty[$identity] = [ordered]@{ caught = $caught; commands = @($commands | ForEach-Object { $_ }) }
+}
+[ordered]@{ nonzero = $nonzero; empty = $empty } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath %s -Encoding UTF8
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(fixturePath),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(localAICandidatePowerShell(t)),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	var result localAICandidateDiscoveryFailureMatrix
+	readJSONFile(t, resultPath, &result)
+	assertLocalAICandidateDiscoveryFailures(t, result.Nonzero, "exited 41", false)
+	assertLocalAICandidateDiscoveryFailures(t, result.Empty, "produced no output", true)
+}
+
+func writeLocalAICandidateDiscoveryFixture(t *testing.T, path string) {
+	t.Helper()
+	fixture := `$identity = (@($args) | ForEach-Object { [string]$_ }) -join ' '
+if ($identity -match 'models invoke' -and $env:LOCALAI_DISCOVERY_ACTIVITY_MARKER) {
+    [System.IO.File]::WriteAllText($env:LOCALAI_DISCOVERY_ACTIVITY_MARKER, 'unexpected model activity')
+}
+if ($env:LOCALAI_DISCOVERY_FAIL_COMMAND -eq $identity) {
+    [Console]::Error.WriteLine("controlled failure for $identity")
+    exit 41
+}
+if ($env:LOCALAI_DISCOVERY_EMPTY_COMMAND -eq $identity) { exit 0 }
+switch ($identity) {
+    '--version' { [Console]::WriteLine('v1.0.1'); exit 0 }
+    '--help' { [Console]::WriteLine('you help'); exit 0 }
+    'docs models' { [Console]::WriteLine('models documentation'); exit 0 }
+    'docs agents' { [Console]::WriteLine('agents documentation'); exit 0 }
+    'models list' { [Console]::WriteLine('llm asr tts embed'); exit 0 }
+    'models --help' { [Console]::WriteLine('llm asr tts embed'); exit 0 }
+    '--json models inspect llm' { [Console]::WriteLine('{"name":"llm","managedRuntime":{"identity":"llm","readinessState":"MISSING","lifecycleState":"NOT_INSTALLED"},"loadState":"UNLOADED"}'); exit 0 }
+    '--json models inspect asr' { [Console]::WriteLine('{"name":"asr","managedRuntime":{"identity":"asr","readinessState":"MISSING","lifecycleState":"NOT_INSTALLED"},"loadState":"UNLOADED"}'); exit 0 }
+    '--json models inspect tts' { [Console]::WriteLine('{"name":"tts","managedRuntime":{"identity":"tts","readinessState":"MISSING","lifecycleState":"NOT_INSTALLED"},"loadState":"UNLOADED"}'); exit 0 }
+    '--json models inspect embed' { [Console]::WriteLine('{"name":"embed","managedRuntime":{"identity":"embed","readinessState":"MISSING","lifecycleState":"NOT_INSTALLED"},"loadState":"UNLOADED"}'); exit 0 }
+    default { [Console]::Error.WriteLine("unknown controlled command $identity"); exit 2 }
+}`
+	if err := os.WriteFile(path, []byte(fixture), 0o600); err != nil {
+		t.Fatalf("write discovery fixture: %v", err)
+	}
+}
+
+func assertLocalAICandidateDiscoveryFailures(t *testing.T, results map[string]localAICandidateDiscoveryFailure, expectedMessage string, emptyOutput bool) {
+	t.Helper()
+	for identity, result := range results {
+		if result.Caught == "" || strings.Contains(result.Caught, "UNEXPECTED_PASS") ||
+			!strings.Contains(result.Caught, identity) || !strings.Contains(result.Caught, expectedMessage) ||
+			len(result.Commands) == 0 {
+			t.Fatalf("discovery failure for %q = %#v", identity, result)
+		}
+		last := result.Commands[len(result.Commands)-1]
+		if strings.Join(last.Arguments, " ") != identity {
+			t.Fatalf("discovery continued after %q: %#v", identity, result.Commands)
+		}
+		if emptyOutput {
+			if last.ExitCode != 0 || strings.TrimSpace(last.Stdout) != "" {
+				t.Fatalf("empty discovery failure command = %#v", last)
+			}
+		} else if last.ExitCode != 41 {
+			t.Fatalf("nonzero discovery failure command = %#v", last)
+		}
+	}
+}
+
 type localAICandidateArchiveFixture struct {
 	role     string
 	file     string
@@ -568,4 +771,37 @@ type localAICandidateFinalizationResult struct {
 	OutputExists  bool   `json:"outputExists"`
 	ReportExists  bool   `json:"reportExists"`
 	DigestExists  bool   `json:"digestExists"`
+}
+
+type localAICandidateDiscoveryCommand struct {
+	Arguments []string `json:"arguments"`
+	ExitCode  int      `json:"exitCode"`
+	Stdout    string   `json:"stdout"`
+}
+
+type localAICandidateDiscoveryActivity struct {
+	Observed                  bool  `json:"observed"`
+	CacheBytesDelta           int64 `json:"cacheBytesDelta"`
+	ModelCalls                int   `json:"modelCalls"`
+	ModelBackendDownloadBytes int64 `json:"modelBackendDownloadBytes"`
+	RuntimeEvidenceRecords    int   `json:"runtimeEvidenceRecords"`
+	BackendProcessStarts      int   `json:"backendProcessStarts"`
+}
+
+type localAICandidateDiscoverySuccess struct {
+	Status       string                             `json:"status"`
+	Version      string                             `json:"version"`
+	Commands     []localAICandidateDiscoveryCommand `json:"commands"`
+	Activity     localAICandidateDiscoveryActivity  `json:"activity"`
+	MarkerExists bool                               `json:"markerExists"`
+}
+
+type localAICandidateDiscoveryFailure struct {
+	Caught   string                             `json:"caught"`
+	Commands []localAICandidateDiscoveryCommand `json:"commands"`
+}
+
+type localAICandidateDiscoveryFailureMatrix struct {
+	Nonzero map[string]localAICandidateDiscoveryFailure `json:"nonzero"`
+	Empty   map[string]localAICandidateDiscoveryFailure `json:"empty"`
 }

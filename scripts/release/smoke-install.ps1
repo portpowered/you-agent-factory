@@ -678,6 +678,125 @@ function Invoke-CandidateCommand {
     }
 }
 
+function Invoke-InstalledCandidateCommand {
+    param(
+        [string]$ExecutablePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory,
+        [string]$OutputDirectory,
+        [string]$OutputName,
+        [System.Collections.Generic.List[object]]$Commands,
+        [string[]]$CommandPrefix = @()
+    )
+    $processArguments = @($CommandPrefix) + @($Arguments)
+    $command = Invoke-CandidateCommand -FilePath $ExecutablePath `
+        -ArgumentList $processArguments -WorkingDirectory $WorkingDirectory `
+        -StdoutPath (Join-Path $OutputDirectory "$OutputName.stdout") `
+        -StderrPath (Join-Path $OutputDirectory "$OutputName.stderr")
+    $evidence = [ordered]@{}
+    foreach ($property in $command.PSObject.Properties) {
+        $evidence[$property.Name] = $property.Value
+    }
+    # Keep report arguments tied to the installed CLI contract when a controlled
+    # launcher is used by the release-harness tests.
+    $evidence.arguments = @($Arguments)
+    if (@($CommandPrefix).Count -gt 0) {
+        $evidence.processArguments = @($processArguments)
+    }
+    $normalized = [pscustomobject]$evidence
+    [void]$Commands.Add($normalized)
+    return $normalized
+}
+
+function Assert-InstalledCandidateCommand {
+    param(
+        [object]$Command,
+        [string]$Identity,
+        [switch]$RequireOutput
+    )
+    if ([int]$Command.exitCode -ne 0) {
+        Fail-Smoke "installed candidate $Identity exited $($Command.exitCode)"
+    }
+    if ($RequireOutput -and [string]::IsNullOrWhiteSpace([string]$Command.stdout)) {
+        Fail-Smoke "installed candidate $Identity produced no output"
+    }
+}
+
+function Invoke-InstalledCandidateDiscovery {
+    param(
+        [string]$ExecutablePath,
+        [string]$WorkingDirectory,
+        [string]$OutputDirectory,
+        [string]$ExpectedVersion,
+        [System.Collections.Generic.List[object]]$Commands,
+        [string[]]$CommandPrefix = @()
+    )
+    $versionCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("--version") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "version" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $versionCommand "--version" -RequireOutput
+    $reportedVersion = $versionCommand.stdout.Trim()
+    if ($reportedVersion -match '[\r\n]' -or $reportedVersion -cne $ExpectedVersion) {
+        Fail-Smoke "installed candidate --version returned '$reportedVersion', want '$ExpectedVersion'"
+    }
+
+    $rootHelpCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("--help") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "root-help" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $rootHelpCommand "--help" -RequireOutput
+    $docsModelsCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("docs", "models") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-docs" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $docsModelsCommand "docs models" -RequireOutput
+    $docsAgentsCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("docs", "agents") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "agents-docs" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $docsAgentsCommand "docs agents" -RequireOutput
+    $listCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("models", "list") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-list" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $listCommand "models list" -RequireOutput
+    $helpCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("models", "--help") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-help" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $helpCommand "models --help" -RequireOutput
+    foreach ($name in @("llm", "asr", "tts", "embed")) {
+        if (-not $helpCommand.stdout.Contains($name)) {
+            Fail-Smoke "installed candidate models --help did not expose $name"
+        }
+        $inspectArguments = @("--json", "models", "inspect", $name)
+        $inspect = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+            -Arguments $inspectArguments -WorkingDirectory $WorkingDirectory `
+            -OutputDirectory $OutputDirectory -OutputName "model-$name" -Commands $Commands `
+            -CommandPrefix $CommandPrefix
+        Assert-InstalledCandidateCommand $inspect ($inspectArguments -join " ") -RequireOutput
+        try {
+            $model = $inspect.stdout | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Fail-Smoke "installed candidate $($inspectArguments -join ' ') returned invalid JSON"
+        }
+        $unexpectedState = $null -eq $model -or $model.name -ne $name -or
+            $model.managedRuntime.identity -ne $name -or
+            $model.managedRuntime.readinessState -ne "MISSING" -or
+            $model.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or
+            $model.loadState -ne "UNLOADED"
+        if ($unexpectedState) {
+            Fail-Smoke "installed candidate models inspect $name performed work or returned an unexpected identity/state"
+        }
+    }
+    return [pscustomobject][ordered]@{
+        status = "PASS"
+        version = $reportedVersion
+        commands = @($Commands | ForEach-Object { $_ })
+    }
+}
+
 function Get-SmokeExecutableBuildInfo {
     param(
         [string]$ExecutablePath,
@@ -1133,72 +1252,11 @@ function Invoke-InstalledCandidateSmoke {
                 -OutputDirectory $CandidateDirectory
             [void]$commands.Add($buildInfo.command)
         }
-        $versionCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("--version") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "version.stdout") `
-            -StderrPath (Join-Path $smokeRoot "version.stderr")
-        [void]$commands.Add($versionCommand)
-        $reportedVersion = $versionCommand.stdout.Trim()
         $expectedVersion = if ([string]::IsNullOrWhiteSpace($ExpectedExecutableVersion)) { $Version } else { $ExpectedExecutableVersion }
-        if ($versionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($reportedVersion) -or
-            $reportedVersion -match '[\r\n]' -or $reportedVersion -cne $expectedVersion) {
-            Fail-Smoke "installed candidate version is '$reportedVersion', want '$expectedVersion'"
-        }
-        $rootHelpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("--help") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "root-help.stdout") `
-            -StderrPath (Join-Path $smokeRoot "root-help.stderr")
-        [void]$commands.Add($rootHelpCommand)
-        if ($rootHelpCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($rootHelpCommand.stdout)) {
-            Fail-Smoke "installed candidate root help failed"
-        }
-        $docsCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("docs", "models") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-docs.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-docs.stderr")
-        [void]$commands.Add($docsCommand)
-        if ($docsCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($docsCommand.stdout)) {
-            Fail-Smoke "installed candidate models docs failed"
-        }
-        $listCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("models", "list") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-list.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-list.stderr")
-        [void]$commands.Add($listCommand)
-        if ($listCommand.exitCode -ne 0) {
-            Fail-Smoke "installed candidate models list exited $($listCommand.exitCode)"
-        }
-        $helpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("models", "--help") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-help.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-help.stderr")
-        [void]$commands.Add($helpCommand)
-        if ($helpCommand.exitCode -ne 0) {
-            Fail-Smoke "installed candidate models help exited $($helpCommand.exitCode)"
-        }
-        foreach ($name in @("llm", "asr", "tts", "embed")) {
-            if (-not $helpCommand.stdout.Contains($name)) {
-                Fail-Smoke "installed candidate models help does not expose $name"
-            }
-            $inspect = Invoke-CandidateCommand -FilePath $resolvedPath `
-                -ArgumentList @("--json", "models", "inspect", $name) `
-                -WorkingDirectory $smokeRoot `
-                -StdoutPath (Join-Path $smokeRoot "$name.stdout") `
-                -StderrPath (Join-Path $smokeRoot "$name.stderr")
-            [void]$commands.Add($inspect)
-            if ($inspect.exitCode -ne 0) {
-                Fail-Smoke "installed candidate models inspect $name exited $($inspect.exitCode)"
-            }
-            $model = $inspect.stdout | ConvertFrom-Json
-            $unexpectedState = $model.name -ne $name -or
-                $model.managedRuntime.identity -ne $name -or
-                $model.managedRuntime.readinessState -ne "MISSING" -or
-                $model.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or
-                $model.loadState -ne "UNLOADED"
-            if ($unexpectedState) {
-                Fail-Smoke "installed candidate models inspect $name performed work or returned an unexpected identity/state"
-            }
-        }
+        $discovery = Invoke-InstalledCandidateDiscovery -ExecutablePath $resolvedPath `
+            -WorkingDirectory $smokeRoot -OutputDirectory $smokeRoot `
+            -ExpectedVersion $expectedVersion -Commands $commands
+        $reportedVersion = $discovery.version
         foreach ($path in @($modelsRoot, $hfRoot)) {
             if ((Test-Path -LiteralPath $path) -and @(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0) {
                 Fail-Smoke "discovery wrote model or backend content under $path"
