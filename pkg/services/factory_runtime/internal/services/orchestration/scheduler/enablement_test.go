@@ -549,6 +549,66 @@ func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *te
 	}
 }
 
+func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistration(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		complete      bool
+		contradictory bool
+	}{
+		{name: "incomplete registration"},
+		{name: "contradictory registration", complete: true, contradictory: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			eval := NewEnablementEvaluator(nil, testNow, nil)
+			n := sameNameGuardNet()
+			transition := n.Transitions["match-items"]
+			transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
+			transition.InputArcs[1].Guard = nil
+
+			parent := &factorytoken.Token{
+				ID:      "project-token",
+				PlaceID: "plan:ready",
+				Color: factorytoken.Color{
+					Name:   "resume-project",
+					WorkID: "project-work",
+				},
+			}
+			historical := &factorytoken.Token{
+				ID:      "a-token-history",
+				PlaceID: "task:ready",
+				Color: factorytoken.Color{
+					Name:     "resume-project",
+					WorkID:   "cycle-44",
+					ParentID: "project-work",
+				},
+			}
+			current := *historical
+			current.ID = "z-token-current"
+			current.Color.WorkID = "cycle-93"
+
+			registeredCurrent := current
+			if test.contradictory {
+				registeredCurrent.Color.ParentID = "other-parent"
+			}
+			marking := makeTestSnapshot(map[string]*factorytoken.Token{
+				parent.ID:     parent,
+				historical.ID: historical,
+				current.ID:    &current,
+			})
+			marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+				"project-work": {
+					Children: []factorytoken.Token{*historical, registeredCurrent},
+					Complete: test.complete,
+				},
+			}
+
+			if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+				t.Fatalf("invalid registration enabled historical same-name transition: %#v", enabled)
+			}
+		})
+	}
+}
+
 func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 

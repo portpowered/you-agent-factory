@@ -1,7 +1,9 @@
 package root_composition_test
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -184,8 +186,8 @@ func waitForExactLedgerWorkerSessionCompletion(
 		if observation.WorkerSessionId == "" {
 			continue
 		}
-		support.WaitForWorkerSessionTerminalAt(t, baseURL, sessionID, observation.WorkerSessionId, timeout)
-		terminal := support.GetSessionWorkerSessionByID(t, baseURL, sessionID, observation.WorkerSessionId)
+		waitForExactLedgerWorkerSessionTerminal(t, baseURL, sessionID, observation.WorkerSessionId, timeout)
+		terminal := getExactLedgerWorkerSessionByID(t, baseURL, sessionID, observation.WorkerSessionId)
 		if !isExactLedgerWorkerSessionTerminal(terminal.State) {
 			t.Fatalf("Worker Session %q state = %q after terminal event, want terminal", terminal.WorkerSessionId, terminal.State)
 		}
@@ -193,6 +195,71 @@ func waitForExactLedgerWorkerSessionCompletion(
 	}
 	t.Fatalf("no new public Worker Session observation was available for Work %q", workID)
 	return factoryapi.WorkerSessionObservation{}
+}
+
+func waitForExactLedgerWorkerSessionTerminal(
+	t *testing.T,
+	baseURL, sessionID, workerSessionID string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatal("worker session id is empty")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) +
+		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build live Worker Session events request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET live Worker Session events: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET live Worker Session events status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatalf("decode live Worker Session event: %v", err)
+		}
+		if event.Delivery == factoryapi.WorkerSessionEventDeliverySourceFailure {
+			t.Fatalf("live Worker Session event source failure: %#v", event)
+		}
+		if event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminal ||
+			event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminalReplay {
+			return
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read live Worker Session events: %v", err)
+	}
+	t.Fatalf("live Worker Session event stream ended without terminal delivery")
+}
+
+func getExactLedgerWorkerSessionByID(
+	t *testing.T,
+	baseURL, sessionID, workerSessionID string,
+) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatal("worker session id is empty")
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) +
+		"/worker-sessions/" + url.PathEscape(workerSessionID)
+	return support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
 }
 
 func isExactLedgerWorkerSessionTerminal(state factoryapi.WorkerSessionObservationState) bool {

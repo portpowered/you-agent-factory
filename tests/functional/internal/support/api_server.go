@@ -434,60 +434,6 @@ func GetWorkerSessionEventsForSessionByIDAt(
 	return events
 }
 
-// WaitForWorkerSessionTerminalAt follows one public Worker Session event
-// stream until its terminal delivery. The timeout is only a bounded failure
-// guard; readiness comes from the stream's terminal event, not polling.
-func WaitForWorkerSessionTerminalAt(
-	t testing.TB,
-	baseURL, sessionID, workerSessionID string,
-	timeout time.Duration,
-) {
-	t.Helper()
-	if strings.TrimSpace(workerSessionID) == "" {
-		t.Fatal("worker session id is empty")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	endpoint := strings.TrimSuffix(baseURL, "/") +
-		"/factory-sessions/" + url.PathEscape(sessionID) +
-		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		t.Fatalf("build live Worker Session events request: %v", err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET live Worker Session events: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET live Worker Session events status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	scanner := bufio.NewScanner(response.Body)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		var event factoryapi.WorkerSessionEvent
-		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-			t.Fatalf("decode live Worker Session event: %v", err)
-		}
-		if event.Delivery == factoryapi.WorkerSessionEventDeliverySourceFailure {
-			t.Fatalf("live Worker Session event source failure: %#v", event)
-		}
-		if event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminal ||
-			event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminalReplay {
-			return
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("read live Worker Session events: %v", err)
-	}
-	t.Fatalf("live Worker Session event stream ended without terminal delivery")
-}
-
 func waitForCompleteWorkerSessionReplay(
 	ctx context.Context,
 	endpoint string,

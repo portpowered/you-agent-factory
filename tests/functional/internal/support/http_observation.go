@@ -143,17 +143,6 @@ func ListSessionWorkerSessions(t testing.TB, baseURL, sessionID, workID string) 
 	return GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
 }
 
-// GetSessionWorkerSessionByID reads one public Worker Session observation by
-// its stable identity after a terminal event has been observed.
-func GetSessionWorkerSessionByID(t testing.TB, baseURL, sessionID, workerSessionID string) factoryapi.WorkerSessionObservation {
-	t.Helper()
-	if strings.TrimSpace(workerSessionID) == "" {
-		t.Fatal("worker session id is empty")
-	}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions/" + url.PathEscape(workerSessionID)
-	return GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
-}
-
 // GetDefaultSessionWorkByID reads one public Work item through the same
 // session-scoped GET /work/{id} surface customers use for detail reads.
 func GetDefaultSessionWorkByID(t testing.TB, baseURL, workID string) factoryapi.Work {

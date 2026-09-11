@@ -497,18 +497,34 @@ func sameNameParentHasMissingCurrentChild(
 ) bool {
 	for _, parentCandidate := range parentCandidates {
 		parentWorkID := parentCandidate.Color.WorkID
-		if parentWorkID == "" {
+		if parentWorkID == "" || parentCandidate.Color.Name == "" || !sameNameParentChildCandidate(
+			parentCandidate,
+			childCandidates,
+		) {
 			continue
 		}
 		registration, registered := snapshot.Marking.ParentChildRegistrations[parentWorkID]
-		if !registered || !registration.Complete || len(registration.Children) == 0 {
+		if !registered {
+			// A missing registration does not prove that this is a parent-child
+			// population. Preserve the legacy same-name fallback for fresh
+			// flows whose relation projection has not been populated yet.
 			continue
 		}
+		if !registration.Complete || len(registration.Children) == 0 ||
+			!sameNameRegistrationIsConsistent(registration.Children, parentWorkID) {
+			// Once the candidate pair proves the authored parent-child join, an
+			// incomplete or contradictory canonical projection cannot authorize
+			// an arbitrary historical token through the legacy fallback.
+			return true
+		}
+
+		foundRegisteredSameNameChild := false
 		for index := len(registration.Children) - 1; index >= 0; index-- {
 			child := registration.Children[index]
-			if child.Color.ParentID != parentWorkID || child.Color.Name != parentCandidate.Color.Name {
+			if child.Color.Name != parentCandidate.Color.Name {
 				continue
 			}
+			foundRegisteredSameNameChild = true
 			for _, candidate := range childCandidates {
 				if sameNameTokenIdentity(candidate, child) {
 					return false
@@ -516,8 +532,55 @@ func sameNameParentHasMissingCurrentChild(
 			}
 			return true
 		}
+		if !foundRegisteredSameNameChild {
+			// The visible candidate proves the relation, but the canonical
+			// projection omits the same-name child. Do not fall back to
+			// token ordering when the two authorities disagree.
+			return true
+		}
 	}
 	return false
+}
+
+func sameNameParentChildCandidate(
+	parentCandidate factorytoken.Token,
+	childCandidates []factorytoken.Token,
+) bool {
+	for _, childCandidate := range childCandidates {
+		if childCandidate.Color.ParentID == parentCandidate.Color.WorkID &&
+			childCandidate.Color.Name == parentCandidate.Color.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func sameNameRegistrationIsConsistent(children []factorytoken.Token, parentWorkID string) bool {
+	seen := make(map[string]struct{}, len(children))
+	for _, child := range children {
+		if child.Color.ParentID != parentWorkID {
+			return false
+		}
+		identity := sameNameRegistrationIdentity(child)
+		if identity == "" {
+			return false
+		}
+		if _, duplicate := seen[identity]; duplicate {
+			return false
+		}
+		seen[identity] = struct{}{}
+	}
+	return true
+}
+
+func sameNameRegistrationIdentity(token factorytoken.Token) string {
+	if token.Color.WorkID != "" {
+		return "work:" + token.Color.WorkID
+	}
+	if token.ID != "" {
+		return "token:" + token.ID
+	}
+	return ""
 }
 
 func sameNameTokenIdentity(left, right factorytoken.Token) bool {
