@@ -24,6 +24,8 @@ param(
     [string]$ExpectedGoReleaserVersion,
     [string]$ExpectedEsbuildVersion,
     [string]$ExpectedEsbuildSHA256,
+    [ValidateRange(1, 4)]
+    [int]$CandidateGoProcessLimit = 4,
     [int64]$CandidateMaximumWorkBytes = 4294967296,
     [string]$ReportPath
 )
@@ -31,6 +33,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $SmokeMaximumTaskRootPathLength = 220
+$script:SmokeInstallScriptPath = $PSCommandPath
 
 if ($null -eq ([System.Management.Automation.PSTypeName]::new("InfiniteYou.ReleaseSmoke.ProcessRunner").Type)) {
     Add-Type -TypeDefinition @'
@@ -370,6 +373,117 @@ function Get-SmokeFileEvidence {
     }
 }
 
+function Get-SmokeCandidateArchiveSet {
+    param([string]$DistDirectory)
+    $dist = Resolve-SmokePath $DistDirectory
+    if (-not (Test-Path -LiteralPath $dist -PathType Container)) {
+        Fail-Smoke "candidate release dist directory is missing: $dist"
+    }
+    $files = @(Get-ChildItem -LiteralPath $dist -File -Force -ErrorAction Stop)
+    $specifications = @(
+        [ordered]@{ role = "darwin-amd64-archive"; os = "darwin"; arch = "amd64"; extension = "tar.gz" }
+        [ordered]@{ role = "darwin-arm64-archive"; os = "darwin"; arch = "arm64"; extension = "tar.gz" }
+        [ordered]@{ role = "linux-amd64-archive"; os = "linux"; arch = "amd64"; extension = "tar.gz" }
+        [ordered]@{ role = "linux-arm64-archive"; os = "linux"; arch = "arm64"; extension = "tar.gz" }
+        [ordered]@{ role = "windows-amd64-archive"; os = "windows"; arch = "amd64"; extension = "zip" }
+        [ordered]@{ role = "windows-arm64-archive"; os = "windows"; arch = "arm64"; extension = "zip" }
+    )
+    $archives = New-Object 'System.Collections.Generic.List[object]'
+    $version = ""
+    foreach ($specification in $specifications) {
+        $pattern = '^you_(?<version>.+)_' + [regex]::Escape($specification.os) + '_' +
+            [regex]::Escape($specification.arch) + '\.' + [regex]::Escape($specification.extension) + '$'
+        $matchingFiles = @($files | Where-Object { $_.Name -cmatch $pattern })
+        if ($matchingFiles.Count -ne 1) {
+            Fail-Smoke "candidate artifact role $($specification.role) matched $($matchingFiles.Count) files, want exactly one"
+        }
+        $nameMatch = [regex]::Match($matchingFiles[0].Name, $pattern)
+        $archiveVersion = $nameMatch.Groups["version"].Value
+        if ([string]::IsNullOrWhiteSpace($archiveVersion)) {
+            Fail-Smoke "candidate artifact role $($specification.role) has an empty version"
+        }
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = $archiveVersion
+        } elseif ($version -cne $archiveVersion) {
+            Fail-Smoke "candidate artifact role $($specification.role) has version $archiveVersion, want $version"
+        }
+        [void]$archives.Add([pscustomobject][ordered]@{
+            role = $specification.role
+            sourcePath = $matchingFiles[0].FullName
+            file = $matchingFiles[0].Name
+        })
+    }
+    $checksumPath = Join-Path $dist "you_${version}_checksums.txt"
+    [void](Assert-SmokeRegularFile "checksums source" $checksumPath)
+    return [pscustomobject][ordered]@{
+        version = $version
+        archives = @($archives | ForEach-Object { $_ })
+        checksumPath = $checksumPath
+    }
+}
+
+function Copy-SmokeCandidateArtifact {
+    param(
+        [string]$Role,
+        [string]$SourcePath,
+        [string]$DestinationPath
+    )
+    $sourceEvidence = Get-SmokeFileEvidence "$Role source" $SourcePath
+    $destination = Resolve-SmokePath $DestinationPath
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+    [void](Copy-Item -LiteralPath (Resolve-SmokePath $SourcePath) -Destination $destination -Force)
+    $retainedEvidence = Get-SmokeFileEvidence $Role $destination
+    if ($sourceEvidence.bytes -ne $retainedEvidence.bytes -or
+        $sourceEvidence.sha256 -cne $retainedEvidence.sha256) {
+        Fail-Smoke "$Role promotion changed bytes or SHA-256"
+    }
+    return $retainedEvidence
+}
+
+function Promote-SmokeCandidateArtifacts {
+    param(
+        [string]$DistDirectory,
+        [string]$InstallerSourcePath,
+        [string]$OutputDirectory
+    )
+    $output = Resolve-SmokePath $OutputDirectory
+    Assert-SmokeTaskRootLength "candidate output directory" $output
+    Assert-SmokeEmptyRoot "candidate output directory" $output
+    [void][System.IO.Directory]::CreateDirectory($output)
+    $archiveSet = Get-SmokeCandidateArchiveSet -DistDirectory $DistDirectory
+    $installerSource = Resolve-SmokePath $InstallerSourcePath
+    [void](Assert-SmokeRegularFile "windows-installer source" $installerSource)
+    foreach ($archive in @($archiveSet.archives)) {
+        [void](Get-SmokeFileEvidence "$($archive.role) source" $archive.sourcePath)
+    }
+    [void](Get-SmokeFileEvidence "checksums source" $archiveSet.checksumPath)
+    [void](Get-SmokeFileEvidence "windows-installer source" $installerSource)
+    $retained = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($archive in @($archiveSet.archives)) {
+        $destination = Join-Path $output $archive.file
+        [void]$retained.Add((Copy-SmokeCandidateArtifact -Role $archive.role `
+            -SourcePath $archive.sourcePath -DestinationPath $destination))
+    }
+    $checksumName = [System.IO.Path]::GetFileName($archiveSet.checksumPath)
+    $checksumPath = Join-Path $output $checksumName
+    [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "checksums" `
+        -SourcePath $archiveSet.checksumPath -DestinationPath $checksumPath))
+    $installerPath = Join-Path $output "install.ps1"
+    [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "windows-installer" `
+        -SourcePath $installerSource -DestinationPath $installerPath))
+    $windowsArchive = @($archiveSet.archives | Where-Object { $_.role -eq "windows-amd64-archive" })
+    if ($windowsArchive.Count -ne 1) {
+        Fail-Smoke "candidate retained Windows amd64 archive selection is not unique"
+    }
+    return [pscustomobject][ordered]@{
+        version = $archiveSet.version
+        windowsAmd64Path = Join-Path $output $windowsArchive[0].file
+        checksumPath = $checksumPath
+        installerPath = $installerPath
+        artifacts = @($retained | ForEach-Object { $_ })
+    }
+}
+
 function Copy-SmokeNativeToolToShortPath {
     param(
         [string]$SourcePath,
@@ -564,6 +678,125 @@ function Invoke-CandidateCommand {
     }
 }
 
+function Invoke-InstalledCandidateCommand {
+    param(
+        [string]$ExecutablePath,
+        [string[]]$Arguments,
+        [string]$WorkingDirectory,
+        [string]$OutputDirectory,
+        [string]$OutputName,
+        [System.Collections.Generic.List[object]]$Commands,
+        [string[]]$CommandPrefix = @()
+    )
+    $processArguments = @($CommandPrefix) + @($Arguments)
+    $command = Invoke-CandidateCommand -FilePath $ExecutablePath `
+        -ArgumentList $processArguments -WorkingDirectory $WorkingDirectory `
+        -StdoutPath (Join-Path $OutputDirectory "$OutputName.stdout") `
+        -StderrPath (Join-Path $OutputDirectory "$OutputName.stderr")
+    $evidence = [ordered]@{}
+    foreach ($property in $command.PSObject.Properties) {
+        $evidence[$property.Name] = $property.Value
+    }
+    # Keep report arguments tied to the installed CLI contract when a controlled
+    # launcher is used by the release-harness tests.
+    $evidence.arguments = @($Arguments)
+    if (@($CommandPrefix).Count -gt 0) {
+        $evidence.processArguments = @($processArguments)
+    }
+    $normalized = [pscustomobject]$evidence
+    [void]$Commands.Add($normalized)
+    return $normalized
+}
+
+function Assert-InstalledCandidateCommand {
+    param(
+        [object]$Command,
+        [string]$Identity,
+        [switch]$RequireOutput
+    )
+    if ([int]$Command.exitCode -ne 0) {
+        Fail-Smoke "installed candidate $Identity exited $($Command.exitCode)"
+    }
+    if ($RequireOutput -and [string]::IsNullOrWhiteSpace([string]$Command.stdout)) {
+        Fail-Smoke "installed candidate $Identity produced no output"
+    }
+}
+
+function Invoke-InstalledCandidateDiscovery {
+    param(
+        [string]$ExecutablePath,
+        [string]$WorkingDirectory,
+        [string]$OutputDirectory,
+        [string]$ExpectedVersion,
+        [System.Collections.Generic.List[object]]$Commands,
+        [string[]]$CommandPrefix = @()
+    )
+    $versionCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("--version") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "version" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $versionCommand "--version" -RequireOutput
+    $reportedVersion = $versionCommand.stdout.Trim()
+    if ($reportedVersion -match '[\r\n]' -or $reportedVersion -cne $ExpectedVersion) {
+        Fail-Smoke "installed candidate --version returned '$reportedVersion', want '$ExpectedVersion'"
+    }
+
+    $rootHelpCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("--help") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "root-help" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $rootHelpCommand "--help" -RequireOutput
+    $docsModelsCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("docs", "models") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-docs" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $docsModelsCommand "docs models" -RequireOutput
+    $docsAgentsCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("docs", "agents") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "agents-docs" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $docsAgentsCommand "docs agents" -RequireOutput
+    $listCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("models", "list") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-list" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $listCommand "models list" -RequireOutput
+    $helpCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+        -Arguments @("models", "--help") -WorkingDirectory $WorkingDirectory `
+        -OutputDirectory $OutputDirectory -OutputName "models-help" -Commands $Commands `
+        -CommandPrefix $CommandPrefix
+    Assert-InstalledCandidateCommand $helpCommand "models --help" -RequireOutput
+    foreach ($name in @("llm", "asr", "tts", "embed")) {
+        if (-not $helpCommand.stdout.Contains($name)) {
+            Fail-Smoke "installed candidate models --help did not expose $name"
+        }
+        $inspectArguments = @("--json", "models", "inspect", $name)
+        $inspect = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
+            -Arguments $inspectArguments -WorkingDirectory $WorkingDirectory `
+            -OutputDirectory $OutputDirectory -OutputName "model-$name" -Commands $Commands `
+            -CommandPrefix $CommandPrefix
+        Assert-InstalledCandidateCommand $inspect ($inspectArguments -join " ") -RequireOutput
+        try {
+            $model = $inspect.stdout | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Fail-Smoke "installed candidate $($inspectArguments -join ' ') returned invalid JSON"
+        }
+        $unexpectedState = $null -eq $model -or $model.name -ne $name -or
+            $model.managedRuntime.identity -ne $name -or
+            $model.managedRuntime.readinessState -ne "MISSING" -or
+            $model.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or
+            $model.loadState -ne "UNLOADED"
+        if ($unexpectedState) {
+            Fail-Smoke "installed candidate models inspect $name performed work or returned an unexpected identity/state"
+        }
+    }
+    return [pscustomobject][ordered]@{
+        status = "PASS"
+        version = $reportedVersion
+        commands = @($Commands | ForEach-Object { $_ })
+    }
+}
+
 function Get-SmokeExecutableBuildInfo {
     param(
         [string]$ExecutablePath,
@@ -627,6 +860,20 @@ function Invoke-SmokeGit {
     return ($output -join "`n").Trim()
 }
 
+function Get-CandidateDriverRevision {
+    $scriptPath = $script:SmokeInstallScriptPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        Fail-Smoke "candidate driver script path is unavailable"
+    }
+    $scriptDirectory = Split-Path -Parent (Resolve-SmokePath $scriptPath)
+    $driverRoot = Invoke-SmokeGit @("-C", $scriptDirectory, "rev-parse", "--show-toplevel")
+    $revision = Invoke-SmokeGit @("-C", $driverRoot, "rev-parse", "HEAD")
+    if ($revision -notmatch '^[0-9a-fA-F]{40}$') {
+        Fail-Smoke "candidate driver revision is not a full Git object ID: $revision"
+    }
+    return $revision.ToLowerInvariant()
+}
+
 function Normalize-CandidateRepository {
     param([string]$Repository)
     return $Repository.Trim().TrimEnd('/').Replace('\', '/').ToLowerInvariant() -replace '\.git$', ''
@@ -645,6 +892,19 @@ function Get-CandidateSourceIdentity {
         Fail-Smoke "candidate source origin is $origin, want $Repository"
     }
     return [pscustomobject][ordered]@{ repository = $origin; commit = $resolvedCommit; tree = $tree }
+}
+
+function Set-CandidateGoProcessEnvironment {
+    param(
+        [ValidateRange(1, 4)]
+        [int]$GoProcessLimit = 4
+    )
+    $env:GOFLAGS = "-p=$GoProcessLimit"
+    $env:GOMAXPROCS = [string]$GoProcessLimit
+    return [ordered]@{
+        GOFLAGS = $env:GOFLAGS
+        GOMAXPROCS = $env:GOMAXPROCS
+    }
 }
 
 function Get-SmokeAvailablePort {
@@ -992,72 +1252,11 @@ function Invoke-InstalledCandidateSmoke {
                 -OutputDirectory $CandidateDirectory
             [void]$commands.Add($buildInfo.command)
         }
-        $versionCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("--version") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "version.stdout") `
-            -StderrPath (Join-Path $smokeRoot "version.stderr")
-        [void]$commands.Add($versionCommand)
-        $reportedVersion = $versionCommand.stdout.Trim()
         $expectedVersion = if ([string]::IsNullOrWhiteSpace($ExpectedExecutableVersion)) { $Version } else { $ExpectedExecutableVersion }
-        if ($versionCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($reportedVersion) -or
-            $reportedVersion -match '[\r\n]' -or $reportedVersion -cne $expectedVersion) {
-            Fail-Smoke "installed candidate version is '$reportedVersion', want '$expectedVersion'"
-        }
-        $rootHelpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("--help") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "root-help.stdout") `
-            -StderrPath (Join-Path $smokeRoot "root-help.stderr")
-        [void]$commands.Add($rootHelpCommand)
-        if ($rootHelpCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($rootHelpCommand.stdout)) {
-            Fail-Smoke "installed candidate root help failed"
-        }
-        $docsCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("docs", "models") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-docs.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-docs.stderr")
-        [void]$commands.Add($docsCommand)
-        if ($docsCommand.exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($docsCommand.stdout)) {
-            Fail-Smoke "installed candidate models docs failed"
-        }
-        $listCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("models", "list") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-list.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-list.stderr")
-        [void]$commands.Add($listCommand)
-        if ($listCommand.exitCode -ne 0) {
-            Fail-Smoke "installed candidate models list exited $($listCommand.exitCode)"
-        }
-        $helpCommand = Invoke-CandidateCommand -FilePath $resolvedPath `
-            -ArgumentList @("models", "--help") -WorkingDirectory $smokeRoot `
-            -StdoutPath (Join-Path $smokeRoot "models-help.stdout") `
-            -StderrPath (Join-Path $smokeRoot "models-help.stderr")
-        [void]$commands.Add($helpCommand)
-        if ($helpCommand.exitCode -ne 0) {
-            Fail-Smoke "installed candidate models help exited $($helpCommand.exitCode)"
-        }
-        foreach ($name in @("llm", "asr", "tts", "embed")) {
-            if (-not $helpCommand.stdout.Contains($name)) {
-                Fail-Smoke "installed candidate models help does not expose $name"
-            }
-            $inspect = Invoke-CandidateCommand -FilePath $resolvedPath `
-                -ArgumentList @("--json", "models", "inspect", $name) `
-                -WorkingDirectory $smokeRoot `
-                -StdoutPath (Join-Path $smokeRoot "$name.stdout") `
-                -StderrPath (Join-Path $smokeRoot "$name.stderr")
-            [void]$commands.Add($inspect)
-            if ($inspect.exitCode -ne 0) {
-                Fail-Smoke "installed candidate models inspect $name exited $($inspect.exitCode)"
-            }
-            $model = $inspect.stdout | ConvertFrom-Json
-            $unexpectedState = $model.name -ne $name -or
-                $model.managedRuntime.identity -ne $name -or
-                $model.managedRuntime.readinessState -ne "MISSING" -or
-                $model.managedRuntime.lifecycleState -ne "NOT_INSTALLED" -or
-                $model.loadState -ne "UNLOADED"
-            if ($unexpectedState) {
-                Fail-Smoke "installed candidate models inspect $name performed work or returned an unexpected identity/state"
-            }
-        }
+        $discovery = Invoke-InstalledCandidateDiscovery -ExecutablePath $resolvedPath `
+            -WorkingDirectory $smokeRoot -OutputDirectory $smokeRoot `
+            -ExpectedVersion $expectedVersion -Commands $commands
+        $reportedVersion = $discovery.version
         foreach ($path in @($modelsRoot, $hfRoot)) {
             if ((Test-Path -LiteralPath $path) -and @(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0) {
                 Fail-Smoke "discovery wrote model or backend content under $path"
@@ -1099,7 +1298,7 @@ function Finalize-SmokeCandidateReport {
         [System.Collections.IDictionary]$Report,
         [System.Exception]$Failure
     )
-    if ($Report.cleanup.status -eq "PASS" -and @($Report.artifacts).Count -gt 0) {
+    if (@($Report.artifacts).Count -gt 0) {
         $retainedEvidenceStable = $true
         $retainedEvidenceErrors = New-Object 'System.Collections.Generic.List[string]'
         foreach ($artifact in @($Report.artifacts)) {
@@ -1121,7 +1320,9 @@ function Finalize-SmokeCandidateReport {
             $Report.cleanup.status = "FAIL"
             $Report.cleanup.retainedEvidenceError = $retainedEvidenceErrors -join "; "
             if ($null -eq $Failure) {
-                $Failure = [System.Exception]::new("retained candidate evidence was missing or changed during install smoke cleanup")
+                $Failure = [System.Exception]::new(
+                    "retained candidate evidence was missing or changed during install smoke cleanup: " +
+                    ($retainedEvidenceErrors -join "; "))
             }
             $Report.status = "FAIL"
             if ([string]::IsNullOrWhiteSpace([string]$Report.error)) { $Report.error = $Failure.Message }
@@ -1144,6 +1345,8 @@ function Invoke-LocalCandidateSmoke {
         [string]$DependencySourcePath,
         [string]$OutputDirectory,
         [string]$WorkDirectory,
+        [ValidateRange(1, 4)]
+        [int]$GoProcessLimit = 4,
         [string]$ReleaseToolPath,
         [string]$ReleaseToolVersion,
         [string]$EsbuildVersion,
@@ -1191,8 +1394,6 @@ function Invoke-LocalCandidateSmoke {
     if ($workDirectory.Length -gt 80) {
         Fail-Smoke "candidate work directory must be at most 80 characters so Windows native tools remain below path limits"
     }
-    $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
-        -Commit $SourceCommit -Repository $SourceRepository
     [void][System.IO.Directory]::CreateDirectory($outputDirectory)
     [void][System.IO.Directory]::CreateDirectory($workDirectory)
     $checkoutPath = Join-Path $workDirectory "src"
@@ -1204,11 +1405,12 @@ function Invoke-LocalCandidateSmoke {
     }
     $report = [ordered]@{
         schemaVersion = "local-windows-candidate/v1"
+        driverRevision = ""
         status = "FAIL"
         source = [ordered]@{
             repository = $SourceRepository
-            commit = $sourceIdentity.commit
-            tree = $sourceIdentity.tree
+            commit = $SourceCommit
+            tree = ""
         }
         build = [ordered]@{}
         artifacts = @()
@@ -1219,8 +1421,13 @@ function Invoke-LocalCandidateSmoke {
     $failure = $null
     $dependencyJunctionPath = $null
     try {
-        $env:GOFLAGS = "-p=4"
-        $env:GOMAXPROCS = "4"
+        $report.driverRevision = Get-CandidateDriverRevision
+        $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
+            -Commit $SourceCommit -Repository $SourceRepository
+        $report.source.repository = $sourceIdentity.repository
+        $report.source.commit = $sourceIdentity.commit
+        $report.source.tree = $sourceIdentity.tree
+        $processEnvironment = Set-CandidateGoProcessEnvironment -GoProcessLimit $GoProcessLimit
         $env:GOPROXY = "off"
         $env:GOSUMDB = "off"
         $env:GOTOOLCHAIN = "local"
@@ -1322,8 +1529,8 @@ function Invoke-LocalCandidateSmoke {
             workBytes = $workBytes
             maximumWorkBytes = $MaximumWorkBytes
             environment = [ordered]@{
-                GOFLAGS = $env:GOFLAGS
-                GOMAXPROCS = $env:GOMAXPROCS
+                GOFLAGS = $processEnvironment.GOFLAGS
+                GOMAXPROCS = $processEnvironment.GOMAXPROCS
                 GOPROXY = $env:GOPROXY
                 GOSUMDB = $env:GOSUMDB
                 GOTOOLCHAIN = $env:GOTOOLCHAIN
@@ -1341,24 +1548,15 @@ function Invoke-LocalCandidateSmoke {
         if ($statusAfter -ne "") {
             Fail-Smoke "candidate clone is dirty after release"
         }
-        $archives = @(Get-ChildItem -LiteralPath (Join-Path $checkoutPath "dist") -Filter "you_*_windows_amd64.zip" -File -ErrorAction Stop)
-        if ($archives.Count -ne 1) {
-            Fail-Smoke "release produced $($archives.Count) Windows amd64 archives, want exactly one"
-        }
-        $archiveMatch = [regex]::Match($archives[0].Name, '^you_(.+)_windows_amd64\.zip$')
-        if (-not $archiveMatch.Success) {
-            Fail-Smoke "release archive name does not expose its version: $($archives[0].Name)"
-        }
-        $version = $archiveMatch.Groups[1].Value
-        $checksumSource = Join-Path $checkoutPath "dist\you_${version}_checksums.txt"
-        $installerSource = Join-Path $checkoutPath "scripts\install.ps1"
-        foreach ($source in @($archives[0].FullName, $checksumSource, $installerSource)) {
-            [void](Assert-SmokeRegularFile "candidate artifact" $source)
-            Copy-Item -LiteralPath $source -Destination $outputDirectory
-        }
-        $archivePath = Join-Path $outputDirectory $archives[0].Name
-        $checksumPath = Join-Path $outputDirectory ([System.IO.Path]::GetFileName($checksumSource))
-        $installerPath = Join-Path $outputDirectory "install.ps1"
+        $promotedArtifacts = Promote-SmokeCandidateArtifacts `
+            -DistDirectory (Join-Path $checkoutPath "dist") `
+            -InstallerSourcePath (Join-Path $checkoutPath "scripts\install.ps1") `
+            -OutputDirectory $outputDirectory
+        $version = $promotedArtifacts.version
+        $archivePath = $promotedArtifacts.windowsAmd64Path
+        $checksumPath = $promotedArtifacts.checksumPath
+        $installerPath = $promotedArtifacts.installerPath
+        $report.artifacts = @($promotedArtifacts.artifacts)
         [void][System.IO.Directory]::CreateDirectory($extractPath)
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
         $archiveExecutablePath = Join-Path $extractPath "you.exe"
@@ -1380,12 +1578,7 @@ function Invoke-LocalCandidateSmoke {
             $archiveExecutableEvidence.sha256 -cne $retainedExecutableEvidence.sha256) {
             Fail-Smoke "retained executable does not match the archive member"
         }
-        $report.artifacts = @(
-            Get-SmokeFileEvidence "windows-amd64-archive" $archivePath
-            Get-SmokeFileEvidence "checksums" $checksumPath
-            Get-SmokeFileEvidence "windows-installer" $installerPath
-            $retainedExecutableEvidence
-        )
+        $report.artifacts = @($report.artifacts + $retainedExecutableEvidence)
         $installArguments = @{
             CandidateDirectory = $outputDirectory
             ArchivePath = $archivePath
@@ -1479,6 +1672,7 @@ if (-not [string]::IsNullOrWhiteSpace($CandidateSourcePath)) {
         DependencySourcePath = $CandidateDependencySourcePath
         OutputDirectory = $CandidateOutputDir
         WorkDirectory = $CandidateWorkDir
+        GoProcessLimit = $CandidateGoProcessLimit
         ReleaseToolPath = $GoReleaserPath
         ReleaseToolVersion = $ExpectedGoReleaserVersion
         EsbuildVersion = $ExpectedEsbuildVersion
