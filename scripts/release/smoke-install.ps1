@@ -373,6 +373,117 @@ function Get-SmokeFileEvidence {
     }
 }
 
+function Get-SmokeCandidateArchiveSet {
+    param([string]$DistDirectory)
+    $dist = Resolve-SmokePath $DistDirectory
+    if (-not (Test-Path -LiteralPath $dist -PathType Container)) {
+        Fail-Smoke "candidate release dist directory is missing: $dist"
+    }
+    $files = @(Get-ChildItem -LiteralPath $dist -File -Force -ErrorAction Stop)
+    $specifications = @(
+        [ordered]@{ role = "darwin-amd64-archive"; os = "darwin"; arch = "amd64"; extension = "tar.gz" }
+        [ordered]@{ role = "darwin-arm64-archive"; os = "darwin"; arch = "arm64"; extension = "tar.gz" }
+        [ordered]@{ role = "linux-amd64-archive"; os = "linux"; arch = "amd64"; extension = "tar.gz" }
+        [ordered]@{ role = "linux-arm64-archive"; os = "linux"; arch = "arm64"; extension = "tar.gz" }
+        [ordered]@{ role = "windows-amd64-archive"; os = "windows"; arch = "amd64"; extension = "zip" }
+        [ordered]@{ role = "windows-arm64-archive"; os = "windows"; arch = "arm64"; extension = "zip" }
+    )
+    $archives = New-Object 'System.Collections.Generic.List[object]'
+    $version = ""
+    foreach ($specification in $specifications) {
+        $pattern = '^you_(?<version>.+)_' + [regex]::Escape($specification.os) + '_' +
+            [regex]::Escape($specification.arch) + '\.' + [regex]::Escape($specification.extension) + '$'
+        $matchingFiles = @($files | Where-Object { $_.Name -cmatch $pattern })
+        if ($matchingFiles.Count -ne 1) {
+            Fail-Smoke "candidate artifact role $($specification.role) matched $($matchingFiles.Count) files, want exactly one"
+        }
+        $nameMatch = [regex]::Match($matchingFiles[0].Name, $pattern)
+        $archiveVersion = $nameMatch.Groups["version"].Value
+        if ([string]::IsNullOrWhiteSpace($archiveVersion)) {
+            Fail-Smoke "candidate artifact role $($specification.role) has an empty version"
+        }
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = $archiveVersion
+        } elseif ($version -cne $archiveVersion) {
+            Fail-Smoke "candidate artifact role $($specification.role) has version $archiveVersion, want $version"
+        }
+        [void]$archives.Add([pscustomobject][ordered]@{
+            role = $specification.role
+            sourcePath = $matchingFiles[0].FullName
+            file = $matchingFiles[0].Name
+        })
+    }
+    $checksumPath = Join-Path $dist "you_${version}_checksums.txt"
+    [void](Assert-SmokeRegularFile "checksums source" $checksumPath)
+    return [pscustomobject][ordered]@{
+        version = $version
+        archives = @($archives | ForEach-Object { $_ })
+        checksumPath = $checksumPath
+    }
+}
+
+function Copy-SmokeCandidateArtifact {
+    param(
+        [string]$Role,
+        [string]$SourcePath,
+        [string]$DestinationPath
+    )
+    $sourceEvidence = Get-SmokeFileEvidence "$Role source" $SourcePath
+    $destination = Resolve-SmokePath $DestinationPath
+    [void][System.IO.Directory]::CreateDirectory((Split-Path -Parent $destination))
+    [void](Copy-Item -LiteralPath (Resolve-SmokePath $SourcePath) -Destination $destination -Force)
+    $retainedEvidence = Get-SmokeFileEvidence $Role $destination
+    if ($sourceEvidence.bytes -ne $retainedEvidence.bytes -or
+        $sourceEvidence.sha256 -cne $retainedEvidence.sha256) {
+        Fail-Smoke "$Role promotion changed bytes or SHA-256"
+    }
+    return $retainedEvidence
+}
+
+function Promote-SmokeCandidateArtifacts {
+    param(
+        [string]$DistDirectory,
+        [string]$InstallerSourcePath,
+        [string]$OutputDirectory
+    )
+    $output = Resolve-SmokePath $OutputDirectory
+    Assert-SmokeTaskRootLength "candidate output directory" $output
+    Assert-SmokeEmptyRoot "candidate output directory" $output
+    [void][System.IO.Directory]::CreateDirectory($output)
+    $archiveSet = Get-SmokeCandidateArchiveSet -DistDirectory $DistDirectory
+    $installerSource = Resolve-SmokePath $InstallerSourcePath
+    [void](Assert-SmokeRegularFile "windows-installer source" $installerSource)
+    foreach ($archive in @($archiveSet.archives)) {
+        [void](Get-SmokeFileEvidence "$($archive.role) source" $archive.sourcePath)
+    }
+    [void](Get-SmokeFileEvidence "checksums source" $archiveSet.checksumPath)
+    [void](Get-SmokeFileEvidence "windows-installer source" $installerSource)
+    $retained = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($archive in @($archiveSet.archives)) {
+        $destination = Join-Path $output $archive.file
+        [void]$retained.Add((Copy-SmokeCandidateArtifact -Role $archive.role `
+            -SourcePath $archive.sourcePath -DestinationPath $destination))
+    }
+    $checksumName = [System.IO.Path]::GetFileName($archiveSet.checksumPath)
+    $checksumPath = Join-Path $output $checksumName
+    [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "checksums" `
+        -SourcePath $archiveSet.checksumPath -DestinationPath $checksumPath))
+    $installerPath = Join-Path $output "install.ps1"
+    [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "windows-installer" `
+        -SourcePath $installerSource -DestinationPath $installerPath))
+    $windowsArchive = @($archiveSet.archives | Where-Object { $_.role -eq "windows-amd64-archive" })
+    if ($windowsArchive.Count -ne 1) {
+        Fail-Smoke "candidate retained Windows amd64 archive selection is not unique"
+    }
+    return [pscustomobject][ordered]@{
+        version = $archiveSet.version
+        windowsAmd64Path = Join-Path $output $windowsArchive[0].file
+        checksumPath = $checksumPath
+        installerPath = $installerPath
+        artifacts = @($retained | ForEach-Object { $_ })
+    }
+}
+
 function Copy-SmokeNativeToolToShortPath {
     param(
         [string]$SourcePath,
@@ -1129,7 +1240,7 @@ function Finalize-SmokeCandidateReport {
         [System.Collections.IDictionary]$Report,
         [System.Exception]$Failure
     )
-    if ($Report.cleanup.status -eq "PASS" -and @($Report.artifacts).Count -gt 0) {
+    if (@($Report.artifacts).Count -gt 0) {
         $retainedEvidenceStable = $true
         $retainedEvidenceErrors = New-Object 'System.Collections.Generic.List[string]'
         foreach ($artifact in @($Report.artifacts)) {
@@ -1151,7 +1262,9 @@ function Finalize-SmokeCandidateReport {
             $Report.cleanup.status = "FAIL"
             $Report.cleanup.retainedEvidenceError = $retainedEvidenceErrors -join "; "
             if ($null -eq $Failure) {
-                $Failure = [System.Exception]::new("retained candidate evidence was missing or changed during install smoke cleanup")
+                $Failure = [System.Exception]::new(
+                    "retained candidate evidence was missing or changed during install smoke cleanup: " +
+                    ($retainedEvidenceErrors -join "; "))
             }
             $Report.status = "FAIL"
             if ([string]::IsNullOrWhiteSpace([string]$Report.error)) { $Report.error = $Failure.Message }
@@ -1377,24 +1490,15 @@ function Invoke-LocalCandidateSmoke {
         if ($statusAfter -ne "") {
             Fail-Smoke "candidate clone is dirty after release"
         }
-        $archives = @(Get-ChildItem -LiteralPath (Join-Path $checkoutPath "dist") -Filter "you_*_windows_amd64.zip" -File -ErrorAction Stop)
-        if ($archives.Count -ne 1) {
-            Fail-Smoke "release produced $($archives.Count) Windows amd64 archives, want exactly one"
-        }
-        $archiveMatch = [regex]::Match($archives[0].Name, '^you_(.+)_windows_amd64\.zip$')
-        if (-not $archiveMatch.Success) {
-            Fail-Smoke "release archive name does not expose its version: $($archives[0].Name)"
-        }
-        $version = $archiveMatch.Groups[1].Value
-        $checksumSource = Join-Path $checkoutPath "dist\you_${version}_checksums.txt"
-        $installerSource = Join-Path $checkoutPath "scripts\install.ps1"
-        foreach ($source in @($archives[0].FullName, $checksumSource, $installerSource)) {
-            [void](Assert-SmokeRegularFile "candidate artifact" $source)
-            Copy-Item -LiteralPath $source -Destination $outputDirectory
-        }
-        $archivePath = Join-Path $outputDirectory $archives[0].Name
-        $checksumPath = Join-Path $outputDirectory ([System.IO.Path]::GetFileName($checksumSource))
-        $installerPath = Join-Path $outputDirectory "install.ps1"
+        $promotedArtifacts = Promote-SmokeCandidateArtifacts `
+            -DistDirectory (Join-Path $checkoutPath "dist") `
+            -InstallerSourcePath (Join-Path $checkoutPath "scripts\install.ps1") `
+            -OutputDirectory $outputDirectory
+        $version = $promotedArtifacts.version
+        $archivePath = $promotedArtifacts.windowsAmd64Path
+        $checksumPath = $promotedArtifacts.checksumPath
+        $installerPath = $promotedArtifacts.installerPath
+        $report.artifacts = @($promotedArtifacts.artifacts)
         [void][System.IO.Directory]::CreateDirectory($extractPath)
         Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
         $archiveExecutablePath = Join-Path $extractPath "you.exe"
@@ -1416,12 +1520,7 @@ function Invoke-LocalCandidateSmoke {
             $archiveExecutableEvidence.sha256 -cne $retainedExecutableEvidence.sha256) {
             Fail-Smoke "retained executable does not match the archive member"
         }
-        $report.artifacts = @(
-            Get-SmokeFileEvidence "windows-amd64-archive" $archivePath
-            Get-SmokeFileEvidence "checksums" $checksumPath
-            Get-SmokeFileEvidence "windows-installer" $installerPath
-            $retainedExecutableEvidence
-        )
+        $report.artifacts = @($report.artifacts + $retainedExecutableEvidence)
         $installArguments = @{
             CandidateDirectory = $outputDirectory
             ArchivePath = $archivePath
