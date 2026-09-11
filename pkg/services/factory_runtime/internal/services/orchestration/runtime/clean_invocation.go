@@ -267,6 +267,7 @@ func validateRestoredWorkState(
 	placements map[string]string,
 	resourcePlaceIDs map[string]struct{},
 	toleratedWorkIDs map[string]struct{},
+	authoritativePlacements map[string]string,
 ) error {
 	if restored == nil || net == nil {
 		return nil
@@ -277,7 +278,7 @@ func validateRestoredWorkState(
 	if err := validateRestoredDispatchWorkReferences(restored, items); err != nil {
 		return err
 	}
-	occupiedWorkIDs, err := validateRestoredOccupancy(restored, net, items, resourcePlaceIDs)
+	occupiedWorkIDs, err := validateRestoredOccupancy(restored, net, items, resourcePlaceIDs, authoritativePlacements)
 	if err != nil {
 		return err
 	}
@@ -295,8 +296,10 @@ func validateRestoredOccupancy(
 	net *state.Net,
 	items map[string]work.FactoryWorkItem,
 	resourcePlaceIDs map[string]struct{},
+	authoritativePlacements map[string]string,
 ) (map[string]string, error) {
 	occupiedWorkIDs := make(map[string]string, len(restored.PlaceOccupancyByID))
+	seenWorkIDs := make(map[string]string, len(restored.PlaceOccupancyByID))
 	for placeKey, entry := range restored.PlaceOccupancyByID {
 		placeID := strings.TrimSpace(placeKey)
 		if placeID == "" {
@@ -338,13 +341,17 @@ func validateRestoredOccupancy(
 					workID,
 				)
 			}
-			if previousPlace, exists := occupiedWorkIDs[workID]; exists {
+			if previousPlace, exists := seenWorkIDs[workID]; exists {
 				return nil, fmt.Errorf(
 					"restore Work board: Work %q is occupied at both %q and %q",
 					workID,
 					previousPlace,
 					placeID,
 				)
+			}
+			seenWorkIDs[workID] = placeID
+			if _, overridden := authoritativePlacements[workID]; overridden {
+				continue
 			}
 			occupiedWorkIDs[workID] = placeID
 			if err := validateRestoredWorkItemPlacement(workID, item, place); err != nil {
@@ -651,12 +658,13 @@ func hasRestoredWorkItem(items map[string]work.FactoryWorkItem, workID string) b
 func restoredWorkPlacements(
 	restored *interfaces.FactoryWorldState,
 	items map[string]work.FactoryWorkItem,
+	authoritativePlacements map[string]string,
 ) (map[string]string, error) {
-	placements := make(map[string]string)
+	placements := cloneRestoredPlacements(authoritativePlacements)
 	if restored == nil {
 		return placements, nil
 	}
-	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID); err != nil {
+	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID, authoritativePlacements); err != nil {
 		return nil, err
 	}
 	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches); err != nil {
@@ -826,6 +834,15 @@ func restoredWorkToken(
 	relations []work.FactoryRelation,
 	now time.Time,
 ) *factorytoken.Token {
+	parentID := item.ParentID
+	if parentID == "" {
+		for _, relation := range relations {
+			if relation.Type == string(work.WorkRelationParentChild) && relation.TargetWorkID != "" {
+				parentID = relation.TargetWorkID
+				break
+			}
+		}
+	}
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID
@@ -847,7 +864,7 @@ func restoredWorkToken(
 			CurrentChainingTraceID:   currentChainingTraceID,
 			PreviousChainingTraceIDs: work.CanonicalChainingTraceIDs(item.PreviousChainingTraceIDs),
 			TraceID:                  item.TraceID,
-			ParentID:                 item.ParentID,
+			ParentID:                 parentID,
 			Tags:                     work.CloneTags(item.Tags),
 			Relations:                restoredWorkRelations(relations),
 			Content:                  work.CloneWorkContentParts(item.Content),

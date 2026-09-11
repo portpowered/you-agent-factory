@@ -227,7 +227,8 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
 	}
-	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
+	historicalWorkIDs := restoredHistoricalWorkIDs(cfg)
+	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs, historicalWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	if !cfg.skipRestoredDispatchReconciliation {
@@ -294,6 +295,7 @@ func New(
 		impl.observePostResumeBufferedDrain,
 		seededRestoredWorkIDs,
 		seededReplayWorkIDsWithRecordedDispatch,
+		historicalWorkIDs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
@@ -310,8 +312,8 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	return scheduler.NewWorkInQueueScheduler(50, cfg.runtimeConfig)
 }
 
-func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator, seededRestoredWorkIDs map[string]struct{}) (*token_transformer.Transformer, []subsystems.Subsystem) {
-	workIDGen := petri.NewWorkIDGenerator()
+func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator, seededRestoredWorkIDs map[string]struct{}, historicalWorkIDs map[string]struct{}) (*token_transformer.Transformer, []subsystems.Subsystem) {
+	workIDGen := petri.NewWorkIDGenerator(sortedStringKeys(historicalWorkIDs)...)
 	var replayIDs factory.ReplayDispatchIDResolver
 	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
 		replayIDs = resolver

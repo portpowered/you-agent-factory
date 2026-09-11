@@ -72,6 +72,7 @@ type SameNameGuard struct {
 }
 
 var _ Guard = (*SameNameGuard)(nil)
+var _ RuntimeGuard = (*SameNameGuard)(nil)
 
 // Evaluate returns all candidates whose authored name equals the bound token's
 // authored name. The guard fails when the binding is missing or either side has
@@ -93,6 +94,112 @@ func (g *SameNameGuard) Evaluate(candidates []factorytoken.Token, bindings map[s
 	}
 
 	return matched, len(matched) > 0
+}
+
+// EvaluateRuntime preserves ordinary same-name matching unless the bound
+// input and at least one candidate prove a parent-child join. For that
+// customer-facing join, the ordered registration projection is the only
+// authority for choosing the current child; incomplete or contradictory
+// registration facts fail closed.
+func (g *SameNameGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	matched, ok := g.Evaluate(candidates, bindings, marking)
+	if !ok {
+		return nil, false
+	}
+
+	bound := bindings[g.MatchBinding]
+	if bound == nil || bound.Color.WorkID == "" {
+		return matched, true
+	}
+
+	parentWorkID := bound.Color.WorkID
+	parentBoundMatches := matchingParentChildren(matched, parentWorkID, "")
+	if len(parentBoundMatches) == 0 {
+		// Same-name joins that do not prove a parent-child population retain the
+		// historical equality behavior and do not depend on runtime history.
+		return matched, true
+	}
+
+	return selectCurrentRegisteredSameNameChild(ctx, parentWorkID, bound.Color.Name, matched, marking)
+}
+
+func selectCurrentRegisteredSameNameChild(
+	ctx RuntimeGuardContext,
+	parentWorkID string,
+	parentName string,
+	candidates []factorytoken.Token,
+	marking *MarkingSnapshot,
+) ([]factorytoken.Token, bool) {
+	registration, registered, ok := completeRegisteredParentChildren(ctx, parentWorkID, marking)
+	if !ok {
+		return nil, false
+	}
+
+	for index := len(registration.Children) - 1; index >= 0; index-- {
+		child := registration.Children[index]
+		if child.Color.ParentID != parentWorkID || child.Color.Name != parentName {
+			continue
+		}
+		identity := tokenIdentity(child)
+		if _, visible := registered[identity]; !visible {
+			return nil, false
+		}
+		if candidate, visible := candidateWithIdentity(candidates, parentWorkID, identity); visible {
+			return []factorytoken.Token{candidate}, true
+		}
+		return nil, false
+	}
+
+	// A parent-bound same-name candidate exists, but the complete canonical
+	// registration has no matching child. Do not fall back to token ordering,
+	// timestamps, payload values, or any other non-canonical signal.
+	return nil, false
+}
+
+func completeRegisteredParentChildren(ctx RuntimeGuardContext, parentWorkID string, marking *MarkingSnapshot) (ParentChildRegistrationSet, map[string]factorytoken.Token, bool) {
+	registration, known := ctx.ParentChildRegistrations[parentWorkID]
+	if !known || !registration.Complete || len(registration.Children) == 0 {
+		return ParentChildRegistrationSet{}, nil, false
+	}
+	registeredIDs := tokenIdentitySet(registration.Children)
+	if len(registeredIDs) != len(registration.Children) || !registeredChildrenBelongToParent(registration.Children, parentWorkID) {
+		return ParentChildRegistrationSet{}, nil, false
+	}
+	registered := parentChildTokens(marking, ctx.ActiveDispatches, parentWorkID, "")
+	if !hasExactlyRegisteredChildren(registered, registeredIDs) {
+		return ParentChildRegistrationSet{}, nil, false
+	}
+	return registration, registered, true
+}
+
+func registeredChildrenBelongToParent(children []factorytoken.Token, parentWorkID string) bool {
+	for _, child := range children {
+		if !isRegisteredChild(child, parentWorkID, "") {
+			return false
+		}
+	}
+	return true
+}
+
+func hasExactlyRegisteredChildren(registered map[string]factorytoken.Token, registeredIDs map[string]bool) bool {
+	if len(registered) != len(registeredIDs) {
+		return false
+	}
+	for identity := range registered {
+		if !registeredIDs[identity] {
+			return false
+		}
+	}
+	return true
+}
+
+func candidateWithIdentity(candidates []factorytoken.Token, parentWorkID, identity string) (factorytoken.Token, bool) {
+	for _, candidate := range candidates {
+		if candidate.Color.ParentID == parentWorkID && tokenIdentity(candidate) == identity {
+			return candidate, true
+		}
+	}
+	return factorytoken.Token{}, false
 }
 
 // SameTraceIDGuard matches candidate tokens whose canonical trace identity

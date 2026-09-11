@@ -102,23 +102,87 @@ func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 }
 
 func TestReconstructRestoredWorldStateUsesSuccessorTickAfterDispatchInterruption(t *testing.T) {
+	restartSource := "daemon-restart"
 	events := []interfaces.FactoryEvent{
 		{Context: interfaces.FactoryEventContext{Tick: 5}},
-		{Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 5, Source: &restartSource}},
 		{Type: interfaces.FactoryEventTypeDispatchRequest, Context: interfaces.FactoryEventContext{Tick: 1}},
 		{Type: interfaces.FactoryEventTypeRunResponse, Context: interfaces.FactoryEventContext{Tick: 4}},
 	}
-	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 4}}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 9}}
 
-	state, err := reconstructRestoredWorldState(opening, events)
+	state, err := reconstructRestoredWorldStateForResume(opening, events)
 	if err != nil {
 		t.Fatalf("reconstructRestoredWorldState: %v", err)
 	}
-	if state == nil || state.Tick != 4 {
-		t.Fatalf("restored state = %#v, want successor tick 4", state)
+	if state == nil || state.Tick != 9 {
+		t.Fatalf("restored state = %#v, want normalized successor tick 9", state)
 	}
-	if opening.tick != 4 {
-		t.Fatalf("selected reconstruction tick = %d, want successor tick 4", opening.tick)
+	if opening.tick != 9 {
+		t.Fatalf("selected reconstruction tick = %d, want normalized successor tick 9", opening.tick)
+	}
+	wantTicks := []int{5, 5, 6, 9}
+	for index, want := range wantTicks {
+		if opening.events[index].Context.Tick != want {
+			t.Fatalf("reconstruction event %d tick = %d, want %d", index, opening.events[index].Context.Tick, want)
+		}
+		if events[index].Context.Tick != []int{5, 5, 1, 4}[index] {
+			t.Fatalf("source event %d was mutated to tick %d", index, events[index].Context.Tick)
+		}
+	}
+}
+
+func TestNormalizeRestoredEventTicksPreservesMultipleCanonicalRestartGenerations(t *testing.T) {
+	restartSource := "daemon-restart"
+	events := []interfaces.FactoryEvent{
+		{Id: "first", Context: interfaces.FactoryEventContext{Tick: 10, Sequence: 1}},
+		{Id: "first-stop", Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 12, Sequence: 2, Source: &restartSource}},
+		{Id: "second", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 3}},
+		{Id: "second-stop", Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 4, Source: &restartSource}},
+		{Id: "third", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 5}},
+	}
+	normalized := normalizeRestoredEventTicks(events)
+	wantTicks := []int{10, 12, 13, 16, 17}
+	for index, want := range wantTicks {
+		if normalized[index].Context.Tick != want || normalized[index].Id != events[index].Id ||
+			normalized[index].Context.Sequence != events[index].Context.Sequence {
+			t.Fatalf("normalized event %d = %#v, want tick %d with identity and sequence preserved", index, normalized[index], want)
+		}
+	}
+	if events[2].Context.Tick != 1 || events[4].Context.Tick != 1 {
+		t.Fatalf("source events were mutated: %#v", events)
+	}
+}
+
+func TestNormalizeRestoredEventTicksDoesNotTreatOrdinaryInterruptionAsRestartBoundary(t *testing.T) {
+	operatorSource := "operator"
+	events := []interfaces.FactoryEvent{
+		{Id: "running", Context: interfaces.FactoryEventContext{Tick: 12}},
+		{Id: "stopped", Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 12, Source: &operatorSource}},
+		{Id: "late-response", Context: interfaces.FactoryEventContext{Tick: 4}},
+	}
+	normalized := normalizeRestoredEventTicks(events)
+	if &normalized[0] != &events[0] || normalized[2].Context.Tick != 4 {
+		t.Fatalf("ordinary interruption changed historical tick ordering: %#v", normalized)
+	}
+}
+
+func TestNormalizeRestoredEventTicksLeavesOrdinarySelectedTickHistoryUnchanged(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Id: "later", Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Id: "earlier", Context: interfaces.FactoryEventContext{Tick: 2}},
+	}
+	if normalized := normalizeRestoredEventTicks(events); &normalized[0] != &events[0] {
+		t.Fatal("ordinary historical projection was detached or normalized without a proven restart boundary")
+	}
+}
+
+func TestNormalizeRestoredEventTicksLeavesEmptyHistoryUnchanged(t *testing.T) {
+	if normalized := normalizeRestoredEventTicks(nil); normalized != nil {
+		t.Fatalf("normalized empty history = %#v, want nil", normalized)
+	}
+	if successorRecordingRestartsLogicalClock(nil) {
+		t.Fatal("empty history cannot prove a successor logical-clock restart")
 	}
 }
 
@@ -137,7 +201,7 @@ func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
 		t.Fatalf("restoredEventsForOpening(resume) error = %v", err)
 	}
 	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 9}}
-	state, err := reconstructRestoredWorldState(opening, selected)
+	state, err := reconstructRestoredWorldStateForResume(opening, selected)
 	if err != nil {
 		t.Fatalf("reconstructRestoredWorldState(resume) error = %v", err)
 	}

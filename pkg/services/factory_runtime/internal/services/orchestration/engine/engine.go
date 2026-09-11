@@ -38,6 +38,7 @@ type FactoryEngine struct {
 	submissionHooks       []factory.SubmissionHook
 	seededRestoredWorkIDs map[string]struct{}
 	replayDispatchWorkIDs map[string]struct{}
+	historicalWorkIDs     map[string]struct{}
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -99,6 +100,7 @@ func NewFactoryEngine(
 	onResultBufferDrained func(int),
 	seededRestoredWorkIDs map[string]struct{},
 	seededReplayWorkIDsWithRecordedDispatch map[string]struct{},
+	historicalWorkIDs map[string]struct{},
 ) (*FactoryEngine, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime engine clock is required")
@@ -136,6 +138,7 @@ func NewFactoryEngine(
 		submissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
 		seededRestoredWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 		replayDispatchWorkIDs: cloneWorkIDSet(seededReplayWorkIDsWithRecordedDispatch),
+		historicalWorkIDs:     cloneWorkIDSet(historicalWorkIDs),
 		submissionState:       make(map[string]map[string]string),
 		workRequests:          make(map[string]workdomain.WorkRequestSubmitResult),
 		projectionWaiters:     make(map[string]chan struct{}),
@@ -324,6 +327,7 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 		return workdomain.WorkRequestSubmitResultFromNormalized(requestID, work, false), nil
 	}
 	e.workRequests[requestID] = result
+	e.reserveHistoricalSubmissions(work)
 	e.submissionHook.enqueue(work)
 	awaitProjection := e.shouldAwaitObservableProjection()
 	var projectionWait <-chan struct{}
@@ -349,11 +353,16 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 }
 
 func (e *FactoryEngine) conflictingMaterializedWorkID(work []workdomain.SubmitRequest) string {
+	seen := make(map[string]struct{}, len(work))
 	for _, req := range work {
 		if req.WorkID == "" {
 			continue
 		}
-		if e.visibleWorkIDAlreadyMaterialized(req.WorkID) {
+		if _, duplicate := seen[req.WorkID]; duplicate {
+			return req.WorkID
+		}
+		seen[req.WorkID] = struct{}{}
+		if _, historical := e.historicalWorkIDs[req.WorkID]; historical || e.visibleWorkIDAlreadyMaterialized(req.WorkID) {
 			return req.WorkID
 		}
 	}
@@ -737,6 +746,7 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 		if err := applyMutations(e.runtimeState.Marking, e.state.Places, result.Mutations, e.clock.Now()); err != nil {
 			return snapshot, mutated, fmt.Errorf("applying mutations from tick-group %d: %w", tickGroup, err)
 		}
+		e.reserveHistoricalMutations(result.Mutations)
 		snapshot = e.runtimeState.Snapshot()
 		mutated = true
 	}

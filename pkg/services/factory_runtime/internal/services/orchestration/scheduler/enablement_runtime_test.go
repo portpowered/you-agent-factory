@@ -12,6 +12,435 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
+func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameNameGuardNet()
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Name: "alpha"}},
+	})
+
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+		t.Fatalf("enabled transitions without a registered parent = %d, want 0", len(enabled))
+	}
+}
+
+func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameNameGuardNet()
+	parentA := &factorytoken.Token{ID: "a-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
+	parentB := &factorytoken.Token{ID: "b-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
+	current := &factorytoken.Token{ID: "current-child", PlaceID: "task:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "cycle-current", ParentID: "project-work"}}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parentA.ID: parentA,
+		parentB.ID: parentB,
+		current.ID: current,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"project-work": {Children: []factorytoken.Token{*current}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions with duplicate registered parents = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != current.ID {
+		t.Fatalf("task binding tokens = %v, want [%s]", got, current.ID)
+	}
+}
+
+func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameNameGuardNet()
+	historical := &factorytoken.Token{
+		ID:      "a-token-history",
+		PlaceID: "task:ready",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "cycle-44",
+			WorkTypeID: "project-cycle",
+			ParentID:   "project-work",
+		},
+	}
+	current := *historical
+	current.ID = "z-token-current"
+	current.Color.WorkID = "cycle-93"
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"project-token": {
+			ID:      "project-token",
+			PlaceID: "plan:ready",
+			Color: factorytoken.Color{
+				Name:       "resume-project",
+				WorkID:     "project-work",
+				WorkTypeID: "project",
+			},
+		},
+		historical.ID: historical,
+		current.ID:    &current,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != current.ID {
+		t.Fatalf("current cycle binding = %v, want [%s] despite token ID ordering", got, current.ID)
+	}
+}
+
+func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"project:waiting":       {ID: "project:waiting"},
+			"project-cycle:blocked": {ID: "project-cycle:blocked"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"block-project": {
+				ID:   "block-project",
+				Name: "block-project",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "project-in",
+						Name:        "project",
+						PlaceID:     "project:waiting",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameNameGuard{MatchBinding: "project-cycle"},
+					},
+					{
+						ID:          "cycle-in",
+						Name:        "project-cycle",
+						PlaceID:     "project-cycle:blocked",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					},
+				},
+			},
+		},
+	}
+	historical := &factorytoken.Token{
+		ID:      "a-token-history",
+		PlaceID: "project-cycle:blocked",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "cycle-44",
+			WorkTypeID: "project-cycle",
+			ParentID:   "project-work",
+		},
+	}
+	current := *historical
+	current.ID = "z-token-current"
+	current.Color.WorkID = "cycle-93"
+	parent := &factorytoken.Token{
+		ID:      "project-token",
+		PlaceID: "project:waiting",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "project-work",
+			WorkTypeID: "project",
+		},
+	}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parent.ID:     parent,
+		historical.ID: historical,
+		current.ID:    &current,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["project-cycle"]); strings.Join(got, ",") != current.ID {
+		t.Fatalf("current cycle binding = %v, want [%s] despite parent guard orientation", got, current.ID)
+	}
+}
+
+func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"project:waiting":       {ID: "project:waiting"},
+			"project-cycle:blocked": {ID: "project-cycle:blocked"},
+			"project-cycle:init":    {ID: "project-cycle:init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"block-project": {
+				ID:   "block-project",
+				Name: "block-project",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "project-in",
+						Name:        "project",
+						PlaceID:     "project:waiting",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameNameGuard{MatchBinding: "project-cycle"},
+					},
+					{
+						ID:          "cycle-in",
+						Name:        "project-cycle",
+						PlaceID:     "project-cycle:blocked",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					},
+				},
+			},
+		},
+	}
+	historical := &factorytoken.Token{
+		ID:      "a-token-history",
+		PlaceID: "project-cycle:blocked",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "cycle-44",
+			WorkTypeID: "project-cycle",
+			ParentID:   "project-work",
+		},
+	}
+	current := *historical
+	current.ID = "z-token-current"
+	current.PlaceID = "project-cycle:init"
+	current.Color.WorkID = "cycle-93"
+	parent := &factorytoken.Token{
+		ID:      "project-token",
+		PlaceID: "project:waiting",
+		Color: factorytoken.Color{
+			Name:       "resume-project",
+			WorkID:     "project-work",
+			WorkTypeID: "project",
+		},
+	}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parent.ID:     parent,
+		historical.ID: historical,
+		current.ID:    &current,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
+	}
+
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+		t.Fatalf("historical child enabled block-project while current child was in init: %#v", enabled)
+	}
+}
+
+func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistration(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		complete      bool
+		contradictory bool
+	}{
+		{name: "incomplete registration"},
+		{name: "contradictory registration", complete: true, contradictory: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			eval := NewEnablementEvaluator(nil, testNow, nil)
+			n := sameNameGuardNet()
+			transition := n.Transitions["match-items"]
+			transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
+			transition.InputArcs[1].Guard = nil
+
+			parent := &factorytoken.Token{
+				ID:      "project-token",
+				PlaceID: "plan:ready",
+				Color: factorytoken.Color{
+					Name:   "resume-project",
+					WorkID: "project-work",
+				},
+			}
+			historical := &factorytoken.Token{
+				ID:      "a-token-history",
+				PlaceID: "task:ready",
+				Color: factorytoken.Color{
+					Name:     "resume-project",
+					WorkID:   "cycle-44",
+					ParentID: "project-work",
+				},
+			}
+			current := *historical
+			current.ID = "z-token-current"
+			current.Color.WorkID = "cycle-93"
+
+			registeredCurrent := current
+			if test.contradictory {
+				registeredCurrent.Color.ParentID = "other-parent"
+			}
+			marking := makeTestSnapshot(map[string]*factorytoken.Token{
+				parent.ID:     parent,
+				historical.ID: historical,
+				current.ID:    &current,
+			})
+			marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+				"project-work": {
+					Children: []factorytoken.Token{*historical, registeredCurrent},
+					Complete: test.complete,
+				},
+			}
+
+			if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+				t.Fatalf("invalid registration enabled historical same-name transition: %#v", enabled)
+			}
+		})
+	}
+}
+
+func TestSameNameMatchBinding_HandlesNestedAndMalformedGuards(t *testing.T) {
+	valid := &petri.SameNameGuard{MatchBinding: "parent"}
+	nested := &petri.AllGuard{Guards: []petri.Guard{&petri.DependencyGuard{}, valid}}
+	var typedNil *petri.SameNameGuard
+	var nilAll *petri.AllGuard
+	tests := []struct {
+		name  string
+		guard petri.Guard
+		want  string
+		ok    bool
+	}{
+		{name: "nil", guard: nil},
+		{name: "typed nil same-name", guard: typedNil},
+		{name: "empty same-name", guard: &petri.SameNameGuard{}},
+		{name: "valid", guard: valid, want: "parent", ok: true},
+		{name: "nested", guard: nested, want: "parent", ok: true},
+		{name: "nil all", guard: nilAll},
+		{name: "empty all", guard: &petri.AllGuard{}},
+		{name: "unrelated", guard: &petri.DependencyGuard{}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := sameNameMatchBinding(test.guard)
+			if got != test.want || ok != test.ok {
+				t.Fatalf("sameNameMatchBinding(%#v) = %q, %v; want %q, %v", test.guard, got, ok, test.want, test.ok)
+			}
+		})
+	}
+}
+
+func TestSingleTokenBindingSearch_SameNamePeerCandidatesRequireRuntimeContext(t *testing.T) {
+	var search *singleTokenBindingSearch
+	if matched, handled := search.sameNamePeerCandidates(nil, nil); handled || matched != nil {
+		t.Fatalf("nil binding search result = %#v, %v; want nil, false", matched, handled)
+	}
+
+	search = &singleTokenBindingSearch{}
+	if matched, handled := search.sameNamePeerCandidates(nil, nil); handled || matched != nil {
+		t.Fatalf("incomplete binding search result = %#v, %v; want nil, false", matched, handled)
+	}
+}
+
+func TestGuardRequiresPeerBinding_ClassifiesGuardShapes(t *testing.T) {
+	tests := []struct {
+		name  string
+		guard petri.Guard
+		want  bool
+	}{
+		{name: "nil"},
+		{name: "same name", guard: &petri.SameNameGuard{}, want: true},
+		{name: "same trace", guard: &petri.SameTraceIDGuard{}, want: true},
+		{name: "matches fields without binding", guard: &petri.MatchesFieldsGuard{InputKey: "work_id"}},
+		{name: "matches fields with binding", guard: &petri.MatchesFieldsGuard{InputKey: "work_id", MatchBinding: "parent"}, want: true},
+		{name: "nested peer", guard: &petri.AllGuard{Guards: []petri.Guard{&petri.DependencyGuard{}, &petri.SameNameGuard{}}}, want: true},
+		{name: "nested ordinary", guard: &petri.AllGuard{Guards: []petri.Guard{&petri.DependencyGuard{}}}},
+		{name: "ordinary", guard: &petri.DependencyGuard{}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := guardRequiresPeerBinding(test.guard); got != test.want {
+				t.Fatalf("guardRequiresPeerBinding(%T) = %v, want %v", test.guard, got, test.want)
+			}
+		})
+	}
+}
+
+func TestApplyCardinality_SelectsSupportedModes(t *testing.T) {
+	tokens := []factorytoken.Token{{ID: "one"}, {ID: "two"}}
+	tests := []struct {
+		name    string
+		input   []factorytoken.Token
+		card    petri.ArcCardinality
+		wantLen int
+		wantNil bool
+	}{
+		{name: "one insufficient", card: petri.ArcCardinality{Mode: petri.CardinalityOne}, wantNil: true},
+		{name: "one", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityOne}, wantLen: 1},
+		{name: "all insufficient", card: petri.ArcCardinality{Mode: petri.CardinalityAll}, wantNil: true},
+		{name: "all", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityAll}, wantLen: 2},
+		{name: "n insufficient", input: tokens[:1], card: petri.ArcCardinality{Mode: petri.CardinalityN, Count: 2}, wantNil: true},
+		{name: "n", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityN, Count: 2}, wantLen: 2},
+		{name: "all terminal insufficient", card: petri.ArcCardinality{Mode: petri.CardinalityAllTerminal}, wantNil: true},
+		{name: "all terminal", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityAllTerminal}, wantLen: 2},
+		{name: "zero or more nil", input: nil, card: petri.ArcCardinality{Mode: petri.CardinalityZeroOrMore}, wantLen: 0},
+		{name: "zero or more", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityZeroOrMore}, wantLen: 2},
+		{name: "unknown", input: tokens, card: petri.ArcCardinality{Mode: petri.CardinalityMode(99)}, wantNil: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := ApplyCardinality(test.input, test.card)
+			if (got == nil) != test.wantNil {
+				t.Fatalf("ApplyCardinality() nil = %v, want %v; got %#v", got == nil, test.wantNil, got)
+			}
+			if len(got) != test.wantLen {
+				t.Fatalf("ApplyCardinality() len = %d, want %d", len(got), test.wantLen)
+			}
+		})
+	}
+}
+
+func TestTransitionWorkerTypes_UsesCurrentOrTopologyWorkers(t *testing.T) {
+	current := &petri.Transition{ID: "current", WorkerType: "agent"}
+	if got := transitionWorkerTypes(nil, current); got[current.ID] != current.WorkerType {
+		t.Fatalf("current worker types = %#v, want current worker", got)
+	}
+	if got := transitionWorkerTypes(&state.Net{}, current); got[current.ID] != current.WorkerType {
+		t.Fatalf("empty topology worker types = %#v, want current worker", got)
+	}
+	if got := transitionWorkerTypes(nil, nil); got != nil {
+		t.Fatalf("missing current worker types = %#v, want nil", got)
+	}
+
+	topology := &state.Net{Transitions: map[string]*petri.Transition{
+		"nil":   nil,
+		"empty": {ID: "empty"},
+		"agent": {ID: "agent", WorkerType: "agent"},
+	}}
+	got := transitionWorkerTypes(topology, current)
+	if len(got) != 1 || got["agent"] != "agent" {
+		t.Fatalf("topology worker types = %#v, want only agent", got)
+	}
+}
+
+func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"resource": {ID: "resource", PlaceID: "resource:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+	})
+	if _, ok := repeatedBindingTokensForArc(&petri.Arc{PlaceID: "missing"}, &marking); ok {
+		t.Fatal("empty repeated-binding place unexpectedly matched")
+	}
+	if _, ok := repeatedBindingTokensForArc(&petri.Arc{PlaceID: "resource:available", Guard: &petri.MatchColorGuard{Field: "work_id"}}, &marking); ok {
+		t.Fatal("unsupported repeated-binding guard unexpectedly matched")
+	}
+	if _, _, _, _, ok := repeatedBindingTokensForInput(&petri.Arc{Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}}, &marking, 0); ok {
+		t.Fatal("non-single repeated-binding cardinality unexpectedly matched")
+	}
+	if got := ExpandRepeatedBindings(nil, &marking, nil); got != nil {
+		t.Fatalf("nil topology expansion = %#v, want nil", got)
+	}
+	base := []interfaces.EnabledTransition{{TransitionID: "unknown"}}
+	if got := ExpandRepeatedBindings(&state.Net{Transitions: map[string]*petri.Transition{}}, &marking, base); len(got) != 1 || got[0].TransitionID != "unknown" {
+		t.Fatalf("unknown transition expansion = %#v, want base", got)
+	}
+	if got := runtimeTokens(nil); got != nil {
+		t.Fatalf("runtimeTokens(nil) = %#v, want nil", got)
+	}
+	if got := arcKey(&petri.Arc{ID: "fallback"}); got != "fallback" {
+		t.Fatalf("arcKey without name = %q, want fallback", got)
+	}
+}
+
 func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 	ctx, cancel := context.WithCancel(context.Background())

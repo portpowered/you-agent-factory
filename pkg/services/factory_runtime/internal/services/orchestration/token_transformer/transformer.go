@@ -523,6 +523,15 @@ func (t *Transformer) nextWorkID(workTypeID string) string {
 	panic("Factory Runtime Work ID generator is required")
 }
 
+// ReserveWorkIDs advances the shared output identity sequence beyond admitted
+// explicit Work IDs before any later transition can generate an output ID.
+func (t *Transformer) ReserveWorkIDs(workIDs ...string) {
+	if t.workIDGen == nil {
+		panic("Factory Runtime Work ID generator is required")
+	}
+	t.workIDGen.Reserve(workIDs...)
+}
+
 func findMatchingInput(inputs []factorytoken.Color, targetTypeID string) *factorytoken.Color {
 	for i := range inputs {
 		if inputs[i].WorkTypeID == targetTypeID {

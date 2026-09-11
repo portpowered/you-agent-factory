@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -280,23 +281,267 @@ func TestNew_RejectsConflictingCompletedDispatchPlaces(t *testing.T) {
 }
 
 func TestNew_RejectsConflictingCurrentWorkPlacements(t *testing.T) {
-	workItem := work.FactoryWorkItem{ID: "work-conflicting-current-places", WorkTypeID: "task"}
+	workItem := work.FactoryWorkItem{ID: "work-conflicting-current-places", WorkTypeID: "task", State: "init"}
 	restored := &interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{workItem.ID: workItem},
 		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
 			"task:init": {PlaceID: "task:init", WorkItemIDs: []string{workItem.ID}},
-		},
-		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
-			workItem.ID: {{
-				WorkID: workItem.ID, WorkTypeName: "task", ToState: "done",
-				FromPlaceID: "task:init", ToPlaceID: "task:done", Source: work.WorkStateChangeSourceAPI,
-			}},
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{workItem.ID}},
 		},
 	}
 	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
 	if err == nil || !strings.Contains(err.Error(), "conflicting current places") {
-		t.Fatalf("New error = %v, want fail-closed conflicting-current-places error", err)
+		t.Fatalf("New error = %v, want fail-closed simultaneous-occupancy error", err)
 	}
+}
+
+func TestNew_CurrentOccupancySupersedesStaleOperatorMove(t *testing.T) {
+	workItem := work.FactoryWorkItem{ID: "work-after-operator-move", WorkTypeID: "task", State: "done"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{workItem.ID: workItem},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{workItem.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			workItem.ID: {{
+				WorkID: workItem.ID, WorkTypeName: "task", FromState: "failed", ToState: "init",
+				FromPlaceID: "task:failed", ToPlaceID: "task:init", Source: work.WorkStateChangeSourceAPI,
+				Sequence: 2,
+			}},
+		},
+	}
+	f, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, workItem.ID, "task:done") {
+		t.Fatalf("restored Work marking = %#v, want current task:done occupancy", snapshot.Marking.PlaceTokens)
+	}
+}
+
+func TestNew_DoesNotResurrectConsumedHistoricalActiveWork(t *testing.T) {
+	for _, outcome := range []workerexecution.WorkOutcome{
+		workerexecution.OutcomeAccepted,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeContinue,
+	} {
+		t.Run(string(outcome), func(t *testing.T) {
+			consumed := work.FactoryWorkItem{ID: "work-consumed", WorkTypeID: "task", State: "init"}
+			restored := &interfaces.FactoryWorldState{
+				WorkItemsByID:       map[string]work.FactoryWorkItem{consumed.ID: consumed},
+				ActiveWorkItemsByID: map[string]work.FactoryWorkItem{consumed.ID: consumed},
+				PlaceOccupancyByID:  map[string]interfaces.FactoryPlaceOccupancy{},
+				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: "dispatch-consumed", TransitionID: "t-process", WorkItemIDs: []string{consumed.ID},
+					Result: interfaces.WorkstationResult{Outcome: string(outcome)},
+				}},
+			}
+			f, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			snapshot, err := f.GetEngineStateSnapshot(context.Background())
+			if err != nil {
+				t.Fatalf("GetEngineStateSnapshot: %v", err)
+			}
+			for _, token := range snapshot.Marking.Tokens {
+				if token != nil && token.Color.WorkID == consumed.ID {
+					t.Fatalf("consumed historical Work was resurrected at %q", token.PlaceID)
+				}
+			}
+		})
+	}
+}
+
+func TestRestoredWorkWasConsumedUsesLatestCompletionAcrossReusedHistoricalID(t *testing.T) {
+	workID := "work-review-reused"
+	oldTerminal := work.FactoryWorkItem{ID: workID, WorkTypeID: "review", State: "complete"}
+	current := work.FactoryWorkItem{ID: workID, WorkTypeID: "review", State: "init"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID:       map[string]work.FactoryWorkItem{workID: current},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{workID: current},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			workID: {WorkItem: oldTerminal, Status: "TERMINAL"},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+			{
+				DispatchID: "dispatch-old-terminal", TransitionID: "t-process", WorkItemIDs: []string{workID},
+				OutputWorkItems: []work.FactoryWorkItem{oldTerminal},
+				TerminalWork:    &interfaces.FactoryTerminalWork{WorkItem: oldTerminal, Status: "TERMINAL"},
+				Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+			},
+			{
+				DispatchID: "dispatch-current-consumed", TransitionID: "t-process", WorkItemIDs: []string{workID},
+				Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeRejected)},
+			},
+		},
+	}
+	if !restoredWorkWasConsumed(restored, workID) {
+		t.Fatal("latest consumed identity epoch was hidden by stale terminal history")
+	}
+}
+
+func TestRestoredWorkWasConsumedRequiresConclusiveLatestCompletion(t *testing.T) {
+	workID := "work-still-live"
+	base := &interfaces.FactoryWorldState{
+		WorkItemsByID:       map[string]work.FactoryWorkItem{workID: {ID: workID, WorkTypeID: "task", State: "init"}},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{workID: {ID: workID, WorkTypeID: "task", State: "init"}},
+		PlaceOccupancyByID:  map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+	tests := []struct {
+		name       string
+		completion interfaces.FactoryWorldDispatchCompletion
+	}{
+		{name: "no completion"},
+		{name: "failed completion", completion: interfaces.FactoryWorldDispatchCompletion{
+			DispatchID: "dispatch-failed", WorkItemIDs: []string{workID},
+			Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)},
+		}},
+		{name: "completion re-emits Work", completion: interfaces.FactoryWorldDispatchCompletion{
+			DispatchID: "dispatch-reemits", WorkItemIDs: []string{workID},
+			OutputWorkItems: []work.FactoryWorkItem{{ID: workID, WorkTypeID: "task", State: "done"}},
+			Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			restored := *base
+			if test.completion.DispatchID != "" {
+				restored.CompletedDispatches = []interfaces.FactoryWorldDispatchCompletion{test.completion}
+			}
+			if restoredWorkWasConsumed(&restored, workID) {
+				t.Fatal("inconclusive completion classified Work as consumed")
+			}
+		})
+	}
+}
+
+func TestNew_RestoresRecordedRetryExhaustionToFailed(t *testing.T) {
+	base := time.Date(2026, time.September, 10, 1, 0, 0, 0, time.UTC)
+	workItem := work.FactoryWorkItem{ID: "work-retry-exhausted", WorkTypeID: "task", State: "done"}
+	for _, maxRetries := range []int{0, 3} {
+		t.Run(fmt.Sprintf("recorded max retries %d", maxRetries), func(t *testing.T) {
+			restored := restoredRetryHistoryFixture(t, base, workItem, maxRetries)
+			f, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			snapshot, err := f.GetEngineStateSnapshot(context.Background())
+			if err != nil {
+				t.Fatalf("GetEngineStateSnapshot: %v", err)
+			}
+			if !markingContainsWorkAtPlace(&snapshot.Marking, workItem.ID, "task:failed") {
+				t.Fatalf("restored Work marking = %#v, want task:failed after recorded retry exhaustion", snapshot.Marking.PlaceTokens)
+			}
+		})
+	}
+}
+
+func TestRestoredRetryExhaustionRequiresLatestCanonicalEvidence(t *testing.T) {
+	base := time.Date(2026, time.September, 10, 1, 0, 0, 0, time.UTC)
+	workItem := work.FactoryWorkItem{ID: "work-not-exhausted", WorkTypeID: "task", State: "done"}
+	tests := []struct {
+		name       string
+		maxRetries int
+		adjust     func(*interfaces.FactoryWorldState)
+	}{
+		{
+			name:       "recorded limit not reached",
+			maxRetries: 4,
+			adjust: func(restored *interfaces.FactoryWorldState) {
+			},
+		},
+		{
+			name: "later successful dispatch resets failures",
+			adjust: func(restored *interfaces.FactoryWorldState) {
+				completion := restored.CompletedDispatches[2]
+				completion.DispatchID = "dispatch-success"
+				completion.CompletedTick++
+				completion.CompletedAt = completion.CompletedAt.Add(time.Second)
+				completion.Result.Outcome = string(workerexecution.OutcomeAccepted)
+				restored.CompletedDispatches = append(restored.CompletedDispatches, completion)
+			},
+		},
+		{
+			name: "later operator reset supersedes failures",
+			adjust: func(restored *interfaces.FactoryWorldState) {
+				restored.WorkStateChangesByWorkID[workItem.ID][0].Tick = 10
+				restored.WorkStateChangesByWorkID[workItem.ID][0].EventTime = base.Add(10 * time.Minute)
+			},
+		},
+		{
+			name: "active dispatch remains active",
+			adjust: func(restored *interfaces.FactoryWorldState) {
+				restored.ActiveDispatches = map[string]interfaces.FactoryWorldDispatch{
+					"dispatch-active": {DispatchID: "dispatch-active", TransitionID: "t-process", WorkItemIDs: []string{workItem.ID}},
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			maxRetries := test.maxRetries
+			if maxRetries == 0 {
+				maxRetries = 3
+			}
+			restored := restoredRetryHistoryFixture(t, base, workItem, maxRetries)
+			test.adjust(restored)
+			placements := restoredRetryExhaustedPlacements(restored, buildSimpleNet(), restoredWorkItems(restored))
+			if _, exhausted := placements[workItem.ID]; exhausted {
+				t.Fatalf("retry evidence classified Work as exhausted: %#v", placements)
+			}
+		})
+	}
+}
+
+func restoredRetryHistoryFixture(
+	t *testing.T,
+	base time.Time,
+	workItem work.FactoryWorkItem,
+	maxRetries int,
+) *interfaces.FactoryWorldState {
+	t.Helper()
+	factorySnapshot, err := interfaces.NewFactorySnapshot(interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{
+		ID: "t-process", Name: "Process", Limits: interfaces.WorkstationLimits{MaxRetries: maxRetries},
+	}}})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	restored := &interfaces.FactoryWorldState{
+		Factory:       factorySnapshot,
+		WorkItemsByID: map[string]work.FactoryWorkItem{workItem.ID: workItem},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:done": {PlaceID: "task:done", WorkItemIDs: []string{workItem.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			workItem.ID: {{
+				WorkID: workItem.ID, FromPlaceID: "task:failed", ToPlaceID: "task:init", Tick: 1,
+				EventTime: base, Sequence: 1,
+			}},
+		},
+		FailureDetailsByWorkID: map[string]interfaces.FactoryWorldFailureDetail{
+			workItem.ID: {DispatchID: "dispatch-failure-3", TransitionID: "t-process"},
+		},
+	}
+	for attempt := 1; attempt <= 3; attempt++ {
+		output := workItem
+		output.State = "init"
+		restored.CompletedDispatches = append(restored.CompletedDispatches, interfaces.FactoryWorldDispatchCompletion{
+			DispatchID:      fmt.Sprintf("dispatch-failure-%d", attempt),
+			TransitionID:    "t-process",
+			Workstation:     interfaces.FactoryWorkstationRef{ID: "t-process", Name: "Process"},
+			CompletedTick:   attempt + 1,
+			CompletedAt:     base.Add(time.Duration(attempt) * time.Minute),
+			Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)},
+			WorkItemIDs:     []string{workItem.ID},
+			OutputWorkItems: []work.FactoryWorkItem{output},
+		})
+	}
+	return restored
 }
 
 func TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork(t *testing.T) {

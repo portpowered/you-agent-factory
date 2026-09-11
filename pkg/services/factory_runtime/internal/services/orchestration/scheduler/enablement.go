@@ -89,8 +89,8 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		return interfaces.EnabledTransition{}, false
 	}
 
-	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
-		return et, true
+	if et, enabled, handled := e.checkSingleTokenGuardedTransition(tr, snapshot); handled {
+		return et, enabled
 	}
 
 	// Separate unguarded and guarded arcs.
@@ -162,6 +162,32 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		Bindings:     workerBindings(result),
 		ArcModes:     arcModes,
 	}, true
+}
+
+func (e *EnablementEvaluator) checkSingleTokenGuardedTransition(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) (interfaces.EnabledTransition, bool, bool) {
+	if !singleTokenGuardedTransition(tr) {
+		return interfaces.EnabledTransition{}, false, false
+	}
+	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
+		return et, true, true
+	}
+	if !shouldFailClosedSameNameJoin(tr, snapshot) {
+		return interfaces.EnabledTransition{}, false, false
+	}
+	// The backtracking evaluator is the only binding path that can honor peer
+	// guards whose authored guard lives on a different input arc. The legacy
+	// phased fallback would bind an arbitrary unguarded peer first, allowing a
+	// historical same-name child when the canonical current child is in another
+	// state. Fail closed only when the canonical registration projection proves
+	// that the current registered child is elsewhere.
+	e.logger.Debug("enablement: transition disabled",
+		"transitionID", tr.ID,
+		"transitionName", tr.Name,
+		"reason", "guard failed for registered single-token binding")
+	return interfaces.EnabledTransition{}, false, true
 }
 
 func (e *EnablementEvaluator) evaluateGuardedArc(
@@ -393,6 +419,9 @@ func guardUsesDependencyGuard(guard petri.Guard) bool {
 
 func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []factorytoken.Token) []factorytoken.Token {
 	if arc.Guard == nil {
+		if matched, handled := s.sameNamePeerCandidates(arc, candidates); handled {
+			return matched
+		}
 		return candidates
 	}
 	guardMatched, ok := s.evaluator.evaluateGuard(arc.Guard, s.runtime, candidates, s.bindings, &s.snapshot.Marking)

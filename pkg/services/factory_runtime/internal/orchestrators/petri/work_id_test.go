@@ -2,7 +2,10 @@ package petri_test
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"regexp"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -79,5 +82,74 @@ func TestWorkIDGenerator_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 	if len(seen) != goroutines*idsPerGoroutine {
 		t.Errorf("expected %d unique IDs, got %d", goroutines*idsPerGoroutine, len(seen))
+	}
+}
+
+func TestWorkIDGenerator_ReservesHistoricalSequenceAcrossWorkTypes(t *testing.T) {
+	t.Parallel()
+
+	gen := petri.NewWorkIDGenerator(
+		"work-task-3",
+		"work-review-25",
+		"batch-request-explicit",
+		"work-plan-not-a-number",
+		"work-task-0",
+	)
+
+	if got := gen.Next("plan"); got != "work-plan-26" {
+		t.Fatalf("Next() = %q, want work-plan-26", got)
+	}
+	gen.Reserve("work-task-80", "work-task-79")
+	if got := gen.Next("review"); got != "work-review-81" {
+		t.Fatalf("Next() after Reserve = %q, want work-review-81", got)
+	}
+}
+
+func TestWorkIDGenerator_ConcurrentSafetyAfterHistoricalReservation(t *testing.T) {
+	t.Parallel()
+
+	gen := petri.NewWorkIDGenerator("work-failed-500", "work-consumed-750")
+	const goroutines = 10
+	const idsPerGoroutine = 100
+
+	var mu sync.Mutex
+	seen := make(map[string]bool, goroutines*idsPerGoroutine)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < idsPerGoroutine; i++ {
+				id := gen.Next(fmt.Sprintf("type-%d", g))
+				mu.Lock()
+				if seen[id] {
+					t.Errorf("duplicate reserved ID under concurrency: %s", id)
+				}
+				seen[id] = true
+				mu.Unlock()
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	if len(seen) != goroutines*idsPerGoroutine {
+		t.Fatalf("generated %d unique IDs, want %d", len(seen), goroutines*idsPerGoroutine)
+	}
+	if seen["work-failed-500"] || seen["work-consumed-750"] {
+		t.Fatal("generator reused a reserved historical Work ID")
+	}
+}
+
+func TestWorkIDGenerator_ContinuesPastPlatformMaxIntWithoutRollover(t *testing.T) {
+	t.Parallel()
+
+	maxInt := strconv.Itoa(math.MaxInt)
+	gen := petri.NewWorkIDGenerator("work-task-" + maxInt)
+	wantCounter := new(big.Int)
+	wantCounter.SetString(maxInt, 10)
+	wantCounter.Add(wantCounter, big.NewInt(1))
+
+	if got, want := gen.Next("review"), "work-review-"+wantCounter.String(); got != want {
+		t.Fatalf("Next() = %q, want %q without integer rollover", got, want)
 	}
 }

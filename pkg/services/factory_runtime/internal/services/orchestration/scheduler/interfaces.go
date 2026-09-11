@@ -43,3 +43,17 @@ func ApplyRuntimeConfig(s Scheduler, runtimeConfig interfaces.RuntimeWorkstation
 	}
 	aware.SetRuntimeConfig(runtimeConfig)
 }
+
+func runtimeWorkstationKind(
+	name string,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) interfaces.WorkstationKind {
+	if runtimeConfig == nil || name == "" {
+		return ""
+	}
+	workstation, ok := runtimeConfig.Workstation(name)
+	if !ok || workstation == nil {
+		return ""
+	}
+	return workstation.Kind
+}
