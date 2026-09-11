@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -302,6 +303,11 @@ func assertLocalAIDirectConfigurationFacts(
 
 func assertLocalAIDirectHostReleased(t *testing.T, launcher *localAIHostLauncher) {
 	t.Helper()
+	waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := launcher.awaitWait(waitContext); err != nil {
+		t.Fatalf("wait for LocalAI host Wait completion: %v", err)
+	}
 	if launcher.Active() || launcher.Starts() != launcher.Stops() || launcher.Stops() != launcher.Waits() {
 		t.Fatalf("LocalAI host lifecycle = starts:%d stops:%d waits:%d active:%t, want fully released", launcher.Starts(), launcher.Stops(), launcher.Waits(), launcher.Active())
 	}
@@ -364,6 +370,7 @@ type localAIHostLauncher struct {
 	starts   int
 	stops    int
 	waits    int
+	waitDone <-chan struct{}
 }
 
 func (launcher *localAIHostLauncher) Start(
@@ -374,15 +381,18 @@ func (launcher *localAIHostLauncher) Start(
 	Wait() error
 	Stop(context.Context) error
 }, error) {
+	waitDone := make(chan struct{})
 	launcher.mu.Lock()
 	launcher.specs = append(launcher.specs, cloneLocalAIHostSpec(spec))
 	launcher.starts++
 	launcher.active++
+	launcher.waitDone = waitDone
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()
 	return &localAIHostProcess{
 		endpoint: endpoint,
 		stopped:  make(chan struct{}),
+		waitDone: waitDone,
 		launcher: launcher,
 	}, nil
 }
@@ -398,6 +408,21 @@ func (launcher *localAIHostLauncher) recordWait() {
 	launcher.mu.Lock()
 	launcher.waits++
 	launcher.mu.Unlock()
+}
+
+func (launcher *localAIHostLauncher) awaitWait(ctx context.Context) error {
+	launcher.mu.Lock()
+	waitDone := launcher.waitDone
+	launcher.mu.Unlock()
+	if waitDone == nil {
+		return errors.New("LocalAI host was not started")
+	}
+	select {
+	case <-waitDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (launcher *localAIHostLauncher) LastSpec() (serviceedges.HostProcessStartSpec, bool) {
@@ -441,15 +466,20 @@ func (launcher *localAIHostLauncher) ModelPath() string {
 type localAIHostProcess struct {
 	endpoint string
 	stopped  chan struct{}
+	waitDone chan struct{}
 	launcher *localAIHostLauncher
 	once     sync.Once
+	waitOnce sync.Once
 }
 
 func (process *localAIHostProcess) HealthEndpoint() string { return process.endpoint }
 
 func (process *localAIHostProcess) Wait() error {
 	<-process.stopped
-	process.launcher.recordWait()
+	process.waitOnce.Do(func() {
+		process.launcher.recordWait()
+		close(process.waitDone)
+	})
 	return nil
 }
 
