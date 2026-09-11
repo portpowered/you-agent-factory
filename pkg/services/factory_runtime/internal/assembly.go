@@ -410,6 +410,9 @@ func restoredWorldStateTick(events []factorydefinitions.FactoryEvent) int {
 }
 
 func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryEvent) bool {
+	if len(events) == 0 {
+		return false
+	}
 	restartBoundarySeen := false
 	previousTick := events[0].Context.Tick
 	for _, event := range events {

@@ -393,6 +393,9 @@ func guardUsesDependencyGuard(guard petri.Guard) bool {
 
 func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []factorytoken.Token) []factorytoken.Token {
 	if arc.Guard == nil {
+		if matched, handled := s.sameNamePeerCandidates(arc, candidates); handled {
+			return matched
+		}
 		return candidates
 	}
 	guardMatched, ok := s.evaluator.evaluateGuard(arc.Guard, s.runtime, candidates, s.bindings, &s.snapshot.Marking)
@@ -400,6 +403,77 @@ func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates 
 		return nil
 	}
 	return stableTokens(guardMatched)
+}
+
+// sameNamePeerCandidates handles the authored Factory shape where SAME_NAME
+// is declared on the parent input and names the child input as its peer. The
+// child arc is otherwise unguarded, so its stable token ordering would choose
+// a historical child before the parent guard is evaluated. When a peer guard
+// references this arc, select the child from the ordered parent registration
+// projection before the parent candidate is tried.
+func (s *singleTokenBindingSearch) sameNamePeerCandidates(arc *petri.Arc, candidates []factorytoken.Token) ([]factorytoken.Token, bool) {
+	if s == nil || s.transition == nil || s.snapshot == nil || arc == nil {
+		return nil, false
+	}
+	childBinding := arcKey(arc)
+	for index := range s.transition.InputArcs {
+		peerArc := &s.transition.InputArcs[index]
+		if peerArc == arc {
+			continue
+		}
+		matchBinding, ok := sameNameMatchBinding(peerArc.Guard)
+		if !ok || matchBinding != childBinding {
+			continue
+		}
+
+		parentCandidates := stableTokens(s.snapshot.Marking.TokensInPlace(peerArc.PlaceID))
+		if len(parentCandidates) == 0 {
+			return nil, true
+		}
+		matched := make([]factorytoken.Token, 0, len(candidates))
+		seen := make(map[string]bool, len(candidates))
+		for _, parentCandidate := range parentCandidates {
+			parent := parentCandidate
+			selected, selectedOK := (&petri.SameNameGuard{MatchBinding: arcKey(peerArc)}).EvaluateRuntime(
+				s.runtime,
+				candidates,
+				map[string]*factorytoken.Token{arcKey(peerArc): &parent},
+				&s.snapshot.Marking,
+			)
+			if !selectedOK {
+				continue
+			}
+			for _, candidate := range selected {
+				if seen[candidate.ID] {
+					continue
+				}
+				seen[candidate.ID] = true
+				matched = append(matched, candidate)
+			}
+		}
+		return stableTokens(matched), true
+	}
+	return nil, false
+}
+
+func sameNameMatchBinding(guard petri.Guard) (string, bool) {
+	switch typed := guard.(type) {
+	case *petri.SameNameGuard:
+		if typed == nil || typed.MatchBinding == "" {
+			return "", false
+		}
+		return typed.MatchBinding, true
+	case *petri.AllGuard:
+		if typed == nil {
+			return "", false
+		}
+		for _, nested := range typed.Guards {
+			if matchBinding, ok := sameNameMatchBinding(nested); ok {
+				return matchBinding, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, key string, candidate factorytoken.Token) bool {

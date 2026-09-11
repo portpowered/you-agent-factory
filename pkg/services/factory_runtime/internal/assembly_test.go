@@ -177,6 +177,15 @@ func TestNormalizeRestoredEventTicksLeavesOrdinarySelectedTickHistoryUnchanged(t
 	}
 }
 
+func TestNormalizeRestoredEventTicksLeavesEmptyHistoryUnchanged(t *testing.T) {
+	if normalized := normalizeRestoredEventTicks(nil); normalized != nil {
+		t.Fatalf("normalized empty history = %#v, want nil", normalized)
+	}
+	if successorRecordingRestartsLogicalClock(nil) {
+		t.Fatal("empty history cannot prove a successor logical-clock restart")
+	}
+}
+
 func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
 	resumeEvents := []interfaces.FactoryEvent{
 		{Id: "resume-event", Context: interfaces.FactoryEventContext{Tick: 9}},
