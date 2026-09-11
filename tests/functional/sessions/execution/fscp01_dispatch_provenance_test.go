@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -102,7 +104,7 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		releaseGate := func() { release.Do(func() { close(gate) }) }
 		runner := support.NewGatedSuccessCommandRunner("fscp01 active provider output", gate)
 		locations := newFSCP01RunLocations(t)
-		support.WriteOperatorModelSourceOverride(t, locations.Home, "llm", fscp01FixtureLLMSource)
+		writeFSCP01OperatorModelSourceOverride(t, locations.Home)
 		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"})
 		logFSCP01RunDeclaration(t, locations, dir, "", "single root; provider-gated active observation")
 		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -143,7 +145,7 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 		t.Parallel()
 		acquireExecutionFixtureSlot(t)
 		locations := newFSCP01RunLocations(t)
-		support.WriteOperatorModelSourceOverride(t, locations.Home, "llm", fscp01FixtureLLMSource)
+		writeFSCP01OperatorModelSourceOverride(t, locations.Home)
 		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-terminal"})
 		logFSCP01RunDeclaration(t, locations, dir, "", "single root; terminal provider observation")
 		runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
@@ -582,4 +584,25 @@ func sortedFSCP01AttemptKeys(attempts map[int]struct{}) []int {
 	}
 	sort.Ints(keys)
 	return keys
+}
+
+func writeFSCP01OperatorModelSourceOverride(t testing.TB, homeDir string) {
+	t.Helper()
+
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	config := map[string]any{
+		"models": map[string]any{
+			"llm": map[string]any{"source": fscp01FixtureLLMSource},
+		},
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal FSCP-01 operator model source override: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("create FSCP-01 operator config directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write FSCP-01 operator model source override: %v", err)
+	}
 }

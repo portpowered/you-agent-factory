@@ -3,7 +3,6 @@ package support
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -121,53 +120,6 @@ func WriteAgentConfig(t *testing.T, dir, workerName, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-// WriteOperatorModelSourceOverride makes a controlled model fixture explicit
-// about its source identity. This keeps root-built functional fixtures from
-// inheriting a production built-in source whose strict artifact requirements
-// are intentionally not part of the fixture.
-func WriteOperatorModelSourceOverride(t testing.TB, home, modelName, source string) {
-	t.Helper()
-
-	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
-	config := map[string]any{}
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := json.Unmarshal(data, &config); err != nil {
-			t.Fatalf("decode existing operator config: %v", err)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("read existing operator config: %v", err)
-	}
-
-	modelsConfig, ok := config["models"].(map[string]any)
-	if !ok {
-		if config["models"] != nil {
-			t.Fatalf("operator config models has type %T, want object", config["models"])
-		}
-		modelsConfig = map[string]any{}
-		config["models"] = modelsConfig
-	}
-	modelConfig, ok := modelsConfig[modelName].(map[string]any)
-	if !ok {
-		if modelsConfig[modelName] != nil {
-			t.Fatalf("operator config model %q has type %T, want object", modelName, modelsConfig[modelName])
-		}
-		modelConfig = map[string]any{}
-		modelsConfig[modelName] = modelConfig
-	}
-	modelConfig["source"] = source
-
-	data, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("marshal operator model source override: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("create operator config directory: %v", err)
-	}
-	if err := os.WriteFile(configPath, data, 0o600); err != nil {
-		t.Fatalf("write operator model source override: %v", err)
 	}
 }
 
