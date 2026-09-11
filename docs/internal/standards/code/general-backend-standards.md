@@ -78,6 +78,32 @@ Rules:
   Standards **MUST NOT** duplicate migration inventories, temporary package
   exceptions, or planned target paths as permanent architecture rules.
 
+### Minimal Internal Transformations
+
+- Each ownership boundary **MUST** keep one canonical representation for its
+  domain state and policy. Internal code **MUST** reuse the owner-level
+  representation directly rather than introduce a second model that only
+  passes fields through.
+- Necessary translation **MUST** happen once, at the narrow edge that owns the
+  concrete external contract. An adapter is justified only for a concrete
+  protocol, provider, persistence, compatibility, or other replaceable
+  external boundary.
+- Every adapter **MUST** name the external boundary, source owner, destination
+  owner, preserved invariant, behavioral reason, and removal or consolidation
+  rationale. The owning service root retains domain policy and state; private
+  implementation types do not cross that boundary.
+- In this repository, `pkg/transports/mapping` owns protocol-to-service
+  representation conversion; `Providers` owns provider adaptation and one
+  normalized execution attempt; `Models` owns local-model readiness and
+  lifecycle; and `Workers` consumes Providers and Models through service-root
+  contracts while owning request-scoped execution and retry policy.
+- Accepted: `pkg/transports/mapping` converts a protocol payload once into a
+  service-root request, preserving service validation and policy ownership;
+  `Providers` adapts one provider protocol into one normalized attempt, and
+  `Workers` consumes that contract. Rejected: a `Workers` pass-through wrapper
+  chain or a duplicate Providers/Models domain model that merely copies fields
+  without a distinct external boundary, behavior, or preserved invariant.
+
 ### 2. Services, Dependency Injection, and Construction
 
 Backend behavior **MUST** be exposed through explicit service contracts and assembled through one dependency-injection graph.
