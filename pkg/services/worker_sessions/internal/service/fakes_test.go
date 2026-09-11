@@ -757,10 +757,29 @@ func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *te
 
 func runProviderFailureContinuation(t *testing.T, waitBeforeCompletion bool) {
 	t.Helper()
-	order := "completion-before-await"
-	if waitBeforeCompletion {
-		order = "waiter-before-completion"
-	}
+	fixture := newProviderFailureContinuationFixture(t, continuationOrder(waitBeforeCompletion))
+	fixture.completeSource(t)
+	successorDispatchID := fixture.admitSuccessor(t)
+	fixture.completeSuccessor(t, successorDispatchID, waitBeforeCompletion)
+	fixture.assertSuccessorFailure(t, successorDispatchID)
+	fixture.assertSourceUnchanged(t)
+}
+
+type providerFailureContinuationFixture struct {
+	order            string
+	sourceID         string
+	successorID      string
+	sourceDispatchID string
+	sourceTopic      events.Topic
+	successorTopic   events.Topic
+	eventsSvc        *terminalAppendObserver
+	boundary         *controlledBoundary
+	registry         workersessions.Service
+	reference        providers.SessionRef
+}
+
+func newProviderFailureContinuationFixture(t *testing.T, order string) *providerFailureContinuationFixture {
+	t.Helper()
 	sourceID := "source-session-" + order
 	successorID := "successor-session-" + order
 	sourceDispatchID := "dispatch-source-" + order
@@ -772,46 +791,71 @@ func runProviderFailureContinuation(t *testing.T, waitBeforeCompletion bool) {
 	if err != nil {
 		t.Fatalf("service.New() error = %v", err)
 	}
-	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-" + order}
-	sourceResult := startControlledSession(t, registry, boundary, sourceID, sourceDispatchID)
-	boundary.complete(completedDispatchWithProviderSession(sourceDispatchID, reference), nil)
-	eventsSvc.waitForTerminalAppend(t, sourceTopic)
-	source := <-sourceResult
-	if source.Session.ID != sourceID || source.Session.State != workersessions.StateCompleted {
-		t.Fatalf("source result = %#v, want completed %q", source.Session, sourceID)
+	return &providerFailureContinuationFixture{
+		order:            order,
+		sourceID:         sourceID,
+		successorID:      successorID,
+		sourceDispatchID: sourceDispatchID,
+		sourceTopic:      sourceTopic,
+		successorTopic:   successorTopic,
+		eventsSvc:        eventsSvc,
+		boundary:         boundary,
+		registry:         registry,
+		reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-" + order,
+		},
 	}
-	assertExactProviderSessionAssociation(t, source.Session.ProviderSessionAssociation, sourceID, sourceDispatchID, reference)
+}
 
-	request := workersessions.ContinueRequest{
-		RequestID:                "continue-request-" + order,
-		SourceWorkerSessionID:    sourceID,
-		SuccessorWorkerSessionID: successorID,
-		FollowUpInput:            "follow-up",
+func (f *providerFailureContinuationFixture) completeSource(t *testing.T) {
+	t.Helper()
+	sourceResult := startControlledSession(t, f.registry, f.boundary, f.sourceID, f.sourceDispatchID)
+	f.boundary.complete(completedDispatchWithProviderSession(f.sourceDispatchID, f.reference), nil)
+	f.eventsSvc.waitForTerminalAppend(t, f.sourceTopic)
+	source := <-sourceResult
+	if source.Session.ID != f.sourceID || source.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source result = %#v, want completed %q", source.Session, f.sourceID)
 	}
-	continued, err := registry.Continue(context.Background(), request)
+	assertExactProviderSessionAssociation(t, source.Session.ProviderSessionAssociation, f.sourceID, f.sourceDispatchID, f.reference)
+}
+
+func (f *providerFailureContinuationFixture) admitSuccessor(t *testing.T) string {
+	t.Helper()
+	continued, err := f.registry.Continue(context.Background(), workersessions.ContinueRequest{
+		RequestID:                "continue-request-" + f.order,
+		SourceWorkerSessionID:    f.sourceID,
+		SuccessorWorkerSessionID: f.successorID,
+		FollowUpInput:            "follow-up",
+	})
 	if err != nil {
 		t.Fatalf("Continue() error = %v, want nil at admission", err)
 	}
-	if continued.Session.ID != successorID || continued.Session.State != workersessions.StateRunning || continued.Session.PredecessorWorkerSessionID != sourceID {
+	if continued.Session.ID != f.successorID || continued.Session.State != workersessions.StateRunning || continued.Session.PredecessorWorkerSessionID != f.sourceID {
 		t.Fatalf("admitted result = %#v, want running successor with predecessor", continued)
 	}
 	if continued.Session.ProviderSessionAssociation == nil {
 		t.Fatal("admitted successor has no provider session association")
 	}
 	successorDispatchID := continued.Session.ProviderSessionAssociation.DispatchID
-	assertExactProviderSessionAssociation(t, continued.Session.ProviderSessionAssociation, successorID, successorDispatchID, reference)
-	handoff := boundary.requestFor(t, successorDispatchID)
+	assertExactProviderSessionAssociation(t, continued.Session.ProviderSessionAssociation, f.successorID, successorDispatchID, f.reference)
+	handoff := f.boundary.requestFor(t, successorDispatchID)
 	if handoff.Execution.Dispatch.DispatchID != successorDispatchID {
 		t.Fatalf("successor handoff dispatch ID = %q, want %q", handoff.Execution.Dispatch.DispatchID, successorDispatchID)
 	}
+	return successorDispatchID
+}
 
+func (f *providerFailureContinuationFixture) completeSuccessor(t *testing.T, dispatchID string, waitBeforeCompletion bool) {
+	t.Helper()
 	complete := func() {
-		boundary.complete(failedContinuationDispatch(successorDispatchID, reference), nil)
+		f.boundary.complete(failedContinuationDispatch(dispatchID, f.reference), nil)
 	}
 	if waitBeforeCompletion {
-		signal, registered := eventsSvc.terminalAppendSignal(successorTopic)
+		signal, registered := f.eventsSvc.terminalAppendSignal(f.successorTopic)
 		if !registered {
-			t.Fatalf("terminal append signal for topic %q is not registered", successorTopic)
+			t.Fatalf("terminal append signal for topic %q is not registered", f.successorTopic)
 		}
 		waitStarted := make(chan struct{})
 		waitResult := make(chan error, 1)
@@ -822,57 +866,40 @@ func runProviderFailureContinuation(t *testing.T, waitBeforeCompletion bool) {
 		<-waitStarted
 		complete()
 		if err := <-waitResult; err != nil {
-			t.Fatalf("terminal append for topic %q: %v", successorTopic, err)
+			t.Fatalf("terminal append for topic %q: %v", f.successorTopic, err)
 		}
-	} else {
-		complete()
-		eventsSvc.waitForTerminalAppend(t, successorTopic)
+		return
 	}
+	complete()
+	f.eventsSvc.waitForTerminalAppend(t, f.successorTopic)
+}
 
-	successor, err := registry.Get(context.Background(), workersessions.GetRequest{ID: successorID})
+func (f *providerFailureContinuationFixture) assertSuccessorFailure(t *testing.T, dispatchID string) {
+	t.Helper()
+	successor, err := f.registry.Get(context.Background(), workersessions.GetRequest{ID: f.successorID})
 	if err != nil {
 		t.Fatalf("Get(successor) error = %v", err)
 	}
-	if successor.ID != successorID || successor.State != workersessions.StateFailed || successor.Result == nil || successor.Result.Outcome != workersessions.TerminalOutcomeFailed || successor.Result.Cause == nil {
+	if successor.ID != f.successorID || successor.State != workersessions.StateFailed || successor.Result == nil || successor.Result.Outcome != workersessions.TerminalOutcomeFailed || successor.Result.Cause == nil {
 		t.Fatalf("successor after provider failure = %#v, want FAILED with cause", successor)
 	}
-	if successor.Result.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure || successor.Result.Cause.Detail != "family=terminal type=permanent_bad_request" || successor.Result.Cause.ProviderContinuationFailureKind != providers.ContinuationFailureKindStale {
-		t.Fatalf("successor failure cause = %#v, want exact stale continuation classification", successor.Result.Cause)
+	assertProviderFailureCause(t, successor.Result.Cause)
+	assertExactProviderSessionAssociation(t, successor.ProviderSessionAssociation, f.successorID, dispatchID, f.reference)
+	if successor.PredecessorWorkerSessionID != f.sourceID || successor.SuccessorWorkerSessionID != "" {
+		t.Fatalf("successor lineage = %#v, want predecessor %q and no successor", successor, f.sourceID)
 	}
-	assertExactProviderSessionAssociation(t, successor.ProviderSessionAssociation, successorID, successorDispatchID, reference)
-	if successor.PredecessorWorkerSessionID != sourceID || successor.SuccessorWorkerSessionID != "" {
-		t.Fatalf("successor lineage = %#v, want predecessor %q and no successor", successor, sourceID)
-	}
+}
 
-	sourceAfter, err := registry.Get(context.Background(), workersessions.GetRequest{ID: sourceID})
+func (f *providerFailureContinuationFixture) assertSourceUnchanged(t *testing.T) {
+	t.Helper()
+	sourceAfter, err := f.registry.Get(context.Background(), workersessions.GetRequest{ID: f.sourceID})
 	if err != nil {
 		t.Fatalf("Get(source) error = %v", err)
 	}
-	if sourceAfter.ID != sourceID || sourceAfter.State != workersessions.StateCompleted || sourceAfter.SuccessorWorkerSessionID != successorID {
-		t.Fatalf("source after provider failure = %#v, want unchanged completed source linked to %q", sourceAfter, successorID)
+	if sourceAfter.ID != f.sourceID || sourceAfter.State != workersessions.StateCompleted || sourceAfter.SuccessorWorkerSessionID != f.successorID {
+		t.Fatalf("source after provider failure = %#v, want unchanged completed source linked to %q", sourceAfter, f.successorID)
 	}
-	assertExactProviderSessionAssociation(t, sourceAfter.ProviderSessionAssociation, sourceID, sourceDispatchID, reference)
-}
-
-func assertExactProviderSessionAssociation(
-	t *testing.T,
-	association *workersessions.ProviderSessionAssociation,
-	sessionID, dispatchID string,
-	reference providers.SessionRef,
-) {
-	t.Helper()
-	if association == nil {
-		t.Fatalf("%s provider session association = nil, want session/attempt identity", sessionID)
-	}
-	want := workersessions.ProviderSessionAssociation{
-		WorkerSessionID: sessionID,
-		DispatchID:      dispatchID,
-		AttemptID:       dispatchID,
-		Reference:       reference,
-	}
-	if *association != want {
-		t.Fatalf("%s provider session association = %#v, want %#v", sessionID, association, want)
-	}
+	assertExactProviderSessionAssociation(t, sourceAfter.ProviderSessionAssociation, f.sourceID, f.sourceDispatchID, f.reference)
 }
 
 func TestContinue_RejectsUnknownActiveAndUnassociatedSourcesWithoutSuccessor(t *testing.T) {
