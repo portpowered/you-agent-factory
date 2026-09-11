@@ -27,16 +27,15 @@ func (checker defaultHostCompatibilityChecker) Check(
 	ctx context.Context,
 	request HostCompatibilityRequest,
 ) error {
-	_, err := checker.resolve(ctx, ResolvedHostConfiguration{
-		Backend:         request.Backend,
-		ModelName:       request.ModelName,
-		Platform:        request.Platform,
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-	})
+	configuration := request.Configuration.Clone()
+	if configuration.ProtocolVersion == "" {
+		configuration.ProtocolVersion = modelseffects.PinnedHostProtocolVersion
+	}
+	_, err := checker.resolve(ctx, configuration)
 	if err != nil {
 		return fmt.Errorf(
 			"select pinned backend %q for model %q: %w",
-			request.Backend, request.ModelName, err,
+			configuration.Backend, configuration.ModelName, err,
 		)
 	}
 	return nil

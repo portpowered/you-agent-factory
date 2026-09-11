@@ -393,6 +393,31 @@ func (o *Root) EnsureModelHost(
 	return o.runtimeHost.EnsureModelHost(ctx, request)
 }
 
+type resolvedHostConfigurationHandoff interface {
+	EnsureModelHostWithConfiguration(
+		context.Context,
+		modelseffects.ResolvedHostConfiguration,
+	) (models.EnsureModelHostResult, error)
+}
+
+func (o *Root) ensureModelHostWithConfiguration(
+	ctx context.Context,
+	configuration modelseffects.ResolvedHostConfiguration,
+) (models.EnsureModelHostResult, error) {
+	if o == nil || o.runtimeHost == nil {
+		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
+	}
+	o.cacheLifecycleMu.Lock()
+	defer o.cacheLifecycleMu.Unlock()
+	if handoff, ok := o.runtimeHost.(resolvedHostConfigurationHandoff); ok {
+		return handoff.EnsureModelHostWithConfiguration(ctx, configuration.Clone())
+	}
+	return o.runtimeHost.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+		Scope: configuration.Scope,
+		Name:  configuration.ModelName,
+	})
+}
+
 func (o *Root) InspectModelHost(
 	ctx context.Context,
 	request models.InspectModelHostRequest,
@@ -639,10 +664,7 @@ func (o *Root) prepareJoinedInvocation(
 		joinedLifecycleStageArtifactProvision, joinedLifecycleOutcomeCompleted,
 		joinedInvocationElapsed(o, started), nil,
 	)
-	ensureResult, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
-		Scope: request.Scope,
-		Name:  plan.modelName,
-	})
+	ensureResult, err := o.ensureModelHostWithConfiguration(ctx, plan.configuration)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageBackendStart, err
 	}

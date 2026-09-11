@@ -20,11 +20,11 @@ const (
 var errVibeVoiceLayout = errors.New("vibevoice role layout is invalid")
 
 func vibeVoiceLoadOptions(
-	request modelseffects.HostProtocolNegotiationRequest,
+	configuration modelseffects.ResolvedHostConfiguration,
 	resolveSymlinks modelseffects.HostResolveSymlinks,
 ) ([]string, error) {
-	if !strings.EqualFold(strings.TrimSpace(request.Backend), vibeVoiceBackendID) ||
-		!strings.EqualFold(strings.TrimSpace(request.ModelName), models.BuiltInModelNameTTS) {
+	if !strings.EqualFold(strings.TrimSpace(configuration.Backend), vibeVoiceBackendID) ||
+		!strings.EqualFold(strings.TrimSpace(configuration.ModelName), models.BuiltInModelNameTTS) {
 		return nil, nil
 	}
 	manifest, err := modelartifacts.DefaultModelRoleManifest()
@@ -32,12 +32,12 @@ func vibeVoiceLoadOptions(
 		return nil, errVibeVoiceLayout
 	}
 	definition, ok := manifest.Model(models.BuiltInModelNameTTS)
-	if !ok || (strings.TrimSpace(request.Revision) != "" &&
-		strings.TrimSpace(request.Revision) != definition.Publication.Revision) {
+	if !ok || (strings.TrimSpace(configuration.Revision) != "" &&
+		strings.TrimSpace(configuration.Revision) != definition.Publication.Revision) {
 		return nil, errVibeVoiceLayout
 	}
 	paths, err := confinedVibeVoiceRolePaths(
-		request.ModelPath, request.ModelFiles, definition, resolveSymlinks,
+		configuration.ModelPath, configuration.ModelFiles, definition, resolveSymlinks,
 	)
 	if err != nil {
 		return nil, errVibeVoiceLayout

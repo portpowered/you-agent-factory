@@ -304,11 +304,11 @@ func assertManagedProcess(t *testing.T, launcher *controlledProcessLauncher) {
 func assertManagedProtocolCall(t *testing.T, protocol *testProtocolNegotiator) {
 	t.Helper()
 	call := protocol.call()
-	if call.endpoint != "grpc://127.0.0.1:50051" || call.request.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
+	if call.endpoint != "grpc://127.0.0.1:50051" || call.request.Configuration.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		t.Fatalf("protocol call = %#v, want pinned endpoint/version", call)
 	}
-	if call.request.Backend != "localai-llamacpp" || call.request.Platform != managedHostPlatform() {
-		t.Fatalf("protocol request = %#v, want resolved backend/platform", call.request)
+	if call.request.Configuration.Backend != "localai-llamacpp" || call.request.Configuration.Platform != managedHostPlatform() {
+		t.Fatalf("protocol request = %#v, want resolved backend/platform", call.request.Configuration)
 	}
 }
 
@@ -516,8 +516,8 @@ func TestManagedLocalAIUsesOperatorOverlayForPinnedIdentity(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("EnsureModelHost: %v", err)
 	}
-	if call := protocol.call(); call.request.Backend != backend {
-		t.Fatalf("protocol backend = %q, want %q", call.request.Backend, backend)
+	if call := protocol.call(); call.request.Configuration.Backend != backend {
+		t.Fatalf("protocol backend = %q, want %q", call.request.Configuration.Backend, backend)
 	}
 	lease, err := host.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope: ref, Name: managedModelName, Holder: "worker-a",
@@ -652,7 +652,7 @@ func (negotiator *testProtocolNegotiator) Negotiate(
 		result.ProtocolVersion = modelseffects.PinnedHostProtocolVersion
 	}
 	if result.Backend == "" {
-		result.Backend = request.Backend
+		result.Backend = request.Configuration.Backend
 	}
 	if !result.Ready {
 		result.Ready = true

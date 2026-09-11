@@ -238,11 +238,7 @@ type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
 	WorkDir, HealthEndpoint string
-	Backend                 string
-	ModelPath               string
-	MMProjPath              string
-	ModelFiles              []string
-	BackendFiles            []string
+	Configuration           ResolvedHostConfiguration
 }
 
 type HostManagedProcess interface {
@@ -278,18 +274,11 @@ type HostClock interface {
 // Models effects seam; callers never import generated backend types.
 const PinnedHostProtocolVersion = "localai-backend-v1"
 
-// HostProtocolNegotiationRequest contains only provider-neutral facts needed
-// to negotiate a managed backend. It deliberately excludes endpoints,
-// credentials, cache paths, process handles, and backend-native messages.
+// HostProtocolNegotiationRequest carries the exact resolved configuration
+// selected by Models to negotiate a managed backend. The endpoint, process
+// handle, and backend-native messages remain outside this seam.
 type HostProtocolNegotiationRequest struct {
-	ProtocolVersion string
-	Backend         string
-	ModelName       string
-	Revision        string
-	Platform        models.AssetHostPlatform
-	ModelPath       string
-	MMProjPath      string
-	ModelFiles      []string
+	Configuration ResolvedHostConfiguration
 }
 
 // HostProtocolNegotiationResult is the detached result of one pinned
@@ -344,13 +333,10 @@ func (negotiator PinnedGRPCNegotiator) Negotiate(
 	return connection.Negotiate(ctx, request)
 }
 
-// HostCompatibilityRequest carries provider-neutral compatibility facts to a
+// HostCompatibilityRequest carries the exact resolved configuration to a
 // platform/accelerator policy implementation.
 type HostCompatibilityRequest struct {
-	Backend   string
-	ModelName string
-	Revision  string
-	Platform  models.AssetHostPlatform
+	Configuration ResolvedHostConfiguration
 }
 
 // HostCompatibilityChecker validates platform and accelerator support before

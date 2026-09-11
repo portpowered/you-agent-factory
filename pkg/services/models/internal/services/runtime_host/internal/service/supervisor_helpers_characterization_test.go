@@ -39,7 +39,13 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 		BackendRequired:   true,
 		BackendFiles:      []string{`C:\models\backend\llama.zip`},
 	}
-	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
+	configuration, err := resolvedHostConfigurationFromInspection(
+		models.RuntimeScopeRef{}, identity, inspection, models.AssetHostPlatform{}, nil,
+	)
+	if err != nil {
+		t.Fatalf("resolvedHostConfigurationFromInspection: %v", err)
+	}
+	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(configuration, worker)
 	if err != nil {
 		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
@@ -56,23 +62,23 @@ func assertBuiltInLLMStartSpec(
 	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
 		t.Fatalf("packaged backend start spec = %#v, want no authored process or endpoint", spec)
 	}
-	if spec.Backend != identity.Backend {
-		t.Fatalf("spec backend = %q, want %q", spec.Backend, identity.Backend)
+	if spec.Configuration.Backend != identity.Backend {
+		t.Fatalf("spec backend = %q, want %q", spec.Configuration.Backend, identity.Backend)
 	}
 	wantModelPath := filepath.Join(inspection.CachePath, builtInLLMModelArtifactName)
 	wantMMProjPath := filepath.Join(inspection.CachePath, builtInLLMProjectorArtifactName)
-	if spec.ModelPath != wantModelPath {
-		t.Fatalf("spec model path = %q, want %q", spec.ModelPath, wantModelPath)
+	if spec.Configuration.ModelPath != wantModelPath {
+		t.Fatalf("spec model path = %q, want %q", spec.Configuration.ModelPath, wantModelPath)
 	}
-	if spec.MMProjPath != wantMMProjPath {
-		t.Fatalf("spec mmproj path = %q, want %q", spec.MMProjPath, wantMMProjPath)
+	if spec.Configuration.MMProjPath != wantMMProjPath {
+		t.Fatalf("spec mmproj path = %q, want %q", spec.Configuration.MMProjPath, wantMMProjPath)
 	}
 	wantFiles := []string{wantModelPath, wantMMProjPath}
-	if len(spec.ModelFiles) != len(wantFiles) || spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] {
-		t.Fatalf("spec model files = %#v, want %#v", spec.ModelFiles, wantFiles)
+	if len(spec.Configuration.ModelFiles) != len(wantFiles) || spec.Configuration.ModelFiles[0] != wantFiles[0] || spec.Configuration.ModelFiles[1] != wantFiles[1] {
+		t.Fatalf("spec model files = %#v, want %#v", spec.Configuration.ModelFiles, wantFiles)
 	}
-	if len(spec.BackendFiles) != 1 || spec.BackendFiles[0] != inspection.BackendFiles[0] {
-		t.Fatalf("spec backend files = %#v, want %#v", spec.BackendFiles, inspection.BackendFiles)
+	if len(spec.Configuration.BackendFiles) != 1 || spec.Configuration.BackendFiles[0] != inspection.BackendFiles[0] {
+		t.Fatalf("spec backend files = %#v, want %#v", spec.Configuration.BackendFiles, inspection.BackendFiles)
 	}
 }
 
@@ -99,7 +105,6 @@ func TestBuiltInLLMRejectsInvalidProjectorMetadataBeforeHostStart(t *testing.T) 
 		Name: models.BuiltInModelNameLLM, Backend: "localai-llamacpp",
 		Source: definition.Source,
 	}
-	worker := &models.RuntimeWorker{Command: "fake-localai"}
 	for _, testCase := range []struct {
 		name   string
 		mutate func(*cacheInspection)
@@ -124,7 +129,9 @@ func TestBuiltInLLMRejectsInvalidProjectorMetadataBeforeHostStart(t *testing.T) 
 			inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), base.ExpectedArtifacts...)
 			inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), base.ObservedArtifacts...)
 			testCase.mutate(&inspection)
-			_, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
+			_, err := resolvedHostConfigurationFromInspection(
+				models.RuntimeScopeRef{}, identity, inspection, models.AssetHostPlatform{}, nil,
+			)
 			if !errors.Is(err, models.ErrHostMissingAssets) {
 				t.Fatalf("builder error = %v, want ErrHostMissingAssets", err)
 			}
@@ -152,7 +159,13 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 		BackendRequired: true,
 		BackendFiles:    []string{`C:\models\backend\vibevoice.zip`},
 	}
-	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
+	configuration, err := resolvedHostConfigurationFromInspection(
+		models.RuntimeScopeRef{}, identity, inspection, models.AssetHostPlatform{}, nil,
+	)
+	if err != nil {
+		t.Fatalf("resolvedHostConfigurationFromInspection: %v", err)
+	}
+	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(configuration, worker)
 	if err != nil {
 		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
@@ -161,9 +174,9 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 		filepath.Join(inspection.CachePath, "tokenizer.gguf"),
 		filepath.Join(inspection.CachePath, "voice-en-Carter_man.gguf"),
 	}
-	if spec.ModelPath != wantFiles[0] || len(spec.ModelFiles) != len(wantFiles) ||
-		spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] || spec.ModelFiles[2] != wantFiles[2] {
-		t.Fatalf("TTS model layout = path %q files %#v, want path %q files %#v", spec.ModelPath, spec.ModelFiles, wantFiles[0], wantFiles)
+	if spec.Configuration.ModelPath != wantFiles[0] || len(spec.Configuration.ModelFiles) != len(wantFiles) ||
+		spec.Configuration.ModelFiles[0] != wantFiles[0] || spec.Configuration.ModelFiles[1] != wantFiles[1] || spec.Configuration.ModelFiles[2] != wantFiles[2] {
+		t.Fatalf("TTS model layout = path %q files %#v, want path %q files %#v", spec.Configuration.ModelPath, spec.Configuration.ModelFiles, wantFiles[0], wantFiles)
 	}
 }
 

@@ -444,15 +444,16 @@ func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
 	endpoint string,
 	request modelswire.HostProtocolNegotiationRequest,
 ) (modelswire.HostProtocolNegotiationResult, error) {
+	configuration := request.Configuration.Clone()
 	result, err := adapter.next.Negotiate(ctx, endpoint, serviceedges.ModelHostProtocolNegotiationRequest{
-		ProtocolVersion: request.ProtocolVersion,
-		Backend:         request.Backend,
-		ModelName:       request.ModelName,
-		Revision:        request.Revision,
-		Platform:        request.Platform,
-		ModelPath:       request.ModelPath,
-		MMProjPath:      request.MMProjPath,
-		ModelFiles:      append([]string(nil), request.ModelFiles...),
+		ProtocolVersion: configuration.ProtocolVersion,
+		Backend:         configuration.Backend,
+		ModelName:       configuration.ModelName,
+		Revision:        configuration.Revision,
+		Platform:        configuration.Platform,
+		ModelPath:       configuration.ModelPath,
+		MMProjPath:      configuration.MMProjPath,
+		ModelFiles:      append([]string(nil), configuration.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -484,15 +485,16 @@ func (adapter modelHostGRPCConnectionAdapter) Negotiate(
 	ctx context.Context,
 	request modelswire.HostProtocolNegotiationRequest,
 ) (modelswire.HostProtocolNegotiationResult, error) {
+	configuration := request.Configuration.Clone()
 	result, err := adapter.next.Negotiate(ctx, serviceedges.ModelHostProtocolNegotiationRequest{
-		ProtocolVersion: request.ProtocolVersion,
-		Backend:         request.Backend,
-		ModelName:       request.ModelName,
-		Revision:        request.Revision,
-		Platform:        request.Platform,
-		ModelPath:       request.ModelPath,
-		MMProjPath:      request.MMProjPath,
-		ModelFiles:      append([]string(nil), request.ModelFiles...),
+		ProtocolVersion: configuration.ProtocolVersion,
+		Backend:         configuration.Backend,
+		ModelName:       configuration.ModelName,
+		Revision:        configuration.Revision,
+		Platform:        configuration.Platform,
+		ModelPath:       configuration.ModelPath,
+		MMProjPath:      configuration.MMProjPath,
+		ModelFiles:      append([]string(nil), configuration.ModelFiles...),
 	})
 	return modelswire.HostProtocolNegotiationResult{
 		ProtocolVersion: result.ProtocolVersion,
@@ -513,11 +515,12 @@ func (adapter modelHostCompatibilityCheckerAdapter) Check(
 	ctx context.Context,
 	request modelswire.HostCompatibilityRequest,
 ) error {
+	configuration := request.Configuration.Clone()
 	return adapter.next.Check(ctx, serviceedges.ModelHostCompatibilityRequest{
-		Backend:   request.Backend,
-		ModelName: request.ModelName,
-		Revision:  request.Revision,
-		Platform:  request.Platform,
+		Backend:   configuration.Backend,
+		ModelName: configuration.ModelName,
+		Revision:  configuration.Revision,
+		Platform:  configuration.Platform,
 	})
 }
 
