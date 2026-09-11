@@ -114,6 +114,10 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(
 		}
 		recordedNormalized := append([]workdomain.SubmitRequest(nil), normalized...)
 		normalized, replacedSeededWorkIDs := e.dedupeSeededReplaySubmissions(normalized, dedupeSeededReplay)
+		// Reserve explicit generated-form identities before constructing any
+		// token in this accepted batch; later entries and output transitions use
+		// the same allocator.
+		e.reserveHistoricalSubmissions(normalized)
 		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
 		if err != nil {
 			return total, err

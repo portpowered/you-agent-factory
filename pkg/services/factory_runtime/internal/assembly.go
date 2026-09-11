@@ -288,7 +288,7 @@ func (a *Assembly) configureRestoredWorldState(
 	if resumeInput != nil {
 		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
 	}
-	restored, err := reconstructRestoredWorldState(recordingsRuntime, restoredEvents)
+	restored, err := reconstructRestoredWorldStateForResume(recordingsRuntime, restoredEvents)
 	if err != nil {
 		return err
 	}
@@ -335,6 +335,20 @@ func reconstructRestoredWorldState(
 	opening recordings.RuntimeOpening,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
+	return reconstructRestoredWorldStateEvents(opening, events)
+}
+
+func reconstructRestoredWorldStateForResume(
+	opening recordings.RuntimeOpening,
+	events []factorydefinitions.FactoryEvent,
+) (*factorydefinitions.FactoryWorldState, error) {
+	return reconstructRestoredWorldStateEvents(opening, normalizeRestoredEventTicks(events))
+}
+
+func reconstructRestoredWorldStateEvents(
+	opening recordings.RuntimeOpening,
+	events []factorydefinitions.FactoryEvent,
+) (*factorydefinitions.FactoryWorldState, error) {
 	if len(events) == 0 {
 		return nil, nil
 	}
@@ -347,6 +361,35 @@ func reconstructRestoredWorldState(
 		return nil, fmt.Errorf("reconstruct restored Factory world state: %w", err)
 	}
 	return &worldState, nil
+}
+
+// normalizeRestoredEventTicks gives each proven successor generation a
+// detached monotonic tick range. The projection reducer can then preserve the
+// canonical ledger order instead of sorting low successor ticks ahead of the
+// predecessor events that caused them.
+func normalizeRestoredEventTicks(events []factorydefinitions.FactoryEvent) []factorydefinitions.FactoryEvent {
+	if !successorRecordingRestartsLogicalClock(events) {
+		return events
+	}
+	normalized := cloneFactoryEvents(events)
+	offset := 0
+	previousRawTick := events[0].Context.Tick
+	previousNormalizedTick := previousRawTick
+	restartBoundarySeen := isDaemonRestartInterruption(events[0])
+	for index := 1; index < len(events); index++ {
+		rawTick := events[index].Context.Tick
+		if restartBoundarySeen && rawTick < previousRawTick {
+			offset = previousNormalizedTick + 1 - rawTick
+			restartBoundarySeen = false
+		}
+		normalized[index].Context.Tick = rawTick + offset
+		if isDaemonRestartInterruption(events[index]) {
+			restartBoundarySeen = true
+		}
+		previousRawTick = rawTick
+		previousNormalizedTick = normalized[index].Context.Tick
+	}
+	return normalized
 }
 
 func restoredWorldStateTick(events []factorydefinitions.FactoryEvent) int {
@@ -367,16 +410,21 @@ func restoredWorldStateTick(events []factorydefinitions.FactoryEvent) int {
 }
 
 func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryEvent) bool {
-	interruptionSeen := false
+	restartBoundarySeen := false
 	previousTick := events[0].Context.Tick
 	for _, event := range events {
-		if event.Type == factorydefinitions.FactoryEventTypeDispatchInterrupted {
-			interruptionSeen = true
+		if isDaemonRestartInterruption(event) {
+			restartBoundarySeen = true
 		}
-		if interruptionSeen && event.Context.Tick < previousTick {
+		if restartBoundarySeen && event.Context.Tick < previousTick {
 			return true
 		}
 		previousTick = event.Context.Tick
 	}
 	return false
+}
+
+func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
+	return event.Type == factorydefinitions.FactoryEventTypeDispatchInterrupted &&
+		event.Context.Source != nil && strings.EqualFold(strings.TrimSpace(*event.Context.Source), "daemon-restart")
 }

@@ -142,6 +142,116 @@ func TestRestoredWorkIDsWithRecordedDispatchIncludesReplayDispatchFacts(t *testi
 	}
 }
 
+func TestRestoredHistoricalWorkIDsIncludesAdmittedEmittedConsumedAndFailedWork(t *testing.T) {
+	t.Parallel()
+
+	outputWork := []work.WorkRequestEventWork{{WorkID: "work-task-80", WorkTypeID: "task", Name: "emitted"}}
+	triggerWorkID := "work-task-72"
+	cfg := &runtimeConfig{
+		restoredWorldState: &interfaces.FactoryWorldState{
+			WorkItemsByID: map[string]work.FactoryWorkItem{
+				"work-task-3": {ID: "work-task-3", WorkTypeID: "task"},
+			},
+			FailedWorkItemsByID: map[string]work.FactoryWorkItem{
+				"work-plan-41": {ID: "work-plan-41", WorkTypeID: "plan"},
+			},
+			TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+				"work-review-55": {WorkItem: work.FactoryWorkItem{ID: "work-review-55", WorkTypeID: "review"}},
+			},
+			CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+				ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-idea-60"}}},
+				OutputWorkItems: []work.FactoryWorkItem{{ID: "work-plan-61"}},
+			}},
+		},
+		restoredEventPrefix: []interfaces.FactoryEvent{
+			{
+				Type:    interfaces.FactoryEventTypeWorkRequest,
+				Context: interfaces.FactoryEventContext{WorkIDs: stringSliceForRecordedTest([]string{"work-idea-65"})},
+				Payload: mustMarshalRecordedTest(t, work.WorkRequestEventPayload{Works: []work.WorkRequestEventWork{{
+					WorkID: "work-plan-70", WorkTypeID: "plan", Name: "admitted",
+				}}}),
+			},
+			{
+				Type:    interfaces.FactoryEventTypeDispatchResponse,
+				Payload: mustMarshalRecordedTest(t, workerexecution.DispatchResponseEventPayload{OutputWork: &outputWork}),
+			},
+			{
+				Type: interfaces.FactoryEventTypeWorkStateChange,
+				Payload: mustMarshalRecordedTest(t, interfaces.WorkStateChangeEventPayload{
+					WorkID: "work-task-71", TriggerWorkID: &triggerWorkID,
+				}),
+			},
+		},
+	}
+
+	got := restoredHistoricalWorkIDs(cfg)
+	for _, workID := range []string{
+		"work-task-3", "work-plan-41", "work-review-55", "work-idea-60",
+		"work-plan-61", "work-idea-65", "work-plan-70", "work-task-71",
+		"work-task-72", "work-task-80",
+	} {
+		if _, ok := got[workID]; !ok {
+			t.Errorf("historical Work IDs = %#v, missing %q", got, workID)
+		}
+	}
+
+	transformer, _ := buildRuntimeSubsystems(
+		&runtimeConfig{net: buildSimpleNet(), clock: platformclock.Real{}},
+		nil,
+		logging.EnsureLogger(nil),
+		func() string { return "runtime-id" },
+		nil,
+		got,
+	)
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{WorkTypeID: "task"}, time.Now())
+	if err != nil {
+		t.Fatalf("InitialTokenFromSubmit: %v", err)
+	}
+	if token.Color.WorkID != "work-task-81" {
+		t.Fatalf("restored next Work ID = %q, want work-task-81", token.Color.WorkID)
+	}
+}
+
+func TestNew_RestoredHistoricalWorkIDIsReservedFromExplicitReadmission(t *testing.T) {
+	t.Parallel()
+
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: []interfaces.FactoryEvent{{
+		Type: interfaces.FactoryEventTypeWorkRequest,
+		Payload: mustMarshalRecordedTest(t, work.WorkRequestEventPayload{Works: []work.WorkRequestEventWork{{
+			WorkID: "work-task-3", WorkTypeID: "task", Name: "historical-consumed-task",
+		}}}),
+	}}}
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withFactoryEventHistory(ledger),
+		withRestoredWorldState(&interfaces.FactoryWorldState{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	result, err := runtime.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		RequestID: "request-new-task-reusing-history",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name: "new-task", WorkID: "work-task-3", WorkTypeID: "task",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if result.Accepted {
+		t.Fatal("restored runtime accepted an explicit Work ID already present in canonical history")
+	}
+	snapshot, err := runtime.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if got := len(snapshot.Marking.PlaceTokens["task:init"]); got != 0 {
+		t.Fatalf("task:init token count = %d, want zero after atomic historical-ID rejection", got)
+	}
+}
+
 func TestNew_WithExplicitEmptyRestoredStateUsesFreshResourceMarking(t *testing.T) {
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	newFactory := func(restored *interfaces.FactoryWorldState) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {

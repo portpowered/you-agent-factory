@@ -26,6 +26,15 @@ func runtimeWorkstationMaxRetries(
 	if !ok {
 		return 0
 	}
+	return EffectiveWorkstationMaxRetries(workstation)
+}
+
+// EffectiveWorkstationMaxRetries returns the retry ceiling encoded by one
+// workstation definition, including the runtime default for an omitted limit.
+func EffectiveWorkstationMaxRetries(workstation *interfaces.FactoryWorkstationConfig) int {
+	if workstation == nil {
+		return 0
+	}
 	if workstation.Limits.MaxRetries > 0 {
 		return workstation.Limits.MaxRetries
 	}
