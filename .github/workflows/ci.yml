@@ -273,10 +273,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          key: go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
           restore-keys: |
+            go-modules-v2-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
             go-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
-            functional-modules-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+      - name: Prefetch complete Go dependency graph
+        run: go list -deps -test -mod=readonly ./... > /dev/null
       - name: Restore unit coverage Go build and test cache
         if: matrix.suite == 'unit'
         id: unit-go-build-cache

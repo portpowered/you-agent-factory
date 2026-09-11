@@ -811,7 +811,7 @@ func mergeGoTestFailureDetail(stderr string, stdout string) string {
 		return stderr
 	case stderr == "":
 		return stdout
-	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
+	case strings.HasPrefix(stdout, "functional test failure:") || strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
 		return stdout + "\n" + stderr
 	default:
 		return stderr + "\n" + stdout
