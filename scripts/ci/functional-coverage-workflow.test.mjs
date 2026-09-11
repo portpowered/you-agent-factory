@@ -26,7 +26,8 @@ test("functional coverage separates module and source-sensitive build caches", (
 	const unitSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'unit'", "      - uses: actions/setup-go@v5");
 	const functionalSetup = stepSection(job, "      - uses: actions/setup-go@v5\n        if: matrix.suite == 'functional'", "      - name: Select functional runner parallelism");
 	const functionalParallelism = stepSection(job, "      - name: Select functional runner parallelism", "      - name: Restore Go module cache");
-	const moduleCache = stepSection(job, "      - name: Restore Go module cache", "      - name: Restore unit coverage Go build and test cache");
+	const moduleCache = stepSection(job, "      - name: Restore Go module cache", "      - name: Prefetch complete Go dependency graph");
+	const modulePrefetch = stepSection(job, "      - name: Prefetch complete Go dependency graph", "      - name: Restore unit coverage Go build and test cache");
 	const buildCache = stepSection(job, "      - name: Restore functional coverage Go build cache", "      - uses: actions/setup-node@v4");
 
 	assert.match(unitSetup, /go-version: \$\{\{ env\.GO_VERSION \}\}/);
@@ -44,7 +45,15 @@ test("functional coverage separates module and source-sensitive build caches", (
 	assert.doesNotMatch(moduleCache, /~\/\.cache\/go-build/);
 	assert.match(
 		moduleCache,
-		/key: go-modules-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
+		/key: go-modules-v2-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-\$\{\{ hashFiles\('go\.sum'\) \}\}/,
+	);
+	assert.match(moduleCache, /go-modules-v2-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-/);
+	assert.match(moduleCache, /go-modules-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-go-\$\{\{ env\.GO_VERSION \}\}-/);
+	assert.match(modulePrefetch, /run: go list -deps -test -mod=readonly \.\/\.\.\. > \/dev\/null/);
+	assert.ok(
+		job.indexOf("      - name: Restore Go module cache") <
+			job.indexOf("      - name: Prefetch complete Go dependency graph"),
+		"the complete module graph must be prefetched after cache restore",
 	);
 
 	assert.match(buildCache, /if: matrix\.suite == 'functional'/);

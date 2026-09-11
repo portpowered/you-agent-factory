@@ -92,6 +92,28 @@ func TestFunctionalFailureUsesTerminalReasonForDetailAndTiming(t *testing.T) {
 	}
 }
 
+func TestFunctionalFailureDetailPrecedesToolchainStderr(t *testing.T) {
+	failingPackage := modulePath + "/tests/functional/quiet/failure"
+	stream := strings.Join([]string{
+		marshalGoTestEventOrPanic(goTestTimingEvent{Action: "output", Package: failingPackage, Test: "TestBroken", Output: "=== RUN   TestBroken\nexpected 2 workstations, got 1\n--- FAIL: TestBroken (0.03s)\n"}),
+		marshalGoTestEventOrPanic(goTestTimingEvent{Action: timingOutcomeFail, Package: failingPackage, Test: "TestBroken", Elapsed: 0.03}),
+		marshalGoTestEventOrPanic(goTestTimingEvent{Action: timingOutcomeFail, Package: failingPackage, Elapsed: 0.04}),
+	}, "\n")
+	toolchainStderr := "go: downloading example.com/dependency v1.2.3\n# get https://proxy.golang.org/example.com/dependency/@v/v1.2.3.zip: 200 OK"
+
+	detail := coverageFailureDetail(config{suite: functionalCoverageSuite, stream: true}, stream, toolchainStderr)
+	wantPrefix := "functional test failure: package=" + failingPackage + " test=TestBroken reason=expected 2 workstations, got 1"
+	if !strings.HasPrefix(detail, wantPrefix) {
+		t.Fatalf("functional failure detail = %q, want test failure before toolchain stderr", detail)
+	}
+	if !strings.Contains(detail, toolchainStderr) {
+		t.Fatalf("functional failure detail = %q, want retained toolchain stderr", detail)
+	}
+	if compact := compactDiagnosticError(errors.New(detail)); !strings.HasPrefix(compact, wantPrefix) || strings.Index(compact, "TestBroken") > strings.Index(compact, "go: downloading") {
+		t.Fatalf("compact diagnostic = %q, want bounded test failure before download chatter", compact)
+	}
+}
+
 func TestFunctionalRunSuppressesSuccessfulChildChatterAndKeepsArtifacts(t *testing.T) {
 	packageNames := []string{
 		modulePath + "/tests/functional/quiet/alpha",
