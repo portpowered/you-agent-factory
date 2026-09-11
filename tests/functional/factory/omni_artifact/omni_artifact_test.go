@@ -25,7 +25,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const omniModelSource = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
+// The Factory fixture explicitly overrides the built-in llm source so its
+// tiny controlled artifact remains a valid generic model. Production's
+// built-in source still selects the pinned Gemma/projector pair.
+const omniFixtureModelSource = "hf://fixture/omni-artifact/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
 
 const omniFactoryFunctionalTimeout = 60 * time.Second
 
@@ -431,6 +434,9 @@ func newFactoryFixtureWithConfig(t *testing.T, response, executionLimit string) 
 	home := t.TempDir()
 	if err := writeBuiltinModelCacheAt(home); err != nil {
 		t.Fatalf("seed builtin model cache: %v", err)
+	}
+	if err := writeOmniModelOverrideAt(home); err != nil {
+		t.Fatalf("seed controlled llm source override: %v", err)
 	}
 	if err := writeBackendCacheAt(home, llamaBackendSelection()); err != nil {
 		t.Fatalf("seed backend model cache: %v", err)

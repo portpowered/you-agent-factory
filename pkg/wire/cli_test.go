@@ -61,7 +61,7 @@ func TestModelsInvokeUsesStandaloneScopeForImplicitMissingFactory(t *testing.T) 
 		},
 	}
 	source := &modelsCLICompositionScopeSourceStub{err: layoutErr}
-	composition, err := provideModelsCLIComposition(root, source)
+	composition, err := provideModelsCLIComposition(root, source, nil)
 	if err != nil {
 		t.Fatalf("provideModelsCLIComposition() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestModelsCatalogUsesSelectedStandaloneCacheScope(t *testing.T) {
 			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 		},
 	}
-	composition, err := provideModelsCLIComposition(root, &modelsCLICompositionScopeSourceStub{})
+	composition, err := provideModelsCLIComposition(root, &modelsCLICompositionScopeSourceStub{}, nil)
 	if err != nil {
 		t.Fatalf("provideModelsCLIComposition() error = %v", err)
 	}
@@ -177,7 +177,7 @@ func TestModelsInvokePreservesExplicitAndNonLayoutFactoryFailures(t *testing.T) 
 				},
 			}
 			source := &modelsCLICompositionScopeSourceStub{err: testCase.err}
-			composition, err := provideModelsCLIComposition(root, source)
+			composition, err := provideModelsCLIComposition(root, source, nil)
 			if err != nil {
 				t.Fatalf("provideModelsCLIComposition() error = %v", err)
 			}
@@ -226,7 +226,7 @@ func TestModelsInvokeStandaloneScopePreservesOpenAndCloseFailures(t *testing.T) 
 					return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: testCase.closed}, testCase.closeErr
 				},
 			}
-			composition, err := provideModelsCLIComposition(root, source)
+			composition, err := provideModelsCLIComposition(root, source, nil)
 			if err != nil {
 				t.Fatalf("provideModelsCLIComposition() error = %v", err)
 			}

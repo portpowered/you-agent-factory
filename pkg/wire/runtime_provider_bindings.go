@@ -230,6 +230,7 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 		HealthEndpoint: spec.HealthEndpoint,
 		Backend:        spec.Backend,
 		ModelPath:      spec.ModelPath,
+		MMProjPath:     spec.MMProjPath,
 		ModelFiles:     append([]string(nil), spec.ModelFiles...),
 		BackendFiles:   append([]string(nil), spec.BackendFiles...),
 	})

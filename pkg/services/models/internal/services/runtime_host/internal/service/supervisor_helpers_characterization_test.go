@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
@@ -24,8 +26,16 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 		t.Fatalf("built-in backend = %q, want localai-llamacpp", identity.Backend)
 	}
 	inspection := cacheInspection{
-		CachePath:         `C:\models\llm\revision`,
-		ObservedArtifacts: []models.AssetArtifact{{Name: "model.gguf"}},
+		CachePath: `C:\models\llm\revision`,
+		ExpectedArtifacts: []models.AssetRequirement{
+			{Name: builtInLLMProjectorArtifactName, Bytes: builtInLLMProjectorArtifactBytes, SHA256: builtInLLMProjectorArtifactSHA256},
+			{Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes, SHA256: builtInLLMModelArtifactSHA256},
+		},
+		ObservedArtifacts: []models.AssetArtifact{
+			{Name: builtInLLMProjectorArtifactName, Bytes: builtInLLMProjectorArtifactBytes, SHA256: builtInLLMProjectorArtifactSHA256},
+			{Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes, SHA256: builtInLLMModelArtifactSHA256},
+		},
+		IntegrityVerified: true,
 		BackendRequired:   true,
 		BackendFiles:      []string{`C:\models\backend\llama.zip`},
 	}
@@ -33,20 +43,92 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
+	assertBuiltInLLMStartSpec(t, spec, identity, inspection)
+}
+
+func assertBuiltInLLMStartSpec(
+	t *testing.T,
+	spec modelseffects.HostProcessStartSpec,
+	identity supervisedIdentity,
+	inspection cacheInspection,
+) {
+	t.Helper()
 	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
 		t.Fatalf("packaged backend start spec = %#v, want no authored process or endpoint", spec)
 	}
 	if spec.Backend != identity.Backend {
 		t.Fatalf("spec backend = %q, want %q", spec.Backend, identity.Backend)
 	}
-	if spec.ModelPath != filepath.Join(inspection.CachePath, "model.gguf") {
-		t.Fatalf("spec model path = %q, want %q", spec.ModelPath, filepath.Join(inspection.CachePath, "model.gguf"))
+	wantModelPath := filepath.Join(inspection.CachePath, builtInLLMModelArtifactName)
+	wantMMProjPath := filepath.Join(inspection.CachePath, builtInLLMProjectorArtifactName)
+	if spec.ModelPath != wantModelPath {
+		t.Fatalf("spec model path = %q, want %q", spec.ModelPath, wantModelPath)
 	}
-	if len(spec.ModelFiles) != 1 || spec.ModelFiles[0] != spec.ModelPath {
-		t.Fatalf("spec model files = %#v, want the verified model layout", spec.ModelFiles)
+	if spec.MMProjPath != wantMMProjPath {
+		t.Fatalf("spec mmproj path = %q, want %q", spec.MMProjPath, wantMMProjPath)
+	}
+	wantFiles := []string{wantModelPath, wantMMProjPath}
+	if len(spec.ModelFiles) != len(wantFiles) || spec.ModelFiles[0] != wantFiles[0] || spec.ModelFiles[1] != wantFiles[1] {
+		t.Fatalf("spec model files = %#v, want %#v", spec.ModelFiles, wantFiles)
 	}
 	if len(spec.BackendFiles) != 1 || spec.BackendFiles[0] != inspection.BackendFiles[0] {
 		t.Fatalf("spec backend files = %#v, want %#v", spec.BackendFiles, inspection.BackendFiles)
+	}
+}
+
+func TestBuiltInLLMRejectsInvalidProjectorMetadataBeforeHostStart(t *testing.T) {
+	t.Parallel()
+
+	base := cacheInspection{
+		CachePath: `C:\models\llm\revision`,
+		ExpectedArtifacts: []models.AssetRequirement{
+			{Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes, SHA256: builtInLLMModelArtifactSHA256},
+			{Name: builtInLLMProjectorArtifactName, Bytes: builtInLLMProjectorArtifactBytes, SHA256: builtInLLMProjectorArtifactSHA256},
+		},
+		ObservedArtifacts: []models.AssetArtifact{
+			{Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes, SHA256: builtInLLMModelArtifactSHA256},
+			{Name: builtInLLMProjectorArtifactName, Bytes: builtInLLMProjectorArtifactBytes, SHA256: builtInLLMProjectorArtifactSHA256},
+		},
+		IntegrityVerified: true,
+	}
+	definition, ok := models.BuiltInCatalog{}.ModelDefinitionFor(models.BuiltInModelNameLLM)
+	if !ok {
+		t.Fatal("built-in llm definition is missing")
+	}
+	identity := supervisedIdentity{
+		Name: models.BuiltInModelNameLLM, Backend: "localai-llamacpp",
+		Source: definition.Source,
+	}
+	worker := &models.RuntimeWorker{Command: "fake-localai"}
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*cacheInspection)
+	}{
+		{name: "missing projector", mutate: func(inspection *cacheInspection) {
+			inspection.ObservedArtifacts = inspection.ObservedArtifacts[:1]
+		}},
+		{name: "corrupt projector metadata", mutate: func(inspection *cacheInspection) {
+			inspection.ObservedArtifacts[1].Bytes++
+		}},
+		{name: "duplicate projector", mutate: func(inspection *cacheInspection) {
+			inspection.ObservedArtifacts = append(inspection.ObservedArtifacts, inspection.ObservedArtifacts[1])
+		}},
+		{name: "escaping projector", mutate: func(inspection *cacheInspection) {
+			inspection.ObservedArtifacts[1].Name = "../" + builtInLLMProjectorArtifactName
+		}},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			inspection := base
+			inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), base.ExpectedArtifacts...)
+			inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), base.ObservedArtifacts...)
+			testCase.mutate(&inspection)
+			_, err := defaultGRPCServerStartBuilderWithSymlinkResolver(identity, inspection, worker, nil)
+			if !errors.Is(err, models.ErrHostMissingAssets) {
+				t.Fatalf("builder error = %v, want ErrHostMissingAssets", err)
+			}
+		})
 	}
 }
 

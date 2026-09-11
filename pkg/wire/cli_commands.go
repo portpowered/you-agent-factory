@@ -581,13 +581,15 @@ type modelsCLIScopeSource interface {
 }
 
 type modelsCLIComposition struct {
-	root   modelservice.Service
-	source modelsCLIScopeSource
+	root               modelservice.Service
+	source             modelsCLIScopeSource
+	loadOperatorConfig operatorsettings.ConfigLoader
 }
 
 func provideModelsCLIComposition(
 	root modelservice.Service,
 	invocation factorysessionwire.InvocationOperation,
+	loadOperatorConfig operatorsettings.ConfigLoader,
 ) (modelscli.CompositionScopeProvider, error) {
 	if root == nil {
 		return nil, errors.New("Models CLI composition requires the Models root")
@@ -596,7 +598,11 @@ func provideModelsCLIComposition(
 	if !ok || source == nil {
 		return nil, errors.New("Models CLI composition requires a Models scope source")
 	}
-	return modelsCLIComposition{root: root, source: source}, nil
+	return modelsCLIComposition{
+		root:               root,
+		source:             source,
+		loadOperatorConfig: loadOperatorConfig,
+	}, nil
 }
 
 func (composition modelsCLIComposition) CompositionModelsRoot() modelservice.Service {

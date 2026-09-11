@@ -154,6 +154,7 @@ func loadModel(
 		NBatch:     localAIModelBatchSize,
 		Embeddings: strings.EqualFold(request.ModelName, models.BuiltInModelNameEmbed),
 		ModelFile:  modelFile,
+		MMProj:     strings.TrimSpace(request.MMProjPath),
 		ModelPath:  filepath.Dir(modelFile),
 		Options:    options,
 	})

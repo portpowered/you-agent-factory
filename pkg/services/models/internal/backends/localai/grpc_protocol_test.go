@@ -3,12 +3,17 @@ package localai
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"image/png"
 	"net"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -30,6 +35,11 @@ func TestPinnedLocalAIModelOptionsDescriptorMatchesField62Contract(t *testing.T)
 	if options == nil || options.Number() != 62 ||
 		options.Cardinality() != protoreflect.Repeated || options.Kind() != protoreflect.StringKind {
 		t.Fatalf("Options descriptor = %#v, want repeated string field 62", options)
+	}
+	mmproj := fields.ByName("MMProj")
+	if mmproj == nil || mmproj.Number() != 41 ||
+		mmproj.Cardinality() != protoreflect.Optional || mmproj.Kind() != protoreflect.StringKind {
+		t.Fatalf("MMProj descriptor = %#v, want optional string field 41", mmproj)
 	}
 	for _, number := range []protoreflect.FieldNumber{15, 38} {
 		if field := fields.ByNumber(number); field != nil {
@@ -253,11 +263,13 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
 	modelFile := filepath.Join("models", "llm", "model.gguf")
+	mmprojFile := filepath.Join("models", "llm", "mmproj-F16.gguf")
 	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Backend:         "localai-llamacpp",
 		ModelName:       "llm",
 		ModelPath:       modelFile,
+		MMProjPath:      mmprojFile,
 	})
 	if err != nil {
 		t.Fatalf("Negotiate() error = %v", err)
@@ -268,17 +280,19 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	if connection.loadRequest.GetModel() != "llm" ||
 		connection.loadRequest.GetEmbeddings() ||
 		connection.loadRequest.GetModelFile() != modelFile ||
+		connection.loadRequest.GetMMProj() != mmprojFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
 		len(connection.loadRequest.GetOptions()) != 0 {
 		t.Fatalf(
-			"load request model=%q modelFile=%q modelPath=%q nBatch=%d options=%v, want model name, file path, model directory, nonzero batch size, and no VibeVoice option",
-			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
+			"load request model=%q modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want model name, file/projector paths, model directory, nonzero batch size, and no VibeVoice option",
+			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetMMProj(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
 		)
 	}
 	expected := appendStringField(nil, 1, "llm")
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
 	expected = appendStringField(expected, 21, modelFile)
+	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	if !bytes.Equal(connection.loadPayload, expected) {
 		t.Fatalf("non-TTS LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
@@ -305,8 +319,8 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 			if err != nil {
 				t.Fatalf("Negotiate() error = %v", err)
 			}
-			if len(connection.loadRequest.GetOptions()) != 0 {
-				t.Fatalf("%s LoadModel options = %#v, want no VibeVoice option", modelName, connection.loadRequest.GetOptions())
+			if len(connection.loadRequest.GetOptions()) != 0 || connection.loadRequest.GetMMProj() != "" {
+				t.Fatalf("%s LoadModel options/mmproj = %#v/%q, want no private option or projector", modelName, connection.loadRequest.GetOptions(), connection.loadRequest.GetMMProj())
 			}
 		})
 	}
@@ -486,6 +500,156 @@ func TestPinnedGRPCProtocolClientUsesNetworkDialerAgainstLocalHost(t *testing.T)
 	}
 }
 
+func TestPinnedGRPCProtocolServerProvesProjectorLoadBeforeImagePredict(t *testing.T) {
+	t.Parallel()
+
+	imageBytes := controlledImageBytes(t)
+	endpoint, backend := startControlledImageServer(t)
+	modelRoot := t.TempDir()
+	modelFile := filepath.Join(modelRoot, "gemma-4-E4B-it-Q4_K_M.gguf")
+	mmprojFile := filepath.Join(modelRoot, "mmproj-F16.gguf")
+	ctx, cancel := context.WithTimeout(context.Background(), testProtocolDeadline)
+	defer cancel()
+
+	negotiateControlledImageHost(t, ctx, endpoint, modelFile, mmprojFile)
+	result := invokeControlledImage(t, ctx, endpoint, imageBytes)
+	assertControlledImageResult(t, result)
+	assertControlledImageObservation(t, backend.snapshot(), modelRoot, modelFile, mmprojFile, 1, controlledImagePNGHash)
+}
+
+func TestPinnedGRPCProtocolServerKeepsTextOnlyPredictImageFree(t *testing.T) {
+	t.Parallel()
+
+	endpoint, backend := startControlledImageServer(t)
+	modelRoot := t.TempDir()
+	modelFile := filepath.Join(modelRoot, "gemma-4-E4B-it-Q4_K_M.gguf")
+	mmprojFile := filepath.Join(modelRoot, "mmproj-F16.gguf")
+	ctx, cancel := context.WithTimeout(context.Background(), testProtocolDeadline)
+	defer cancel()
+
+	negotiateControlledImageHost(t, ctx, endpoint, modelFile, mmprojFile)
+	result := invokeControlledTextOnly(t, ctx, endpoint)
+	assertControlledImageResult(t, result)
+	assertControlledImageObservation(t, backend.snapshot(), modelRoot, modelFile, mmprojFile, 0, "")
+}
+
+func controlledImageBytes(t *testing.T) []byte {
+	t.Helper()
+	imageBytes, err := base64.StdEncoding.DecodeString(controlledImagePNGBase64)
+	if err != nil {
+		t.Fatalf("DecodeString(controlled PNG) error = %v", err)
+	}
+	if _, err := png.Decode(bytes.NewReader(imageBytes)); err != nil {
+		t.Fatalf("controlled image is not a PNG: %v", err)
+	}
+	return imageBytes
+}
+
+func startControlledImageServer(t *testing.T) (string, *controlledImageBackend) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := grpcgo.NewServer()
+	backend := &controlledImageBackend{}
+	server.RegisterService(&localAIBackendServiceDesc, backend)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		server.Stop()
+		_ = listener.Close()
+		<-serveDone
+	})
+	return listener.Addr().String(), backend
+}
+
+func negotiateControlledImageHost(t *testing.T, ctx context.Context, endpoint, modelFile, mmprojFile string) {
+	t.Helper()
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(platformgrpc.NetworkDialer{})
+	negotiated, err := negotiator.Negotiate(ctx, endpoint, modelseffects.HostProtocolNegotiationRequest{
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Backend:         "localai-llamacpp",
+		ModelName:       models.BuiltInModelNameLLM,
+		ModelPath:       modelFile,
+		MMProjPath:      mmprojFile,
+	})
+	if err != nil {
+		t.Fatalf("Negotiate() error = %v", err)
+	}
+	if !negotiated.Ready {
+		t.Fatalf("Negotiate() result = %#v, want ready", negotiated)
+	}
+}
+
+func invokeControlledImage(t *testing.T, ctx context.Context, endpoint string, imageBytes []byte) OmniInvocationResult {
+	t.Helper()
+	return invokeControlledOmni(t, ctx, endpoint, []models.InferenceInput{
+		{Name: "prompt", Modality: models.ModalityText, Content: "describe this image"},
+		{Name: "image", Modality: models.ModalityImage, ContentType: "image/png", MediaType: "image/png", Content: string(imageBytes)},
+	})
+}
+
+func invokeControlledTextOnly(t *testing.T, ctx context.Context, endpoint string) OmniInvocationResult {
+	t.Helper()
+	return invokeControlledOmni(t, ctx, endpoint, []models.InferenceInput{
+		{Name: "prompt", Modality: models.ModalityText, Content: "describe this image"},
+	})
+}
+
+func invokeControlledOmni(t *testing.T, ctx context.Context, endpoint string, inputs []models.InferenceInput) OmniInvocationResult {
+	t.Helper()
+	codec := NewPinnedOmniCodec(NewPinnedGRPCProtocolClient(platformgrpc.NetworkDialer{}))
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:controlled-image")
+	if err != nil {
+		t.Fatalf("scope.Parse: %v", err)
+	}
+	result, err := codec.Invoke(WithInvocationEndpoint(ctx, endpoint), models.InvokeModelRequest{
+		Scope:     scope,
+		Holder:    "controlled-image-test",
+		Model:     models.ModelReference{NameOrURI: models.BuiltInModelNameLLM},
+		Operation: models.OperationOMNI,
+		Inputs:    inputs,
+	})
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	return result
+}
+
+func assertControlledImageResult(t *testing.T, result OmniInvocationResult) {
+	t.Helper()
+	if len(result.Content) != 1 || result.Content[0].Content != "controlled image response" {
+		t.Fatalf("Invoke() result = %#v, want controlled text output", result)
+	}
+}
+
+func assertControlledImageObservation(
+	t *testing.T,
+	observation controlledImageObservation,
+	modelRoot, modelFile, mmprojFile string,
+	wantImageCount int,
+	wantImageSHA256 string,
+) {
+	t.Helper()
+	if !equalStrings(observation.calls, []string{localAIHealthMethod, localAILoadModelMethod, localAIPredictMethod}) {
+		t.Fatalf("server calls = %#v, want Health, LoadModel, Predict", observation.calls)
+	}
+	if observation.load.ModelFile != modelFile || observation.load.ModelPath != modelRoot ||
+		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM {
+		t.Fatalf("server LoadModel = %#v, want exact model/projector paths", observation.load)
+	}
+	if observation.imageCount != wantImageCount || observation.imageSHA256 != wantImageSHA256 {
+		t.Fatalf("server image observation = count:%d sha256:%q, want count:%d sha256:%q", observation.imageCount, observation.imageSHA256, wantImageCount, wantImageSHA256)
+	}
+}
+
+const (
+	controlledImagePNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+	controlledImagePNGHash   = "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460"
+	testProtocolDeadline     = 10 * time.Second
+)
+
 type recordingGRPCDialer struct {
 	connection *recordingGRPCConnection
 }
@@ -571,8 +735,86 @@ func equalStrings(left, right []string) bool {
 	return true
 }
 
+type controlledImageBackend struct {
+	mu          sync.Mutex
+	calls       []string
+	load        controlledLoadObservation
+	imageCount  int
+	imageSHA256 string
+}
+
+func (backend *controlledImageBackend) Health(context.Context, *HealthMessage) (*Reply, error) {
+	backend.record(localAIHealthMethod)
+	return &Reply{}, nil
+}
+
+func (backend *controlledImageBackend) LoadModel(_ context.Context, request *ModelOptions) (*Result, error) {
+	backend.mu.Lock()
+	backend.calls = append(backend.calls, localAILoadModelMethod)
+	backend.load = controlledLoadObservation{
+		Model:     request.GetModel(),
+		ModelFile: request.GetModelFile(),
+		ModelPath: request.GetModelPath(),
+		MMProj:    request.GetMMProj(),
+		Options:   append([]string(nil), request.GetOptions()...),
+	}
+	backend.mu.Unlock()
+	return &Result{Success: true}, nil
+}
+
+func (backend *controlledImageBackend) Predict(_ context.Context, request *PredictOptions) (*Reply, error) {
+	var imageHash string
+	if len(request.GetImages()) == 1 {
+		imageBytes, err := base64.StdEncoding.DecodeString(request.GetImages()[0])
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "image is not base64")
+		}
+		digest := sha256.Sum256(imageBytes)
+		imageHash = hex.EncodeToString(digest[:])
+	}
+	backend.mu.Lock()
+	backend.calls = append(backend.calls, localAIPredictMethod)
+	backend.imageCount = len(request.GetImages())
+	backend.imageSHA256 = imageHash
+	backend.mu.Unlock()
+	return &Reply{Message: []byte("controlled image response")}, nil
+}
+
+func (backend *controlledImageBackend) record(method string) {
+	backend.mu.Lock()
+	backend.calls = append(backend.calls, method)
+	backend.mu.Unlock()
+}
+
+type controlledImageObservation struct {
+	calls       []string
+	load        controlledLoadObservation
+	imageCount  int
+	imageSHA256 string
+}
+
+type controlledLoadObservation struct {
+	Model     string
+	ModelFile string
+	ModelPath string
+	MMProj    string
+	Options   []string
+}
+
+func (backend *controlledImageBackend) snapshot() controlledImageObservation {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	return controlledImageObservation{
+		calls:       append([]string(nil), backend.calls...),
+		load:        backend.load,
+		imageCount:  backend.imageCount,
+		imageSHA256: backend.imageSHA256,
+	}
+}
+
 type networkBackend interface {
 	Health(context.Context, *HealthMessage) (*Reply, error)
+	LoadModel(context.Context, *ModelOptions) (*Result, error)
 	Predict(context.Context, *PredictOptions) (*Reply, error)
 }
 
@@ -580,6 +822,10 @@ type networkBackendImpl struct{}
 
 func (networkBackendImpl) Health(context.Context, *HealthMessage) (*Reply, error) {
 	return &Reply{}, nil
+}
+
+func (networkBackendImpl) LoadModel(context.Context, *ModelOptions) (*Result, error) {
+	return &Result{Success: true}, nil
 }
 
 func (networkBackendImpl) Predict(context.Context, *PredictOptions) (*Reply, error) {
@@ -591,8 +837,29 @@ var localAIBackendServiceDesc = grpcgo.ServiceDesc{
 	HandlerType: (*networkBackend)(nil),
 	Methods: []grpcgo.MethodDesc{
 		{MethodName: "Health", Handler: localAIHealthHandler},
+		{MethodName: "LoadModel", Handler: localAILoadModelHandler},
 		{MethodName: "Predict", Handler: localAIPredictHandler},
 	},
+}
+
+func localAILoadModelHandler(
+	srv any,
+	ctx context.Context,
+	decode func(any) error,
+	interceptor grpcgo.UnaryServerInterceptor,
+) (any, error) {
+	request := new(ModelOptions)
+	if err := decode(request); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(networkBackend).LoadModel(ctx, request)
+	}
+	info := &grpcgo.UnaryServerInfo{Server: srv, FullMethod: localAILoadModelMethod}
+	handler := func(ctx context.Context, request any) (any, error) {
+		return srv.(networkBackend).LoadModel(ctx, request.(*ModelOptions))
+	}
+	return interceptor(ctx, request, info, handler)
 }
 
 func localAIHealthHandler(

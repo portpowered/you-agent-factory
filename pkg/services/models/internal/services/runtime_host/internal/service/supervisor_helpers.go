@@ -13,10 +13,20 @@ import (
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
+const (
+	builtInLLMModelArtifactName       = "gemma-4-E4B-it-Q4_K_M.gguf"
+	builtInLLMModelArtifactBytes      = int64(4977171584)
+	builtInLLMModelArtifactSHA256     = "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"
+	builtInLLMProjectorArtifactName   = "mmproj-F16.gguf"
+	builtInLLMProjectorArtifactBytes  = int64(990372672)
+	builtInLLMProjectorArtifactSHA256 = "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51"
+)
+
 type supervisedIdentity struct {
 	Name       string
 	Backend    string
 	LoadPolicy string
+	Source     string
 	Revision   string
 }
 
@@ -111,6 +121,7 @@ func supervisedIdentityForModel(
 	if definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName); ok {
 		identity.Backend = strings.TrimSpace(definition.Backend)
 		identity.LoadPolicy = string(definition.LoadPolicy)
+		identity.Source = strings.TrimSpace(definition.Source)
 	}
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil {
 		if backend := strings.TrimSpace(resource.Backend); backend != "" {
@@ -121,6 +132,9 @@ func supervisedIdentityForModel(
 		}
 	}
 	if overlay, ok := modelOverlay(overlays, modelName); ok {
+		if overlay.Source != nil {
+			identity.Source = strings.TrimSpace(*overlay.Source)
+		}
 		if overlay.Backend != nil {
 			identity.Backend = strings.TrimSpace(*overlay.Backend)
 		}
@@ -132,6 +146,7 @@ func supervisedIdentityForModel(
 		Name:       identity.Name,
 		Backend:    identity.Backend,
 		LoadPolicy: identity.LoadPolicy,
+		Source:     identity.Source,
 		Revision:   identity.Revision,
 	}
 }
@@ -163,6 +178,8 @@ func cacheInspectionFromAssets(inspection scopedassets.RuntimeCacheInspection) c
 		InstalledFileCount:    inspection.InstalledFileCount,
 		MissingAssets:         append([]string(nil), inspection.MissingAssets...),
 		PartialArtifacts:      inspection.PartialArtifacts,
+		ExpectedArtifacts:     append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		IntegrityVerified:     inspection.IntegrityVerified,
 		BackendRequired:       inspection.BackendRequired,
 		BackendCachePath:      inspection.BackendCachePath,
 		BackendRevision:       inspection.BackendRevision,
@@ -180,6 +197,8 @@ type cacheInspection struct {
 	InstalledFileCount    int
 	MissingAssets         []string
 	PartialArtifacts      bool
+	ExpectedArtifacts     []models.AssetRequirement
+	IntegrityVerified     bool
 	BackendRequired       bool
 	BackendCachePath      string
 	BackendRevision       string
@@ -245,6 +264,15 @@ func defaultGRPCServerStartBuilderWithSymlinkResolver(
 			identity.Backend,
 		)
 	}
+	var err error
+	var modelPath, mmProjPath string
+	var modelFiles []string
+	if isBuiltInLLMIdentity(identity) {
+		modelPath, mmProjPath, modelFiles, err = builtInLLMArtifactPaths(inspection, resolveSymlinks)
+		if err != nil {
+			return modelseffects.HostProcessStartSpec{}, err
+		}
+	}
 	command := strings.TrimSpace(worker.Command)
 	if command == "" {
 		if !inspection.BackendRequired || len(inspection.BackendFiles) == 0 {
@@ -253,13 +281,17 @@ func defaultGRPCServerStartBuilderWithSymlinkResolver(
 				models.ErrHostMissingAssets, identity.Name,
 			)
 		}
-		modelFiles, err := modelArtifactPaths(inspection, resolveSymlinks)
-		if err != nil {
-			return modelseffects.HostProcessStartSpec{}, err
+		if modelFiles == nil {
+			modelFiles, err = modelArtifactPaths(inspection, resolveSymlinks)
+			if err != nil {
+				return modelseffects.HostProcessStartSpec{}, err
+			}
+			modelPath = modelFiles[0]
 		}
 		return modelseffects.HostProcessStartSpec{
 			Backend:      identity.Backend,
-			ModelPath:    modelFiles[0],
+			ModelPath:    modelPath,
+			MMProjPath:   mmProjPath,
 			ModelFiles:   modelFiles,
 			BackendFiles: append([]string(nil), inspection.BackendFiles...),
 		}, nil
@@ -291,7 +323,121 @@ func defaultGRPCServerStartBuilderWithSymlinkResolver(
 		Command:        command,
 		Args:           args,
 		HealthEndpoint: endpoint,
+		ModelPath:      modelPath,
+		MMProjPath:     mmProjPath,
+		ModelFiles:     modelFiles,
 	}, nil
+}
+
+func isBuiltInLLMIdentity(identity supervisedIdentity) bool {
+	if !strings.EqualFold(strings.TrimSpace(identity.Name), models.BuiltInModelNameLLM) {
+		return false
+	}
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
+	return ok && strings.TrimSpace(identity.Source) == strings.TrimSpace(definition.Source)
+}
+
+func builtInLLMArtifactPaths(
+	inspection cacheInspection,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+) (string, string, []string, error) {
+	paths, err := modelArtifactPaths(inspection, resolveSymlinks)
+	if err != nil {
+		return "", "", nil, err
+	}
+	wanted := builtInLLMArtifactRequirements()
+	if !inspection.IntegrityVerified {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	if len(inspection.ExpectedArtifacts) != len(wanted) || len(inspection.ObservedArtifacts) != len(wanted) || len(paths) != len(wanted) {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	if !validBuiltInLLMRequirements(inspection.ExpectedArtifacts, wanted) {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	modelPath, mmProjPath, valid := builtInLLMObservedPaths(inspection.ObservedArtifacts, paths, wanted)
+	if !valid {
+		return "", "", nil, invalidModelArtifactLayout()
+	}
+	return modelPath, mmProjPath, []string{modelPath, mmProjPath}, nil
+}
+
+func builtInLLMArtifactRequirements() map[string]models.AssetRequirement {
+	return map[string]models.AssetRequirement{
+		builtInLLMModelArtifactName: {
+			Name: builtInLLMModelArtifactName, Bytes: builtInLLMModelArtifactBytes,
+			SHA256: builtInLLMModelArtifactSHA256,
+		},
+		builtInLLMProjectorArtifactName: {
+			Name: builtInLLMProjectorArtifactName, Bytes: builtInLLMProjectorArtifactBytes,
+			SHA256: builtInLLMProjectorArtifactSHA256,
+		},
+	}
+}
+
+func validBuiltInLLMRequirements(
+	requirements []models.AssetRequirement,
+	wanted map[string]models.AssetRequirement,
+) bool {
+	seen := make(map[string]struct{}, len(requirements))
+	for _, requirement := range requirements {
+		if !matchesBuiltInLLMRequirement(requirement.Name, requirement.Bytes, requirement.SHA256, wanted) {
+			return false
+		}
+		if _, duplicate := seen[requirement.Name]; duplicate {
+			return false
+		}
+		seen[requirement.Name] = struct{}{}
+	}
+	return len(seen) == len(wanted)
+}
+
+func matchesBuiltInLLMRequirement(
+	name string,
+	bytes int64,
+	sha256 string,
+	wanted map[string]models.AssetRequirement,
+) bool {
+	trimmedName := strings.TrimSpace(name)
+	want, ok := wanted[trimmedName]
+	if !ok {
+		return false
+	}
+	if trimmedName != name {
+		return false
+	}
+	if bytes != want.Bytes {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(sha256), want.SHA256)
+}
+
+func builtInLLMObservedPaths(
+	artifacts []models.AssetArtifact,
+	paths []string,
+	wanted map[string]models.AssetRequirement,
+) (string, string, bool) {
+	seen := make(map[string]struct{}, len(artifacts))
+	var modelPath, mmProjPath string
+	for index, artifact := range artifacts {
+		if !matchesBuiltInLLMRequirement(artifact.Name, artifact.Bytes, artifact.SHA256, wanted) {
+			return "", "", false
+		}
+		if _, duplicate := seen[artifact.Name]; duplicate {
+			return "", "", false
+		}
+		seen[artifact.Name] = struct{}{}
+		switch artifact.Name {
+		case builtInLLMModelArtifactName:
+			modelPath = paths[index]
+		case builtInLLMProjectorArtifactName:
+			mmProjPath = paths[index]
+		}
+	}
+	if len(seen) != len(wanted) {
+		return "", "", false
+	}
+	return modelPath, mmProjPath, true
 }
 
 func modelArtifactPaths(

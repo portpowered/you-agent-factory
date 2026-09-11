@@ -110,6 +110,15 @@ func (s *service) acquireGenericCacheOnce(
 		return cacheResultFromPaths(artifactKind, artifacts, cached), inspectErr
 	}
 	if len(missing) == 0 {
+		// Verified members may have been recovered from different partial
+		// content-addressed records. Do not expose that combination as a
+		// complete revision: copy every verified member into one newly published
+		// snapshot before returning a successful result.
+		if cacheResultFromPaths(artifactKind, artifacts, cached).snapshotPath == "" {
+			return s.publishGenericCache(
+				ctx, kind, artifactKind, source, artifacts, cached, nil, roots,
+			)
+		}
 		cached, err = s.repairLegacyGenericCache(ctx, kind, source, artifacts, cached, roots)
 		if err != nil {
 			return cacheResultFromPaths(artifactKind, artifacts, cached), err
@@ -149,6 +158,18 @@ func (s *service) inspectGenericCache(
 		missing = append(missing, artifact)
 	}
 	if len(missing) > 0 {
+		recovered, remaining, err := s.inspectPartialGenericCache(
+			ctx, kind, source, artifacts, missing, roots,
+		)
+		if err != nil {
+			return cached, missing, err
+		}
+		for name, artifact := range recovered {
+			cached[name] = artifact
+		}
+		missing = remaining
+	}
+	if len(missing) > 0 {
 		if legacy, found, err := s.inspectLegacyGenericCache(ctx, kind, source, artifacts, roots); err != nil {
 			return cached, artifacts, err
 		} else if found {
@@ -159,6 +180,78 @@ func (s *service) inspectGenericCache(
 		}
 	}
 	return cached, missing, nil
+}
+
+func (s *service) inspectPartialGenericCache(
+	ctx context.Context,
+	kind string,
+	source genericSource,
+	requested []genericArtifact,
+	missing []genericArtifact,
+	roots []string,
+) (map[string]genericCachePath, []genericArtifact, error) {
+	records := make([]genericCacheRecord, 0)
+	for _, root := range roots {
+		records = append(records, s.discoverContentAddressedRecords(root, kind, source)...)
+	}
+	recovered := make(map[string]genericCachePath, len(missing))
+	remaining := make([]genericArtifact, 0, len(missing))
+	for _, artifact := range missing {
+		name := artifact.requirement.Name
+		found := false
+		for _, record := range records {
+			// Complete records intentionally remain on the legacy-repair path;
+			// their metadata may need to be rewritten even when all files are
+			// already present.
+			if genericCacheMetadataCoversArtifacts(record.metadata, requested) {
+				continue
+			}
+			if !genericCacheMetadataContainsArtifact(record.metadata, name) {
+				continue
+			}
+			path := filepath.Join(record.snapshotPath, filepath.FromSlash(name))
+			verified, ok, err := s.verifyGenericCachedArtifact(
+				ctx, path, artifact.requirement,
+			)
+			if err != nil {
+				return recovered, remaining, err
+			}
+			if !ok {
+				continue
+			}
+			recovered[name] = verified
+			found = true
+			break
+		}
+		if !found {
+			remaining = append(remaining, artifact)
+		}
+	}
+	return recovered, remaining, nil
+}
+
+func genericCacheMetadataContainsArtifact(metadata genericCacheMetadata, name string) bool {
+	for _, artifact := range metadata.Artifacts {
+		if filepath.ToSlash(strings.TrimSpace(artifact.Name)) == filepath.ToSlash(strings.TrimSpace(name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func genericCacheMetadataCoversArtifacts(
+	metadata genericCacheMetadata,
+	requested []genericArtifact,
+) bool {
+	if len(requested) == 0 || len(metadata.Artifacts) < len(requested) {
+		return false
+	}
+	for _, artifact := range requested {
+		if !genericCacheMetadataContainsArtifact(metadata, artifact.requirement.Name) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *service) findGenericArtifact(
@@ -388,7 +481,7 @@ func (s *service) refreshGenericCacheArtifacts(
 	if len(artifacts) == 0 {
 		return discoveredArtifacts, nil
 	}
-	return mergeGenericManifest(artifacts, discoveredArtifacts)
+	return mergeDiscoveredGenericArtifacts(artifacts, discoveredArtifacts)
 }
 
 func (s *service) moveExistingGenericSnapshot(finalPath string) (string, bool, error) {

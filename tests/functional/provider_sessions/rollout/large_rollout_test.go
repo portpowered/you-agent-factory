@@ -32,6 +32,7 @@ const (
 	rolloutSuccessProviderID    = "rollout-controlled-success-provider"
 	rolloutFailureProviderID    = "rollout-controlled-failure-provider"
 	rolloutSuccessFinalResponse = "Codex fixture answer COMPLETE"
+	rolloutFixtureLLMSource     = "hf://fixture/provider-sessions-rollout/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
 	rolloutScenarioTimeout      = 60 * time.Second
 )
 
@@ -135,6 +136,7 @@ func newRolloutSharedFixture(t *testing.T) *rolloutSharedFixture {
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatalf("create controlled rollout shared home: %v", err)
 	}
+	writeRolloutOperatorModelSourceOverride(t, homeDir)
 	support.WriteAgentConfig(t, hostFactory, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
 
 	runner := newRolloutCommandRunner(t)
@@ -218,6 +220,7 @@ func runControlledRolloutCase(t *testing.T, fixture *rolloutSharedFixture, testC
 		t.Fatalf("copy %s Factory: %v", testCase.name, err)
 	}
 	homeDir := t.TempDir()
+	writeRolloutOperatorModelSourceOverride(t, homeDir)
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
 	support.WriteWorkstationConfig(t, factoryDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n"+rolloutRoutePrefix+"{{ (index .Inputs 0).Name }}\n")
 
@@ -662,6 +665,27 @@ func rolloutEnvironment(homeDir string) []string {
 	env := append([]string(nil), os.Environ()...)
 	env = append(env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 	return env
+}
+
+func writeRolloutOperatorModelSourceOverride(t testing.TB, homeDir string) {
+	t.Helper()
+
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	config := map[string]any{
+		"models": map[string]any{
+			"llm": map[string]any{"source": rolloutFixtureLLMSource},
+		},
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal rollout operator model source override: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("create rollout operator config directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("write rollout operator model source override: %v", err)
+	}
 }
 
 func copyRolloutFactory(sourceDir, targetDir string) error {

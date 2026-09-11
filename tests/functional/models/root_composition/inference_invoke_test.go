@@ -838,6 +838,7 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 
 func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
 	t.Helper()
+	source = genericModelFixtureSource(t, home, source)
 	name := "weights.bin"
 	if sourcePath := strings.Split(strings.TrimSuffix(strings.TrimSpace(source), "@"), "@")[0]; strings.Contains(sourcePath, "/") {
 		parts := strings.Split(strings.Trim(sourcePath, "/"), "/")

@@ -18,6 +18,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -485,7 +486,7 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	gotProcess, err := launcher.Start(context.Background(), modelswire.HostProcessStartSpec{
 		Command: "model-host", Args: []string{"serve"}, Env: []string{"MODEL=seal"},
 		WorkDir: "runtime", HealthEndpoint: process.healthEndpoint,
-		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf",
+		Backend: "localai-llamacpp", ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
 		BackendFiles: []string{"runtime/backend.zip"},
 	})
 	if err != nil {
@@ -494,7 +495,7 @@ func TestModelsCompositionAdaptsEdgePortsAtTheWireBoundary(t *testing.T) {
 	if gotSpec.Command != "model-host" || len(gotSpec.Args) != 1 || gotSpec.Args[0] != "serve" ||
 		len(gotSpec.Env) != 1 || gotSpec.Env[0] != "MODEL=seal" || gotSpec.WorkDir != "runtime" ||
 		gotSpec.HealthEndpoint != process.healthEndpoint || gotSpec.Backend != "localai-llamacpp" ||
-		gotSpec.ModelPath != "runtime/model.gguf" || len(gotSpec.BackendFiles) != 1 ||
+		gotSpec.ModelPath != "runtime/model.gguf" || gotSpec.MMProjPath != "runtime/mmproj.gguf" || len(gotSpec.BackendFiles) != 1 ||
 		gotSpec.BackendFiles[0] != "runtime/backend.zip" {
 		t.Fatalf("adapted process spec = %#v, want exact edge projection", gotSpec)
 	}
@@ -603,7 +604,8 @@ func modelEdgeProtocolRequest() modelswire.HostProtocolNegotiationRequest {
 		ProtocolVersion: "model-host.v1", Backend: "localai-vibevoice", ModelName: "tts",
 		Revision:  "revision-1",
 		Platform:  models.AssetHostPlatform{OperatingSystem: "test-os", Architecture: "test-arch"},
-		ModelPath: "runtime/model.gguf", ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
+		ModelPath: "runtime/model.gguf", MMProjPath: "runtime/mmproj.gguf",
+		ModelFiles: []string{"runtime/model.gguf", "runtime/tokenizer.gguf"},
 	}
 }
 
@@ -618,7 +620,8 @@ func assertAdaptedProtocolNegotiation(t *testing.T, request modelswire.HostProto
 	if protocol.endpoint != "grpc://model-host" || protocol.request.ProtocolVersion != request.ProtocolVersion ||
 		protocol.request.Backend != request.Backend || protocol.request.ModelName != request.ModelName ||
 		protocol.request.Revision != request.Revision || protocol.request.Platform != request.Platform ||
-		protocol.request.ModelPath != request.ModelPath || !equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
+		protocol.request.ModelPath != request.ModelPath || protocol.request.MMProjPath != request.MMProjPath ||
+		!equalStringSlices(protocol.request.ModelFiles, request.ModelFiles) {
 		t.Fatalf("edge protocol request = %#v at %q, want exact projection", protocol.request, protocol.endpoint)
 	}
 	if result != (modelswire.HostProtocolNegotiationResult{
@@ -657,6 +660,7 @@ func assertAdaptedGRPCConnection(t *testing.T, request modelswire.HostProtocolNe
 		t.Fatalf("close model host connection: %v", err)
 	}
 	if connection.request.Backend != request.Backend || connection.request.ModelPath != request.ModelPath ||
+		connection.request.MMProjPath != request.MMProjPath ||
 		!equalStringSlices(connection.request.ModelFiles, request.ModelFiles) || !connection.closed {
 		t.Fatalf("dialed connection state = %#v, want request and close", connection)
 	}
@@ -883,7 +887,7 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 	source := &modelsCLICompositionScopeSourceStub{
 		scope: modelservice.PresentationScope{Scope: scope},
 	}
-	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source)
+	composition, err := provideModelsCLIComposition(modelsCLICompositionRootStub{}, source, nil)
 	if err != nil {
 		t.Fatalf("provideModelsCLIComposition() error = %v", err)
 	}
@@ -927,5 +931,58 @@ func TestModelsInvokeCompositionMapsCacheSelectionToPresentationScope(t *testing
 	}
 	if !reflect.DeepEqual(source.request, want) {
 		t.Fatalf("presentation scope request = %#v, want %#v", source.request, want)
+	}
+}
+
+func TestModelsInvokeStandaloneScopeProjectsOperatorModelOverlay(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:standalone-overlay")
+	if err != nil {
+		t.Fatalf("parse standalone overlay scope: %v", err)
+	}
+	home := t.TempDir()
+	fixtureSource := "hf://fixture/models/llm.gguf@0000000000000000000000000000000000000000"
+	var openRequest modelservice.OpenRuntimeScopeRequest
+	root := modelsCLICompositionRootStub{
+		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+			openRequest = request
+			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+		},
+		closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
+			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		},
+	}
+	loader := func(path string) (operatorsettings.Config, error) {
+		if path != operatorsettings.DefaultConfigPath(home) {
+			t.Fatalf("operator config path = %q, want %q", path, operatorsettings.DefaultConfigPath(home))
+		}
+		return operatorsettings.Config{Models: map[string]operatorsettings.ModelConfig{
+			modelservice.BuiltInModelNameLLM: {Source: &fixtureSource},
+		}}, nil
+	}
+	composition, err := provideModelsCLIComposition(
+		root,
+		&modelsCLICompositionScopeSourceStub{err: factorydefinitions.ErrFactoryLayoutNotFound},
+		loader,
+	)
+	if err != nil {
+		t.Fatalf("provideModelsCLIComposition() error = %v", err)
+	}
+	opener, ok := composition.(modelscli.CompositionInvokeScopeWithModelCacheOpener)
+	if !ok {
+		t.Fatal("Models CLI composition does not expose cache-aware invoke scope opener")
+	}
+	opened, err := opener.CompositionOpenInvokeScopeWithModelCache(context.Background(), modelscli.InvokeScopeRequest{
+		Config: modelscli.InvokeConfig{HomeDir: home},
+	})
+	if err != nil {
+		t.Fatalf("CompositionOpenInvokeScopeWithModelCache() error = %v", err)
+	}
+	if overlay := openRequest.Config.OperatorModels[modelservice.BuiltInModelNameLLM]; overlay.Source == nil || *overlay.Source != fixtureSource {
+		t.Fatalf("standalone Models operator overlay = %#v, want fixture source %q", overlay, fixtureSource)
+	}
+	if err := opened.Close(context.Background()); err != nil {
+		t.Fatalf("close standalone overlay scope: %v", err)
 	}
 }
