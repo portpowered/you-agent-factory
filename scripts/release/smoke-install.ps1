@@ -24,6 +24,8 @@ param(
     [string]$ExpectedGoReleaserVersion,
     [string]$ExpectedEsbuildVersion,
     [string]$ExpectedEsbuildSHA256,
+    [ValidateRange(1, 4)]
+    [int]$CandidateGoProcessLimit = 4,
     [int64]$CandidateMaximumWorkBytes = 4294967296,
     [string]$ReportPath
 )
@@ -31,6 +33,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $SmokeMaximumTaskRootPathLength = 220
+$script:SmokeInstallScriptPath = $PSCommandPath
 
 if ($null -eq ([System.Management.Automation.PSTypeName]::new("InfiniteYou.ReleaseSmoke.ProcessRunner").Type)) {
     Add-Type -TypeDefinition @'
@@ -627,6 +630,20 @@ function Invoke-SmokeGit {
     return ($output -join "`n").Trim()
 }
 
+function Get-CandidateDriverRevision {
+    $scriptPath = $script:SmokeInstallScriptPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        Fail-Smoke "candidate driver script path is unavailable"
+    }
+    $scriptDirectory = Split-Path -Parent (Resolve-SmokePath $scriptPath)
+    $driverRoot = Invoke-SmokeGit @("-C", $scriptDirectory, "rev-parse", "--show-toplevel")
+    $revision = Invoke-SmokeGit @("-C", $driverRoot, "rev-parse", "HEAD")
+    if ($revision -notmatch '^[0-9a-fA-F]{40}$') {
+        Fail-Smoke "candidate driver revision is not a full Git object ID: $revision"
+    }
+    return $revision.ToLowerInvariant()
+}
+
 function Normalize-CandidateRepository {
     param([string]$Repository)
     return $Repository.Trim().TrimEnd('/').Replace('\', '/').ToLowerInvariant() -replace '\.git$', ''
@@ -645,6 +662,19 @@ function Get-CandidateSourceIdentity {
         Fail-Smoke "candidate source origin is $origin, want $Repository"
     }
     return [pscustomobject][ordered]@{ repository = $origin; commit = $resolvedCommit; tree = $tree }
+}
+
+function Set-CandidateGoProcessEnvironment {
+    param(
+        [ValidateRange(1, 4)]
+        [int]$GoProcessLimit = 4
+    )
+    $env:GOFLAGS = "-p=$GoProcessLimit"
+    $env:GOMAXPROCS = [string]$GoProcessLimit
+    return [ordered]@{
+        GOFLAGS = $env:GOFLAGS
+        GOMAXPROCS = $env:GOMAXPROCS
+    }
 }
 
 function Get-SmokeAvailablePort {
@@ -1144,6 +1174,8 @@ function Invoke-LocalCandidateSmoke {
         [string]$DependencySourcePath,
         [string]$OutputDirectory,
         [string]$WorkDirectory,
+        [ValidateRange(1, 4)]
+        [int]$GoProcessLimit = 4,
         [string]$ReleaseToolPath,
         [string]$ReleaseToolVersion,
         [string]$EsbuildVersion,
@@ -1191,8 +1223,6 @@ function Invoke-LocalCandidateSmoke {
     if ($workDirectory.Length -gt 80) {
         Fail-Smoke "candidate work directory must be at most 80 characters so Windows native tools remain below path limits"
     }
-    $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
-        -Commit $SourceCommit -Repository $SourceRepository
     [void][System.IO.Directory]::CreateDirectory($outputDirectory)
     [void][System.IO.Directory]::CreateDirectory($workDirectory)
     $checkoutPath = Join-Path $workDirectory "src"
@@ -1204,11 +1234,12 @@ function Invoke-LocalCandidateSmoke {
     }
     $report = [ordered]@{
         schemaVersion = "local-windows-candidate/v1"
+        driverRevision = ""
         status = "FAIL"
         source = [ordered]@{
             repository = $SourceRepository
-            commit = $sourceIdentity.commit
-            tree = $sourceIdentity.tree
+            commit = $SourceCommit
+            tree = ""
         }
         build = [ordered]@{}
         artifacts = @()
@@ -1219,8 +1250,13 @@ function Invoke-LocalCandidateSmoke {
     $failure = $null
     $dependencyJunctionPath = $null
     try {
-        $env:GOFLAGS = "-p=4"
-        $env:GOMAXPROCS = "4"
+        $report.driverRevision = Get-CandidateDriverRevision
+        $sourceIdentity = Get-CandidateSourceIdentity -SourcePath $sourcePath `
+            -Commit $SourceCommit -Repository $SourceRepository
+        $report.source.repository = $sourceIdentity.repository
+        $report.source.commit = $sourceIdentity.commit
+        $report.source.tree = $sourceIdentity.tree
+        $processEnvironment = Set-CandidateGoProcessEnvironment -GoProcessLimit $GoProcessLimit
         $env:GOPROXY = "off"
         $env:GOSUMDB = "off"
         $env:GOTOOLCHAIN = "local"
@@ -1322,8 +1358,8 @@ function Invoke-LocalCandidateSmoke {
             workBytes = $workBytes
             maximumWorkBytes = $MaximumWorkBytes
             environment = [ordered]@{
-                GOFLAGS = $env:GOFLAGS
-                GOMAXPROCS = $env:GOMAXPROCS
+                GOFLAGS = $processEnvironment.GOFLAGS
+                GOMAXPROCS = $processEnvironment.GOMAXPROCS
                 GOPROXY = $env:GOPROXY
                 GOSUMDB = $env:GOSUMDB
                 GOTOOLCHAIN = $env:GOTOOLCHAIN
@@ -1479,6 +1515,7 @@ if (-not [string]::IsNullOrWhiteSpace($CandidateSourcePath)) {
         DependencySourcePath = $CandidateDependencySourcePath
         OutputDirectory = $CandidateOutputDir
         WorkDirectory = $CandidateWorkDir
+        GoProcessLimit = $CandidateGoProcessLimit
         ReleaseToolPath = $GoReleaserPath
         ReleaseToolVersion = $ExpectedGoReleaserVersion
         EsbuildVersion = $ExpectedEsbuildVersion
