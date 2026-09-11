@@ -10,7 +10,7 @@ type HostDiagnosticLogger = effects.HostDiagnosticLogger
 type HostMetricsRecorder = effects.HostMetricsRecorder
 type LocalRuntimeHooks = effects.LocalRuntimeHooks
 type ProcessDependencies = effects.ProcessDependencies
-type BackendArtifactSelectionRequest = effects.BackendArtifactSelectionRequest
+type ResolvedHostConfiguration = effects.ResolvedHostConfiguration
 type BackendArtifactSelection = effects.BackendArtifactSelection
 type BackendArtifactResolver = effects.BackendArtifactResolver
 

@@ -156,13 +156,40 @@ type ProcessDependencies struct {
 	BackendArtifactPlatform    models.AssetHostPlatform
 }
 
-// BackendArtifactSelectionRequest contains only the facts needed to select a
-// pinned backend archive. The selector owns the immutable publication manifest;
-// Models receives detached archive facts and never exposes that manifest.
-type BackendArtifactSelectionRequest struct {
-	Backend         string
-	Platform        models.AssetHostPlatform
-	ProtocolVersion string
+// ResolvedHostConfiguration is the single Models-owned private fact set for
+// selecting and supervising one resolved host. Offline is intentionally absent:
+// cache-only invocation policy remains on models.PrepareModelAssetsRequest.
+//
+// The value is ephemeral and is never serialized, persisted, or exposed by the
+// public Models contract. Private consumers must use Clone when retaining it
+// across an effect boundary.
+type ResolvedHostConfiguration struct {
+	Scope            models.RuntimeScopeRef
+	ModelName        string
+	Source           models.ModelReference
+	Revision         string
+	Backend          string
+	Platform         models.AssetHostPlatform
+	ProtocolVersion  string
+	ModelCachePath   string
+	BackendCachePath string
+	ModelPath        string
+	MMProjPath       string
+	ModelFiles       []string
+	BackendFiles     []string
+	BackendArtifact  BackendArtifactSelection
+}
+
+// Clone returns a detached configuration suitable for an injected effect or
+// another private owner. The source is value-only today; explicitly assigning
+// it here keeps that ownership rule visible if the reference gains fields.
+func (configuration ResolvedHostConfiguration) Clone() ResolvedHostConfiguration {
+	configuration.Source = models.ModelReference{
+		NameOrURI: configuration.Source.NameOrURI,
+	}
+	configuration.ModelFiles = append([]string(nil), configuration.ModelFiles...)
+	configuration.BackendFiles = append([]string(nil), configuration.BackendFiles...)
+	return configuration
 }
 
 // BackendArtifactSelection is the provider-neutral archive identity consumed
@@ -180,7 +207,7 @@ type BackendArtifactSelection struct {
 // production can obtain the published P3 artifact set without live probing.
 type BackendArtifactResolver func(
 	context.Context,
-	BackendArtifactSelectionRequest,
+	ResolvedHostConfiguration,
 ) (BackendArtifactSelection, error)
 
 type AssetHTTPDoer interface {

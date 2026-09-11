@@ -246,7 +246,25 @@ func joinedAssetPreparationRequestWithBackend(
 	resolved models.ResolvedModelReference,
 	backendArtifact modelseffects.BackendArtifactSelection,
 ) (models.PrepareModelAssetsRequest, error) {
-	assetReference := joinedAssetReference(request.Model, resolved)
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Scope:           request.Scope,
+		ModelName:       modelName,
+		Source:          joinedAssetReference(request.Model, resolved),
+		Backend:         strings.TrimSpace(resolved.Definition.Backend),
+		BackendArtifact: backendArtifact,
+	}
+	return joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
+}
+
+func joinedAssetPreparationRequestWithConfiguration(
+	request models.InvokeModelRequest,
+	configuration modelseffects.ResolvedHostConfiguration,
+	resolved models.ResolvedModelReference,
+) (models.PrepareModelAssetsRequest, error) {
+	assetReference := configuration.Source
+	if assetReference.IsZero() {
+		assetReference = joinedAssetReference(request.Model, resolved)
+	}
 	modelRequirements, err := joinedModelAssetRequirements(
 		resolved.Definition, assetReference.NameOrURI,
 	)
@@ -254,21 +272,23 @@ func joinedAssetPreparationRequestWithBackend(
 		return models.PrepareModelAssetsRequest{}, err
 	}
 	prepared := models.PrepareModelAssetsRequest{
-		Scope:     request.Scope,
-		Name:      modelName,
+		Scope:     configuration.Scope,
+		Name:      configuration.ModelName,
 		Reference: assetReference,
 		Offline:   request.Offline,
-		Backend:   strings.TrimSpace(resolved.Definition.Backend),
+		Backend:   configuration.Backend,
 		Artifacts: modelRequirements,
 	}
-	if backendArtifact.Name != "" {
-		prepared.BackendReference = models.ModelReference{NameOrURI: backendArtifact.Location}
+	if configuration.BackendArtifact.Name != "" {
+		prepared.BackendReference = models.ModelReference{NameOrURI: configuration.BackendArtifact.Location}
 		prepared.BackendArtifacts = []models.AssetRequirement{{
-			Name: backendArtifact.Name, Bytes: backendArtifact.Bytes, SHA256: backendArtifact.SHA256,
+			Name:   configuration.BackendArtifact.Name,
+			Bytes:  configuration.BackendArtifact.Bytes,
+			SHA256: configuration.BackendArtifact.SHA256,
 		}}
 		return prepared, nil
 	}
-	if backend := strings.TrimSpace(resolved.Definition.Backend); isJoinedSourceReference(backend) {
+	if backend := strings.TrimSpace(configuration.Backend); isJoinedSourceReference(backend) {
 		prepared.Backend = ""
 		prepared.BackendReference = models.ModelReference{NameOrURI: backend}
 		prepared.BackendArtifacts = joinedSourceAssetRequirements(backend)

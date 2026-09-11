@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -462,13 +463,14 @@ func (o *Root) InvokeModelWithLease(
 }
 
 type joinedInvocationPlan struct {
-	modelName   string
-	backend     string
-	revision    string
-	correlation string
-	operation   models.Operation
-	prepared    models.InvokeModelRequest
-	lease       models.ModelLeaseRef
+	modelName     string
+	backend       string
+	revision      string
+	correlation   string
+	configuration modelseffects.ResolvedHostConfiguration
+	operation     models.Operation
+	prepared      models.InvokeModelRequest
+	lease         models.ModelLeaseRef
 }
 
 // InvokeModel owns the complete prepared-model transaction. The injected
@@ -591,9 +593,12 @@ func (o *Root) prepareJoinedInvocation(
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	resolved := resolution.Resolved
-	plan.modelName = resolved.Definition.Name
-	plan.backend = resolved.Definition.Backend
-	plan.revision = joinedInvocationRevision(resolved.Definition.Source)
+	plan.configuration = joinedHostConfiguration(
+		request, resolved, o.process.BackendArtifactPlatform,
+	)
+	plan.modelName = plan.configuration.ModelName
+	plan.backend = plan.configuration.Backend
+	plan.revision = plan.configuration.Revision
 	plan.correlation = correlation
 	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
 	if err != nil {
@@ -605,12 +610,13 @@ func (o *Root) prepareJoinedInvocation(
 		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
 	}
 
-	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, plan.configuration)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
-	assetRequest, err := joinedAssetPreparationRequestWithBackend(
-		request, plan.modelName, resolved, backendArtifact,
+	plan.configuration.BackendArtifact = backendArtifact
+	assetRequest, err := joinedAssetPreparationRequestWithConfiguration(
+		request, plan.configuration, resolved,
 	)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
@@ -621,6 +627,12 @@ func (o *Root) prepareJoinedInvocation(
 	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
 		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
 	}
+	if err := o.enrichJoinedHostConfiguration(ctx, &plan.configuration); err != nil {
+		return plan, joinedAssetRuntimeStage(err), joinedInvocationAssetError(request, err)
+	}
+	plan.modelName = plan.configuration.ModelName
+	plan.backend = plan.configuration.Backend
+	plan.revision = plan.configuration.Revision
 	joinedInvocationLifecycleRecord(
 		o, plan.modelName, plan.backend, plan.revision, correlation,
 		plan.operation.Name, models.ModelInvocationRef{},
@@ -682,9 +694,9 @@ func joinedAssetRuntimeStage(err error) modelseffects.RuntimeStage {
 
 func (o *Root) resolveJoinedBackendArtifact(
 	ctx context.Context,
-	definition models.ModelDefinition,
+	configuration modelseffects.ResolvedHostConfiguration,
 ) (modelseffects.BackendArtifactSelection, error) {
-	if !isJoinedPinnedBackend(definition.Backend) {
+	if !isJoinedPinnedBackend(configuration.Backend) {
 		return modelseffects.BackendArtifactSelection{}, nil
 	}
 	if o == nil || o.resolveBackendArtifact == nil {
@@ -693,11 +705,7 @@ func (o *Root) resolveJoinedBackendArtifact(
 			models.ErrHostMissingAssets,
 		)
 	}
-	selection, err := o.resolveBackendArtifact(ctx, modelseffects.BackendArtifactSelectionRequest{
-		Backend:         strings.TrimSpace(definition.Backend),
-		Platform:        o.process.BackendArtifactPlatform,
-		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-	})
+	selection, err := o.resolveBackendArtifact(ctx, configuration.Clone())
 	if err != nil {
 		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
 			"%w: pinned backend artifact selection failed",
@@ -707,13 +715,113 @@ func (o *Root) resolveJoinedBackendArtifact(
 	requirement := models.AssetRequirement{
 		Name: selection.Name, Bytes: selection.Bytes, SHA256: selection.SHA256,
 	}
-	if strings.TrimSpace(selection.Location) == "" || selection.Bytes <= 0 || requirement.Validate() != nil {
+	if strings.TrimSpace(selection.Location) == "" || strings.TrimSpace(selection.SHA256) == "" ||
+		selection.Bytes <= 0 || requirement.Validate() != nil {
 		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
 			"%w: pinned backend artifact facts are invalid",
 			models.ErrHostMissingAssets,
 		)
 	}
 	return selection, nil
+}
+
+func joinedHostConfiguration(
+	request models.InvokeModelRequest,
+	resolved models.ResolvedModelReference,
+	platform models.AssetHostPlatform,
+) modelseffects.ResolvedHostConfiguration {
+	return modelseffects.ResolvedHostConfiguration{
+		Scope:           request.Scope,
+		ModelName:       strings.TrimSpace(resolved.Definition.Name),
+		Source:          joinedAssetReference(request.Model, resolved),
+		Revision:        joinedInvocationRevision(resolved.Definition.Source),
+		Backend:         strings.TrimSpace(resolved.Definition.Backend),
+		Platform:        platform,
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}
+}
+
+func (o *Root) enrichJoinedHostConfiguration(
+	ctx context.Context,
+	configuration *modelseffects.ResolvedHostConfiguration,
+) error {
+	if configuration == nil || o == nil || o.assets == nil {
+		return models.ErrUnsupportedOperation
+	}
+	layout, err := o.assets.ResolveRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: configuration.Scope,
+		Name:  configuration.ModelName,
+	})
+	if errors.Is(err, models.ErrUnsupportedOperation) {
+		// Some parent-private component fakes intentionally stop at asset
+		// preparation. Production Assets supplies the cache bridge; the fake
+		// capability is not a host/cache result and is safe to leave empty.
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(layout.CachePath) == "" || len(layout.Files) == 0 {
+		return fmt.Errorf(
+			"%w: resolved model cache facts are incomplete",
+			models.ErrHostMissingAssets,
+		)
+	}
+
+	configuration.ModelCachePath = strings.TrimSpace(layout.CachePath)
+	configuration.BackendCachePath = strings.TrimSpace(layout.BackendCachePath)
+	configuration.ModelFiles = append([]string(nil), layout.Files...)
+	configuration.BackendFiles = append([]string(nil), layout.BackendFiles...)
+	configuration.ModelPath, configuration.MMProjPath = joinedHostModelPaths(layout.Files)
+	if configuration.ModelPath == "" {
+		return fmt.Errorf(
+			"%w: resolved model file facts are incomplete",
+			models.ErrHostMissingAssets,
+		)
+	}
+	if isJoinedPinnedBackend(configuration.Backend) && configuration.BackendArtifact.Name != "" &&
+		(strings.TrimSpace(configuration.BackendCachePath) == "" || len(configuration.BackendFiles) == 0) {
+		return fmt.Errorf(
+			"%w: resolved backend cache facts are incomplete",
+			models.ErrHostMissingAssets,
+		)
+	}
+	if revision := strings.TrimSpace(layout.Revision); revision != "" {
+		configuration.Revision = revision
+	}
+	return nil
+}
+
+func joinedHostModelPaths(files []string) (string, string) {
+	var modelPath, mmProjPath string
+	for _, raw := range files {
+		file := strings.TrimSpace(raw)
+		if file == "" {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(filepath.Clean(file)))
+		if strings.Contains(base, "mmproj") {
+			if mmProjPath == "" {
+				mmProjPath = file
+			}
+			continue
+		}
+		if modelPath == "" && !strings.Contains(base, "tokenizer") && !strings.HasPrefix(base, "voice") {
+			modelPath = file
+		}
+	}
+	if modelPath == "" {
+		for _, raw := range files {
+			file := strings.TrimSpace(raw)
+			base := strings.ToLower(filepath.Base(filepath.Clean(file)))
+			if file == "" || strings.Contains(base, "mmproj") {
+				continue
+			}
+			modelPath = file
+			break
+		}
+	}
+	return modelPath, mmProjPath
 }
 
 func (o *Root) executeJoinedInvocation(

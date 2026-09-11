@@ -419,7 +419,7 @@ func adaptModelBackendArtifactResolver(
 	}
 	return func(
 		ctx context.Context,
-		request modelswire.BackendArtifactSelectionRequest,
+		request modelswire.ResolvedHostConfiguration,
 	) (modelswire.BackendArtifactSelection, error) {
 		selection, err := next(ctx, serviceedges.ModelBackendArtifactSelectionRequest{
 			Backend:         request.Backend,

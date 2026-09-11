@@ -27,8 +27,9 @@ func (checker defaultHostCompatibilityChecker) Check(
 	ctx context.Context,
 	request HostCompatibilityRequest,
 ) error {
-	_, err := checker.resolve(ctx, BackendArtifactSelectionRequest{
+	_, err := checker.resolve(ctx, ResolvedHostConfiguration{
 		Backend:         request.Backend,
+		ModelName:       request.ModelName,
 		Platform:        request.Platform,
 		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 	})

@@ -213,19 +213,28 @@ func (o *Root) normalizeAssetPreflightRequest(
 	if err != nil {
 		return models.PrepareModelAssetsRequest{}, err
 	}
-	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolution.Resolved.Definition)
-	if err != nil {
-		return models.PrepareModelAssetsRequest{}, err
-	}
-	return joinedAssetPreparationRequestWithBackend(
+	configuration := joinedHostConfiguration(
 		models.InvokeModelRequest{
 			Scope:   request.Scope,
 			Model:   models.ModelReference{NameOrURI: request.Name},
 			Offline: request.Offline,
 		},
-		resolution.Resolved.Definition.Name,
 		resolution.Resolved,
-		backendArtifact,
+		o.process.BackendArtifactPlatform,
+	)
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration)
+	if err != nil {
+		return models.PrepareModelAssetsRequest{}, err
+	}
+	configuration.BackendArtifact = backendArtifact
+	return joinedAssetPreparationRequestWithConfiguration(
+		models.InvokeModelRequest{
+			Scope:   request.Scope,
+			Model:   models.ModelReference{NameOrURI: request.Name},
+			Offline: request.Offline,
+		},
+		configuration,
+		resolution.Resolved,
 	)
 }
 

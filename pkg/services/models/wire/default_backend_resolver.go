@@ -18,7 +18,7 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode default backend artifact manifest: %w", err)
 	}
-	return func(ctx context.Context, request BackendArtifactSelectionRequest) (BackendArtifactSelection, error) {
+	return func(ctx context.Context, request ResolvedHostConfiguration) (BackendArtifactSelection, error) {
 		if err := ctx.Err(); err != nil {
 			return BackendArtifactSelection{}, err
 		}
