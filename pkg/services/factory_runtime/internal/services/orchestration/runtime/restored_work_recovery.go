@@ -27,6 +27,44 @@ type restoredWorkRecovery struct {
 	legacyWorkIDs    map[string]struct{}
 }
 
+type restoredDispatchPlaceFailure string
+
+const (
+	restoredDispatchPlaceMissing   restoredDispatchPlaceFailure = "missing"
+	restoredDispatchPlaceAmbiguous restoredDispatchPlaceFailure = "ambiguous"
+)
+
+// restoredDispatchPlaceError reports why a legacy Work-bearing dispatch input
+// could not be assigned one exact logical place during detached restoration.
+// It is intentionally private: the public event and Runtime contracts remain
+// unchanged while callers inside this package can distinguish fail-closed
+// recovery from ordinary validation failures.
+type restoredDispatchPlaceError struct {
+	Reason       restoredDispatchPlaceFailure
+	DispatchID   string
+	WorkID       string
+	TransitionID string
+	Candidates   []string
+}
+
+func (e *restoredDispatchPlaceError) Error() string {
+	if e == nil {
+		return "restore Work board: unable to resolve a legacy dispatch input place"
+	}
+	candidates := "none"
+	if len(e.Candidates) > 0 {
+		candidates = fmt.Sprintf("%q", e.Candidates)
+	}
+	return fmt.Sprintf(
+		"restore Work board: active dispatch %q Work %q transition %q has %s canonical logical place candidates: %s",
+		e.DispatchID,
+		e.WorkID,
+		e.TransitionID,
+		e.Reason,
+		candidates,
+	)
+}
+
 // restoredHistoricalWorkIDs returns every Work identity known to durable
 // replay, including Work no longer present in the restored marking.
 func restoredHistoricalWorkIDs(cfg *runtimeConfig) map[string]struct{} {
@@ -157,6 +195,9 @@ func restoreRestoredWorkMarking(
 	resourcePlaceIDs, recordedDispatchWorkIDs map[string]struct{},
 ) (map[string]struct{}, error) {
 	restoredItems := restoredWorkItems(cfg.restoredWorldState)
+	if err := materializeRestoredDispatchInputPlaces(cfg.restoredWorldState, cfg.net, restoredItems); err != nil {
+		return nil, err
+	}
 	recovery := classifyRestoredWorkRecovery(cfg.restoredWorldState, cfg.net, restoredItems)
 	excludedWorkIDs := cloneRestoredWorkIDSet(recovery.excludedWorkIDs)
 	if cfg.skipRestoredDispatchReconciliation {
@@ -181,6 +222,280 @@ func restoreRestoredWorkMarking(
 	}
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
+}
+
+// materializeRestoredDispatchInputPlaces resolves only missing Work input
+// places. Candidate calculation is completed for every active dispatch before
+// any detached projection is changed, so a zero or ambiguous candidate cannot
+// expose a partially restored board.
+func materializeRestoredDispatchInputPlaces(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	items map[string]work.FactoryWorkItem,
+) error {
+	if restored == nil || net == nil {
+		return nil
+	}
+
+	resolutions := make(map[string]map[int]string)
+	for _, dispatchID := range sortedRestoredDispatchIDs(restored.ActiveDispatches) {
+		dispatch := restored.ActiveDispatches[dispatchID]
+		for inputIndex, input := range dispatch.Inputs {
+			if input.PlaceID != "" {
+				continue
+			}
+			workID, ok := restoredDispatchWorkID(input)
+			if !ok || workID == "" {
+				continue
+			}
+			candidates := restoredDispatchPlaceCandidates(restored, net, dispatch, workID, items)
+			if len(candidates) != 1 {
+				reason := restoredDispatchPlaceMissing
+				if len(candidates) > 1 {
+					reason = restoredDispatchPlaceAmbiguous
+				}
+				return &restoredDispatchPlaceError{
+					Reason:       reason,
+					DispatchID:   dispatchID,
+					WorkID:       workID,
+					TransitionID: dispatch.TransitionID,
+					Candidates:   append([]string(nil), candidates...),
+				}
+			}
+			if resolutions[dispatchID] == nil {
+				resolutions[dispatchID] = make(map[int]string)
+			}
+			resolutions[dispatchID][inputIndex] = candidates[0]
+		}
+	}
+
+	for dispatchID, inputPlaces := range resolutions {
+		dispatch := restored.ActiveDispatches[dispatchID]
+		for inputIndex, placeID := range inputPlaces {
+			dispatch.Inputs[inputIndex].PlaceID = placeID
+		}
+		restored.ActiveDispatches[dispatchID] = dispatch
+	}
+	return nil
+}
+
+func restoredDispatchPlaceCandidates(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	dispatch interfaces.FactoryWorldDispatch,
+	workID string,
+	items map[string]work.FactoryWorkItem,
+) []string {
+	item, ok := items[workID]
+	if !ok || item.ID != workID || strings.TrimSpace(item.WorkTypeID) == "" || strings.TrimSpace(item.State) == "" {
+		return nil
+	}
+
+	if strings.TrimSpace(dispatch.TransitionID) == "" {
+		return nil
+	}
+	transition, ok := net.Transitions[dispatch.TransitionID]
+	if !ok || transition == nil {
+		return nil
+	}
+	candidateSets := make([][]string, 0, 5)
+	canonicalPlaces := restoredCanonicalWorkStatePlaces(net, item)
+	if len(canonicalPlaces) == 0 {
+		return nil
+	}
+	candidateSets = append(candidateSets, canonicalPlaces)
+	loadedArcPlaces := restoredWorkTypeDispatchPlaces(net, item, transitionInputPlaceIDs(transition.InputArcs))
+	if len(loadedArcPlaces) == 0 {
+		return nil
+	}
+	candidateSets = append(candidateSets, loadedArcPlaces)
+
+	if len(restored.Topology.Workstations) > 0 {
+		recordedPlaces, found := restoredRecordedWorkstationPlaces(restored.Topology, dispatch.TransitionID)
+		if !found {
+			return nil
+		}
+		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
+	}
+
+	if placeID, found := latestRestoredNonEmptyWorkStateChangePlace(restored, workID); found {
+		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, []string{placeID}))
+	}
+	if recordedPlaces, found := restoredRecordedExactWorkstationInputPlaces(restored, dispatch.TransitionID, workID); found {
+		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
+	}
+
+	candidates := candidateSets[0]
+	for _, candidateSet := range candidateSets[1:] {
+		candidates = intersectRestoredDispatchPlaceIDs(candidates, candidateSet)
+		if len(candidates) == 0 {
+			return nil
+		}
+	}
+	return candidates
+}
+
+func transitionInputPlaceIDs(arcs []petri.Arc) []string {
+	placeIDs := make([]string, 0, len(arcs))
+	for _, arc := range arcs {
+		if placeID := strings.TrimSpace(arc.PlaceID); placeID != "" {
+			placeIDs = append(placeIDs, placeID)
+		}
+	}
+	return placeIDs
+}
+
+func restoredRecordedWorkstationPlaces(
+	topology interfaces.InitialStructurePayload,
+	transitionID string,
+) ([]string, bool) {
+	var placeIDs []string
+	found := false
+	for _, workstation := range topology.Workstations {
+		if workstation.ID != transitionID {
+			continue
+		}
+		found = true
+		placeIDs = append(placeIDs, workstation.InputPlaceIDs...)
+	}
+	return placeIDs, found
+}
+
+func restoredRecordedExactWorkstationInputPlaces(
+	restored *interfaces.FactoryWorldState,
+	transitionID string,
+	workID string,
+) ([]string, bool) {
+	placeIDs := make([]string, 0)
+	appendInputs := func(inputs []interfaces.WorkstationInput) {
+		for _, input := range inputs {
+			inputWorkID, ok := restoredDispatchWorkID(input)
+			if !ok || inputWorkID != workID || strings.TrimSpace(input.PlaceID) == "" {
+				continue
+			}
+			placeIDs = append(placeIDs, input.PlaceID)
+		}
+	}
+	for _, dispatch := range restored.ActiveDispatches {
+		if dispatch.TransitionID == transitionID {
+			appendInputs(dispatch.Inputs)
+		}
+	}
+	for _, completion := range restored.CompletedDispatches {
+		if completion.TransitionID == transitionID {
+			appendInputs(completion.ConsumedInputs)
+		}
+	}
+	for _, completion := range restored.FailedDispatches {
+		if completion.TransitionID == transitionID {
+			appendInputs(completion.ConsumedInputs)
+		}
+	}
+	for _, session := range restored.ProviderSessions {
+		if session.TransitionID == transitionID {
+			appendInputs(session.ConsumedInputs)
+		}
+	}
+	return placeIDs, len(placeIDs) > 0
+}
+
+func latestRestoredNonEmptyWorkStateChangePlace(
+	restored *interfaces.FactoryWorldState,
+	workID string,
+) (string, bool) {
+	if restored == nil {
+		return "", false
+	}
+	records := restored.WorkStateChangesByWorkID[workID]
+	latestIndex := -1
+	var latest interfaces.FactoryWorldWorkStateChangeRecord
+	for index, record := range records {
+		placeID := strings.TrimSpace(record.ToPlaceID)
+		if placeID == "" {
+			continue
+		}
+		if latestIndex < 0 || restoredWorkStateChangeIsLater(record, latest, index, latestIndex) {
+			latest = record
+			latestIndex = index
+		}
+	}
+	if latestIndex < 0 {
+		return "", false
+	}
+	return strings.TrimSpace(latest.ToPlaceID), true
+}
+
+func restoredWorkStateChangeIsLater(
+	candidate interfaces.FactoryWorldWorkStateChangeRecord,
+	current interfaces.FactoryWorldWorkStateChangeRecord,
+	candidateIndex int,
+	currentIndex int,
+) bool {
+	if candidate.Sequence != current.Sequence {
+		return candidate.Sequence > current.Sequence
+	}
+	if !candidate.EventTime.Equal(current.EventTime) {
+		return candidate.EventTime.After(current.EventTime)
+	}
+	if candidate.Tick != current.Tick {
+		return candidate.Tick > current.Tick
+	}
+	return candidateIndex > currentIndex
+}
+
+func restoredCanonicalWorkStatePlaces(net *state.Net, item work.FactoryWorkItem) []string {
+	placeIDs := make([]string, 0)
+	for placeID, place := range net.Places {
+		if place == nil || place.TypeID != item.WorkTypeID || place.State != item.State {
+			continue
+		}
+		placeIDs = append(placeIDs, placeID)
+	}
+	return sortedUniqueRestoredDispatchPlaceIDs(placeIDs)
+}
+
+func restoredWorkTypeDispatchPlaces(
+	net *state.Net,
+	item work.FactoryWorkItem,
+	placeIDs []string,
+) []string {
+	unique := make(map[string]struct{}, len(placeIDs))
+	for _, placeID := range placeIDs {
+		placeID = strings.TrimSpace(placeID)
+		place, ok := net.Places[placeID]
+		if !ok || place == nil || place.TypeID != item.WorkTypeID {
+			continue
+		}
+		unique[placeID] = struct{}{}
+	}
+	return sortedRestoredKeys(unique)
+}
+
+func sortedUniqueRestoredDispatchPlaceIDs(placeIDs []string) []string {
+	unique := make(map[string]struct{}, len(placeIDs))
+	for _, placeID := range placeIDs {
+		if placeID = strings.TrimSpace(placeID); placeID != "" {
+			unique[placeID] = struct{}{}
+		}
+	}
+	return sortedRestoredKeys(unique)
+}
+
+func intersectRestoredDispatchPlaceIDs(left, right []string) []string {
+	if len(left) == 0 || len(right) == 0 {
+		return nil
+	}
+	rightSet := make(map[string]struct{}, len(right))
+	for _, placeID := range right {
+		rightSet[placeID] = struct{}{}
+	}
+	intersection := make(map[string]struct{})
+	for _, placeID := range left {
+		if _, ok := rightSet[placeID]; ok {
+			intersection[placeID] = struct{}{}
+		}
+	}
+	return sortedRestoredKeys(intersection)
 }
 
 func classifyRestoredWorkRecovery(

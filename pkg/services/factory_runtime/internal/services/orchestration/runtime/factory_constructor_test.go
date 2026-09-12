@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"reflect"
 	"strings"
@@ -248,6 +249,234 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	}
 }
 
+func TestRestoreRestoredActiveDispatchResolvesUniqueCanonicalPlace(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	marking := petri.NewMarking("test-net")
+	cfg := &runtimeConfig{
+		net:                buildSimpleNet(),
+		clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState: restored,
+	}
+
+	seeded, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+	if err != nil {
+		t.Fatalf("restoreRestoredWorkMarking: %v", err)
+	}
+	if _, ok := seeded["work-missing-place"]; !ok {
+		t.Fatalf("seeded Work IDs = %#v, want work-missing-place", seeded)
+	}
+	input := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0]
+	if input.PlaceID != "task:init" {
+		t.Fatalf("resolved dispatch input = %#v, want task:init", input)
+	}
+	tokens := marking.TokensInPlace("task:init")
+	if len(tokens) != 1 || tokens[0].Color.WorkID != "work-missing-place" {
+		t.Fatalf("restored task:init tokens = %#v, want the original Work identity", tokens)
+	}
+}
+
+func TestNew_WithRestoredActiveDispatchMissingPlaceResolvesCanonicalPlace(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withClock(platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second)),
+		withRestoredWorldState(restored),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	tokens := snapshot.Marking.PlaceTokens["task:init"]
+	if len(tokens) != 1 {
+		t.Fatalf("restored active Work token IDs = %#v, want one token at task:init", tokens)
+	}
+	token := snapshot.Marking.Tokens[tokens[0]]
+	if token == nil || token.Color.WorkID != "work-missing-place" {
+		t.Fatalf("restored active Work token = %#v, want work-missing-place", token)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "task:init" {
+		t.Fatalf("resolved dispatch input PlaceID = %q, want task:init", got)
+	}
+}
+
+func TestRestoreRestoredActiveDispatchUsesLatestCanonicalMutation(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.Topology.Workstations = nil
+	restored.WorkStateChangesByWorkID = map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+		"work-missing-place": {
+			{WorkID: "work-missing-place", ToPlaceID: "task:init-a", Sequence: 1},
+			{WorkID: "work-missing-place", ToPlaceID: "task:init-b", Sequence: 2},
+		},
+	}
+	net := buildSimpleNet()
+	net.Places["task:init-a"] = &petri.Place{ID: "task:init-a", TypeID: "task", State: "init"}
+	net.Places["task:init-b"] = &petri.Place{ID: "task:init-b", TypeID: "task", State: "init"}
+	net.Transitions["t-process"].InputArcs = []petri.Arc{
+		{ID: "a-b", PlaceID: "task:init-b", Direction: petri.ArcInput},
+		{ID: "a-a", PlaceID: "task:init-a", Direction: petri.ArcInput},
+	}
+
+	if err := materializeRestoredDispatchInputPlaces(restored, net, restoredWorkItems(restored)); err != nil {
+		t.Fatalf("materializeRestoredDispatchInputPlaces: %v", err)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "task:init-b" {
+		t.Fatalf("resolved dispatch input PlaceID = %q, want latest task:init-b mutation", got)
+	}
+}
+
+func TestRestoreRestoredActiveDispatchRejectsMissingPlaceWithoutMutation(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.Topology.Workstations = nil
+	net := buildSimpleNet()
+	net.Transitions["t-process"].InputArcs = nil
+	marking := petri.NewMarking("test-net")
+	beforeMarking := marking.Snapshot()
+	cfg := &runtimeConfig{
+		net:                net,
+		clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState: restored,
+	}
+
+	_, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+	if err == nil {
+		t.Fatal("materializeRestoredDispatchInputPlaces returned nil, want missing-place error")
+	}
+	var placeErr *restoredDispatchPlaceError
+	if !errors.As(err, &placeErr) {
+		t.Fatalf("materialization error = %T %v, want restoredDispatchPlaceError", err, err)
+	}
+	if placeErr.Reason != restoredDispatchPlaceMissing || placeErr.DispatchID != "dispatch-missing-place" ||
+		placeErr.WorkID != "work-missing-place" || placeErr.TransitionID != "t-process" || len(placeErr.Candidates) != 0 {
+		t.Fatalf("typed missing-place error = %#v, want stable empty-candidate diagnostics", placeErr)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "" {
+		t.Fatalf("missing-place dispatch input = %q, want unchanged empty place", got)
+	}
+	if !reflect.DeepEqual(marking.Snapshot(), beforeMarking) {
+		t.Fatalf("marking changed after missing-place rejection: got %#v, want %#v", marking.Snapshot(), beforeMarking)
+	}
+}
+
+func TestRestoreRestoredActiveDispatchRejectsAmbiguousPlacesWithSortedCandidates(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.Topology.Workstations[0].InputPlaceIDs = []string{"task:init-b", "task:init-a"}
+	net := buildSimpleNet()
+	net.Places["task:init-a"] = &petri.Place{ID: "task:init-a", TypeID: "task", State: "init"}
+	net.Places["task:init-b"] = &petri.Place{ID: "task:init-b", TypeID: "task", State: "init"}
+	net.Transitions["t-process"].InputArcs = []petri.Arc{
+		{ID: "a-b", Name: "input-b", PlaceID: "task:init-b", Direction: petri.ArcInput},
+		{ID: "a-a", Name: "input-a", PlaceID: "task:init-a", Direction: petri.ArcInput},
+	}
+	marking := petri.NewMarking("test-net")
+	beforeMarking := marking.Snapshot()
+	cfg := &runtimeConfig{
+		net:                net,
+		clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState: restored,
+	}
+
+	_, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+	if err == nil {
+		t.Fatal("materializeRestoredDispatchInputPlaces returned nil, want ambiguous-place error")
+	}
+	var placeErr *restoredDispatchPlaceError
+	if !errors.As(err, &placeErr) {
+		t.Fatalf("materialization error = %T %v, want restoredDispatchPlaceError", err, err)
+	}
+	if placeErr.Reason != restoredDispatchPlaceAmbiguous {
+		t.Fatalf("typed ambiguous-place reason = %q, want ambiguous", placeErr.Reason)
+	}
+	if !reflect.DeepEqual(placeErr.Candidates, []string{"task:init-a", "task:init-b"}) {
+		t.Fatalf("ambiguous candidates = %#v, want sorted exact IDs", placeErr.Candidates)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "" {
+		t.Fatalf("ambiguous dispatch input = %q, want unchanged empty place", got)
+	}
+	if !reflect.DeepEqual(marking.Snapshot(), beforeMarking) {
+		t.Fatalf("marking changed after ambiguous-place rejection: got %#v, want %#v", marking.Snapshot(), beforeMarking)
+	}
+}
+
+func TestRestoreRestoredActiveDispatchResolvesAtomicallyAcrossBatch(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.ActiveDispatches["dispatch-ambiguous"] = interfaces.FactoryWorldDispatch{
+		DispatchID:   "dispatch-ambiguous",
+		TransitionID: "t-ambiguous",
+		WorkItemIDs:  []string{"work-ambiguous"},
+		Inputs: []interfaces.WorkstationInput{{
+			TokenID:  "work-ambiguous",
+			WorkItem: &work.FactoryWorkItem{ID: "work-ambiguous"},
+		}},
+	}
+	restored.WorkItemsByID["work-ambiguous"] = work.FactoryWorkItem{ID: "work-ambiguous", WorkTypeID: "task", State: "init"}
+	restored.Topology.Workstations = append(restored.Topology.Workstations, interfaces.FactoryWorkstation{
+		ID: "t-ambiguous", InputPlaceIDs: []string{"task:init-a", "task:init-b"},
+	})
+	net := buildSimpleNet()
+	net.Places["task:init-a"] = &petri.Place{ID: "task:init-a", TypeID: "task", State: "init"}
+	net.Places["task:init-b"] = &petri.Place{ID: "task:init-b", TypeID: "task", State: "init"}
+	net.Transitions["t-ambiguous"] = &petri.Transition{
+		ID: "t-ambiguous",
+		InputArcs: []petri.Arc{
+			{ID: "a-b", PlaceID: "task:init-b", Direction: petri.ArcInput},
+			{ID: "a-a", PlaceID: "task:init-a", Direction: petri.ArcInput},
+		},
+	}
+	marking := petri.NewMarking("test-net")
+	beforeMarking := marking.Snapshot()
+	cfg := &runtimeConfig{
+		net:                net,
+		clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState: restored,
+	}
+
+	_, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+	if err == nil {
+		t.Fatal("materializeRestoredDispatchInputPlaces returned nil, want later ambiguous-place error")
+	}
+	var placeErr *restoredDispatchPlaceError
+	if !errors.As(err, &placeErr) || placeErr.DispatchID != "dispatch-ambiguous" {
+		t.Fatalf("batch materialization error = %T %v, want ambiguous dispatch diagnostic", err, err)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "" {
+		t.Fatalf("earlier unique dispatch input = %q, want no partial resolution", got)
+	}
+	if got := restored.ActiveDispatches["dispatch-ambiguous"].Inputs[0].PlaceID; got != "" {
+		t.Fatalf("ambiguous dispatch input = %q, want unchanged empty place", got)
+	}
+	if !reflect.DeepEqual(marking.Snapshot(), beforeMarking) {
+		t.Fatalf("marking changed after batch rejection: got %#v, want %#v", marking.Snapshot(), beforeMarking)
+	}
+}
+
+func restoredMissingPlaceDispatchFixture() *interfaces.FactoryWorldState {
+	return &interfaces.FactoryWorldState{
+		Topology: interfaces.InitialStructurePayload{
+			Workstations: []interfaces.FactoryWorkstation{{
+				ID: "t-process", InputPlaceIDs: []string{"task:init"},
+			}},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-missing-place": {ID: "work-missing-place", WorkTypeID: "task", State: "init"},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-missing-place": {
+				DispatchID:   "dispatch-missing-place",
+				TransitionID: "t-process",
+				WorkItemIDs:  []string{"work-missing-place"},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "work-missing-place",
+					WorkItem: &work.FactoryWorkItem{ID: "work-missing-place"},
+				}},
+			},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+}
+
 func TestCycle003MissingPlaceProjectionPreservesLegacyWitness(t *testing.T) {
 	const (
 		targetWorkID = "batch-localai-project-cycle-092-v15-adapter-topology-characterization-20260910-localai-v3-model-adapter-topology-characterization-001"
@@ -333,6 +562,23 @@ func TestCycle003MissingPlaceProjectionPreservesLegacyWitness(t *testing.T) {
 	input := dispatch.Inputs[0]
 	if input.TokenID != targetWorkID || input.WorkItem == nil || input.WorkItem.ID != targetWorkID || input.PlaceID != "" {
 		t.Fatalf("projected legacy dispatch input = %#v, want target identity with empty PlaceID", input)
+	}
+	resolutionNet := &state.Net{
+		Places: map[string]*petri.Place{
+			"idea:init": {ID: "idea:init", TypeID: "idea", State: "init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"plan": {
+				ID:        "plan",
+				InputArcs: []petri.Arc{{PlaceID: "idea:init", Direction: petri.ArcInput}},
+			},
+		},
+	}
+	if err := materializeRestoredDispatchInputPlaces(&restored, resolutionNet, restoredWorkItems(&restored)); err != nil {
+		t.Fatalf("resolve projected cycle-003 dispatch input place: %v", err)
+	}
+	if got := restored.ActiveDispatches[dispatchID].Inputs[0].PlaceID; got != "idea:init" {
+		t.Fatalf("resolved projected cycle-003 input PlaceID = %q, want idea:init", got)
 	}
 	if got := restored.Topology.Workstations[0].InputPlaceIDs; !reflect.DeepEqual(got, []string{"idea:init"}) {
 		t.Fatalf("projected plan input topology = %#v, want idea:init", got)
