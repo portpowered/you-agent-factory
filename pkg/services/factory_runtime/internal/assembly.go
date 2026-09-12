@@ -375,15 +375,23 @@ func normalizeRestoredEventTicks(events []factorydefinitions.FactoryEvent) []fac
 	offset := 0
 	previousRawTick := events[0].Context.Tick
 	previousNormalizedTick := previousRawTick
-	restartBoundarySeen := isDaemonRestartInterruption(events[0])
+	restartBoundarySeen := isRestoredLogicalClockBoundary(events[0])
 	for index := 1; index < len(events); index++ {
 		rawTick := events[index].Context.Tick
 		if restartBoundarySeen && rawTick < previousRawTick {
 			offset = previousNormalizedTick + 1 - rawTick
 			restartBoundarySeen = false
 		}
-		normalized[index].Context.Tick = rawTick + offset
-		if isDaemonRestartInterruption(events[index]) {
+		normalizedTick := rawTick + offset
+		// Async responses retain the tick of the dispatch that started them, so
+		// their raw tick can move backwards even inside one successor process.
+		// Resume reconstruction needs append order after a proven daemon restart;
+		// keep that order monotonic without inventing another restart boundary.
+		if normalizedTick < previousNormalizedTick {
+			normalizedTick = previousNormalizedTick
+		}
+		normalized[index].Context.Tick = normalizedTick
+		if isRestoredLogicalClockBoundary(events[index]) {
 			restartBoundarySeen = true
 		}
 		previousRawTick = rawTick
@@ -416,7 +424,7 @@ func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryE
 	restartBoundarySeen := false
 	previousTick := events[0].Context.Tick
 	for _, event := range events {
-		if isDaemonRestartInterruption(event) {
+		if isRestoredLogicalClockBoundary(event) {
 			restartBoundarySeen = true
 		}
 		if restartBoundarySeen && event.Context.Tick < previousTick {
@@ -430,4 +438,8 @@ func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryE
 func isDaemonRestartInterruption(event factorydefinitions.FactoryEvent) bool {
 	return event.Type == factorydefinitions.FactoryEventTypeDispatchInterrupted &&
 		event.Context.Source != nil && strings.EqualFold(strings.TrimSpace(*event.Context.Source), "daemon-restart")
+}
+
+func isRestoredLogicalClockBoundary(event factorydefinitions.FactoryEvent) bool {
+	return isDaemonRestartInterruption(event) || event.Type == factorydefinitions.FactoryEventTypeSessionResumed
 }
