@@ -7,11 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -20,6 +24,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"go.uber.org/zap"
@@ -459,4 +464,396 @@ func preflightTestScope(t *testing.T) modelinference.RuntimeScopeRef {
 		t.Fatalf("parse preflight scope: %v", err)
 	}
 	return scope
+}
+
+func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesReadinessFailureClasses(t *testing.T) {
+	tests := []struct {
+		name           string
+		invokeErr      error
+		wantIs         error
+		wantContains   []string
+		wantNotContain string
+	}{
+		{
+			name: "missing_inference_failure",
+			invokeErr: classifiedBootstrapInvokeFailure(
+				factoryapi.ManagedRuntimeReadinessStateMISSING,
+				factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			),
+			wantIs: modelinference.ErrMissing,
+			wantContains: []string{
+				"pull or install",
+				"OMNIVOICE_Q4_K_M",
+			},
+			wantNotContain: "models endpoint not reachable",
+		},
+		{
+			name: "loading_inference_failure",
+			invokeErr: classifiedBootstrapInvokeFailure(
+				factoryapi.ManagedRuntimeReadinessStateLOADING,
+				factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			),
+			wantIs: modelinference.ErrLoading,
+			wantContains: []string{
+				"still loading",
+				"OMNIVOICE_Q4_K_M",
+			},
+			wantNotContain: "models endpoint not reachable",
+		},
+		{
+			name: "failed_inference_failure",
+			invokeErr: classifiedBootstrapInvokeFailure(
+				factoryapi.ManagedRuntimeReadinessStateFAILED,
+				factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			),
+			wantIs: modelinference.ErrFailed,
+			wantContains: []string{
+				"readiness is FAILED",
+				"resolve the managed runtime failure",
+			},
+			wantNotContain: "models endpoint not reachable",
+		},
+		{
+			name: "unsupported_inference_failure",
+			invokeErr: classifiedBootstrapInvokeFailure(
+				factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
+				factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			),
+			wantIs: modelinference.ErrUnsupported,
+			wantContains: []string{
+				"readiness is UNSUPPORTED",
+				"supported managed runtime",
+			},
+			wantNotContain: "models endpoint not reachable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(
+				_ context.Context,
+				_ string,
+				_ factoryapi.ModelInvocationRequest,
+			) (modelinference.Result, error) {
+				return modelinference.Result{}, tt.invokeErr
+			}))
+
+			err := invokeForTest(t, InvokeConfig{Context: context.Background(),
+				ModelName:  "OMNIVOICE_Q4_K_M",
+				Operation:  "TTS",
+				Text:       "hello world",
+				FactoryDir: t.TempDir(),
+				Server:     failureBaselineUnreachableServer,
+				OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
+				Logger:     zap.NewNop(),
+				Output:     io.Discard,
+			})
+			if err == nil {
+				t.Fatal("expected readiness-gated invoke failure")
+			}
+			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+				t.Fatalf("error = %v, want errors.Is %v", err, tt.wantIs)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want substring %q", err.Error(), want)
+				}
+			}
+			if tt.wantNotContain != "" && strings.Contains(err.Error(), tt.wantNotContain) {
+				t.Fatalf("error = %q, want to avoid transport failure %q", err.Error(), tt.wantNotContain)
+			}
+		})
+	}
+}
+
+func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVocabulary(t *testing.T) {
+	tests := []struct {
+		name          string
+		readiness     factoryapi.ManagedRuntimeReadinessState
+		lifecycle     factoryapi.ManagedRuntimeLifecycleState
+		wantIs        error
+		wantReadiness modelinference.ReadinessState
+		wantLifecycle modelinference.LifecycleState
+	}{
+		{
+			name:          "missing",
+			readiness:     factoryapi.ManagedRuntimeReadinessStateMISSING,
+			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantIs:        modelinference.ErrMissing,
+			wantReadiness: modelinference.ReadinessStateMissing,
+			wantLifecycle: modelinference.LifecycleStateNotInstalled,
+		},
+		{
+			name:          "loading",
+			readiness:     factoryapi.ManagedRuntimeReadinessStateLOADING,
+			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			wantIs:        modelinference.ErrLoading,
+			wantReadiness: modelinference.ReadinessStateLoading,
+			wantLifecycle: modelinference.LifecycleStateLoading,
+		},
+		{
+			name:          "failed",
+			readiness:     factoryapi.ManagedRuntimeReadinessStateFAILED,
+			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantIs:        modelinference.ErrFailed,
+			wantReadiness: modelinference.ReadinessStateFailed,
+			wantLifecycle: modelinference.LifecycleStateNotInstalled,
+		},
+		{
+			name:          "unsupported",
+			readiness:     factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
+			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantIs:        modelinference.ErrUnsupported,
+			wantReadiness: modelinference.ReadinessStateUnsupported,
+			wantLifecycle: modelinference.LifecycleStateNotInstalled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			invokeErr := (modelinference.Runtime{
+				Identity:       "OMNIVOICE_Q4_K_M",
+				ReadinessState: modelinference.ReadinessState(tt.readiness),
+				LifecycleState: modelinference.LifecycleState(tt.lifecycle),
+			}).InvocationError()
+			installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(
+				_ context.Context,
+				_ string,
+				_ factoryapi.ModelInvocationRequest,
+			) (modelinference.Result, error) {
+				return modelinference.Result{}, invokeErr
+			}))
+
+			err := invokeForTest(t, InvokeConfig{Context: context.Background(),
+				ModelName:  "OMNIVOICE_Q4_K_M",
+				Operation:  "TTS",
+				Text:       "hello world",
+				FactoryDir: t.TempDir(),
+				Server:     failureBaselineUnreachableServer,
+				OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
+				Logger:     zap.NewNop(),
+				Output:     io.Discard,
+			})
+			if err == nil {
+				t.Fatal("expected managed runtime readiness failure")
+			}
+			if !errors.Is(err, tt.wantIs) {
+				t.Fatalf("error = %v, want errors.Is %v", err, tt.wantIs)
+			}
+			var readinessErr *modelinference.InvocationError
+			if !errors.As(err, &readinessErr) {
+				t.Fatalf("error = %T, want *ManagedRuntimeInvocationError", err)
+			}
+			if readinessErr.ReadinessState != tt.wantReadiness {
+				t.Fatalf("readiness = %s, want %s", readinessErr.ReadinessState, tt.wantReadiness)
+			}
+			if readinessErr.LifecycleState != tt.wantLifecycle {
+				t.Fatalf("lifecycle = %s, want %s", readinessErr.LifecycleState, tt.wantLifecycle)
+			}
+			if !strings.Contains(err.Error(), string(tt.wantReadiness)) {
+				t.Fatalf("error = %q, want readiness token %q", err.Error(), tt.wantReadiness)
+			}
+			if strings.Contains(err.Error(), "models endpoint not reachable") {
+				t.Fatalf("error = %q, want bootstrap readiness failure instead of transport failure", err.Error())
+			}
+		})
+	}
+}
+
+func classifiedBootstrapInvokeFailure(
+	readiness factoryapi.ManagedRuntimeReadinessState,
+	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+) error {
+	readinessErr := (modelinference.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: modelinference.ReadinessState(readiness),
+		LifecycleState: modelinference.LifecycleState(lifecycle),
+	}).InvocationError()
+	message := readinessErr.Error()
+	switch readiness {
+	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+		message = "model \"OMNIVOICE_Q4_K_M\" is not available: pull or install the managed runtime before invoking"
+	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+		message = "model \"OMNIVOICE_Q4_K_M\" is still loading: wait for the managed runtime to finish loading and retry the invocation"
+	}
+	return &modelinference.InferenceFailure{
+		Class: readinessFailureClass(readiness), Message: message,
+		ModelName: "OMNIVOICE_Q4_K_M", WorkerName: "voice-local", Operation: "TTS", Cause: readinessErr,
+	}
+}
+
+func readinessFailureClass(readiness factoryapi.ManagedRuntimeReadinessState) modelinference.InferenceFailureClass {
+	switch readiness {
+	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+		return modelinference.InferenceFailureClassMissingModel
+	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+		return modelinference.InferenceFailureClassLoadingModel
+	default:
+		return modelinference.InferenceFailureClassRuntimeFailure
+	}
+}
+
+func TestInvokeGenericMapsBackendPreflightFailure(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("asset-estimate:failure")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	catalog := modelinference.Detail{Summary: modelinference.Summary{
+		Operations: []modelinference.Operation{{
+			Name:    modelinference.OperationOMNI,
+			Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
+		}},
+	}}
+	root := &genericCLIModelsService{
+		catalog:      catalog,
+		preflightErr: fmt.Errorf("controlled HEAD failed: %w", modelinference.ErrAssetBackendNotReady),
+	}
+	service := &rootService{models: root}
+	handled, err := service.invokeGenericInScopeWithOffline(
+		InvokeConfig{Context: context.Background(), Output: io.Discard, JSON: true},
+		scope, "model", modelinference.OperationOMNI, "hello", catalog, false,
+	)
+	if !handled || err == nil {
+		t.Fatalf("invokeGenericInScope = handled:%v error:%v, want typed failure", handled, err)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorMessage() string
+	}
+	if !errors.As(err, &coded) || coded.CLIErrorCode() != "MODEL_BACKEND_NOT_READY" || coded.CLIErrorMessage() != "managed model backend is unavailable" {
+		t.Fatalf("mapped preflight error = %v, want backend readiness diagnostic", err)
+	}
+}
+
+func TestModelsRemoteGenericInvokeCatalogFailuresAvoidPost(t *testing.T) {
+	t.Parallel()
+	t.Run("outage", testRemoteGenericCatalogOutage)
+	t.Run("cancellation", testRemoteGenericCatalogCancellation)
+}
+
+func testRemoteGenericCatalogOutage(t *testing.T) {
+	var catalogCalls atomic.Int32
+	var postCalls atomic.Int32
+	server := httptest.NewServer(remoteCatalogOutageHandler(&catalogCalls, &postCalls))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := remoteHTTPService(t, remoteStaticInputReader([]byte("PNG"))).Invoke(remoteInvokeConfig(
+		context.Background(), server.URL, []string{"prompt=hello", "image=@fixture.png"}, &output,
+	))
+	var apiErr *clihttp.APIError
+	if err == nil || !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("catalog outage = %v, want typed service-unavailable error", err)
+	}
+	if catalogCalls.Load() != 1 || postCalls.Load() != 0 || output.Len() != 0 {
+		t.Fatalf("catalog outage effects = GET:%d POST:%d output:%q, want 1/0/empty", catalogCalls.Load(), postCalls.Load(), output.String())
+	}
+}
+
+func remoteCatalogOutageHandler(catalogCalls, postCalls *atomic.Int32) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			catalogCalls.Add(1)
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(writer).Encode(factoryapi.ErrorResponse{
+				Code:   factoryapi.ErrorResponseCode("MODEL_BACKEND_NOT_READY"),
+				Family: factoryapi.ErrorFamilyInternalServerError, Message: "catalog unavailable",
+			})
+			return
+		}
+		if request.Method == http.MethodPost {
+			postCalls.Add(1)
+		}
+		http.NotFound(writer, request)
+	}
+}
+
+func testRemoteGenericCatalogCancellation(t *testing.T) {
+	started := make(chan struct{})
+	done := make(chan struct{})
+	server := httptest.NewServer(remoteCatalogCancellationHandler(started, done))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var output bytes.Buffer
+	result := make(chan error, 1)
+	go func() {
+		result <- remoteHTTPService(t, remoteStaticInputReader([]byte("PNG"))).Invoke(remoteInvokeConfig(
+			ctx, server.URL, []string{"prompt=hello", "image=@fixture.png"}, &output,
+		))
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("catalog request did not start")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if err == nil || !errors.Is(err, context.Canceled) {
+			t.Fatalf("catalog cancellation = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("catalog cancellation did not return")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("catalog handler did not observe cancellation")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("catalog cancellation output = %q, want empty", output.String())
+	}
+}
+
+func remoteCatalogCancellationHandler(started, done chan struct{}) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			http.NotFound(writer, request)
+			return
+		}
+		close(started)
+		<-request.Context().Done()
+		close(done)
+	}
+}
+
+func remoteASRModelDetail() factoryapi.ModelDetail {
+	required := true
+	return factoryapi.ModelDetail{
+		Name: "asr",
+		Operations: []factoryapi.ModelInvocationOperation{{
+			Name: modelinference.OperationASR,
+			Inputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{{
+				Name: "audio", Modality: remotePointer(factoryapi.ModelInvocationContentTypeAudio), Required: &required,
+			}}),
+			Outputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
+				{Name: "transcript", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText)},
+				{Name: "segments", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON)},
+			}),
+		}},
+	}
+}
+
+func remoteParameterOutputModelDetail() factoryapi.ModelDetail {
+	required := true
+	return factoryapi.ModelDetail{
+		Name: "llm",
+		Operations: []factoryapi.ModelInvocationOperation{{
+			Name: modelinference.OperationOMNI,
+			Inputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
+				{Name: "prompt", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText), Required: &required, MediaTypes: remotePointerSlice([]string{"text/plain"})},
+				{Name: "image", Modality: remotePointer(factoryapi.ModelInvocationContentTypeImage), MediaTypes: remotePointerSlice([]string{"image/*"})},
+				{Name: "parameters", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON), MediaTypes: remotePointerSlice([]string{"application/json"})},
+			}),
+			Outputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
+				{Name: "text", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText)},
+				{Name: "usage", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON)},
+			}),
+		}},
+	}
 }
