@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
@@ -15,6 +18,161 @@ import (
 
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
 const codedDiagnosticUnknownModelName = "missing-model"
+
+// TestModelsASRMissingRequiredInputRendersLocalAndServerCodedDiagnostic
+// proves the assembled customer boundary preserves the generic invalid-slot
+// identity when no ASR audio is supplied. The local path uses the production
+// root process and controlled external-effect edges; the configured-server
+// path uses a loopback catalog that records one GET and must not receive a
+// POST after catalog validation reports the missing slot.
+func TestModelsASRMissingRequiredInputRendersLocalAndServerCodedDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInvalidGenericCLIProcess(t, genericConformanceFactoryConfig)
+	defer fixture.close(t)
+
+	serverTrace := &codedDiagnosticModelServerTrace{}
+	server := functionalNewHTTPServer(t, serverTrace)
+	t.Cleanup(server.Close)
+
+	cases := []struct {
+		name   string
+		server bool
+		json   bool
+	}{
+		{name: "local-human"},
+		{name: "local-json", json: true},
+		{name: "server-human", server: true},
+		{name: "server-json", server: true, json: true},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			outputDirectory := t.TempDir()
+			outputPaths := []string{
+				filepath.Join(outputDirectory, "transcript.txt"),
+				filepath.Join(outputDirectory, "segments.json"),
+			}
+			args := []string{"you"}
+			if testCase.json {
+				args = append(args, "--json")
+			}
+			if testCase.server {
+				args = append(args, "--server", server.URL)
+			}
+			args = append(args,
+				"models", "invoke", "asr", "--operation", "ASR",
+				"--output-map", "transcript="+outputPaths[0],
+				"--output-map", "segments="+outputPaths[1],
+			)
+
+			beforeEffects := fixture.effectSnapshot()
+			beforeRequests := serverTrace.snapshot()
+			inputs := support.FakeInputs(t.Context(), args)
+			inputs.Input.Env = fixture.environment
+			inputs.Input.WorkingDirectory = fixture.directory
+			err := fixture.execute(func() error { return fixture.process.Execute(inputs.Input) })
+			if err == nil {
+				t.Fatal("Process.Execute(models invoke asr) error = nil, want missing-audio failure")
+			}
+
+			var typed *modelservice.InvocationFailure
+			if !errors.As(err, &typed) || typed == nil {
+				t.Fatalf("models invoke asr error = %v, want typed InvocationFailure", err)
+			}
+			if typed.Class != modelservice.InvocationFailureClassInvalidSlot || typed.Slot != "audio" {
+				t.Fatalf("models invoke asr typed failure = %#v, want INVALID_SLOT/audio", typed)
+			}
+			if typed.Message != "required input slot is missing: audio" {
+				t.Fatalf("models invoke asr typed message = %q, want exact catalog-derived message", typed.Message)
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("models invoke asr stdout = %q, want empty on failure", inputs.Stdout())
+			}
+			if diagnostic := decodeFirstDiagnostic(t, inputs.Stderr()); diagnostic.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") ||
+				diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != typed.Message {
+				t.Fatalf("models invoke asr diagnostic = %#v, want BAD_REQUEST with typed message %q", diagnostic, typed.Message)
+			}
+			if diagnosticLines := nonEmptyDiagnosticLines(inputs.Stderr()); diagnosticLines != 1 {
+				t.Fatalf("models invoke asr diagnostic lines = %d, want one", diagnosticLines)
+			}
+			for _, path := range outputPaths {
+				if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("models invoke asr output %q stat error = %v, want no published output", path, statErr)
+				}
+			}
+			fixture.assertNoEffectsSince(t, beforeEffects)
+
+			afterRequests := serverTrace.snapshot()
+			if testCase.server {
+				if afterRequests.gets-beforeRequests.gets != 1 || afterRequests.posts-beforeRequests.posts != 0 {
+					t.Fatalf("configured-server requests = GET %d POST %d, want GET 1 POST 0", afterRequests.gets-beforeRequests.gets, afterRequests.posts-beforeRequests.posts)
+				}
+			} else if afterRequests != beforeRequests {
+				t.Fatalf("local invocation changed configured-server requests from %#v to %#v", beforeRequests, afterRequests)
+			}
+		})
+	}
+}
+
+func nonEmptyDiagnosticLines(stderr string) int {
+	count := 0
+	for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+type codedDiagnosticModelServerTrace struct {
+	mu    sync.Mutex
+	gets  int
+	posts int
+}
+
+type codedDiagnosticModelServerCounts struct {
+	gets  int
+	posts int
+}
+
+func (trace *codedDiagnosticModelServerTrace) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	trace.mu.Lock()
+	switch request.Method {
+	case http.MethodGet:
+		trace.gets++
+	case http.MethodPost:
+		trace.posts++
+	}
+	trace.mu.Unlock()
+
+	if request.Method != http.MethodGet || request.URL.Path != "/models/asr" {
+		http.NotFound(writer, request)
+		return
+	}
+	required := true
+	detail := factoryapi.ModelDetail{
+		Name: "asr",
+		Operations: []factoryapi.ModelInvocationOperation{{
+			Name: "ASR",
+			Inputs: &[]factoryapi.ModelInvocationSlot{{
+				Name: "audio", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeAudio}, Required: &required,
+			}},
+			Outputs: &[]factoryapi.ModelInvocationSlot{
+				{Name: "transcript", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeText}},
+				{Name: "segments", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeJSON}},
+			},
+		}},
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(writer).Encode(detail)
+}
+
+func (trace *codedDiagnosticModelServerTrace) snapshot() codedDiagnosticModelServerCounts {
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	return codedDiagnosticModelServerCounts{gets: trace.gets, posts: trace.posts}
+}
 
 // TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic proves local removal renders a coded diagnostic for a missing cache entry.
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
