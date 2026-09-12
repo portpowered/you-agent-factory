@@ -613,7 +613,7 @@ func TestValidateCLIOutputShapeRequiresAnUnambiguousPublicOutput(t *testing.T) {
 	}
 }
 
-func TestHTTPServiceInvokeRejectsLocalOnlyGenericBindings(t *testing.T) {
+func TestHTTPServiceInvokeValidatesGenericBindingsBeforeHTTP(t *testing.T) {
 	t.Parallel()
 
 	service := &httpService{}
@@ -627,7 +627,7 @@ func TestHTTPServiceInvokeRejectsLocalOnlyGenericBindings(t *testing.T) {
 			cfg.Text = ""
 			cfg.InputSpecs = []string{"{}"}
 		}, want: "CLI HTTP protocol is required"},
-		{name: "parameters", mutate: func(cfg *InvokeConfig) { cfg.ParameterSpecs = []string{"{}"} }, want: "explicit generic parameters"},
+		{name: "parameters", mutate: func(cfg *InvokeConfig) { cfg.ParameterSpecs = []string{"{}"} }, want: "parse --parameter 1: name is required"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			cfg := base

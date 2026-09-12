@@ -688,7 +688,15 @@ func validateGenericCLIOutputMappings(
 }
 
 func (service *rootService) writeGenericCLIOutputMappings(cfg InvokeConfig, result modelinference.InvokeModelResult) error {
-	if service.outputFileSystem == nil {
+	return writeGenericCLIOutputMappingsWithFileSystem(cfg, result, service.outputFileSystem)
+}
+
+func writeGenericCLIOutputMappingsWithFileSystem(
+	cfg InvokeConfig,
+	result modelinference.InvokeModelResult,
+	fileSystem OutputFileSystem,
+) error {
+	if fileSystem == nil {
 		return fmt.Errorf("Models CLI output filesystem is required for explicit output mappings")
 	}
 	mappings, err := parseGenericCLIOutputMappings(cfg.OutputMappings)
@@ -708,28 +716,28 @@ func (service *rootService) writeGenericCLIOutputMappings(cfg InvokeConfig, resu
 	committed := false
 	defer func() {
 		if committed {
-			removeGenericCLIOutputBackups(service.outputFileSystem, backups)
+			removeGenericCLIOutputBackups(fileSystem, backups)
 		} else {
-			rollbackGenericCLIOutputPublication(service.outputFileSystem, staged, backups, published)
+			rollbackGenericCLIOutputPublication(fileSystem, staged, backups, published)
 		}
 		for _, output := range staged {
 			if output.temporary != "" {
-				_ = service.outputFileSystem.Remove(output.temporary)
+				_ = fileSystem.Remove(output.temporary)
 			}
 		}
 	}()
-	staged, err = stageGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, bySlot)
+	staged, err = stageGenericCLIOutputs(cfg.Context, fileSystem, result, bySlot)
 	if err != nil {
 		return err
 	}
 	if err := cfg.Context.Err(); err != nil {
 		return err
 	}
-	backups, err = backupGenericCLIOutputTargets(cfg.Context, service.outputFileSystem, mappings)
+	backups, err = backupGenericCLIOutputTargets(cfg.Context, fileSystem, mappings)
 	if err != nil {
 		return err
 	}
-	published, err = publishGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, staged)
+	published, err = publishGenericCLIOutputs(cfg.Context, fileSystem, result, staged)
 	if err != nil {
 		return err
 	}

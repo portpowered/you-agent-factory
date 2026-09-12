@@ -61,6 +61,7 @@ func bindCompositionService(
 		models:           cfg.Models,
 		openCatalogScope: cfg.OpenCatalogScope,
 		openInvokeScope:  cfg.OpenInvokeScope,
+		outputFileSystem: outputFileSystem,
 		inputFileReader:  inputFileReader,
 	}
 	owned := NewService(cfg)

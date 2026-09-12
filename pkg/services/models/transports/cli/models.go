@@ -150,6 +150,7 @@ type httpService struct {
 	models           modelinference.Service
 	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	outputFileSystem OutputFileSystem
 	inputFileReader  InputFileReader
 }
 
@@ -293,7 +294,7 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	if err := validateHTTPInvokeBindings(cfg); err != nil {
 		return err
 	}
-	if hasGenericCLIInputs(cfg) {
+	if hasGenericCLIInvocationBindings(cfg) {
 		return service.invokeRemoteGeneric(cfg, modelName, operation)
 	}
 	return service.invokeLegacyModel(cfg, modelName, operation, text)
@@ -311,7 +312,7 @@ func validateHTTPInvokeRequest(cfg InvokeConfig) error {
 
 func resolveHTTPInvokeOperation(cfg InvokeConfig, modelName string) (string, error) {
 	operation := strings.TrimSpace(cfg.Operation)
-	if operation == "" && hasGenericCLIInputs(cfg) {
+	if operation == "" && hasGenericCLIInvocationBindings(cfg) {
 		operation = inferGenericCLIModelOperation(modelName)
 	}
 	if operation == "" {
@@ -321,7 +322,7 @@ func resolveHTTPInvokeOperation(cfg InvokeConfig, modelName string) (string, err
 }
 
 func validateHTTPInvokeText(cfg InvokeConfig, text string) error {
-	if text == "" && !hasGenericCLIInputs(cfg) {
+	if text == "" && !hasGenericCLIInvocationBindings(cfg) {
 		return fmt.Errorf("--text is required")
 	}
 	if text != "" && hasGenericCLIInputs(cfg) {
@@ -376,14 +377,19 @@ func (service *httpService) invokeLegacyModel(
 }
 
 func validateHTTPInvokeBindings(cfg InvokeConfig) error {
-	switch {
-	case len(cfg.ParameterSpecs) > 0:
-		return fmt.Errorf("explicit generic parameters require the local Models composition")
-	case len(cfg.OutputMappings) > 0:
-		return fmt.Errorf("explicit output mappings require the local Models composition")
-	default:
-		return nil
+	if len(cfg.OutputMappings) > 0 && strings.TrimSpace(cfg.OutputPath) != "" {
+		return mapModelsClientError(genericCLIOutputFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			"--output cannot be combined with explicit output mappings", cfg.Operation, nil,
+		))
 	}
+	if _, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs); err != nil {
+		return mapModelsClientError(err)
+	}
+	if _, err := parseGenericCLIOutputMappings(cfg.OutputMappings); err != nil {
+		return mapModelsClientError(err)
+	}
+	return nil
 }
 
 func (service *httpService) Pull(cfg PullConfig) error {
@@ -811,17 +817,22 @@ func (service *httpService) invokeRemoteGeneric(
 		return err
 	}
 	catalog := genericCLIModelDetailFromGenerated(model)
+	if _, ok := catalogOperationForName(catalog, operation); !ok {
+		return mapModelsClientError(genericCLIInputFailure(
+			modelinference.InvocationFailureClassInvalidOperation,
+			fmt.Sprintf("unknown operation %q", operation), operation, nil,
+		))
+	}
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return mapModelsClientError(err)
 	}
-	inputs, err := prepareGenericCLIInputsWithReader(cfg, operation, catalog, inputFileReader)
+	request, err := prepareRemoteGenericRequest(cfg, modelName, operation, catalog, inputFileReader)
 	if err != nil {
 		return mapModelsClientError(err)
 	}
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return fmt.Errorf("--output is not supported with explicit generic inputs")
 	}
-	request := genericCLIRequestFromInputs(modelName, operation, inputs)
 	var response factoryapi.GenericModelInvocationResponse
 	if err := doModelsPOST(
 		cfg.Context, inferenceHTTP, cfg.Server, "/models/invocations", request, &response,
@@ -838,14 +849,53 @@ func (service *httpService) invokeRemoteGeneric(
 	if err := validateGenericCLIResponse(response); err != nil {
 		return err
 	}
-	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(response)
-	}
 	result, err := genericCLIResultFromGenerated(response, modelName, operation)
 	if err != nil {
 		return malformedModelsResponseError(err)
 	}
+	if len(cfg.OutputMappings) > 0 {
+		return writeGenericCLIOutputMappingsWithFileSystem(cfg, result, service.outputFileSystem)
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
 	return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
+}
+
+func prepareRemoteGenericRequest(
+	cfg InvokeConfig,
+	modelName string,
+	operation string,
+	catalog modelinference.Detail,
+	inputFileReader InputFileReader,
+) (factoryapi.GenericModelInvocationRequest, error) {
+	parameters, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs)
+	if err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	inputs, err := prepareGenericCLIInputsWithReader(cfg, operation, catalog, inputFileReader)
+	if err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse(remoteModelsInvokeScope)
+	if err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	request := modelinference.InvokeModelRequest{
+		Scope: scope, Holder: modelsCLIInvokeHolder,
+		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
+		Inputs: inputs, Parameters: parameters,
+	}
+	if len(inputs) == 0 && strings.TrimSpace(cfg.Text) != "" {
+		request = joinedCLIInvocationRequestFromInputs(
+			scope, modelName, operation, strings.TrimSpace(cfg.Text), inputs, parameters, catalog,
+		)
+	}
+	prepared, err := preflightGenericCLIInvocation(cfg, request, catalog)
+	if err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	return genericCLIRequestFromInputs(modelName, prepared.Operation, prepared.Inputs, prepared.Parameters), nil
 }
 func genericCLIInvocationFailureFromGenerated(
 	failure *factoryapi.ModelInvocationFailure,
@@ -918,6 +968,7 @@ func genericCLIRequestFromInputs(
 	modelName string,
 	operation string,
 	inputs []modelinference.InferenceInput,
+	parameters []modelinference.OperationParameter,
 ) factoryapi.GenericModelInvocationRequest {
 	generatedInputs := make([]factoryapi.ModelInvocationInput, len(inputs))
 	for index, input := range inputs {
@@ -939,13 +990,23 @@ func genericCLIRequestFromInputs(
 		generatedInputs[index] = generated
 	}
 	operationValue := operation
-	return factoryapi.GenericModelInvocationRequest{
+	request := factoryapi.GenericModelInvocationRequest{
 		Scope:     remoteModelsInvokeScope,
 		Holder:    modelsCLIInvokeHolder,
 		Model:     factoryapi.ModelReference{NameOrUri: modelName},
 		Operation: &operationValue,
 		Inputs:    &generatedInputs,
 	}
+	if len(parameters) > 0 {
+		generatedParameters := make([]factoryapi.ModelInvocationParameter, len(parameters))
+		for index, parameter := range parameters {
+			generatedParameters[index] = factoryapi.ModelInvocationParameter{
+				Name: parameter.Name, Value: parameter.Value,
+			}
+		}
+		request.Parameters = &generatedParameters
+	}
+	return request
 }
 func genericCLIInputUsesBinaryCarrier(modality modelinference.Modality) bool {
 	switch modality {
