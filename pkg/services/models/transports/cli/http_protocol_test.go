@@ -122,7 +122,7 @@ func TestLegacyHTTPAdapterValidatesOperationInputs(t *testing.T) {
 	}, "--operation is required")
 	assertError("Invoke text", func() error {
 		return service.Invoke(InvokeConfig{Context: context.Background(), ModelName: "voice", Operation: "TTS", Output: output})
-	}, "--text is required")
+	}, "CLI HTTP protocol is required for remote models invoke")
 	assertError("Pull context", func() error {
 		return service.Pull(PullConfig{Output: output})
 	}, "context is required")

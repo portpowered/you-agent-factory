@@ -122,8 +122,7 @@ func (service *rootService) refreshInvokeReadiness(
 }
 
 func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
-	if strings.TrimSpace(cfg.Operation) != "" || cfg.JSON || len(cfg.InputMappings) > 0 ||
-		len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+	if hasGenericCLIInvocationBindings(cfg) || cfg.JSON {
 		return true
 	}
 	if isDirectTTSAlias(cfg) && strings.TrimSpace(cfg.OutputPath) != "" {

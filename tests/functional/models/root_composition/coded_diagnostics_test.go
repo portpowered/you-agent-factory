@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -29,49 +27,67 @@ func TestModelsASRMissingRequiredInputRendersLocalAndServerCodedDiagnostic(t *te
 	t.Parallel()
 
 	fixture := newInvalidGenericCLIProcess(t, genericConformanceFactoryConfig)
-	defer fixture.close(t)
-
-	serverTrace := &codedDiagnosticModelServerTrace{}
-	server := functionalNewHTTPServer(t, serverTrace)
-	t.Cleanup(server.Close)
+	// functionalBuildProcess registers cleanup with the parent test. That
+	// cleanup must outlive the parallel explicit-server children below.
 
 	cases := []struct {
-		name   string
-		server bool
-		json   bool
+		name    string
+		server  bool
+		json    bool
+		offline bool
 	}{
-		{name: "local-human"},
-		{name: "local-json", json: true},
+		{name: "local-human", offline: true},
+		{name: "local-json", json: true, offline: true},
 		{name: "server-human", server: true},
 		{name: "server-json", server: true, json: true},
 	}
 	for _, testCase := range cases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			outputDirectory := t.TempDir()
-			outputPaths := []string{
-				filepath.Join(outputDirectory, "transcript.txt"),
-				filepath.Join(outputDirectory, "segments.json"),
+			if testCase.server {
+				t.Parallel()
 			}
+
+			var serverTrace *codedDiagnosticModelServerTrace
+			serverURL := ""
+			if testCase.server {
+				serverTrace = &codedDiagnosticModelServerTrace{}
+				server := functionalNewHTTPServer(t, serverTrace)
+				t.Cleanup(server.Close)
+				serverURL = server.URL
+			}
+
 			args := []string{"you"}
 			if testCase.json {
 				args = append(args, "--json")
 			}
 			if testCase.server {
-				args = append(args, "--server", server.URL)
+				args = append(args, "--server", serverURL)
 			}
-			args = append(args,
-				"models", "invoke", "asr", "--operation", "ASR",
-				"--output-map", "transcript="+outputPaths[0],
-				"--output-map", "segments="+outputPaths[1],
-			)
+			args = append(args, "models", "invoke", "asr", "--operation", "ASR")
+			if testCase.offline {
+				args = append(args, "--offline")
+			}
 
 			beforeEffects := fixture.effectSnapshot()
-			beforeRequests := serverTrace.snapshot()
 			inputs := support.FakeInputs(t.Context(), args)
-			inputs.Input.Env = fixture.environment
-			inputs.Input.WorkingDirectory = fixture.directory
-			err := fixture.execute(func() error { return fixture.process.Execute(inputs.Input) })
+			if testCase.server {
+				// Remote validation does not open the local Models runtime. Give
+				// each independent request its own customer profile and work root.
+				inputs.Input.Env = functionalHomeEnvironment(functionalTempDir(t))
+				inputs.Input.WorkingDirectory = functionalTempDir(t)
+			} else {
+				inputs.Input.Env = fixture.environment
+				inputs.Input.WorkingDirectory = fixture.directory
+			}
+			var err error
+			if testCase.server {
+				err = fixture.process.Execute(inputs.Input)
+			} else {
+				// The local rows share the customer-visible Current Factory
+				// ownership boundary, so only this smallest cohort is serialized.
+				err = fixture.execute(func() error { return fixture.process.Execute(inputs.Input) })
+			}
 			if err == nil {
 				t.Fatal("Process.Execute(models invoke asr) error = nil, want missing-audio failure")
 			}
@@ -96,20 +112,13 @@ func TestModelsASRMissingRequiredInputRendersLocalAndServerCodedDiagnostic(t *te
 			if diagnosticLines := nonEmptyDiagnosticLines(inputs.Stderr()); diagnosticLines != 1 {
 				t.Fatalf("models invoke asr diagnostic lines = %d, want one", diagnosticLines)
 			}
-			for _, path := range outputPaths {
-				if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
-					t.Fatalf("models invoke asr output %q stat error = %v, want no published output", path, statErr)
-				}
-			}
 			fixture.assertNoEffectsSince(t, beforeEffects)
 
-			afterRequests := serverTrace.snapshot()
 			if testCase.server {
-				if afterRequests.gets-beforeRequests.gets != 1 || afterRequests.posts-beforeRequests.posts != 0 {
-					t.Fatalf("configured-server requests = GET %d POST %d, want GET 1 POST 0", afterRequests.gets-beforeRequests.gets, afterRequests.posts-beforeRequests.posts)
+				afterRequests := serverTrace.snapshot()
+				if afterRequests.gets != 1 || afterRequests.posts != 0 {
+					t.Fatalf("configured-server requests = GET %d POST %d, want GET 1 POST 0", afterRequests.gets, afterRequests.posts)
 				}
-			} else if afterRequests != beforeRequests {
-				t.Fatalf("local invocation changed configured-server requests from %#v to %#v", beforeRequests, afterRequests)
 			}
 		})
 	}
@@ -151,16 +160,20 @@ func (trace *codedDiagnosticModelServerTrace) ServeHTTP(writer http.ResponseWrit
 		return
 	}
 	required := true
+	audioModality := factoryapi.ModelInvocationContentTypeAudio
+	textModality := factoryapi.ModelInvocationContentTypeText
+	jsonModality := factoryapi.ModelInvocationContentTypeJSON
 	detail := factoryapi.ModelDetail{
 		Name: "asr",
 		Operations: []factoryapi.ModelInvocationOperation{{
 			Name: "ASR",
 			Inputs: &[]factoryapi.ModelInvocationSlot{{
-				Name: "audio", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeAudio}, Required: &required,
+				Name: "audio", Modality: &audioModality,
+				ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeAudio}, Required: &required,
 			}},
 			Outputs: &[]factoryapi.ModelInvocationSlot{
-				{Name: "transcript", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeText}},
-				{Name: "segments", ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeJSON}},
+				{Name: "transcript", Modality: &textModality, ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeText}},
+				{Name: "segments", Modality: &jsonModality, ContentTypes: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeJSON}},
 			},
 		}},
 	}

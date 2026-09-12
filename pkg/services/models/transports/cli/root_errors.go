@@ -60,8 +60,13 @@ func validateModelsInvokeRequest(cfg InvokeConfig) (string, string, string, erro
 }
 
 func hasGenericCLIInvocationBindings(cfg InvokeConfig) bool {
-	return strings.TrimSpace(cfg.Operation) != "" || hasGenericCLIInputs(cfg) ||
-		len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0
+	if hasGenericCLIInputs(cfg) || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+		return true
+	}
+	// An explicit operation without the legacy --text binding selects the
+	// catalog-backed generic contract. Keep the documented direct-TTS
+	// --text/--output compatibility path unchanged.
+	return strings.TrimSpace(cfg.Operation) != "" && strings.TrimSpace(cfg.Text) == ""
 }
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
