@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -242,6 +245,101 @@ func TestNew_WithRestoredActiveDispatchUsesRecordedWorkPlacement(t *testing.T) {
 	token := snapshot.Marking.Tokens[tokens[0]]
 	if token == nil || token.Color.WorkID != "work-active" {
 		t.Fatalf("restored active Work token = %#v, want work-active", token)
+	}
+}
+
+func TestCycle003MissingPlaceProjectionPreservesLegacyWitness(t *testing.T) {
+	const (
+		targetWorkID = "batch-localai-project-cycle-092-v15-adapter-topology-characterization-20260910-localai-v3-model-adapter-topology-characterization-001"
+		parentWorkID = "batch-localai-project-cycle-092-v15-adapter-topology-characterization-20260910-localai"
+		dispatchID   = "e6629641-36f7-431f-b4bf-a2a3f6402eaa"
+		requestID    = "localai-project-cycle-092-v15-adapter-topology-characterization-20260910"
+		traceID      = "trace-operator-localai-delegation-restart-20260907"
+	)
+
+	data, err := os.ReadFile("testdata/cycle-003-missing-place.jsonl")
+	if err != nil {
+		t.Fatalf("read minimized cycle-003 fixture: %v", err)
+	}
+
+	var events []interfaces.FactoryEvent
+	for lineNumber, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var record struct {
+			RecordType string                   `json:"recordType"`
+			Event      *interfaces.FactoryEvent `json:"event,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode minimized cycle-003 fixture line %d: %v", lineNumber+1, err)
+		}
+		if record.RecordType == "event" && record.Event != nil {
+			events = append(events, *record.Event)
+		}
+	}
+	if len(events) != 6 {
+		t.Fatalf("minimized cycle-003 event count = %d, want 6 events plus one header", len(events))
+	}
+
+	projector := recordingswire.NewProjectionService()
+	restored, err := projector.ReconstructFactoryWorldState(events, 322)
+	if err != nil {
+		t.Fatalf("project minimized cycle-003 fixture: %v", err)
+	}
+
+	item, ok := restored.WorkItemsByID[targetWorkID]
+	if !ok {
+		t.Fatalf("projected Work %q is missing", targetWorkID)
+	}
+	if item.WorkTypeID != "idea" || item.State != "init" || item.DisplayName != "localai-v3-model-adapter-topology-characterization-001" {
+		t.Fatalf("projected target Work = %#v, want idea/init with the source display name", item)
+	}
+	if item.ChainingTraceDepth != 2 || item.CurrentChainingTraceID != traceID ||
+		!reflect.DeepEqual(item.PreviousChainingTraceIDs, []string{traceID}) || item.TraceID != traceID {
+		t.Fatalf("projected target Work lineage = %#v, want depth/current/previous/trace from source", item)
+	}
+
+	initial := restored.PayloadLineage.ResolveInitialSubmittedSnapshot(targetWorkID)
+	if initial.Snapshot == nil || initial.Snapshot.WorkItem.ID != targetWorkID ||
+		initial.Snapshot.RequestID != requestID || initial.Snapshot.WorkItem.WorkTypeID != "idea" ||
+		initial.Snapshot.WorkItem.State != "init" {
+		t.Fatalf("projected initial Work lineage = %#v, want request %q and target identity", initial, requestID)
+	}
+
+	if relations := restored.RelationsByWorkID[targetWorkID]; len(relations) != 1 ||
+		relations[0].Type != "PARENT_CHILD" || relations[0].SourceWorkID != targetWorkID ||
+		relations[0].SourceWorkName != "localai-v3-model-adapter-topology-characterization-001" ||
+		relations[0].TargetWorkID != "batch-operator-localai-delegation-restart-20260907-localai" ||
+		relations[0].TargetWorkName != "batch-operator-localai-delegation-restart-20260907-localai" ||
+		relations[0].RequestID != requestID || relations[0].TraceID != traceID {
+		t.Fatalf("projected target relations = %#v, want the source parent-child relation", relations)
+	}
+	if relations := restored.RelationsByWorkID[parentWorkID]; len(relations) != 1 ||
+		relations[0].Type != "DEPENDS_ON" || relations[0].SourceWorkID != parentWorkID ||
+		relations[0].SourceWorkName != "localai" || relations[0].TargetWorkID != targetWorkID ||
+		relations[0].TargetWorkName != "localai-v3-model-adapter-topology-characterization-001" ||
+		relations[0].RequiredState != "complete" || relations[0].RequestID != requestID || relations[0].TraceID != traceID {
+		t.Fatalf("projected parent relations = %#v, want the source dependency relation", relations)
+	}
+
+	dispatch, ok := restored.ActiveDispatches[dispatchID]
+	if !ok {
+		t.Fatalf("projected active dispatch %q is missing", dispatchID)
+	}
+	if dispatch.TransitionID != "plan" || !reflect.DeepEqual(dispatch.WorkItemIDs, []string{targetWorkID}) || len(dispatch.Inputs) != 1 {
+		t.Fatalf("projected active dispatch = %#v, want plan and target Work identity", dispatch)
+	}
+	input := dispatch.Inputs[0]
+	if input.TokenID != targetWorkID || input.WorkItem == nil || input.WorkItem.ID != targetWorkID || input.PlaceID != "" {
+		t.Fatalf("projected legacy dispatch input = %#v, want target identity with empty PlaceID", input)
+	}
+	if got := restored.Topology.Workstations[0].InputPlaceIDs; !reflect.DeepEqual(got, []string{"idea:init"}) {
+		t.Fatalf("projected plan input topology = %#v, want idea:init", got)
+	}
+	if trace := restored.TracesByID[traceID]; !reflect.DeepEqual(trace.DispatchIDs, []string{dispatchID}) ||
+		!reflect.DeepEqual(trace.WorkItemIDs, []string{parentWorkID, targetWorkID}) {
+		t.Fatalf("projected trace = %#v, want target/parent and dispatch lineage", trace)
 	}
 }
 
