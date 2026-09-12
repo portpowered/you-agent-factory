@@ -278,7 +278,10 @@ func prepareGenericCLIInputsWithReader(
 ) ([]modelinference.InferenceInput, error) {
 	rawValues := append([]string(nil), cfg.InputMappings...)
 	rawValues = append(rawValues, cfg.InputSpecs...)
-	if len(rawValues) == 0 {
+	if len(rawValues) == 0 && strings.TrimSpace(cfg.Text) != "" {
+		// The legacy --text/TTS aliases are converted into the generic request
+		// after this helper returns. Treat that text as the input binding so the
+		// new empty-generic validation does not reject the compatibility path.
 		return nil, nil
 	}
 	selected, ok := catalogOperationForName(catalog, operation)
@@ -287,6 +290,13 @@ func prepareGenericCLIInputsWithReader(
 			modelinference.InvocationFailureClassInvalidOperation,
 			fmt.Sprintf("unknown operation %q", operation), operation, nil,
 		)
+	}
+	if len(rawValues) == 0 {
+		_, validNames := genericCLIInputSlots(selected.Inputs)
+		if err := validateMissingGenericCLIInputSlots(selected.Inputs, nil, validNames); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	mappingValues, specValues := splitGenericCLIInputValues(rawValues)
 	var inputs []modelinference.InferenceInput
@@ -380,10 +390,11 @@ func validateMissingGenericCLIInputSlots(
 ) error {
 	missing := make([]string, 0)
 	for _, slot := range slots {
-		if slot.Required == nil || !*slot.Required || counts[strings.TrimSpace(slot.Name)] != 0 {
+		name := strings.TrimSpace(slot.Name)
+		if name == "" || slot.Required == nil || !*slot.Required || counts[name] != 0 {
 			continue
 		}
-		missing = append(missing, strings.TrimSpace(slot.Name))
+		missing = append(missing, name)
 	}
 	if len(missing) == 0 {
 		return nil

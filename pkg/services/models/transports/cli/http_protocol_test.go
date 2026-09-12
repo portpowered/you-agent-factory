@@ -693,3 +693,198 @@ func TestModelsRemoteGenericInvokeUsesDedicatedLongRunningProtocol(t *testing.T)
 		t.Fatalf("protocol calls = standard:%d long-running:%d, want one catalog and one inference call", standardCalls.Load(), longRunningCalls.Load())
 	}
 }
+
+func TestModelsRemoteGenericInvokeMissingRequiredOutputMappingsStopsBeforePost(t *testing.T) {
+	t.Parallel()
+
+	var catalogCalls atomic.Int32
+	var postCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			catalogCalls.Add(1)
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).Encode(remoteASRModelDetail())
+			return
+		}
+		if request.Method == http.MethodPost {
+			postCalls.Add(1)
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := (&httpService{http: testHTTPProtocol(t)}).Invoke(InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		Server:         server.URL,
+		OutputMappings: []string{"transcript=transcript.txt", "segments=segments.json"},
+		Output:         &output,
+	})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want missing required audio failure")
+	}
+	var failure *modelinference.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != modelinference.InvocationFailureClassInvalidSlot ||
+		failure.Slot != "audio" || failure.Message != "required input slot is missing: audio" {
+		t.Fatalf("Invoke() failure = %v, want typed missing audio slot", err)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+	}
+	if !errors.As(err, &coded) || coded.CLIErrorCode() != modelsRootBadRequestCode || coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("Invoke() diagnostic = %v, want BAD_REQUEST", err)
+	}
+	if catalogCalls.Load() != 1 || postCalls.Load() != 0 || output.Len() != 0 {
+		t.Fatalf("missing-slot effects = GET:%d POST:%d output:%q, want 1/0/empty", catalogCalls.Load(), postCalls.Load(), output.String())
+	}
+}
+
+func TestModelsRemoteGenericInvokeProjectsParametersAndAtomicallyPublishesOutputs(t *testing.T) {
+	t.Parallel()
+
+	var catalogCalls atomic.Int32
+	var postCalls atomic.Int32
+	var validRequest atomic.Bool
+	server := httptest.NewServer(remoteParameterOutputHandler(&catalogCalls, &postCalls, &validRequest))
+	defer server.Close()
+
+	fileSystem := &genericOutputFileSystem{}
+	var output bytes.Buffer
+	err := (&httpService{
+		http: testHTTPProtocol(t), outputFileSystem: fileSystem,
+		inputFileReader: remoteStaticInputReader([]byte("PNG")),
+	}).Invoke(InvokeConfig{
+		Context: context.Background(), ModelName: "llm", Operation: modelinference.OperationOMNI,
+		Server: server.URL, InputMappings: []string{"prompt=hello", "image=@fixture.png"},
+		ParameterSpecs: []string{
+			`{"name":"temperature","value":0.2}`,
+			`{"name":"stop","value":["END"]}`,
+		},
+		OutputMappings: []string{"text=answer.txt", "usage=usage.json"}, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if catalogCalls.Load() != 1 || postCalls.Load() != 1 || !validRequest.Load() {
+		t.Fatalf("remote effects/request = GET:%d POST:%d valid:%t, want 1/1/true", catalogCalls.Load(), postCalls.Load(), validRequest.Load())
+	}
+	if len(fileSystem.created) != 2 || string(fileSystem.created[0].data) != "answer" || string(fileSystem.created[1].data) != `{"tokens":2}` {
+		t.Fatalf("staged outputs = %#v, want ordered text and usage bytes", fileSystem.created)
+	}
+	if len(fileSystem.renamed) != 2 || !strings.HasSuffix(fileSystem.renamed[0][1], "answer.txt") || !strings.HasSuffix(fileSystem.renamed[1][1], "usage.json") {
+		t.Fatalf("published outputs = %#v, want atomic target renames", fileSystem.renamed)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil || len(response.Outputs) != 2 || response.Outputs[1].Name != "usage" {
+		t.Fatalf("mapped response = %q, %v; want ordered two-output response", output.String(), err)
+	}
+}
+
+func remoteParameterOutputHandler(catalogCalls, postCalls *atomic.Int32, validRequest *atomic.Bool) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.Method {
+		case http.MethodGet:
+			catalogCalls.Add(1)
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).Encode(remoteParameterOutputModelDetail())
+		case http.MethodPost:
+			postCalls.Add(1)
+			var invocation factoryapi.GenericModelInvocationRequest
+			if err := json.NewDecoder(request.Body).Decode(&invocation); err != nil {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if !remoteParameterOutputRequestValid(invocation) {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			validRequest.Store(true)
+			answer := "answer"
+			usage := `{"tokens":2}`
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).Encode(factoryapi.GenericModelInvocationResponse{
+				Outputs: []factoryapi.ModelInvocationOutput{
+					{Name: "text", Modality: factoryapi.ModelInvocationContentTypeText, Content: &answer},
+					{Name: "usage", Modality: factoryapi.ModelInvocationContentTypeJSON, Content: &usage},
+				},
+			})
+		default:
+			http.NotFound(writer, request)
+		}
+	})
+}
+
+func remoteParameterOutputRequestValid(invocation factoryapi.GenericModelInvocationRequest) bool {
+	if invocation.Operation == nil || *invocation.Operation != modelinference.OperationOMNI || invocation.Inputs == nil {
+		return false
+	}
+	return remoteParameterOutputInputsValid(*invocation.Inputs) && remoteParameterOutputParametersValid(invocation.Parameters)
+}
+
+func remoteParameterOutputInputsValid(inputs []factoryapi.ModelInvocationInput) bool {
+	if len(inputs) != 2 {
+		return false
+	}
+	return inputs[0].Name == "prompt" && inputs[0].Content != nil && *inputs[0].Content == "hello" &&
+		inputs[1].Name == "image" && inputs[1].ContentBase64 != nil && string(*inputs[1].ContentBase64) == "PNG"
+}
+
+func remoteParameterOutputParametersValid(parameters *[]factoryapi.ModelInvocationParameter) bool {
+	if parameters == nil || len(*parameters) != 2 {
+		return false
+	}
+	values := *parameters
+	if values[0].Name != "temperature" || values[1].Name != "stop" {
+		return false
+	}
+	temperature, ok := values[0].Value.(float64)
+	if !ok || temperature != 0.2 {
+		return false
+	}
+	stop, ok := values[1].Value.([]interface{})
+	return ok && len(stop) == 1 && stop[0] == "END"
+}
+
+func TestModelsRemoteGenericInvokeRejectsMalformedBindingsBeforeCatalog(t *testing.T) {
+	t.Parallel()
+
+	var protocolCalls atomic.Int32
+	protocol, err := clihttp.NewProtocol(modelsPullDoer(func(*http.Request) (*http.Response, error) {
+		protocolCalls.Add(1)
+		return nil, errors.New("unexpected catalog request")
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("build protocol: %v", err)
+	}
+	base := InvokeConfig{Context: context.Background(), ModelName: "llm", Operation: modelinference.OperationOMNI, Text: "hello", Output: io.Discard}
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*InvokeConfig)
+		want   string
+	}{
+		{name: "malformed parameter", mutate: func(cfg *InvokeConfig) {
+			cfg.ParameterSpecs = []string{`{"name":"temperature"}`}
+		}, want: "parse --parameter 1 (temperature): value is required"},
+		{name: "malformed output mapping", mutate: func(cfg *InvokeConfig) {
+			cfg.Text = ""
+			cfg.OutputMappings = []string{"text"}
+		}, want: "invalid output mapping 1: expected slot=path"},
+		{name: "conflicting text and input", mutate: func(cfg *InvokeConfig) {
+			cfg.InputMappings = []string{"prompt=other"}
+		}, want: "--text cannot be used with --input"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			cfg := base
+			testCase.mutate(&cfg)
+			if err := (&httpService{http: protocol}).Invoke(cfg); err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("Invoke() error = %v, want %q", err, testCase.want)
+			}
+		})
+	}
+	if protocolCalls.Load() != 0 {
+		t.Fatalf("malformed binding catalog calls = %d, want 0", protocolCalls.Load())
+	}
+}
