@@ -312,10 +312,9 @@ func restoredDispatchPlaceCandidates(
 
 	if len(restored.Topology.Workstations) > 0 {
 		recordedPlaces, found := restoredRecordedWorkstationPlaces(restored.Topology, dispatch.TransitionID)
-		if !found {
-			return nil
+		if found && len(recordedPlaces) > 0 {
+			candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
 		}
-		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
 	}
 
 	if placeID, found := latestRestoredNonEmptyWorkStateChangePlace(restored, workID); found {

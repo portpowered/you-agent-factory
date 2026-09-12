@@ -327,6 +327,18 @@ func TestRestoreRestoredActiveDispatchUsesLatestCanonicalMutation(t *testing.T) 
 	}
 }
 
+func TestRestoreRestoredActiveDispatchIgnoresEmptyRecordedWorkstationPlaces(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.Topology.Workstations[0].InputPlaceIDs = nil
+
+	if err := materializeRestoredDispatchInputPlaces(restored, buildSimpleNet(), restoredWorkItems(restored)); err != nil {
+		t.Fatalf("materializeRestoredDispatchInputPlaces: %v", err)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "task:init" {
+		t.Fatalf("resolved dispatch input PlaceID = %q, want loaded transition place task:init", got)
+	}
+}
+
 func TestRestoreRestoredActiveDispatchRejectsMissingPlaceWithoutMutation(t *testing.T) {
 	restored := restoredMissingPlaceDispatchFixture()
 	restored.Topology.Workstations = nil
