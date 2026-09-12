@@ -43,9 +43,16 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.ListModelsWithRuntime(
+		list, err := localmodels.ListModelsWithRuntime(
 			runtimeCfg, nil, localmodels.DefaultManagedRuntimeSourceResolver(),
 		)
+		if err != nil {
+			return modelcatalog.List{}, err
+		}
+		for index := range list.Results {
+			list.Results[index] = projectCatalogAvailability(list.Results[index])
+		}
+		return list, nil
 	}
 
 	catalog := localmodels.BuildCatalogWithRuntime(
@@ -64,6 +71,7 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 			return modelcatalog.List{}, err
 		}
 		summary.ManagedRuntime = overlayCatalogCacheFacts(summary.ManagedRuntime, inspection)
+		summary = projectCatalogAvailability(summary)
 		results = append(results, summary)
 	}
 	sort.Slice(results, func(i, j int) bool {
@@ -83,9 +91,14 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.GetModelWithRuntime(
+		detail, err := localmodels.GetModelWithRuntime(
 			runtimeCfg, modelName, nil, localmodels.DefaultManagedRuntimeSourceResolver(),
 		)
+		if err != nil {
+			return modelcatalog.Detail{}, err
+		}
+		detail.Summary = projectCatalogAvailability(detail.Summary)
+		return detail, nil
 	}
 
 	catalog := localmodels.BuildCatalogWithRuntime(
@@ -110,8 +123,23 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 		return modelcatalog.Detail{}, err
 	}
 	detail.ManagedRuntime = overlayCatalogCacheFacts(detail.ManagedRuntime, inspection)
+	detail.Summary = projectCatalogAvailability(detail.Summary)
 	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime.Diagnostics)
 	return detail, nil
+}
+
+func projectCatalogAvailability(summary modelcatalog.Summary) modelcatalog.Summary {
+	summary.Status = modelcatalog.StatusUnavailable
+	summary.LoadState = modelcatalog.LoadStateUnloaded
+	if summary.ManagedRuntime.LifecycleState == models.LifecycleStateNotApplicable {
+		summary.LoadState = modelcatalog.LoadStateNotApplicable
+	}
+	if summary.ManagedRuntime.ReadinessState == models.ReadinessStateReady &&
+		(summary.ManagedRuntime.LifecycleState == models.LifecycleStateInstalled ||
+			summary.ManagedRuntime.LifecycleState == models.LifecycleStateLoaded) {
+		summary.Status = modelcatalog.StatusReady
+	}
+	return summary
 }
 
 func overlayCatalogManagedRuntime(
