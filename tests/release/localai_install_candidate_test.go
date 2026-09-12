@@ -33,53 +33,25 @@ var localAICandidateSourceCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 func TestLocalAICandidateSourceCommitValidation(t *testing.T) {
 	t.Parallel()
-
 	const canonical = "4e7813a68fd775c15a760f64d91c8d2f7baa5a11"
-	tests := []struct {
-		name    string
-		value   string
-		want    string
-		wantErr bool
-	}{
-		{name: "canonical", value: canonical, want: canonical},
-		{name: "empty", value: "", wantErr: true},
-		{name: "uppercase", value: strings.ToUpper(canonical), wantErr: true},
-		{name: "leading whitespace", value: " " + canonical, wantErr: true},
-		{name: "trailing whitespace", value: canonical + " ", wantErr: true},
-		{name: "non-hex", value: strings.Repeat("g", 40), wantErr: true},
-		{name: "short", value: canonical[:39], wantErr: true},
-		{name: "long", value: canonical + "0", wantErr: true},
-		{name: "concatenated", value: canonical + canonical, wantErr: true},
+	if got, err := parseLocalAICandidateSourceCommit(canonical); err != nil || got != canonical {
+		t.Fatalf("parseLocalAICandidateSourceCommit(%q) = %q/%v, want canonical", canonical, got, err)
 	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := parseLocalAICandidateSourceCommit(test.value)
-			if test.wantErr {
-				if err == nil {
-					t.Fatalf("parseLocalAICandidateSourceCommit(%q) succeeded, want error", test.value)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseLocalAICandidateSourceCommit(%q): %v", test.value, err)
-			}
-			if got != test.want {
-				t.Fatalf("parseLocalAICandidateSourceCommit(%q) = %q, want %q", test.value, got, test.want)
-			}
-		})
+	for _, value := range []string{
+		"", strings.ToUpper(canonical), " " + canonical, canonical + " ",
+		strings.Repeat("g", 40), canonical[:39], canonical + "0", canonical + canonical,
+	} {
+		if _, err := parseLocalAICandidateSourceCommit(value); err == nil {
+			t.Errorf("parseLocalAICandidateSourceCommit(%q) succeeded, want error", value)
+		}
 	}
 }
-
 func parseLocalAICandidateSourceCommit(value string) (string, error) {
 	if value == "" || !localAICandidateSourceCommitPattern.MatchString(value) {
 		return "", fmt.Errorf("target revision must be one lowercase 40-hex value, got %q", value)
 	}
 	return value, nil
 }
-
 func localAICandidateSourceCommit(t *testing.T) string {
 	t.Helper()
 	value, present := os.LookupEnv(localAICandidateSourceCommitEnvironment)
@@ -92,13 +64,11 @@ func localAICandidateSourceCommit(t *testing.T) string {
 	}
 	return value
 }
-
 func TestLocalAICandidateScriptParses(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	scriptPath := localAICandidateScriptPath(t)
 	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command", fmt.Sprintf(`
 $errors = $null
@@ -116,7 +86,6 @@ func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := filepath.Join(t.TempDir(), "path with spaces")
 	if err := os.MkdirAll(tempDir, 0o700); err != nil {
 		t.Fatalf("create fixture directory: %v", err)
@@ -161,7 +130,6 @@ if ($result.exitCode -ne 23) { exit 2 }
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, append(os.Environ(), "LOCALAI_ARGUMENT_RECORD="+recordPath), "")
-
 	var gotArguments []string
 	readJSONFile(t, recordPath, &gotArguments)
 	if strings.Join(gotArguments, "\x00") != strings.Join(wantArguments, "\x00") {
@@ -204,7 +172,6 @@ func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := t.TempDir()
 	childPIDPath := filepath.Join(tempDir, "child.pid")
 	childPath := filepath.Join(tempDir, "child.ps1")
@@ -224,7 +191,6 @@ $child = Start-Process -FilePath %s -ArgumentList @('-NoProfile', '-NonInteracti
 	if err := os.WriteFile(parentPath, []byte(parent), 0o600); err != nil {
 		t.Fatalf("write hanging parent: %v", err)
 	}
-
 	resultPath := filepath.Join(tempDir, "result.json")
 	harnessPath := filepath.Join(tempDir, "deadline.ps1")
 	harness := fmt.Sprintf(`
@@ -267,7 +233,6 @@ func TestLocalAICandidateCommandBoundsRetainedOutput(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := t.TempDir()
 	writerPath := filepath.Join(tempDir, "writer.ps1")
 	if err := os.WriteFile(writerPath, []byte(`[Console]::Out.Write(('token=x ' * 1024)); exit 0`), 0o600); err != nil {
