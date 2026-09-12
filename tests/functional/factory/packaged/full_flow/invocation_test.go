@@ -247,6 +247,13 @@ type fullFlowRunner struct {
 	stallImplementation             bool
 	implementationCalls             int
 	detectConcurrentImplementations bool
+	singleTask                      bool
+	failImplementation              bool
+	acceptedResultWithError         bool
+	pauseAcceptedResult             bool
+	acceptedResultStarted           chan struct{}
+	acceptedResultRelease           chan struct{}
+	acceptedResultOnce              sync.Once
 }
 
 func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -269,6 +276,9 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		call := runner.plannerCalls
 		runner.mu.Unlock()
 		if call == 1 {
+			if runner.singleTask || runner.failImplementation {
+				return fullFlowCodexResult(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","payload":"implement task a"},{"name":"work-1","workTypeName":"cycle-control","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"work-1","targetWorkName":"task-a","requiredState":"merged"}]}}`), nil
+			}
 			return fullFlowCodexResult(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","payload":"implement task a"},{"name":"task-b","workTypeName":"delivery-task","payload":"implement task b"},{"name":"work-1","workTypeName":"cycle-control","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"work-1","targetWorkName":"task-a","requiredState":"merged"},{"type":"DEPENDS_ON","sourceWorkName":"work-1","targetWorkName":"task-b","requiredState":"merged"}]}}`), nil
 		}
 		return fullFlowCodexResult(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"work-1","workTypeName":"cycle-control","payload":"complete"}]}}`), nil
@@ -276,6 +286,7 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		task := filepath.Base(request.WorkDir)
 		runner.mu.Lock()
 		runner.implementationCalls++
+		call := runner.implementationCalls
 		runner.active++
 		if runner.active > runner.maxActive {
 			runner.maxActive = runner.active
@@ -290,6 +301,15 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 			runner.mu.Unlock()
 			return fullFlowCodexResult("<CONTINUE>"), nil
 		}
+		if runner.failImplementation {
+			runner.mu.Lock()
+			runner.active--
+			runner.mu.Unlock()
+			return platformprocess.CommandResult{
+				Stderr:   []byte("provider exited before producing a result"),
+				ExitCode: 17,
+			}, nil
+		}
 		if err := os.WriteFile(filepath.Join(request.WorkDir, task+".txt"), []byte(task+"\n"), 0o600); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
@@ -298,6 +318,16 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		}
 		if _, err := fullFlowGit(request.WorkDir, "commit", "-m", "implement "+task); err != nil {
 			return platformprocess.CommandResult{}, err
+		}
+		if runner.acceptedResultWithError && call == 1 {
+			if runner.pauseAcceptedResult {
+				runner.acceptedResultOnce.Do(func() { close(runner.acceptedResultStarted) })
+				<-runner.acceptedResultRelease
+			}
+			runner.mu.Lock()
+			runner.active--
+			runner.mu.Unlock()
+			return fullFlowCodexResultWithExit("<COMPLETE>", 17), nil
 		}
 		runner.mu.Lock()
 		runner.active--
@@ -400,4 +430,10 @@ func fullFlowGit(directory string, args ...string) (string, error) {
 
 func fullFlowCodexResult(text string) platformprocess.CommandResult {
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(text)}
+}
+
+func fullFlowCodexResultWithExit(text string, exitCode int) platformprocess.CommandResult {
+	result := fullFlowCodexResult(text)
+	result.ExitCode = exitCode
+	return result
 }
