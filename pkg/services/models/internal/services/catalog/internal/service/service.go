@@ -63,6 +63,7 @@ func (s *service) ListCatalog(
 			}
 			summary.ManagedRuntime = overlayResolvedRuntime(summary.ManagedRuntime, current)
 		}
+		summary = catalog.ProjectAvailability(summary)
 		result.Models = append(result.Models, summary)
 	}
 	sort.Slice(result.Models, func(i, j int) bool {
@@ -149,11 +150,12 @@ func (s *service) GetCatalogModel(
 			return models.GetModelResult{}, models.ErrUnavailable
 		}
 		detail.Summary.ManagedRuntime = overlayResolvedRuntime(detail.Summary.ManagedRuntime, current)
-		// Detail diagnostics historically includes the managed-runtime state for
-		// compatibility. Keep that duplicate projection sourced from the same
-		// resolved runtime as the canonical managedRuntime object.
-		detail.Diagnostics = mergeDiagnostics(detail.Diagnostics, detail.Summary.ManagedRuntime.Diagnostics)
 	}
+	detail.Summary = catalog.ProjectAvailability(detail.Summary)
+	// Detail diagnostics historically includes the managed-runtime state for
+	// compatibility. Keep that duplicate projection sourced from the same
+	// resolved runtime as the canonical managedRuntime object.
+	detail.Diagnostics = mergeDiagnostics(detail.Diagnostics, detail.Summary.ManagedRuntime.Diagnostics)
 	return models.GetModelResult{Model: detail}, nil
 }
 

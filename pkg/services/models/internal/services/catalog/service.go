@@ -29,6 +29,23 @@ const (
 	LoadStateNotApplicable = models.LoadStateNotApplicable
 )
 
+// ProjectAvailability derives the public catalog compatibility fields from the
+// fully overlaid managed-runtime snapshot. A runtime is customer-available
+// only after readiness and installed lifecycle facts agree.
+func ProjectAvailability(summary Summary) Summary {
+	summary.Status = StatusUnavailable
+	summary.LoadState = LoadStateUnloaded
+	if summary.ManagedRuntime.LifecycleState == models.LifecycleStateNotApplicable {
+		summary.LoadState = LoadStateNotApplicable
+	}
+	if summary.ManagedRuntime.ReadinessState == models.ReadinessStateReady &&
+		(summary.ManagedRuntime.LifecycleState == models.LifecycleStateInstalled ||
+			summary.ManagedRuntime.LifecycleState == models.LifecycleStateLoaded) {
+		summary.Status = StatusReady
+	}
+	return summary
+}
+
 // Service serves detached, deterministically ordered discovery values for
 // runtime configuration held by the Models Runtime Scopes authority.
 type Service interface {

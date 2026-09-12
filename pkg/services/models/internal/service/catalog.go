@@ -43,9 +43,16 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.ListModelsWithRuntime(
+		list, err := localmodels.ListModelsWithRuntime(
 			runtimeCfg, nil, localmodels.DefaultManagedRuntimeSourceResolver(),
 		)
+		if err != nil {
+			return modelcatalog.List{}, err
+		}
+		for index := range list.Results {
+			list.Results[index] = projectCatalogAvailability(list.Results[index])
+		}
+		return list, nil
 	}
 
 	catalog := localmodels.BuildCatalogWithRuntime(
@@ -84,9 +91,14 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.GetModelWithRuntime(
+		detail, err := localmodels.GetModelWithRuntime(
 			runtimeCfg, modelName, nil, localmodels.DefaultManagedRuntimeSourceResolver(),
 		)
+		if err != nil {
+			return modelcatalog.Detail{}, err
+		}
+		detail.Summary = projectCatalogAvailability(detail.Summary)
+		return detail, nil
 	}
 
 	catalog := localmodels.BuildCatalogWithRuntime(
@@ -117,17 +129,7 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 }
 
 func projectCatalogAvailability(summary modelcatalog.Summary) modelcatalog.Summary {
-	summary.Status = modelcatalog.StatusUnavailable
-	summary.LoadState = modelcatalog.LoadStateUnloaded
-	if summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateNotApplicable {
-		summary.LoadState = modelcatalog.LoadStateNotApplicable
-	}
-	if summary.ManagedRuntime.ReadinessState == managedruntime.ReadinessStateReady &&
-		(summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateInstalled ||
-			summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateLoaded) {
-		summary.Status = modelcatalog.StatusReady
-	}
-	return summary
+	return modelcatalog.ProjectAvailability(summary)
 }
 
 func overlayCatalogManagedRuntime(

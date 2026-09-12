@@ -880,9 +880,9 @@ func assertScopedCatalogResource(t *testing.T, alpha *models.Summary) {
 
 func assertScopedCatalogRuntime(t *testing.T, alpha *models.Summary) {
 	t.Helper()
-	if alpha.Status != models.StatusReady ||
+	if alpha.Status != models.StatusUnavailable ||
 		alpha.ManagedRuntime.Diagnostics["sourceKind"] != localmodels.ManagedRuntimeSourceKindManagedMirror {
-		t.Fatalf("alpha status/runtime = %#v, want ready managed-mirror projection", alpha)
+		t.Fatalf("alpha status/runtime = %#v, want unavailable managed-mirror projection", alpha)
 	}
 }
 

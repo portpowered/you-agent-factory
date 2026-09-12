@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,8 +44,37 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	source := newControlledModelSource(baseBody, tokenizerBody)
 	sourceServer := functionalNewHTTPServer(t, source)
 	t.Cleanup(sourceServer.Close)
+	var activeBackendRequests atomic.Int64
+	var backendRequestCount atomic.Int64
+	audio := []byte("RIFF....WAVE")
+	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		case "/invoke":
+			activeBackendRequests.Add(1)
+			defer activeBackendRequests.Add(-1)
+			var payload struct {
+				OutputFile string `json:"outputFile"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				http.Error(writer, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			backendRequestCount.Add(1)
+			writer.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(modelServer.Close)
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 
-	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(sourceServer.URL))
+	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
 	cacheDirectory := functionalTempDir(t)
 	homeDirectory := functionalTempDir(t)
 	environment := append(
@@ -62,6 +93,9 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 				BaseURL:    sourceServer.URL,
 				APIBaseURL: sourceServer.URL,
 			},
+			ModelHostProcessLauncher: hostLauncher,
+			ModelHostHTTPClient:      modelServer.Client(),
+			ModelRuntimeHTTPClient:   modelServer.Client(),
 		},
 	})
 
@@ -73,6 +107,13 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
 	before := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "before pull")
 	assertStory003State(t, before, factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
+	assertStory003CatalogParity(t, inspectProcess, server.URL(), "before pull", beforeList, before,
+		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
+	assertStory003SourceCounts(t, source, "before pull", 0, 0, 0)
+	if got := hostLauncher.Calls(); got != 0 {
+		t.Fatalf("model host starts before pull = %d, want 0 from catalog list/inspect", got)
+	}
 
 	pullProcess := functionalBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, pullProcess)
@@ -88,6 +129,13 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	duringList := executeStory003List(t, inspectProcess, server.URL(), "during pull")
 	assertStory003StatePair(t, duringList.ManagedRuntime.ReadinessState, duringList.ManagedRuntime.LifecycleState,
 		factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
+	assertStory003CatalogParity(t, inspectProcess, server.URL(), "during pull", duringList, during,
+		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
+	assertStory003SourceCounts(t, source, "during pull", 1, 1, 0)
+	if got := hostLauncher.Calls(); got != 0 {
+		t.Fatalf("model host starts during pull = %d, want 0 from catalog list/inspect", got)
+	}
 
 	close(source.releaseFirstDownload)
 	select {
@@ -125,54 +173,121 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		after.Detail.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateLOADED {
 		t.Fatalf("after-pull lifecycle = %s, want INSTALLED or LOADED", after.Detail.ManagedRuntime.LifecycleState)
 	}
-	assertStory003ReadyParity(t, inspectProcess, server.URL(), afterList, after)
 	if before.state() == during.state() || during.state() == after.state() || before.state() == after.state() {
 		t.Fatalf("inspect state pairs were not all distinct: before=%s during=%s after=%s", before.state(), during.state(), after.state())
 	}
 	if after.ArtifactBytes != int64(len(baseBody)+len(tokenizerBody)) {
 		t.Fatalf("final on-disk artifact bytes = %d, want %d", after.ArtifactBytes, len(baseBody)+len(tokenizerBody))
 	}
+	assertStory003CatalogParity(t, inspectProcess, server.URL(), "after pull", afterList, after,
+		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	assertStory003SourceCounts(t, source, "after pull", 1, 1, 1)
+	if got := hostLauncher.Calls(); got != 0 {
+		t.Fatalf("model host starts after pull = %d, want 0 from catalog list/inspect", got)
+	}
+
+	responseMode := factoryapi.METADATA
+	invocation := postFunctionalJSON[factoryapi.ModelInvocationResponse](
+		t,
+		server.URL()+"/models/"+story003ModelName+"/invocations",
+		factoryapi.ModelInvocationRequest{
+			Operation: "TTS",
+			Bindings:  localModelReadinessAssetsHostBindings(),
+			Content: &factoryapi.WorkContent{
+				mustFunctionalTextPart(t, "release the controlled model lease"),
+			},
+			Options: &factoryapi.ModelInvocationOptions{ResponseMode: &responseMode},
+		},
+		"POST /models invocations",
+	)
+	if invocation.ModelName != story003ModelName || invocation.Operation != "TTS" {
+		t.Fatalf("POST /models invocations identity = %#v, want %s/TTS", invocation, story003ModelName)
+	}
+	if got := hostLauncher.Calls(); got != 1 {
+		t.Fatalf("model host starts after invocation = %d, want 1", got)
+	}
+	if got := backendRequestCount.Load(); got != 1 || activeBackendRequests.Load() != 0 {
+		t.Fatalf("controlled backend requests = completed:%d active:%d, want 1/0 after released invocation", got, activeBackendRequests.Load())
+	}
+	afterInvocationList := executeStory003List(t, inspectProcess, server.URL(), "after invocation release")
+	afterInvocation := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "after invocation release")
+	assertStory003CatalogParity(t, inspectProcess, server.URL(), "after invocation release", afterInvocationList, afterInvocation,
+		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	assertStory003SourceCounts(t, source, "after invocation release", 1, 1, 1)
 
 	t.Run("controlled source failure", testStory003ControlledSourceFailure)
 }
 
-func assertStory003ReadyParity(
+func assertStory003CatalogParity(
 	t *testing.T,
 	process support.Process,
 	serverURL string,
+	phase string,
 	listed factoryapi.ModelSummary,
 	inspected story003InspectCapture,
+	wantStatus factoryapi.ModelStatus,
+	wantLoadState factoryapi.ModelLoadState,
+	wantReadiness factoryapi.ManagedRuntimeReadinessState,
+	wantLifecycle factoryapi.ManagedRuntimeLifecycleState,
 ) {
 	t.Helper()
-	assertStory003StatePair(t, listed.ManagedRuntime.ReadinessState, listed.ManagedRuntime.LifecycleState,
-		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	if listed.ManagedRuntime.ReadinessState != inspected.Detail.ManagedRuntime.ReadinessState ||
-		listed.ManagedRuntime.LifecycleState != inspected.Detail.ManagedRuntime.LifecycleState ||
-		listed.ManagedRuntime.Revision == nil || inspected.Detail.ManagedRuntime.Revision == nil ||
-		*listed.ManagedRuntime.Revision != *inspected.Detail.ManagedRuntime.Revision ||
-		listed.ManagedRuntime.CacheBytes == nil || inspected.Detail.ManagedRuntime.CacheBytes == nil ||
-		*listed.ManagedRuntime.CacheBytes != *inspected.Detail.ManagedRuntime.CacheBytes {
-		t.Fatalf("list/inspect managed runtime diverged: list=%#v inspect=%#v", listed.ManagedRuntime, inspected.Detail.ManagedRuntime)
+	assertStory003CompatibilityState(t, listed, wantStatus, wantLoadState, wantReadiness, wantLifecycle)
+	inspectedSummary := story003SummaryFromDetail(inspected.Detail)
+	if !reflect.DeepEqual(listed, inspectedSummary) {
+		t.Fatalf("%s CLI list/inspect summaries diverged:\nlist=%#v\ninspect=%#v", phase, listed, inspectedSummary)
 	}
 	httpList := support.GetJSON[factoryapi.ListModelsResponse](t, serverURL+"/models")
 	httpDetail := support.GetJSON[factoryapi.ModelDetail](t, serverURL+"/models/"+story003ModelName)
-	listedModel := findStory003Model(t, httpList.Results, "HTTP list")
-	assertStory003StatePair(t, listedModel.ManagedRuntime.ReadinessState, listedModel.ManagedRuntime.LifecycleState,
-		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	if httpDetail.ManagedRuntime.ReadinessState != listedModel.ManagedRuntime.ReadinessState ||
-		httpDetail.ManagedRuntime.LifecycleState != listedModel.ManagedRuntime.LifecycleState {
-		t.Fatalf("HTTP list/detail managed runtime diverged: list=%#v detail=%#v", listedModel.ManagedRuntime, httpDetail.ManagedRuntime)
+	listedModel := findStory003Model(t, httpList.Results, "HTTP list "+phase)
+	assertStory003CompatibilityState(t, listedModel, wantStatus, wantLoadState, wantReadiness, wantLifecycle)
+	if !reflect.DeepEqual(listed, listedModel) {
+		t.Fatalf("%s CLI/HTTP list summaries diverged:\ncli=%#v\nhttp=%#v", phase, listed, listedModel)
 	}
-	if httpDetail.Diagnostics["readinessState"] != string(httpDetail.ManagedRuntime.ReadinessState) ||
-		httpDetail.Diagnostics["lifecycleState"] != string(httpDetail.ManagedRuntime.LifecycleState) {
-		t.Fatalf("HTTP detail diagnostics diverged from managed runtime: diagnostics=%#v managedRuntime=%#v", httpDetail.Diagnostics, httpDetail.ManagedRuntime)
+	if !reflect.DeepEqual(inspected.Detail, httpDetail) {
+		t.Fatalf("%s CLI/HTTP inspect details diverged:\ncli=%#v\nhttp=%#v", phase, inspected.Detail, httpDetail)
 	}
-	if inspected.Detail.Diagnostics["readinessState"] != string(inspected.Detail.ManagedRuntime.ReadinessState) ||
-		inspected.Detail.Diagnostics["lifecycleState"] != string(inspected.Detail.ManagedRuntime.LifecycleState) {
-		t.Fatalf("inspect diagnostics diverged from managed runtime: diagnostics=%#v managedRuntime=%#v", inspected.Detail.Diagnostics, inspected.Detail.ManagedRuntime)
+	assertStory003CompatibilityState(t, story003SummaryFromDetail(httpDetail), wantStatus, wantLoadState, wantReadiness, wantLifecycle)
+	for surface, detail := range map[string]factoryapi.ModelDetail{
+		"CLI inspect":  inspected.Detail,
+		"HTTP inspect": httpDetail,
+	} {
+		if detail.Diagnostics["readinessState"] != string(detail.ManagedRuntime.ReadinessState) ||
+			detail.Diagnostics["lifecycleState"] != string(detail.ManagedRuntime.LifecycleState) {
+			t.Fatalf("%s %s diagnostics diverged from managed runtime: diagnostics=%#v managedRuntime=%#v", phase, surface, detail.Diagnostics, detail.ManagedRuntime)
+		}
 	}
-	assertStory003HumanOutput(t, process, "models list", story003ModelsHumanListArgs(serverURL), "READY", "INSTALLED")
-	assertStory003HumanOutput(t, process, "models inspect", story003ModelsHumanInspectArgs(serverURL), "READY", "INSTALLED")
+	assertStory003HumanOutput(t, process, "models list "+phase, story003ModelsHumanListArgs(serverURL), string(wantReadiness), string(wantLifecycle))
+	assertStory003HumanOutput(t, process, "models inspect "+phase, story003ModelsHumanInspectArgs(serverURL), string(wantReadiness), string(wantLifecycle))
+}
+
+func assertStory003CompatibilityState(
+	t *testing.T,
+	summary factoryapi.ModelSummary,
+	wantStatus factoryapi.ModelStatus,
+	wantLoadState factoryapi.ModelLoadState,
+	wantReadiness factoryapi.ManagedRuntimeReadinessState,
+	wantLifecycle factoryapi.ManagedRuntimeLifecycleState,
+) {
+	t.Helper()
+	if summary.Status != wantStatus || summary.LoadState != wantLoadState {
+		t.Fatalf("catalog compatibility state = %s/%s, want %s/%s", summary.Status, summary.LoadState, wantStatus, wantLoadState)
+	}
+	assertStory003StatePair(t, summary.ManagedRuntime.ReadinessState, summary.ManagedRuntime.LifecycleState, wantReadiness, wantLifecycle)
+}
+
+func story003SummaryFromDetail(detail factoryapi.ModelDetail) factoryapi.ModelSummary {
+	return factoryapi.ModelSummary{
+		Name:             detail.Name,
+		ProviderLocality: detail.ProviderLocality,
+		Status:           detail.Status,
+		LoadState:        detail.LoadState,
+		Operations:       detail.Operations,
+		Modalities:       detail.Modalities,
+		Resources:        detail.Resources,
+		ManagedRuntime:   detail.ManagedRuntime,
+	}
 }
 
 func assertStory003ListAfterPull(
@@ -209,13 +324,16 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 	t.Parallel()
 	cacheDirectory := functionalTempDir(t)
 	writeCachedOmniVoiceAssets(t, cacheDirectory)
+	sharedCASPath, sharedCASBody := writeStory003SharedCASFixture(t, cacheDirectory)
 	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	environment := append(
 		functionalHomeEnvironment(cacheDirectory),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
 	)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
 	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir, WaitForServiceModeRuntime: true, Env: environment,
+		Edges: serviceedges.Edges{ModelAssetHTTPClient: rejectingNetwork},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -223,6 +341,11 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 	support.CleanupProcess(t, process)
 	revisionPath := filepath.Join(cacheDirectory, story003ModelName, "cached-revision")
 	beforeBytes := story003RegularFileBytes(t, revisionPath)
+	beforeList := executeStory003List(t, process, server.URL(), "before remove")
+	before := executeStory003Inspect(t, process, server.URL(), cacheDirectory, "before remove")
+	assertStory003CatalogParity(t, process, server.URL(), "before remove", beforeList, before,
+		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
 	removeInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
 	removeInputs.Input.WorkingDirectory = factoryDir
 	if err := process.Execute(removeInputs.Input); err != nil {
@@ -243,6 +366,9 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 	if afterBytes != 0 {
 		t.Fatalf("removed revision bytes = %d, want 0 after removal", afterBytes)
 	}
+	if got, err := os.ReadFile(sharedCASPath); err != nil || string(got) != string(sharedCASBody) {
+		t.Fatalf("shared content-addressed artifact = (%q, %v), want preserved body %q", got, err, sharedCASBody)
+	}
 	t.Logf(
 		"models remove beforeRevisionBytes=%d afterRevisionBytes=%d remainingModelCacheBytes=%d response=%s cachePath=%s",
 		beforeBytes,
@@ -251,6 +377,15 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 		strings.TrimSpace(removeInputs.Stdout()),
 		removed.CachePath,
 	)
+	afterList := executeStory003List(t, process, server.URL(), "after remove")
+	after := executeStory003Inspect(t, process, server.URL(), cacheDirectory, "after remove")
+	assertStory003CatalogParity(t, process, server.URL(), "after remove", afterList, after,
+		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
+		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
+	assertStory003RemovedFacts(t, afterList, after)
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("list/inspect/remove made %d model asset network requests, want 0", rejectingNetwork.Calls())
+	}
 
 	missingInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
 	missingInputs.Input.WorkingDirectory = factoryDir
@@ -260,6 +395,71 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 	}
 
 	t.Run("in-use response", testModelsPublicRemoveRefusesInUseCache)
+}
+
+func assertStory003RemovedFacts(
+	t *testing.T,
+	listed factoryapi.ModelSummary,
+	inspected story003InspectCapture,
+) {
+	t.Helper()
+	for _, item := range []struct {
+		name        string
+		runtime     factoryapi.ManagedRuntime
+		diagnostics factoryapi.StringMap
+	}{
+		{name: "list", runtime: listed.ManagedRuntime, diagnostics: nil},
+		{name: "inspect", runtime: inspected.Detail.ManagedRuntime, diagnostics: inspected.Detail.Diagnostics},
+	} {
+		surface := item.name
+		runtime := item.runtime
+		diagnostics := item.diagnostics
+		if runtime.Revision != nil || runtime.CacheBytes != nil || runtime.CachePath != nil {
+			t.Fatalf("removed %s cache facts = %#v, want no selected revision/cache path/bytes", surface, runtime)
+		}
+		managedDiagnostics := story003ManagedDiagnostics(runtime)
+		if runtime.Diagnostics == nil || !strings.Contains(managedDiagnostics["missingAssets"], story003BaseAsset) ||
+			!strings.Contains(managedDiagnostics["missingAssets"], story003TokenizerAsset) {
+			t.Fatalf("removed %s managed diagnostics = %#v, want both missing assets", surface, managedDiagnostics)
+		}
+		if surface == "inspect" && diagnostics["missingAssets"] != managedDiagnostics["missingAssets"] {
+			t.Fatalf("removed inspect diagnostics = %#v, want managed missing-assets fact", diagnostics)
+		}
+	}
+}
+
+func story003ManagedDiagnostics(runtime factoryapi.ManagedRuntime) factoryapi.StringMap {
+	if runtime.Diagnostics == nil {
+		return nil
+	}
+	return *runtime.Diagnostics
+}
+
+func writeStory003SharedCASFixture(t *testing.T, cacheDirectory string) (string, []byte) {
+	t.Helper()
+	body := []byte("shared-content-addressed-model-fixture")
+	identity := "model|story-003-shared|shared-model.bin"
+	identityHash := sha256.Sum256([]byte(identity))
+	snapshot := filepath.Join(cacheDirectory, ".you-content-addressed", "model", hex.EncodeToString(identityHash[:]))
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatalf("create shared content-addressed model directory: %v", err)
+	}
+	path := filepath.Join(snapshot, "shared-model.bin")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("write shared content-addressed model artifact: %v", err)
+	}
+	checksum := sha256.Sum256(body)
+	metadata, err := json.Marshal(map[string]any{
+		"kind": "model", "identity": identity, "source": "story-003-shared", "sourceKey": "story-003-shared",
+		"artifacts": []map[string]any{{"Name": "shared-model.bin", "Bytes": len(body), "SHA256": hex.EncodeToString(checksum[:])}},
+	})
+	if err != nil {
+		t.Fatalf("marshal shared content-addressed metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, ".you-assets.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write shared content-addressed metadata: %v", err)
+	}
+	return path, body
 }
 
 func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
@@ -663,6 +863,9 @@ type controlledModelSource struct {
 	releaseFirstDownload chan struct{}
 	manifestOnce         sync.Once
 	firstDownloadOnce    sync.Once
+	manifestRequests     atomic.Int64
+	baseDownloads        atomic.Int64
+	tokenizerDownloads   atomic.Int64
 }
 
 func newControlledModelSource(baseBody, tokenizerBody []byte) *controlledModelSource {
@@ -678,6 +881,7 @@ func newControlledModelSource(baseBody, tokenizerBody []byte) *controlledModelSo
 func (source *controlledModelSource) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch request.URL.Path {
 	case "/models/" + story003Repository:
+		source.manifestRequests.Add(1)
 		source.manifestOnce.Do(func() { close(source.manifestServed) })
 		manifest := map[string]any{
 			"sha": story003Revision,
@@ -690,6 +894,7 @@ func (source *controlledModelSource) ServeHTTP(writer http.ResponseWriter, reque
 			return
 		}
 	case "/" + story003Repository + "/resolve/" + story003Revision + "/" + story003BaseAsset:
+		source.baseDownloads.Add(1)
 		source.firstDownloadOnce.Do(func() { close(source.firstDownloadStarted) })
 		select {
 		case <-source.releaseFirstDownload:
@@ -697,9 +902,25 @@ func (source *controlledModelSource) ServeHTTP(writer http.ResponseWriter, reque
 		case <-request.Context().Done():
 		}
 	case "/" + story003Repository + "/resolve/" + story003Revision + "/" + story003TokenizerAsset:
+		source.tokenizerDownloads.Add(1)
 		_, _ = writer.Write(source.tokenizerBody)
 	default:
 		http.NotFound(writer, request)
+	}
+}
+
+func assertStory003SourceCounts(
+	t *testing.T,
+	source *controlledModelSource,
+	phase string,
+	wantManifest, wantBase, wantTokenizer int64,
+) {
+	t.Helper()
+	gotManifest := source.manifestRequests.Load()
+	gotBase := source.baseDownloads.Load()
+	gotTokenizer := source.tokenizerDownloads.Load()
+	if gotManifest != wantManifest || gotBase != wantBase || gotTokenizer != wantTokenizer {
+		t.Fatalf("controlled source requests %s = manifest:%d base:%d tokenizer:%d, want %d/%d/%d", phase, gotManifest, gotBase, gotTokenizer, wantManifest, wantBase, wantTokenizer)
 	}
 }
 
