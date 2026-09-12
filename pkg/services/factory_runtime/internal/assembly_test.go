@@ -167,6 +167,44 @@ func TestNormalizeRestoredEventTicksDoesNotTreatOrdinaryInterruptionAsRestartBou
 	}
 }
 
+func TestNormalizeRestoredEventTicksPreservesSuccessorAppendOrderAcrossAsyncResponses(t *testing.T) {
+	restartSource := "daemon-restart"
+	events := []interfaces.FactoryEvent{
+		{Id: "predecessor", Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 1}},
+		{Id: "restart", Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 2, Source: &restartSource}},
+		{Id: "successor-dispatch", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 3}},
+		{Id: "later-dispatch", Context: interfaces.FactoryEventContext{Tick: 8, Sequence: 4}},
+		{Id: "async-response", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 5}},
+		{Id: "current-result", Context: interfaces.FactoryEventContext{Tick: 19, Sequence: 6}},
+	}
+	normalized := normalizeRestoredEventTicks(events)
+	wantTicks := []int{68, 68, 69, 76, 76, 87}
+	for index, want := range wantTicks {
+		if normalized[index].Context.Tick != want {
+			t.Fatalf("normalized event %d tick = %d, want %d", index, normalized[index].Context.Tick, want)
+		}
+		if index > 0 && normalized[index].Context.Tick < normalized[index-1].Context.Tick {
+			t.Fatalf("normalized successor ticks decrease at %d: %#v", index, normalized)
+		}
+	}
+}
+
+func TestNormalizeRestoredEventTicksRecognizesQuiescentSessionResumeBoundary(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Id: "paused", Type: interfaces.FactoryEventTypeSessionPaused, Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 1}},
+		{Id: "resumed", Type: interfaces.FactoryEventTypeSessionResumed, Context: interfaces.FactoryEventContext{Tick: 68, Sequence: 2}},
+		{Id: "successor-dispatch", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 3}},
+		{Id: "async-response", Context: interfaces.FactoryEventContext{Tick: 0, Sequence: 4}},
+	}
+	normalized := normalizeRestoredEventTicks(events)
+	wantTicks := []int{68, 68, 69, 69}
+	for index, want := range wantTicks {
+		if normalized[index].Context.Tick != want {
+			t.Fatalf("normalized event %d tick = %d, want %d", index, normalized[index].Context.Tick, want)
+		}
+	}
+}
+
 func TestNormalizeRestoredEventTicksLeavesOrdinarySelectedTickHistoryUnchanged(t *testing.T) {
 	events := []interfaces.FactoryEvent{
 		{Id: "later", Context: interfaces.FactoryEventContext{Tick: 5}},

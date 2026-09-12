@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -445,21 +446,24 @@ func TestLocalAIFactoryInferenceCharacterization(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
-		name        string
-		response    string
-		failure     error
-		wantStatus  factoryapi.InvocationTerminalStatus
-		wantSession interfaces.FactorySessionLifecycleStatus
+		name                 string
+		response             string
+		failure              error
+		waitBeforeCompletion bool
+		wantStatus           factoryapi.InvocationTerminalStatus
+		wantSession          interfaces.FactorySessionLifecycleStatus
 	}{
 		{
 			name: "success", response: localAIFactoryInferenceSuccess,
-			wantStatus:  factoryapi.InvocationTerminalStatusCompleted,
-			wantSession: interfaces.FactorySessionLifecycleStatusSucceeded,
+			waitBeforeCompletion: false,
+			wantStatus:           factoryapi.InvocationTerminalStatusCompleted,
+			wantSession:          interfaces.FactorySessionLifecycleStatusSucceeded,
 		},
 		{
 			name: "backend protocol failure", failure: errors.New(localAIFactoryInferenceFailure),
-			wantStatus:  factoryapi.InvocationTerminalStatusFailed,
-			wantSession: interfaces.FactorySessionLifecycleStatusSucceeded,
+			waitBeforeCompletion: true,
+			wantStatus:           factoryapi.InvocationTerminalStatusFailed,
+			wantSession:          interfaces.FactorySessionLifecycleStatusSucceeded,
 		},
 	} {
 		test := test
@@ -467,7 +471,7 @@ func TestLocalAIFactoryInferenceCharacterization(t *testing.T) {
 			t.Parallel()
 
 			const prompt = "Factory LocalAI characterization prompt"
-			run := runLocalAIFactoryInference(t, prompt, test.response, test.failure)
+			run := runLocalAIFactoryInference(t, prompt, test.response, test.failure, test.waitBeforeCompletion)
 			if test.failure == nil {
 				if run.executeErr != nil {
 					t.Fatalf("Process.Execute(Factory LocalAI success) error = %v\nstdout:\n%s\nstderr:\n%s", run.executeErr, run.stdout, run.stderr)
@@ -498,7 +502,7 @@ func TestLocalAIFactoryInferenceCharacterization(t *testing.T) {
 			assertLocalAIFactoryEventSpine(t, run.artifact.Events)
 			assertLocalAIFactoryTerminalSession(t, run.artifact.Events, test.wantSession)
 			assertBTRCOneShotResponseStreamHasOneTerminalRecord(t, run.stdout)
-			assertLocalAIFactoryConfigurationFacts(t, run, prompt, test.failure == nil)
+			assertLocalAIFactoryConfigurationFacts(t, run, prompt, test.failure == nil, test.waitBeforeCompletion)
 		})
 	}
 }
@@ -523,7 +527,7 @@ type localAIFactoryInferenceRun struct {
 	invocation     *localAIFactoryInvocationProtocolRecorder
 }
 
-func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure error) localAIFactoryInferenceRun {
+func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure error, waitBeforeCompletion bool) localAIFactoryInferenceRun {
 	t.Helper()
 
 	home := t.TempDir()
@@ -537,7 +541,9 @@ func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure e
 	assetNetwork := &localAIFactoryAssetHTTP{}
 	resolver := &localAIFactoryRevisionRecorder{revision: localAIFactoryInferenceRevision}
 	backendSelect := &localAIFactoryBackendSelectionRecorder{selection: selection}
-	launcher := &localAIFactoryHostLauncher{endpoint: "http://localai-factory-characterization.invalid"}
+	launcher := &localAIFactoryHostLauncher{
+		endpoint: "http://localai-factory-characterization.invalid",
+	}
 	negotiator := &localAIFactoryHostProtocolRecorder{}
 	compatibility := &localAIFactoryHostCompatibilityRecorder{}
 	invocation := &localAIFactoryInvocationProtocolRecorder{response: response, failure: failure}
@@ -566,6 +572,7 @@ func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure e
 		ModelInvocationProtocolClient:   invocation,
 	})
 	support.CleanupProcess(t, process)
+	t.Cleanup(launcher.releaseWait)
 
 	artifactPath := filepath.Join(t.TempDir(), "localai-factory-inference.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -579,8 +586,18 @@ func runLocalAIFactoryInference(t *testing.T, prompt, response string, failure e
 	inputs.Input.WorkingDirectory = factoryDir
 	executeErr := process.Execute(inputs.Input)
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
+	if !waitBeforeCompletion {
+		launcher.releaseWait()
+	}
 	if err := process.Close(context.Background()); err != nil {
 		t.Fatalf("close Factory LocalAI characterization process: %v", err)
+	}
+	if !waitBeforeCompletion {
+		waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		if err := launcher.awaitWait(waitContext); err != nil {
+			t.Fatalf("wait for Factory LocalAI host Wait completion: %v", err)
+		}
 	}
 
 	return localAIFactoryInferenceRun{
@@ -830,7 +847,7 @@ func assertLocalAIFactoryTerminalSession(t *testing.T, events []interfaces.Facto
 	}
 }
 
-func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInferenceRun, prompt string, success bool) {
+func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInferenceRun, prompt string, success, waitBeforeCompletion bool) {
 	t.Helper()
 	if got := run.resolver.Sources(); len(got) == 0 || got[0] != run.source {
 		t.Fatalf("Factory LocalAI resolved sources = %#v, want %q", got, run.source)
@@ -859,6 +876,23 @@ func assertLocalAIFactoryConfigurationFacts(t *testing.T, run localAIFactoryInfe
 	}
 	if run.assetNetwork.Calls() != 0 {
 		t.Fatalf("Factory LocalAI model network calls = %d, want zero from selected cache", run.assetNetwork.Calls())
+	}
+	waitContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if waitBeforeCompletion {
+		waitStarted := make(chan struct{})
+		waitResult := make(chan error, 1)
+		go func() {
+			close(waitStarted)
+			waitResult <- run.launcher.awaitWait(waitContext)
+		}()
+		<-waitStarted
+		run.launcher.releaseWait()
+		if err := <-waitResult; err != nil {
+			t.Fatalf("wait for Factory LocalAI host Wait completion: %v", err)
+		}
+	} else if err := run.launcher.awaitWait(waitContext); err != nil {
+		t.Fatalf("wait for Factory LocalAI host Wait completion: %v", err)
 	}
 	if run.launcher.Active() || run.launcher.Starts() != run.launcher.Stops() || run.launcher.Stops() != run.launcher.Waits() {
 		t.Fatalf("Factory LocalAI host lifecycle = starts:%d stops:%d waits:%d active:%t, want fully released", run.launcher.Starts(), run.launcher.Stops(), run.launcher.Waits(), run.launcher.Active())
