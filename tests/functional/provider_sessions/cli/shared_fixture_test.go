@@ -224,6 +224,12 @@ func newWorkerSessionsCLISharedRouteRunner(
 		routes[workName] = platformprocess.CommandResult{Stdout: stdout}
 		writeCodexRollout(t, homeDir, providerSessionID, rollout)
 	}
+	addFailureRoute := func(workName, providerSessionID string) {
+		stdout := bytesReplaceAll(failureStdout, workerSessionsCodexFailureID, providerSessionID)
+		rollout := bytesReplaceAll(failureRollout, workerSessionsCodexFailureID, providerSessionID)
+		routes[workName] = platformprocess.CommandResult{Stdout: stdout, ExitCode: 1}
+		writeCodexRollout(t, homeDir, providerSessionID, rollout)
+	}
 	addSuccessRoute("worker-session-replay-only-redirect", "session_fixture_codex_replay_redirect")
 	addSuccessRoute("worker-session-cli-recovery-success", "session_fixture_codex_recovery_success")
 	addSuccessRoute("wsr-ft-001", "session_fixture_codex_wsr_ft_001")
@@ -231,6 +237,14 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-alpha", "session_fixture_codex_fleet_alpha")
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
+	for index, workName := range boundedFleetWorkNames() {
+		providerSessionID := boundedFleetProviderSessionID(index)
+		if index%2 == 0 {
+			addSuccessRoute(workName, providerSessionID)
+			continue
+		}
+		addFailureRoute(workName, providerSessionID)
+	}
 
 	fleetGate := newProviderCommandRouteGate()
 	fleetRoutes := map[string]*providerCommandRouteGate{

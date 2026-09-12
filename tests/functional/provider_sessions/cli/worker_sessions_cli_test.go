@@ -205,21 +205,40 @@ func stringValue(payload map[string]interface{}, key string) string {
 }
 
 type workerSessionJSON struct {
-	AttemptID         string               `json:"attemptId"`
-	DurationMillis    *int64               `json:"durationMillis"`
-	DurationBasis     string               `json:"durationBasis"`
-	Failure           json.RawMessage      `json:"failure"`
-	FactorySessionID  *string              `json:"factorySessionId"`
-	ProviderSession   *providerSessionJSON `json:"providerSession"`
-	StartedAt         *time.Time           `json:"startedAt"`
-	State             string               `json:"state"`
-	ConfirmationState string               `json:"confirmationState"`
-	TokenUsage        *tokenUsageJSON      `json:"tokenUsage"`
-	Transcript        string               `json:"transcript"`
-	WorkID            *string              `json:"workId"`
-	WorkIDs           []string             `json:"workIds"`
-	WorkName          *string              `json:"workName"`
-	WorkerSessionID   string               `json:"workerSessionId"`
+	AttemptID                string                 `json:"attemptId"`
+	Direct                   bool                   `json:"direct"`
+	DurationMillis           *int64                 `json:"durationMillis"`
+	DurationBasis            string                 `json:"durationBasis"`
+	EndedAt                  *time.Time             `json:"endedAt"`
+	Failure                  json.RawMessage        `json:"failure"`
+	FactorySessionID         *string                `json:"factorySessionId"`
+	Parse                    workerSessionParseJSON `json:"parse"`
+	ProviderSession          *providerSessionJSON   `json:"providerSession"`
+	ProviderSessionAvailable bool                   `json:"providerSessionAvailable"`
+	RecordingHealth          *string                `json:"recordingHealth"`
+	StartedAt                *time.Time             `json:"startedAt"`
+	State                    string                 `json:"state"`
+	ConfirmationState        string                 `json:"confirmationState"`
+	TokenUsage               *tokenUsageJSON        `json:"tokenUsage"`
+	Transcript               string                 `json:"transcript"`
+	TurnID                   *string                `json:"turnId"`
+	WorkID                   *string                `json:"workId"`
+	WorkIDs                  []string               `json:"workIds"`
+	WorkName                 *string                `json:"workName"`
+	WorkerSessionID          string                 `json:"workerSessionId"`
+}
+
+type workerSessionParseJSON struct {
+	Errors             []workerSessionParseErrorJSON `json:"errors"`
+	EventCount         int                           `json:"eventCount"`
+	MalformedLineCount int                           `json:"malformedLineCount"`
+	UnknownEventCount  int                           `json:"unknownEventCount"`
+}
+
+type workerSessionParseErrorJSON struct {
+	Code       string `json:"code"`
+	LineNumber int    `json:"lineNumber"`
+	Message    string `json:"message"`
 }
 
 type providerSessionJSON struct {
@@ -235,7 +254,13 @@ type tokenUsageJSON struct {
 }
 
 type workerSessionListJSON struct {
-	Sessions []workerSessionJSON `json:"sessions"`
+	Sessions          []workerSessionJSON          `json:"sessions"`
+	PaginationContext *workerSessionPaginationJSON `json:"paginationContext"`
+}
+
+type workerSessionPaginationJSON struct {
+	MaxResults int    `json:"maxResults"`
+	NextToken  string `json:"nextToken"`
 }
 
 type transcriptJSON struct {
