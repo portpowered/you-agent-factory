@@ -324,7 +324,10 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	}
 	if e.conflictingMaterializedWorkID(work) != "" {
 		e.mu.Unlock()
-		return workdomain.WorkRequestSubmitResultFromNormalized(requestID, work, false), nil
+		return workdomain.WorkRequestSubmitResult{}, fmt.Errorf(
+			"%w: explicit Work ID is already reserved by another request",
+			workdomain.ErrWorkRequestConflict,
+		)
 	}
 	e.workRequests[requestID] = result
 	e.reserveHistoricalSubmissions(work)

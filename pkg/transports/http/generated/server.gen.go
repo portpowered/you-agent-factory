@@ -133,6 +133,7 @@ const (
 const (
 	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                     ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                     ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeCONFLICT                                       ErrorResponseCode = "CONFLICT"
 	ErrorResponseCodeCOSTSINVALIDREQUEST                            ErrorResponseCode = "COSTS_INVALID_REQUEST"
 	ErrorResponseCodeCOSTSQUERYCANCELED                             ErrorResponseCode = "COSTS_QUERY_CANCELED"
 	ErrorResponseCodeCOSTSQUERYFAILED                               ErrorResponseCode = "COSTS_QUERY_FAILED"
@@ -9771,6 +9772,9 @@ type ShutdownControlRejected = ErrorResponse
 
 // ShutdownControlUnavailable defines model for ShutdownControlUnavailable.
 type ShutdownControlUnavailable = ErrorResponse
+
+// WorkRequestConflict defines model for WorkRequestConflict.
+type WorkRequestConflict = ErrorResponse
 
 // WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
 type WorkerSessionContinuationConflict = ErrorResponse

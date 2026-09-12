@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -862,12 +863,10 @@ func TestSubmitWorkRequest_RejectsDifferentRequestIDWhenWorkIDAlreadyMaterialize
 		}},
 	}
 	secondResult, err := eng.SubmitWorkRequest(context.Background(), second)
-	if err != nil {
-		t.Fatalf("retry SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("retry SubmitWorkRequest error = %v, want Work Request conflict", err)
 	}
-	if secondResult.Accepted {
-		t.Fatalf("retry accepted = true, want rejection when work ID is already materialized")
-	}
+	assertZeroWorkRequestSubmitResult(t, secondResult)
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick after retry: %v", err)
 	}

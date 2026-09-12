@@ -1,7 +1,13 @@
 package batch_contract_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +17,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -119,6 +126,133 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 	}
 	if stdout != "" {
 		t.Fatalf("duplicate-name dry-run emitted stdout: %q", stdout)
+	}
+}
+
+// TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary proves
+// the shared root process preserves exact replay while a different request is
+// rejected through both the public HTTP and CLI admission boundaries. The
+// Work list and retained Factory Event stream remain value-equivalent
+// after each conflict attempt.
+func TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	sessionID := opened.Session.Id
+	const (
+		workID         = "work-explicit-session-conflict"
+		firstRequestID = "request-explicit-session-first"
+	)
+	firstBody := explicitBatchJSONWithTitle(firstRequestID, workID, "accepted-payload")
+	firstArgs := []string{
+		"you", "--server", server.URL(), "submit", "batch",
+		"--session", sessionID, firstBody,
+	}
+	stdout, stderr, err := executeSubmitBatchCLIOnServer(t, server, firstArgs)
+	if err != nil {
+		t.Fatalf("first explicit batch submit error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "workId="+workID) {
+		t.Fatalf("first explicit batch output missing Work ID %q:\n%s", workID, stdout)
+	}
+
+	listEndpoint := support.SessionWorkURL(server.URL(), sessionID, "/work")
+	beforeWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	if len(beforeWork.Results) != 1 || beforeWork.Results[0].WorkId == nil || *beforeWork.Results[0].WorkId != workID {
+		t.Fatalf("first explicit batch Work list = %#v, want one Work with %q", beforeWork.Results, workID)
+	}
+	beforeEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+
+	// The exact request replay remains a successful HTTP 201/no-op from the
+	// customer's perspective and must not append another Work or event.
+	stdout, stderr, err = executeSubmitBatchCLIOnServer(t, server, firstArgs)
+	if err != nil {
+		t.Fatalf("exact explicit batch replay error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	afterReplayWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterReplayEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	if !reflect.DeepEqual(afterReplayWork, beforeWork) {
+		t.Fatalf("exact replay changed public Work list:\nbefore=%#v\nafter=%#v", beforeWork, afterReplayWork)
+	}
+	if !reflect.DeepEqual(afterReplayEvents, beforeEvents) {
+		t.Fatalf("exact replay changed retained Factory Events:\nbefore=%#v\nafter=%#v", beforeEvents, afterReplayEvents)
+	}
+
+	// Exercise the Work HTTP edge directly so its typed 409 contract is proven
+	// independently of the CLI renderer.
+	httpRequestID := "request-explicit-session-http-conflict"
+	httpBody := explicitBatchJSONWithTitle(httpRequestID, workID, "untrusted-payload-secret")
+	httpEndpoint := support.SessionWorkURL(
+		server.URL(), sessionID, "/work-requests/"+url.PathEscape(httpRequestID),
+	)
+	httpRequest, err := http.NewRequest(http.MethodPut, httpEndpoint, bytes.NewBufferString(httpBody))
+	if err != nil {
+		t.Fatalf("build explicit Work ID conflict request: %v", err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	httpResponse, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("send explicit Work ID conflict request: %v", err)
+	}
+	httpResponseBody, readErr := io.ReadAll(httpResponse.Body)
+	httpResponse.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read explicit Work ID conflict response: %v", readErr)
+	}
+	var conflictResponse factoryapi.ErrorResponse
+	if err := json.Unmarshal(httpResponseBody, &conflictResponse); err != nil {
+		t.Fatalf("decode explicit Work ID conflict response: %v\nbody=%s", err, httpResponseBody)
+	}
+	if httpResponse.StatusCode != http.StatusConflict ||
+		conflictResponse.Code != factoryapi.ErrorResponseCodeCONFLICT ||
+		conflictResponse.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("HTTP conflict = status:%d response:%#v, want 409 CONFLICT/CONFLICT", httpResponse.StatusCode, conflictResponse)
+	}
+	if strings.Contains(string(httpResponseBody), "untrusted-payload-secret") {
+		t.Fatalf("HTTP conflict response echoed untrusted payload: %s", httpResponseBody)
+	}
+	afterHTTPWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterHTTPEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	if !reflect.DeepEqual(afterHTTPWork, beforeWork) || !reflect.DeepEqual(afterHTTPEvents, beforeEvents) {
+		t.Fatalf("HTTP conflict mutated public state: workChanged=%t eventsChanged=%t", !reflect.DeepEqual(afterHTTPWork, beforeWork), !reflect.DeepEqual(afterHTTPEvents, beforeEvents))
+	}
+
+	// The CLI must surface the typed conflict as an actionable non-success
+	// diagnostic without reflecting request payload content.
+	cliRequestID := "request-explicit-session-cli-conflict"
+	stdout, stderr, err = executeSubmitBatchCLIOnServer(t, server, []string{
+		"you", "--server", server.URL(), "submit", "batch",
+		"--session", sessionID,
+		explicitBatchJSONWithTitle(cliRequestID, workID, "untrusted-payload-secret"),
+	})
+	if err == nil {
+		t.Fatal("CLI explicit Work ID conflict succeeded")
+	}
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range []string{
+		"batch submission failed (409)",
+		"code=CONFLICT",
+		"family=CONFLICT",
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("CLI conflict diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+	if strings.Contains(diagnostic, "untrusted-payload-secret") {
+		t.Fatalf("CLI conflict diagnostic echoed untrusted payload: %s", diagnostic)
+	}
+	if stdout != "" {
+		t.Fatalf("CLI conflict emitted success stdout: %q", stdout)
+	}
+	afterCLIWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterCLIEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	if !reflect.DeepEqual(afterCLIWork, beforeWork) || !reflect.DeepEqual(afterCLIEvents, beforeEvents) {
+		t.Fatalf("CLI conflict mutated public state: workChanged=%t eventsChanged=%t", !reflect.DeepEqual(afterCLIWork, beforeWork), !reflect.DeepEqual(afterCLIEvents, beforeEvents))
 	}
 }
 

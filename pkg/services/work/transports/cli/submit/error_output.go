@@ -173,6 +173,7 @@ func safeSubmitErrorFamily(value factoryapi.ErrorFamily) factoryapi.ErrorFamily 
 
 func safeSubmitErrorCode(value factoryapi.ErrorResponseCode) factoryapi.ErrorResponseCode {
 	allowed := []factoryapi.ErrorResponseCode{
+		factoryapi.ErrorResponseCodeCONFLICT,
 		factoryapi.ErrorResponseCodeBADREQUEST,
 		factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT,
 		factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS,

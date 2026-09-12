@@ -89,6 +89,23 @@ func executeSubmitBatchCLIExpectErrorWithInput(
 	return inputs.Stdout(), inputs.Stderr(), err
 }
 
+func executeSubmitBatchCLIOnServer(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	args []string,
+) (stdout, stderr string, err error) {
+	t.Helper()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = batchContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	err = server.Execute(t, inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
+}
+
 func harnessInlineBatchJSON(requestID string) string {
 	return inlineBatchJSON(requestID, harnessSubmitBatchWorkName, harnessSubmitBatchWorkType, "Harness")
 }
@@ -299,6 +316,17 @@ func duplicateBatchJSON(requestID string) string {
 			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
 		]
 	}`
+}
+
+func explicitBatchJSON(requestID, workID string) string {
+	return explicitBatchJSONWithTitle(requestID, workID, "explicit Work ID conflict")
+}
+
+func explicitBatchJSONWithTitle(requestID, workID, title string) string {
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":"explicit-work","workId":%q,"workTypeName":"task","payload":{"title":%q}}]}`,
+		requestID, workID, title,
+	)
 }
 
 func validRelationsBatchJSON() string {

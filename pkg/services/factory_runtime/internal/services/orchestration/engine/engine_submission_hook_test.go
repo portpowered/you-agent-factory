@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +18,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func assertZeroWorkRequestSubmitResult(t *testing.T, result work.WorkRequestSubmitResult) {
+	t.Helper()
+	if result.RequestID != "" || result.TraceID != "" || result.WorkID != "" ||
+		result.Name != "" || result.WorkTypeName != "" || result.Accepted || len(result.Works) != 0 {
+		t.Fatalf("WorkRequestSubmitResult = %#v, want zero result", result)
+	}
+}
 
 type submissionSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 
@@ -564,12 +575,10 @@ func TestSubmitWorkRequest_RejectsExplicitWorkIDReservedByHistoricalReplay(t *te
 			TraceID:    "trace-reuses-consumed-history",
 		}},
 	})
-	if err != nil {
-		t.Fatalf("SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("SubmitWorkRequest error = %v, want Work Request conflict", err)
 	}
-	if result.Accepted {
-		t.Fatal("SubmitWorkRequest accepted an explicit Work ID reserved by historical replay")
-	}
+	assertZeroWorkRequestSubmitResult(t, result)
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick after rejected historical ID: %v", err)
 	}
@@ -591,12 +600,10 @@ func TestSubmitWorkRequest_RejectsDuplicateExplicitWorkIDsWithinBatchAtomically(
 			{Name: "second", WorkID: "explicit-duplicate", WorkTypeID: "task"},
 		},
 	})
-	if err != nil {
-		t.Fatalf("SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("SubmitWorkRequest error = %v, want Work Request conflict", err)
 	}
-	if result.Accepted {
-		t.Fatal("SubmitWorkRequest accepted duplicate explicit Work IDs in one batch")
-	}
+	assertZeroWorkRequestSubmitResult(t, result)
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick after rejected duplicate IDs: %v", err)
 	}
@@ -638,11 +645,135 @@ func TestSubmitWorkRequest_RejectsPreviouslyAdmittedWorkIDAfterItLeavesBoard(t *
 			Name: "new-after-consumption", WorkID: "explicit-consumed", WorkTypeID: "task",
 		}},
 	})
-	if err != nil {
-		t.Fatalf("second SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("second SubmitWorkRequest error = %v, want Work Request conflict", err)
 	}
-	if result.Accepted {
-		t.Fatal("second SubmitWorkRequest reused an admitted Work ID after it left the board")
+	assertZeroWorkRequestSubmitResult(t, result)
+}
+
+func TestSubmitWorkRequest_RejectsExplicitWorkIDReservedByCurrentMarkingOrActiveDispatch(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		marking    *petri.Marking
+		configure  func(*FactoryEngine)
+		wantTokens int
+	}{
+		{
+			name: "current marking",
+			marking: func() *petri.Marking {
+				marking := petri.NewMarking("test-wf")
+				marking.AddToken(&factorytoken.Token{
+					ID: "existing-token", PlaceID: "task:init",
+					Color: factorytoken.Color{
+						Name: "existing-work", WorkID: "work-current",
+						WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+					},
+				})
+				return marking
+			}(),
+			wantTokens: 1,
+		},
+		{
+			name:    "active dispatch",
+			marking: petri.NewMarking("test-wf"),
+			configure: func(eng *FactoryEngine) {
+				eng.runtimeState.Dispatches["dispatch-existing"] = &interfaces.DispatchEntry{
+					DispatchID: "dispatch-existing",
+					ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
+						Color: factorytoken.Color{
+							Name: "active-work", WorkID: "work-active",
+							WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+						},
+					}}),
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			eng := newTestFactoryEngine(buildTestNet(), test.marking, nil)
+			if test.configure != nil {
+				test.configure(eng)
+			}
+
+			result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+				RequestID: "request-reuses-" + test.name,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{
+					Name: "new-work", WorkID: map[string]string{
+						"current marking": "work-current",
+						"active dispatch": "work-active",
+					}[test.name], WorkTypeID: "task",
+				}},
+			})
+			if !errors.Is(err, work.ErrWorkRequestConflict) {
+				t.Fatalf("SubmitWorkRequest error = %v, want Work Request conflict", err)
+			}
+			assertZeroWorkRequestSubmitResult(t, result)
+			if len(eng.workRequests) != 0 || len(eng.submissionHook.batches) != 0 {
+				t.Fatalf("conflict mutated admission state: workRequests=%d queuedBatches=%d", len(eng.workRequests), len(eng.submissionHook.batches))
+			}
+			if got := len(eng.GetMarking().Tokens); got != test.wantTokens {
+				t.Fatalf("marking token count = %d, want %d", got, test.wantTokens)
+			}
+		})
+	}
+}
+
+func TestSubmitWorkRequest_ConcurrentExplicitWorkIDHasOneWinnerAndTypedLosers(t *testing.T) {
+	t.Parallel()
+
+	const claimantCount = 8
+	eng := newTestFactoryEngine(buildTestNet(), petri.NewMarking("test-wf"), nil)
+	start := make(chan struct{})
+	results := make(chan struct {
+		result work.WorkRequestSubmitResult
+		err    error
+	}, claimantCount)
+	var wait sync.WaitGroup
+	wait.Add(claimantCount)
+	for index := 0; index < claimantCount; index++ {
+		index := index
+		go func() {
+			defer wait.Done()
+			<-start
+			result, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+				RequestID: fmt.Sprintf("concurrent-request-%d", index),
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{
+					Name: "concurrent-work", WorkID: "work-concurrent", WorkTypeID: "task",
+				}},
+			})
+			results <- struct {
+				result work.WorkRequestSubmitResult
+				err    error
+			}{result: result, err: err}
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+
+	winners := 0
+	for outcome := range results {
+		if outcome.err == nil {
+			if !outcome.result.Accepted {
+				t.Fatalf("successful concurrent admission returned unaccepted result: %#v", outcome.result)
+			}
+			winners++
+			continue
+		}
+		if !errors.Is(outcome.err, work.ErrWorkRequestConflict) {
+			t.Fatalf("concurrent losing admission error = %v, want Work Request conflict", outcome.err)
+		}
+		assertZeroWorkRequestSubmitResult(t, outcome.result)
+	}
+	if winners != 1 {
+		t.Fatalf("concurrent explicit-ID winners = %d, want exactly one", winners)
+	}
+	if len(eng.workRequests) != 1 || len(eng.submissionHook.batches) != 1 {
+		t.Fatalf("concurrent admission state = workRequests:%d queuedBatches:%d, want one each", len(eng.workRequests), len(eng.submissionHook.batches))
 	}
 }
 

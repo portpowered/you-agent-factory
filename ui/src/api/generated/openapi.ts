@@ -7813,6 +7813,15 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description A different Work Request already reserved an explicit Work ID in this batch. */
+    WorkRequestConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description The supplied requestId was already used with materially different source, args, orchestrator, or requested policy. */
     ExecutionRequestIdConflict: {
       headers: {
@@ -8988,6 +8997,7 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkRequestConflict"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -10702,6 +10712,8 @@ export const ErrorFamily = {
 } as const;
 export type ErrorFamily = (typeof ErrorFamily)[keyof typeof ErrorFamily];
 export const ErrorResponseCode = {
+  // A Work Request conflicts with an already reserved explicit Work ID.
+  CONFLICT: "CONFLICT",
   // Request payload or parameter validation failed.
   BAD_REQUEST: "BAD_REQUEST",
   // Factory session discovery found a readable factory target whose config could not be loaded.

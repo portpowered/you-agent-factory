@@ -867,6 +867,13 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, moveWorkBySession, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, moveWorkBySession, "404", "#/components/responses/NotFound")
 	assertResponseRef(t, moveWorkBySession, "409", "#/components/responses/MoveWorkConflict")
+
+	submitWorkRequest := pathOperation(t, paths, "/factory-sessions/{session_id}/work-requests/{request_id}", "put")
+	assertRequestSchemaRef(t, submitWorkRequest, "#/components/schemas/WorkRequest")
+	assertResponseSchemaRef(t, submitWorkRequest, "201", "#/components/schemas/UpsertWorkRequestResponse")
+	assertResponseRef(t, submitWorkRequest, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, submitWorkRequest, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, submitWorkRequest, "409", "#/components/responses/WorkRequestConflict")
 }
 
 func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
@@ -891,6 +898,9 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	})
 	assertResponseExampleCodeFamilies(t, responses, "MoveWorkConflict", map[string]string{
 		"MOVE_WORK_REQUEST_ALREADY_APPLIED": "CONFLICT",
+	})
+	assertResponseExampleCodeFamilies(t, responses, "WorkRequestConflict", map[string]string{
+		"CONFLICT": "CONFLICT",
 	})
 }
 
