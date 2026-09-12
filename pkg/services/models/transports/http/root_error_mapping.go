@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -25,6 +26,7 @@ const (
 	catalogGetFailedMessage           = "failed to load model"
 	pullFailedMessage                 = "failed to pull model"
 	removeFailedMessage               = "failed to remove model cache"
+	modelCacheNotFoundMessagePrefix   = "model cache is not installed; run you models pull"
 	invokeFailedMessage               = "model invocation failed"
 	catalogErrorCodeModelNotAvailable = "MODEL_NOT_AVAILABLE"
 )
@@ -100,7 +102,7 @@ func removeSentinelErrorResponse(err error, operation modelsHTTPOperation) (int,
 	switch {
 	case errors.Is(err, models.ErrModelCacheNotFound):
 		return http.StatusNotFound, factoryapi.ErrorResponse{
-			Message: strings.TrimSpace(err.Error()),
+			Message: modelCacheNotFoundMessage(err),
 			Family:  factoryapi.ErrorFamilyNotFound,
 			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_NOT_FOUND"),
 		}, true
@@ -115,6 +117,28 @@ func removeSentinelErrorResponse(err error, operation modelsHTTPOperation) (int,
 	default:
 		return 0, factoryapi.ErrorResponse{}, false
 	}
+}
+
+func modelCacheNotFoundMessage(err error) string {
+	modelName := modelNameFromError(err, models.ErrModelCacheNotFound.Error())
+	if modelName == "" {
+		return modelCacheNotFoundMessagePrefix + " <model> first"
+	}
+	return fmt.Sprintf("%s %s first", modelCacheNotFoundMessagePrefix, modelName)
+}
+
+func modelNameFromError(err error, marker string) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(err.Error())
+	markerIndex := strings.LastIndex(message, marker)
+	if markerIndex < 0 {
+		return ""
+	}
+	modelName := strings.TrimSpace(message[markerIndex+len(marker):])
+	modelName = strings.TrimPrefix(modelName, ":")
+	return strings.TrimSpace(modelName)
 }
 
 func invocationFailureErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {

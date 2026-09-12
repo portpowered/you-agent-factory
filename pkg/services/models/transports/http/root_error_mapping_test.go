@@ -26,6 +26,47 @@ func TestRootErrorResponse_MapsRepresentativeTypedFailures(t *testing.T) {
 	}
 }
 
+func TestRootErrorResponse_MapsModelCacheNotFound(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name        string
+		err         error
+		wantMessage string
+	}{
+		{
+			name:        "wrapped model identity",
+			err:         fmt.Errorf("remove model: %w: LLM", models.ErrModelCacheNotFound),
+			wantMessage: "model cache is not installed; run you models pull LLM first",
+		},
+		{
+			name:        "bare sentinel fallback",
+			err:         models.ErrModelCacheNotFound,
+			wantMessage: "model cache is not installed; run you models pull <model> first",
+		},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			status, response, ok := RootErrorResponse(tt.err, modelsHTTPOperationRemove)
+			if !ok {
+				t.Fatalf("RootErrorResponse(%v) = not handled, want missing-cache mapping", tt.err)
+			}
+			if status != http.StatusNotFound ||
+				response.Code != factoryapi.ErrorResponseCodeMODELCACHENOTFOUND ||
+				response.Family != factoryapi.ErrorFamilyNotFound ||
+				response.Message != tt.wantMessage {
+				t.Fatalf("RootErrorResponse(%v) = %d %#v, want 404 MODEL_CACHE_NOT_FOUND/NOT_FOUND/%q", tt.err, status, response, tt.wantMessage)
+			}
+			if strings.Contains(response.Message, models.ErrModelCacheNotFound.Error()) ||
+				strings.Contains(response.Message, "/") || strings.Contains(response.Message, `\`) {
+				t.Fatalf("missing-cache message exposes internal detail: %q", response.Message)
+			}
+		})
+	}
+}
+
 type rootErrorMappingCase struct {
 	name       string
 	operation  modelsHTTPOperation

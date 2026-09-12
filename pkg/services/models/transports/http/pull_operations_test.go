@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -279,6 +281,77 @@ func TestRemoveModelHandlerUsesSpecificCacheErrors(t *testing.T) {
 	}
 	if body.Code != factoryapi.ErrorResponseCodeMODELCACHEINUSE {
 		t.Fatalf("error code = %q, want MODEL_CACHE_IN_USE", body.Code)
+	}
+	if body.Family != factoryapi.ErrorFamilyConflict || body.Message != "managed model cache is in use\nheld" {
+		t.Fatalf("error response = %#v, want conflict family and preserved in-use message", body)
+	}
+}
+
+func TestRemoveModelHandlerMapsWrappedModelCacheNotFound(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "LLM"
+	root := &rootFake{remove: func(_ context.Context, request models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error) {
+		if request.Name != modelName {
+			t.Fatalf("remove request name = %q, want %q", request.Name, modelName)
+		}
+		return models.RemoveModelAssetsResult{}, fmt.Errorf("remove model: %w: %s", models.ErrModelCacheNotFound, modelName)
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	response := httptest.NewRecorder()
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), modelName)
+
+	assertCatalogHTTPError(t, response, http.StatusNotFound, "MODEL_CACHE_NOT_FOUND", "model cache is not installed; run you models pull LLM first")
+	var body factoryapi.ErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("error family = %q, want NOT_FOUND", body.Family)
+	}
+	if strings.Contains(response.Body.String(), models.ErrModelCacheNotFound.Error()) ||
+		strings.Contains(response.Body.String(), "/") || strings.Contains(response.Body.String(), `\`) {
+		t.Fatalf("response exposes internal cache detail: %s", response.Body.String())
+	}
+}
+
+func TestRemoveModelHandlerPreservesUnsafeCacheMapping(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{remove: func(context.Context, models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error) {
+		return models.RemoveModelAssetsResult{}, fmt.Errorf("%w: symlink target", models.ErrModelCacheUnsafe)
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	response := httptest.NewRecorder()
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM")
+
+	assertCatalogHTTPError(t, response, http.StatusBadRequest, "BAD_REQUEST", "managed model cache path is unsafe: symlink target")
+	var body factoryapi.ErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("error family = %q, want BAD_REQUEST", body.Family)
+	}
+}
+
+func TestRemoveModelHandlerSanitizesUnmappedFailure(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{remove: func(context.Context, models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error) {
+		return models.RemoveModelAssetsResult{}, errors.New("pkg/services/models/internal/cache: C:\\models\\LLM unavailable")
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	response := httptest.NewRecorder()
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM")
+
+	assertCatalogHTTPError(t, response, http.StatusInternalServerError, "INTERNAL_ERROR", removeFailedMessage)
+	var body factoryapi.ErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("error family = %q, want INTERNAL_SERVER_ERROR", body.Family)
 	}
 }
 
