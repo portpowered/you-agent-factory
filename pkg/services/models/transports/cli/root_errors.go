@@ -41,22 +41,26 @@ func validateModelsInvokeRequest(cfg InvokeConfig) (string, string, string, erro
 		return "", "", "", fmt.Errorf("model name is required")
 	}
 	operation := strings.TrimSpace(cfg.Operation)
-	if operation == "" && len(cfg.InputMappings) > 0 {
+	if operation == "" && hasGenericCLIInputs(cfg) {
 		operation = inferGenericCLIModelOperation(modelName)
 	}
 	if operation == "" {
 		return "", "", "", fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
+	if text == "" && !hasGenericCLIInvocationBindings(cfg) {
 		return "", "", "", fmt.Errorf("--text is required")
 	}
-	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
+	if text != "" && hasGenericCLIInputs(cfg) {
 		return "", "", "", clidiag.NewFlagConflictFailure(
 			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
 		)
 	}
 	return modelName, operation, text, nil
+}
+
+func hasGenericCLIInvocationBindings(cfg InvokeConfig) bool {
+	return hasGenericCLIInputs(cfg) || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0
 }
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
