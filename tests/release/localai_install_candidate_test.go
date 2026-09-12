@@ -306,29 +306,81 @@ func TestLocalAICandidateFinalizationRetainsFailureReport(t *testing.T) {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
 	tempDir := t.TempDir()
-	outputDir := filepath.Join(tempDir, "candidate-output")
-	reportPath := filepath.Join(outputDir, "candidate-report.json")
+	caseDirectories := map[string]string{
+		"missingArtifact": filepath.Join(tempDir, "missing-artifact"),
+		"changedArtifact": filepath.Join(tempDir, "changed-artifact"),
+		"missingCommand":  filepath.Join(tempDir, "missing-command"),
+		"changedCommand":  filepath.Join(tempDir, "changed-command"),
+	}
+	resultPath := filepath.Join(tempDir, "finalization.json")
 	harnessPath := filepath.Join(tempDir, "finalization.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$report = [ordered]@{ status = "PASS"; error = ""; artifacts = @([ordered]@{ role = "missing-artifact"; file = "missing.zip"; bytes = 3; sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }); cleanup = [ordered]@{ status = "PASS" } }
-$result = Finalize-SmokeCandidateReport -OutputDirectory %s -ReportPath %s -Report $report -Failure $null
-if ($null -eq $result.failure -or $result.report.status -ne "FAIL" -or $result.report.cleanup.status -ne "FAIL" -or $result.report.cleanup.retainedEvidenceHashesStable) { exit 2 }
-$digestPath = Join-Path %s "candidate-report.sha256"; $hasher = [System.Security.Cryptography.SHA256]::Create()
-$reportHash = [System.BitConverter]::ToString($hasher.ComputeHash([System.IO.File]::ReadAllBytes(%s))).Replace("-", "").ToLowerInvariant(); $hasher.Dispose()
-$digestHash = (Get-Content -LiteralPath $digestPath -Raw).Trim().Split(' ')[0]
-if (-not (Test-Path -LiteralPath %s -PathType Leaf) -or -not (Test-Path -LiteralPath $digestPath -PathType Leaf) -or $reportHash -cne $digestHash) { exit 3 }
+$cases = [ordered]@{
+    missingArtifact = [ordered]@{ output = %s; removeArtifact = $true; changeArtifact = $false; removeCommand = $false; changeCommand = $false }
+    changedArtifact = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $true; removeCommand = $false; changeCommand = $false }
+    missingCommand = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $false; removeCommand = $true; changeCommand = $false }
+    changedCommand = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $false; removeCommand = $false; changeCommand = $true }
+}
+$results = [ordered]@{}
+foreach ($entry in $cases.GetEnumerator()) {
+    $case = $entry.Value
+    $output = $case.output
+    [void][System.IO.Directory]::CreateDirectory($output)
+    $artifactPath = Join-Path $output 'candidate.bin'
+    $commandPath = Join-Path $output 'command.log'
+    [System.IO.File]::WriteAllText($artifactPath, 'retained bytes')
+    [System.IO.File]::WriteAllText($commandPath, 'command evidence')
+    $report = [ordered]@{
+        status = 'PASS'
+        error = ''
+        artifacts = @(Get-SmokeFileEvidence 'linux-amd64-archive' $artifactPath)
+        commandEvidence = @(Get-SmokeFileEvidence 'command-output' $commandPath)
+        cleanup = [ordered]@{ status = 'PASS' }
+    }
+    if ($case.removeArtifact) { Remove-Item -LiteralPath $artifactPath -Force }
+    if ($case.changeArtifact) { [System.IO.File]::WriteAllText($artifactPath, 'changed artifact') }
+    if ($case.removeCommand) { Remove-Item -LiteralPath $commandPath -Force }
+    if ($case.changeCommand) { [System.IO.File]::WriteAllText($commandPath, 'changed command') }
+    $result = Finalize-SmokeCandidateReport -OutputDirectory $output -ReportPath (Join-Path $output 'candidate-report.json') -Report $report -Failure $null
+    $results[$entry.Key] = [ordered]@{
+        failure = if ($null -eq $result.failure) { '' } else { $result.failure.Message }
+        status = $result.report.status
+        cleanupStatus = $result.report.cleanup.status
+        stable = $result.report.cleanup.retainedEvidenceHashesStable
+        detail = $result.report.cleanup.retainedEvidenceError
+        commandEvidenceCount = @($result.report.commandEvidence).Count
+        outputExists = Test-Path -LiteralPath $output -PathType Container
+        reportExists = Test-Path -LiteralPath (Join-Path $output 'candidate-report.json') -PathType Leaf
+        digestExists = Test-Path -LiteralPath (Join-Path $output 'candidate-report.sha256') -PathType Leaf
+    }
+}
+$results | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath %s -Encoding UTF8
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
-		localAICandidatePowerShellLiteral(outputDir),
-		localAICandidatePowerShellLiteral(reportPath),
-		localAICandidatePowerShellLiteral(outputDir),
-		localAICandidatePowerShellLiteral(reportPath),
-		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(caseDirectories["missingArtifact"]),
+		localAICandidatePowerShellLiteral(caseDirectories["changedArtifact"]),
+		localAICandidatePowerShellLiteral(caseDirectories["missingCommand"]),
+		localAICandidatePowerShellLiteral(caseDirectories["changedCommand"]),
+		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	var results map[string]localAICandidateFinalizationResult
+	readJSONFile(t, resultPath, &results)
+	for name, result := range results {
+		wantRole := "linux-amd64-archive"
+		if strings.Contains(name, "Command") {
+			wantRole = "command-output"
+		}
+		if result.Failure == "" || result.Status != "FAIL" || result.CleanupStatus != "FAIL" || result.Stable ||
+			result.CommandEvidenceCount != 1 || !strings.Contains(result.Detail, wantRole) || !result.OutputExists ||
+			!result.ReportExists || !result.DigestExists {
+			t.Fatalf("%s finalization = %#v, want named retained-evidence failure", name, result)
+		}
+	}
 }
+
 func TestLocalAICandidateRootsRejectOverlapAndReparseAncestry(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {

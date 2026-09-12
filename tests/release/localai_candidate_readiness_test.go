@@ -232,6 +232,212 @@ if ([string]::IsNullOrWhiteSpace($caught) -or $report.status -ne 'FAIL' -or $rep
 	}
 }
 
+func TestLocalAICandidatePromotionFailureStillCleansOwnedRoots(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate delivery is Windows-only")
+	}
+	tempDir, err := os.MkdirTemp(os.TempDir(), "lmx-")
+	if err != nil {
+		t.Fatalf("create short candidate fixture root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	sourceDir := filepath.Join(tempDir, "source")
+	dependencyDir := filepath.Join(tempDir, "dependencies")
+	for _, directory := range []string{
+		sourceDir,
+		filepath.Join(dependencyDir, "ui", "node_modules", "esbuild", "lib"),
+	} {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatalf("create candidate fixture directory: %v", err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(sourceDir, "ui"), 0o700); err != nil {
+		t.Fatalf("create source UI directory: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(sourceDir, "scripts"), 0o700); err != nil {
+		t.Fatalf("create source scripts directory: %v", err)
+	}
+	lockContents := []byte("candidate lock\n")
+	for _, path := range []string{
+		filepath.Join(sourceDir, "ui", "bun.lock"),
+		filepath.Join(dependencyDir, "ui", "bun.lock"),
+	} {
+		if err := os.WriteFile(path, lockContents, 0o600); err != nil {
+			t.Fatalf("write lock file %s: %v", path, err)
+		}
+	}
+	for path, contents := range map[string][]byte{
+		filepath.Join(sourceDir, ".gitignore"):             []byte("ui/node_modules/\n"),
+		filepath.Join(sourceDir, ".goreleaser.yml"):        []byte("fixture release config\n"),
+		filepath.Join(sourceDir, "scripts", "install.ps1"): []byte("fixture installer\n"),
+	} {
+		if err := os.WriteFile(path, contents, 0o600); err != nil {
+			t.Fatalf("write source fixture %s: %v", path, err)
+		}
+	}
+	nativeContents := []byte("esbuild fixture")
+	nativePath := filepath.Join(dependencyDir, "ui", "node_modules", "esbuild", "lib", "downloaded-@esbuild-win32-x64-esbuild.exe")
+	if err := os.WriteFile(nativePath, nativeContents, 0o600); err != nil {
+		t.Fatalf("write native fixture: %v", err)
+	}
+	localAICandidateRunGit(t, sourceDir, "init", "--quiet")
+	localAICandidateRunGit(t, sourceDir, "config", "user.email", "candidate@example.invalid")
+	localAICandidateRunGit(t, sourceDir, "config", "user.name", "candidate")
+	localAICandidateRunGit(t, sourceDir, "add", ".")
+	localAICandidateRunGit(t, sourceDir, "commit", "--quiet", "-m", "candidate fixture")
+	localAICandidateRunGit(t, sourceDir, "remote", "add", "origin", "https://example.invalid/candidate.git")
+	sourceCommit := localAICandidateGit(t, sourceDir, "rev-parse", "HEAD")
+	releaseToolPath := filepath.Join(tempDir, "goreleaser.exe")
+	if err := os.WriteFile(releaseToolPath, []byte("controlled release tool"), 0o600); err != nil {
+		t.Fatalf("write release tool fixture: %v", err)
+	}
+	esbuildDigest := fmt.Sprintf("%x", sha256.Sum256(nativeContents))
+	outputDir := filepath.Join(tempDir, "output")
+	workDir := filepath.Join(tempDir, "work")
+	installDir := filepath.Join(tempDir, "install")
+	reportPath := filepath.Join(outputDir, "candidate-report.json")
+	resultPath := filepath.Join(tempDir, "promotion-failure.json")
+	harnessPath := filepath.Join(tempDir, "promotion-failure.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$releaseTool = %s
+$version = '1.0.1-snapshot-fixture'
+function Invoke-CandidateCommand {
+    param([string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory, [string]$StdoutPath, [string]$StderrPath)
+    $stdout = ''
+    if (@($ArgumentList) -contains '--version') {
+        if ($FilePath -like '*esbuild-native.exe') { $stdout = '0.27.7' }
+        elseif ($FilePath -eq $releaseTool) { $stdout = 'goreleaser version v2.12.7' }
+        else { $stdout = $version }
+    } elseif (@($ArgumentList) -contains 'version') {
+        $stdout = 'go version go1.26.8 windows/amd64'
+    } elseif (@($ArgumentList) -contains 'release') {
+        $dist = Join-Path $WorkingDirectory 'dist'
+        [void][System.IO.Directory]::CreateDirectory($dist)
+        foreach ($name in @(
+            ('you_' + $version + '_darwin_amd64.tar.gz'),
+            ('you_' + $version + '_darwin_arm64.tar.gz'),
+            ('you_' + $version + '_linux_amd64.tar.gz'),
+            ('you_' + $version + '_linux_arm64.tar.gz'),
+            ('you_' + $version + '_windows_amd64.zip'),
+            ('you_' + $version + '_windows_arm64.zip'),
+            ('you_' + $version + '_checksums.txt'))) {
+            [System.IO.File]::WriteAllText((Join-Path $dist $name), 'candidate artifact')
+        }
+    }
+    [System.IO.File]::WriteAllText($StdoutPath, $stdout, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($StderrPath, '', [System.Text.UTF8Encoding]::new($false))
+    return [pscustomobject][ordered]@{
+        file = $FilePath
+        arguments = @($ArgumentList)
+        exitCode = 0
+        timedOut = $false
+        outputLimitExceeded = $false
+        terminationReason = ''
+        elapsedMilliseconds = 1
+        stdout = $stdout
+        stderr = ''
+        stdoutEvidence = Get-SmokeFileEvidence 'command-output' $StdoutPath
+        stderrEvidence = Get-SmokeFileEvidence 'command-output' $StderrPath
+    }
+}
+function Expand-Archive {
+    param([string]$LiteralPath, [string]$DestinationPath, [switch]$Force)
+    [void][System.IO.Directory]::CreateDirectory($DestinationPath)
+    [System.IO.File]::WriteAllText((Join-Path $DestinationPath 'you.exe'), 'candidate executable')
+}
+function Invoke-InstalledCandidateSmoke {
+    param([string]$RequestedInstallDir)
+    [void][System.IO.Directory]::CreateDirectory($RequestedInstallDir)
+    [System.IO.File]::WriteAllText((Join-Path $RequestedInstallDir 'you.exe'), 'installed executable')
+    return [pscustomobject][ordered]@{
+        status = 'PASS'
+        executableBuildInfo = [ordered]@{ sourceRevision = %s; vcsModified = $false }
+    }
+}
+function Promote-SmokeCommandEvidence {
+    throw 'controlled command-evidence promotion failure'
+}
+$caught = ''
+try {
+    Invoke-LocalCandidateSmoke -SourcePath %s -SourceCommit %s -SourceRepository 'https://example.invalid/candidate.git' -DependencySourcePath %s -OutputDirectory %s -WorkDirectory %s -GoProcessLimit 2 -ReleaseToolPath $releaseTool -ReleaseToolVersion 'v2.12.7' -EsbuildVersion '0.27.7' -EsbuildSHA256 %s -MaximumWorkBytes 1048576 -RequestedInstallDir %s -RequestedReportPath %s
+    $caught = 'UNEXPECTED_PASS'
+} catch {
+    $caught = $_.Exception.Message
+}
+$report = Get-Content -LiteralPath %s -Raw | ConvertFrom-Json
+$stable = $false
+$cleanupPropertyNames = @($report.cleanup.PSObject.Properties | ForEach-Object { $_.Name })
+if ($cleanupPropertyNames -contains 'retainedEvidenceHashesStable') { $stable = [bool]$report.cleanup.retainedEvidenceHashesStable }
+$buildPropertyNames = @($report.build.PSObject.Properties | ForEach-Object { $_.Name })
+$versionCommandsRecorded = ($buildPropertyNames -contains 'esbuildVersionCommand') -and
+    ($buildPropertyNames -contains 'goReleaserVersionCommand')
+[ordered]@{
+    caught = $caught
+    status = $report.status
+    cleanupStatus = $report.cleanup.status
+    installDirectoryRemoved = $report.cleanup.installDirectoryRemoved
+    workDirectoryRemoved = $report.cleanup.workDirectoryRemoved
+    retainedEvidenceHashesStable = $stable
+    outputExists = Test-Path -LiteralPath %s -PathType Container
+    reportExists = Test-Path -LiteralPath %s -PathType Leaf
+    digestExists = Test-Path -LiteralPath (Join-Path %s 'candidate-report.sha256') -PathType Leaf
+    commandEvidenceCount = @($report.commandEvidence).Count
+    versionCommandsRecorded = $versionCommandsRecorded
+} | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath %s -Encoding UTF8
+if (-not $caught.Contains('controlled command-evidence promotion failure') -or $report.status -ne 'FAIL' -or
+    $report.cleanup.status -ne 'FAIL' -or -not $report.cleanup.installDirectoryRemoved -or
+    -not $report.cleanup.workDirectoryRemoved -or -not $stable -or
+    @($report.commandEvidence).Count -ne 0 -or -not $versionCommandsRecorded) { exit 3 }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(releaseToolPath),
+		localAICandidatePowerShellLiteral(sourceCommit),
+		localAICandidatePowerShellLiteral(sourceDir),
+		localAICandidatePowerShellLiteral(sourceCommit),
+		localAICandidatePowerShellLiteral(dependencyDir),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(workDir),
+		localAICandidatePowerShellLiteral(esbuildDigest),
+		localAICandidatePowerShellLiteral(installDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(reportPath),
+		localAICandidatePowerShellLiteral(outputDir),
+		localAICandidatePowerShellLiteral(resultPath),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	var result struct {
+		Caught                       string `json:"caught"`
+		Status                       string `json:"status"`
+		CleanupStatus                string `json:"cleanupStatus"`
+		InstallDirectoryRemoved      bool   `json:"installDirectoryRemoved"`
+		WorkDirectoryRemoved         bool   `json:"workDirectoryRemoved"`
+		RetainedEvidenceHashesStable bool   `json:"retainedEvidenceHashesStable"`
+		OutputExists                 bool   `json:"outputExists"`
+		ReportExists                 bool   `json:"reportExists"`
+		DigestExists                 bool   `json:"digestExists"`
+		CommandEvidenceCount         int    `json:"commandEvidenceCount"`
+		VersionCommandsRecorded      bool   `json:"versionCommandsRecorded"`
+	}
+	readJSONFile(t, resultPath, &result)
+	if !strings.Contains(result.Caught, "controlled command-evidence promotion failure") || result.Status != "FAIL" ||
+		result.CleanupStatus != "FAIL" || !result.InstallDirectoryRemoved || !result.WorkDirectoryRemoved ||
+		!result.RetainedEvidenceHashesStable || !result.OutputExists || !result.ReportExists || !result.DigestExists ||
+		result.CommandEvidenceCount != 0 || !result.VersionCommandsRecorded {
+		t.Fatalf("promotion failure cleanup = %#v", result)
+	}
+	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
+		t.Fatalf("install directory remains after promotion failure: %v", err)
+	}
+	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
+		t.Fatalf("work directory remains after promotion failure: %v", err)
+	}
+}
+
 func TestLocalAICandidateArtifactsRetained(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -789,14 +995,15 @@ func localAICandidateArchiveFixtures(version string) []localAICandidateArchiveFi
 }
 
 type localAICandidateFinalizationResult struct {
-	Failure       string `json:"failure"`
-	Status        string `json:"status"`
-	CleanupStatus string `json:"cleanupStatus"`
-	Stable        bool   `json:"stable"`
-	Detail        string `json:"detail"`
-	OutputExists  bool   `json:"outputExists"`
-	ReportExists  bool   `json:"reportExists"`
-	DigestExists  bool   `json:"digestExists"`
+	Failure              string `json:"failure"`
+	Status               string `json:"status"`
+	CleanupStatus        string `json:"cleanupStatus"`
+	Stable               bool   `json:"stable"`
+	Detail               string `json:"detail"`
+	CommandEvidenceCount int    `json:"commandEvidenceCount"`
+	OutputExists         bool   `json:"outputExists"`
+	ReportExists         bool   `json:"reportExists"`
+	DigestExists         bool   `json:"digestExists"`
 }
 
 type localAICandidateDiscoveryCommand struct {
