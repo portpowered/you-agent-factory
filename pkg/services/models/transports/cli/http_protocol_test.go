@@ -748,54 +748,7 @@ func TestModelsRemoteGenericInvokeProjectsParametersAndAtomicallyPublishesOutput
 	var catalogCalls atomic.Int32
 	var postCalls atomic.Int32
 	var validRequest atomic.Bool
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method == http.MethodGet {
-			catalogCalls.Add(1)
-			writer.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(writer).Encode(remoteParameterOutputModelDetail())
-			return
-		}
-		if request.Method != http.MethodPost {
-			http.NotFound(writer, request)
-			return
-		}
-		postCalls.Add(1)
-		var invocation factoryapi.GenericModelInvocationRequest
-		if err := json.NewDecoder(request.Body).Decode(&invocation); err != nil {
-			writer.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		valid := invocation.Operation != nil && *invocation.Operation == modelinference.OperationOMNI &&
-			invocation.Inputs != nil && len(*invocation.Inputs) == 2 && (*invocation.Inputs)[0].Name == "prompt" &&
-			(*invocation.Inputs)[0].Content != nil && *(*invocation.Inputs)[0].Content == "hello" &&
-			(*invocation.Inputs)[1].Name == "image" && (*invocation.Inputs)[1].ContentBase64 != nil &&
-			string(*(*invocation.Inputs)[1].ContentBase64) == "PNG"
-		if invocation.Parameters == nil || len(*invocation.Parameters) != 2 {
-			valid = false
-		} else {
-			valid = valid && (*invocation.Parameters)[0].Name == "temperature" && (*invocation.Parameters)[1].Name == "stop"
-			if temperature, ok := (*invocation.Parameters)[0].Value.(float64); !ok || temperature != 0.2 {
-				valid = false
-			}
-			if stop, ok := (*invocation.Parameters)[1].Value.([]interface{}); !ok || len(stop) != 1 || stop[0] != "END" {
-				valid = false
-			}
-		}
-		if !valid {
-			writer.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		validRequest.Store(true)
-		answer := "answer"
-		usage := `{"tokens":2}`
-		writer.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(writer).Encode(factoryapi.GenericModelInvocationResponse{
-			Outputs: []factoryapi.ModelInvocationOutput{
-				{Name: "text", Modality: factoryapi.ModelInvocationContentTypeText, Content: &answer},
-				{Name: "usage", Modality: factoryapi.ModelInvocationContentTypeJSON, Content: &usage},
-			},
-		})
-	}))
+	server := httptest.NewServer(remoteParameterOutputHandler(&catalogCalls, &postCalls, &validRequest))
 	defer server.Close()
 
 	fileSystem := &genericOutputFileSystem{}
@@ -828,6 +781,71 @@ func TestModelsRemoteGenericInvokeProjectsParametersAndAtomicallyPublishesOutput
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || len(response.Outputs) != 2 || response.Outputs[1].Name != "usage" {
 		t.Fatalf("mapped response = %q, %v; want ordered two-output response", output.String(), err)
 	}
+}
+
+func remoteParameterOutputHandler(catalogCalls, postCalls *atomic.Int32, validRequest *atomic.Bool) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.Method {
+		case http.MethodGet:
+			catalogCalls.Add(1)
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).Encode(remoteParameterOutputModelDetail())
+		case http.MethodPost:
+			postCalls.Add(1)
+			var invocation factoryapi.GenericModelInvocationRequest
+			if err := json.NewDecoder(request.Body).Decode(&invocation); err != nil {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if !remoteParameterOutputRequestValid(invocation) {
+				writer.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			validRequest.Store(true)
+			answer := "answer"
+			usage := `{"tokens":2}`
+			writer.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(writer).Encode(factoryapi.GenericModelInvocationResponse{
+				Outputs: []factoryapi.ModelInvocationOutput{
+					{Name: "text", Modality: factoryapi.ModelInvocationContentTypeText, Content: &answer},
+					{Name: "usage", Modality: factoryapi.ModelInvocationContentTypeJSON, Content: &usage},
+				},
+			})
+		default:
+			http.NotFound(writer, request)
+		}
+	})
+}
+
+func remoteParameterOutputRequestValid(invocation factoryapi.GenericModelInvocationRequest) bool {
+	if invocation.Operation == nil || *invocation.Operation != modelinference.OperationOMNI || invocation.Inputs == nil {
+		return false
+	}
+	return remoteParameterOutputInputsValid(*invocation.Inputs) && remoteParameterOutputParametersValid(invocation.Parameters)
+}
+
+func remoteParameterOutputInputsValid(inputs []factoryapi.ModelInvocationInput) bool {
+	if len(inputs) != 2 {
+		return false
+	}
+	return inputs[0].Name == "prompt" && inputs[0].Content != nil && *inputs[0].Content == "hello" &&
+		inputs[1].Name == "image" && inputs[1].ContentBase64 != nil && string(*inputs[1].ContentBase64) == "PNG"
+}
+
+func remoteParameterOutputParametersValid(parameters *[]factoryapi.ModelInvocationParameter) bool {
+	if parameters == nil || len(*parameters) != 2 {
+		return false
+	}
+	values := *parameters
+	if values[0].Name != "temperature" || values[1].Name != "stop" {
+		return false
+	}
+	temperature, ok := values[0].Value.(float64)
+	if !ok || temperature != 0.2 {
+		return false
+	}
+	stop, ok := values[1].Value.([]interface{})
+	return ok && len(stop) == 1 && stop[0] == "END"
 }
 
 func TestModelsRemoteGenericInvokeRejectsMalformedBindingsBeforeCatalog(t *testing.T) {
@@ -868,126 +886,5 @@ func TestModelsRemoteGenericInvokeRejectsMalformedBindingsBeforeCatalog(t *testi
 	}
 	if protocolCalls.Load() != 0 {
 		t.Fatalf("malformed binding catalog calls = %d, want 0", protocolCalls.Load())
-	}
-}
-
-func TestModelsRemoteGenericInvokeCatalogFailuresAvoidPost(t *testing.T) {
-	t.Parallel()
-
-	t.Run("outage", func(t *testing.T) {
-		var catalogCalls atomic.Int32
-		var postCalls atomic.Int32
-		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if request.Method == http.MethodGet {
-				catalogCalls.Add(1)
-				writer.Header().Set("Content-Type", "application/json")
-				writer.WriteHeader(http.StatusServiceUnavailable)
-				_ = json.NewEncoder(writer).Encode(factoryapi.ErrorResponse{
-					Code:   factoryapi.ErrorResponseCode("MODEL_BACKEND_NOT_READY"),
-					Family: factoryapi.ErrorFamilyInternalServerError, Message: "catalog unavailable",
-				})
-				return
-			}
-			if request.Method == http.MethodPost {
-				postCalls.Add(1)
-			}
-			http.NotFound(writer, request)
-		}))
-		defer server.Close()
-
-		var output bytes.Buffer
-		err := remoteHTTPService(t, remoteStaticInputReader([]byte("PNG"))).Invoke(remoteInvokeConfig(
-			context.Background(), server.URL, []string{"prompt=hello", "image=@fixture.png"}, &output,
-		))
-		var apiErr *clihttp.APIError
-		if err == nil || !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable {
-			t.Fatalf("catalog outage = %v, want typed service-unavailable error", err)
-		}
-		if catalogCalls.Load() != 1 || postCalls.Load() != 0 || output.Len() != 0 {
-			t.Fatalf("catalog outage effects = GET:%d POST:%d output:%q, want 1/0/empty", catalogCalls.Load(), postCalls.Load(), output.String())
-		}
-	})
-
-	t.Run("cancellation", func(t *testing.T) {
-		started := make(chan struct{})
-		done := make(chan struct{})
-		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if request.Method != http.MethodGet {
-				http.NotFound(writer, request)
-				return
-			}
-			close(started)
-			<-request.Context().Done()
-			close(done)
-		}))
-		defer server.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		var output bytes.Buffer
-		result := make(chan error, 1)
-		go func() {
-			result <- remoteHTTPService(t, remoteStaticInputReader([]byte("PNG"))).Invoke(remoteInvokeConfig(
-				ctx, server.URL, []string{"prompt=hello", "image=@fixture.png"}, &output,
-			))
-		}()
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("catalog request did not start")
-		}
-		cancel()
-		select {
-		case err := <-result:
-			if err == nil || !errors.Is(err, context.Canceled) {
-				t.Fatalf("catalog cancellation = %v, want context cancellation", err)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("catalog cancellation did not return")
-		}
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Fatal("catalog handler did not observe cancellation")
-		}
-		if output.Len() != 0 {
-			t.Fatalf("catalog cancellation output = %q, want empty", output.String())
-		}
-	})
-}
-
-func remoteASRModelDetail() factoryapi.ModelDetail {
-	required := true
-	return factoryapi.ModelDetail{
-		Name: "asr",
-		Operations: []factoryapi.ModelInvocationOperation{{
-			Name: modelinference.OperationASR,
-			Inputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{{
-				Name: "audio", Modality: remotePointer(factoryapi.ModelInvocationContentTypeAudio), Required: &required,
-			}}),
-			Outputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
-				{Name: "transcript", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText)},
-				{Name: "segments", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON)},
-			}),
-		}},
-	}
-}
-
-func remoteParameterOutputModelDetail() factoryapi.ModelDetail {
-	required := true
-	return factoryapi.ModelDetail{
-		Name: "llm",
-		Operations: []factoryapi.ModelInvocationOperation{{
-			Name: modelinference.OperationOMNI,
-			Inputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
-				{Name: "prompt", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText), Required: &required, MediaTypes: remotePointerSlice([]string{"text/plain"})},
-				{Name: "image", Modality: remotePointer(factoryapi.ModelInvocationContentTypeImage), MediaTypes: remotePointerSlice([]string{"image/*"})},
-				{Name: "parameters", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON), MediaTypes: remotePointerSlice([]string{"application/json"})},
-			}),
-			Outputs: remotePointerSlice([]factoryapi.ModelInvocationSlot{
-				{Name: "text", Modality: remotePointer(factoryapi.ModelInvocationContentTypeText)},
-				{Name: "usage", Modality: remotePointer(factoryapi.ModelInvocationContentTypeJSON)},
-			}),
-		}},
 	}
 }
