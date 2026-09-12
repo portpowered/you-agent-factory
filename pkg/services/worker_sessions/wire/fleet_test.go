@@ -48,18 +48,373 @@ func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 
 	for _, source := range firstSources {
 		requests := source.requestsSnapshot()
-		if len(requests) != 12 && source.name != "source-c" {
-			t.Fatalf("%s baseline call count = %d, want twelve exhaustive source-page calls", source.name, len(requests))
-		}
-		if source.name == "source-c" && len(requests) != 18 {
-			t.Fatalf("source-c baseline call count = %d, want eighteen exhaustive source-page calls", len(requests))
+		if len(requests) != 6 {
+			t.Fatalf("%s bounded call count = %d, want one call per fleet page", source.name, len(requests))
 		}
 		for _, request := range requests {
-			if request.Scope != workersessions.ObservationScopeAll || request.MaxResults != 3 || len(request.States) != 0 {
-				t.Fatalf("%s baseline request = %#v, want all scope, limit 3, and no states", source.name, request)
+			if request.Scope != workersessions.ObservationScopeAll || request.MaxResults != 4 || len(request.States) != 0 {
+				t.Fatalf("%s bounded request = %#v, want all scope, lookahead limit 4, and no states", source.name, request)
 			}
 		}
 	}
+}
+
+func TestFleetObservationServiceUsesOneLookaheadReadPerFleetPage(t *testing.T) {
+	t.Parallel()
+
+	inventory := make([]workersessions.Observation, 0, 45)
+	wantIDs := make([]string, 0, 45)
+	for id := 1; id <= 45; id++ {
+		workerSessionID := fmt.Sprintf("worker-%02d", id)
+		inventory = append(inventory, fleetObservation(workerSessionID, true, workersessions.StateCompleted))
+		wantIDs = append(wantIDs, workerSessionID)
+	}
+	source := newFleetObservationSource("bounded", inventory...)
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{source}, nil
+	})
+
+	request := workersessions.ListWorkerSessionObservationsRequest{
+		Scope:      workersessions.ObservationScopeAll,
+		MaxResults: 20,
+	}
+	var got []workersessions.Observation
+	wantPageLengths := []int{20, 20, 5}
+	wantCursors := []string{"", "worker-20", "worker-40"}
+	for index, wantPageLength := range wantPageLengths {
+		result, err := service.ListWorkerSessionObservations(context.Background(), request)
+		if err != nil {
+			t.Fatalf("bounded fleet page %d: %v", index+1, err)
+		}
+		if len(result.Observations) != wantPageLength {
+			t.Fatalf("bounded fleet page %d rows = %d, want %d", index+1, len(result.Observations), wantPageLength)
+		}
+		wantNextToken := ""
+		if index < len(wantPageLengths)-1 {
+			wantNextToken = encodeFleetObservationCursor(wantCursors[index+1])
+		}
+		if result.NextToken != wantNextToken {
+			t.Fatalf("bounded fleet page %d token = %q, want %q", index+1, result.NextToken, wantNextToken)
+		}
+		got = append(got, result.Observations...)
+		request.NextToken = result.NextToken
+	}
+	assertFleetObservationIDs(t, got, wantIDs)
+
+	requests := source.requestsSnapshot()
+	if len(requests) != len(wantPageLengths) {
+		t.Fatalf("bounded source calls = %d, want %d", len(requests), len(wantPageLengths))
+	}
+	for index, request := range requests {
+		if request.Scope != workersessions.ObservationScopeAll || request.MaxResults != 21 {
+			t.Fatalf("bounded source request[%d] = %#v, want all scope and lookahead limit 21", index, request)
+		}
+		if request.NextToken != encodeFleetObservationCursor(wantCursors[index]) {
+			t.Fatalf("bounded source request[%d] cursor = %q, want %q", index, request.NextToken, encodeFleetObservationCursor(wantCursors[index]))
+		}
+	}
+}
+
+func TestFleetLookaheadLimitSaturatesAtIntegerMaximum(t *testing.T) {
+	if got := fleetLookaheadLimit(20); got != 21 {
+		t.Fatalf("fleetLookaheadLimit(20) = %d, want 21", got)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if got := fleetLookaheadLimit(maxInt); got != maxInt {
+		t.Fatalf("fleetLookaheadLimit(maxInt) = %d, want saturation at maxInt", got)
+	}
+}
+
+func TestFleetObservationServiceMergesComplementaryFactsWithoutOverwriting(t *testing.T) {
+	t.Parallel()
+
+	primary := fleetObservation("merge-01", true, workersessions.StateFailed)
+	authoritativeModel := "authoritative-model"
+	primary.Model = &authoritativeModel
+	authoritativeAttempt := primary.AttemptID
+	primary.FactorySessionID = ""
+	primary.ProviderSession = providers.SessionRef{}
+	primary.ProviderSessionAvailable = false
+	primary.WorkIDs = nil
+	primary.TurnID = ""
+	primary.ReasoningEffort = nil
+	primary.StartedAt = nil
+	primary.EndedAt = nil
+	primary.Duration = nil
+	primary.DurationBasis = ""
+	primary.TokenUsage = nil
+	primary.TurnUsage = nil
+	primary.Transcript = ""
+	primary.RecordingHealth = ""
+	primary.RecordingHealthReason = ""
+	primary.ConfirmationState = ""
+	primary.Failure = nil
+	primary.Parse = workersessions.ParseDiagnostics{}
+
+	complementary := fleetObservation("merge-01", false, workersessions.StateFailed)
+	conflictingModel := "conflicting-model"
+	complementary.Model = &conflictingModel
+	complementary.AttemptID = "secondary-attempt"
+	complementary.RecordingHealthReason = "secondary-recording"
+
+	primarySource := newFleetObservationSource("primary", primary)
+	secondarySource := newFleetObservationSource("secondary", complementary)
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{primarySource, secondarySource}, nil
+	})
+
+	result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{
+		Scope:      workersessions.ObservationScopeAll,
+		MaxResults: 20,
+	})
+	if err != nil {
+		t.Fatalf("complementary fleet list: %v", err)
+	}
+	if len(result.Observations) != 1 {
+		t.Fatalf("complementary fleet rows = %d, want one unique identity", len(result.Observations))
+	}
+	got := result.Observations[0]
+	if got.Model == nil || *got.Model != authoritativeModel {
+		t.Fatalf("duplicate model = %#v, want authoritative primary model", got.Model)
+	}
+	if got.AttemptID != authoritativeAttempt || got.Direct != primary.Direct || got.State != primary.State {
+		t.Fatalf("authoritative identity facts changed: %#v", got)
+	}
+	if got.FactorySessionID != complementary.FactorySessionID ||
+		got.ProviderSession != complementary.ProviderSession ||
+		!got.ProviderSessionAvailable ||
+		!reflect.DeepEqual(got.WorkIDs, complementary.WorkIDs) ||
+		got.TurnID != complementary.TurnID ||
+		got.ReasoningEffort == nil ||
+		got.StartedAt == nil || got.EndedAt == nil || got.Duration == nil ||
+		got.DurationBasis != complementary.DurationBasis ||
+		got.Transcript != complementary.Transcript ||
+		got.RecordingHealth != complementary.RecordingHealth ||
+		got.RecordingHealthReason != complementary.RecordingHealthReason ||
+		got.ConfirmationState != complementary.ConfirmationState ||
+		got.Failure == nil || got.Failure.Detail != complementary.Failure.Detail ||
+		!reflect.DeepEqual(got.Parse, complementary.Parse) ||
+		got.TokenUsage == nil || got.TurnUsage == nil {
+		t.Fatalf("complementary facts were not preserved: %#v", got)
+	}
+}
+
+func TestFleetObservationServiceRejectsMalformedSourcePages(t *testing.T) {
+	t.Parallel()
+
+	pageObservation := func(id string, direct bool, state workersessions.State) workersessions.Observation {
+		return fleetObservation(id, direct, state)
+	}
+	cases := []struct {
+		name    string
+		request workersessions.ListWorkerSessionObservationsRequest
+		result  workersessions.ListWorkerSessionObservationsResult
+	}{
+		{
+			name: "overfull",
+			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
+				pageObservation("a", true, workersessions.StateCompleted),
+				pageObservation("b", true, workersessions.StateCompleted),
+				pageObservation("c", true, workersessions.StateCompleted),
+				pageObservation("d", true, workersessions.StateCompleted),
+			}},
+		},
+		{
+			name: "duplicate identity",
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("b", true, workersessions.StateCompleted),
+					pageObservation("b", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("b"),
+			},
+		},
+		{
+			name: "regressing identities",
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("b", true, workersessions.StateCompleted),
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("c", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("c"),
+			},
+		},
+		{
+			name: "row before cursor",
+			request: workersessions.ListWorkerSessionObservationsRequest{
+				Scope: workersessions.ObservationScopeAll, MaxResults: 2,
+				NextToken: encodeFleetObservationCursor("b"),
+			},
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("c", true, workersessions.StateCompleted),
+					pageObservation("d", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("d"),
+			},
+		},
+		{
+			name: "scope mismatch",
+			request: workersessions.ListWorkerSessionObservationsRequest{
+				Scope: workersessions.ObservationScopeDirect, MaxResults: 2,
+			},
+			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
+				pageObservation("a", false, workersessions.StateCompleted),
+			}},
+		},
+		{
+			name: "state mismatch",
+			request: workersessions.ListWorkerSessionObservationsRequest{
+				Scope: workersessions.ObservationScopeAll, States: []workersessions.State{workersessions.StateCompleted}, MaxResults: 2,
+			},
+			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
+				pageObservation("a", true, workersessions.StateFailed),
+			}},
+		},
+		{
+			name: "malformed continuation",
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("b", true, workersessions.StateCompleted),
+					pageObservation("c", true, workersessions.StateCompleted),
+				},
+				NextToken: "not-base64",
+			},
+		},
+		{
+			name: "repeated continuation",
+			request: workersessions.ListWorkerSessionObservationsRequest{
+				Scope: workersessions.ObservationScopeAll, MaxResults: 2,
+				NextToken: encodeFleetObservationCursor("cursor"),
+			},
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("cursor-a", true, workersessions.StateCompleted),
+					pageObservation("cursor-b", true, workersessions.StateCompleted),
+					pageObservation("cursor-c", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("cursor"),
+			},
+		},
+		{
+			name: "underfilled continuation",
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("b", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("b"),
+			},
+		},
+		{
+			name: "regressing continuation",
+			result: workersessions.ListWorkerSessionObservationsResult{
+				Observations: []workersessions.Observation{
+					pageObservation("a", true, workersessions.StateCompleted),
+					pageObservation("b", true, workersessions.StateCompleted),
+					pageObservation("c", true, workersessions.StateCompleted),
+				},
+				NextToken: encodeFleetObservationCursor("b"),
+			},
+		},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			request := test.request
+			if request.MaxResults == 0 {
+				request.MaxResults = 2
+			}
+			bad := newFleetObservationSource("bad")
+			bad.resultFn = func(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+				return test.result, nil
+			}
+			later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
+			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+				return []workersessions.Service{bad, later}, nil
+			})
+
+			result, err := service.ListWorkerSessionObservations(context.Background(), request)
+			if !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+				t.Fatalf("malformed %s error = %v, want invalid pagination", test.name, err)
+			}
+			if len(result.Observations) != 0 || result.NextToken != "" {
+				t.Fatalf("malformed %s returned partial result: %#v", test.name, result)
+			}
+			if len(bad.requestsSnapshot()) != 1 || len(later.requestsSnapshot()) != 0 {
+				t.Fatalf("malformed %s calls = bad:%d later:%d, want one bounded call and no later source", test.name, len(bad.requestsSnapshot()), len(later.requestsSnapshot()))
+			}
+		})
+	}
+}
+
+func TestFleetObservationServiceStopsOnUnavailableProjectionAndCancellation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("complete projection unavailable", func(t *testing.T) {
+		t.Parallel()
+		available := newFleetObservationSource("available", fleetObservation("a", true, workersessions.StateCompleted))
+		unavailable := newFleetObservationSource("unavailable")
+		unavailable.err = workersessions.ErrObservationProjectionUnavailable
+		later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
+		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+			return []workersessions.Service{available, unavailable, later}, nil
+		})
+
+		result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 2})
+		if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+			t.Fatalf("complete projection error = %v, want projection unavailable", err)
+		}
+		if len(result.Observations) != 0 || len(later.requestsSnapshot()) != 0 {
+			t.Fatalf("complete projection returned partial/later work: %#v, later calls=%d", result, len(later.requestsSnapshot()))
+		}
+	})
+
+	t.Run("cancellation after bounded source call", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		first := newFleetObservationSource("first")
+		first.resultFn = func(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+			cancel()
+			return workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
+				fleetObservation("a", true, workersessions.StateCompleted),
+			}}, nil
+		}
+		later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
+		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+			return []workersessions.Service{first, later}, nil
+		})
+
+		result, err := service.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{MaxResults: 2})
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled fleet error = %v, want context canceled", err)
+		}
+		if len(result.Observations) != 0 || len(later.requestsSnapshot()) != 0 {
+			t.Fatalf("canceled fleet returned partial/later work: %#v, later calls=%d", result, len(later.requestsSnapshot()))
+		}
+	})
+
+	t.Run("catalog failure", func(t *testing.T) {
+		t.Parallel()
+		catalogErr := errors.New("catalog unavailable")
+		service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+			return nil, catalogErr
+		})
+
+		result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 2})
+		if !errors.Is(err, catalogErr) {
+			t.Fatalf("catalog failure = %v, want catalog error", err)
+		}
+		if len(result.Observations) != 0 || result.NextToken != "" {
+			t.Fatalf("catalog failure returned partial result: %#v", result)
+		}
+	})
 }
 
 func TestFleetObservationServiceCharacterizesFiltersFactsAndDetachment(t *testing.T) {
@@ -371,8 +726,8 @@ func assertFleetSourceRequestFilters(
 		t.Fatalf("%s has no recorded request", source.name)
 	}
 	request := requests[len(requests)-1]
-	if request.Scope != wantScope || request.MaxResults != 50 || !reflect.DeepEqual(request.States, wantStates) {
-		t.Fatalf("%s request = %#v, want scope=%q states=%#v limit=50", source.name, request, wantScope, wantStates)
+	if request.Scope != wantScope || request.MaxResults != 51 || !reflect.DeepEqual(request.States, wantStates) {
+		t.Fatalf("%s request = %#v, want scope=%q states=%#v lookahead limit=51", source.name, request, wantScope, wantStates)
 	}
 }
 
@@ -390,8 +745,8 @@ func assertFleetSourceRequestHistory(
 	}
 	for index, wantScope := range wantScopes {
 		request := requests[index]
-		if request.Scope != wantScope || request.MaxResults != 50 || !reflect.DeepEqual(request.States, wantStates) {
-			t.Fatalf("%s request[%d] = %#v, want scope=%q states=%#v limit=50", source.name, index, request, wantScope, wantStates)
+		if request.Scope != wantScope || request.MaxResults != 51 || !reflect.DeepEqual(request.States, wantStates) {
+			t.Fatalf("%s request[%d] = %#v, want scope=%q states=%#v lookahead limit=51", source.name, index, request, wantScope, wantStates)
 		}
 	}
 }
@@ -454,6 +809,7 @@ type fleetObservationSource struct {
 	name      string
 	inventory []workersessions.Observation
 	err       error
+	resultFn  func(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
 
 	mu       sync.Mutex
 	requests []workersessions.ListWorkerSessionObservationsRequest
@@ -481,6 +837,9 @@ func (source *fleetObservationSource) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	source.recordRequest(request)
+	if source.resultFn != nil {
+		return source.resultFn(ctx, request)
+	}
 	cursor, err := decodeFleetSourceCursor(request.NextToken)
 	if err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
