@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -22,11 +23,75 @@ import (
 )
 
 const (
-	localAICandidateSourceCommit      = "059474b2c00915865306a33ca5e3d02b618bb6f0"
-	localAICandidateNativeToolVersion = "0.27.7"
-	localAICandidateNativeToolSHA256  = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
-	localAICandidateNativeToolBytes   = int64(11386368)
+	localAICandidateSourceCommitEnvironment = "INFINITE_YOU_LOCALAI_CANDIDATE_SOURCE_COMMIT"
+	localAICandidateNativeToolVersion       = "0.27.7"
+	localAICandidateNativeToolSHA256        = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
+	localAICandidateNativeToolBytes         = int64(11386368)
 )
+
+var localAICandidateSourceCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func TestLocalAICandidateSourceCommitValidation(t *testing.T) {
+	t.Parallel()
+
+	const canonical = "4e7813a68fd775c15a760f64d91c8d2f7baa5a11"
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "canonical", value: canonical, want: canonical},
+		{name: "empty", value: "", wantErr: true},
+		{name: "uppercase", value: strings.ToUpper(canonical), wantErr: true},
+		{name: "leading whitespace", value: " " + canonical, wantErr: true},
+		{name: "trailing whitespace", value: canonical + " ", wantErr: true},
+		{name: "non-hex", value: strings.Repeat("g", 40), wantErr: true},
+		{name: "short", value: canonical[:39], wantErr: true},
+		{name: "long", value: canonical + "0", wantErr: true},
+		{name: "concatenated", value: canonical + canonical, wantErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := parseLocalAICandidateSourceCommit(test.value)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("parseLocalAICandidateSourceCommit(%q) succeeded, want error", test.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLocalAICandidateSourceCommit(%q): %v", test.value, err)
+			}
+			if got != test.want {
+				t.Fatalf("parseLocalAICandidateSourceCommit(%q) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+func parseLocalAICandidateSourceCommit(value string) (string, error) {
+	if value == "" || !localAICandidateSourceCommitPattern.MatchString(value) {
+		return "", fmt.Errorf("target revision must be one lowercase 40-hex value, got %q", value)
+	}
+	return value, nil
+}
+
+func localAICandidateSourceCommit(t *testing.T) string {
+	t.Helper()
+	value, present := os.LookupEnv(localAICandidateSourceCommitEnvironment)
+	if !present {
+		t.Fatalf("%s must declare one canonical 40-hex target revision", localAICandidateSourceCommitEnvironment)
+	}
+	value, err := parseLocalAICandidateSourceCommit(value)
+	if err != nil {
+		t.Fatalf("invalid %s: %v", localAICandidateSourceCommitEnvironment, err)
+	}
+	return value
+}
 
 func TestLocalAICandidateScriptParses(t *testing.T) {
 	t.Parallel()
@@ -623,6 +688,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
+	targetRevision := localAICandidateSourceCommit(t)
 	binaryPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_PREBUILT_BINARY"))
 	if binaryPath == "" {
 		t.Skip("set INFINITE_YOU_LOCALAI_PREBUILT_BINARY to an already compiled you.exe")
@@ -630,7 +696,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if !filepath.IsAbs(binaryPath) {
 		t.Fatalf("INFINITE_YOU_LOCALAI_PREBUILT_BINARY must be absolute: %s", binaryPath)
 	}
-	assertLocalAICandidateBuildInfo(t, binaryPath)
+	assertLocalAICandidateBuildInfo(t, binaryPath, targetRevision)
 	goPath, err := exec.LookPath("go.exe")
 	if err != nil {
 		t.Fatalf("locate Go for build-info inspection: %v", err)
@@ -696,16 +762,16 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(stagedBinary),
 		localAICandidatePowerShellLiteral(archiveVersion),
 		localAICandidatePowerShellLiteral(version),
-		localAICandidatePowerShellLiteral(localAICandidateSourceCommit),
+		localAICandidatePowerShellLiteral(targetRevision),
 		localAICandidatePowerShellLiteral(goPath),
 		localAICandidatePowerShellLiteral(installDir),
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, isolatedEnvironment, tempDir)
-	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version)
+	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version, targetRevision)
 }
-func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version string) {
+func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version, targetRevision string) {
 	t.Helper()
 	var result struct {
 		Status                    string `json:"status"`
@@ -748,8 +814,8 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
 		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
 	}
-	if result.ExecutableBuildInfo.SourceRevision != localAICandidateSourceCommit || result.ExecutableBuildInfo.VCSModified {
-		t.Fatalf("public candidate executable build info = %#v", result.ExecutableBuildInfo)
+	if result.ExecutableBuildInfo.SourceRevision != targetRevision || result.ExecutableBuildInfo.VCSModified {
+		t.Fatalf("public candidate executable build info = %#v, want revision %s and vcs.modified=false", result.ExecutableBuildInfo, targetRevision)
 	}
 	wantCommands := []string{
 		"--version",
@@ -879,7 +945,7 @@ func localAICandidateIsolatedEnvironment(root string) []string {
 func localAICandidatePowerShellLiteral(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
-func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
+func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath, targetRevision string) {
 	t.Helper()
 	info, err := buildinfo.ReadFile(binaryPath)
 	if err != nil {
@@ -892,8 +958,8 @@ func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
 		}
 		settings[setting.Key] = setting.Value
 	}
-	if settings["vcs.revision"] != localAICandidateSourceCommit || settings["vcs.modified"] != "false" {
-		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, localAICandidateSourceCommit)
+	if settings["vcs.revision"] != targetRevision || settings["vcs.modified"] != "false" {
+		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, targetRevision)
 	}
 }
 func localAICandidateGit(t *testing.T, directory string, arguments ...string) string {
