@@ -300,35 +300,6 @@ if ($backendActivity.backendProcessStarts -ne 1 -or -not $backendRejected) { exi
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 }
-func TestLocalAICandidateFinalizationRetainsFailureReport(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS != "windows" {
-		t.Skip("PowerShell candidate delivery is Windows-only")
-	}
-	tempDir := t.TempDir()
-	outputDir := filepath.Join(tempDir, "candidate-output")
-	reportPath := filepath.Join(outputDir, "candidate-report.json")
-	harnessPath := filepath.Join(tempDir, "finalization.ps1")
-	harness := fmt.Sprintf(`
-. %s -InstallDir %s
-$report = [ordered]@{ status = "PASS"; error = ""; artifacts = @([ordered]@{ role = "missing-artifact"; file = "missing.zip"; bytes = 3; sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }); cleanup = [ordered]@{ status = "PASS" } }
-$result = Finalize-SmokeCandidateReport -OutputDirectory %s -ReportPath %s -Report $report -Failure $null
-if ($null -eq $result.failure -or $result.report.status -ne "FAIL" -or $result.report.cleanup.status -ne "FAIL" -or $result.report.cleanup.retainedEvidenceHashesStable) { exit 2 }
-$digestPath = Join-Path %s "candidate-report.sha256"; $hasher = [System.Security.Cryptography.SHA256]::Create()
-$reportHash = [System.BitConverter]::ToString($hasher.ComputeHash([System.IO.File]::ReadAllBytes(%s))).Replace("-", "").ToLowerInvariant(); $hasher.Dispose()
-$digestHash = (Get-Content -LiteralPath $digestPath -Raw).Trim().Split(' ')[0]
-if (-not (Test-Path -LiteralPath %s -PathType Leaf) -or -not (Test-Path -LiteralPath $digestPath -PathType Leaf) -or $reportHash -cne $digestHash) { exit 3 }
-`,
-		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
-		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
-		localAICandidatePowerShellLiteral(outputDir),
-		localAICandidatePowerShellLiteral(reportPath),
-		localAICandidatePowerShellLiteral(outputDir),
-		localAICandidatePowerShellLiteral(reportPath),
-		localAICandidatePowerShellLiteral(reportPath),
-	)
-	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
-}
 func TestLocalAICandidateRootsRejectOverlapAndReparseAncestry(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {

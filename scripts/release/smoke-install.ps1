@@ -484,6 +484,36 @@ function Promote-SmokeCandidateArtifacts {
     }
 }
 
+function Promote-SmokeCommandEvidence {
+    param(
+        [string]$SourceDirectory,
+        [string]$OutputDirectory
+    )
+    $source = Resolve-SmokePath $SourceDirectory
+    $output = Resolve-SmokePath $OutputDirectory
+    if (-not (Test-Path -LiteralPath $source)) { return @() }
+    $sourceItem = Get-Item -LiteralPath $source -Force -ErrorAction Stop
+    if (-not $sourceItem.PSIsContainer -or (($sourceItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        Fail-Smoke "candidate command evidence directory must be a regular directory: $source"
+    }
+    $entries = @(Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop)
+    foreach ($entry in $entries) {
+        if (-not $entry.PSIsContainer -and (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) { continue }
+        Fail-Smoke "candidate command evidence must contain only regular files: $($entry.FullName)"
+    }
+    [void][System.IO.Directory]::CreateDirectory($output)
+    $retained = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($entry in $entries) {
+        $destination = Join-Path $output $entry.Name
+        if (Test-Path -LiteralPath $destination) {
+            Fail-Smoke "candidate command evidence destination already exists: $destination"
+        }
+        [void]$retained.Add((Copy-SmokeCandidateArtifact -Role "command-output" `
+            -SourcePath $entry.FullName -DestinationPath $destination))
+    }
+    return @($retained | ForEach-Object { $_ })
+}
+
 function Copy-SmokeNativeToolToShortPath {
     param(
         [string]$SourcePath,
@@ -1298,10 +1328,14 @@ function Finalize-SmokeCandidateReport {
         [System.Collections.IDictionary]$Report,
         [System.Exception]$Failure
     )
-    if (@($Report.artifacts).Count -gt 0) {
+    $retainedEvidence = @($Report.artifacts)
+    if ($Report.Contains("commandEvidence")) {
+        $retainedEvidence += @($Report.commandEvidence)
+    }
+    if ($retainedEvidence.Count -gt 0) {
         $retainedEvidenceStable = $true
         $retainedEvidenceErrors = New-Object 'System.Collections.Generic.List[string]'
-        foreach ($artifact in @($Report.artifacts)) {
+        foreach ($artifact in $retainedEvidence) {
             try {
                 $artifactPath = Join-Path $OutputDirectory ([string]$artifact.file)
                 $currentEvidence = Get-SmokeFileEvidence ([string]$artifact.role) $artifactPath
@@ -1398,6 +1432,8 @@ function Invoke-LocalCandidateSmoke {
     [void][System.IO.Directory]::CreateDirectory($workDirectory)
     $checkoutPath = Join-Path $workDirectory "src"
     $extractPath = Join-Path $workDirectory "archive"
+    $commandEvidenceDirectory = Join-Path $workDirectory "command-evidence"
+    [void][System.IO.Directory]::CreateDirectory($commandEvidenceDirectory)
     $environmentNames = @("GOFLAGS", "GOMAXPROCS", "GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "npm_config_offline", "ESBUILD_BINARY_PATH")
     $originalEnvironment = @{}
     foreach ($name in $environmentNames) {
@@ -1414,6 +1450,7 @@ function Invoke-LocalCandidateSmoke {
         }
         build = [ordered]@{}
         artifacts = @()
+        commandEvidence = @()
         install = [ordered]@{ status = "NOT_RUN" }
         cleanup = [ordered]@{ status = "NOT_RUN" }
         error = ""
@@ -1472,8 +1509,8 @@ function Invoke-LocalCandidateSmoke {
             -DestinationPath $esbuildOverridePath -ExpectedSHA256 $EsbuildSHA256
         $esbuildResult = Invoke-CandidateCommand -FilePath $esbuildOverridePath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "esbuild.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "esbuild.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "esbuild.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "esbuild.stderr.log")
         if ($esbuildResult.exitCode -ne 0 -or $esbuildResult.stdout.Trim() -cne $EsbuildVersion) {
             Fail-Smoke "esbuild sanity check failed: exit=$($esbuildResult.exitCode) version='$($esbuildResult.stdout.Trim())'"
         }
@@ -1481,8 +1518,8 @@ function Invoke-LocalCandidateSmoke {
         $releaseToolEvidence = Get-SmokeFileEvidence "goreleaser" $releaseToolPath
         $releaseToolResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList @("--version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "goreleaser-version.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "goreleaser-version.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "goreleaser-version.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "goreleaser-version.stderr.log")
         if ($releaseToolResult.exitCode -ne 0 -or $releaseToolResult.stdout -notmatch ("(?m)\b" + [regex]::Escape($ReleaseToolVersion) + "\b")) {
             Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
         }
@@ -1491,8 +1528,8 @@ function Invoke-LocalCandidateSmoke {
         $goPath = [string]$goCommand.Source
         $goVersionResult = Invoke-CandidateCommand -FilePath $goPath `
             -ArgumentList @("version") -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "go-version.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "go-version.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "go-version.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "go-version.stderr.log")
         if ($goVersionResult.exitCode -ne 0 -or $goVersionResult.stdout -notmatch '(?m)\bgo1\.26\.8\b') {
             Fail-Smoke "Go version check failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())', want go1.26.8"
         }
@@ -1503,8 +1540,8 @@ function Invoke-LocalCandidateSmoke {
         $releaseArguments = @("release", "--snapshot", "--clean", "-f", ".goreleaser.yml")
         $releaseResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList $releaseArguments -WorkingDirectory $checkoutPath `
-            -StdoutPath (Join-Path $outputDirectory "release.stdout.log") `
-            -StderrPath (Join-Path $outputDirectory "release.stderr.log")
+            -StdoutPath (Join-Path $commandEvidenceDirectory "release.stdout.log") `
+            -StderrPath (Join-Path $commandEvidenceDirectory "release.stderr.log")
         $workBytes = Get-SmokeDirectoryBytes $workDirectory
         $report.build = [ordered]@{
             command = $releaseToolPath
@@ -1518,12 +1555,14 @@ function Invoke-LocalCandidateSmoke {
             stderr = $releaseResult.stderrEvidence
             goReleaser = $releaseToolEvidence
             goReleaserVersion = $ReleaseToolVersion
+            goReleaserVersionCommand = $releaseToolResult
             goVersion = $goVersionResult
             config = Get-SmokeFileEvidence "goreleaser-config" (Join-Path $checkoutPath ".goreleaser.yml")
             bunLock = $sourceLock
             esbuild = $esbuildEvidence
             esbuildOverride = $esbuildOverride
             esbuildVersion = $EsbuildVersion
+            esbuildVersionCommand = $esbuildResult
             esbuildPathLength = $esbuildPath.Length
             esbuildOverridePathLength = $esbuildOverride.pathLength
             workBytes = $workBytes
@@ -1599,21 +1638,56 @@ function Invoke-LocalCandidateSmoke {
         $failure = $_.Exception
         $report.error = $failure.Message
     } finally {
-        foreach ($name in $environmentNames) {
-            [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
-        }
+        $finalizationFailures = New-Object 'System.Collections.Generic.List[string]'
         try {
-            Remove-SmokeOwnedTree "install directory" $installDirectory
-            Remove-SmokeCandidateWork -WorkDirectory $workDirectory -DependencyJunctionPath $dependencyJunctionPath
-            $report.cleanup = [ordered]@{
-                status = "PASS"
-                workDirectoryRemoved = -not (Test-Path -LiteralPath $workDirectory)
-                installDirectoryRemoved = -not (Test-Path -LiteralPath $installDirectory)
+            foreach ($name in $environmentNames) {
+                [System.Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], "Process")
             }
         } catch {
-            $report.cleanup = [ordered]@{ status = "FAIL"; error = $_.Exception.Message }
-            if ($null -eq $failure) { $failure = $_.Exception }
+            [void]$finalizationFailures.Add("candidate environment restoration failed: $($_.Exception.Message)")
+        }
+        try {
+            try {
+                $report.commandEvidence = @(Promote-SmokeCommandEvidence -SourceDirectory $commandEvidenceDirectory `
+                    -OutputDirectory $outputDirectory)
+            } catch {
+                [void]$finalizationFailures.Add("candidate command evidence promotion failed: $($_.Exception.Message)")
+            }
+        } finally {
+            try {
+                Remove-SmokeOwnedTree "install directory" $installDirectory
+            } catch {
+                [void]$finalizationFailures.Add("install directory cleanup failed: $($_.Exception.Message)")
+            } finally {
+                try {
+                    Remove-SmokeCandidateWork -WorkDirectory $workDirectory -DependencyJunctionPath $dependencyJunctionPath
+                } catch {
+                    [void]$finalizationFailures.Add("candidate work directory cleanup failed: $($_.Exception.Message)")
+                }
+            }
+        }
+        $installDirectoryRemoved = -not (Test-Path -LiteralPath $installDirectory)
+        $workDirectoryRemoved = -not (Test-Path -LiteralPath $workDirectory)
+        if (-not $installDirectoryRemoved) {
+            [void]$finalizationFailures.Add("install directory cleanup left the owned root in place: $installDirectory")
+        }
+        if (-not $workDirectoryRemoved) {
+            [void]$finalizationFailures.Add("candidate work directory cleanup left the owned root in place: $workDirectory")
+        }
+        $report.cleanup = [ordered]@{
+            status = if ($finalizationFailures.Count -eq 0) { "PASS" } else { "FAIL" }
+            workDirectoryRemoved = $workDirectoryRemoved
+            installDirectoryRemoved = $installDirectoryRemoved
+        }
+        if ($finalizationFailures.Count -gt 0) {
+            $failureMessages = New-Object 'System.Collections.Generic.List[string]'
+            if ($null -ne $failure) { [void]$failureMessages.Add($failure.Message) }
+            foreach ($message in $finalizationFailures) { [void]$failureMessages.Add($message) }
+            $combinedFailureMessage = $failureMessages -join "; "
+            $report.cleanup.error = $finalizationFailures -join "; "
             $report.status = "FAIL"
+            $report.error = $combinedFailureMessage
+            $failure = [System.Exception]::new($combinedFailureMessage)
         }
         $finalized = Finalize-SmokeCandidateReport -OutputDirectory $outputDirectory `
             -ReportPath $reportPath -Report $report -Failure $failure
