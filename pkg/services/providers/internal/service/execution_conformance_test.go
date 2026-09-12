@@ -19,16 +19,18 @@ import (
 
 func TestStreamingAdapterConformance(t *testing.T) {
 	executiontest.Run(t, executiontest.Subject{
-		NewAdapter:       newStreamingAdapter,
-		NewRoot:          newConformanceRoot,
-		SupportsProgress: true,
+		NewAdapter:                    newStreamingAdapter,
+		NewRoot:                       newConformanceRoot,
+		SupportsProgress:              true,
+		PreservesResultOnParseFailure: true,
 	})
 }
 
 func TestFinalOnlyAdapterConformance(t *testing.T) {
 	executiontest.Run(t, executiontest.Subject{
-		NewAdapter: newFinalOnlyAdapter,
-		NewRoot:    newConformanceRoot,
+		NewAdapter:                    newFinalOnlyAdapter,
+		NewRoot:                       newConformanceRoot,
+		PreservesResultOnParseFailure: true,
 	})
 }
 

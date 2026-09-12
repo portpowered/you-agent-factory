@@ -65,6 +65,10 @@ type Subject struct {
 	NewAdapter       func(Plan) Adapter
 	NewRoot          func(execution.Attempt) (providers.Service, error)
 	SupportsProgress bool
+	// PreservesResultOnParseFailure identifies subjects whose direct attempt
+	// seam returns a candidate beside the synthetic parse failure used by this
+	// harness. Native protocol adapters may fail before producing that result.
+	PreservesResultOnParseFailure bool
 	// Provider selects the canonical catalog identity exercised by the harness.
 	// It defaults to Codex when unset so existing fixtures stay provider-neutral.
 	Provider providers.ID
@@ -106,7 +110,7 @@ func Run(t *testing.T, subject Subject) {
 	t.Run("pre-expired deadline stops before adapter I/O", func(t *testing.T) {
 		runPreTerminatedContext(t, subject, true)
 	})
-	t.Run("success after cancellation is suppressed", func(t *testing.T) {
+	t.Run("late success follows result and error policy", func(t *testing.T) {
 		runLateSuccessAfterCancellation(t, subject)
 	})
 }
@@ -244,13 +248,25 @@ func runParseFailure(t *testing.T, subject Subject) {
 		},
 	})
 	result, err := executeConformance(t, root, t.Context(), request)
-	failure := assertFailure(
-		t,
-		result,
-		err,
-		providers.ErrExecuteFailed,
-		providers.ExecuteFailureKindDependency,
-	)
+	var failure providers.ExecuteFailure
+	if subject.PreservesResultOnParseFailure {
+		failure = assertFailureWithCandidate(
+			t,
+			result,
+			err,
+			providers.ErrExecuteFailed,
+			providers.ExecuteFailureKindDependency,
+			conformanceContent,
+		)
+	} else {
+		failure = assertFailure(
+			t,
+			result,
+			err,
+			providers.ErrExecuteFailed,
+			providers.ExecuteFailureKindDependency,
+		)
+	}
 	if failure.Diagnostics == nil ||
 		failure.Diagnostics.Metadata["failure_stage"] != "final_parse" {
 		t.Fatalf("parse failure diagnostics = %#v", failure.Diagnostics)
@@ -337,15 +353,16 @@ func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 
 	select {
 	case got := <-outcome:
-		assertFailure(
+		assertFailureWithCandidate(
 			t,
 			got.result,
 			got.err,
 			providers.ErrExecuteCancelled,
 			providers.ExecuteFailureKindCanceled,
+			conformanceContent,
 		)
 	case <-time.After(time.Second):
-		t.Fatal("Execute() did not suppress success after cancellation")
+		t.Fatal("Execute() did not finalize the late result after cancellation")
 	}
 	assertObservation(t, adapter, 1, 1, request)
 }
@@ -457,9 +474,20 @@ func assertFailure(
 	wantSentinel error,
 	wantKind providers.ExecuteFailureKind,
 ) providers.ExecuteFailure {
+	return assertFailureWithCandidate(t, result, err, wantSentinel, wantKind, "")
+}
+
+func assertFailureWithCandidate(
+	t *testing.T,
+	result providers.ExecuteResult,
+	err error,
+	wantSentinel error,
+	wantKind providers.ExecuteFailureKind,
+	wantContent string,
+) providers.ExecuteFailure {
 	t.Helper()
-	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-		t.Fatalf("failed Execute() result = %#v, want zero result", result)
+	if result.Content != wantContent {
+		t.Fatalf("failed Execute() content = %q, want %q", result.Content, wantContent)
 	}
 	if !errors.Is(err, wantSentinel) {
 		t.Fatalf("Execute() error = %v, want %v", err, wantSentinel)

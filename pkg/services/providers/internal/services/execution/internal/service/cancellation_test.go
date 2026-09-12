@@ -75,8 +75,8 @@ func TestExecutePropagatesCancellationAndDeadlineAndCleansUpOnce(t *testing.T) {
 			if cleanupCalls != 1 {
 				t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
 			}
-			if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-				t.Fatalf("Execute() result = %#v, want zero terminal result", result)
+			if result.Content != "must not escape" {
+				t.Fatalf("Execute() content = %q, want normalized candidate", result.Content)
 			}
 		})
 	}

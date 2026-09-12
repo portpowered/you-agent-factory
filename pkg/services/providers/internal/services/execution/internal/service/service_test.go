@@ -426,7 +426,7 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 	}
 }
 
-func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
+func TestExecutePreservesAdapterResultAlongsideFailureWithoutRetry(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
@@ -469,8 +469,8 @@ func TestExecuteReturnsFirstAdapterFailureWithoutRetry(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("adapter calls = %d, want 1", calls)
 	}
-	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-		t.Fatalf("failed Execute() result = %#v, want zero result", result)
+	if result.Content != "must not escape" {
+		t.Fatalf("failed Execute() content = %q, want normalized adapter result", result.Content)
 	}
 }
 

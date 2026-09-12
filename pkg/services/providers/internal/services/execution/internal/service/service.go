@@ -104,7 +104,6 @@ func (s *service) Continue(
 	secret := continuationDiagnosticSecrets(detached.ResumeSession)
 	defer func() {
 		if contextErr := normalizeContextFailureWithExisting(ctx, detached.ExecuteRequest, executeErr, secret...); contextErr != nil {
-			result = providers.ExecuteResult{}
 			executeErr = contextErr
 		}
 	}()
@@ -133,10 +132,14 @@ func (s *service) Continue(
 		detached.ResumeSession.Provider = resolved.Provider.ID
 	}
 	result, err = binding.continueAttempt(ctx, detached)
-	if err != nil {
-		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached.ExecuteRequest, secret...)
+	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached.ExecuteRequest, secret...)
+	if resultErr != nil {
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, detached.ExecuteRequest, secret...)
 	}
-	return normalizeSuccess(result, resolved.Provider.ID, detached.ExecuteRequest, secret...)
+	if err != nil {
+		return normalizedResult, normalizeAttemptFailure(ctx, err, detached.ExecuteRequest, secret...)
+	}
+	return normalizedResult, nil
 }
 
 func (s *service) Execute(
@@ -146,7 +149,6 @@ func (s *service) Execute(
 	detached := request.Clone()
 	defer func() {
 		if contextErr := normalizeContextFailureWithExisting(ctx, detached, executeErr); contextErr != nil {
-			result = providers.ExecuteResult{}
 			executeErr = contextErr
 		}
 	}()
@@ -175,10 +177,14 @@ func (s *service) Execute(
 	}
 	detached.Provider = resolved.Provider.ID
 	result, err = binding.attempt(ctx, detached)
-	if err != nil {
-		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached)
+	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached)
+	if resultErr != nil {
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, detached)
 	}
-	return normalizeSuccess(result, resolved.Provider.ID, detached)
+	if err != nil {
+		return normalizedResult, normalizeAttemptFailure(ctx, err, detached)
+	}
+	return normalizedResult, nil
 }
 
 func normalizeContextFailureWithExisting(
