@@ -3,6 +3,10 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
@@ -10,8 +14,6 @@ import (
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
-	"strings"
-	"testing"
 )
 
 func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
@@ -94,6 +96,9 @@ func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
 	if models.Results[0].ManagedRuntime.ReadinessState != managedruntime.ReadinessStateMissing {
 		t.Fatalf("managed readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
 	}
+	if models.Results[0].Status != modelcatalog.StatusUnavailable || models.Results[0].LoadState != modelcatalog.LoadStateUnloaded {
+		t.Fatalf("catalog availability = (%s, %s), want (UNAVAILABLE, UNLOADED)", models.Results[0].Status, models.Results[0].LoadState)
+	}
 }
 
 func TestServiceCatalogProjectsInstalledCacheFactsAcrossListAndDetail(t *testing.T) {
@@ -119,6 +124,245 @@ func TestServiceCatalogProjectsInstalledCacheFactsAcrossListAndDetail(t *testing
 	}
 	if detail.ManagedRuntime.Revision == nil || *detail.ManagedRuntime.Revision != "rev-cache" || detail.ManagedRuntime.CacheBytes == nil || *detail.ManagedRuntime.CacheBytes != 17 {
 		t.Fatalf("detail cache facts = %#v, want rev-cache/17", detail.ManagedRuntime)
+	}
+	if listed.Results[0].Status != modelcatalog.StatusReady || listed.Results[0].LoadState != modelcatalog.LoadStateUnloaded ||
+		detail.Status != modelcatalog.StatusReady || detail.LoadState != modelcatalog.LoadStateUnloaded {
+		t.Fatalf("catalog availability = list (%s, %s), detail (%s, %s), want READY/UNLOADED", listed.Results[0].Status, listed.Results[0].LoadState, detail.Status, detail.LoadState)
+	}
+}
+
+func TestServiceCatalogProjectsAvailabilityTruthTableAcrossListAndDetail(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range catalogAvailabilityCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			exerciseCatalogAvailabilityCase(t, test)
+		})
+	}
+}
+
+type catalogAvailabilityCase struct {
+	name             string
+	readiness        managedruntime.ReadinessState
+	lifecycle        managedruntime.LifecycleState
+	snapshotLocality managedruntime.Locality
+	wantStatus       modelcatalog.Status
+	wantLoadState    modelcatalog.LoadState
+}
+
+func catalogAvailabilityCases() []catalogAvailabilityCase {
+	return []catalogAvailabilityCase{
+		{
+			name: "ready installed", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:  managedruntime.LifecycleStateInstalled,
+			wantStatus: modelcatalog.StatusReady, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "ready loaded", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:  managedruntime.LifecycleStateLoaded,
+			wantStatus: modelcatalog.StatusReady, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "missing", readiness: managedruntime.ReadinessStateMissing,
+			lifecycle:  managedruntime.LifecycleStateNotInstalled,
+			wantStatus: modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "loading", readiness: managedruntime.ReadinessStateLoading,
+			lifecycle:  managedruntime.LifecycleStateLoading,
+			wantStatus: modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "failed", readiness: managedruntime.ReadinessStateFailed,
+			lifecycle:  managedruntime.LifecycleStateInstalled,
+			wantStatus: modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "unsupported", readiness: managedruntime.ReadinessStateUnsupported,
+			lifecycle:  managedruntime.LifecycleStateNotApplicable,
+			wantStatus: modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateNotApplicable,
+		},
+		{
+			name: "ready not installed", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:        managedruntime.LifecycleStateNotInstalled,
+			snapshotLocality: managedruntime.LocalityCloud,
+			wantStatus:       modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "ready installing", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:        managedruntime.LifecycleStateInstalling,
+			snapshotLocality: managedruntime.LocalityCloud,
+			wantStatus:       modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "ready loading", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:        managedruntime.LifecycleStateLoading,
+			snapshotLocality: managedruntime.LocalityCloud,
+			wantStatus:       modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateUnloaded,
+		},
+		{
+			name: "ready not applicable", readiness: managedruntime.ReadinessStateReady,
+			lifecycle:        managedruntime.LifecycleStateNotApplicable,
+			snapshotLocality: managedruntime.LocalityCloud,
+			wantStatus:       modelcatalog.StatusUnavailable, wantLoadState: modelcatalog.LoadStateNotApplicable,
+		},
+	}
+}
+
+func exerciseCatalogAvailabilityCase(t *testing.T, test catalogAvailabilityCase) {
+	t.Helper()
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	locality := test.snapshotLocality
+	if locality == "" {
+		locality = managedruntime.LocalityLocal
+	}
+	svc := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost: catalogProjectionHost{snapshot: modelhost.ReadinessSnapshot{
+			Identity: modelhost.Identity{
+				Name: "OMNIVOICE_Q4_K_M", Locality: locality,
+			},
+			ReadinessState: test.readiness,
+			LifecycleState: test.lifecycle,
+			Diagnostics:    map[string]string{"hostFact": "preserved"},
+		}},
+		ModelAssetPuller: catalogInspectionPuller{inspection: localmodels.RuntimeCacheInspection{
+			Supported: true, Installed: true, Revision: "rev-truth", CacheBytes: 17,
+		}},
+	})
+
+	listed, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	detail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	if len(listed.Results) != 1 {
+		t.Fatalf("ListModels results = %d, want 1", len(listed.Results))
+	}
+	assertCatalogAvailability(t, listed.Results[0], test.wantStatus, test.wantLoadState)
+	assertCatalogAvailability(t, detail.Summary, test.wantStatus, test.wantLoadState)
+	if !reflect.DeepEqual(listed.Results[0], detail.Summary) {
+		t.Fatalf("list/detail summaries differ:\nlist=%#v\ndetail=%#v", listed.Results[0], detail.Summary)
+	}
+	if detail.ManagedRuntime.Diagnostics["hostFact"] != "preserved" || detail.Diagnostics["hostFact"] != "preserved" {
+		t.Fatalf("diagnostics = managed %#v detail %#v, want hostFact preserved", detail.ManagedRuntime.Diagnostics, detail.Diagnostics)
+	}
+	if detail.ManagedRuntime.Revision == nil || *detail.ManagedRuntime.Revision != "rev-truth" ||
+		detail.ManagedRuntime.CacheBytes == nil || *detail.ManagedRuntime.CacheBytes != 17 {
+		t.Fatalf("managed cache facts = %#v, want rev-truth/17", detail.ManagedRuntime)
+	}
+}
+
+func TestServiceCatalogInspectionFailuresReturnNoPartialResults(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		hostError  error
+		cacheError error
+		wantError  string
+	}{
+		{name: "host inspection", hostError: errors.New("host inspect failed"), wantError: "host inspect failed"},
+		{name: "cache inspection", cacheError: errors.New("cache inspect failed"), wantError: "cache inspect failed"},
+	}
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+			svc := mustConstructModelService(t, modelServiceFixture{
+				RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+				ModelHost: catalogProjectionHost{
+					snapshot: modelhost.ReadinessSnapshot{
+						Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M", Locality: managedruntime.LocalityLocal},
+						ReadinessState: managedruntime.ReadinessStateReady,
+						LifecycleState: managedruntime.LifecycleStateInstalled,
+					},
+					err: test.hostError,
+				},
+				ModelAssetPuller: catalogInspectionPuller{err: test.cacheError},
+			})
+
+			listed, err := svc.ListModels(context.Background())
+			if !reflect.DeepEqual(listed, modelcatalog.List{}) {
+				t.Fatalf("ListModels result = %#v, want empty result", listed)
+			}
+			assertCatalogError(t, "ListModels", err, test.wantError)
+
+			detail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+			if !reflect.DeepEqual(detail, modelcatalog.Detail{}) {
+				t.Fatalf("GetModel result = %#v, want empty result", detail)
+			}
+			assertCatalogError(t, "GetModel", err, test.wantError)
+		})
+	}
+}
+
+func TestServiceCatalogResultsRemainDetachedAcrossRequests(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost: catalogProjectionHost{snapshot: modelhost.ReadinessSnapshot{
+			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M", Locality: managedruntime.LocalityLocal},
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateInstalled,
+			Diagnostics:    map[string]string{"hostFact": "stable"},
+		}},
+		ModelAssetPuller: catalogInspectionPuller{inspection: localmodels.RuntimeCacheInspection{
+			Supported: true, Installed: true, Revision: "rev-detached", CacheBytes: 19,
+		}},
+	})
+
+	firstList, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("first ListModels: %v", err)
+	}
+	firstDetail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("first GetModel: %v", err)
+	}
+	firstList.Results[0].Status = modelcatalog.StatusUnavailable
+	firstList.Results[0].ManagedRuntime.Diagnostics["hostFact"] = "mutated"
+	*firstList.Results[0].ManagedRuntime.Revision = "mutated"
+	firstDetail.Diagnostics["hostFact"] = "mutated"
+	firstDetail.Operations[0].Name = "mutated"
+
+	secondList, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("second ListModels: %v", err)
+	}
+	secondDetail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("second GetModel: %v", err)
+	}
+	assertCatalogAvailability(t, secondList.Results[0], modelcatalog.StatusReady, modelcatalog.LoadStateUnloaded)
+	assertCatalogAvailability(t, secondDetail.Summary, modelcatalog.StatusReady, modelcatalog.LoadStateUnloaded)
+	if secondList.Results[0].ManagedRuntime.Diagnostics["hostFact"] != "stable" || secondDetail.Diagnostics["hostFact"] != "stable" {
+		t.Fatalf("detached diagnostics = list %#v detail %#v, want stable", secondList.Results[0].ManagedRuntime.Diagnostics, secondDetail.Diagnostics)
+	}
+	if secondList.Results[0].ManagedRuntime.Revision == nil || *secondList.Results[0].ManagedRuntime.Revision != "rev-detached" || secondDetail.Operations[0].Name != "TTS" {
+		t.Fatalf("detached facts = list %#v detail %#v, want rev-detached/TTS", secondList.Results[0], secondDetail)
+	}
+}
+
+func assertCatalogAvailability(t *testing.T, summary modelcatalog.Summary, wantStatus modelcatalog.Status, wantLoadState modelcatalog.LoadState) {
+	t.Helper()
+	if summary.Status != wantStatus || summary.LoadState != wantLoadState {
+		t.Fatalf("catalog availability = (%s, %s), want (%s, %s)", summary.Status, summary.LoadState, wantStatus, wantLoadState)
+	}
+}
+
+func assertCatalogError(t *testing.T, operation string, err error, wantError string) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), wantError) {
+		t.Fatalf("%s error = %v, want %q", operation, err, wantError)
 	}
 }
 
@@ -288,6 +532,26 @@ func TestService_GetModel_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
 	if svc != nil || !errors.Is(err, modelsservice.ErrInvalidDependencies) {
 		t.Fatalf("NewService = (%v, %v), want missing runtime construction error", svc, err)
 	}
+}
+
+type catalogProjectionHost struct {
+	missingCacheInspectHost
+	snapshot modelhost.ReadinessSnapshot
+	err      error
+}
+
+func (h catalogProjectionHost) InspectReadiness(context.Context, *modelRuntimeConfig, string) (modelhost.ReadinessSnapshot, error) {
+	return h.snapshot, h.err
+}
+
+type catalogInspectionPuller struct {
+	installedCacheFactsPuller
+	inspection localmodels.RuntimeCacheInspection
+	err        error
+}
+
+func (p catalogInspectionPuller) InspectRuntimeCache(context.Context, *modelRuntimeConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return p.inspection, p.err
 }
 
 type missingCacheInspectHost struct{}

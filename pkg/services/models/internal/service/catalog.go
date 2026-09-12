@@ -64,6 +64,7 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 			return modelcatalog.List{}, err
 		}
 		summary.ManagedRuntime = overlayCatalogCacheFacts(summary.ManagedRuntime, inspection)
+		summary = projectCatalogAvailability(summary)
 		results = append(results, summary)
 	}
 	sort.Slice(results, func(i, j int) bool {
@@ -110,8 +111,23 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 		return modelcatalog.Detail{}, err
 	}
 	detail.ManagedRuntime = overlayCatalogCacheFacts(detail.ManagedRuntime, inspection)
+	detail.Summary = projectCatalogAvailability(detail.Summary)
 	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime.Diagnostics)
 	return detail, nil
+}
+
+func projectCatalogAvailability(summary modelcatalog.Summary) modelcatalog.Summary {
+	summary.Status = modelcatalog.StatusUnavailable
+	summary.LoadState = modelcatalog.LoadStateUnloaded
+	if summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateNotApplicable {
+		summary.LoadState = modelcatalog.LoadStateNotApplicable
+	}
+	if summary.ManagedRuntime.ReadinessState == managedruntime.ReadinessStateReady &&
+		(summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateInstalled ||
+			summary.ManagedRuntime.LifecycleState == managedruntime.LifecycleStateLoaded) {
+		summary.Status = modelcatalog.StatusReady
+	}
+	return summary
 }
 
 func overlayCatalogManagedRuntime(
