@@ -115,19 +115,33 @@ func TestServiceCatalogProjectsInstalledCacheFactsAcrossListAndDetail(t *testing
 	if err != nil {
 		t.Fatalf("ListModels: %v", err)
 	}
+	if len(listed.Results) != 1 {
+		t.Fatalf("ListModels results = %d, want 1", len(listed.Results))
+	}
 	detail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.Revision == nil || *listed.Results[0].ManagedRuntime.Revision != "rev-cache" || listed.Results[0].ManagedRuntime.CacheBytes == nil || *listed.Results[0].ManagedRuntime.CacheBytes != 17 {
-		t.Fatalf("list cache facts = %#v, want rev-cache/17", listed.Results[0].ManagedRuntime)
+	assertInstalledCacheFacts(t, "list", listed.Results[0])
+	assertInstalledCacheFacts(t, "detail", detail.Summary)
+}
+
+func assertInstalledCacheFacts(t *testing.T, surface string, summary modelcatalog.Summary) {
+	t.Helper()
+	if summary.ManagedRuntime.Revision == nil {
+		t.Fatalf("%s cache revision = nil, want rev-cache", surface)
 	}
-	if detail.ManagedRuntime.Revision == nil || *detail.ManagedRuntime.Revision != "rev-cache" || detail.ManagedRuntime.CacheBytes == nil || *detail.ManagedRuntime.CacheBytes != 17 {
-		t.Fatalf("detail cache facts = %#v, want rev-cache/17", detail.ManagedRuntime)
+	if *summary.ManagedRuntime.Revision != "rev-cache" {
+		t.Fatalf("%s cache revision = %q, want rev-cache", surface, *summary.ManagedRuntime.Revision)
 	}
-	if listed.Results[0].Status != modelcatalog.StatusReady || listed.Results[0].LoadState != modelcatalog.LoadStateUnloaded ||
-		detail.Status != modelcatalog.StatusReady || detail.LoadState != modelcatalog.LoadStateUnloaded {
-		t.Fatalf("catalog availability = list (%s, %s), detail (%s, %s), want READY/UNLOADED", listed.Results[0].Status, listed.Results[0].LoadState, detail.Status, detail.LoadState)
+	if summary.ManagedRuntime.CacheBytes == nil {
+		t.Fatalf("%s cache bytes = nil, want 17", surface)
+	}
+	if *summary.ManagedRuntime.CacheBytes != 17 {
+		t.Fatalf("%s cache bytes = %d, want 17", surface, *summary.ManagedRuntime.CacheBytes)
+	}
+	if summary.Status != modelcatalog.StatusReady || summary.LoadState != modelcatalog.LoadStateUnloaded {
+		t.Fatalf("%s catalog availability = (%s, %s), want READY/UNLOADED", surface, summary.Status, summary.LoadState)
 	}
 }
 

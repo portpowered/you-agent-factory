@@ -26,6 +26,23 @@ func New(scopes runtimescopes.Service, readiness catalog.ReadinessQuery) catalog
 	return &service{scopes: scopes, readiness: readiness}
 }
 
+// ProjectAvailability derives the public catalog compatibility fields from the
+// fully overlaid managed-runtime snapshot. A runtime is customer-available
+// only after readiness and installed lifecycle facts agree.
+func ProjectAvailability(summary models.Summary) models.Summary {
+	summary.Status = models.StatusUnavailable
+	summary.LoadState = models.LoadStateUnloaded
+	if summary.ManagedRuntime.LifecycleState == models.LifecycleStateNotApplicable {
+		summary.LoadState = models.LoadStateNotApplicable
+	}
+	if summary.ManagedRuntime.ReadinessState == models.ReadinessStateReady &&
+		(summary.ManagedRuntime.LifecycleState == models.LifecycleStateInstalled ||
+			summary.ManagedRuntime.LifecycleState == models.LifecycleStateLoaded) {
+		summary.Status = models.StatusReady
+	}
+	return summary
+}
+
 func (s *service) ListCatalog(
 	ctx context.Context,
 	request models.ListModelsRequest,
@@ -63,7 +80,7 @@ func (s *service) ListCatalog(
 			}
 			summary.ManagedRuntime = overlayResolvedRuntime(summary.ManagedRuntime, current)
 		}
-		summary = catalog.ProjectAvailability(summary)
+		summary = ProjectAvailability(summary)
 		result.Models = append(result.Models, summary)
 	}
 	sort.Slice(result.Models, func(i, j int) bool {
@@ -151,7 +168,7 @@ func (s *service) GetCatalogModel(
 		}
 		detail.Summary.ManagedRuntime = overlayResolvedRuntime(detail.Summary.ManagedRuntime, current)
 	}
-	detail.Summary = catalog.ProjectAvailability(detail.Summary)
+	detail.Summary = ProjectAvailability(detail.Summary)
 	// Detail diagnostics historically includes the managed-runtime state for
 	// compatibility. Keep that duplicate projection sourced from the same
 	// resolved runtime as the canonical managedRuntime object.

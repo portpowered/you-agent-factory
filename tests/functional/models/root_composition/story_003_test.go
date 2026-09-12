@@ -39,41 +39,45 @@ const (
 // sleeps or extend a client deadline to manufacture a transitional state.
 func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	t.Parallel()
+	workflow := newStory003PullWorkflow(t)
+	before := assertStory003BeforePull(t, workflow)
+	pull := startStory003Pull(t, workflow)
+	during := assertStory003DuringPull(t, workflow)
+	close(workflow.source.releaseFirstDownload)
+	finishStory003Pull(t, workflow, pull)
+	assertStory003AfterPull(t, workflow, before, during)
+	assertStory003Invocation(t, workflow)
+	t.Run("controlled source failure", testStory003ControlledSourceFailure)
+}
+
+type story003PullWorkflow struct {
+	source                                     *controlledModelSource
+	baseBody, tokenizerBody                    []byte
+	factoryDir, cacheDirectory, serverURL      string
+	hostLauncher                               *recordingModelHostLauncher
+	inspectProcess                             support.Process
+	activeBackendRequests, backendRequestCount *atomic.Int64
+}
+type story003PullExecution struct {
+	inputs    *support.CapturedInputs
+	command   *support.ProcessCommand
+	startedAt time.Time
+}
+
+func newStory003PullWorkflow(t *testing.T) *story003PullWorkflow {
+	t.Helper()
 	baseBody := []byte("functional-omnivoice-base-asset")
 	tokenizerBody := []byte("functional-omnivoice-tokenizer-asset")
 	source := newControlledModelSource(baseBody, tokenizerBody)
 	sourceServer := functionalNewHTTPServer(t, source)
 	t.Cleanup(sourceServer.Close)
-	var activeBackendRequests atomic.Int64
-	var backendRequestCount atomic.Int64
-	audio := []byte("RIFF....WAVE")
-	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/health":
-			writer.WriteHeader(http.StatusOK)
-		case "/invoke":
-			activeBackendRequests.Add(1)
-			defer activeBackendRequests.Add(-1)
-			var payload struct {
-				OutputFile string `json:"outputFile"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				http.Error(writer, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
-				http.Error(writer, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			backendRequestCount.Add(1)
-			writer.WriteHeader(http.StatusOK)
-		default:
-			http.NotFound(writer, request)
-		}
-	}))
+	activeBackendRequests := &atomic.Int64{}
+	backendRequestCount := &atomic.Int64{}
+	modelServer := functionalNewHTTPServer(t, story003BackendHandler(
+		[]byte("RIFF....WAVE"), activeBackendRequests, backendRequestCount,
+	))
 	t.Cleanup(modelServer.Close)
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-
 	factoryDir := functionalScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
 	cacheDirectory := functionalTempDir(t)
 	homeDirectory := functionalTempDir(t)
@@ -98,60 +102,112 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 			ModelRuntimeHTTPClient:   modelServer.Client(),
 		},
 	})
-
 	inspectProcess := functionalBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, inspectProcess)
-
-	beforeList := executeStory003List(t, inspectProcess, server.URL(), "before pull")
+	return &story003PullWorkflow{
+		source:                source,
+		baseBody:              baseBody,
+		tokenizerBody:         tokenizerBody,
+		factoryDir:            factoryDir,
+		cacheDirectory:        cacheDirectory,
+		serverURL:             server.URL(),
+		hostLauncher:          hostLauncher,
+		inspectProcess:        inspectProcess,
+		activeBackendRequests: activeBackendRequests,
+		backendRequestCount:   backendRequestCount,
+	}
+}
+func story003BackendHandler(
+	audio []byte,
+	activeBackendRequests *atomic.Int64,
+	backendRequestCount *atomic.Int64,
+) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		case "/invoke":
+			activeBackendRequests.Add(1)
+			defer activeBackendRequests.Add(-1)
+			var payload struct {
+				OutputFile string `json:"outputFile"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				http.Error(writer, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			backendRequestCount.Add(1)
+			writer.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(writer, request)
+		}
+	})
+}
+func assertStory003BeforePull(t *testing.T, workflow *story003PullWorkflow) story003InspectCapture {
+	t.Helper()
+	beforeList := executeStory003List(t, workflow.inspectProcess, workflow.serverURL, "before pull")
 	assertStory003StatePair(t, beforeList.ManagedRuntime.ReadinessState, beforeList.ManagedRuntime.LifecycleState,
 		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
-	before := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "before pull")
+	before := executeStory003Inspect(t, workflow.inspectProcess, workflow.serverURL, workflow.cacheDirectory, "before pull")
 	assertStory003State(t, before, factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
-	assertStory003CatalogParity(t, inspectProcess, server.URL(), "before pull", beforeList, before,
+	assertStory003CatalogParity(t, workflow.inspectProcess, workflow.serverURL, "before pull", beforeList, before,
 		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
 		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
-	assertStory003SourceCounts(t, source, "before pull", 0, 0, 0)
-	if got := hostLauncher.Calls(); got != 0 {
+	assertStory003SourceCounts(t, workflow.source, "before pull", 0, 0, 0)
+	if got := workflow.hostLauncher.Calls(); got != 0 {
 		t.Fatalf("model host starts before pull = %d, want 0 from catalog list/inspect", got)
 	}
-
+	return before
+}
+func startStory003Pull(t *testing.T, workflow *story003PullWorkflow) story003PullExecution {
+	t.Helper()
 	pullProcess := functionalBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, pullProcess)
-	pullInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(server.URL()))
-	pullInputs.Input.WorkingDirectory = factoryDir
-	pullStartedAt := time.Now().UTC()
-	pullCommand := support.StartProcessCommand(t, pullProcess, pullInputs.Input)
-
-	waitStory003Signal(t, source.manifestServed, "manifest request")
-	waitStory003Signal(t, source.firstDownloadStarted, "first asset download")
-	during := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "during pull")
+	pullInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(workflow.serverURL))
+	pullInputs.Input.WorkingDirectory = workflow.factoryDir
+	return story003PullExecution{
+		inputs:    pullInputs,
+		command:   support.StartProcessCommand(t, pullProcess, pullInputs.Input),
+		startedAt: time.Now().UTC(),
+	}
+}
+func assertStory003DuringPull(t *testing.T, workflow *story003PullWorkflow) story003InspectCapture {
+	t.Helper()
+	waitStory003Signal(t, workflow.source.manifestServed, "manifest request")
+	waitStory003Signal(t, workflow.source.firstDownloadStarted, "first asset download")
+	during := executeStory003Inspect(t, workflow.inspectProcess, workflow.serverURL, workflow.cacheDirectory, "during pull")
 	assertStory003State(t, during, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
-	duringList := executeStory003List(t, inspectProcess, server.URL(), "during pull")
+	duringList := executeStory003List(t, workflow.inspectProcess, workflow.serverURL, "during pull")
 	assertStory003StatePair(t, duringList.ManagedRuntime.ReadinessState, duringList.ManagedRuntime.LifecycleState,
 		factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
-	assertStory003CatalogParity(t, inspectProcess, server.URL(), "during pull", duringList, during,
+	assertStory003CatalogParity(t, workflow.inspectProcess, workflow.serverURL, "during pull", duringList, during,
 		factoryapi.ModelStatusUNAVAILABLE, factoryapi.UNLOADED,
 		factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
-	assertStory003SourceCounts(t, source, "during pull", 1, 1, 0)
-	if got := hostLauncher.Calls(); got != 0 {
+	assertStory003SourceCounts(t, workflow.source, "during pull", 1, 1, 0)
+	if got := workflow.hostLauncher.Calls(); got != 0 {
 		t.Fatalf("model host starts during pull = %d, want 0 from catalog list/inspect", got)
 	}
-
-	close(source.releaseFirstDownload)
+	return during
+}
+func finishStory003Pull(t *testing.T, workflow *story003PullWorkflow, pull story003PullExecution) {
+	t.Helper()
 	select {
-	case <-pullCommand.Done():
+	case <-pull.command.Done():
 	case <-time.After(story003WorkflowTimeout):
 		t.Fatal("timed out waiting for synchronous model pull to finish")
 	}
-	pullFinishedAt := time.Now().UTC()
-	t.Logf("models pull command=%q start=%s finish=%s exitCode=0", strings.Join(story003ModelsPullArgs(server.URL()), " "), pullStartedAt.Format(time.RFC3339Nano), pullFinishedAt.Format(time.RFC3339Nano))
-	if err := pullCommand.Err(); err != nil {
-		t.Fatalf("Process.Execute(models pull) error = %v\nstdout:\n%s\nstderr:\n%s", err, pullInputs.Stdout(), pullInputs.Stderr())
+	finishedAt := time.Now().UTC()
+	t.Logf("models pull command=%q start=%s finish=%s exitCode=0", strings.Join(story003ModelsPullArgs(workflow.serverURL), " "), pull.startedAt.Format(time.RFC3339Nano), finishedAt.Format(time.RFC3339Nano))
+	if err := pull.command.Err(); err != nil {
+		t.Fatalf("Process.Execute(models pull) error = %v\nstdout:\n%s\nstderr:\n%s", err, pull.inputs.Stdout(), pull.inputs.Stderr())
 	}
-
 	var pullResponse factoryapi.ModelPullResponse
-	if err := json.Unmarshal([]byte(pullInputs.Stdout()), &pullResponse); err != nil {
-		t.Fatalf("decode successful models pull output: %v\nstdout:\n%s", err, pullInputs.Stdout())
+	if err := json.Unmarshal([]byte(pull.inputs.Stdout()), &pullResponse); err != nil {
+		t.Fatalf("decode successful models pull output: %v\nstdout:\n%s", err, pull.inputs.Stdout())
 	}
 	if pullResponse.Outcome != factoryapi.ModelPullOutcomePULLED ||
 		pullResponse.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
@@ -159,13 +215,17 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		t.Fatalf("successful pull response = %#v, want PULLED/INSTALLED_SUCCESSFULLY/READY", pullResponse)
 	}
 	assertStory003DownloadedFiles(t, pullResponse.DownloadedFiles, map[string][]byte{
-		story003BaseAsset:      baseBody,
-		story003TokenizerAsset: tokenizerBody,
+		story003BaseAsset: workflow.baseBody, story003TokenizerAsset: workflow.tokenizerBody,
 	})
-
-	afterList := assertStory003ListAfterPull(t, inspectProcess, server.URL(), cacheDirectory)
-
-	after := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "after pull")
+}
+func assertStory003AfterPull(
+	t *testing.T,
+	workflow *story003PullWorkflow,
+	before, during story003InspectCapture,
+) {
+	t.Helper()
+	afterList := assertStory003ListAfterPull(t, workflow.inspectProcess, workflow.serverURL, workflow.cacheDirectory)
+	after := executeStory003Inspect(t, workflow.inspectProcess, workflow.serverURL, workflow.cacheDirectory, "after pull")
 	if after.Detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		t.Fatalf("after-pull readiness = %s, want READY", after.Detail.ManagedRuntime.ReadinessState)
 	}
@@ -176,21 +236,24 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	if before.state() == during.state() || during.state() == after.state() || before.state() == after.state() {
 		t.Fatalf("inspect state pairs were not all distinct: before=%s during=%s after=%s", before.state(), during.state(), after.state())
 	}
-	if after.ArtifactBytes != int64(len(baseBody)+len(tokenizerBody)) {
-		t.Fatalf("final on-disk artifact bytes = %d, want %d", after.ArtifactBytes, len(baseBody)+len(tokenizerBody))
+	if after.ArtifactBytes != int64(len(workflow.baseBody)+len(workflow.tokenizerBody)) {
+		t.Fatalf("final on-disk artifact bytes = %d, want %d", after.ArtifactBytes, len(workflow.baseBody)+len(workflow.tokenizerBody))
 	}
-	assertStory003CatalogParity(t, inspectProcess, server.URL(), "after pull", afterList, after,
+	assertStory003CatalogParity(t, workflow.inspectProcess, workflow.serverURL, "after pull", afterList, after,
 		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
 		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	assertStory003SourceCounts(t, source, "after pull", 1, 1, 1)
-	if got := hostLauncher.Calls(); got != 0 {
+	assertStory003SourceCounts(t, workflow.source, "after pull", 1, 1, 1)
+	if got := workflow.hostLauncher.Calls(); got != 0 {
 		t.Fatalf("model host starts after pull = %d, want 0 from catalog list/inspect", got)
 	}
+}
 
+func assertStory003Invocation(t *testing.T, workflow *story003PullWorkflow) {
+	t.Helper()
 	responseMode := factoryapi.METADATA
 	invocation := postFunctionalJSON[factoryapi.ModelInvocationResponse](
 		t,
-		server.URL()+"/models/"+story003ModelName+"/invocations",
+		workflow.serverURL+"/models/"+story003ModelName+"/invocations",
 		factoryapi.ModelInvocationRequest{
 			Operation: "TTS",
 			Bindings:  localModelReadinessAssetsHostBindings(),
@@ -204,22 +267,19 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	if invocation.ModelName != story003ModelName || invocation.Operation != "TTS" {
 		t.Fatalf("POST /models invocations identity = %#v, want %s/TTS", invocation, story003ModelName)
 	}
-	if got := hostLauncher.Calls(); got != 1 {
+	if got := workflow.hostLauncher.Calls(); got != 1 {
 		t.Fatalf("model host starts after invocation = %d, want 1", got)
 	}
-	if got := backendRequestCount.Load(); got != 1 || activeBackendRequests.Load() != 0 {
-		t.Fatalf("controlled backend requests = completed:%d active:%d, want 1/0 after released invocation", got, activeBackendRequests.Load())
+	if got := workflow.backendRequestCount.Load(); got != 1 || workflow.activeBackendRequests.Load() != 0 {
+		t.Fatalf("controlled backend requests = completed:%d active:%d, want 1/0 after released invocation", got, workflow.activeBackendRequests.Load())
 	}
-	afterInvocationList := executeStory003List(t, inspectProcess, server.URL(), "after invocation release")
-	afterInvocation := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "after invocation release")
-	assertStory003CatalogParity(t, inspectProcess, server.URL(), "after invocation release", afterInvocationList, afterInvocation,
+	afterInvocationList := executeStory003List(t, workflow.inspectProcess, workflow.serverURL, "after invocation release")
+	afterInvocation := executeStory003Inspect(t, workflow.inspectProcess, workflow.serverURL, workflow.cacheDirectory, "after invocation release")
+	assertStory003CatalogParity(t, workflow.inspectProcess, workflow.serverURL, "after invocation release", afterInvocationList, afterInvocation,
 		factoryapi.ModelStatusREADY, factoryapi.UNLOADED,
 		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	assertStory003SourceCounts(t, source, "after invocation release", 1, 1, 1)
-
-	t.Run("controlled source failure", testStory003ControlledSourceFailure)
+	assertStory003SourceCounts(t, workflow.source, "after invocation release", 1, 1, 1)
 }
-
 func assertStory003CatalogParity(
 	t *testing.T,
 	process support.Process,

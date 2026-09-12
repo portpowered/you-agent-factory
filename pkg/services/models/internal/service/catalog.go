@@ -129,7 +129,17 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 }
 
 func projectCatalogAvailability(summary modelcatalog.Summary) modelcatalog.Summary {
-	return modelcatalog.ProjectAvailability(summary)
+	summary.Status = modelcatalog.StatusUnavailable
+	summary.LoadState = modelcatalog.LoadStateUnloaded
+	if summary.ManagedRuntime.LifecycleState == models.LifecycleStateNotApplicable {
+		summary.LoadState = modelcatalog.LoadStateNotApplicable
+	}
+	if summary.ManagedRuntime.ReadinessState == models.ReadinessStateReady &&
+		(summary.ManagedRuntime.LifecycleState == models.LifecycleStateInstalled ||
+			summary.ManagedRuntime.LifecycleState == models.LifecycleStateLoaded) {
+		summary.Status = modelcatalog.StatusReady
+	}
+	return summary
 }
 
 func overlayCatalogManagedRuntime(
