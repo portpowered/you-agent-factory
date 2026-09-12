@@ -60,7 +60,8 @@ func validateModelsInvokeRequest(cfg InvokeConfig) (string, string, string, erro
 }
 
 func hasGenericCLIInvocationBindings(cfg InvokeConfig) bool {
-	return hasGenericCLIInputs(cfg) || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0
+	return strings.TrimSpace(cfg.Operation) != "" || hasGenericCLIInputs(cfg) ||
+		len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0
 }
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
