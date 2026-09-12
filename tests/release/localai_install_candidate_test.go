@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -22,18 +23,52 @@ import (
 )
 
 const (
-	localAICandidateSourceCommit      = "059474b2c00915865306a33ca5e3d02b618bb6f0"
-	localAICandidateNativeToolVersion = "0.27.7"
-	localAICandidateNativeToolSHA256  = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
-	localAICandidateNativeToolBytes   = int64(11386368)
+	localAICandidateSourceCommitEnvironment = "INFINITE_YOU_LOCALAI_CANDIDATE_SOURCE_COMMIT"
+	localAICandidateNativeToolVersion       = "0.27.7"
+	localAICandidateNativeToolSHA256        = "44ce6728d54c891b1c5a6d7dbfb1a0f13419884cca0b090f1fbcf0dcd8bee0e9"
+	localAICandidateNativeToolBytes         = int64(11386368)
 )
 
+var localAICandidateSourceCommitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func TestLocalAICandidateSourceCommitValidation(t *testing.T) {
+	t.Parallel()
+	const canonical = "4e7813a68fd775c15a760f64d91c8d2f7baa5a11"
+	if got, err := parseLocalAICandidateSourceCommit(canonical); err != nil || got != canonical {
+		t.Fatalf("parseLocalAICandidateSourceCommit(%q) = %q/%v, want canonical", canonical, got, err)
+	}
+	for _, value := range []string{
+		"", strings.ToUpper(canonical), " " + canonical, canonical + " ",
+		strings.Repeat("g", 40), canonical[:39], canonical + "0", canonical + canonical,
+	} {
+		if _, err := parseLocalAICandidateSourceCommit(value); err == nil {
+			t.Errorf("parseLocalAICandidateSourceCommit(%q) succeeded, want error", value)
+		}
+	}
+}
+func parseLocalAICandidateSourceCommit(value string) (string, error) {
+	if value == "" || !localAICandidateSourceCommitPattern.MatchString(value) {
+		return "", fmt.Errorf("target revision must be one lowercase 40-hex value, got %q", value)
+	}
+	return value, nil
+}
+func localAICandidateSourceCommit(t *testing.T) string {
+	t.Helper()
+	value, present := os.LookupEnv(localAICandidateSourceCommitEnvironment)
+	if !present {
+		t.Fatalf("%s must declare one canonical 40-hex target revision", localAICandidateSourceCommitEnvironment)
+	}
+	value, err := parseLocalAICandidateSourceCommit(value)
+	if err != nil {
+		t.Fatalf("invalid %s: %v", localAICandidateSourceCommitEnvironment, err)
+	}
+	return value
+}
 func TestLocalAICandidateScriptParses(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	scriptPath := localAICandidateScriptPath(t)
 	command := exec.Command(localAICandidatePowerShell(t), "-NoProfile", "-NonInteractive", "-Command", fmt.Sprintf(`
 $errors = $null
@@ -51,7 +86,6 @@ func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := filepath.Join(t.TempDir(), "path with spaces")
 	if err := os.MkdirAll(tempDir, 0o700); err != nil {
 		t.Fatalf("create fixture directory: %v", err)
@@ -96,7 +130,6 @@ if ($result.exitCode -ne 23) { exit 2 }
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, append(os.Environ(), "LOCALAI_ARGUMENT_RECORD="+recordPath), "")
-
 	var gotArguments []string
 	readJSONFile(t, recordPath, &gotArguments)
 	if strings.Join(gotArguments, "\x00") != strings.Join(wantArguments, "\x00") {
@@ -139,7 +172,6 @@ func TestLocalAICandidateCommandDeadlineKillsChildTree(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := t.TempDir()
 	childPIDPath := filepath.Join(tempDir, "child.pid")
 	childPath := filepath.Join(tempDir, "child.ps1")
@@ -159,7 +191,6 @@ $child = Start-Process -FilePath %s -ArgumentList @('-NoProfile', '-NonInteracti
 	if err := os.WriteFile(parentPath, []byte(parent), 0o600); err != nil {
 		t.Fatalf("write hanging parent: %v", err)
 	}
-
 	resultPath := filepath.Join(tempDir, "result.json")
 	harnessPath := filepath.Join(tempDir, "deadline.ps1")
 	harness := fmt.Sprintf(`
@@ -202,7 +233,6 @@ func TestLocalAICandidateCommandBoundsRetainedOutput(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-
 	tempDir := t.TempDir()
 	writerPath := filepath.Join(tempDir, "writer.ps1")
 	if err := os.WriteFile(writerPath, []byte(`[Console]::Out.Write(('token=x ' * 1024)); exit 0`), 0o600); err != nil {
@@ -623,6 +653,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
+	targetRevision := localAICandidateSourceCommit(t)
 	binaryPath := strings.TrimSpace(os.Getenv("INFINITE_YOU_LOCALAI_PREBUILT_BINARY"))
 	if binaryPath == "" {
 		t.Skip("set INFINITE_YOU_LOCALAI_PREBUILT_BINARY to an already compiled you.exe")
@@ -630,7 +661,7 @@ func TestLocalAICandidatePublicInstallUsesPrebuiltArtifact(t *testing.T) {
 	if !filepath.IsAbs(binaryPath) {
 		t.Fatalf("INFINITE_YOU_LOCALAI_PREBUILT_BINARY must be absolute: %s", binaryPath)
 	}
-	assertLocalAICandidateBuildInfo(t, binaryPath)
+	assertLocalAICandidateBuildInfo(t, binaryPath, targetRevision)
 	goPath, err := exec.LookPath("go.exe")
 	if err != nil {
 		t.Fatalf("locate Go for build-info inspection: %v", err)
@@ -696,16 +727,16 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(stagedBinary),
 		localAICandidatePowerShellLiteral(archiveVersion),
 		localAICandidatePowerShellLiteral(version),
-		localAICandidatePowerShellLiteral(localAICandidateSourceCommit),
+		localAICandidatePowerShellLiteral(targetRevision),
 		localAICandidatePowerShellLiteral(goPath),
 		localAICandidatePowerShellLiteral(installDir),
 		localAICandidatePowerShellLiteral(workDir),
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, isolatedEnvironment, tempDir)
-	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version)
+	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version, targetRevision)
 }
-func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version string) {
+func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version, targetRevision string) {
 	t.Helper()
 	var result struct {
 		Status                    string `json:"status"`
@@ -748,8 +779,8 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
 		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
 	}
-	if result.ExecutableBuildInfo.SourceRevision != localAICandidateSourceCommit || result.ExecutableBuildInfo.VCSModified {
-		t.Fatalf("public candidate executable build info = %#v", result.ExecutableBuildInfo)
+	if result.ExecutableBuildInfo.SourceRevision != targetRevision || result.ExecutableBuildInfo.VCSModified {
+		t.Fatalf("public candidate executable build info = %#v, want revision %s and vcs.modified=false", result.ExecutableBuildInfo, targetRevision)
 	}
 	wantCommands := []string{
 		"--version",
@@ -879,7 +910,7 @@ func localAICandidateIsolatedEnvironment(root string) []string {
 func localAICandidatePowerShellLiteral(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
-func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
+func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath, targetRevision string) {
 	t.Helper()
 	info, err := buildinfo.ReadFile(binaryPath)
 	if err != nil {
@@ -892,8 +923,8 @@ func assertLocalAICandidateBuildInfo(t *testing.T, binaryPath string) {
 		}
 		settings[setting.Key] = setting.Value
 	}
-	if settings["vcs.revision"] != localAICandidateSourceCommit || settings["vcs.modified"] != "false" {
-		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, localAICandidateSourceCommit)
+	if settings["vcs.revision"] != targetRevision || settings["vcs.modified"] != "false" {
+		t.Fatalf("candidate executable build info = %#v, want revision %s and vcs.modified=false", settings, targetRevision)
 	}
 }
 func localAICandidateGit(t *testing.T, directory string, arguments ...string) string {
