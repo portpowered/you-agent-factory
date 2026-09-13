@@ -1,10 +1,12 @@
 import { saveSessionFactory } from "./api";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("saveSessionFactory replace-current", () => {
   it("issues PUT with factory-only body and incremented version when mode is omitted", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -68,6 +70,7 @@ describe("saveSessionFactory replace-current", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],

@@ -1,4 +1,5 @@
 import { getCurrentFactory } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 const defaultSessionFactoryVersion = {
   logical: "9",
@@ -10,6 +11,7 @@ describe("session factory getCurrentFactory", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workTypes: [],
           workers: [],
@@ -30,6 +32,7 @@ describe("session factory getCurrentFactory", () => {
         fetch: fetchMock,
       }),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Current Factory",
       workTypes: [],
       workers: [],
@@ -47,6 +50,7 @@ describe("session factory getCurrentFactory", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Session Factory",
           workTypes: [],
           workers: [],
@@ -68,6 +72,7 @@ describe("session factory getCurrentFactory", () => {
         sessionID: "session-2",
       }),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Session Factory",
       workTypes: [],
       workers: [],

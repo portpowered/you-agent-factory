@@ -1,11 +1,13 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("getSessionFactory routing", () => {
   it("issues GET to the default session factory route", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -36,6 +38,7 @@ describe("getSessionFactory routing", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Scoped Factory",
           workers: [],
           workstations: [],
@@ -68,6 +71,7 @@ describe("saveSessionFactory — issues PUT with factory-only body when mode is 
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -130,6 +134,7 @@ describe("saveSessionFactory — issues PUT with REPLACE_CURRENT mode and increm
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -197,6 +202,7 @@ describe("saveSessionFactory — issues PUT with REPLACE_CURRENT on a non-defaul
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Scoped Factory",
           workers: [],
           workstations: [],
@@ -261,6 +267,7 @@ describe("saveSessionFactory — issues PUT with UPSERT_NAMED_AND_ACTIVATE on th
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Imported Factory",
           workers: [],
           workstations: [],
@@ -318,6 +325,7 @@ describe("saveSessionFactory — issues PUT with UPSERT_NAMED_AND_ACTIVATE on a 
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Imported Factory",
           workers: [],
           workstations: [],

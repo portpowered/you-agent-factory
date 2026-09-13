@@ -158,6 +158,7 @@ describe("session-factory-mocks helpers", () => {
       ),
     ).toEqual({
       ...baseFactoryDefinition,
+      activation: sessionFactoryImportActivationDocument.activation,
       name: sessionFactoryImportActivationDocument.name,
       version: incrementedSessionFactoryVersion,
     });

@@ -62,6 +62,7 @@ function toCurrentFactoryDocumentFromEventFactory(
   const version = eventFactory.version;
   if (
     version == null ||
+    eventFactory.activation == null ||
     typeof version !== "object" ||
     (typeof version.logical !== "string" &&
       typeof version.logical !== "number") ||
@@ -72,6 +73,7 @@ function toCurrentFactoryDocumentFromEventFactory(
 
   return {
     ...eventFactory,
+    activation: eventFactory.activation,
     version: {
       logical: String(version.logical),
       physical: version.physical,

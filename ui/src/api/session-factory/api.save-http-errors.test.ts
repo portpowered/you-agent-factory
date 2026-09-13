@@ -1,4 +1,5 @@
 import { saveSessionFactory } from "./api";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
 const sessionFactoryFixture = {
@@ -17,6 +18,7 @@ describe("saveSessionFactory version metadata", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],

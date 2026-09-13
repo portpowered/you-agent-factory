@@ -2,6 +2,7 @@ import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,
 } from "../../../../api/current-factory-definition";
+import { defaultFactoryActivation } from "../../../../testing/factory-activation-fixtures";
 
 export const baseFactoryDefinition: CanonicalFactoryDefinition = {
   metadata: {
@@ -66,6 +67,7 @@ export const baseFactoryDefinition: CanonicalFactoryDefinition = {
 
 export const currentFactoryDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
+  activation: defaultFactoryActivation,
   version: {
     logical: "5",
     physical: "2026-05-18T15:00:00Z",

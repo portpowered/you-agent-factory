@@ -11,6 +11,11 @@ import type { CanonicalFactoryDefinition } from "../../../api/factory-definition
 import { mediumBranchingDashboardTopology } from "./topologies";
 
 const DEFAULT_FIXTURE_OBSERVED_AT = "2026-04-08T12:00:00Z";
+const DEFAULT_FIXTURE_ACTIVATION = {
+  activationId: "fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+} satisfies NonNullable<CanonicalFactoryDefinition["activation"]>;
 
 type DashboardFixtureWorkStateType = NonNullable<
   CanonicalFactoryDefinition["workTypes"]
@@ -255,6 +260,7 @@ export function factoryFromDashboardTopology(
   });
 
   return {
+    activation: DEFAULT_FIXTURE_ACTIVATION,
     name: "dashboard-fixture",
     resources: [...resources.values()],
     workers: [...workers.values()],

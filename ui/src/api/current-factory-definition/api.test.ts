@@ -2,6 +2,7 @@ import {
   CurrentFactoryDefinitionError,
   getCurrentFactoryDocument,
 } from "./api";
+import { defaultSessionFactoryActivation } from "../session-factory/import-activation.test-helpers";
 
 const firstProviderPlaceholder = "${".concat("firstProvider}");
 
@@ -14,6 +15,7 @@ describe("current-factory-definition api", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           id: "factory-current",
           name: "Current Factory",
           workers: [
@@ -65,6 +67,7 @@ describe("current-factory-definition api", () => {
     });
 
     expect(document).toEqual({
+      activation: defaultSessionFactoryActivation,
       id: "factory-current",
       name: "Current Factory",
       version: {
@@ -114,6 +117,7 @@ describe("current-factory-definition api", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Current Factory",
             workers: [],
             workstations: [],
@@ -135,6 +139,7 @@ describe("current-factory-definition api", () => {
     });
 
     expect(document).toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Current Factory",
       workers: [],
       workstations: [],
@@ -151,6 +156,7 @@ describe("current-factory-definition api", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "tts-factory",
             workers: [
               {
@@ -218,6 +224,7 @@ describe("current-factory-definition api", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             invocationSignature: {
               parameters: [
                 {
@@ -262,6 +269,7 @@ describe("current-factory-definition api", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Scoped Factory",
           workers: [],
           workstations: [],
@@ -497,6 +505,7 @@ describe("current-factory-definition api", () => {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Current Factory",
             workers: [{ name: "classifier" }],
             workTypes: [
@@ -541,6 +550,7 @@ describe("current-factory-definition api", () => {
     });
 
     expect(document).toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Current Factory",
       workers: [{ name: "classifier" }],
       workTypes: [

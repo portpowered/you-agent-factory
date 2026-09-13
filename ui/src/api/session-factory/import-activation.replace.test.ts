@@ -2,6 +2,7 @@ import {
   activateImportedFactoryDocumentForSession,
   activateImportedFactoryForSession,
 } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("session factory import activation replace-current default session", () => {
   it("activates an imported factory through PUT /factory-sessions/~default/factory with version metadata", async () => {
@@ -10,6 +11,7 @@ describe("session factory import activation replace-current default session", ()
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -30,6 +32,7 @@ describe("session factory import activation replace-current default session", ()
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [
               { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -63,6 +66,7 @@ describe("session factory import activation replace-current default session", ()
         { fetch: fetchMock },
       ),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Session Current Name",
       workTypes: [
         { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -118,6 +122,7 @@ describe("session factory import activation replace-current scoped session route
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Scoped Factory",
             workTypes: [],
             workers: [],
@@ -138,6 +143,7 @@ describe("session factory import activation replace-current scoped session route
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Scoped Factory",
             workTypes: [
               { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
@@ -174,6 +180,7 @@ describe("session factory import activation replace-current scoped session route
         },
       ),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Scoped Factory",
       workTypes: [
         { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
@@ -205,6 +212,7 @@ describe("session factory import activation replace-current supplied baseline", 
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Scoped Factory",
           workTypes: [
             { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
@@ -237,6 +245,7 @@ describe("session factory import activation replace-current supplied baseline", 
         },
         {
           currentDocument: {
+            activation: defaultSessionFactoryActivation,
             name: "Scoped Factory",
             workTypes: [],
             workers: [],
@@ -251,6 +260,7 @@ describe("session factory import activation replace-current supplied baseline", 
         },
       ),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Scoped Factory",
       workTypes: [
         { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
