@@ -86,11 +86,24 @@
     "journeys": {
       "type": "object",
       "required": ["install", "discovery", "cold", "warmOffline", "removal"],
+      "properties": {
+        "install": { "$ref": "#/$defs/phase" },
+        "discovery": { "$ref": "#/$defs/phase" },
+        "cold": { "$ref": "#/$defs/phase" },
+        "warmOffline": { "$ref": "#/$defs/phase" },
+        "removal": { "$ref": "#/$defs/phase" },
+        "steps": {
+          "type": "array",
+          "minItems": 12,
+          "items": { "$ref": "#/$defs/journeyStep" }
+        }
+      },
       "additionalProperties": true
     },
     "audio": {
       "type": "array",
       "minItems": 2,
+      "maxItems": 2,
       "items": {
         "type": "object",
         "required": [
@@ -102,6 +115,15 @@
           "durationMillis",
           "nonSilentSamples"
         ],
+        "properties": {
+          "name": { "type": "string" },
+          "mediaType": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "riffDecoded": { "type": "boolean" },
+          "durationMillis": { "type": "integer", "minimum": 0 },
+          "nonSilentSamples": { "type": "integer", "minimum": 0 }
+        },
         "additionalProperties": true
       }
     },
@@ -113,14 +135,27 @@
           "phase",
           "readinessState",
           "lifecycleState",
-          "cacheBytes"
+          "cacheBytes",
+          "cacheReused"
         ],
+        "properties": {
+          "phase": { "type": "string" },
+          "readinessState": { "type": "string" },
+          "lifecycleState": { "type": "string" },
+          "cacheBytes": { "type": "integer", "minimum": 0 },
+          "cacheReused": { "type": "boolean" }
+        },
         "additionalProperties": true
       }
     },
     "network": {
       "type": "object",
       "required": ["policy", "attempts", "warmOfflineAttempts"],
+      "properties": {
+        "policy": { "enum": ["none", "staged-loopback-and-declared-public-origins"] },
+        "attempts": { "type": "integer", "minimum": 0 },
+        "warmOfflineAttempts": { "type": "integer", "minimum": 0 }
+      },
       "additionalProperties": true
     },
     "cleanup": {
@@ -133,6 +168,14 @@
         "survivingListeners",
         "removedRuntimeRoots"
       ],
+      "properties": {
+        "ownedProcesses": { "type": "integer", "minimum": 0 },
+        "ownedListeners": { "type": "integer", "minimum": 0 },
+        "ownedRoots": { "type": "integer", "minimum": 0 },
+        "survivingProcesses": { "type": "integer", "minimum": 0 },
+        "survivingListeners": { "type": "integer", "minimum": 0 },
+        "removedRuntimeRoots": { "type": "integer", "minimum": 0 }
+      },
       "additionalProperties": true
     },
     "criteria": {
@@ -152,5 +195,27 @@
       }
     },
     "findings": { "type": "array" }
+  },
+  "$defs": {
+    "phase": {
+      "type": "object",
+      "required": ["status", "evidence", "unprovenEdge"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL", "INCONCLUSIVE", "NOT_RUN"] },
+        "evidence": { "type": "array" },
+        "unprovenEdge": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "journeyStep": {
+      "type": "object",
+      "required": ["name", "status", "evidence"],
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "enum": ["PASS", "FAIL", "INCONCLUSIVE"] },
+        "evidence": { "type": "array", "minItems": 1 }
+      },
+      "additionalProperties": false
+    }
   }
 }

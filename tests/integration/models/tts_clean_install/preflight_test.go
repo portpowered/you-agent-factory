@@ -203,7 +203,7 @@ func TestU06AtomicReportPublicationDoesNotExposePartialPass(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	reportPath := filepath.Join(root, "report.json")
-	report := newReport()
+	report := completeReportForPublicationTest(t)
 	report.Verdict = "PASS"
 	interrupted := errors.New("controlled publication interruption")
 	if err := WriteReportAtomic(reportPath, report, func() error { return interrupted }); !errors.Is(err, interrupted) {
@@ -246,6 +246,20 @@ func TestU06AtomicReportPublicationDoesNotExposePartialPass(t *testing.T) {
 	if _, err := os.Stat(badPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("incomplete report was published: %v", err)
 	}
+}
+
+func completeReportForPublicationTest(t *testing.T) Report {
+	t.Helper()
+	f := newFixture(t)
+	preflight, err := Preflight(f.invocation)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	report, err := BuildControlledJourneyReport(preflight.Plan, completeJourneyObservation(t))
+	if err != nil {
+		t.Fatalf("BuildControlledJourneyReport: %v", err)
+	}
+	return report
 }
 
 type fixture struct {
