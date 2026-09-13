@@ -1,7 +1,10 @@
 package current
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -47,6 +51,90 @@ func TestSharedCurrentFactoryAPI(t *testing.T) {
 		testSharedTemplateValidationDoesNotMutate(t, fixture)
 	})
 
+}
+
+// TestSharedCurrentFactoryProvenance proves through one root-composed server
+// that current inspection keeps the loaded Factory tuple stable while the
+// selected authored source moves from matching to changed and unavailable.
+func TestSharedCurrentFactoryProvenance(t *testing.T) {
+	t.Parallel()
+	fixture := startSharedCurrentFactoryAPI(t)
+	fixture.requireServerRunning(t)
+	session := fixture.openSession(t, "alpha-provenance")
+
+	first := getCurrentFactoryForSession(t, session.serverURL, session.id)
+	if first.Activation == nil {
+		t.Fatal("initial activation provenance is nil")
+	}
+	if first.Activation.State != factoryapi.FactoryActivationStateACTIVE {
+		t.Fatalf("initial activation state = %q, want ACTIVE", first.Activation.State)
+	}
+	if first.Activation.ActivationId == "" || first.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("initial activation tuple = %#v, want non-empty identity and digest", first.Activation)
+	}
+	if first.Version == nil {
+		t.Fatal("initial loaded version is nil")
+	}
+	initialActivation := *first.Activation
+	initialVersion := *first.Version
+
+	factoryPath := filepath.Join(fixture.rootDir, "alpha-provenance", interfaces.FactoryConfigFile)
+	authoredBytes, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read authored factory: %v", err)
+	}
+	var authored map[string]any
+	if err := json.Unmarshal(authoredBytes, &authored); err != nil {
+		t.Fatalf("decode authored factory: %v", err)
+	}
+	authored["id"] = "authored-after-activation"
+	editedBytes, err := json.Marshal(authored)
+	if err != nil {
+		t.Fatalf("encode edited authored factory: %v", err)
+	}
+	if err := os.WriteFile(factoryPath, editedBytes, 0o644); err != nil {
+		t.Fatalf("write edited authored factory: %v", err)
+	}
+	workerInstructionsPath := filepath.Join(
+		fixture.rootDir,
+		"alpha-provenance",
+		interfaces.WorkersDir,
+		"planner",
+		interfaces.FactoryAgentsFileName,
+	)
+	workerInstructions, err := os.ReadFile(workerInstructionsPath)
+	if err != nil {
+		t.Fatalf("read authored worker instructions: %v", err)
+	}
+	workerInstructions = append(workerInstructions, []byte("\nchanged after activation\n")...)
+	if err := os.WriteFile(workerInstructionsPath, workerInstructions, 0o644); err != nil {
+		t.Fatalf("write edited worker instructions: %v", err)
+	}
+
+	changed := getCurrentFactoryForSession(t, session.serverURL, session.id)
+	if changed.Name != first.Name || changed.Id == nil || first.Id == nil || *changed.Id != *first.Id {
+		t.Fatalf("loaded Factory changed after authored drift: first=%#v changed=%#v", first, changed)
+	}
+	if changed.Activation == nil || changed.Activation.State != factoryapi.FactoryActivationStateAUTHOREDCHANGED {
+		t.Fatalf("drifted activation = %#v, want AUTHORED_CHANGED", changed.Activation)
+	}
+	if changed.Activation.ActivationId != initialActivation.ActivationId || changed.Activation.LoadedSourceDigest != initialActivation.LoadedSourceDigest {
+		t.Fatalf("loaded activation tuple changed after authored drift: first=%#v changed=%#v", initialActivation, *changed.Activation)
+	}
+	if changed.Version == nil || changed.Version.Logical != initialVersion.Logical || !changed.Version.Physical.Equal(initialVersion.Physical) {
+		t.Fatalf("loaded version changed after authored drift: first=%#v changed=%#v", initialVersion, changed.Version)
+	}
+
+	if err := os.WriteFile(factoryPath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("malform authored factory: %v", err)
+	}
+	unavailable := getCurrentFactoryForSession(t, session.serverURL, session.id)
+	if unavailable.Activation == nil || unavailable.Activation.State != factoryapi.FactoryActivationStateAUTHOREDSOURCEUNAVAILABLE {
+		t.Fatalf("unavailable activation = %#v, want AUTHORED_SOURCE_UNAVAILABLE", unavailable.Activation)
+	}
+	if unavailable.Activation.ActivationId != initialActivation.ActivationId || unavailable.Activation.LoadedSourceDigest != initialActivation.LoadedSourceDigest {
+		t.Fatalf("loaded activation tuple changed after authored source became unavailable: first=%#v unavailable=%#v", initialActivation, *unavailable.Activation)
+	}
 }
 
 // testSharedCurrentFactoryGetAndSave proves that one explicit Factory Session

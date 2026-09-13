@@ -3317,6 +3317,10 @@ components:
     # ==== Raw data schemas for a factor =======
     FactorySaveMode:
       $ref: './components/schemas/api/FactorySaveMode.yaml'
+    FactoryActivationState:
+      $ref: './components/schemas/api/FactoryActivationState.yaml'
+    FactoryActivationProvenance:
+      $ref: './components/schemas/api/FactoryActivationProvenance.yaml'
     SaveFactoryForSessionRequest:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:

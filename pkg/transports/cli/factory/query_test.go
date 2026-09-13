@@ -28,8 +28,8 @@ func TestQuery_WritesHumanReadableDefaultRootFactory(t *testing.T) {
 		t.Fatalf("Query: %v", err)
 	}
 
-	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
-		fmt.Sprintf("%s\tdefault-root\t\t%s\n", apisurface.DefaultCurrentFactoryName, factoryDir)
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\tACTIVATION STATE\tACTIVATION ID\tLOADED SOURCE DIGEST\n" +
+		fmt.Sprintf("%s\tdefault-root\t\t%s\t\t\t\n", apisurface.DefaultCurrentFactoryName, factoryDir)
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -48,10 +48,32 @@ func TestQuery_WritesHumanReadableNamedFactory(t *testing.T) {
 		t.Fatalf("Query: %v", err)
 	}
 
-	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\n" +
-		"beta\tnamed\tcustomer-factory\t\n"
+	want := "NAME\tKIND\tID\tFACTORY DIRECTORY\tACTIVATION STATE\tACTIVATION ID\tLOADED SOURCE DIGEST\n" +
+		"beta\tnamed\tcustomer-factory\t\t\t\t\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestQuery_WritesActivationProvenanceInHumanReadableOutput(t *testing.T) {
+	factoryID := "customer-factory"
+	srv := currentFactoryServer(t, factoryapi.Factory{
+		Name: "beta",
+		Id:   &factoryID,
+		Activation: &factoryapi.FactoryActivationProvenance{
+			ActivationId:       "activation-beta",
+			LoadedSourceDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			State:              factoryapi.FactoryActivationStateACTIVE,
+		},
+	})
+	defer srv.Close()
+
+	var out strings.Builder
+	if err := NewQuery(testHTTPProtocol(t))(QueryConfig{Context: context.Background(), Server: serverBase(t, srv), Output: &out}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if !strings.Contains(out.String(), "ACTIVE\tactivation-beta\tsha256:") {
+		t.Fatalf("output = %q, want activation provenance columns", out.String())
 	}
 }
 

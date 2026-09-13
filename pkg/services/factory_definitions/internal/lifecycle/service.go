@@ -464,11 +464,20 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	version, err := s.CurrentFactoryDefinitionVersionAtRoot(versionRootDir, factoryName)
-	if err != nil {
-		return EditableFactory{}, err
+	version, loadedVersion := loadedFactoryDefinitionVersion(runtimeCfg)
+	if !loadedVersion {
+		resolvedVersion, err := s.CurrentFactoryDefinitionVersionAtRoot(versionRootDir, factoryName)
+		if err != nil {
+			return EditableFactory{}, err
+		}
+		version = &resolvedVersion
 	}
-	return EditableFactory{Name: factoryName, Snapshot: snapshot, Version: &version}, nil
+	return EditableFactory{
+		Name:       factoryName,
+		Snapshot:   snapshot,
+		Version:    version,
+		Activation: currentFactoryActivationProvenance(runtimeCfg),
+	}, nil
 }
 
 // CurrentFactoryDefinitionVersionAtRoot returns optimistic-concurrency metadata.

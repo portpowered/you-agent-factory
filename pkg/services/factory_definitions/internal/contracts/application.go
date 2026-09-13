@@ -24,9 +24,10 @@ const (
 )
 
 type EditableFactory struct {
-	Name     string
-	Snapshot *FactorySnapshot
-	Version  *FactoryVersion
+	Name       string
+	Snapshot   *FactorySnapshot
+	Version    *FactoryVersion
+	Activation *FactoryActivationProvenance
 }
 
 // NamedFactoryListEntry describes one persisted named Factory under a Factory
@@ -178,6 +179,35 @@ type FactorySnapshotSource interface {
 type LoadedFactorySource interface {
 	FactorySnapshotSource
 	RuntimeBaseDir() string
+}
+
+// LoadedFactoryActivationSource is an optional capability exposed by loaded
+// sources that were constructed with an immutable activation identity. It is
+// separate from LoadedFactorySource so older adapters and focused test doubles
+// remain valid.
+type LoadedFactoryActivationSource interface {
+	FactoryActivationProvenance() *FactoryActivationProvenance
+}
+
+// LoadedFactoryAuthoredSourceComparator is an optional read-only capability
+// used to compare the active snapshot with the selected authored source.
+type LoadedFactoryAuthoredSourceComparator interface {
+	CompareAuthoredSource() (FactoryActivationState, error)
+}
+
+// LoadedFactoryVersionSource is an optional capability carrying the version
+// observed when the active source was loaded. It prevents current inspection
+// from mixing a loaded snapshot with a later authored file version.
+type LoadedFactoryVersionSource interface {
+	LoadedFactoryVersion() *FactoryVersion
+}
+
+// LoadedFactorySourceMetadataSetter is the construction-time capability used
+// by the Definitions loader to attach read-only comparison and version
+// metadata without changing the stable LoadedFactorySource contract.
+type LoadedFactorySourceMetadataSetter interface {
+	SetAuthoredSourceComparison(AuthoredSourceComparison)
+	SetLoadedFactoryVersion(*FactoryVersion)
 }
 
 type MutableLoadedFactorySource interface {

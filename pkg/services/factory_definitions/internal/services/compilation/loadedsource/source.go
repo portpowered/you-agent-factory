@@ -1,10 +1,14 @@
 package loadedsource
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig"
 )
@@ -21,12 +25,19 @@ type Source struct {
 	workerPromptSources         map[string]factorydefinitions.PromptSource
 	workstationPromptSources    map[string]factorydefinitions.PromptSource
 	portableBundledReplacements []factorydefinitions.PortableBundledFileReplacement
+	activation                  *factorydefinitions.FactoryActivationProvenance
+	authoredSourceComparison    factorydefinitions.AuthoredSourceComparison
+	loadedFactoryVersion        *factorydefinitions.FactoryVersion
 }
 
 var _ factorydefinitions.RuntimeConfigLookup = (*Source)(nil)
 var _ factorydefinitions.RuntimeFactoryConfigLookup = (*Source)(nil)
 var _ factorydefinitions.RuntimePromptSourceLookup = (*Source)(nil)
 var _ factorydefinitions.MutableLoadedFactorySource = (*Source)(nil)
+var _ factorydefinitions.LoadedFactoryActivationSource = (*Source)(nil)
+var _ factorydefinitions.LoadedFactoryAuthoredSourceComparator = (*Source)(nil)
+var _ factorydefinitions.LoadedFactoryVersionSource = (*Source)(nil)
+var _ factorydefinitions.LoadedFactorySourceMetadataSetter = (*Source)(nil)
 
 // New constructs an effective loaded source from an authored Factory
 // Definition and optional runtime definitions.
@@ -49,6 +60,10 @@ func New(
 	if effectiveFactory == nil {
 		return nil, fmt.Errorf("runtime Factory Definition merger returned nil")
 	}
+	loadedSourceDigest, err := LoadedSourceDigest(effectiveFactory)
+	if err != nil {
+		return nil, fmt.Errorf("compute loaded Factory source digest: %w", err)
+	}
 
 	loaded := &Source{
 		factoryDir:                  factoryDir,
@@ -58,6 +73,12 @@ func New(
 		workerPromptSources:         make(map[string]factorydefinitions.PromptSource),
 		workstationPromptSources:    make(map[string]factorydefinitions.PromptSource),
 		portableBundledReplacements: cloneReplacements(portableBundledReplacements),
+		activation: &factorydefinitions.FactoryActivationProvenance{
+			ActivationID:       uuid.NewString(),
+			LoadedSourceDigest: loadedSourceDigest,
+			State:              factorydefinitions.FactoryActivationStateNotActivated,
+		},
+		loadedFactoryVersion: cloneFactoryVersion(effectiveFactory.Version),
 	}
 	for index := range effectiveFactory.Workers {
 		worker := &effectiveFactory.Workers[index]
@@ -88,6 +109,53 @@ func New(
 		loaded.workstations[workstation.Name] = &workstation
 	}
 	return loaded, nil
+}
+
+// LoadedSourceDigest returns the deterministic, secret-safe identity of the
+// effective Factory and its resolved runtime instruction content. Runtime-only
+// source paths are excluded so moving a loaded source does not change its
+// content identity.
+func LoadedSourceDigest(factoryConfig *factorydefinitions.FactoryConfig) (string, error) {
+	if factoryConfig == nil {
+		return "", fmt.Errorf("factory config is required")
+	}
+	detached, err := factorydefinitions.CloneFactoryConfig(factoryConfig)
+	if err != nil {
+		return "", err
+	}
+	clearRuntimeSourcePaths(detached)
+	encoded, err := json.Marshal(detached)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
+}
+
+// EffectiveLoadedSourceDigest applies the same runtime-definition merge used
+// by Source and computes the resulting immutable-source identity.
+func EffectiveLoadedSourceDigest(
+	factoryConfig *factorydefinitions.FactoryConfig,
+	runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
+) (string, error) {
+	effective, err := runtimeconfig.Merge(factoryConfig, runtimeDefinitions)
+	if err != nil {
+		return "", err
+	}
+	return LoadedSourceDigest(effective)
+}
+
+func clearRuntimeSourcePaths(factoryConfig *factorydefinitions.FactoryConfig) {
+	if factoryConfig == nil {
+		return
+	}
+	for index := range factoryConfig.Workers {
+		factoryConfig.Workers[index].PromptSourcePath = ""
+	}
+	for index := range factoryConfig.Workstations {
+		factoryConfig.Workstations[index].PromptSourcePath = ""
+		factoryConfig.Workstations[index].PromptSourceIsTemplate = false
+	}
 }
 
 func (s *Source) FactoryDir() string {
@@ -124,6 +192,63 @@ func (s *Source) FactoryConfig() *factorydefinitions.FactoryConfig {
 		return nil
 	}
 	return s.factory
+}
+
+// FactoryActivationProvenance returns a detached identity for the immutable
+// source accepted by this loaded runtime.
+func (s *Source) FactoryActivationProvenance() *factorydefinitions.FactoryActivationProvenance {
+	if s == nil || s.activation == nil {
+		return nil
+	}
+	provenance := *s.activation
+	return &provenance
+}
+
+// CompareAuthoredSource returns the safe authored-source comparison state. A
+// source without a loader-installed comparison is intentionally unproven.
+func (s *Source) CompareAuthoredSource() (factorydefinitions.FactoryActivationState, error) {
+	if s == nil || s.authoredSourceComparison == nil {
+		return factorydefinitions.FactoryActivationStateNotActivated, nil
+	}
+	state, err := s.authoredSourceComparison()
+	if err != nil {
+		return "", err
+	}
+	switch state {
+	case factorydefinitions.FactoryActivationStateActive,
+		factorydefinitions.FactoryActivationStateAuthoredChanged,
+		factorydefinitions.FactoryActivationStateNotActivated,
+		factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable:
+		return state, nil
+	default:
+		return "", fmt.Errorf("unknown Factory activation state %q", state)
+	}
+}
+
+// SetAuthoredSourceComparison attaches the read-only comparison selected by
+// the Definitions loader before this source is published to a runtime.
+func (s *Source) SetAuthoredSourceComparison(comparison factorydefinitions.AuthoredSourceComparison) {
+	if s == nil {
+		return
+	}
+	s.authoredSourceComparison = comparison
+}
+
+// LoadedFactoryVersion returns the version observed when this source was
+// loaded, detached from the source's mutable configuration.
+func (s *Source) LoadedFactoryVersion() *factorydefinitions.FactoryVersion {
+	if s == nil {
+		return nil
+	}
+	return cloneFactoryVersion(s.loadedFactoryVersion)
+}
+
+// SetLoadedFactoryVersion records the version observed during source loading.
+func (s *Source) SetLoadedFactoryVersion(version *factorydefinitions.FactoryVersion) {
+	if s == nil {
+		return
+	}
+	s.loadedFactoryVersion = cloneFactoryVersion(version)
 }
 
 func (s *Source) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
@@ -194,4 +319,12 @@ func cloneReplacements(
 	replacements []factorydefinitions.PortableBundledFileReplacement,
 ) []factorydefinitions.PortableBundledFileReplacement {
 	return append([]factorydefinitions.PortableBundledFileReplacement(nil), replacements...)
+}
+
+func cloneFactoryVersion(version *factorydefinitions.FactoryVersion) *factorydefinitions.FactoryVersion {
+	if version == nil {
+		return nil
+	}
+	cloned := *version
+	return &cloned
 }

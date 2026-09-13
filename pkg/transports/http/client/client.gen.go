@@ -207,6 +207,14 @@ const (
 	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
 )
 
+// Defines values for FactoryActivationState.
+const (
+	FactoryActivationStateActive                    FactoryActivationState = "ACTIVE"
+	FactoryActivationStateAuthoredChanged           FactoryActivationState = "AUTHORED_CHANGED"
+	FactoryActivationStateAuthoredSourceUnavailable FactoryActivationState = "AUTHORED_SOURCE_UNAVAILABLE"
+	FactoryActivationStateNotActivated              FactoryActivationState = "NOT_ACTIVATED"
+)
+
 // Defines values for FactoryArtifactAuditMode.
 const (
 	FactoryArtifactAuditModeFULL     FactoryArtifactAuditMode = "FULL"
@@ -2226,6 +2234,9 @@ type ExpectedArtifactVerificationReason string
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
+	// Activation Server-owned provenance returned by current-Factory inspection and activation responses. It is not accepted as authored topology and is never persisted.
+	Activation *FactoryActivationProvenance `json:"activation,omitempty"`
+
 	// Description Optional localized customer-facing explanation of this Factory.
 	Description *NameValue `json:"description,omitempty"`
 
@@ -2289,6 +2300,21 @@ type Factory struct {
 	// Workstations Processing steps that consume work, invoke workers, and emit the next work states.
 	Workstations *[]Workstation `json:"workstations,omitempty"`
 }
+
+// FactoryActivationProvenance Server-owned identity of the immutable Factory snapshot accepted by the active runtime.
+type FactoryActivationProvenance struct {
+	// ActivationId Opaque identity published once for this successful activation.
+	ActivationId string `json:"activationId"`
+
+	// LoadedSourceDigest SHA-256 identity of the canonical effective Factory and resolved definition/instruction bytes accepted for activation; source bytes are never returned.
+	LoadedSourceDigest string `json:"loadedSourceDigest"`
+
+	// State Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.
+	State FactoryActivationState `json:"state"`
+}
+
+// FactoryActivationState Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.
+type FactoryActivationState string
 
 // FactoryArtifact defines model for FactoryArtifact.
 type FactoryArtifact struct {

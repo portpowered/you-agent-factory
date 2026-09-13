@@ -1,0 +1,13 @@
+type: string
+description: >-
+    Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.
+enum:
+    - ACTIVE
+    - AUTHORED_CHANGED
+    - NOT_ACTIVATED
+    - AUTHORED_SOURCE_UNAVAILABLE
+x-enum-varnames:
+    - FactoryActivationStateActive
+    - FactoryActivationStateAuthoredChanged
+    - FactoryActivationStateNotActivated
+    - FactoryActivationStateAuthoredSourceUnavailable

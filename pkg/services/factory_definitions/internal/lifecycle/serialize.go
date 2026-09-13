@@ -3,9 +3,62 @@ package lifecycle
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+func loadedFactoryDefinitionVersion(
+	current factorydefinitions.LoadedFactorySource,
+) (*factorydefinitions.FactoryVersion, bool) {
+	if current == nil {
+		return nil, false
+	}
+	if versionSource, ok := current.(factorydefinitions.LoadedFactoryVersionSource); ok {
+		if version := versionSource.LoadedFactoryVersion(); version != nil {
+			version.Physical = version.Physical.UTC()
+			return version, true
+		}
+	}
+	if factoryConfig := current.FactoryConfig(); factoryConfig != nil && factoryConfig.Version != nil {
+		version := *factoryConfig.Version
+		version.Physical = version.Physical.UTC()
+		return &version, true
+	}
+	return nil, false
+}
+
+func currentFactoryActivationProvenance(
+	current factorydefinitions.LoadedFactorySource,
+) *factorydefinitions.FactoryActivationProvenance {
+	activationSource, ok := current.(factorydefinitions.LoadedFactoryActivationSource)
+	if !ok {
+		return nil
+	}
+	activation := activationSource.FactoryActivationProvenance()
+	if activation == nil ||
+		strings.TrimSpace(activation.ActivationID) == "" ||
+		strings.TrimSpace(activation.LoadedSourceDigest) == "" {
+		return nil
+	}
+	activation.State = factorydefinitions.FactoryActivationStateNotActivated
+	if comparator, ok := current.(factorydefinitions.LoadedFactoryAuthoredSourceComparator); ok {
+		state, err := comparator.CompareAuthoredSource()
+		if err != nil {
+			state = factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable
+		}
+		switch state {
+		case factorydefinitions.FactoryActivationStateActive,
+			factorydefinitions.FactoryActivationStateAuthoredChanged,
+			factorydefinitions.FactoryActivationStateNotActivated,
+			factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable:
+			activation.State = state
+		default:
+			activation.State = factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable
+		}
+	}
+	return activation
+}
 
 func (s *Service) serializeNamedFactory(
 	name string,
