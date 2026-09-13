@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -70,6 +71,46 @@ func TestMinimalWorkflowExampleValidation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestMinimumAuthoringContractExampleValidation validates the exact shipped
+// minimum-authoring example through the public Factory config validation path.
+func TestMinimumAuthoringContractExampleValidation(t *testing.T) {
+	t.Parallel()
+	factoryPath := support.AgentFactoryPath(t, filepath.Join("examples", "minimum-authoring-contract", "factory.json"))
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "config", "validate", factoryPath,
+	})
+	inputs.Input.Env = isolatedHomeEnvironment(t)
+	inputs.Input.WorkingDirectory = filepath.Dir(factoryPath)
+
+	if err := buildDefinitionsProcess(t).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory config validate %s) error = %v\nstdout:\n%s\nstderr:\n%s",
+			factoryPath,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+
+	diagnostic := inputs.Stdout() + "\n" + inputs.Stderr()
+	if !strings.Contains(diagnostic, "Factory validation passed.") {
+		t.Fatalf("validation diagnostic missing success marker:\n%s", diagnostic)
+	}
+
+	sourceData, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read exact checked-in Factory example %s: %v", factoryPath, err)
+	}
+	if _, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(sourceData); err != nil {
+		t.Fatalf(
+			"strict Factory boundary rejected the exact checked-in example: %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
 	}
 }
 
