@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:omni-media-probe-report:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "status", "build", "dependencies", "fixtures", "policy", "journeys", "outputs", "processes", "cleanup", "failure"],
+  "properties": {
+    "schemaVersion": {"const": "you.localai.omni-media-probe-report.v1"},
+    "runId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["READY", "PASS", "FAIL", "INCONCLUSIVE"]},
+    "build": {"$ref": "#/$defs/recordedIdentity"},
+    "dependencies": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model", "projector", "backend"],
+      "properties": {
+        "model": {"$ref": "#/$defs/recordedIdentity"},
+        "projector": {"$ref": "#/$defs/recordedIdentity"},
+        "backend": {"$ref": "#/$defs/recordedIdentity"}
+      }
+    },
+    "fixtures": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/recordedIdentity"}},
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rootIdentities", "port", "timeoutSeconds", "networkPolicy", "downloadBytes", "paidUsd", "maxHeavyProcesses"],
+      "properties": {
+        "rootIdentities": {"type": "array", "minItems": 6, "uniqueItems": true, "items": {"type": "string"}},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "not": {"const": 7437}},
+        "timeoutSeconds": {"type": "integer", "minimum": 1},
+        "networkPolicy": {"const": "declared-local-assets-and-loopback-only"},
+        "downloadBytes": {"const": 0},
+        "paidUsd": {"const": 0},
+        "maxHeavyProcesses": {"const": 1}
+      }
+    },
+    "journeys": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/journey"}, {"properties": {"name": {"const": "image"}}}]},
+        {"allOf": [{"$ref": "#/$defs/journey"}, {"properties": {"name": {"const": "video"}}}]}
+      ],
+      "items": false
+    },
+    "outputs": {"type": "array", "items": {"$ref": "#/$defs/recordedIdentity"}},
+    "processes": {"type": "array", "items": {"$ref": "#/$defs/process"}},
+    "cleanup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["checked", "ownedProcessSurvivors", "ownedListenerSurvivors", "partialOutputs"],
+      "properties": {
+        "checked": {"const": true},
+        "ownedProcessSurvivors": {"const": 0},
+        "ownedListenerSurvivors": {"const": 0},
+        "partialOutputs": {"const": 0}
+      }
+    },
+    "failure": {
+      "type": ["object", "null"],
+      "required": ["owner", "code", "expected", "observed", "nextAction"],
+      "properties": {
+        "owner": {"type": "string"}, "code": {"type": "string"},
+        "expected": {"type": "string"}, "observed": {"type": "string"},
+        "nextAction": {"type": "string"}
+      }
+    }
+  },
+  "$defs": {
+    "recordedIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "pathIdentity", "bytes", "sha256"],
+      "properties": {
+        "identity": {"type": "string"}, "pathIdentity": {"type": "string"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "journey": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "status", "command", "requestInputs", "semanticRubric", "failure"],
+      "properties": {
+        "name": {"enum": ["image", "video"]},
+        "status": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
+        "command": {"type": "array", "items": {"type": "string"}},
+        "requestInputs": {"type": "array", "items": {"$ref": "#/$defs/requestInput"}},
+        "semanticRubric": {"type": "object", "minProperties": 1},
+        "failure": {"type": ["object", "null"]}
+      }
+    },
+    "requestInput": {
+      "type": "object", "additionalProperties": false,
+      "required": ["order", "name", "modality", "mediaType", "bytes", "sha256"],
+      "properties": {
+        "order": {"type": "integer", "minimum": 0},
+        "name": {"enum": ["prompt", "image", "video"]},
+        "modality": {"enum": ["TEXT", "IMAGE", "VIDEO"]},
+        "mediaType": {"enum": ["text/plain", "image/png", "video/mp4"]},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "process": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity", "kind", "pid", "owner", "started", "exited", "exitCode", "timedOut"],
+      "properties": {
+        "identity": {"type": "string"}, "kind": {"type": "string"},
+        "pid": {"type": "integer", "minimum": 0}, "owner": {"type": "string"},
+        "started": {"type": "boolean"}, "exited": {"type": "boolean"},
+        "exitCode": {"type": "integer"}, "timedOut": {"type": "boolean"}
+      }
+    }
+  }
+}
