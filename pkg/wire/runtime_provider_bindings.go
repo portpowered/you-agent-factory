@@ -63,11 +63,22 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 		Command: launch.Command, Args: append([]string(nil), launch.Args...),
 		Env: environment, WorkDir: launch.WorkDir,
 	}
+	// Runtime Host owns cancellation while the child is starting and becoming
+	// ready. Once managedchild has started the process, the supervisor owns its
+	// lifetime and will stop it explicitly on cancellation, unload, shutdown,
+	// or failure. Passing the temporary readiness context into managedchild
+	// would make its context watcher tear down a successfully ready host when
+	// Runtime Host releases that startup context.
+	childContext := ctx
+	if childContext == nil {
+		childContext = context.Background()
+	}
+	childContext = context.WithoutCancel(childContext)
 	var child *managedchild.Process
 	if launcher.startProcess != nil {
-		child, err = launcher.startProcess(ctx, managedSpec)
+		child, err = launcher.startProcess(childContext, managedSpec)
 	} else {
-		child, err = managedchild.Start(ctx, managedSpec)
+		child, err = managedchild.Start(childContext, managedSpec)
 	}
 	if err == nil && child == nil {
 		err = errors.New("managed child starter returned a nil process")

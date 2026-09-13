@@ -563,7 +563,8 @@ test-integration:
 
 # The managed-process integration target is intentionally separate from the
 # broad integration lane. It owns one helper build, records its immutable
-# digest, and supplies both identities to the small OS-boundary package.
+# digest, and supplies both identities to the direct and production boundary
+# packages.
 build-integration-models-managed-process-helper:
 ifeq ($(OS),Windows_NT)
 	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER)'); $$artifactDir = Split-Path -Parent $$artifactPath; $$digestPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER_DIGEST_FILE)'); New-Item -ItemType Directory -Path $$artifactDir -Force | Out-Null; New-Item -ItemType Directory -Path (Split-Path -Parent $$digestPath) -Force | Out-Null; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -trimpath -o $$artifactPath '$(MANAGED_PROCESS_HELPER_SOURCE)'; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; $$hashAlgorithm = [System.Security.Cryptography.SHA256]::Create(); try { $$sha256 = [System.BitConverter]::ToString($$hashAlgorithm.ComputeHash([System.IO.File]::ReadAllBytes($$artifactPath))).Replace('-', '').ToLowerInvariant() } finally { $$hashAlgorithm.Dispose() }; Set-Content -LiteralPath $$digestPath -Value $$sha256 -NoNewline; Write-Output ('managed process helper path=' + $$artifactPath); Write-Output ('managed process helper bytes=' + (Get-Item -LiteralPath $$artifactPath).Length); Write-Output ('managed process helper sha256=' + $$sha256)"
@@ -580,14 +581,15 @@ endif
 
 test-integration-models-managed-process: build-integration-models-managed-process-helper
 ifeq ($(OS),Windows_NT)
-	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER)'); $$digestPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER_DIGEST_FILE)'); $$sha256 = (Get-Content -Raw -LiteralPath $$digestPath).Trim(); $$env:YOU_MODELS_MANAGED_PROCESS_HELPER = $$artifactPath; $$env:YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256 = $$sha256; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' test -p=4 '$(MANAGED_PROCESS_INTEGRATION_PACKAGE)' -count=1 -timeout '$(GO_TEST_TIMEOUT)'; exit $$LASTEXITCODE"
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER)'); $$digestPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER_DIGEST_FILE)'); $$sha256 = (Get-Content -Raw -LiteralPath $$digestPath).Trim(); $$env:YOU_MODELS_MANAGED_PROCESS_HELPER = $$artifactPath; $$env:YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256 = $$sha256; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' test -p=4 '$(MANAGED_PROCESS_INTEGRATION_PACKAGE)' -count=1 -timeout '$(GO_TEST_TIMEOUT)'; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; & '$(GO)' test -p=4 './pkg/wire' -run '^TestModelsManagedProcessProductionBoundaryLifecycle$$' -count=1 -timeout '$(GO_TEST_TIMEOUT)'; exit $$LASTEXITCODE"
 else
 	@set -eu; \
 	artifact_path="$(abspath $(MANAGED_PROCESS_HELPER))"; \
 	digest_path="$(abspath $(MANAGED_PROCESS_HELPER_DIGEST_FILE))"; \
 	artifact_sha256="$$(tr -d '\r\n' < "$$digest_path")"; \
 	printf '%s\n' "managed process integration helper path=$$artifact_path" "managed process integration helper sha256=$$artifact_sha256"; \
-	YOU_MODELS_MANAGED_PROCESS_HELPER="$$artifact_path" YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256="$$artifact_sha256" GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) test -p=4 "$(MANAGED_PROCESS_INTEGRATION_PACKAGE)" -count=1 -timeout "$(GO_TEST_TIMEOUT)"
+	YOU_MODELS_MANAGED_PROCESS_HELPER="$$artifact_path" YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256="$$artifact_sha256" GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) test -p=4 "$(MANAGED_PROCESS_INTEGRATION_PACKAGE)" -count=1 -timeout "$(GO_TEST_TIMEOUT)"; \
+	YOU_MODELS_MANAGED_PROCESS_HELPER="$$artifact_path" YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256="$$artifact_sha256" GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) test -p=4 ./pkg/wire -run '^TestModelsManagedProcessProductionBoundaryLifecycle$$' -count=1 -timeout "$(GO_TEST_TIMEOUT)"
 endif
 
 test-contract:
