@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,27 +18,35 @@ import (
 )
 
 const (
-	knownASRFixtureFile                   = "localai-asr-known.wav"
-	knownASRFixtureMetadataFile           = "localai-asr-known.json"
-	knownASRFixtureSchema                 = "localai.asr-known-fixture.v1"
-	knownASRFixtureSHA256                 = "eea86018ce1730baaf7f5dd6ec88c1f727dd90203521a9115b489310a248ea05"
-	knownASRFixtureMediaType              = "audio/wav"
-	knownASRFixtureMaxBytes         int64 = 1 << 20
-	knownASRFixtureBytes            int64 = 10340
-	knownASRFixtureDataBytes        int64 = 10296
-	knownASRFixtureDuration         int64 = 644
-	knownASRFixtureSourceRepository       = "https://github.com/Jakobovski/free-spoken-digit-dataset"
-	knownASRFixtureSourceRevision         = "2b2c7c40d93a401feccf428247dcd2317431fdd6"
-	knownASRFixtureSourcePath             = "recordings/0_jackson_0.wav"
-	knownASRFixtureAttribution            = "Free Spoken Digit Dataset contributors; speaker jackson"
-	knownASRFixtureLicense                = "CC BY-SA 4.0"
-	knownASRFixtureLicenseURL             = "https://creativecommons.org/licenses/by-sa/4.0/"
-	knownASRFixtureLanguage               = "en"
-	knownASRFixtureTranscript             = "zero"
-	knownASRFixtureNormalization          = "lowercase-trim-space-and-terminal-punctuation"
+	knownASRFixtureDirectory                   = "tests/fixtures/localai/asr"
+	knownASRFixtureFile                        = "localai-asr-known.wav"
+	knownASRFixtureManifestFile                = "manifest.json"
+	knownASRFixtureSchema                      = "localai.asr-semantic-fixture.v1"
+	knownASRFixtureSHA256                      = "eea86018ce1730baaf7f5dd6ec88c1f727dd90203521a9115b489310a248ea05"
+	knownASRFixtureMediaType                   = "audio/wav"
+	knownASRFixtureMaxBytes              int64 = 1 << 20
+	knownASRFixtureBytes                 int64 = 10340
+	knownASRFixtureDataBytes             int64 = 10296
+	knownASRFixtureDurationMillis              = 643.5
+	knownASRFixtureSourceRepository            = "https://github.com/Jakobovski/free-spoken-digit-dataset"
+	knownASRFixtureSourceRevision              = "2b2c7c40d93a401feccf428247dcd2317431fdd6"
+	knownASRFixtureSourcePath                  = "recordings/0_jackson_0.wav"
+	knownASRFixtureAttribution                 = "Free Spoken Digit Dataset contributors; speaker jackson"
+	knownASRFixtureLicense                     = "CC BY-SA 4.0"
+	knownASRFixtureLicenseURL                  = "https://creativecommons.org/licenses/by-sa/4.0/"
+	knownASRFixtureLanguage                    = "en"
+	knownASRFixtureRawTranscript               = "Zero."
+	knownASRFixtureTranscript                  = "zero"
+	knownASRFixtureNormalization               = "lowercase-trim-space-and-terminal-punctuation"
+	knownASRFixtureSegmentTimeUnit             = "milliseconds"
+	knownASRFixtureSegmentID                   = 0
+	knownASRFixtureSegmentStartMillis          = 0.0
+	knownASRFixtureSegmentEndMillis            = 500.0
+	knownASRFixtureSegmentText                 = " Zero."
+	knownASRFixtureSegmentNormalizedText       = "zero"
 )
 
-type knownASRFixtureMetadata struct {
+type knownASRFixtureManifest struct {
 	Schema     string                     `json:"schema"`
 	File       string                     `json:"file"`
 	Bytes      int64                      `json:"bytes"`
@@ -45,22 +54,45 @@ type knownASRFixtureMetadata struct {
 	MediaType  string                     `json:"mediaType"`
 	WAV        knownASRWAVMetadata        `json:"wav"`
 	Transcript knownASRTranscriptMetadata `json:"transcript"`
+	Segments   knownASRSegmentsMetadata   `json:"segments"`
 	Source     knownASRSourceMetadata     `json:"source"`
 }
 
 type knownASRWAVMetadata struct {
-	AudioFormat   uint16 `json:"audioFormat"`
-	Channels      uint16 `json:"channels"`
-	SampleRateHz  uint32 `json:"sampleRateHz"`
-	BitsPerSample uint16 `json:"bitsPerSample"`
-	DataBytes     int64  `json:"dataBytes"`
-	DurationMS    int64  `json:"durationMillis"`
+	AudioFormat   uint16  `json:"audioFormat"`
+	Channels      uint16  `json:"channels"`
+	SampleRateHz  uint32  `json:"sampleRateHz"`
+	BitsPerSample uint16  `json:"bitsPerSample"`
+	DataBytes     int64   `json:"dataBytes"`
+	DurationMS    float64 `json:"durationMillis"`
 }
 
 type knownASRTranscriptMetadata struct {
 	Language      string `json:"language"`
-	Text          string `json:"text"`
+	Raw           string `json:"raw"`
+	Normalized    string `json:"normalized"`
 	Normalization string `json:"normalization"`
+}
+
+type knownASRSegmentsMetadata struct {
+	TimeUnit    string                     `json:"timeUnit"`
+	Items       []knownASRSegment          `json:"items"`
+	Constraints knownASRSegmentConstraints `json:"constraints"`
+}
+
+type knownASRSegment struct {
+	ID             int     `json:"id"`
+	Start          float64 `json:"start"`
+	End            float64 `json:"end"`
+	Text           string  `json:"text"`
+	NormalizedText string  `json:"normalizedText"`
+}
+
+type knownASRSegmentConstraints struct {
+	Finite       bool    `json:"finite"`
+	Monotonic    bool    `json:"monotonic"`
+	MinimumStart float64 `json:"minimumStart"`
+	MaximumEnd   float64 `json:"maximumEnd"`
 }
 
 type knownASRSourceMetadata struct {
@@ -78,7 +110,7 @@ type knownASRWaveDetails struct {
 	SampleRateHz uint32
 	Bits         uint16
 	DataBytes    int64
-	DurationMS   int64
+	DurationMS   float64
 }
 
 type knownASRFixtureMismatch struct {
@@ -98,23 +130,20 @@ func (m *knownASRFixtureMismatch) Error() string {
 func TestLocalAIRealHarnessKnownASRFixture(t *testing.T) {
 	t.Parallel()
 
-	fixturePath := testutil.MustRepoPath(t, filepath.ToSlash(filepath.Join(
-		"tests", "integration", "models", "testdata", knownASRFixtureFile,
-	)))
-	metadataPath := testutil.MustRepoPath(t, filepath.ToSlash(filepath.Join(
-		"tests", "integration", "models", "testdata", knownASRFixtureMetadataFile,
-	)))
+	fixturePath, manifestPath := knownASRFixturePaths(t)
 
-	details, err := validateKnownASRFixture(fixturePath, metadataPath)
+	details, err := validateKnownASRFixture(fixturePath, manifestPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf(
-		"LOCALAI-ASR-FIXTURE-EVIDENCE schema=%s bytes=%d sha256=%s format=%d channels=%d sampleRateHz=%d bits=%d dataBytes=%d durationMillis=%d transcript=%q sourceRevision=%s",
+		"LOCALAI-ASR-FIXTURE-EVIDENCE schema=%s bytes=%d sha256=%s mediaType=%s format=%d channels=%d sampleRateHz=%d bits=%d dataBytes=%d durationMillis=%g rawTranscript=%q normalizedTranscript=%q segmentStart=%g segmentEnd=%g sourceRevision=%s license=%s",
 		knownASRFixtureSchema, knownASRFixtureBytes, knownASRFixtureSHA256,
-		details.AudioFormat, details.Channels, details.SampleRateHz, details.Bits,
-		details.DataBytes, details.DurationMS, knownASRFixtureTranscript,
-		knownASRFixtureSourceRevision,
+		knownASRFixtureMediaType, details.AudioFormat, details.Channels,
+		details.SampleRateHz, details.Bits, details.DataBytes, details.DurationMS,
+		knownASRFixtureRawTranscript, knownASRFixtureTranscript,
+		knownASRFixtureSegmentStartMillis, knownASRFixtureSegmentEndMillis,
+		knownASRFixtureSourceRevision, knownASRFixtureLicense,
 	)
 
 	t.Run("mutated-fixture-is-rejected", func(t *testing.T) {
@@ -129,51 +158,85 @@ func TestLocalAIRealHarnessKnownASRFixture(t *testing.T) {
 			t.Fatal(writeErr)
 		}
 
-		_, err := validateKnownASRFixture(mutatedPath, metadataPath)
+		_, err := validateKnownASRFixture(mutatedPath, manifestPath)
 		assertKnownASRMismatch(t, err, "fixture.sha256", knownASRFixtureSHA256, knownASRSHA256Hex(body))
 	})
 
-	t.Run("mutated-metadata-is-rejected", func(t *testing.T) {
+	t.Run("mutated-transcript-semantics-are-rejected", func(t *testing.T) {
 		t.Parallel()
-		metadataBody, readErr := os.ReadFile(metadataPath)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		var metadata knownASRFixtureMetadata
-		if decodeErr := decodeKnownASRJSON(metadataBody, &metadata); decodeErr != nil {
-			t.Fatal(decodeErr)
-		}
-		metadata.Transcript.Text = "one"
-		mutatedBody, marshalErr := json.MarshalIndent(metadata, "", "  ")
-		if marshalErr != nil {
-			t.Fatal(marshalErr)
-		}
-		mutatedPath := filepath.Join(t.TempDir(), knownASRFixtureMetadataFile)
-		if writeErr := os.WriteFile(mutatedPath, append(mutatedBody, '\n'), 0o600); writeErr != nil {
-			t.Fatal(writeErr)
-		}
-
+		mutatedPath := writeKnownASRManifestMutation(t, manifestPath, func(manifest *knownASRFixtureManifest) {
+			manifest.Transcript.Normalized = "one"
+		})
 		_, err := validateKnownASRFixture(fixturePath, mutatedPath)
-		assertKnownASRMismatch(t, err, "metadata.transcript.text", `"zero"`, `"one"`)
+		assertKnownASRMismatch(t, err, "metadata.transcript.normalized", `"zero"`, `"one"`)
+	})
+
+	t.Run("mutated-segment-semantics-are-rejected", func(t *testing.T) {
+		t.Parallel()
+		mutatedPath := writeKnownASRManifestMutation(t, manifestPath, func(manifest *knownASRFixtureManifest) {
+			manifest.Segments.Items[0].End = knownASRFixtureDurationMillis + 1
+		})
+		_, err := validateKnownASRFixture(fixturePath, mutatedPath)
+		assertKnownASRMismatch(t, err, "segments.items[0].end", `"500"`, `"644.5"`)
+	})
+
+	t.Run("mutated-provenance-is-rejected", func(t *testing.T) {
+		t.Parallel()
+		mutatedPath := writeKnownASRManifestMutation(t, manifestPath, func(manifest *knownASRFixtureManifest) {
+			manifest.Source.License = "proprietary"
+		})
+		_, err := validateKnownASRFixture(fixturePath, mutatedPath)
+		assertKnownASRMismatch(t, err, "metadata.source.license", `"CC BY-SA 4.0"`, `"proprietary"`)
 	})
 }
 
-func validateKnownASRFixture(fixturePath, metadataPath string) (knownASRWaveDetails, error) {
-	metadataBody, err := os.ReadFile(metadataPath)
+func knownASRFixturePaths(t testing.TB) (string, string) {
+	t.Helper()
+	directory := testutil.MustRepoPath(t, knownASRFixtureDirectory)
+	return filepath.Join(directory, knownASRFixtureFile), filepath.Join(directory, knownASRFixtureManifestFile)
+}
+
+func writeKnownASRManifestMutation(t *testing.T, manifestPath string, mutate func(*knownASRFixtureManifest)) string {
+	t.Helper()
+	body, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return knownASRWaveDetails{}, fmt.Errorf("read ASR fixture metadata: %w", err)
+		t.Fatalf("read ASR fixture manifest: %v", err)
 	}
-	var metadata knownASRFixtureMetadata
-	if err := decodeKnownASRJSON(metadataBody, &metadata); err != nil {
-		return knownASRWaveDetails{}, fmt.Errorf("decode ASR fixture metadata: %w", err)
+	var manifest knownASRFixtureManifest
+	if err := decodeKnownASRJSON(body, &manifest); err != nil {
+		t.Fatalf("decode ASR fixture manifest: %v", err)
 	}
-	if mismatch := validateKnownASRMetadata(metadata); mismatch != nil {
+	mutate(&manifest)
+	mutatedBody, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated ASR fixture manifest: %v", err)
+	}
+	mutatedPath := filepath.Join(t.TempDir(), knownASRFixtureManifestFile)
+	if err := os.WriteFile(mutatedPath, append(mutatedBody, '\n'), 0o600); err != nil {
+		t.Fatalf("write mutated ASR fixture manifest: %v", err)
+	}
+	return mutatedPath
+}
+
+func validateKnownASRFixture(fixturePath, manifestPath string) (knownASRWaveDetails, error) {
+	manifestBody, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return knownASRWaveDetails{}, fmt.Errorf("read ASR fixture manifest: %w", err)
+	}
+	var manifest knownASRFixtureManifest
+	if err := decodeKnownASRJSON(manifestBody, &manifest); err != nil {
+		return knownASRWaveDetails{}, fmt.Errorf("decode ASR fixture manifest: %w", err)
+	}
+	if mismatch := validateKnownASRManifest(manifest); mismatch != nil {
 		return knownASRWaveDetails{}, mismatch
 	}
 
 	info, err := os.Stat(fixturePath)
 	if err != nil {
 		return knownASRWaveDetails{}, fmt.Errorf("stat ASR fixture: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return knownASRWaveDetails{}, fmt.Errorf("ASR fixture is not a regular file: %s", fixturePath)
 	}
 	if info.Size() > knownASRFixtureMaxBytes {
 		return knownASRWaveDetails{}, &knownASRFixtureMismatch{
@@ -195,46 +258,111 @@ func validateKnownASRFixture(fixturePath, metadataPath string) (knownASRWaveDeta
 	if err != nil {
 		return knownASRWaveDetails{}, fmt.Errorf("parse ASR fixture WAV: %w", err)
 	}
-	if mismatch := compareKnownASRWave(metadata.WAV, details); mismatch != nil {
+	if mismatch := compareKnownASRWave(manifest.WAV, details); mismatch != nil {
 		return knownASRWaveDetails{}, mismatch
 	}
 	return details, nil
 }
 
-func validateKnownASRMetadata(metadata knownASRFixtureMetadata) *knownASRFixtureMismatch {
+func validateKnownASRManifest(manifest knownASRFixtureManifest) *knownASRFixtureMismatch {
 	checks := []struct {
 		field, expected, observed string
 	}{
-		{"metadata.schema", knownASRFixtureSchema, metadata.Schema},
-		{"metadata.file", knownASRFixtureFile, metadata.File},
-		{"metadata.bytes", fmt.Sprint(knownASRFixtureBytes), fmt.Sprint(metadata.Bytes)},
-		{"metadata.sha256", knownASRFixtureSHA256, metadata.SHA256},
-		{"metadata.mediaType", knownASRFixtureMediaType, metadata.MediaType},
-		{"metadata.wav.audioFormat", "1", fmt.Sprint(metadata.WAV.AudioFormat)},
-		{"metadata.wav.channels", "1", fmt.Sprint(metadata.WAV.Channels)},
-		{"metadata.wav.sampleRateHz", "8000", fmt.Sprint(metadata.WAV.SampleRateHz)},
-		{"metadata.wav.bitsPerSample", "16", fmt.Sprint(metadata.WAV.BitsPerSample)},
-		{"metadata.wav.dataBytes", fmt.Sprint(knownASRFixtureDataBytes), fmt.Sprint(metadata.WAV.DataBytes)},
-		{"metadata.wav.durationMillis", fmt.Sprint(knownASRFixtureDuration), fmt.Sprint(metadata.WAV.DurationMS)},
-		{"metadata.transcript.language", knownASRFixtureLanguage, metadata.Transcript.Language},
-		{"metadata.transcript.text", knownASRFixtureTranscript, metadata.Transcript.Text},
-		{"metadata.transcript.normalization", knownASRFixtureNormalization, metadata.Transcript.Normalization},
-		{"metadata.source.repository", knownASRFixtureSourceRepository, metadata.Source.Repository},
-		{"metadata.source.revision", knownASRFixtureSourceRevision, metadata.Source.Revision},
-		{"metadata.source.path", knownASRFixtureSourcePath, metadata.Source.Path},
-		{"metadata.source.attribution", knownASRFixtureAttribution, metadata.Source.Attribution},
-		{"metadata.source.license", knownASRFixtureLicense, metadata.Source.License},
-		{"metadata.source.licenseUrl", knownASRFixtureLicenseURL, metadata.Source.LicenseURL},
+		{"metadata.schema", knownASRFixtureSchema, manifest.Schema},
+		{"metadata.file", knownASRFixtureFile, manifest.File},
+		{"metadata.bytes", fmt.Sprint(knownASRFixtureBytes), fmt.Sprint(manifest.Bytes)},
+		{"metadata.sha256", knownASRFixtureSHA256, manifest.SHA256},
+		{"metadata.mediaType", knownASRFixtureMediaType, manifest.MediaType},
+		{"metadata.transcript.language", knownASRFixtureLanguage, manifest.Transcript.Language},
+		{"metadata.transcript.raw", knownASRFixtureRawTranscript, manifest.Transcript.Raw},
+		{"metadata.transcript.normalized", knownASRFixtureTranscript, manifest.Transcript.Normalized},
+		{"metadata.transcript.normalization", knownASRFixtureNormalization, manifest.Transcript.Normalization},
+		{"metadata.segments.timeUnit", knownASRFixtureSegmentTimeUnit, manifest.Segments.TimeUnit},
+		{"metadata.source.repository", knownASRFixtureSourceRepository, manifest.Source.Repository},
+		{"metadata.source.revision", knownASRFixtureSourceRevision, manifest.Source.Revision},
+		{"metadata.source.path", knownASRFixtureSourcePath, manifest.Source.Path},
+		{"metadata.source.attribution", knownASRFixtureAttribution, manifest.Source.Attribution},
+		{"metadata.source.license", knownASRFixtureLicense, manifest.Source.License},
+		{"metadata.source.licenseUrl", knownASRFixtureLicenseURL, manifest.Source.LicenseURL},
 	}
 	for _, check := range checks {
 		if check.expected != check.observed {
 			return &knownASRFixtureMismatch{Field: check.field, Expected: quoteKnownASRValue(check.expected), Observed: quoteKnownASRValue(check.observed)}
 		}
 	}
-	if metadata.Bytes > knownASRFixtureMaxBytes {
-		return &knownASRFixtureMismatch{Field: "metadata.bytes", Expected: fmt.Sprint(knownASRFixtureMaxBytes) + " or less", Observed: fmt.Sprint(metadata.Bytes)}
+	if manifest.Bytes > knownASRFixtureMaxBytes {
+		return &knownASRFixtureMismatch{Field: "metadata.bytes", Expected: fmt.Sprint(knownASRFixtureMaxBytes) + " or less", Observed: fmt.Sprint(manifest.Bytes)}
+	}
+	if mismatch := compareKnownASRFloat("metadata.wav.durationMillis", knownASRFixtureDurationMillis, manifest.WAV.DurationMS); mismatch != nil {
+		return mismatch
+	}
+	if mismatch := validateKnownASRSegments(manifest.Segments); mismatch != nil {
+		return mismatch
 	}
 	return nil
+}
+
+func validateKnownASRSegments(segments knownASRSegmentsMetadata) *knownASRFixtureMismatch {
+	checks := []struct {
+		field, expected, observed string
+	}{
+		{"metadata.segments.constraints.finite", "true", fmt.Sprint(segments.Constraints.Finite)},
+		{"metadata.segments.constraints.monotonic", "true", fmt.Sprint(segments.Constraints.Monotonic)},
+		{"metadata.segments.constraints.minimumStart", fmt.Sprint(knownASRFixtureSegmentStartMillis), fmt.Sprint(segments.Constraints.MinimumStart)},
+		{"metadata.segments.constraints.maximumEnd", fmt.Sprint(knownASRFixtureDurationMillis), fmt.Sprint(segments.Constraints.MaximumEnd)},
+	}
+	for _, check := range checks {
+		if check.expected != check.observed {
+			return &knownASRFixtureMismatch{Field: check.field, Expected: check.expected, Observed: check.observed}
+		}
+	}
+	if len(segments.Items) != 1 {
+		return &knownASRFixtureMismatch{Field: "metadata.segments.items.length", Expected: "1", Observed: fmt.Sprint(len(segments.Items))}
+	}
+	segment := segments.Items[0]
+	checks = []struct {
+		field, expected, observed string
+	}{
+		{"segments.items[0].id", fmt.Sprint(knownASRFixtureSegmentID), fmt.Sprint(segment.ID)},
+		{"segments.items[0].start", fmt.Sprint(knownASRFixtureSegmentStartMillis), fmt.Sprint(segment.Start)},
+		{"segments.items[0].end", fmt.Sprint(knownASRFixtureSegmentEndMillis), fmt.Sprint(segment.End)},
+		{"segments.items[0].text", knownASRFixtureSegmentText, segment.Text},
+		{"segments.items[0].normalizedText", knownASRFixtureSegmentNormalizedText, segment.NormalizedText},
+	}
+	for _, check := range checks {
+		if check.expected != check.observed {
+			return &knownASRFixtureMismatch{Field: check.field, Expected: quoteKnownASRValue(check.expected), Observed: quoteKnownASRValue(check.observed)}
+		}
+	}
+	if !finiteMonotonicKnownASRSegments(segments.Items, segments.Constraints) {
+		return &knownASRFixtureMismatch{Field: "metadata.segments.items", Expected: "finite monotonic bounds", Observed: "segment bounds violate constraints"}
+	}
+	return nil
+}
+
+func finiteMonotonicKnownASRSegments(items []knownASRSegment, constraints knownASRSegmentConstraints) bool {
+	previousID := -1
+	previousStart, previousEnd := constraints.MinimumStart, constraints.MinimumStart
+	for _, item := range items {
+		if item.ID <= previousID || !finiteKnownASRFloat(item.Start) || !finiteKnownASRFloat(item.End) ||
+			item.Start < constraints.MinimumStart || item.End > constraints.MaximumEnd || item.End <= item.Start ||
+			item.Start < previousStart || item.End < previousEnd || item.NormalizedText == "" {
+			return false
+		}
+		previousID, previousStart, previousEnd = item.ID, item.Start, item.End
+	}
+	return true
+}
+
+func finiteKnownASRFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func compareKnownASRFloat(field string, expected, observed float64) *knownASRFixtureMismatch {
+	if expected == observed {
+		return nil
+	}
+	return &knownASRFixtureMismatch{Field: field, Expected: fmt.Sprint(expected), Observed: fmt.Sprint(observed)}
 }
 
 func compareKnownASRWave(expected knownASRWAVMetadata, observed knownASRWaveDetails) *knownASRFixtureMismatch {
@@ -296,6 +424,9 @@ func parseKnownASRWave(body []byte) (knownASRWaveDetails, error) {
 			if blockAlign == 0 || byteRate == 0 {
 				return knownASRWaveDetails{}, errors.New("fmt chunk has empty byte rate or block alignment")
 			}
+			if uint64(blockAlign) != uint64(details.Channels)*uint64(details.Bits)/8 {
+				return knownASRWaveDetails{}, errors.New("fmt chunk block alignment does not match PCM fields")
+			}
 			if uint64(byteRate) != uint64(details.SampleRateHz)*uint64(blockAlign) {
 				return knownASRWaveDetails{}, errors.New("fmt chunk byte rate does not match PCM fields")
 			}
@@ -324,7 +455,10 @@ func parseKnownASRWave(body []byte) (knownASRWaveDetails, error) {
 		return knownASRWaveDetails{}, errors.New("WAV data is not aligned to PCM frames")
 	}
 	frames := uint64(details.DataBytes) / blockAlign
-	details.DurationMS = int64((frames*1000 + uint64(details.SampleRateHz)/2) / uint64(details.SampleRateHz))
+	details.DurationMS = float64(frames) * 1000 / float64(details.SampleRateHz)
+	if !finiteKnownASRFloat(details.DurationMS) {
+		return knownASRWaveDetails{}, errors.New("WAV duration is not finite")
+	}
 	return details, nil
 }
 
