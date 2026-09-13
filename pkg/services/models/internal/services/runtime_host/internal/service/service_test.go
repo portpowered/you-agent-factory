@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -642,4 +643,402 @@ func (t realHostTimer) C() <-chan time.Time {
 
 func (t realHostTimer) Stop() bool {
 	return t.timer.Stop()
+}
+func TestRuntimeHostPropagatesCrashSnapshotAndCanRestartTheSlot(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			return newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("RPC_REJECTED"))
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-crash")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	ctx := modelseffects.WithRuntimeCorrelation(context.Background(), "managed-crash-42")
+	if _, err := host.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	first := launcher.process(0)
+	first.crash(errors.New("private process exit"))
+	entry := logger.awaitMessage(t, "model host process crashed")
+	assertManagedProcessDiagnosticFields(t, entry.fields, "RPC_REJECTED")
+	if entry.fields["correlation_id"] != "managed-crash-42" {
+		t.Fatalf("crash correlation = %q, want managed-crash-42", entry.fields["correlation_id"])
+	}
+	if first.diagnosticCallCount() != 1 {
+		t.Fatalf("crash snapshot calls = %d, want exactly one", first.diagnosticCallCount())
+	}
+	sink.awaitFailure(t)
+	assertFailedManagedProcessEvidence(t, sink.snapshot(), modelseffects.RuntimeStageBackendStart)
+
+	inspected, err := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectModelHost after crash: %v", err)
+	}
+	if inspected.Host.ReadinessState != models.ReadinessStateFailed {
+		t.Fatalf("crashed readiness = %s, want FAILED", inspected.Host.ReadinessState)
+	}
+	if _, err := host.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("EnsureModelHost restart: %v", err)
+	}
+	if launcher.startCount() != 2 {
+		t.Fatalf("process starts after crash recovery = %d, want 2", launcher.startCount())
+	}
+}
+
+func TestRuntimeHostProtocolFailureRetainsProcessSnapshotAndStableFailure(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			return newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("RPC_REJECTED"))
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-protocol")
+	ref := openScope(t, scopes, cacheDirectory, managedLocalAIConfig(models.LoadPolicyOnDemand))
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			Platform:             managedHostPlatform(),
+			CompatibilityChecker: &testCompatibilityChecker{},
+			ProtocolNegotiator: &testProtocolNegotiator{result: modelseffects.HostProtocolNegotiationResult{
+				ProtocolVersion: "unsupported-version",
+				Backend:         "localai-llamacpp",
+				Ready:           true,
+			}},
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		})
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: managedModelName,
+	})
+	if !errors.Is(err, models.ErrHostProtocolIncompatible) {
+		t.Fatalf("protocol failure = %v, want ErrHostProtocolIncompatible", err)
+	}
+	entry := logger.awaitMessage(t, "model host load failed")
+	if entry.fields["stage"] != "PROTOCOL_LOAD" || entry.fields["failure_class"] != "PROTOCOL_INCOMPATIBLE" {
+		t.Fatalf("protocol diagnostic fields = %#v, want protocol classification", entry.fields)
+	}
+	assertManagedProcessDiagnosticFields(t, entry.fields, "RPC_REJECTED")
+	sink.awaitFailure(t)
+	assertFailedManagedProcessEvidence(t, sink.snapshot(), modelseffects.RuntimeStageProtocolLoad)
+	if launcher.process(0).stopCount() != 1 {
+		t.Fatalf("protocol stop count = %d, want exactly one", launcher.process(0).stopCount())
+	}
+}
+
+func TestRuntimeHostTimeoutProjectsSnapshotWithoutChangingFailureOrOutput(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			return newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("TIMEOUT"))
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-timeout")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{
+			ReadinessTimeout:    40 * time.Millisecond,
+			HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker:       neverReadyHostChecker{},
+		},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrHostLoadingTimeout) {
+		t.Fatalf("timeout failure = %v, want ErrHostLoadingTimeout", err)
+	}
+	entry := logger.awaitMessage(t, "model host load failed")
+	assertManagedProcessDiagnosticFields(t, entry.fields, "TIMEOUT")
+	if launcher.process(0).stopCount() != 1 {
+		t.Fatalf("timeout stop count = %d, want exactly one", launcher.process(0).stopCount())
+	}
+	if launcher.process(0).diagnosticCallCount() != 1 {
+		t.Fatalf("timeout snapshot calls = %d, want exactly one", launcher.process(0).diagnosticCallCount())
+	}
+	sink.awaitFailure(t)
+	assertFailedManagedProcessEvidence(t, sink.snapshot(), modelseffects.RuntimeStageBackendStart)
+	if strings.Contains(err.Error(), "PRIVATE_BACKEND_DIAGNOSTIC_SENTINEL") {
+		t.Fatalf("timeout error exposed diagnostic output: %v", err)
+	}
+}
+
+func TestRuntimeHostForcedStopEmitsOneStopDiagnosticWithoutCrashDuplicate(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			return newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("PROCESS_EXITED"))
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-stop")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
+		internalservice.HostPolicyTestConfig{},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	if _, err := host.StopModelHost(context.Background(), models.StopModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	}); err != nil {
+		t.Fatalf("StopModelHost: %v", err)
+	}
+	entry := logger.awaitMessage(t, "model host stopped")
+	assertManagedProcessDiagnosticFields(t, entry.fields, "PROCESS_EXITED")
+	if logger.countMessage("model host process crashed") != 0 {
+		t.Fatal("forced stop emitted duplicate process-crash diagnostic")
+	}
+	if logger.countMessage("model host stopped") != 1 {
+		t.Fatalf("stop diagnostics = %d, want one", logger.countMessage("model host stopped"))
+	}
+	if launcher.process(0).diagnosticCallCount() != 1 {
+		t.Fatalf("stop snapshot calls = %d, want exactly one", launcher.process(0).diagnosticCallCount())
+	}
+}
+
+func TestRuntimeHostIgnoresDefectiveOptionalDiagnosticSource(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			process := newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("TIMEOUT"))
+			process.diagnosticPanics = true
+			return process
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-optional")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{
+			ReadinessTimeout:    40 * time.Millisecond,
+			HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker:       neverReadyHostChecker{},
+		},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrHostLoadingTimeout) {
+		t.Fatalf("defective optional source failure = %v, want ErrHostLoadingTimeout", err)
+	}
+	entry := logger.awaitMessage(t, "model host load failed")
+	if _, present := entry.fields["exit_class"]; present {
+		t.Fatalf("defective optional source emitted process fields: %#v", entry.fields)
+	}
+	for _, record := range sink.snapshot() {
+		if record.ExitClass != "" || record.CauseCode != "" {
+			t.Fatalf("defective optional source entered evidence: %#v", record)
+		}
+	}
+}
+
+func TestRuntimeHostCancellationProjectsSnapshotAndReleasesProcessOnce(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		started: make(chan struct{}),
+		newProcess: func() *runtimeDiagnosticProcess {
+			return newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("CANCELLED"))
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-cancel")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{
+			ReadinessTimeout:    time.Second,
+			HealthCheckInterval: 25 * time.Millisecond,
+			HealthChecker:       neverReadyHostChecker{},
+		},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := host.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+			Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+		})
+		errCh <- err
+	}()
+	select {
+	case <-launcher.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for managed process start")
+	}
+	cancel()
+	var err error
+	select {
+	case err = <-errCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for cancellation result")
+	}
+	if !errors.Is(err, models.ErrHostCancelled) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation failure = %v, want HostCancelled/context.Canceled", err)
+	}
+	entry := logger.awaitMessage(t, "model host load failed")
+	assertManagedProcessDiagnosticFields(t, entry.fields, "CANCELLED")
+	if launcher.process(0).stopCount() != 1 || launcher.process(0).diagnosticCallCount() != 1 {
+		t.Fatalf("cancellation process lifecycle = stop=%d snapshot=%d, want (1, 1)", launcher.process(0).stopCount(), launcher.process(0).diagnosticCallCount())
+	}
+	sink.awaitFailure(t)
+	assertFailedManagedProcessEvidence(t, sink.snapshot(), modelseffects.RuntimeStageBackendStart)
+}
+
+func TestRuntimeHostIgnoresNotReadyOptionalDiagnosticSource(t *testing.T) {
+	t.Parallel()
+
+	logger := newSignalingDiagnosticsLogger()
+	sink := newDiagnosticEvidenceSink()
+	launcher := &runtimeDiagnosticLauncher{
+		newProcess: func() *runtimeDiagnosticProcess {
+			process := newRuntimeDiagnosticProcess(runtimeDiagnosticSnapshot("TIMEOUT"))
+			process.diagnosticUnavailable = true
+			return process
+		},
+	}
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	scopes := newScopes(t, "managed-diagnostic-not-ready")
+	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		internalservice.SupervisorTestConfig{
+			ReadinessTimeout:    40 * time.Millisecond,
+			HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker:       neverReadyHostChecker{},
+		},
+		internalservice.HostPolicyTestConfig{},
+		runtimehost.Options{
+			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
+		},
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+
+	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrHostLoadingTimeout) {
+		t.Fatalf("not-ready optional source failure = %v, want ErrHostLoadingTimeout", err)
+	}
+	entry := logger.awaitMessage(t, "model host load failed")
+	if _, present := entry.fields["exit_class"]; present {
+		t.Fatalf("not-ready optional source emitted process fields: %#v", entry.fields)
+	}
+	for _, record := range sink.snapshot() {
+		if record.ExitClass != "" || record.CauseCode != "" {
+			t.Fatalf("not-ready optional source entered evidence: %#v", record)
+		}
+	}
 }
