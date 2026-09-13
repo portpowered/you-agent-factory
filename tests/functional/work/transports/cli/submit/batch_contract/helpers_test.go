@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -15,6 +18,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -86,6 +90,23 @@ func executeSubmitBatchCLIExpectErrorWithInput(
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 	inputs.Input.Stdin = strings.NewReader(stdin)
 	err = process.Execute(inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
+}
+
+func executeSubmitBatchCLIOnServer(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	args []string,
+) (stdout, stderr string, err error) {
+	t.Helper()
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = batchContractHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = home
+	stdinIsTTY := true
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.Stdin = strings.NewReader("")
+	err = server.Execute(t, inputs.Input)
 	return inputs.Stdout(), inputs.Stderr(), err
 }
 
@@ -239,6 +260,105 @@ func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSO
 	}
 }
 
+func assertExplicitWorkIDHTTPConflict(
+	t *testing.T,
+	serverURL, sessionID, workID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	requestID := "request-explicit-session-http-conflict"
+	endpoint := support.SessionWorkURL(
+		serverURL, sessionID, "/work-requests/"+url.PathEscape(requestID),
+	)
+	request, err := http.NewRequest(
+		http.MethodPut,
+		endpoint,
+		bytes.NewBufferString(explicitBatchJSONWithTitle(requestID, workID, "untrusted-payload-secret")),
+	)
+	if err != nil {
+		t.Fatalf("build explicit Work ID conflict request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("send explicit Work ID conflict request: %v", err)
+	}
+	responseBody, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read explicit Work ID conflict response: %v", readErr)
+	}
+	var conflictResponse factoryapi.ErrorResponse
+	if err := json.Unmarshal(responseBody, &conflictResponse); err != nil {
+		t.Fatalf("decode explicit Work ID conflict response: %v\nbody=%s", err, responseBody)
+	}
+	if response.StatusCode != http.StatusConflict ||
+		conflictResponse.Code != factoryapi.ErrorResponseCodeCONFLICT ||
+		conflictResponse.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("HTTP conflict = status:%d response:%#v, want 409 CONFLICT/CONFLICT", response.StatusCode, conflictResponse)
+	}
+	if strings.Contains(string(responseBody), "untrusted-payload-secret") {
+		t.Fatalf("HTTP conflict response echoed untrusted payload: %s", responseBody)
+	}
+	assertExplicitWorkIDConflictStateUnchanged(t, serverURL, sessionID, beforeWork, beforeEvents, "HTTP")
+}
+
+func assertExplicitWorkIDCLIConflict(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	sessionID, workID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	requestID := "request-explicit-session-cli-conflict"
+	stdout, stderr, err := executeSubmitBatchCLIOnServer(t, server, []string{
+		"you", "--server", server.URL(), "submit", "batch",
+		"--session", sessionID,
+		explicitBatchJSONWithTitle(requestID, workID, "untrusted-payload-secret"),
+	})
+	if err == nil {
+		t.Fatal("CLI explicit Work ID conflict succeeded")
+	}
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range []string{
+		"batch submission failed (409)",
+		"code=CONFLICT",
+		"family=CONFLICT",
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("CLI conflict diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+	if strings.Contains(diagnostic, "untrusted-payload-secret") {
+		t.Fatalf("CLI conflict diagnostic echoed untrusted payload: %s", diagnostic)
+	}
+	if stdout != "" {
+		t.Fatalf("CLI conflict emitted success stdout: %q", stdout)
+	}
+	assertExplicitWorkIDConflictStateUnchanged(t, server.URL(), sessionID, beforeWork, beforeEvents, "CLI")
+}
+
+func assertExplicitWorkIDConflictStateUnchanged(
+	t *testing.T,
+	serverURL, sessionID string,
+	beforeWork factoryapi.ListWorkResponse,
+	beforeEvents []factoryapi.FactoryEvent,
+	boundary string,
+) {
+	t.Helper()
+
+	listEndpoint := support.SessionWorkURL(serverURL, sessionID, "/work")
+	afterWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterEvents := support.GetFactoryEventsForSessionAt(t, serverURL, sessionID)
+	if !reflect.DeepEqual(afterWork, beforeWork) || !reflect.DeepEqual(afterEvents, beforeEvents) {
+		t.Fatalf("%s conflict mutated public state: workChanged=%t eventsChanged=%t", boundary, !reflect.DeepEqual(afterWork, beforeWork), !reflect.DeepEqual(afterEvents, beforeEvents))
+	}
+}
+
 func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, value, source string) {
 	t.Helper()
 	for _, marker := range []string{
@@ -299,6 +419,17 @@ func duplicateBatchJSON(requestID string) string {
 			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
 		]
 	}`
+}
+
+func explicitBatchJSON(requestID, workID string) string {
+	return explicitBatchJSONWithTitle(requestID, workID, "explicit Work ID conflict")
+}
+
+func explicitBatchJSONWithTitle(requestID, workID, title string) string {
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":"explicit-work","workId":%q,"workTypeName":"task","payload":{"title":%q}}]}`,
+		requestID, workID, title,
+	)
 }
 
 func validRelationsBatchJSON() string {

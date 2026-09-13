@@ -874,6 +874,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkRequestConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/{id}:
@@ -2549,6 +2551,19 @@ components:
                 message: Operator move request was already applied.
                 family: CONFLICT
                 code: MOVE_WORK_REQUEST_ALREADY_APPLIED
+    WorkRequestConflict:
+      description: A different Work Request already reserved an explicit Work ID in this batch.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            explicitWorkIdConflict:
+              summary: Explicit Work ID is already reserved.
+              value:
+                message: Work Request admission conflict
+                family: CONFLICT
+                code: CONFLICT
     ExecutionRequestIdConflict:
       description: The supplied requestId was already used with materially different source, args, orchestrator, or requested policy.
       content:
@@ -5607,6 +5622,7 @@ components:
           type: string
           description: Stable machine-readable error code.
           enum:
+            - CONFLICT
             - BAD_REQUEST
             - FACTORY_SESSION_CONFIG_LOAD_FAILED
             - INVALID_FACTORY_NAME
@@ -5672,6 +5688,7 @@ components:
             - SHUTDOWN_CONTROL_REJECTED
             - SHUTDOWN_CONTROL_UNAVAILABLE
           x-enum-descriptions:
+            - A Work Request conflicts with an already reserved explicit Work ID.
             - Request payload or parameter validation failed.
             - Factory session discovery found a readable factory target whose config could not be loaded.
             - Named factory name validation failed.

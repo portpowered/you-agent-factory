@@ -126,6 +126,7 @@ func TestOpenAPIContract_WorkPayloadLimitIsDocumented(t *testing.T) {
 	paths := objectField(t, doc, "paths")
 	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/work-requests/{request_id}", "put")
 	assertResponseRef(t, operation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, operation, "409", "#/components/responses/WorkRequestConflict")
 }
 
 func TestOpenAPIContract_WorkerSessionTurnUsageIsOptionalAndDocumented(t *testing.T) {

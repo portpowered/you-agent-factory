@@ -2,6 +2,7 @@ package batch_contract_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -120,6 +122,64 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 	if stdout != "" {
 		t.Fatalf("duplicate-name dry-run emitted stdout: %q", stdout)
 	}
+}
+
+// TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary proves
+// the shared root process preserves exact replay while a different request is
+// rejected through both the public HTTP and CLI admission boundaries. The
+// Work list and retained Factory Event stream remain value-equivalent
+// after each conflict attempt.
+func TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	sessionID := opened.Session.Id
+	const (
+		workID         = "work-explicit-session-conflict"
+		firstRequestID = "request-explicit-session-first"
+	)
+	firstBody := explicitBatchJSONWithTitle(firstRequestID, workID, "accepted-payload")
+	firstArgs := []string{
+		"you", "--server", server.URL(), "submit", "batch",
+		"--session", sessionID, firstBody,
+	}
+	stdout, stderr, err := executeSubmitBatchCLIOnServer(t, server, firstArgs)
+	if err != nil {
+		t.Fatalf("first explicit batch submit error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "workId="+workID) {
+		t.Fatalf("first explicit batch output missing Work ID %q:\n%s", workID, stdout)
+	}
+
+	listEndpoint := support.SessionWorkURL(server.URL(), sessionID, "/work")
+	beforeWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	if len(beforeWork.Results) != 1 || beforeWork.Results[0].WorkId == nil || *beforeWork.Results[0].WorkId != workID {
+		t.Fatalf("first explicit batch Work list = %#v, want one Work with %q", beforeWork.Results, workID)
+	}
+	beforeEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+
+	// The exact request replay remains a successful HTTP 201/no-op from the
+	// customer's perspective and must not append another Work or event.
+	stdout, stderr, err = executeSubmitBatchCLIOnServer(t, server, firstArgs)
+	if err != nil {
+		t.Fatalf("exact explicit batch replay error = %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	afterReplayWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
+	afterReplayEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	if !reflect.DeepEqual(afterReplayWork, beforeWork) {
+		t.Fatalf("exact replay changed public Work list:\nbefore=%#v\nafter=%#v", beforeWork, afterReplayWork)
+	}
+	if !reflect.DeepEqual(afterReplayEvents, beforeEvents) {
+		t.Fatalf("exact replay changed retained Factory Events:\nbefore=%#v\nafter=%#v", beforeEvents, afterReplayEvents)
+	}
+
+	assertExplicitWorkIDHTTPConflict(t, server.URL(), sessionID, workID, beforeWork, beforeEvents)
+	assertExplicitWorkIDCLIConflict(t, server, sessionID, workID, beforeWork, beforeEvents)
 }
 
 // TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes proves every

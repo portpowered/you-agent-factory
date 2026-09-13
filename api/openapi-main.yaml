@@ -1002,6 +1002,8 @@ paths:
                 $ref: '#/components/schemas/UpsertWorkRequestResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/WorkRequestConflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -2520,6 +2522,8 @@ components:
       $ref: './components/responses/SaveCurrentFactoryConflict.yaml'
     MoveWorkConflict:
       $ref: './components/responses/MoveWorkConflict.yaml'
+    WorkRequestConflict:
+      $ref: './components/responses/WorkRequestConflict.yaml'
     ExecutionRequestIdConflict:
       $ref: './components/responses/ExecutionRequestIdConflict.yaml'
     WorkerSessionStartConflict:

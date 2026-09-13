@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -78,8 +80,11 @@ func TestConcurrentBatchIngressDifferentRequestIDAfterVisibleAcceptanceDoesNotDu
 	assertIngressObservable(t, history, h.Factory, firstRequest.RequestID, workID)
 
 	second, err := h.Factory.SubmitWorkRequest(context.Background(), secondRequest)
-	if err != nil {
-		t.Fatalf("retry SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("retry SubmitWorkRequest error = %v, want Work Request conflict", err)
+	}
+	if !reflect.DeepEqual(second, work.WorkRequestSubmitResult{}) {
+		t.Fatalf("retry SubmitWorkRequest result = %#v, want zero result", second)
 	}
 	if second.Accepted {
 		t.Fatalf("different-request-ID retry accepted = true, want rejection after visible acceptance")

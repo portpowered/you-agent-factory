@@ -2,6 +2,8 @@ package runtime
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -166,11 +168,11 @@ func TestNew_RestoredHistoricalWorkIDIsReservedFromExplicitReadmission(t *testin
 			Name: "new-task", WorkID: "work-task-3", WorkTypeID: "task",
 		}},
 	})
-	if err != nil {
-		t.Fatalf("SubmitWorkRequest: %v", err)
+	if !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatalf("SubmitWorkRequest error = %v, want Work Request conflict", err)
 	}
-	if result.Accepted {
-		t.Fatal("restored runtime accepted an explicit Work ID already present in canonical history")
+	if !reflect.DeepEqual(result, work.WorkRequestSubmitResult{}) {
+		t.Fatalf("SubmitWorkRequest result = %#v, want zero result", result)
 	}
 	snapshot, err := runtime.GetEngineStateSnapshot(context.Background())
 	if err != nil {

@@ -13,6 +13,7 @@ properties:
     type: string
     description: Stable machine-readable error code.
     enum:
+      - CONFLICT
       - BAD_REQUEST
       - FACTORY_SESSION_CONFIG_LOAD_FAILED
       - INVALID_FACTORY_NAME
@@ -78,6 +79,7 @@ properties:
       - SHUTDOWN_CONTROL_REJECTED
       - SHUTDOWN_CONTROL_UNAVAILABLE
     x-enum-descriptions:
+      - A Work Request conflicts with an already reserved explicit Work ID.
       - Request payload or parameter validation failed.
       - Factory session discovery found a readable factory target whose config could not be loaded.
       - Named factory name validation failed.

@@ -1,0 +1,12 @@
+description: A different Work Request already reserved an explicit Work ID in this batch.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      explicitWorkIdConflict:
+        summary: Explicit Work ID is already reserved.
+        value:
+          message: Work Request admission conflict
+          family: CONFLICT
+          code: CONFLICT

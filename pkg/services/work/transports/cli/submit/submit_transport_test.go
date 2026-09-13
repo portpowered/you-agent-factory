@@ -247,6 +247,48 @@ func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_Transport_HTTPConflictReturnsSafeTypedFields(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "Work Request admission conflict",
+			Code:    factoryapi.ErrorResponseCodeCONFLICT,
+			Family:  factoryapi.ErrorFamilyConflict,
+		}); err != nil {
+			t.Fatalf("encode error response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, validBatchJSON("batch-explicit-conflict", "reserved-work"))
+	var out bytes.Buffer
+	err := submitBatchForTest(t, BatchConfig{
+		Context: context.Background(), Args: []string{path},
+		Server: mustServerBase(t, srv.URL), Output: &out,
+	})
+	if err == nil {
+		t.Fatal("SubmitBatch succeeded for explicit Work ID conflict")
+	}
+	if got := err.Error(); got != "batch submission failed (409): code=CONFLICT family=CONFLICT" {
+		t.Fatalf("error = %q, want safe conflict fields", got)
+	}
+	var httpErr *SubmissionHTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
+	}
+	if httpErr.StatusCode != http.StatusConflict ||
+		httpErr.Code != factoryapi.ErrorResponseCodeCONFLICT ||
+		httpErr.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("typed error = %#v", httpErr)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on API conflict", out.String())
+	}
+}
+
 func TestSubmitBatch_HTTPErrorPreservesWorkRequestDiagnosticInHumanAndJSONModes(t *testing.T) {
 	message := "work_request: duplicate name \"release\": works[1].name conflicts with works[0].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry"
 	for _, test := range []struct {
