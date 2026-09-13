@@ -10199,7 +10199,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Saved current factory definition and new version metadata for the targeted session. */
+      /** @description Saved and activated Factory with the newly published version and activation provenance for the targeted session. */
       200: {
         headers: {
           [name: string]: unknown;

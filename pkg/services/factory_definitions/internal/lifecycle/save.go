@@ -21,33 +21,45 @@ func (s *Service) SaveReplaceCurrentSnapshotForSession(
 	sessionID string,
 	request EditableFactory,
 ) (*factorydefinitions.FactorySnapshot, error) {
+	saved, err := s.saveReplaceCurrentFactoryForSession(ctx, sessionID, request)
+	if err != nil {
+		return nil, err
+	}
+	return saved.Snapshot, nil
+}
+
+func (s *Service) saveReplaceCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+	request EditableFactory,
+) (EditableFactory, error) {
 	if s == nil || s.host == nil || s.activationGateway == nil {
-		return nil, fmt.Errorf("factory definition service is required")
+		return EditableFactory{}, fmt.Errorf("factory definition service is required")
 	}
 	if request.Snapshot == nil {
-		return nil, fmt.Errorf("editable factory snapshot is required")
+		return EditableFactory{}, fmt.Errorf("editable factory snapshot is required")
 	}
 
 	session, err := s.host.RequireSession(sessionID)
 	if err != nil {
-		return nil, err
+		return EditableFactory{}, err
 	}
 	currentSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
 	if err != nil {
-		return nil, err
+		return EditableFactory{}, err
 	}
 	currentName, err := factorySnapshotName(currentSnapshot)
 	if err != nil {
-		return nil, fmt.Errorf("read current factory snapshot identity: %w", err)
+		return EditableFactory{}, fmt.Errorf("read current factory snapshot identity: %w", err)
 	}
 	sessionRootDir := sessionFactoryRootDir(s.host.PersistRootDir(), session)
 	sessionRootDir, sanitized, err := s.prepareEditableFactoryDefinitionSave(ctx, sessionRootDir, currentName, request.Snapshot)
 	if err != nil {
-		return nil, err
+		return EditableFactory{}, err
 	}
 	targetDir, activateFactoryDir, err := resolveReplaceCurrentLayoutTarget(s.host, sessionRootDir, currentName)
 	if err != nil {
-		return nil, err
+		return EditableFactory{}, err
 	}
 
 	return s.replaceCurrentFactoryLayoutLocked(
@@ -92,12 +104,12 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 	targetDir string,
 	activateFactoryDir string,
 	sanitized *factorydefinitions.FactorySnapshot,
-) (*factorydefinitions.FactorySnapshot, error) {
+) (EditableFactory, error) {
 	currentName, err := factorySnapshotName(sanitized)
 	if err != nil {
-		return nil, fmt.Errorf("read editable factory snapshot identity: %w", err)
+		return EditableFactory{}, fmt.Errorf("read editable factory snapshot identity: %w", err)
 	}
-	var saved *factorydefinitions.FactorySnapshot
+	var saved EditableFactory
 	err = s.activationGateway.WithActivationLock(func() error {
 		if err := s.activationGateway.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
@@ -134,20 +146,35 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			}
 			return err
 		}
-		if replaceResult != nil && replaceResult.DiscardBackup != nil {
-			replaceResult.DiscardBackup()
-		}
-
 		var readbackErr error
-		savedSnapshot, readbackErr := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
+		savedSnapshot, readbackErr := s.host.GetCurrentFactorySnapshotForSession(
+			factorydefinitions.WithActivationReadBypass(ctx),
+			sessionID,
+		)
 		if readbackErr != nil {
 			return readbackErr
 		}
-		saved = savedSnapshot.Clone()
+		version := &nextVersion
+		var activation *factorydefinitions.FactoryActivationProvenance
+		if runtimeCfg, runtimeErr := s.host.SessionRuntimeConfig(sessionID); runtimeErr == nil {
+			if loadedVersion, loaded := loadedFactoryDefinitionVersion(runtimeCfg); loaded {
+				version = loadedVersion
+			}
+			activation = currentFactoryActivationProvenance(runtimeCfg)
+		}
+		saved = EditableFactory{
+			Name:       currentName,
+			Snapshot:   savedSnapshot.Clone(),
+			Version:    version,
+			Activation: activation,
+		}
+		if replaceResult != nil && replaceResult.DiscardBackup != nil {
+			replaceResult.DiscardBackup()
+		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return EditableFactory{}, err
 	}
 	return saved, nil
 }

@@ -64,7 +64,7 @@ func TestEditableFactoryMappingPreservesServerOwnedActivationProvenance(t *testi
 	}
 	if mapped.Activation == nil || mapped.Activation.ActivationId != want.ActivationID ||
 		mapped.Activation.LoadedSourceDigest != want.LoadedSourceDigest ||
-		mapped.Activation.State != factoryapi.FactoryActivationStateACTIVE {
+		mapped.Activation.State != factoryapi.FactoryActivationStateActive {
 		t.Fatalf("mapped activation = %#v, want %#v", mapped.Activation, want)
 	}
 }
@@ -77,7 +77,7 @@ func TestEditableFactoryMappingIgnoresClientActivationProvenance(t *testing.T) {
 		Activation: &factoryapi.FactoryActivationProvenance{
 			ActivationId:       "forged",
 			LoadedSourceDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			State:              factoryapi.FactoryActivationStateACTIVE,
+			State:              factoryapi.FactoryActivationStateActive,
 		},
 	}
 	editable, err := editableFactoryFromAPI(request)

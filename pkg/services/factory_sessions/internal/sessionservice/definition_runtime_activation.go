@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -95,7 +96,9 @@ func ApplyNamedReplacement(
 	requireRuntimeIdle func(context.Context) error,
 	replaceSession func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
 	activateWithoutLiveRuntime func(string, string, runtimeports.RuntimeInstance) error,
+	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
+	removeCurrent factorydefinitions.CurrentFactoryPointerRemover,
 ) error {
 	if writeCurrent == nil {
 		return fmt.Errorf("current Factory pointer writer is required")
@@ -107,10 +110,23 @@ func ApplyNamedReplacement(
 		if err := requireSessionIdle(ctx, sessionID); err != nil {
 			return err
 		}
-		if err := writeCurrent(persistRoot, name); err != nil {
+		restorePointer, err := factorydefinitions.WriteCurrentFactoryPointerTransaction(
+			persistRoot,
+			name,
+			readCurrent,
+			writeCurrent,
+			removeCurrent,
+		)
+		if err != nil {
 			return err
 		}
-		return replaceSession(ctx, session, name, replacement)
+		if err := replaceSession(ctx, session, name, replacement); err != nil {
+			if restoreErr := restorePointer(); restoreErr != nil {
+				return errors.Join(err, fmt.Errorf("restore current Factory pointer: %w", restoreErr))
+			}
+			return err
+		}
+		return nil
 	}
 	if requireRuntimeIdle == nil || activateWithoutLiveRuntime == nil {
 		return fmt.Errorf("factory runtime replacement dependencies are required")

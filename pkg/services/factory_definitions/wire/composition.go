@@ -20,3 +20,15 @@ func WithDistributionScaffold(
 		scaffoldFactoryNameResolver,
 	)
 }
+
+// WithActivationRollback wires the durable inverse effects used by named
+// activation transactions without changing the public service constructor.
+func WithActivationRollback(
+	discardNamedFactory func(string, string) error,
+	removeCurrentFactoryPointer func(string) error,
+) CompositionOption {
+	return factorydefinitionsinternal.WithActivationRollback(
+		discardNamedFactory,
+		removeCurrentFactoryPointer,
+	)
+}

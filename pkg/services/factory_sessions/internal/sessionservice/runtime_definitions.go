@@ -139,10 +139,19 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 					runtime.namedPaths.WriteCurrentPointer,
 				)
 			},
+			runtime.namedPaths.ReadCurrentPointer,
 			runtime.namedPaths.WriteCurrentPointer,
+			currentFactoryPointerRemover(runtime.namedPaths),
 		)
 	}
 	return dependencies
+}
+
+func currentFactoryPointerRemover(
+	paths interfaces.NamedPathResolver,
+) interfaces.CurrentFactoryPointerRemover {
+	remover, _ := paths.(interfaces.CurrentFactoryPointerRemover)
+	return remover
 }
 
 func (h *SessionRuntime) requireDefinitions() interfaces.Service {

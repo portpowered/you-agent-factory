@@ -66,7 +66,7 @@ func TestSharedCurrentFactoryProvenance(t *testing.T) {
 	if first.Activation == nil {
 		t.Fatal("initial activation provenance is nil")
 	}
-	if first.Activation.State != factoryapi.FactoryActivationStateACTIVE {
+	if first.Activation.State != factoryapi.FactoryActivationStateActive {
 		t.Fatalf("initial activation state = %q, want ACTIVE", first.Activation.State)
 	}
 	if first.Activation.ActivationId == "" || first.Activation.LoadedSourceDigest == "" {
@@ -115,7 +115,7 @@ func TestSharedCurrentFactoryProvenance(t *testing.T) {
 	if changed.Name != first.Name || changed.Id == nil || first.Id == nil || *changed.Id != *first.Id {
 		t.Fatalf("loaded Factory changed after authored drift: first=%#v changed=%#v", first, changed)
 	}
-	if changed.Activation == nil || changed.Activation.State != factoryapi.FactoryActivationStateAUTHOREDCHANGED {
+	if changed.Activation == nil || changed.Activation.State != factoryapi.FactoryActivationStateAuthoredChanged {
 		t.Fatalf("drifted activation = %#v, want AUTHORED_CHANGED", changed.Activation)
 	}
 	if changed.Activation.ActivationId != initialActivation.ActivationId || changed.Activation.LoadedSourceDigest != initialActivation.LoadedSourceDigest {
@@ -129,7 +129,7 @@ func TestSharedCurrentFactoryProvenance(t *testing.T) {
 		t.Fatalf("malform authored factory: %v", err)
 	}
 	unavailable := getCurrentFactoryForSession(t, session.serverURL, session.id)
-	if unavailable.Activation == nil || unavailable.Activation.State != factoryapi.FactoryActivationStateAUTHOREDSOURCEUNAVAILABLE {
+	if unavailable.Activation == nil || unavailable.Activation.State != factoryapi.FactoryActivationStateAuthoredSourceUnavailable {
 		t.Fatalf("unavailable activation = %#v, want AUTHORED_SOURCE_UNAVAILABLE", unavailable.Activation)
 	}
 	if unavailable.Activation.ActivationId != initialActivation.ActivationId || unavailable.Activation.LoadedSourceDigest != initialActivation.LoadedSourceDigest {

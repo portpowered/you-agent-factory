@@ -52,7 +52,16 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 		if err != nil {
 			return err
 		}
-		factoryDir, err := persistUpsertNamedFactoryPrepared(
+		pointerState, err := factorydefinitions.ReadCurrentFactoryPointerState(
+			func(rootDir string) (string, error) {
+				return readCurrentFactoryPointerFromHost(s.host, rootDir)
+			},
+			sessionRootDir,
+		)
+		if err != nil {
+			return err
+		}
+		persisted, err := persistUpsertNamedFactoryPrepared(
 			s.host,
 			sessionRootDir,
 			request,
@@ -69,7 +78,8 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 			session,
 			sessionID,
 			sessionRootDir,
-			factoryDir,
+			persisted,
+			pointerState,
 			request,
 		)
 		return finalizeErr
@@ -78,6 +88,33 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 		return EditableFactory{}, err
 	}
 	return saved, nil
+}
+
+type persistedNamedFactory struct {
+	factoryDir   string
+	replace      *factorydefinitions.FactorySplitLayoutReplaceResult
+	created      bool
+	replaceKnown bool
+}
+
+func (p persistedNamedFactory) rollback(host Host, rootDir, name string) error {
+	if p.replaceKnown {
+		if p.replace == nil || p.replace.Restore == nil {
+			return fmt.Errorf("named Factory layout rollback handle is required")
+		}
+		p.replace.Restore()
+		return nil
+	}
+	if p.created {
+		return discardNamedFactoryFromHost(host, rootDir, name)
+	}
+	return nil
+}
+
+func (p persistedNamedFactory) commit() {
+	if p.replace != nil && p.replace.DiscardBackup != nil {
+		p.replace.DiscardBackup()
+	}
 }
 
 func (s *Service) upsertCurrentVersionAtSessionRoot(
@@ -103,11 +140,24 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 	session *factorydefinitions.DefinitionSession,
 	sessionID string,
 	sessionRootDir string,
-	factoryDir string,
+	persisted persistedNamedFactory,
+	pointerState factorydefinitions.CurrentFactoryPointerState,
 	request EditableFactory,
 ) (EditableFactory, error) {
-	if err := writeCurrentFactoryPointerFromHost(s.host, sessionRootDir, request.Name); err != nil {
-		return EditableFactory{}, fmt.Errorf("write session current factory pointer: %w", err)
+	restorePointer, err := s.publishUpsertCurrentPointer(
+		pointerState,
+		sessionRootDir,
+		request.Name,
+	)
+	if err != nil {
+		return EditableFactory{}, rollbackUpsertFailure(
+			err,
+			s.host,
+			sessionRootDir,
+			request.Name,
+			persisted,
+			nil,
+		)
 	}
 
 	if err := s.activationGateway.ActivateSessionEditableFactory(
@@ -115,26 +165,104 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		session,
 		sessionID,
 		sessionRootDir,
-		factoryDir,
+		persisted.factoryDir,
 		request.Name,
 		request.Name,
 	); err != nil {
-		return EditableFactory{}, err
+		return EditableFactory{}, rollbackUpsertFailure(
+			err,
+			s.host,
+			sessionRootDir,
+			request.Name,
+			persisted,
+			restorePointer,
+		)
 	}
 
+	saved, err := s.upsertActivationResponse(sessionID, sessionRootDir, request.Name)
+	if err != nil {
+		return EditableFactory{}, rollbackUpsertFailure(
+			err,
+			s.host,
+			sessionRootDir,
+			request.Name,
+			persisted,
+			restorePointer,
+		)
+	}
+	persisted.commit()
+	return saved, nil
+}
+
+func (s *Service) publishUpsertCurrentPointer(
+	state factorydefinitions.CurrentFactoryPointerState,
+	rootDir string,
+	name string,
+) (func() error, error) {
+	remover := factorydefinitions.CurrentFactoryPointerRemoverFunc(func(rootDir string) error {
+		return removeCurrentFactoryPointerFromHost(s.host, rootDir)
+	})
+	restore, err := factorydefinitions.WriteCurrentFactoryPointerAfterState(
+		state,
+		rootDir,
+		name,
+		func(rootDir, name string) error {
+			return writeCurrentFactoryPointerFromHost(s.host, rootDir, name)
+		},
+		remover,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("write session current factory pointer: %w", err)
+	}
+	return restore, nil
+}
+
+func (s *Service) upsertActivationResponse(
+	sessionID string,
+	rootDir string,
+	name string,
+) (EditableFactory, error) {
 	runtimeCfg, err := s.host.SessionRuntimeConfig(sessionID)
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	snapshot, err := s.SerializeNamedFactoryUpsertResponse(request.Name, runtimeCfg)
+	snapshot, err := s.SerializeNamedFactoryUpsertResponse(name, runtimeCfg)
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	version, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	version, err := s.currentFactoryDefinitionVersionAtRoot(rootDir, name)
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	return EditableFactory{Name: request.Name, Snapshot: snapshot, Version: &version}, nil
+	return EditableFactory{
+		Name:       name,
+		Snapshot:   snapshot,
+		Version:    &version,
+		Activation: currentFactoryActivationProvenance(runtimeCfg),
+	}, nil
+}
+
+func rollbackUpsertFailure(
+	primary error,
+	host Host,
+	rootDir string,
+	name string,
+	persisted persistedNamedFactory,
+	restorePointer func() error,
+) error {
+	var rollbackErrs []error
+	if restorePointer != nil {
+		if err := restorePointer(); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("restore current Factory pointer: %w", err))
+		}
+	}
+	if err := persisted.rollback(host, rootDir, name); err != nil {
+		rollbackErrs = append(rollbackErrs, fmt.Errorf("rollback persisted named Factory: %w", err))
+	}
+	if len(rollbackErrs) == 0 {
+		return primary
+	}
+	return errors.Join(append([]error{primary}, rollbackErrs...)...)
 }
 
 func namedFactoryExistsAtSessionRoot(
@@ -158,22 +286,27 @@ func persistUpsertNamedFactoryPrepared(
 	request EditableFactory,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	replaceExisting bool,
-) (string, error) {
+) (persistedNamedFactory, error) {
 	if replaceExisting {
 		targetDir, err := resolveExistingFactoryDirFromHost(host, sessionRootDir, request.Name)
 		if err != nil {
-			return "", mapUpsertNamedFactoryPersistError(err)
+			return persistedNamedFactory{}, mapUpsertNamedFactoryPersistError(err)
 		}
-		if _, err := host.ReplaceFactoryLayoutAtDir(targetDir, prepared); err != nil {
-			return "", mapUpsertNamedFactoryPersistError(err)
+		replace, err := host.ReplaceFactoryLayoutAtDir(targetDir, prepared)
+		if err != nil {
+			return persistedNamedFactory{}, mapUpsertNamedFactoryPersistError(err)
 		}
-		return targetDir, nil
+		return persistedNamedFactory{
+			factoryDir:   targetDir,
+			replace:      replace,
+			replaceKnown: true,
+		}, nil
 	}
 	factoryDir, err := persistNamedFactoryWithPreparedFromHost(host, sessionRootDir, request.Name, prepared)
 	if err != nil {
-		return "", mapUpsertNamedFactoryPersistError(err)
+		return persistedNamedFactory{}, mapUpsertNamedFactoryPersistError(err)
 	}
-	return factoryDir, nil
+	return persistedNamedFactory{factoryDir: factoryDir, created: true}, nil
 }
 
 func mapUpsertNamedFactoryPersistError(err error) error {

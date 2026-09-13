@@ -49,6 +49,7 @@ func NewWithAuthoringLayout(
 		packagedInstaller.Install == nil {
 		return nil
 	}
+	composition := applyCompositionOptions(options)
 	host, err := lifecycle.NewHost(
 		sessionHost.PersistRootDir, sessionHost.WorkstationLoader,
 		loadFactory,
@@ -74,6 +75,10 @@ func NewWithAuthoringLayout(
 		sessionHost.SessionFactoryPersistRoot, sessionHost.ValidateEditableFactorySnapshot,
 		sessionHost.GetCurrentFactorySnapshotForSession,
 		replaceFactoryLayout,
+		lifecycle.RollbackCallbacks{
+			DiscardNamedFactory:         composition.discardNamedFactory,
+			RemoveCurrentFactoryPointer: composition.removeCurrentFactoryPointer,
+		},
 	)
 	if err != nil {
 		return nil
@@ -93,7 +98,6 @@ func NewWithAuthoringLayout(
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	composition := applyCompositionOptions(options)
 	distributionService := lifecycle.ComposeDistributionService(
 		packagedCatalog,
 		packagedInstaller,
