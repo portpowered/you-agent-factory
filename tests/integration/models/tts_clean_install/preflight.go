@@ -168,6 +168,7 @@ type JourneyEvidence struct {
 	Cold        PhaseEvidence `json:"cold"`
 	WarmOffline PhaseEvidence `json:"warmOffline"`
 	Removal     PhaseEvidence `json:"removal"`
+	Steps       []JourneyStep `json:"steps"`
 }
 
 type PhaseEvidence struct {
@@ -191,6 +192,7 @@ type ReadinessEvidence struct {
 	ReadinessState string `json:"readinessState"`
 	LifecycleState string `json:"lifecycleState"`
 	CacheBytes     int64  `json:"cacheBytes"`
+	CacheReused    bool   `json:"cacheReused"`
 }
 
 type NetworkEvidence struct {
@@ -711,7 +713,7 @@ func newReport() Report {
 		Commands:   []CommandEvidence{},
 		Journeys: JourneyEvidence{
 			Install: phaseNotRun(), Discovery: phaseNotRun(), Cold: phaseNotRun(),
-			WarmOffline: phaseNotRun(), Removal: phaseNotRun(),
+			WarmOffline: phaseNotRun(), Removal: phaseNotRun(), Steps: []JourneyStep{},
 		},
 		Audio: []AudioEvidence{
 			{Name: "cold-tts.wav", MediaType: "audio/wav", SHA256: emptySHA},
@@ -796,7 +798,10 @@ func ValidateReport(report Report) error {
 			return errors.New("command evidence is incomplete")
 		}
 	}
-	if report.Network.Policy == "" || report.Network.Attempts < 0 || report.Network.WarmOfflineAttempts < 0 {
+	if report.Network.Policy != "none" && report.Network.Policy != "staged-loopback-and-declared-public-origins" {
+		return errors.New("network policy is unsupported")
+	}
+	if report.Network.Attempts < 0 || report.Network.WarmOfflineAttempts < 0 {
 		return errors.New("network evidence is incomplete")
 	}
 	if report.Cleanup.OwnedProcesses < 0 || report.Cleanup.OwnedListeners < 0 || report.Cleanup.OwnedRoots < 0 || report.Cleanup.SurvivingProcesses < 0 || report.Cleanup.SurvivingListeners < 0 || report.Cleanup.RemovedRuntimeRoots < 0 {
@@ -810,13 +815,18 @@ func ValidateReport(report Report) error {
 	if report.Findings == nil || report.Preflight.Checks == nil || report.Commands == nil || report.Readiness == nil {
 		return errors.New("report arrays must be explicit, complete arrays")
 	}
+	if report.Journeys.Steps == nil {
+		return errors.New("journey steps must be an explicit array")
+	}
+	if report.Verdict == "PASS" {
+		if err := validatePassReport(report); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func WriteReportAtomic(path string, report Report, beforeReplace func() error) error {
-	if err := ValidateReport(report); err != nil {
-		return err
-	}
 	reportPath, err := absoluteClean(path)
 	if err != nil {
 		return err
@@ -829,11 +839,10 @@ func WriteReportAtomic(path string, report Report, beforeReplace func() error) e
 	if !info.IsDir() {
 		return errors.New("report parent is not a directory")
 	}
-	body, err := json.MarshalIndent(report, "", "  ")
+	body, err := MarshalReport(report)
 	if err != nil {
 		return err
 	}
-	body = append(body, '\n')
 	temp, err := os.CreateTemp(root, ".tts-report-*.tmp")
 	if err != nil {
 		return err
