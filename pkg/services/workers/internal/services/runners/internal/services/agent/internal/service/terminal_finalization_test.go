@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -101,6 +102,73 @@ func TestExecuteUnusableResultKeepsTypedFailureTerminal(t *testing.T) {
 		t.Fatalf("result.Outcome = %q, want FAILED", result.Outcome)
 	}
 
+	fragments := recorder.snapshot()
+	if countFragmentsByKind(fragments, workers.CompletedFragmentKind) != 0 {
+		t.Fatalf("completed terminal fragments = %#v, want none", fragments)
+	}
+	if countFragmentsByKind(fragments, workers.FailedFragmentKind) != 1 {
+		t.Fatalf("failed terminal fragments = %#v, want exactly one", fragments)
+	}
+}
+
+func TestExecutePartialNativeResultOnTimeoutKeepsTypedFailure(t *testing.T) {
+	t.Parallel()
+
+	provider := &resultErrorProvidersFake{
+		result: providers.ExecuteResult{Content: "partial output before timeout"},
+		err: providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindTimeout,
+			Message: "provider invocation timed out",
+		},
+	}
+	recorder := &progressFragmentRecorder{}
+	runner, err := New(provider, recorder.publish)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := baseAgentRequest()
+	request.StopToken = "COMPLETE"
+	result, err := runner.Execute(t.Context(), request)
+	if err == nil {
+		t.Fatal("Execute() error = nil, want timeout failure for partial native output")
+	}
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) || providerErr.Type != workers.WorkFailureTypeTimeout {
+		t.Fatalf("Execute() error = %v, want typed timeout ProviderError", err)
+	}
+	if result.Content != "partial output before timeout" {
+		t.Fatalf("result.Content = %q, want retained partial output", result.Content)
+	}
+
+	fragments := recorder.snapshot()
+	if countFragmentsByKind(fragments, workers.CompletedFragmentKind) != 0 {
+		t.Fatalf("completed terminal fragments = %#v, want none", fragments)
+	}
+	if countFragmentsByKind(fragments, workers.FailedFragmentKind) != 1 {
+		t.Fatalf("failed terminal fragments = %#v, want exactly one", fragments)
+	}
+}
+
+func TestExecuteEmptyResultPublishesNoUsableFailure(t *testing.T) {
+	t.Parallel()
+
+	recorder := &progressFragmentRecorder{}
+	runner, err := New(&resultErrorProvidersFake{}, recorder.publish)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := runner.Execute(t.Context(), baseAgentRequest())
+	var providerErr *workers.ProviderError
+	if err == nil || !errors.As(err, &providerErr) ||
+		providerErr.Type != workers.WorkFailureTypeInternalServerError ||
+		strings.Contains(err.Error(), noUsableAgentResultMessage) {
+		t.Fatalf("Execute() error = %v, want bounded no-usable-result failure", err)
+	}
+	if result.Outcome != workers.OutcomeFailed {
+		t.Fatalf("result.Outcome = %q, want FAILED", result.Outcome)
+	}
 	fragments := recorder.snapshot()
 	if countFragmentsByKind(fragments, workers.CompletedFragmentKind) != 0 {
 		t.Fatalf("completed terminal fragments = %#v, want none", fragments)
@@ -285,4 +353,135 @@ func fragmentByKind(
 		}
 	}
 	return workers.ProgressFragment{}
+}
+
+func TestTerminalPublicationNilIsNoop(t *testing.T) {
+	var publication *terminalPublication
+	fragment := workers.ProgressFragment{Kind: workers.ProgressFragmentKind}
+
+	publication.progress(fragment)
+	publication.terminal(fragment)
+	publication.close()
+}
+
+func TestExecuteNativeLifecycleDoesNotSynthesizeCompletion(t *testing.T) {
+	t.Parallel()
+
+	recorder := &progressFragmentRecorder{}
+	provider := &resultProvidersFake{result: providers.ExecuteResult{
+		Content: "native completed output",
+		Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{
+			Phase:  "turn.completed",
+			Detail: "native terminal lifecycle",
+		}}},
+	}}
+	runner, err := New(provider, recorder.publish)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if _, err := runner.Execute(t.Context(), baseAgentRequest()); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	fragments := recorder.snapshot()
+	if countFragmentsByKind(fragments, workers.CompletedFragmentKind) != 0 {
+		t.Fatalf("completed terminal fragments = %#v, want native lifecycle only", fragments)
+	}
+	if len(fragments) != 2 || fragments[0].Type != "turn.completed" ||
+		fragments[1].Type != "message.completed" {
+		t.Fatalf("native lifecycle fragments = %#v, want native lifecycle and ordered message progress", fragments)
+	}
+}
+
+func TestMergeDecisionEnvelopeDiagnosticsCopiesOwnerLayers(t *testing.T) {
+	t.Parallel()
+
+	envelope := &workers.WorkDiagnostics{
+		Provider: &workers.ProviderDiagnostic{
+			Provider: "definitions",
+			ResponseMetadata: map[string]string{
+				"classification": "accepted",
+			},
+		},
+		Metadata: map[string]string{"decision": "owner"},
+	}
+	if merged := mergeDecisionEnvelopeDiagnostics(nil, envelope); merged == nil ||
+		merged.Provider == nil || merged.Provider.ResponseMetadata["classification"] != "accepted" {
+		t.Fatalf("nil-base diagnostics = %#v, want cloned owner diagnostics", merged)
+	}
+
+	baseWithoutProvider := &workers.WorkDiagnostics{}
+	merged := mergeDecisionEnvelopeDiagnostics(baseWithoutProvider, envelope)
+	if merged.Provider == nil || merged.Provider.Provider != "definitions" {
+		t.Fatalf("provider overlay = %#v, want owner provider", merged.Provider)
+	}
+
+	baseWithoutMetadata := &workers.WorkDiagnostics{
+		Provider: &workers.ProviderDiagnostic{Provider: "codex"},
+	}
+	merged = mergeDecisionEnvelopeDiagnostics(baseWithoutMetadata, envelope)
+	if merged.Provider.ResponseMetadata["classification"] != "accepted" ||
+		merged.Metadata["decision"] != "owner" {
+		t.Fatalf("layered diagnostics = %#v, want provider and top-level metadata", merged)
+	}
+}
+
+func TestRunnerResultCopiesDetachedProviderDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	response := runnerResult(providers.ExecuteResult{
+		Content: "diagnosed output",
+		SessionRef: &providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "diagnosed-session",
+		},
+		Diagnostics: &providers.ExecuteDiagnostics{
+			DurationMillis: 7,
+			Command: &providers.ExecuteCommandDiagnostics{
+				Command: "codex", Args: []string{"exec"}, Env: map[string]string{"SAFE": "1"},
+				Stdin: "prompt", Stdout: "out", Stderr: "err", ExitCode: 3,
+				TimedOut: true, DurationMS: 4, WorkingDir: "work",
+			},
+			Panic: &providers.ExecutePanicDiagnostics{Message: "panic", Stack: "stack"},
+		},
+	}, providers.IDCodex)
+	if response.Diagnostics == nil || response.Diagnostics.Provider == nil ||
+		response.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataDurationMS] != "7" {
+		t.Fatalf("provider diagnostics = %#v, want duration metadata", response.Diagnostics)
+	}
+	if response.Diagnostics.Command == nil || !response.Diagnostics.Command.TimedOut ||
+		response.Diagnostics.Panic == nil || response.Diagnostics.Panic.Message != "panic" {
+		t.Fatalf("detached command/panic diagnostics = %#v, want copied facts", response.Diagnostics)
+	}
+}
+
+func TestLiveProviderSessionSnapshotCopiesAuthoredReference(t *testing.T) {
+	t.Parallel()
+
+	live := &liveProviderSession{}
+	live.set(providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "live-session",
+	})
+	snapshot := live.snapshot()
+	if snapshot == nil || snapshot.ProviderSessionID != "live-session" {
+		t.Fatalf("live session snapshot = %#v, want authored continuation", snapshot)
+	}
+}
+
+func TestPreserveContinuationUsesLegacySessionID(t *testing.T) {
+	t.Parallel()
+
+	request := baseAgentRequest()
+	request.SessionID = "legacy-session"
+	response := preserveContinuation(
+		workers.RunnerExecutionResult{},
+		request,
+		nil,
+	)
+	if response.Continuation == nil || response.Continuation.ProviderSessionID != "legacy-session" {
+		t.Fatalf("preserved continuation = %#v, want legacy session", response.Continuation)
+	}
 }

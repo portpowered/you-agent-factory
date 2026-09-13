@@ -158,6 +158,17 @@ func assertNormalizedResultAndError(
 	wantResumeID string,
 ) {
 	t.Helper()
+	assertNormalizedResult(t, result, wantContent, wantResumeID)
+	assertNormalizedFailure(t, executeErr)
+}
+
+func assertNormalizedResult(
+	t *testing.T,
+	result providers.ExecuteResult,
+	wantContent string,
+	wantResumeID string,
+) {
+	t.Helper()
 	if result.Content != wantContent || result.Outcome != providers.ExecuteOutcomeAccepted {
 		t.Fatalf("normalized result = %#v, want accepted content/outcome", result)
 	}
@@ -175,6 +186,13 @@ func assertNormalizedResultAndError(
 		(wantResumeID != "" && strings.Contains(result.Diagnostics.Progress[0].Detail, wantResumeID)) {
 		t.Fatalf("normalized result progress leaked secret: %#v", result.Diagnostics.Progress[0])
 	}
+}
+
+func assertNormalizedFailure(
+	t *testing.T,
+	executeErr error,
+) {
+	t.Helper()
 	if !errors.Is(executeErr, providers.ErrExecuteFailed) {
 		t.Fatalf("execution error = %v, want failed sentinel", executeErr)
 	}

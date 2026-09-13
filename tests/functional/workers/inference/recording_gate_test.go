@@ -276,8 +276,16 @@ func queueWSRFT004ProviderResult(
 	if len(stderr) > 0 {
 		resultStderr = stderr[0]
 	}
+	resultStdout := loaded.Stdout.Raw
+	if exitCode != 0 {
+		// This helper models a genuine failed execution. A successful Codex
+		// transcript beside a nonzero exit is the separate terminal-finalization
+		// contract exercised by the Full Flow fixture, so do not accidentally
+		// turn this recording-health failure case into an accepted candidate.
+		resultStdout = nil
+	}
 	runner.delegate.Queue(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stdout:   append([]byte(nil), resultStdout...),
 		Stderr:   []byte(resultStderr),
 		ExitCode: exitCode,
 	})

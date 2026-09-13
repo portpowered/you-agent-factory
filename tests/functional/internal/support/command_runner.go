@@ -66,7 +66,13 @@ func (r *ShapedProviderCommandRunner) Run(ctx context.Context, req platformproce
 	if err != nil {
 		return result, err
 	}
-	result.Stdout = shapedProviderCommandStdout(req.Command, result.Stdout)
+	// A nonzero process result is a provider failure, not a successful empty
+	// stream. Preserve its raw output so the runner can make the terminal
+	// failure decision from the process result instead of this test edge
+	// manufacturing a Codex/Claude success fixture.
+	if result.ExitCode == 0 {
+		result.Stdout = shapedProviderCommandStdout(req.Command, result.Stdout)
+	}
 	return result, nil
 }
 

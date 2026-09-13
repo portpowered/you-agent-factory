@@ -727,7 +727,12 @@ func (runner *codexSharedCommandRunner) Run(
 	runner.requests = append(runner.requests, cloneCodexCommandRequest(request))
 	runner.mu.Unlock()
 	result := route.result
-	result.Stdout = support.CodexSuccessStdout(string(result.Stdout))
+	// A nonzero process result is a provider refusal, not a successful empty
+	// stream. Keep its raw stdout so Workers can route the typed failure rather
+	// than letting this shared fixture manufacture a completion record beside it.
+	if result.ExitCode == 0 {
+		result.Stdout = support.CodexSuccessStdout(string(result.Stdout))
+	}
 	result.Stderr = append([]byte(nil), result.Stderr...)
 	return result, nil
 }

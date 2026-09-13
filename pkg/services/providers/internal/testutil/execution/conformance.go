@@ -250,7 +250,7 @@ func runParseFailure(t *testing.T, subject Subject) {
 	result, err := executeConformance(t, root, t.Context(), request)
 	var failure providers.ExecuteFailure
 	if subject.PreservesResultOnParseFailure {
-		failure = assertFailureWithCandidate(
+		failure = assertFailure(
 			t,
 			result,
 			err,
@@ -353,7 +353,7 @@ func runLateSuccessAfterCancellation(t *testing.T, subject Subject) {
 
 	select {
 	case got := <-outcome:
-		assertFailureWithCandidate(
+		assertFailure(
 			t,
 			got.result,
 			got.err,
@@ -473,21 +473,15 @@ func assertFailure(
 	err error,
 	wantSentinel error,
 	wantKind providers.ExecuteFailureKind,
-) providers.ExecuteFailure {
-	return assertFailureWithCandidate(t, result, err, wantSentinel, wantKind, "")
-}
-
-func assertFailureWithCandidate(
-	t *testing.T,
-	result providers.ExecuteResult,
-	err error,
-	wantSentinel error,
-	wantKind providers.ExecuteFailureKind,
-	wantContent string,
+	wantContent ...string,
 ) providers.ExecuteFailure {
 	t.Helper()
-	if result.Content != wantContent {
-		t.Fatalf("failed Execute() content = %q, want %q", result.Content, wantContent)
+	expectedContent := ""
+	if len(wantContent) == 1 {
+		expectedContent = wantContent[0]
+	}
+	if result.Content != expectedContent {
+		t.Fatalf("failed Execute() content = %q, want %q", result.Content, expectedContent)
 	}
 	if !errors.Is(err, wantSentinel) {
 		t.Fatalf("Execute() error = %v, want %v", err, wantSentinel)
