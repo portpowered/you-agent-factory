@@ -615,9 +615,9 @@ func (f *Factory) openForRequest(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (runtimeProducts, error) {
-	// Historical portable replay is an inspection-only product and must not
-	// acquire live Runtime state. Legacy replay artifacts still use the normal
-	// activation path and therefore retain the live replay behavior.
+	// Historical replay, whether portable or legacy, is an inspection-only
+	// product and must select its detached projection before live Factory
+	// Runtime assembly. Resume remains an explicit live successor path below.
 	if request != nil && request.Recordings.ReplayPath != "" {
 		// A compatibility Factory without a Runtime root still needs the direct
 		// historical/replay opener used by narrow tests and migration callers.
@@ -639,6 +639,12 @@ func (f *Factory) openForRequest(
 			}
 			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
 		}
+		if legacyReplayArtifactHasCanonicalEventShape(*input.Legacy) {
+			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
+		}
+		// Keep intentionally incomplete synthetic inputs used by narrow
+		// compatibility callers on their historical activation path. The real
+		// Recordings loader rejects such an artifact before this branch.
 		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
 	if request != nil && strings.TrimSpace(request.Recordings.ResumePath) != "" {

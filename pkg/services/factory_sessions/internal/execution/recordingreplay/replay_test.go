@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -159,6 +162,70 @@ func TestReplayRecordingPreservesCurrentWorkerHistoryFacts(t *testing.T) {
 	assertInspectionWorkerHistory(t, first)
 }
 
+func TestReplayLegacyRecordingMapsCanonicalFailureAndLaterEventFacts(t *testing.T) {
+	t.Parallel()
+
+	workID := `work-"failed`
+	item := work.FactoryWorkItem{
+		ID: workID, WorkTypeID: "review", State: "failed", TraceID: "trace-failed",
+		CurrentChainingTraceID: "chain-current", PreviousChainingTraceIDs: []string{"chain-previous"},
+		ParentID: "parent-1",
+	}
+	state := recording.FactoryWorldState{
+		FactoryState: "FAILED",
+		WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1", Type: work.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []work.FactoryWorkItem{item},
+			},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{workID: item},
+		FailedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-failed", TransitionID: "review-transition", WorkItemIDs: []string{workID},
+			Result: factorydefinitions.WorkstationResult{
+				Outcome: string(workers.OutcomeFailed), Error: "{\"decision\":\"not-a-live-envelope\"}",
+			},
+		}},
+		SessionBracket: &factorydefinitions.FactoryWorldSessionBracketState{
+			SessionID: "legacy-session", SourceRef: "workflow/legacy.js", LifecycleControlStatus: "FAILED",
+			ResultStatus: string(factorydefinitions.FactorySessionResultStatusFailedWithPartial),
+			Terminal:     true, FinalStatus: string(factorydefinitions.FactorySessionLifecycleStatusFailed),
+		},
+	}
+	eventTime := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	value := recording.ReplayArtifact{
+		SchemaVersion: "legacy", Events: []recording.FactoryEvent{
+			{
+				SchemaVersion: recording.FactoryEventSchemaVersionV1,
+				Id:            "event-later", Type: recording.FactoryEventTypeFactoryStateResponse,
+				Context: recording.FactoryEventContext{Tick: 4, Sequence: 0, EventTime: eventTime},
+				Payload: json.RawMessage(`{"state":"FAILED"}`),
+			},
+		},
+	}
+
+	got, err := ReplayLegacyRecording(value, "requested-session", state)
+	if err != nil {
+		t.Fatalf("ReplayLegacyRecording: %v", err)
+	}
+	if got.FactoryProjection == nil || got.FactoryProjection.SessionBracket == nil ||
+		got.Session.SessionID != "legacy-session" ||
+		got.Session.ResolvedSource.SourceRef != "workflow/legacy.js" ||
+		got.Session.Status != fse.LifecycleStatusFailed ||
+		got.Result.ResultStatus != fse.ResultStatusFailedWithPartial ||
+		got.Result.Failure == nil || got.Result.Failure.Reason != string(workers.WorkFailureTypeUnknown) {
+		t.Fatalf("legacy session/result projection = %#v, want canonical terminal failure facts", got)
+	}
+	if len(got.Events.Events) != 1 || !strings.Contains(string(got.Events.Events[0]), `"event-later"`) {
+		t.Fatalf("legacy event projection = %#v, want later event identity", got.Events)
+	}
+	detail, ok := got.FactoryProjection.FailureDetailsByWorkID[workID]
+	if !ok || detail.DispatchID != "dispatch-failed" || detail.TransitionID != "review-transition" ||
+		detail.FailureDetail == nil || detail.FailureDetail.Message != "{\"decision\":\"not-a-live-envelope\"}" {
+		t.Fatalf("legacy failure detail = %#v, want preserved safe recorded message and dispatch identity", detail)
+	}
+}
+
 func assertLegacyReplayFixture(t *testing.T, name string) {
 	t.Helper()
 	value := loadVersionPinnedRecordingFixture(t, name)
@@ -221,6 +288,11 @@ func assertInspectionWorkerHistory(t *testing.T, projection RecordingReplayProje
 	inspection := NewService(projection).Inspection()
 	if !reflect.DeepEqual(inspection.WorkerHistory, projection.WorkerHistory) {
 		t.Fatalf("inspection Worker history = %#v, want %#v", inspection.WorkerHistory, projection.WorkerHistory)
+	}
+	if inspection.FactoryProjection.Availability != factorysessions.HistoricalReplayFactoryProjectionUnavailable ||
+		inspection.FactoryProjection.Reason != factorysessions.HistoricalReplayFactoryProjectionReasonNotRecorded ||
+		inspection.FactoryProjection.State != nil {
+		t.Fatalf("portable Factory projection = %#v, want explicit unavailable state", inspection.FactoryProjection)
 	}
 }
 

@@ -507,7 +507,13 @@ func (operation *Operation) Run(ctx context.Context) error {
 		if err := operation.runner.Run(ctx); err != nil {
 			return err
 		}
-		return emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay)
+		if err := emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay); err != nil {
+			return err
+		}
+		return emitReplayMetadataWarnings(
+			replayMetadataOutput(operation.cfg),
+			operation.replayMetadataWarnings,
+		)
 	}
 	if operation.invocationMode {
 		if err := operation.prepareStartup(ctx, false); err != nil {
@@ -590,6 +596,25 @@ func emitHistoricalReplayInspection(
 	); err != nil {
 		return fmt.Errorf("write historical replay inspection: %w", err)
 	}
+	factoryProjection := normalizedHistoricalReplayFactoryProjection(inspection.FactoryProjection)
+	if _, err := fmt.Fprintf(
+		output,
+		"Factory projection: %s (reason=%s)\n",
+		factoryProjection.Availability,
+		factoryProjection.Reason,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	controlStatus, terminal, finalStatus := historicalReplayLifecycle(inspection)
+	if _, err := fmt.Fprintf(
+		output,
+		"Session lifecycle: control=%s terminal=%t final=%s\n",
+		quoteHistoricalReplayValue(controlStatus),
+		terminal,
+		quoteHistoricalReplayValue(finalStatus),
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
 	if inspection.Checkpoint != nil {
 		if _, err := fmt.Fprintf(
 			output,
@@ -617,6 +642,9 @@ func emitHistoricalReplayInspection(
 		if _, err := fmt.Fprintf(output, "Artifact: %s (%s)\n", artifact.ID, artifact.Kind); err != nil {
 			return fmt.Errorf("write historical replay inspection: %w", err)
 		}
+	}
+	if err := emitHistoricalReplayFactoryFacts(output, inspection); err != nil {
+		return err
 	}
 	for index, event := range inspection.Events.Events {
 		var summary struct {
@@ -724,6 +752,9 @@ func prepareRunConfig(
 func classifyRunInputFailure(cfg RunConfig, err error) error {
 	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
 		return err
+	}
+	if structural := newReplayStructuralCLIError(err); structural != nil {
+		return structural
 	}
 	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
 		return clidiag.NewLocalInputFailure("--replay", path, err)
