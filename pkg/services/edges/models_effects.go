@@ -137,13 +137,6 @@ type HostProcessDiagnosticSnapshot struct {
 	CauseMessageRedacted bool
 }
 
-// HostManagedProcessDiagnosticSource is optional so existing process effects
-// remain source-compatible. A false result means terminal evidence is not
-// available yet.
-type HostManagedProcessDiagnosticSource interface {
-	DiagnosticSnapshot() (HostProcessDiagnosticSnapshot, bool)
-}
-
 type RuntimeInspectFile func(string) (os.FileInfo, error)
 type RuntimeTempDirectory func() string
 type RuntimeCreateTempFile func(string, string) (interface {

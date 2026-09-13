@@ -125,7 +125,6 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 		"HostProcessStartSpec":                 {},
 		"HostProcessStreamDiagnostic":          {},
 		"HostProcessDiagnosticSnapshot":        {},
-		"HostManagedProcessDiagnosticSource":   {},
 		"ModelBackendArtifactSelectionRequest": {}, "ModelBackendArtifactSelection": {},
 		"ModelResolveBackendArtifact":         {},
 		"ModelInvocationBackend":              {},
