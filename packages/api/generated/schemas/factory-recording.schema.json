@@ -719,6 +719,14 @@
       "additionalProperties": false,
       "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
       "properties": {
+        "activation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryActivationProvenance"
+            }
+          ],
+          "description": "Server-owned provenance returned by current-Factory inspection and activation responses. It is not accepted as authored topology and is never persisted."
+        },
         "description": {
           "allOf": [
             {
@@ -867,6 +875,41 @@
         "name"
       ],
       "type": "object"
+    },
+    "FactoryActivationProvenance": {
+      "additionalProperties": false,
+      "description": "Server-owned identity of the immutable Factory snapshot accepted by the active runtime.",
+      "properties": {
+        "activationId": {
+          "description": "Opaque identity published once for this successful activation.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "loadedSourceDigest": {
+          "description": "SHA-256 identity of the canonical effective Factory and resolved definition/instruction bytes accepted for activation; source bytes are never returned.",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FactoryActivationState"
+        }
+      },
+      "required": [
+        "activationId",
+        "loadedSourceDigest",
+        "state"
+      ],
+      "type": "object"
+    },
+    "FactoryActivationState": {
+      "description": "Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.",
+      "enum": [
+        "ACTIVE",
+        "AUTHORED_CHANGED",
+        "NOT_ACTIVATED",
+        "AUTHORED_SOURCE_UNAVAILABLE"
+      ],
+      "type": "string"
     },
     "FactoryArtifact": {
       "additionalProperties": false,

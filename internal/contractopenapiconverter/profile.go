@@ -70,6 +70,12 @@ func isKeywordAllowed(stage, key string) bool {
 	if isCoreShapeKeyword(key) {
 		return true
 	}
+	// readOnly is an OpenAPI property annotation. The converter produces
+	// writable JSON Schema projections, so read-only properties are removed by
+	// convertPropertiesField and the annotation itself is not emitted.
+	if key == "readOnly" {
+		return true
+	}
 	if stage == profileStageCompositionNullable || stage == profileStageFailClosed {
 		if key == "nullable" {
 			return true

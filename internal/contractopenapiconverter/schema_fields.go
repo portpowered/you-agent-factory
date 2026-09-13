@@ -13,6 +13,9 @@ func (ctx *convertContext) convertPropertiesField(value any, childPath string) (
 	}
 	converted := make(map[string]any, len(properties))
 	for name, property := range properties {
+		if isReadOnlyProperty(property) {
+			continue
+		}
 		propertyValue, diagnostics := ctx.convertNode(property, joinPath(childPath, name))
 		if len(diagnostics) != 0 {
 			return nil, diagnostics
@@ -24,6 +27,56 @@ func (ctx *convertContext) convertPropertiesField(value any, childPath string) (
 		converted[name] = propertySchema
 	}
 	return converted, nil
+}
+
+func isReadOnlyProperty(value any) bool {
+	property, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	readOnly, ok := property["readOnly"].(bool)
+	return ok && readOnly
+}
+
+func removeReadOnlyRequiredProperties(value, propertiesValue any) any {
+	properties, ok := propertiesValue.(map[string]any)
+	if !ok {
+		return value
+	}
+	readOnly := make(map[string]struct{})
+	for name, property := range properties {
+		if isReadOnlyProperty(property) {
+			readOnly[name] = struct{}{}
+		}
+	}
+	if len(readOnly) == 0 {
+		return value
+	}
+	switch required := value.(type) {
+	case []any:
+		filtered := make([]any, 0, len(required))
+		for _, name := range required {
+			nameString, ok := name.(string)
+			if !ok {
+				filtered = append(filtered, name)
+				continue
+			}
+			if _, skip := readOnly[nameString]; !skip {
+				filtered = append(filtered, name)
+			}
+		}
+		return filtered
+	case []string:
+		filtered := make([]string, 0, len(required))
+		for _, name := range required {
+			if _, skip := readOnly[name]; !skip {
+				filtered = append(filtered, name)
+			}
+		}
+		return filtered
+	default:
+		return value
+	}
 }
 
 func (ctx *convertContext) convertItemsField(value any, childPath string) (map[string]any, []contractvalidator.Diagnostic) {
