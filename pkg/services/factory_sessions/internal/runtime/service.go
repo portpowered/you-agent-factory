@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -378,19 +379,33 @@ func (s *Service) bindResponseEventCompletion(session *livesession.LiveSession, 
 	if session == nil || addRecorder == nil {
 		return
 	}
-	if s.responseEvents != nil {
-		addRecorder(func(eventType interfaces.FactoryEventType) {
-			if eventType == interfaces.FactoryEventTypeSessionCompleted {
+	// AddEventTypeRecorder synchronously replays the existing canonical prefix
+	// before it returns. Keep the completion callback disarmed for that prefix,
+	// then publish the live-tail handoff with an atomic state transition so an
+	// append racing the handoff cannot race the registration state itself.
+	var liveTail atomic.Bool
+	var completeOnce sync.Once
+	complete := func() {
+		completeOnce.Do(func() {
+			if s.responseEvents != nil {
 				s.responseEvents.Complete(session.ResponseEvents)
+				return
 			}
-		})
-	} else {
-		addRecorder(func(eventType interfaces.FactoryEventType) {
-			if eventType == interfaces.FactoryEventTypeSessionCompleted {
-				session.CompleteResponseEvents()
-			}
+			session.CompleteResponseEvents()
 		})
 	}
+	recordTerminal := func(eventType interfaces.FactoryEventType) {
+		if eventType != interfaces.FactoryEventTypeSessionCompleted || !liveTail.Load() {
+			return
+		}
+		complete()
+	}
+	if s.responseEvents != nil {
+		addRecorder(recordTerminal)
+	} else {
+		addRecorder(recordTerminal)
+	}
+	liveTail.Store(true)
 }
 
 // Unregister closes session-owned streams and removes the live session.
