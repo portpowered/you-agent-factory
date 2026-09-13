@@ -208,6 +208,13 @@ func TestReplayLegacyRecordingMapsCanonicalFailureAndLaterEventFacts(t *testing.
 	if err != nil {
 		t.Fatalf("ReplayLegacyRecording: %v", err)
 	}
+	assertLegacyFailureProjection(t, got)
+	assertLegacyLaterEvent(t, got)
+	assertLegacyFailureDetail(t, got, workID)
+}
+
+func assertLegacyFailureProjection(t *testing.T, got RecordingReplayProjection) {
+	t.Helper()
 	if got.FactoryProjection == nil || got.FactoryProjection.SessionBracket == nil ||
 		got.Session.SessionID != "legacy-session" ||
 		got.Session.ResolvedSource.SourceRef != "workflow/legacy.js" ||
@@ -216,9 +223,17 @@ func TestReplayLegacyRecordingMapsCanonicalFailureAndLaterEventFacts(t *testing.
 		got.Result.Failure == nil || got.Result.Failure.Reason != string(workers.WorkFailureTypeUnknown) {
 		t.Fatalf("legacy session/result projection = %#v, want canonical terminal failure facts", got)
 	}
+}
+
+func assertLegacyLaterEvent(t *testing.T, got RecordingReplayProjection) {
+	t.Helper()
 	if len(got.Events.Events) != 1 || !strings.Contains(string(got.Events.Events[0]), `"event-later"`) {
 		t.Fatalf("legacy event projection = %#v, want later event identity", got.Events)
 	}
+}
+
+func assertLegacyFailureDetail(t *testing.T, got RecordingReplayProjection, workID string) {
+	t.Helper()
 	detail, ok := got.FactoryProjection.FailureDetailsByWorkID[workID]
 	if !ok || detail.DispatchID != "dispatch-failed" || detail.TransitionID != "review-transition" ||
 		detail.FailureDetail == nil || detail.FailureDetail.Message != "{\"decision\":\"not-a-live-envelope\"}" {

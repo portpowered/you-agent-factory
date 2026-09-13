@@ -231,28 +231,79 @@ func loadRuntime(
 		return RuntimeLoad{}, err
 	}
 	if replayLoad.historicalReplay != nil {
-		replayMetadataWarnings := []recording.MetadataMismatchWarning(nil)
-		if replayLoad.legacyArtifact != nil {
-			replayMetadataWarnings = reportRuntimeReplayMetadata(
-				dir,
-				replayPath,
-				workstationLoader,
-				replayLoad.legacyArtifact,
-				logger,
-				loadFactory,
-				captureLoadedFactorySnapshot,
-				operatorDefaults,
-			)
-		}
-		return RuntimeLoad{
-			ReplayArtifact:         replayLoad.legacyArtifact,
-			PortableRecording:      replayLoad.portableRecording,
-			HistoricalReplay:       replayLoad.historicalReplay,
-			ReplayMetadataWarnings: replayMetadataWarnings,
-			SessionLogger:          logger,
-		}, nil
+		return loadHistoricalRuntime(
+			dir,
+			replayPath,
+			workstationLoader,
+			operatorDefaults,
+			loadFactory,
+			captureLoadedFactorySnapshot,
+			replayLoad,
+			logger,
+		)
 	}
+	return loadConfiguredRuntime(
+		dir,
+		executionBaseDir,
+		replayPath,
+		operatorDefaults,
+		workstationLoader,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		captureLoadedFactorySnapshot,
+		resolvedSnapshot,
+		replayLoad,
+		logger,
+	)
+}
 
+func loadHistoricalRuntime(
+	dir string,
+	replayPath string,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	replayLoad runtimeReplayLoad,
+	logger *zap.Logger,
+) (RuntimeLoad, error) {
+	replayMetadataWarnings := []recording.MetadataMismatchWarning(nil)
+	if replayLoad.legacyArtifact != nil {
+		replayMetadataWarnings = reportRuntimeReplayMetadata(
+			dir,
+			replayPath,
+			workstationLoader,
+			replayLoad.legacyArtifact,
+			logger,
+			loadFactory,
+			captureLoadedFactorySnapshot,
+			operatorDefaults,
+		)
+	}
+	return RuntimeLoad{
+		ReplayArtifact:         replayLoad.legacyArtifact,
+		PortableRecording:      replayLoad.portableRecording,
+		HistoricalReplay:       replayLoad.historicalReplay,
+		ReplayMetadataWarnings: replayMetadataWarnings,
+		SessionLogger:          logger,
+	}, nil
+}
+
+func loadConfiguredRuntime(
+	dir string,
+	executionBaseDir string,
+	replayPath string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
+	replayLoad runtimeReplayLoad,
+	logger *zap.Logger,
+) (RuntimeLoad, error) {
 	logger.Info("loading factory config", zap.String("dir", dir))
 	loaded, artifact, err := loadRuntimeConfig(
 		dir,

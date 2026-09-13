@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -366,43 +367,75 @@ func replayLegacyRedaction(artifacts []fse.ArtifactSummary) recording.PortableRe
 func replayLegacyLifecycle(value recording.ReplayArtifact, state recording.FactoryWorldState) *fse.LifecycleTimestamps {
 	lifecycle := &fse.LifecycleTimestamps{}
 	if bracket := state.SessionBracket; bracket != nil {
-		setLegacyTimestamp(&lifecycle.StartedAt, bracket.StartedAt)
-		setLegacyTimestamp(&lifecycle.PausedAt, bracket.PausedAt)
-		setLegacyTimestamp(&lifecycle.ResumedAt, bracket.ResumedAt)
-		setLegacyTimestamp(&lifecycle.FinishedAt, bracket.CompletedAt)
+		replayLegacyBracketLifecycle(lifecycle, *bracket)
 	}
 	for _, event := range value.Events {
-		timestamp := event.Context.EventTime.UTC()
-		if timestamp.IsZero() {
-			continue
-		}
-		switch event.Type {
-		case recording.FactoryEventTypeSessionStarted:
-			var payload factorydefinitions.FactorySessionStartedEventPayload
-			if event.DecodePayload(&payload) == nil && !payload.StartedAt.IsZero() {
-				timestamp = payload.StartedAt.UTC()
-			}
-			setLegacyTimestamp(&lifecycle.StartedAt, timestamp)
-		case recording.FactoryEventTypeSessionPaused:
-			var payload factorydefinitions.FactorySessionPausedEventPayload
-			if event.DecodePayload(&payload) == nil && !payload.PausedAt.IsZero() {
-				timestamp = payload.PausedAt.UTC()
-			}
-			setLegacyTimestamp(&lifecycle.PausedAt, timestamp)
-		case recording.FactoryEventTypeSessionResumed:
-			var payload factorydefinitions.FactorySessionResumedEventPayload
-			if event.DecodePayload(&payload) == nil && !payload.ResumedAt.IsZero() {
-				timestamp = payload.ResumedAt.UTC()
-			}
-			setLegacyTimestamp(&lifecycle.ResumedAt, timestamp)
-		case recording.FactoryEventTypeSessionCompleted:
-			var payload factorydefinitions.FactorySessionCompletedEventPayload
-			if event.DecodePayload(&payload) == nil && !payload.CompletedAt.IsZero() {
-				timestamp = payload.CompletedAt.UTC()
-			}
-			setLegacyTimestamp(&lifecycle.FinishedAt, timestamp)
-		}
+		replayLegacyLifecycleEvent(lifecycle, event)
 	}
+	replayLegacyLifecycleFallback(lifecycle, value)
+	return lifecycle
+}
+
+func replayLegacyBracketLifecycle(
+	lifecycle *fse.LifecycleTimestamps,
+	bracket recording.FactoryWorldSessionBracketState,
+) {
+	setLegacyTimestamp(&lifecycle.StartedAt, bracket.StartedAt)
+	setLegacyTimestamp(&lifecycle.PausedAt, bracket.PausedAt)
+	setLegacyTimestamp(&lifecycle.ResumedAt, bracket.ResumedAt)
+	setLegacyTimestamp(&lifecycle.FinishedAt, bracket.CompletedAt)
+}
+
+func replayLegacyLifecycleEvent(lifecycle *fse.LifecycleTimestamps, event recording.FactoryEvent) {
+	timestamp := event.Context.EventTime.UTC()
+	if timestamp.IsZero() {
+		return
+	}
+	switch event.Type {
+	case recording.FactoryEventTypeSessionStarted:
+		setLegacyTimestamp(&lifecycle.StartedAt, legacyStartedTimestamp(event, timestamp))
+	case recording.FactoryEventTypeSessionPaused:
+		setLegacyTimestamp(&lifecycle.PausedAt, legacyPausedTimestamp(event, timestamp))
+	case recording.FactoryEventTypeSessionResumed:
+		setLegacyTimestamp(&lifecycle.ResumedAt, legacyResumedTimestamp(event, timestamp))
+	case recording.FactoryEventTypeSessionCompleted:
+		setLegacyTimestamp(&lifecycle.FinishedAt, legacyCompletedTimestamp(event, timestamp))
+	}
+}
+
+func legacyStartedTimestamp(event recording.FactoryEvent, fallback time.Time) time.Time {
+	var payload factorydefinitions.FactorySessionStartedEventPayload
+	if event.DecodePayload(&payload) == nil && !payload.StartedAt.IsZero() {
+		return payload.StartedAt.UTC()
+	}
+	return fallback
+}
+
+func legacyPausedTimestamp(event recording.FactoryEvent, fallback time.Time) time.Time {
+	var payload factorydefinitions.FactorySessionPausedEventPayload
+	if event.DecodePayload(&payload) == nil && !payload.PausedAt.IsZero() {
+		return payload.PausedAt.UTC()
+	}
+	return fallback
+}
+
+func legacyResumedTimestamp(event recording.FactoryEvent, fallback time.Time) time.Time {
+	var payload factorydefinitions.FactorySessionResumedEventPayload
+	if event.DecodePayload(&payload) == nil && !payload.ResumedAt.IsZero() {
+		return payload.ResumedAt.UTC()
+	}
+	return fallback
+}
+
+func legacyCompletedTimestamp(event recording.FactoryEvent, fallback time.Time) time.Time {
+	var payload factorydefinitions.FactorySessionCompletedEventPayload
+	if event.DecodePayload(&payload) == nil && !payload.CompletedAt.IsZero() {
+		return payload.CompletedAt.UTC()
+	}
+	return fallback
+}
+
+func replayLegacyLifecycleFallback(lifecycle *fse.LifecycleTimestamps, value recording.ReplayArtifact) {
 	if lifecycle.StartedAt == nil && !value.RecordedAt.IsZero() {
 		startedAt := value.RecordedAt.UTC()
 		lifecycle.StartedAt = &startedAt
@@ -415,7 +448,6 @@ func replayLegacyLifecycle(value recording.ReplayArtifact, state recording.Facto
 		finishedAt := value.WallClock.FinishedAt.UTC()
 		lifecycle.FinishedAt = &finishedAt
 	}
-	return lifecycle
 }
 
 func setLegacyTimestamp(destination **time.Time, value time.Time) {
@@ -435,39 +467,63 @@ func legacyLifecycleStatus(events []recording.FactoryEvent, state recording.Fact
 	if status := normalizeLegacyLifecycleStatus(state.FactoryState); status != "" {
 		return status
 	}
+	return legacyLifecycleEventStatus(events)
+}
+
+func legacyLifecycleEventStatus(events []recording.FactoryEvent) fse.LifecycleStatus {
 	status := fse.LifecycleStatusRunning
 	for _, event := range events {
-		switch event.Type {
-		case recording.FactoryEventTypeRunResponse:
-			var payload factorydefinitions.RunResponseEventPayload
-			if event.DecodePayload(&payload) == nil && payload.State != nil {
-				if next := normalizeLegacyLifecycleStatus(string(*payload.State)); next != "" {
-					status = next
-				}
-			}
-		case recording.FactoryEventTypeFactoryStateResponse:
-			var payload factorydefinitions.FactoryStateResponseEventPayload
-			if event.DecodePayload(&payload) == nil {
-				if next := normalizeLegacyLifecycleStatus(string(payload.State)); next != "" {
-					status = next
-				}
-			}
-		case recording.FactoryEventTypeSessionStarted:
-			status = fse.LifecycleStatusRunning
-		case recording.FactoryEventTypeSessionPaused:
-			status = fse.LifecycleStatusPaused
-		case recording.FactoryEventTypeSessionResumed:
-			status = fse.LifecycleStatusRunning
-		case recording.FactoryEventTypeSessionCompleted:
-			var payload factorydefinitions.FactorySessionCompletedEventPayload
-			if event.DecodePayload(&payload) == nil {
-				if next := normalizeLegacyLifecycleStatus(string(payload.FinalStatus)); next != "" {
-					status = next
-				}
-			}
+		if next, ok := legacyLifecycleEventStatusFor(event); ok {
+			status = next
 		}
 	}
 	return status
+}
+
+func legacyLifecycleEventStatusFor(event recording.FactoryEvent) (fse.LifecycleStatus, bool) {
+	switch event.Type {
+	case recording.FactoryEventTypeRunResponse:
+		return legacyRunResponseStatus(event)
+	case recording.FactoryEventTypeFactoryStateResponse:
+		return legacyFactoryStateStatus(event)
+	case recording.FactoryEventTypeSessionStarted:
+		return fse.LifecycleStatusRunning, true
+	case recording.FactoryEventTypeSessionPaused:
+		return fse.LifecycleStatusPaused, true
+	case recording.FactoryEventTypeSessionResumed:
+		return fse.LifecycleStatusRunning, true
+	case recording.FactoryEventTypeSessionCompleted:
+		return legacyCompletedStatus(event)
+	default:
+		return "", false
+	}
+}
+
+func legacyRunResponseStatus(event recording.FactoryEvent) (fse.LifecycleStatus, bool) {
+	var payload factorydefinitions.RunResponseEventPayload
+	if event.DecodePayload(&payload) != nil || payload.State == nil {
+		return "", false
+	}
+	status := normalizeLegacyLifecycleStatus(string(*payload.State))
+	return status, status != ""
+}
+
+func legacyFactoryStateStatus(event recording.FactoryEvent) (fse.LifecycleStatus, bool) {
+	var payload factorydefinitions.FactoryStateResponseEventPayload
+	if event.DecodePayload(&payload) != nil {
+		return "", false
+	}
+	status := normalizeLegacyLifecycleStatus(string(payload.State))
+	return status, status != ""
+}
+
+func legacyCompletedStatus(event recording.FactoryEvent) (fse.LifecycleStatus, bool) {
+	var payload factorydefinitions.FactorySessionCompletedEventPayload
+	if event.DecodePayload(&payload) != nil {
+		return "", false
+	}
+	status := normalizeLegacyLifecycleStatus(string(payload.FinalStatus))
+	return status, status != ""
 }
 
 func normalizeLegacyLifecycleStatus(value string) fse.LifecycleStatus {
@@ -504,31 +560,46 @@ func legacyResultStatus(
 	if runtime := state.JavaScriptRuntime; runtime != nil && strings.TrimSpace(runtime.ResultStatus) != "" {
 		return fse.ResultStatus(runtime.ResultStatus)
 	}
+	if observed := legacyObservedResultStatus(events); observed != "" {
+		return observed
+	}
+	return legacyFallbackResultStatus(status)
+}
+
+func legacyObservedResultStatus(events []recording.FactoryEvent) fse.ResultStatus {
 	var observed fse.ResultStatus
 	for _, event := range events {
 		switch event.Type {
 		case recording.FactoryEventTypeSessionResultUpdated:
-			var payload factorydefinitions.FactorySessionResultUpdatedEventPayload
-			if event.DecodePayload(&payload) == nil {
-				observed = fse.ResultStatus(payload.ResultStatus)
-			}
+			observed = legacyResultUpdatedStatus(event, observed)
 		case recording.FactoryEventTypeSessionCompleted:
-			var payload factorydefinitions.FactorySessionCompletedEventPayload
-			if event.DecodePayload(&payload) == nil && payload.ResultStatus != nil {
-				observed = fse.ResultStatus(*payload.ResultStatus)
-			}
+			observed = legacyCompletedResultStatus(event, observed)
 		}
 	}
-	if observed != "" {
-		return observed
+	return observed
+}
+
+func legacyResultUpdatedStatus(event recording.FactoryEvent, fallback fse.ResultStatus) fse.ResultStatus {
+	var payload factorydefinitions.FactorySessionResultUpdatedEventPayload
+	if event.DecodePayload(&payload) != nil {
+		return fallback
 	}
+	return fse.ResultStatus(payload.ResultStatus)
+}
+
+func legacyCompletedResultStatus(event recording.FactoryEvent, fallback fse.ResultStatus) fse.ResultStatus {
+	var payload factorydefinitions.FactorySessionCompletedEventPayload
+	if event.DecodePayload(&payload) != nil || payload.ResultStatus == nil {
+		return fallback
+	}
+	return fse.ResultStatus(*payload.ResultStatus)
+}
+
+func legacyFallbackResultStatus(status fse.LifecycleStatus) fse.ResultStatus {
 	switch status {
 	case fse.LifecycleStatusSucceeded:
 		return fse.ResultStatusFinal
 	case fse.LifecycleStatusFailed:
-		if len(state.FailedDispatches) > 0 || len(state.FailureDetailsByWorkID) > 0 {
-			return fse.ResultStatusUnavailable
-		}
 		return fse.ResultStatusUnavailable
 	default:
 		return fse.ResultStatusNotReady
@@ -568,64 +639,96 @@ func enrichLegacyFailureDetails(state *recording.FactoryWorldState) {
 	}
 	completions := state.FailedDispatches
 	if len(completions) == 0 {
-		for _, completion := range state.CompletedDispatches {
-			if completion.Result.Outcome == string(workers.OutcomeFailed) {
-				completions = append(completions, completion)
-			}
-		}
+		completions = legacyFailedDispatches(state.CompletedDispatches)
 	}
 	for _, completion := range completions {
-		if completion.Result.Outcome != string(workers.OutcomeFailed) {
-			continue
-		}
-		workIDs := make([]string, 0, len(completion.WorkItemIDs)+len(completion.OutputWorkItems)+len(completion.InputWorkItems))
-		workIDs = append(workIDs, completion.WorkItemIDs...)
-		for _, item := range completion.OutputWorkItems {
-			workIDs = append(workIDs, item.ID)
-		}
-		for _, item := range completion.InputWorkItems {
-			workIDs = append(workIDs, item.ID)
-		}
-		workIDs = uniqueSortedStrings(workIDs)
-		for _, workID := range workIDs {
-			if strings.TrimSpace(workID) == "" {
-				continue
-			}
-			item, ok := state.WorkItemsByID[workID]
-			if !ok {
-				for _, candidate := range completion.OutputWorkItems {
-					if candidate.ID == workID {
-						item, ok = candidate, true
-						break
-					}
-				}
-			}
-			if !ok {
-				for _, candidate := range completion.InputWorkItems {
-					if candidate.ID == workID {
-						item, ok = candidate, true
-						break
-					}
-				}
-			}
-			if !ok {
-				continue
-			}
-			detail := state.FailureDetailsByWorkID[workID]
-			detail.DispatchID = firstNonEmpty(detail.DispatchID, completion.DispatchID)
-			detail.TransitionID = firstNonEmpty(detail.TransitionID, completion.TransitionID)
-			if detail.WorkItem.ID == "" {
-				detail.WorkItem = item
-			}
-			if detail.FailureDetail == nil {
-				detail.FailureDetail = legacyFailureDetail(completion.Result)
-			}
-			if detail.ArtifactVerification == nil {
-				detail.ArtifactVerification = completion.Result.ArtifactVerification.Clone()
-			}
-			state.FailureDetailsByWorkID[workID] = detail
+		enrichLegacyFailureCompletion(state, completion)
+	}
+}
+
+func legacyFailedDispatches(
+	completions []recording.FactoryWorldDispatchCompletion,
+) []recording.FactoryWorldDispatchCompletion {
+	failed := make([]recording.FactoryWorldDispatchCompletion, 0, len(completions))
+	for _, completion := range completions {
+		if completion.Result.Outcome == string(workers.OutcomeFailed) {
+			failed = append(failed, completion)
 		}
 	}
+	return failed
+}
+
+func enrichLegacyFailureCompletion(
+	state *recording.FactoryWorldState,
+	completion recording.FactoryWorldDispatchCompletion,
+) {
+	if completion.Result.Outcome != string(workers.OutcomeFailed) {
+		return
+	}
+	for _, workID := range legacyFailureWorkIDs(completion) {
+		enrichLegacyFailureWork(state, completion, workID)
+	}
+}
+
+func legacyFailureWorkIDs(completion recording.FactoryWorldDispatchCompletion) []string {
+	workIDs := make([]string, 0, len(completion.WorkItemIDs)+len(completion.OutputWorkItems)+len(completion.InputWorkItems))
+	workIDs = append(workIDs, completion.WorkItemIDs...)
+	for _, item := range completion.OutputWorkItems {
+		workIDs = append(workIDs, item.ID)
+	}
+	for _, item := range completion.InputWorkItems {
+		workIDs = append(workIDs, item.ID)
+	}
+	return uniqueSortedStrings(workIDs)
+}
+
+func enrichLegacyFailureWork(
+	state *recording.FactoryWorldState,
+	completion recording.FactoryWorldDispatchCompletion,
+	workID string,
+) {
+	if strings.TrimSpace(workID) == "" {
+		return
+	}
+	item, ok := legacyFailureWorkItem(state, completion, workID)
+	if !ok {
+		return
+	}
+	detail := state.FailureDetailsByWorkID[workID]
+	detail.DispatchID = firstNonEmpty(detail.DispatchID, completion.DispatchID)
+	detail.TransitionID = firstNonEmpty(detail.TransitionID, completion.TransitionID)
+	if detail.WorkItem.ID == "" {
+		detail.WorkItem = item
+	}
+	if detail.FailureDetail == nil {
+		detail.FailureDetail = legacyFailureDetail(completion.Result)
+	}
+	if detail.ArtifactVerification == nil {
+		detail.ArtifactVerification = completion.Result.ArtifactVerification.Clone()
+	}
+	state.FailureDetailsByWorkID[workID] = detail
+}
+
+func legacyFailureWorkItem(
+	state *recording.FactoryWorldState,
+	completion recording.FactoryWorldDispatchCompletion,
+	workID string,
+) (work.FactoryWorkItem, bool) {
+	item, ok := state.WorkItemsByID[workID]
+	if ok {
+		return item, true
+	}
+	for _, candidate := range completion.OutputWorkItems {
+		if candidate.ID == workID {
+			return candidate, true
+		}
+	}
+	for _, candidate := range completion.InputWorkItems {
+		if candidate.ID == workID {
+			return candidate, true
+		}
+	}
+	return work.FactoryWorkItem{}, false
 }
 
 func legacyFailureDetail(result factorydefinitions.WorkstationResult) *workers.FailureDetail {

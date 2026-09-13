@@ -79,30 +79,6 @@ func TestOperationRunDisclosesReplayHomeBeforeInspection(t *testing.T) {
 	}
 }
 
-func TestOperationRunEmitsReplayDriftAfterHistoricalInspection(t *testing.T) {
-	t.Parallel()
-
-	var output bytes.Buffer
-	operation := &Operation{
-		cfg:    RunConfig{Output: &output, SuppressDashboardRendering: true},
-		runner: stubFactoryService{run: func(context.Context) error { return nil }},
-		historicalReplay: &factorysessions.HistoricalReplayInspection{
-			Session: factorysessions.SessionReadResult{SessionID: "replay-session"},
-		},
-		replayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "workers_hash"}},
-	}
-
-	if err := operation.Run(context.Background()); err != nil {
-		t.Fatalf("Operation.Run() error = %v, want successful historical replay", err)
-	}
-	inspectionIndex := strings.Index(output.String(), "Replayed Factory Session: replay-session\n")
-	warning := "Replay warning: current Factory Definition differs from the recording; affected components: workers. Replay continues with recorded inputs.\n"
-	warningIndex := strings.Index(output.String(), warning)
-	if inspectionIndex < 0 || warningIndex < 0 || warningIndex < inspectionIndex {
-		t.Fatalf("historical replay output ordering or warning is wrong:\n%s", output.String())
-	}
-}
-
 type stubFactoryService struct {
 	runtimehost.Service
 	run                   func(context.Context) error

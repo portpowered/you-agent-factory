@@ -3,7 +3,6 @@ package run
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -498,22 +497,7 @@ func (operation *Operation) Run(ctx context.Context) error {
 		defer operation.visualizations.CloseRuntimeSink(operation.visualizationSinkID)
 	}
 	if operation.historicalReplay != nil {
-		if operation.runner == nil {
-			return fmt.Errorf("run historical replay: runtime runner is required")
-		}
-		if err := operation.prepareStartup(ctx, true); err != nil {
-			return err
-		}
-		if err := operation.runner.Run(ctx); err != nil {
-			return err
-		}
-		if err := emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay); err != nil {
-			return err
-		}
-		return emitReplayMetadataWarnings(
-			replayMetadataOutput(operation.cfg),
-			operation.replayMetadataWarnings,
-		)
+		return operation.runHistoricalReplay(ctx)
 	}
 	if operation.invocationMode {
 		if err := operation.prepareStartup(ctx, false); err != nil {
@@ -550,6 +534,25 @@ func (operation *Operation) Run(ctx context.Context) error {
 	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
 }
 
+func (operation *Operation) runHistoricalReplay(ctx context.Context) error {
+	if operation.runner == nil {
+		return fmt.Errorf("run historical replay: runtime runner is required")
+	}
+	if err := operation.prepareStartup(ctx, true); err != nil {
+		return err
+	}
+	if err := operation.runner.Run(ctx); err != nil {
+		return err
+	}
+	if err := emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay); err != nil {
+		return err
+	}
+	return emitReplayMetadataWarnings(
+		replayMetadataOutput(operation.cfg),
+		operation.replayMetadataWarnings,
+	)
+}
+
 func (operation *Operation) prepareStartup(ctx context.Context, discloseHome bool) error {
 	if operation == nil {
 		return fmt.Errorf("prepare local startup: operation is required")
@@ -568,96 +571,6 @@ func (operation *Operation) prepareStartup(ctx context.Context, discloseHome boo
 		emitHomeDirectoryDisclosure(operation.cfg)
 	}
 	operation.startupPrepared = true
-	return nil
-}
-
-func emitHistoricalReplayInspection(
-	output io.Writer,
-	inspection factorysessions.HistoricalReplayInspection,
-) error {
-	if output == nil {
-		return nil
-	}
-	if _, err := fmt.Fprintf(
-		output,
-		"Replayed Factory Session: %s\nSource: %s\nStatus: %s\nResult: %s\n",
-		inspection.Session.SessionID,
-		inspection.Session.ResolvedSource.SourceRef,
-		inspection.Session.Status,
-		inspection.Result.ResultStatus,
-	); err != nil {
-		return fmt.Errorf("write historical replay inspection: %w", err)
-	}
-	if _, err := fmt.Fprintf(
-		output,
-		"Worker history: %s (reason=%s)\n",
-		inspection.WorkerHistory.Availability,
-		inspection.WorkerHistory.Reason,
-	); err != nil {
-		return fmt.Errorf("write historical replay inspection: %w", err)
-	}
-	factoryProjection := normalizedHistoricalReplayFactoryProjection(inspection.FactoryProjection)
-	if _, err := fmt.Fprintf(
-		output,
-		"Factory projection: %s (reason=%s)\n",
-		factoryProjection.Availability,
-		factoryProjection.Reason,
-	); err != nil {
-		return fmt.Errorf("write historical replay inspection: %w", err)
-	}
-	controlStatus, terminal, finalStatus := historicalReplayLifecycle(inspection)
-	if _, err := fmt.Fprintf(
-		output,
-		"Session lifecycle: control=%s terminal=%t final=%s\n",
-		quoteHistoricalReplayValue(controlStatus),
-		terminal,
-		quoteHistoricalReplayValue(finalStatus),
-	); err != nil {
-		return fmt.Errorf("write historical replay inspection: %w", err)
-	}
-	if inspection.Checkpoint != nil {
-		if _, err := fmt.Fprintf(
-			output,
-			"Checkpoint: %s (%s)\n",
-			inspection.Checkpoint.ID,
-			inspection.Checkpoint.Summary,
-		); err != nil {
-			return fmt.Errorf("write historical replay inspection: %w", err)
-		}
-	}
-	if _, err := fmt.Fprintf(
-		output,
-		"Artifacts: %d\nEvents: %d\nRedaction: runtimeStateOmitted=%t checkpointBodiesOmitted=%t providerTranscriptsOmitted=%t childDispatchesOmitted=%t secretsRedacted=%d\n",
-		len(inspection.Artifacts.Artifacts),
-		len(inspection.Events.Events),
-		inspection.Redaction.RuntimeStateOmitted,
-		inspection.Redaction.CheckpointBodiesOmitted,
-		inspection.Redaction.ProviderTranscriptsOmitted,
-		inspection.Redaction.ChildDispatchesOmitted,
-		inspection.Redaction.SecretsRedacted,
-	); err != nil {
-		return fmt.Errorf("write historical replay inspection: %w", err)
-	}
-	for _, artifact := range inspection.Artifacts.Artifacts {
-		if _, err := fmt.Fprintf(output, "Artifact: %s (%s)\n", artifact.ID, artifact.Kind); err != nil {
-			return fmt.Errorf("write historical replay inspection: %w", err)
-		}
-	}
-	if err := emitHistoricalReplayFactoryFacts(output, inspection); err != nil {
-		return err
-	}
-	for index, event := range inspection.Events.Events {
-		var summary struct {
-			ID   string `json:"id"`
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(event, &summary); err != nil {
-			return fmt.Errorf("write historical replay inspection: decode event %d: %w", index, err)
-		}
-		if _, err := fmt.Fprintf(output, "Event %d: %s (%s)\n", index, summary.Type, summary.ID); err != nil {
-			return fmt.Errorf("write historical replay inspection: %w", err)
-		}
-	}
 	return nil
 }
 
@@ -753,7 +666,7 @@ func classifyRunInputFailure(cfg RunConfig, err error) error {
 	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
 		return err
 	}
-	if structural := newReplayStructuralCLIError(err); structural != nil {
+	if structural := recordingscli.MapStructuralReplayFailure(err); structural != nil {
 		return structural
 	}
 	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
