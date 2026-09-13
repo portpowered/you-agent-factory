@@ -384,7 +384,7 @@ func TestRootInvokeMapsInvalidOutputMappingsToBadRequest(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			err := validateCLIOutputShape(
-				InvokeConfig{JSON: true, OutputMappings: testCase.mappings},
+				InvokeConfig{JSON: true, InputMappings: []string{"text=hello"}, OutputMappings: testCase.mappings},
 				modelinference.Detail{Summary: modelinference.Summary{Operations: []modelinference.Operation{operation}}},
 				modelinference.OperationOMNI,
 			)

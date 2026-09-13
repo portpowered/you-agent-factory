@@ -122,7 +122,7 @@ func (service *rootService) refreshInvokeReadiness(
 }
 
 func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
-	if cfg.JSON || len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+	if hasGenericCLIInvocationBindings(cfg) || cfg.JSON {
 		return true
 	}
 	if isDirectTTSAlias(cfg) && strings.TrimSpace(cfg.OutputPath) != "" {
@@ -350,6 +350,9 @@ func validateCLIOutputShape(
 	operation string,
 ) error {
 	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
+	if err := validateZeroInputCLIRequiredSlots(cfg, selected, ok); err != nil {
+		return err
+	}
 	if len(cfg.OutputMappings) > 0 {
 		if strings.TrimSpace(cfg.OutputPath) != "" {
 			return genericCLIOutputFailure(

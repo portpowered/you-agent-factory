@@ -161,6 +161,9 @@ func (h *CommandHandler) Invoke(
 	if err != nil {
 		return mapModelsClientError(err)
 	}
+	if err := validateModelsInvokeInputs(invokeInputs); err != nil {
+		return err
+	}
 	logger, err := h.buildLogger()
 	if err != nil {
 		return err
@@ -222,14 +225,31 @@ func (h *CommandHandler) invokeWithSelectedCache(
 }
 
 type modelsInvokeInputs struct {
-	modelName      string
-	operation      string
-	offline        bool
-	text           string
-	inputMappings  []string
-	parameterSpecs []string
-	outputPath     string
-	outputMappings []string
+	modelName        string
+	operation        string
+	operationDefault bool
+	offline          bool
+	text             string
+	inputMappings    []string
+	parameterSpecs   []string
+	outputPath       string
+	outputMappings   []string
+}
+
+func validateModelsInvokeInputs(inputs modelsInvokeInputs) error {
+	if !missingLegacyTTSInput(inputs) {
+		return nil
+	}
+	// The manifest's implicit TTS operation is the legacy direct-invoke
+	// default. Do not reinterpret it as an explicit generic operation-only
+	// request; only a caller-supplied --operation takes that path.
+	return fmt.Errorf("--text is required")
+}
+
+func missingLegacyTTSInput(inputs modelsInvokeInputs) bool {
+	return inputs.operationDefault && strings.TrimSpace(inputs.text) == "" &&
+		len(inputs.inputMappings) == 0 && len(inputs.parameterSpecs) == 0 &&
+		len(inputs.outputMappings) == 0
 }
 
 func inferGenericCLIModelOperation(modelName string) string {
@@ -255,6 +275,10 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	operation, err := inputs.String(modelsInvokeOperationID)
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke operation: %w", err)
+	}
+	operationDefault := false
+	if state, present := inputs.State(modelsInvokeOperationID); present {
+		operationDefault = state.Default
 	}
 	offline := false
 	if _, present := inputs.State(modelsInvokeOfflineID); present {
@@ -283,13 +307,14 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 		// generic input binding selects the operation from the built-in model
 		// alias unless the caller supplied --operation explicitly.
 		operation = ""
+		operationDefault = false
 	}
 	outputPath, outputMappings, err := readModelsInvokeOutputs(inputs)
 	if err != nil {
 		return modelsInvokeInputs{}, err
 	}
 	return modelsInvokeInputs{
-		modelName: modelName, operation: operation, offline: offline, text: text,
+		modelName: modelName, operation: operation, operationDefault: operationDefault, offline: offline, text: text,
 		inputMappings:  inputMappings,
 		parameterSpecs: parameterSpecs, outputPath: outputPath,
 		outputMappings: outputMappings,

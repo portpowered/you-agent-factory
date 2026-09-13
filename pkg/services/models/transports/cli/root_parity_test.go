@@ -728,14 +728,14 @@ func TestRootAdapter_ValidationFailuresPreserveExitRelevantErrors(t *testing.T) 
 			want: "--operation is required",
 		},
 		{
-			name: "invoke missing text",
+			name: "invoke operation-only leaves legacy text validation",
 			run: func() error {
 				return service.Invoke(modelscli.InvokeConfig{
 					Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M",
 					Operation: "TTS", Output: io.Discard,
 				})
 			},
-			want: "--text is required",
+			want: "--output is required unless --json is set",
 		},
 		{
 			name: "invoke missing output path",

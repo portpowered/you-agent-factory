@@ -593,7 +593,7 @@ func TestRootInvokeValidatesGenericCLIInputForms(t *testing.T) {
 		{name: "model", cfg: InvokeConfig{Context: context.Background(), Output: io.Discard}, want: "model name is required"},
 		{name: "custom named input needs operation", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", InputMappings: []string{"prompt=hello"}, Output: io.Discard}, want: "--operation is required"},
 		{name: "text needs operation", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", Text: "hello", Output: io.Discard}, want: "--operation is required"},
-		{name: "text is required", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", Operation: modelinference.OperationOMNI, Output: io.Discard}, want: "--text is required"},
+		{name: "operation-only reaches generic scope", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", Operation: modelinference.OperationOMNI, Output: io.Discard}, want: "runtime scope opener is required"},
 		{name: "text and named input conflict", cfg: InvokeConfig{Context: context.Background(), ModelName: "llm", InputMappings: []string{"prompt=hello"}, Text: "hello", Output: io.Discard}, want: "--text cannot be used with --input"},
 		{name: "remote server", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", Operation: modelinference.OperationOMNI, Text: "hello", Server: "http://remote", Output: io.Discard}, want: "composition-stable HTTP service"},
 		{name: "scope opener", cfg: InvokeConfig{Context: context.Background(), ModelName: "custom", Operation: modelinference.OperationOMNI, Text: "hello", Output: io.Discard}, want: "runtime scope opener is required"},

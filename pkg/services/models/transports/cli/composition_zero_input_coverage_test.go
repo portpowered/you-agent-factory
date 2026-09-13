@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -117,10 +116,9 @@ func assertRootAdapterZeroInputRequiredSlots(t *testing.T, test zeroInputRequire
 		},
 	})
 
-	outputPath := filepath.Join(t.TempDir(), "result.out")
 	err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: test.model, Operation: test.operation,
-		OutputMappings: []string{test.outputs[0].Name + "=" + outputPath}, Output: io.Discard,
+		Output: io.Discard,
 	})
 	var failure *modelinference.InvocationFailure
 	if !errors.As(err, &failure) || failure == nil {
@@ -140,5 +138,53 @@ func assertRootAdapterZeroInputRequiredSlots(t *testing.T, test zeroInputRequire
 	}
 	if catalogCalls != 1 || root.preflightCalls != 0 || inputReads != 0 || leaseCalls != 0 || invokeCalls != 0 {
 		t.Fatalf("zero-input effects = catalog:%d preflight:%d reads:%d leases:%d invokes:%d, want 1/0/0/0/0", catalogCalls, root.preflightCalls, inputReads, leaseCalls, invokeCalls)
+	}
+}
+
+func TestRootAdapter_InvokeGenericASRMultipleOutputsAfterCompleteInput(t *testing.T) {
+	t.Parallel()
+
+	inputReads, invokeCalls := 0, 0
+	root := &zeroInputEffectsModelsRoot{}
+	root.stubModelsRoot.getCatalogModel = func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+		return genericCLIOperationModel(request.Name, request.Operation,
+			[]modelinference.OperationSlot{{
+				Name: "audio", Modality: modelinference.ModalityAudio,
+				Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+			}},
+			[]modelinference.OperationSlot{
+				{Name: "transcript", Modality: modelinference.ModalityText},
+				{Name: "segments", Modality: modelinference.ModalityJSON},
+			}), nil
+	}
+	root.stubModelsRoot.invokeModel = func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+		invokeCalls++
+		return modelinference.InvokeModelResult{}, nil
+	}
+	service := modelscli.NewService(modelscli.Config{
+		Models: root,
+		InputFileReader: func(context.Context, string, int64) ([]byte, error) {
+			inputReads++
+			return []byte("unexpected input read"), nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: testRuntimeScope(t)}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"audio=@meeting.wav"}, Output: io.Discard,
+	})
+	var failure *modelinference.InvocationFailure
+	if !errors.As(err, &failure) || failure == nil {
+		t.Fatalf("Invoke() error = %v, want typed output-shape failure", err)
+	}
+	if failure.Class != modelinference.InvocationFailureClassInvalidParameter ||
+		failure.Message != "multiple model outputs require --json or explicit output mappings: transcript, segments" {
+		t.Fatalf("InvocationFailure = %#v, want named ASR multi-output diagnostic", failure)
+	}
+	if root.preflightCalls != 0 || inputReads != 0 || invokeCalls != 0 {
+		t.Fatalf("complete-input output-shape effects = preflight:%d reads:%d invokes:%d, want 0/0/0", root.preflightCalls, inputReads, invokeCalls)
 	}
 }

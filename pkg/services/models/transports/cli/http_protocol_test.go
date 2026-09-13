@@ -122,7 +122,7 @@ func TestLegacyHTTPAdapterValidatesOperationInputs(t *testing.T) {
 	}, "--operation is required")
 	assertError("Invoke text", func() error {
 		return service.Invoke(InvokeConfig{Context: context.Background(), ModelName: "voice", Operation: "TTS", Output: output})
-	}, "--text is required")
+	}, "CLI HTTP protocol is required for remote models invoke")
 	assertError("Pull context", func() error {
 		return service.Pull(PullConfig{Output: output})
 	}, "context is required")
@@ -351,9 +351,9 @@ func TestCLIOutputShapeValidationBranches(t *testing.T) {
 		op   string
 		want string
 	}{
-		{name: "mapping with output path", cfg: InvokeConfig{OutputMappings: []string{"text=a"}, OutputPath: "speech.wav"}, op: "OMNI", want: "cannot be combined"},
-		{name: "mapping missing output", cfg: InvokeConfig{OutputMappings: []string{"text=a"}, JSON: true}, op: "OMNI", want: "cover every output"},
-		{name: "mapping unknown slot", cfg: InvokeConfig{OutputMappings: []string{"other=a", "usage=b"}, JSON: true}, op: "OMNI", want: "unknown slot"},
+		{name: "mapping with output path", cfg: InvokeConfig{InputMappings: []string{"text=hello"}, OutputMappings: []string{"text=a"}, OutputPath: "speech.wav"}, op: "OMNI", want: "cannot be combined"},
+		{name: "mapping missing output", cfg: InvokeConfig{InputMappings: []string{"text=hello"}, OutputMappings: []string{"text=a"}, JSON: true}, op: "OMNI", want: "cover every output"},
+		{name: "mapping unknown slot", cfg: InvokeConfig{InputMappings: []string{"text=hello"}, OutputMappings: []string{"other=a", "usage=b"}, JSON: true}, op: "OMNI", want: "unknown slot"},
 		{name: "multiple outputs without mode", cfg: InvokeConfig{}, op: "OMNI", want: "multiple model outputs"},
 		{name: "unknown operation without mode", cfg: InvokeConfig{}, op: "UNKNOWN", want: "--output is required"},
 	}

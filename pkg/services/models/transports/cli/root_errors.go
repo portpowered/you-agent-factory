@@ -60,7 +60,34 @@ func validateModelsInvokeRequest(cfg InvokeConfig) (string, string, string, erro
 }
 
 func hasGenericCLIInvocationBindings(cfg InvokeConfig) bool {
-	return hasGenericCLIInputs(cfg) || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0
+	if hasGenericCLIInputs(cfg) || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+		return true
+	}
+	// An explicit operation without the legacy --text binding selects the
+	// catalog-backed generic contract. Keep the documented direct-TTS
+	// --text/--output compatibility path unchanged.
+	return strings.TrimSpace(cfg.Operation) != "" && strings.TrimSpace(cfg.Text) == ""
+}
+
+func validateZeroInputCLIRequiredSlots(
+	cfg InvokeConfig,
+	selected modelinference.Operation,
+	ok bool,
+) error {
+	if !shouldValidateZeroInputCLIRequiredSlots(cfg, selected, ok) {
+		return nil
+	}
+	_, validNames := genericCLIInputSlots(selected.Inputs)
+	return validateMissingGenericCLIInputSlots(selected.Inputs, map[string]int{}, validNames)
+}
+
+func shouldValidateZeroInputCLIRequiredSlots(
+	cfg InvokeConfig,
+	selected modelinference.Operation,
+	ok bool,
+) bool {
+	return ok && hasGenericCLIInvocationBindings(cfg) && !hasGenericCLIInputs(cfg) &&
+		strings.TrimSpace(cfg.Text) == "" && genericCLIInputContractComplete(selected.Inputs)
 }
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
