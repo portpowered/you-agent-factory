@@ -26,6 +26,17 @@ const (
 	eventIDSessionLifecycleControlPrefix = "session-lifecycle-control"
 )
 
+// sessionLifecycleState is the Recordings-owned exactly-once authority for
+// one Factory Session identity. Event IDs remain legacy-compatible for the
+// first bracket in a recording, while later distinct brackets use their
+// session identity to avoid durable-recorder deduplication collisions.
+type sessionLifecycleState struct {
+	startedAt      time.Time
+	hasStarted     bool
+	hasCompleted   bool
+	legacyEventIDs bool
+}
+
 // SessionLifecycleStartInput carries replay-safe facts for SESSION_STARTED.
 type SessionLifecycleStartInput struct {
 	SessionID           string
@@ -189,6 +200,11 @@ func (h *FactoryEventHistory) seedSessionProjectionLocked() {
 }
 
 func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.FactoryEvent) {
+	if h.sessionLifecycles == nil {
+		h.sessionLifecycles = make(map[string]sessionLifecycleState)
+	}
+	sessionID := sessionLifecycleEventSessionID(event)
+	state := h.sessionLifecycles[sessionID]
 	switch event.Type {
 	case interfaces.FactoryEventTypeInitialStructureRequest:
 		h.hasInitialStructure = true
@@ -198,10 +214,17 @@ func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.Facto
 	case interfaces.FactoryEventTypeRunResponse:
 		h.hasRunResponse = true
 	case interfaces.FactoryEventTypeSessionStarted:
-		h.hasSessionStarted = true
-		h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		if !state.hasStarted {
+			state.hasStarted = true
+			state.startedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		}
+		state.legacyEventIDs = state.legacyEventIDs || event.Id == eventIDSessionStarted
 	case interfaces.FactoryEventTypeSessionCompleted:
-		h.hasSessionCompleted = true
+		state.hasCompleted = true
+		state.legacyEventIDs = state.legacyEventIDs || event.Id == eventIDSessionCompleted
+	}
+	if event.Type == interfaces.FactoryEventTypeSessionStarted || event.Type == interfaces.FactoryEventTypeSessionCompleted {
+		h.sessionLifecycles[sessionID] = state
 	}
 	if event.Context.SessionID != nil {
 		if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
@@ -251,25 +274,35 @@ func (h *FactoryEventHistory) RecordSessionResumed(input SessionLifecycleControl
 
 // RecordSessionStarted records the canonical session execution start marker.
 func (h *FactoryEventHistory) RecordSessionStarted(input SessionLifecycleStartInput, eventTime time.Time) {
-	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+	sessionID := strings.TrimSpace(input.SessionID)
+	if h == nil || sessionID == "" {
 		return
 	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
 	h.mu.Lock()
-	if h.hasSessionStarted {
+	if h.sessionLifecycles == nil {
+		h.sessionLifecycles = make(map[string]sessionLifecycleState)
+	}
+	state := h.sessionLifecycles[sessionID]
+	if state.hasStarted {
+		h.sessionID = sessionID
 		h.mu.Unlock()
 		return
 	}
-	h.hasSessionStarted = true
-	h.sessionStartedAt = interfaces.CanonicalEventTime(eventTime)
-	h.sessionID = strings.TrimSpace(input.SessionID)
+	if len(h.sessionLifecycles) == 0 {
+		state.legacyEventIDs = true
+	}
+	state.hasStarted = true
+	state.startedAt = eventTime
+	h.sessionLifecycles[sessionID] = state
+	h.sessionID = sessionID
 	h.mu.Unlock()
 
-	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeSessionStarted,
-		eventIDSessionStarted,
-		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		sessionLifecycleEventID(eventIDSessionStarted, sessionID, state.legacyEventIDs),
+		h.domainSessionLifecycleContext(sessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
 		interfaces.FactorySessionStartedEventPayload{
 			FactoryID:  stringPtrIfNotEmpty(input.FactoryID),
 			SourceRef:  stringPtrIfNotEmpty(input.SourceRef),
@@ -314,22 +347,45 @@ func (h *FactoryEventHistory) RecordSessionResultUpdated(input SessionLifecycleR
 
 // RecordSessionCompleted records the authoritative terminal session lifecycle marker.
 func (h *FactoryEventHistory) RecordSessionCompleted(input SessionLifecycleCompleteInput, eventTime time.Time) {
-	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+	sessionID := strings.TrimSpace(input.SessionID)
+	if h == nil || sessionID == "" {
 		return
 	}
-	h.mu.Lock()
-	if h.hasSessionCompleted {
-		h.mu.Unlock()
-		return
-	}
-	startedAt := h.sessionStartedAt
-	h.hasSessionCompleted = true
-	h.mu.Unlock()
-
 	eventTime = interfaces.CanonicalEventTime(eventTime)
+	state, accepted := h.reserveSessionCompletion(sessionID)
+	if !accepted {
+		return
+	}
+	h.appendSessionCompleted(input, sessionID, eventTime, state)
+}
+
+func (h *FactoryEventHistory) reserveSessionCompletion(sessionID string) (sessionLifecycleState, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.sessionLifecycles == nil {
+		h.sessionLifecycles = make(map[string]sessionLifecycleState)
+	}
+	state := h.sessionLifecycles[sessionID]
+	if state.hasCompleted {
+		return state, false
+	}
+	if len(h.sessionLifecycles) == 0 {
+		state.legacyEventIDs = true
+	}
+	state.hasCompleted = true
+	h.sessionLifecycles[sessionID] = state
+	return state, true
+}
+
+func (h *FactoryEventHistory) appendSessionCompleted(
+	input SessionLifecycleCompleteInput,
+	sessionID string,
+	eventTime time.Time,
+	state sessionLifecycleState,
+) {
 	durationMillis := int64(0)
-	if !startedAt.IsZero() {
-		durationMillis = eventTime.Sub(startedAt).Milliseconds()
+	if !state.startedAt.IsZero() {
+		durationMillis = eventTime.Sub(state.startedAt).Milliseconds()
 		if durationMillis < 0 {
 			durationMillis = 0
 		}
@@ -350,8 +406,8 @@ func (h *FactoryEventHistory) RecordSessionCompleted(input SessionLifecycleCompl
 	sequence := h.allocateSessionLifecycleSequence()
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeSessionCompleted,
-		eventIDSessionCompleted,
-		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		sessionLifecycleEventID(eventIDSessionCompleted, sessionID, state.legacyEventIDs),
+		h.domainSessionLifecycleContext(sessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
 		payload,
 	))
 }
@@ -408,6 +464,7 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 	if strings.TrimSpace(sessionID) == "" {
 		sessionID = workerexecution.DefaultSessionID
 	}
+	sessionID = strings.TrimSpace(sessionID)
 	orchestratorKind := interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
 	finalStatus := interfaces.FactorySessionLifecycleStatusSucceeded
 	resultStatus := interfaces.FactorySessionResultStatusFinal
@@ -420,6 +477,10 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 		}
 	}
 	result := resultStatus
+	state, accepted := h.reserveSessionCompletion(sessionID)
+	if !accepted {
+		return
+	}
 	h.RecordSessionResultUpdated(SessionLifecycleResultInput{
 		SessionID:        sessionID,
 		OrchestratorKind: orchestratorKind,
@@ -436,6 +497,31 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 		ResultStatus:     &result,
 		FailureDetail:    failureDetail,
 	}, eventTime)
+	h.appendSessionCompleted(SessionLifecycleCompleteInput{
+		SessionID:        sessionID,
+		OrchestratorKind: orchestratorKind,
+		Source:           "runtime",
+		Tick:             tick,
+		FinalStatus:      finalStatus,
+		ResultStatus:     &result,
+		FailureDetail:    failureDetail,
+	}, sessionID, interfaces.CanonicalEventTime(eventTime), state)
+}
+
+func sessionLifecycleEventID(prefix, sessionID string, legacy bool) string {
+	if legacy {
+		return prefix
+	}
+	return prefix + "/" + sessionID
+}
+
+func sessionLifecycleEventSessionID(event interfaces.FactoryEvent) string {
+	if event.Context.SessionID != nil {
+		if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
+			return sessionID
+		}
+	}
+	return workerexecution.DefaultSessionID
 }
 
 // RecordSessionLifecycleControl records one accepted pause or resume control on the
