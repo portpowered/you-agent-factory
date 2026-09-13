@@ -1,12 +1,7 @@
 package batch_contract_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -183,77 +178,8 @@ func TestCLISubmitBatchExplicitWorkIDConflictIsAtomicAcrossSessionBoundary(t *te
 		t.Fatalf("exact replay changed retained Factory Events:\nbefore=%#v\nafter=%#v", beforeEvents, afterReplayEvents)
 	}
 
-	// Exercise the Work HTTP edge directly so its typed 409 contract is proven
-	// independently of the CLI renderer.
-	httpRequestID := "request-explicit-session-http-conflict"
-	httpBody := explicitBatchJSONWithTitle(httpRequestID, workID, "untrusted-payload-secret")
-	httpEndpoint := support.SessionWorkURL(
-		server.URL(), sessionID, "/work-requests/"+url.PathEscape(httpRequestID),
-	)
-	httpRequest, err := http.NewRequest(http.MethodPut, httpEndpoint, bytes.NewBufferString(httpBody))
-	if err != nil {
-		t.Fatalf("build explicit Work ID conflict request: %v", err)
-	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-	httpResponse, err := http.DefaultClient.Do(httpRequest)
-	if err != nil {
-		t.Fatalf("send explicit Work ID conflict request: %v", err)
-	}
-	httpResponseBody, readErr := io.ReadAll(httpResponse.Body)
-	httpResponse.Body.Close()
-	if readErr != nil {
-		t.Fatalf("read explicit Work ID conflict response: %v", readErr)
-	}
-	var conflictResponse factoryapi.ErrorResponse
-	if err := json.Unmarshal(httpResponseBody, &conflictResponse); err != nil {
-		t.Fatalf("decode explicit Work ID conflict response: %v\nbody=%s", err, httpResponseBody)
-	}
-	if httpResponse.StatusCode != http.StatusConflict ||
-		conflictResponse.Code != factoryapi.ErrorResponseCodeCONFLICT ||
-		conflictResponse.Family != factoryapi.ErrorFamilyConflict {
-		t.Fatalf("HTTP conflict = status:%d response:%#v, want 409 CONFLICT/CONFLICT", httpResponse.StatusCode, conflictResponse)
-	}
-	if strings.Contains(string(httpResponseBody), "untrusted-payload-secret") {
-		t.Fatalf("HTTP conflict response echoed untrusted payload: %s", httpResponseBody)
-	}
-	afterHTTPWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
-	afterHTTPEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
-	if !reflect.DeepEqual(afterHTTPWork, beforeWork) || !reflect.DeepEqual(afterHTTPEvents, beforeEvents) {
-		t.Fatalf("HTTP conflict mutated public state: workChanged=%t eventsChanged=%t", !reflect.DeepEqual(afterHTTPWork, beforeWork), !reflect.DeepEqual(afterHTTPEvents, beforeEvents))
-	}
-
-	// The CLI must surface the typed conflict as an actionable non-success
-	// diagnostic without reflecting request payload content.
-	cliRequestID := "request-explicit-session-cli-conflict"
-	stdout, stderr, err = executeSubmitBatchCLIOnServer(t, server, []string{
-		"you", "--server", server.URL(), "submit", "batch",
-		"--session", sessionID,
-		explicitBatchJSONWithTitle(cliRequestID, workID, "untrusted-payload-secret"),
-	})
-	if err == nil {
-		t.Fatal("CLI explicit Work ID conflict succeeded")
-	}
-	diagnostic := err.Error() + "\n" + stderr
-	for _, marker := range []string{
-		"batch submission failed (409)",
-		"code=CONFLICT",
-		"family=CONFLICT",
-	} {
-		if !strings.Contains(diagnostic, marker) {
-			t.Fatalf("CLI conflict diagnostic missing %q:\n%s", marker, diagnostic)
-		}
-	}
-	if strings.Contains(diagnostic, "untrusted-payload-secret") {
-		t.Fatalf("CLI conflict diagnostic echoed untrusted payload: %s", diagnostic)
-	}
-	if stdout != "" {
-		t.Fatalf("CLI conflict emitted success stdout: %q", stdout)
-	}
-	afterCLIWork := support.GetJSON[factoryapi.ListWorkResponse](t, listEndpoint)
-	afterCLIEvents := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
-	if !reflect.DeepEqual(afterCLIWork, beforeWork) || !reflect.DeepEqual(afterCLIEvents, beforeEvents) {
-		t.Fatalf("CLI conflict mutated public state: workChanged=%t eventsChanged=%t", !reflect.DeepEqual(afterCLIWork, beforeWork), !reflect.DeepEqual(afterCLIEvents, beforeEvents))
-	}
+	assertExplicitWorkIDHTTPConflict(t, server.URL(), sessionID, workID, beforeWork, beforeEvents)
+	assertExplicitWorkIDCLIConflict(t, server, sessionID, workID, beforeWork, beforeEvents)
 }
 
 // TestCLISubmitBatchOversizedPayloadDiagnosticAcrossInputModes proves every
