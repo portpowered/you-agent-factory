@@ -110,7 +110,11 @@ func TestResumedSuccessorResponseScopeAndWorkAdmission(t *testing.T) {
 	repeatedSession := support.GetDefaultSession(t, baseURL)
 	assertResumedSuccessorIdentityStable(t, session, repeatedSession)
 	sessionID := session.Id
-	t.Logf("resumed successor session identity stable: %s", sessionID)
+	t.Logf(
+		"resumed successor session identity stable: public=%s canonical=%s",
+		sessionID,
+		session.Runtime.StreamIdentity.FactorySessionID,
+	)
 
 	initialEvents := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 	assertResumedHistoricalPrefix(t, initialEvents, artifacts.ledger)
@@ -276,10 +280,7 @@ func TestResumedSuccessorResponseScopeAndWorkAdmission(t *testing.T) {
 	responseEvents := readResumedResponseEventsUntilDispatchTerminal(t, responseStream, dispatchID)
 	assertGeneratedWorkResponseProgress(t, responseEvents, dispatchID, sessionID)
 
-	generatedWork := support.GetJSON[factoryapi.Work](
-		t,
-		support.SessionWorkURL(baseURL, sessionID, "/work/"+url.PathEscape(generatedWorkID)),
-	)
+	generatedWork := waitForResumedWorkTerminal(t, baseURL, sessionID, generatedWorkID)
 	assertGeneratedWorkTerminal(t, generatedWork, generatedWorkID)
 	assertGeneratedSuffixesAboveHistory(t, baseURL, sessionID, artifacts.ledger)
 	assertResumedResponseScopeNoWarnings(t, futureEvents, responseEvents)
@@ -309,6 +310,8 @@ func TestResumedSuccessorResponseScopeAndWorkAdmission(t *testing.T) {
 
 	terminalResponseEvents := readClosedResumedResponseEvents(t, baseURL, sessionID)
 	assertResumedResponseEventOrder(t, terminalResponseEvents, sessionID, dispatchID)
+	terminalCanonicalEvents := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	assertResumedSuccessorLifecycle(t, terminalCanonicalEvents, session.Runtime.StreamIdentity.FactorySessionID)
 	terminalSnapshot := captureClosedResumedScopeSnapshot(t, baseURL, sessionID, terminalResponseEvents)
 
 	httpTerminalStatus, httpTerminalBody := postResumedLifecycleControl(t, baseURL, sessionID, "cancel")
@@ -736,6 +739,55 @@ func assertResumedHistoricalPrefix(
 	}
 }
 
+func assertResumedSuccessorLifecycle(
+	t testing.TB,
+	events []factoryapi.FactoryEvent,
+	canonicalSessionID string,
+) {
+	t.Helper()
+	var startedEvents, completedEvents []factoryapi.FactoryEvent
+	for _, event := range events {
+		if event.Context.SessionId == nil || *event.Context.SessionId != canonicalSessionID {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeSessionStarted:
+			startedEvents = append(startedEvents, event)
+		case factoryapi.FactoryEventTypeSessionCompleted:
+			completedEvents = append(completedEvents, event)
+		}
+	}
+	if len(startedEvents) != 1 || len(completedEvents) != 1 {
+		t.Fatalf(
+			"successor lifecycle events for %q = started:%d completed:%d, want exactly one of each",
+			canonicalSessionID,
+			len(startedEvents),
+			len(completedEvents),
+		)
+	}
+	started, err := startedEvents[0].Payload.AsSessionStartedEventPayload()
+	if err != nil {
+		t.Fatalf("decode successor SESSION_STARTED %q: %v", startedEvents[0].Id, err)
+	}
+	completed, err := completedEvents[0].Payload.AsSessionCompletedEventPayload()
+	if err != nil {
+		t.Fatalf("decode successor SESSION_COMPLETED %q: %v", completedEvents[0].Id, err)
+	}
+	wantDuration := completed.CompletedAt.Sub(started.StartedAt).Milliseconds()
+	if wantDuration < 0 {
+		t.Fatalf("successor lifecycle times are reversed: started=%s completed=%s", started.StartedAt, completed.CompletedAt)
+	}
+	if completed.DurationMillis == nil || *completed.DurationMillis != wantDuration {
+		t.Fatalf(
+			"successor lifecycle duration = %#v, want %d ms from %s to %s",
+			completed.DurationMillis,
+			wantDuration,
+			started.StartedAt,
+			completed.CompletedAt,
+		)
+	}
+}
+
 type resumedScopeSnapshot struct {
 	workCount               int
 	relationCount           int
@@ -1113,11 +1165,44 @@ func readResumedFutureEventsUntilWorkTerminal(
 			continue
 		}
 		if payload.ToState == "complete" || payload.ToState == "failed" {
+			// Keep the canonical Work-state transition in the progress evidence;
+			// the public Work projection may still lag the dispatch response, so
+			// the caller also waits on that customer-visible read model.
 			return events
 		}
 	}
 	t.Fatalf("read %d resumed Factory Events without generated Work %q terminal state", len(events), workID)
 	return nil
+}
+
+func waitForResumedWorkTerminal(
+	t testing.TB,
+	baseURL, sessionID, workID string,
+) factoryapi.Work {
+	t.Helper()
+	deadline := time.NewTimer(resumedResponseScopeStreamTimeout)
+	defer deadline.Stop()
+	// The canonical stream exposes dispatch completion, but the public Work
+	// projection has no separate readiness signal and can lag that event. Read
+	// the customer-visible Work endpoint until its typed terminal state appears;
+	// the timer is only a failure ceiling, not a fixed completion delay.
+	poll := time.NewTicker(25 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		work := support.GetJSON[factoryapi.Work](
+			t,
+			support.SessionWorkURL(baseURL, sessionID, "/work/"+url.PathEscape(workID)),
+		)
+		if work.State != nil &&
+			(work.State.Type == factoryapi.WorkStateTypeTERMINAL || work.State.Type == factoryapi.WorkStateTypeFAILED) {
+			return work
+		}
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Fatalf("generated Work %q did not reach a public terminal state within %s: %#v", workID, resumedResponseScopeStreamTimeout, work.State)
+		}
+	}
 }
 
 func assertGeneratedWorkCanonicalProgress(t testing.TB, events []factoryapi.FactoryEvent, workID string) string {
