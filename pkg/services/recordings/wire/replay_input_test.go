@@ -421,6 +421,50 @@ func TestReplayInputLoaderClassifiesLegacyLoaderFailure(t *testing.T) {
 	}
 }
 
+func TestReplayInputLoaderPreservesStructuralLegacyDiagnosticAndSafeError(t *testing.T) {
+	t.Parallel()
+
+	const privatePath = `C:\customer\private\legacy-recording.jsonl`
+	structural := &recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorForeign,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code:    recordings.ReplayArtifactDiagnosticForeignReference,
+			Area:    "events",
+			Path:    "events[4]",
+			Message: `event "factory-event/dispatch-created/dispatch-1" has a foreign reference`,
+			Action:  recordings.ReplayArtifactStructuralRepairAction,
+		},
+		Cause: recordings.ErrCorruptReplayInput,
+	}
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			return []byte(`{"schemaVersion":"legacy"}`), nil
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			return nil, structural
+		},
+		logging.NoopLogger{},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: privatePath})
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("LoadReplayInput() result = %#v, want zero result", result)
+	}
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) {
+		t.Fatalf("error = %v, want ReplayInputError", err)
+	}
+	if !reflect.DeepEqual(inputErr.Diagnostic, structural.Diagnostic) {
+		t.Fatalf("diagnostic = %#v, want %#v", inputErr.Diagnostic, structural.Diagnostic)
+	}
+	if !errors.Is(err, recordings.ErrCorruptReplayInput) {
+		t.Fatalf("error = %v, want ErrCorruptReplayInput", err)
+	}
+	if strings.Contains(err.Error(), privatePath) {
+		t.Fatalf("error leaked private path: %v", err)
+	}
+}
+
 func TestReplayInputLoaderPublishesDetachedSafeDiagnostic(t *testing.T) {
 	t.Parallel()
 

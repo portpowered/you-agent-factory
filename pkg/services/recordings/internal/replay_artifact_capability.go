@@ -264,7 +264,11 @@ func (loader *replayInputLoader) loadLegacyReplayInput(
 			recordings.ReplayInputFamilyLegacy,
 			fmt.Errorf("load replay artifact: %w", err),
 		)
-		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), "")
+		loader.logReplayInputOutcome(
+			replayInputFailureOutcome(failure.Diagnostic.Code),
+			string(failure.Diagnostic.Code),
+			string(recordings.ReplayInputFamilyLegacy),
+		)
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy))
@@ -314,7 +318,12 @@ func (loader *replayInputLoader) loadReplayInputMetadata(
 	metadata, err := loader.loadLegacyMetadata(path)
 	if err != nil {
 		failure := newReplayInputError(recordings.ReplayInputFamilyLegacy, fmt.Errorf("load replay artifact metadata: %w", err))
-		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), string(recordings.ReplayInputFamilyLegacy), true)
+		loader.logReplayInputOutcome(
+			replayInputFailureOutcome(failure.Diagnostic.Code),
+			string(failure.Diagnostic.Code),
+			string(recordings.ReplayInputFamilyLegacy),
+			true,
+		)
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy), true)
@@ -436,10 +445,11 @@ func (loader *replayInputLoader) logReplayInputOutcome(
 }
 
 func newReplayInputError(family recordings.ReplayInputFamily, cause error) *recordings.ReplayInputError {
+	diagnostic := replayInputDiagnostic(cause)
 	return &recordings.ReplayInputError{
 		Family:     family,
-		Diagnostic: replayInputDiagnostic(cause),
-		Cause:      cause,
+		Diagnostic: diagnostic,
+		Cause:      safeReplayInputCause{message: diagnostic.Error(), cause: cause},
 	}
 }
 
@@ -456,8 +466,35 @@ func newPortableReplayInputError(cause error) *recordings.ReplayInputError {
 	return &recordings.ReplayInputError{
 		Family:     recordings.ReplayInputFamilyPortable,
 		Diagnostic: diagnostic,
-		Cause:      cause,
+		Cause:      safeReplayInputCause{message: diagnostic.Error(), cause: cause},
 	}
+}
+
+type safeReplayInputCause struct {
+	message string
+	cause   error
+}
+
+func (cause safeReplayInputCause) Error() string {
+	if cause.message == "" {
+		return "replay input failure"
+	}
+	return cause.message
+}
+
+func (cause safeReplayInputCause) Unwrap() error {
+	return cause.cause
+}
+
+func replayInputFailureOutcome(code recordings.ReplayArtifactDiagnosticCode) string {
+	if code == recordings.ReplayArtifactDiagnosticDependencyFailure ||
+		code == recordings.ReplayArtifactDiagnosticCancelled {
+		if code == recordings.ReplayArtifactDiagnosticCancelled {
+			return "canceled"
+		}
+		return "dependency_failure"
+	}
+	return "validation_failure"
 }
 
 func replayInputDiagnostic(err error) recordings.ReplayArtifactDiagnostic {
