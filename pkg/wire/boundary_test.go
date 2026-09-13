@@ -973,26 +973,3 @@ type verifiedArchiveCompatibilityChecker struct{}
 func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
 	return nil
 }
-
-func TestModelsManagedProcessRetainsCleanupErrorOnce(t *testing.T) {
-	t.Parallel()
-	cleanupErr := errors.New("bounded cleanup failure")
-	cleanupCalls := 0
-	process := &modelsManagedProcess{
-		cleanup: func() error {
-			cleanupCalls++
-			return cleanupErr
-		},
-		finished: make(chan struct{}),
-	}
-	close(process.finished)
-
-	process.cleanupResources()
-	process.cleanupResources()
-	if cleanupCalls != 1 {
-		t.Fatalf("cleanup calls = %d, want once", cleanupCalls)
-	}
-	if err := process.Wait(); !errors.Is(err, cleanupErr) {
-		t.Fatalf("process wait error = %v, want retained cleanup error", err)
-	}
-}

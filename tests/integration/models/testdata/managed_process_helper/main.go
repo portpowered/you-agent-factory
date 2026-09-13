@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -23,10 +25,12 @@ func main() {
 		fail("missing helper case")
 	}
 	switch os.Args[1] {
+	case "serve":
+		runCase(requiredOption("case"))
 	case "--case":
 		runCase(requiredArgument(2, "case"))
 	case "--descendant":
-		runDescendant(requiredOption("ready-file"))
+		runDescendant(requiredOption("ready-file"), optionalOption("health-server"))
 	default:
 		fail("unknown helper mode %q", os.Args[1])
 	}
@@ -44,9 +48,59 @@ func runCase(name string) {
 		os.Exit(7)
 	case "forced-stop":
 		runForcedStop(requiredOption("pid-file"), requiredOption("ready-file"))
+	case "production-ready", "production-pending", "production-crash":
+		runProductionHost(name)
 	default:
 		fail("unknown helper case %q", name)
 	}
+}
+
+func runProductionHost(name string) {
+	rootPIDPath := requiredOption("root-pid-file")
+	descendantPIDPath := requiredOption("descendant-pid-file")
+	descendantReadyPath := requiredOption("descendant-ready-file")
+	rootHealthServer := requiredOption("health-server")
+	descendantHealthServer := requiredOption("descendant-health-server")
+	crashPath := optionalOption("crash-file")
+	releasePath := optionalOption("release-file")
+
+	if err := writePIDFile(rootPIDPath, os.Getpid()); err != nil {
+		fail("write root PID: %v", err)
+	}
+	child := exec.Command(os.Args[0], "--descendant", "--ready-file", descendantReadyPath, "--health-server", descendantHealthServer)
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
+	if err := child.Start(); err != nil {
+		fail("start descendant: %v", err)
+	}
+	if !waitForFile(descendantReadyPath) {
+		_ = child.Process.Kill()
+		fail("descendant did not publish readiness")
+	}
+	if err := writePIDFile(descendantPIDPath, child.Process.Pid); err != nil {
+		_ = child.Process.Kill()
+		fail("write descendant PID: %v", err)
+	}
+
+	ready := func() bool {
+		if name != "production-pending" {
+			return true
+		}
+		return fileExists(releasePath)
+	}
+	if err := serveHealth(rootHealthServer, ready); err != nil {
+		_ = child.Process.Kill()
+		fail("start root health server: %v", err)
+	}
+	if name == "production-crash" {
+		go func() {
+			if !waitForFile(crashPath) {
+				fail("crash trigger was not published")
+			}
+			os.Exit(23)
+		}()
+	}
+	blockUntilSignal()
 }
 
 func runForcedStop(pidPath, readyPath string) {
@@ -73,11 +127,34 @@ func runForcedStop(pidPath, readyPath string) {
 	blockUntilSignal()
 }
 
-func runDescendant(readyPath string) {
+func runDescendant(readyPath, healthServer string) {
+	if strings.TrimSpace(healthServer) != "" {
+		if err := serveHealth(healthServer, func() bool { return true }); err != nil {
+			fail("start descendant health server: %v", err)
+		}
+	}
 	if err := os.WriteFile(readyPath, []byte("ready\n"), 0o600); err != nil {
 		fail("write descendant readiness: %v", err)
 	}
 	blockUntilSignal()
+}
+
+func serveHealth(address string, ready func() bool) error {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		if ready != nil && !ready() {
+			response.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		response.WriteHeader(http.StatusOK)
+	})}
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	return nil
 }
 
 func writeRepeated(writer io.Writer, value byte, total int) error {
@@ -121,6 +198,9 @@ func writePIDFile(path string, pid int) error {
 }
 
 func waitForFile(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
 	deadline := time.NewTimer(readinessTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(readinessPoll)
@@ -137,6 +217,14 @@ func waitForFile(path string) bool {
 	}
 }
 
+func fileExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func blockUntilSignal() {
 	// A signal channel keeps the helper alive without the Go runtime treating a
 	// bare empty select as a deadlock. The managed process tree supplies the
@@ -148,6 +236,15 @@ func blockUntilSignal() {
 }
 
 func requiredOption(name string) string {
+	value := optionalOption(name)
+	if value != "" {
+		return value
+	}
+	fail("missing --%s", name)
+	return ""
+}
+
+func optionalOption(name string) string {
 	for index := 2; index < len(os.Args); index++ {
 		if os.Args[index] == "--"+name && index+1 < len(os.Args) {
 			value := strings.TrimSpace(os.Args[index+1])
@@ -156,7 +253,6 @@ func requiredOption(name string) string {
 			}
 		}
 	}
-	fail("missing --%s", name)
 	return ""
 }
 
