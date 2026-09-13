@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
+import { defaultFactoryActivation } from "../../../../testing/factory-activation-fixtures";
 import { mockFactoryDocumentSave } from "../../../../testing/factory-document-save-mocks";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
@@ -374,6 +375,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       new Response(
         JSON.stringify({
           name: "Current Factory",
+          activation: defaultFactoryActivation,
           version: {
             logical: "7",
             physical: "2026-05-23T15:52:00Z",

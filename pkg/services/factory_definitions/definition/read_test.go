@@ -357,48 +357,79 @@ func TestService_GetCurrentFactoryForSession_PreservesLoadedProvenanceAcrossAuth
 	}
 	svc := newTestService(host)
 
-	first, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("initial GetCurrentFactoryForSession: %v", err)
-	}
-	if first.Activation == nil {
-		t.Fatal("initial activation provenance is nil")
-	}
-	if first.Activation.State != factorydefinitions.FactoryActivationStateActive {
-		t.Fatalf("initial activation state = %q, want ACTIVE", first.Activation.State)
-	}
-	if first.Version == nil {
-		t.Fatal("initial loaded version is nil")
-	}
-	activationID := first.Activation.ActivationID
-	loadedDigest := first.Activation.LoadedSourceDigest
-	loadedVersion := *first.Version
+	witness := requireLoadedProvenance(t, svc, sessionID)
 
 	edited := factoryfixtures.MinimalFactoryConfig()
 	edited["id"] = "authored-after-activation"
 	factoryfixtures.WriteFactoryJSON(t, rootDir, edited)
 
-	changed, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("drifted GetCurrentFactoryForSession: %v", err)
-	}
-	if changed.Activation == nil {
-		t.Fatal("drifted activation provenance is nil")
-	}
-	if changed.Activation.State != factorydefinitions.FactoryActivationStateAuthoredChanged {
-		t.Fatalf("drifted activation state = %q, want AUTHORED_CHANGED", changed.Activation.State)
-	}
-	if changed.Activation.ActivationID != activationID || changed.Activation.LoadedSourceDigest != loadedDigest {
-		t.Fatalf("loaded activation tuple changed after authored drift: %#v", changed.Activation)
-	}
-	if changed.Version == nil || changed.Version.Logical != loadedVersion.Logical || !changed.Version.Physical.Equal(loadedVersion.Physical) {
-		t.Fatalf("loaded version changed after authored drift: %#v, want %#v", changed.Version, loadedVersion)
-	}
+	requireAuthoredDriftProvenance(t, svc, sessionID, witness)
 
 	factoryPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	if err := os.WriteFile(factoryPath, []byte("{"), 0o644); err != nil {
 		t.Fatalf("malform authored factory: %v", err)
 	}
+	requireUnavailableAuthoredSourceProvenance(t, svc, sessionID, witness)
+}
+
+type loadedProvenanceWitness struct {
+	activationID string
+	digest       string
+	version      factorydefinitions.FactoryVersion
+}
+
+func requireLoadedProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+) loadedProvenanceWitness {
+	t.Helper()
+	first, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("initial GetCurrentFactoryForSession: %v", err)
+	}
+	if first.Activation == nil || first.Activation.State != factorydefinitions.FactoryActivationStateActive {
+		t.Fatalf("initial activation = %#v, want ACTIVE provenance", first.Activation)
+	}
+	if first.Version == nil {
+		t.Fatal("initial loaded version is nil")
+	}
+	return loadedProvenanceWitness{
+		activationID: first.Activation.ActivationID,
+		digest:       first.Activation.LoadedSourceDigest,
+		version:      *first.Version,
+	}
+}
+
+func requireAuthoredDriftProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+	witness loadedProvenanceWitness,
+) {
+	t.Helper()
+	changed, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("drifted GetCurrentFactoryForSession: %v", err)
+	}
+	if changed.Activation == nil || changed.Activation.State != factorydefinitions.FactoryActivationStateAuthoredChanged {
+		t.Fatalf("drifted activation = %#v, want AUTHORED_CHANGED provenance", changed.Activation)
+	}
+	if changed.Activation.ActivationID != witness.activationID || changed.Activation.LoadedSourceDigest != witness.digest {
+		t.Fatalf("loaded activation tuple changed after authored drift: %#v", changed.Activation)
+	}
+	if changed.Version == nil || changed.Version.Logical != witness.version.Logical || !changed.Version.Physical.Equal(witness.version.Physical) {
+		t.Fatalf("loaded version changed after authored drift: %#v, want %#v", changed.Version, witness.version)
+	}
+}
+
+func requireUnavailableAuthoredSourceProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+	witness loadedProvenanceWitness,
+) {
+	t.Helper()
 	unavailable, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("unavailable-source GetCurrentFactoryForSession: %v", err)
@@ -406,7 +437,7 @@ func TestService_GetCurrentFactoryForSession_PreservesLoadedProvenanceAcrossAuth
 	if unavailable.Activation == nil || unavailable.Activation.State != factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable {
 		t.Fatalf("unavailable activation = %#v, want AUTHORED_SOURCE_UNAVAILABLE", unavailable.Activation)
 	}
-	if unavailable.Activation.ActivationID != activationID || unavailable.Activation.LoadedSourceDigest != loadedDigest {
+	if unavailable.Activation.ActivationID != witness.activationID || unavailable.Activation.LoadedSourceDigest != witness.digest {
 		t.Fatalf("loaded activation tuple changed after authored source became unavailable: %#v", unavailable.Activation)
 	}
 }

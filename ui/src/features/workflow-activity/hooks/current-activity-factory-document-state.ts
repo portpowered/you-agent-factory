@@ -17,6 +17,13 @@ export interface CurrentActivityFactoryDocumentState {
   editableDefinitionQuery: CurrentActivityFactoryDocumentQuery;
 }
 
+type VersionedEventFactory = NonNullable<DashboardSnapshot["factory"]> & {
+  version: {
+    logical: string | number;
+    physical: string;
+  };
+};
+
 export function useCurrentActivityFactoryDocumentState({
   eventFactory,
 }: {
@@ -40,12 +47,20 @@ export function useCurrentActivityFactoryDocumentState({
         };
       }
 
+      if (hasVersionedEventFactory(eventFactory)) {
+        return {
+          data: undefined,
+          error: null,
+          status: "success",
+        };
+      }
+
       return {
         data: undefined,
         error: null,
         status: "pending",
       };
-    }, [eventFactoryDocument]);
+    }, [eventFactory, eventFactoryDocument]);
 
   return useMemo(
     () => ({
@@ -59,17 +74,14 @@ export function useCurrentActivityFactoryDocumentState({
 function toCurrentFactoryDocumentFromEventFactory(
   eventFactory: NonNullable<DashboardSnapshot["factory"]>,
 ): CurrentFactoryDocument | null {
-  const version = eventFactory.version;
   if (
-    version == null ||
-    eventFactory.activation == null ||
-    typeof version !== "object" ||
-    (typeof version.logical !== "string" &&
-      typeof version.logical !== "number") ||
-    typeof version.physical !== "string"
+    !hasVersionedEventFactory(eventFactory) ||
+    eventFactory.activation == null
   ) {
     return null;
   }
+
+  const version = eventFactory.version;
 
   return {
     ...eventFactory,
@@ -79,4 +91,17 @@ function toCurrentFactoryDocumentFromEventFactory(
       physical: version.physical,
     },
   };
+}
+
+function hasVersionedEventFactory(
+  eventFactory?: DashboardSnapshot["factory"] | null,
+): eventFactory is VersionedEventFactory {
+  const version = eventFactory?.version;
+  return (
+    version != null &&
+    typeof version === "object" &&
+    (typeof version.logical === "string" ||
+      typeof version.logical === "number") &&
+    typeof version.physical === "string"
+  );
 }
