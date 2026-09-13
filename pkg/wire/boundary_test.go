@@ -13,7 +13,6 @@ import (
 	"go/token"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -525,7 +525,9 @@ func TestModelsProcessLauncherStartFailureRetainsCleanupCause(t *testing.T) {
 				},
 			}, nil
 		},
-		startCommand: func(*exec.Cmd) error { return startCause },
+		startProcess: func(context.Context, managedchild.Spec) (*managedchild.Process, error) {
+			return nil, startCause
+		},
 	}
 	_, err := launcher.Start(context.Background(), serviceedges.HostProcessStartSpec{Backend: "localai-vibevoice"})
 	if cleanupCalls != 1 {

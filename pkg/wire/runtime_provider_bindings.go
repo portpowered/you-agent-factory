@@ -13,6 +13,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -41,7 +42,7 @@ func newConfiguredProvidersService(
 type modelsProcessLauncher struct {
 	recorder      managedChildEnvironmentRecorder
 	resolveLaunch func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error)
-	startCommand  func(*exec.Cmd) error
+	startProcess  func(context.Context, managedchild.Spec) (*managedchild.Process, error)
 }
 
 func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
@@ -57,28 +58,26 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(launch.Command, launch.Args...)
-	if env := appendManagedBackendEnvironment(spec.Env, launch.Env); len(env) > 0 {
-		cmd.Env = env
+	environment := appendManagedBackendEnvironment(spec.Env, launch.Env)
+	startProcess := launcher.startProcess
+	if startProcess == nil {
+		startProcess = managedchild.Start
 	}
-	if launch.WorkDir != "" {
-		cmd.Dir = launch.WorkDir
+	child, err := startProcess(ctx, managedchild.Spec{
+		Command: launch.Command, Args: append([]string(nil), launch.Args...),
+		Env: environment, WorkDir: launch.WorkDir,
+	})
+	if err == nil && child == nil {
+		err = errors.New("managed child starter returned a nil process")
 	}
-	startCommand := launcher.startCommand
-	if startCommand == nil {
-		startCommand = (*exec.Cmd).Start
-	}
-	if err := startCommand(cmd); err != nil {
+	if err != nil {
 		var cleanupErr error
 		if launch.Cleanup != nil {
 			cleanupErr = launch.Cleanup()
 		}
 		return nil, managedbackend.WrapBackendStartFailureWithCleanup(err, cleanupErr)
 	}
-	processID := 0
-	if cmd.Process != nil {
-		processID = cmd.Process.Pid
-	}
+	processID := child.PID()
 	if processID > 0 {
 		recorder := launcher.recorder
 		if recorder != nil {
@@ -87,12 +86,12 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 				Backend:     boundedManagedBackendID(spec.Backend),
 				ProcessID:   processID,
 				Phase:       managedChildPhaseStarted,
-				Environment: managedEnvironmentFacts(effectiveManagedBackendEnvironment(cmd.Env)),
+				Environment: managedEnvironmentFacts(effectiveManagedBackendEnvironment(environment)),
 			})
 		}
 	}
 	managed := &modelsManagedProcess{
-		cmd:            cmd,
+		child:          child,
 		healthEndpoint: launch.Endpoint,
 		cleanup:        launch.Cleanup,
 		finished:       make(chan struct{}),
@@ -101,7 +100,7 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 		recorder:       launcher.recorder,
 	}
 	go func() {
-		waitErr := cmd.Wait()
+		waitErr := child.Wait()
 		managed.recordProcessExit(waitErr)
 		managed.cleanupResources()
 		managed.mu.Lock()
@@ -335,7 +334,7 @@ func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRun
 
 type modelsManagedProcess struct {
 	mu             sync.Mutex
-	cmd            *exec.Cmd
+	child          *managedchild.Process
 	healthEndpoint string
 	cleanup        func() error
 	cleanupOnce    sync.Once
@@ -427,17 +426,15 @@ func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	p.mu.Lock()
-	if p.stopped || p.cmd == nil || p.cmd.Process == nil {
+	if p.stopped || p.child == nil {
 		p.mu.Unlock()
 		return nil
 	}
 	p.stopped = true
-	command := p.cmd
+	child := p.child
 	p.mu.Unlock()
-	if !p.processFinished() {
-		if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && !p.processFinished() {
-			return err
-		}
+	if err := child.Stop(ctx); err != nil {
+		return err
 	}
 	if p.finished == nil {
 		return nil
@@ -448,18 +445,4 @@ func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-func (p *modelsManagedProcess) processFinished() bool {
-	if p == nil {
-		return true
-	}
-	if p.finished != nil {
-		select {
-		case <-p.finished:
-			return true
-		default:
-		}
-	}
-	return p.cmd != nil && p.cmd.ProcessState != nil
 }
