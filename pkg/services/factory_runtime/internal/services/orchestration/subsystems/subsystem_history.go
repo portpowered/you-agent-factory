@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -202,4 +204,126 @@ func cloneHistoryForIntermittentFailureRequeue(
 		Attempt:      history.TotalVisits[result.transitionID],
 	})
 	return cloned
+}
+
+// SetReplayHistoricalWorks supplies durable Work identities for replay-only
+// relation admission. The slice is copied so callers can reuse their source
+// collection without changing transitioner behavior after construction.
+func (t *TransitionerSubsystem) SetReplayHistoricalWorks(existing []work.ExistingWork) {
+	if t == nil {
+		return
+	}
+	t.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
+}
+
+// SetReplayHistoricalRelations supplies canonical request relations for
+// replay-only name-to-ID resolution. Live admission remains name/board scoped.
+func (t *TransitionerSubsystem) SetReplayHistoricalRelations(relations []work.FactoryRelation) {
+	if t == nil {
+		return
+	}
+	t.replayHistoricalRelations = append([]work.FactoryRelation(nil), relations...)
+}
+
+// resolveReplayHistoricalRelationIDs restores the target identity chosen by
+// the original Work admission. No guess is made when the canonical relation is
+// absent or ambiguous.
+func resolveReplayHistoricalRelationIDs(request *work.WorkRequest, historical []work.FactoryRelation) {
+	if request == nil || request.RequestID == "" || len(request.Relations) == 0 || len(historical) == 0 {
+		return
+	}
+	for relationIndex := range request.Relations {
+		relation := &request.Relations[relationIndex]
+		if strings.TrimSpace(relation.TargetWorkID) != "" {
+			continue
+		}
+		if targetID, ok := uniqueHistoricalRelationTarget(*relation, request.RequestID, historical); ok {
+			relation.TargetWorkID = targetID
+		}
+	}
+}
+
+func uniqueHistoricalRelationTarget(
+	relation work.WorkRelation,
+	requestID string,
+	historical []work.FactoryRelation,
+) (string, bool) {
+	targetID := ""
+	matches := 0
+	for _, candidate := range historical {
+		if !historicalRelationMatches(candidate, relation, requestID) {
+			continue
+		}
+		targetID = candidate.TargetWorkID
+		matches++
+	}
+	return targetID, matches == 1
+}
+
+func historicalRelationMatches(candidate work.FactoryRelation, relation work.WorkRelation, requestID string) bool {
+	return candidate.RequestID == requestID && candidate.Type == string(relation.Type) &&
+		candidate.SourceWorkName == relation.SourceWorkName &&
+		candidate.TargetWorkName == relation.TargetWorkName &&
+		candidate.RequiredState == relation.RequiredState && candidate.TargetWorkID != ""
+}
+
+// existingWorksForAdmission returns board and replay identities visible to a
+// worker-emitted batch.
+func (t *TransitionerSubsystem) existingWorksForAdmission(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) []work.ExistingWork {
+	if snapshot == nil {
+		return nil
+	}
+	byID := make(map[string]work.ExistingWork)
+	for _, token := range snapshot.Marking.Tokens {
+		if token != nil {
+			mergeTransitionerAdmissionColor(byID, token.Color)
+		}
+	}
+	for _, dispatch := range snapshot.Dispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			mergeTransitionerAdmissionColor(byID, token.Color)
+		}
+	}
+	for _, historical := range t.replayHistoricalWorks {
+		mergeTransitionerAdmissionWork(byID, historical)
+	}
+
+	works := make([]work.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
+}
+
+func mergeTransitionerAdmissionColor(byID map[string]work.ExistingWork, color factorytoken.Color) {
+	if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+		return
+	}
+	mergeTransitionerAdmissionWork(byID, work.ExistingWork{
+		WorkID: color.WorkID, Name: color.Name, WorkTypeID: color.WorkTypeID,
+	})
+}
+
+func mergeTransitionerAdmissionWork(byID map[string]work.ExistingWork, candidate work.ExistingWork) {
+	if candidate.WorkID == "" {
+		return
+	}
+	current, exists := byID[candidate.WorkID]
+	if !exists {
+		byID[candidate.WorkID] = candidate
+		return
+	}
+	if current.Name == "" {
+		current.Name = candidate.Name
+	}
+	if current.WorkTypeID == "" {
+		current.WorkTypeID = candidate.WorkTypeID
+	}
+	byID[candidate.WorkID] = current
 }

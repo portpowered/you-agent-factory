@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -430,4 +431,95 @@ func (e *FactoryEngine) RunningDispatches() map[string][]interfaces.MarkingMutat
 		result[k] = muts
 	}
 	return result
+}
+
+// SetReplayHistoricalWorks supplies durable Work identities for replay-only
+// relation admission. The live admission snapshot remains board-scoped; this
+// index is used only by restored runtimes that replay an immutable event log.
+func (e *FactoryEngine) SetReplayHistoricalWorks(existing []work.ExistingWork) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
+}
+
+// existingWorksForAdmissionLocked returns the current board identities used
+// by live relation admission. Marking tokens cover queued, terminal, and
+// failed Work; consumed dispatch tokens cover Work that is currently active
+// and therefore temporarily absent from the marking.
+//
+// The caller must hold e.mu and the admission gate must prevent a tick from
+// changing the board while this snapshot is consumed by normalization.
+func (e *FactoryEngine) existingWorksForAdmissionLocked() []work.ExistingWork {
+	byID := make(map[string]work.ExistingWork)
+	e.addMarkedWorksForAdmission(byID)
+	e.addDispatchedWorksForAdmission(byID)
+	mergeExistingWorks(byID, e.replayHistoricalWorks)
+
+	works := make([]work.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
+}
+
+func (e *FactoryEngine) addMarkedWorksForAdmission(byID map[string]work.ExistingWork) {
+	if e.runtimeState == nil || e.runtimeState.Marking == nil {
+		return
+	}
+	for _, token := range e.runtimeState.Marking.Tokens {
+		if token != nil {
+			mergeExistingWorkColor(byID, token.Color)
+		}
+	}
+}
+
+func (e *FactoryEngine) addDispatchedWorksForAdmission(byID map[string]work.ExistingWork) {
+	if e.runtimeState == nil {
+		return
+	}
+	for _, dispatch := range e.runtimeState.Dispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			mergeExistingWorkColor(byID, token.Color)
+		}
+	}
+}
+
+func mergeExistingWorkColor(byID map[string]work.ExistingWork, color factorytoken.Color) {
+	if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+		return
+	}
+	mergeExistingWork(byID, work.ExistingWork{
+		WorkID: color.WorkID, Name: color.Name, WorkTypeID: color.WorkTypeID,
+	})
+}
+
+func mergeExistingWorks(byID map[string]work.ExistingWork, works []work.ExistingWork) {
+	for _, candidate := range works {
+		mergeExistingWork(byID, candidate)
+	}
+}
+
+func mergeExistingWork(byID map[string]work.ExistingWork, candidate work.ExistingWork) {
+	if candidate.WorkID == "" {
+		return
+	}
+	current, exists := byID[candidate.WorkID]
+	if !exists {
+		byID[candidate.WorkID] = candidate
+		return
+	}
+	if current.Name == "" {
+		current.Name = candidate.Name
+	}
+	if current.WorkTypeID == "" {
+		current.WorkTypeID = candidate.WorkTypeID
+	}
+	byID[candidate.WorkID] = current
 }

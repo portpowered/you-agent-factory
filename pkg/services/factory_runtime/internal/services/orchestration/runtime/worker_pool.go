@@ -8,10 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -866,4 +871,100 @@ func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities
 	}
 	clone := *value
 	return &clone
+}
+
+func (h *dispatchPlanningResultHook) plannedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+	workResult workers.WorkResult,
+) (workers.WorkResult, bool, error) {
+	provider, ok := h.completionPlanner.(plannedCompletionResultProvider)
+	if ok {
+		planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
+		if err != nil {
+			return workResult, false, err
+		}
+		if hasPlanned {
+			return choosePlannedWorkersResult(request, workResult, planned)
+		}
+	}
+	replayProvider, ok := h.completionPlanner.(replayCompletionResultProvider)
+	if !ok {
+		return workResult, false, nil
+	}
+	planned, hasPlanned, err := replayProvider.ReplayResultForDispatch(request.Execution.Dispatch)
+	if err != nil || !hasPlanned {
+		return workResult, false, err
+	}
+	return choosePlannedWorkersResult(request, workResult, planned)
+}
+
+func choosePlannedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+	live, planned workers.WorkResult,
+) (workers.WorkResult, bool, error) {
+	if live.Outcome == workers.OutcomeFailed && planned.Outcome != workers.OutcomeFailed {
+		return live, false, nil
+	}
+	planned.DispatchID = request.Execution.Dispatch.DispatchID
+	planned.TransitionID = request.Execution.Dispatch.TransitionID
+	return planned, true, nil
+}
+
+type plannedCompletionResultProvider interface {
+	PlannedResultForDispatch(dispatch work.WorkDispatch) (workers.WorkResult, bool, error)
+}
+
+type replayCompletionResultProvider interface {
+	ReplayResultForDispatch(dispatch work.WorkDispatch) (workers.WorkResult, bool, error)
+}
+
+func buildRuntimeSubsystems(
+	cfg *runtimeConfig,
+	sched scheduler.Scheduler,
+	logger logging.Logger,
+	newID factory.IDGenerator,
+	seededRestoredWorkIDs map[string]struct{},
+	historicalWorkIDs map[string]struct{},
+) (*token_transformer.Transformer, []subsystems.Subsystem) {
+	workIDGen := petri.NewWorkIDGenerator(sortedStringKeys(historicalWorkIDs)...)
+	var replayIDs factory.ReplayDispatchIDResolver
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
+		replayIDs = resolver
+	}
+	sharedTransformer := token_transformer.New(cfg.net.Places, cfg.net.WorkTypes, workIDGen)
+	transitioner := subsystems.NewTransitioner(
+		cfg.net,
+		logger,
+		cfg.clock.Now,
+		sharedTransformer,
+		cfg.runtimeConfig,
+		cfg.quorumPolicy,
+		cfg.outputShaping,
+		cfg.workPropagation,
+		cfg.decisionEnvelopes,
+	)
+	if cfg.skipRestoredDispatchReconciliation {
+		transitioner.SetReplayHistoricalWorks(restoredHistoricalAdmissionWorks(cfg))
+		transitioner.SetReplayHistoricalRelations(restoredHistoricalRelations(cfg))
+	}
+	return sharedTransformer, []subsystems.Subsystem{
+		subsystems.NewCircuitBreakerWithClock(cfg.net, cfg.clock.Now, logger, cfg.runtimeConfig),
+		subsystems.NewDispatcherWithSeededReplay(
+			cfg.net,
+			sched,
+			cfg.workflowContext,
+			logger,
+			cfg.runtimeConfig,
+			cfg.clock.Now,
+			newID,
+			replayIDs,
+			seededRestoredWorkIDs,
+		),
+		subsystems.NewHistory(logger),
+		transitioner,
+		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
+		subsystems.NewTerminationCheckWithRuntime(
+			cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now,
+		),
+	}
 }

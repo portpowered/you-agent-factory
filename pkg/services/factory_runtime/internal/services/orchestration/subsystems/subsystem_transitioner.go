@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -120,25 +119,6 @@ func NewTransitioner(
 		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 	return tr
-}
-
-// SetReplayHistoricalWorks supplies durable Work identities for replay-only
-// relation admission. The slice is copied so callers can reuse their source
-// collection without changing transitioner behavior after construction.
-func (t *TransitionerSubsystem) SetReplayHistoricalWorks(existing []work.ExistingWork) {
-	if t == nil {
-		return
-	}
-	t.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
-}
-
-// SetReplayHistoricalRelations supplies canonical request relations for
-// replay-only name-to-ID resolution. Live admission remains name/board scoped.
-func (t *TransitionerSubsystem) SetReplayHistoricalRelations(relations []work.FactoryRelation) {
-	if t == nil {
-		return
-	}
-	t.replayHistoricalRelations = append([]work.FactoryRelation(nil), relations...)
 }
 
 // TickGroup returns Transitioner (12).
@@ -622,109 +602,6 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		return generatedBatchWork{}, true, fmt.Errorf("worker-emitted work request batch: %w", err)
 	}
 	return generatedBatchWork{request: request, submits: normalized, metadata: metadata}, true, nil
-}
-
-// resolveReplayHistoricalRelationIDs restores the target identity chosen by
-// the original Work admission. A worker output can legitimately contain only
-// targetWorkName; replay must use the immutable request relation when the
-// restored final board contains more than one Work with that name. No guess is
-// made when the canonical relation is absent or ambiguous.
-func resolveReplayHistoricalRelationIDs(request *work.WorkRequest, historical []work.FactoryRelation) {
-	if request == nil || request.RequestID == "" || len(request.Relations) == 0 || len(historical) == 0 {
-		return
-	}
-	for relationIndex := range request.Relations {
-		relation := &request.Relations[relationIndex]
-		if strings.TrimSpace(relation.TargetWorkID) != "" {
-			continue
-		}
-		var match work.FactoryRelation
-		matches := 0
-		for _, candidate := range historical {
-			if candidate.RequestID != request.RequestID || candidate.Type != string(relation.Type) ||
-				candidate.SourceWorkName != relation.SourceWorkName ||
-				candidate.TargetWorkName != relation.TargetWorkName ||
-				candidate.RequiredState != relation.RequiredState || candidate.TargetWorkID == "" {
-				continue
-			}
-			match = candidate
-			matches++
-		}
-		if matches == 1 {
-			relation.TargetWorkID = match.TargetWorkID
-		}
-	}
-}
-
-// existingWorksForAdmission returns the point-in-time board identities visible
-// to a worker-emitted batch. A dispatched Work is absent from Marking while it
-// is active, so consumed dispatch tokens are included alongside marking
-// tokens. The engine performs the same snapshot for external admission before
-// queueing the request.
-func (t *TransitionerSubsystem) existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
-	if snapshot == nil {
-		return nil
-	}
-
-	byID := make(map[string]work.ExistingWork)
-	add := func(color factorytoken.Color) {
-		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
-			return
-		}
-		candidate := work.ExistingWork{
-			WorkID:     color.WorkID,
-			Name:       color.Name,
-			WorkTypeID: color.WorkTypeID,
-		}
-		if current, exists := byID[candidate.WorkID]; exists {
-			if current.Name == "" {
-				current.Name = candidate.Name
-			}
-			if current.WorkTypeID == "" {
-				current.WorkTypeID = candidate.WorkTypeID
-			}
-			byID[candidate.WorkID] = current
-			return
-		}
-		byID[candidate.WorkID] = candidate
-	}
-
-	for _, token := range snapshot.Marking.Tokens {
-		if token != nil {
-			add(token.Color)
-		}
-	}
-	for _, dispatch := range snapshot.Dispatches {
-		if dispatch == nil {
-			continue
-		}
-		for _, token := range dispatch.ConsumedTokens {
-			add(token.Color)
-		}
-	}
-	for _, historical := range t.replayHistoricalWorks {
-		if historical.WorkID == "" {
-			continue
-		}
-		if current, exists := byID[historical.WorkID]; exists {
-			if current.Name == "" {
-				current.Name = historical.Name
-			}
-			if current.WorkTypeID == "" {
-				current.WorkTypeID = historical.WorkTypeID
-			}
-			byID[historical.WorkID] = current
-			continue
-		}
-		byID[historical.WorkID] = historical
-	}
-
-	works := make([]work.ExistingWork, 0, len(byID))
-	for _, candidate := range byID {
-		works = append(works, candidate)
-	}
-	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
-	return works
 }
 
 type workerEmittedBatchEnvelope struct {

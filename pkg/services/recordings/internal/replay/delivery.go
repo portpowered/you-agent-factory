@@ -609,9 +609,30 @@ func (p *CompletionDeliveryPlan) ReplayResultForDispatch(
 		planned := cloneReplayPlannedResult(record.completion.result)
 		planned.DispatchID = dispatch.DispatchID
 		planned.TransitionID = dispatch.TransitionID
+		alignRoutedReplayWorkLineage(&planned, record.dispatch.dispatch)
 		return planned, true, nil
 	}
 	return workerexecution.WorkResult{}, false, nil
+}
+
+func alignRoutedReplayWorkLineage(result *workerexecution.WorkResult, dispatch work.WorkDispatch) {
+	if result == nil || len(result.RecordedOutputWork) == 0 {
+		return
+	}
+	inputLineage := make(map[string][]string, len(dispatch.Execution.WorkIDs))
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.Color.WorkID == "" {
+			continue
+		}
+		inputLineage[token.Color.WorkID] = work.CanonicalChainingTraceIDs(token.Color.PreviousChainingTraceIDs)
+	}
+	for index := range result.RecordedOutputWork {
+		previous, routed := inputLineage[result.RecordedOutputWork[index].ID]
+		if !routed {
+			continue
+		}
+		result.RecordedOutputWork[index].PreviousChainingTraceIDs = previous
+	}
 }
 
 // ValidateReplayTick is retained for the runtime hook contract. Replay dispatch

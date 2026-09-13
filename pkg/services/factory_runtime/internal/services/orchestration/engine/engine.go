@@ -169,18 +169,6 @@ func NewFactoryEngine(
 	return e, nil
 }
 
-// SetReplayHistoricalWorks supplies durable Work identities for replay-only
-// relation admission. The live admission snapshot remains board-scoped; this
-// index is used only by restored runtimes that replay an immutable event log.
-func (e *FactoryEngine) SetReplayHistoricalWorks(existing []workdomain.ExistingWork) {
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.replayHistoricalWorks = append([]workdomain.ExistingWork(nil), existing...)
-}
-
 // drainPendingResults moves any buffered results into runtimeState.Results.
 // Dispatch entries are NOT removed here — they remain visible to subsystems
 // (especially TerminationCheck) until end-of-tick cleanup. This prevents
@@ -442,79 +430,6 @@ func (e *FactoryEngine) validWorkTypes() map[string]bool {
 		valid[workTypeID] = true
 	}
 	return valid
-}
-
-// existingWorksForAdmissionLocked returns the current board identities used
-// by live relation admission. Marking tokens cover queued, terminal, and
-// failed Work; consumed dispatch tokens cover Work that is currently active
-// and therefore temporarily absent from the marking.
-//
-// The caller must hold e.mu and the admission gate must prevent a tick from
-// changing the board while this snapshot is consumed by normalization.
-func (e *FactoryEngine) existingWorksForAdmissionLocked() []workdomain.ExistingWork {
-	byID := make(map[string]workdomain.ExistingWork)
-	add := func(color factorytoken.Color) {
-		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
-			return
-		}
-		candidate := workdomain.ExistingWork{
-			WorkID:     color.WorkID,
-			Name:       color.Name,
-			WorkTypeID: color.WorkTypeID,
-		}
-		if current, exists := byID[candidate.WorkID]; exists {
-			if current.Name == "" {
-				current.Name = candidate.Name
-			}
-			if current.WorkTypeID == "" {
-				current.WorkTypeID = candidate.WorkTypeID
-			}
-			byID[candidate.WorkID] = current
-			return
-		}
-		byID[candidate.WorkID] = candidate
-	}
-
-	if e.runtimeState != nil && e.runtimeState.Marking != nil {
-		for _, token := range e.runtimeState.Marking.Tokens {
-			if token != nil {
-				add(token.Color)
-			}
-		}
-	}
-	if e.runtimeState != nil {
-		for _, dispatch := range e.runtimeState.Dispatches {
-			if dispatch == nil {
-				continue
-			}
-			for _, token := range dispatch.ConsumedTokens {
-				add(token.Color)
-			}
-		}
-	}
-	for _, historical := range e.replayHistoricalWorks {
-		if historical.WorkID == "" {
-			continue
-		}
-		if current, exists := byID[historical.WorkID]; exists {
-			if current.Name == "" {
-				current.Name = historical.Name
-			}
-			if current.WorkTypeID == "" {
-				current.WorkTypeID = historical.WorkTypeID
-			}
-			byID[historical.WorkID] = current
-			continue
-		}
-		byID[historical.WorkID] = historical
-	}
-
-	works := make([]workdomain.ExistingWork, 0, len(byID))
-	for _, candidate := range byID {
-		works = append(works, candidate)
-	}
-	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
-	return works
 }
 
 // Run is the main execution loop. Blocks on a select over wake channels until
