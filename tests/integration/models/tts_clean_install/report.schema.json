@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:tts-clean-install-probe-report:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "verdict",
+    "environment",
+    "identities",
+    "preflight",
+    "commands",
+    "journeys",
+    "audio",
+    "readiness",
+    "network",
+    "cleanup",
+    "criteria",
+    "findings"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "verdict": { "enum": ["PASS", "FAIL", "INCONCLUSIVE"] },
+    "environment": {
+      "type": "object",
+      "required": ["platform", "architecture", "roots", "limits"],
+      "additionalProperties": true
+    },
+    "identities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "identity", "path", "bytes", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "identity": { "type": "string" },
+          "path": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "required": [
+        "completedBeforeEffects",
+        "childStarts",
+        "listenerOpens",
+        "networkAttempts",
+        "checks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "completedBeforeEffects": { "type": "boolean" },
+        "childStarts": { "type": "integer", "minimum": 0 },
+        "listenerOpens": { "type": "integer", "minimum": 0 },
+        "networkAttempts": { "type": "integer", "minimum": 0 },
+        "checks": { "type": "array" }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "phase",
+          "argv",
+          "exitCode",
+          "startedAt",
+          "endedAt",
+          "stdoutBytes",
+          "stderrBytes",
+          "stdoutSha256",
+          "stderrSha256",
+          "timedOut",
+          "cancelled"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "journeys": {
+      "type": "object",
+      "required": ["install", "discovery", "cold", "warmOffline", "removal"],
+      "additionalProperties": true
+    },
+    "audio": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "mediaType",
+          "bytes",
+          "sha256",
+          "riffDecoded",
+          "durationMillis",
+          "nonSilentSamples"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "readiness": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "phase",
+          "readinessState",
+          "lifecycleState",
+          "cacheBytes"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": ["policy", "attempts", "warmOfflineAttempts"],
+      "additionalProperties": true
+    },
+    "cleanup": {
+      "type": "object",
+      "required": [
+        "ownedProcesses",
+        "ownedListeners",
+        "ownedRoots",
+        "survivingProcesses",
+        "survivingListeners",
+        "removedRuntimeRoots"
+      ],
+      "additionalProperties": true
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "verdict", "evidence", "unprovenEdge"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "verdict": {
+            "enum": ["PASS", "FAIL", "BLOCKED", "INCONCLUSIVE"]
+          },
+          "evidence": { "type": "array" },
+          "unprovenEdge": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "findings": { "type": "array" }
+  }
+}
