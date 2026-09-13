@@ -22,14 +22,35 @@ import (
 func TestModelsASRBoundedInvalidInputsAreTypedAndEffectFree(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name        string
-		arguments   func(*testing.T) []string
-		wantCode    factoryapi.ErrorResponseCode
-		wantClass   models.InvocationFailureClass
-		wantSlot    string
-		wantMessage string
-	}{
+	for _, testCase := range asrBoundedInvalidInputCases() {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			fixture := newInvalidGenericCLIProcess(t, genericConformanceFactoryConfig)
+			defer fixture.close(t)
+			arguments := testCase.arguments(t)
+			beforeEffects := fixture.effectSnapshot()
+
+			assertASRBoundedInvalidInputModes(t, &fixture, testCase, arguments)
+
+			fixture.assertNoEffectsSince(t, beforeEffects)
+			t.Logf("ASR bounded invalid-input proof: human and JSON requests returned %s with no downstream model or asset effects", testCase.wantCode)
+		})
+	}
+}
+
+type asrBoundedInvalidInputCase struct {
+	name        string
+	arguments   func(*testing.T) []string
+	wantCode    factoryapi.ErrorResponseCode
+	wantClass   models.InvocationFailureClass
+	wantSlot    string
+	wantMessage string
+}
+
+func asrBoundedInvalidInputCases() []asrBoundedInvalidInputCase {
+	return []asrBoundedInvalidInputCase{
 		{
 			name: "missing file",
 			arguments: func(t *testing.T) []string {
@@ -82,65 +103,58 @@ func TestModelsASRBoundedInvalidInputsAreTypedAndEffectFree(t *testing.T) {
 			wantMessage: "parse --parameter 1",
 		},
 	}
+}
 
-	for _, testCase := range cases {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
+func assertASRBoundedInvalidInputModes(t *testing.T, fixture *invalidGenericCLIProcess, testCase asrBoundedInvalidInputCase, arguments []string) {
+	t.Helper()
+	for _, jsonMode := range []bool{false, true} {
+		args := []string{"you"}
+		if jsonMode {
+			args = append(args, "--json")
+		}
+		args = append(args, "models", "invoke", models.BuiltInModelNameASR)
+		args = append(args, arguments...)
+		if !jsonMode {
+			outputDir := t.TempDir()
+			args = append(args,
+				"--output-map", "transcript="+filepath.Join(outputDir, "transcript.txt"),
+				"--output-map", "segments="+filepath.Join(outputDir, "segments.json"),
+			)
+		}
 
-			fixture := newInvalidGenericCLIProcess(t, genericConformanceFactoryConfig)
-			defer fixture.close(t)
-			arguments := testCase.arguments(t)
-			beforeEffects := fixture.effectSnapshot()
+		var stdout, stderr bytes.Buffer
+		inputs := support.FakeInputs(t.Context(), args)
+		inputs.Input.Env = fixture.environment
+		inputs.Input.WorkingDirectory = fixture.directory
+		inputs.Input.Stdout = &stdout
+		inputs.Input.Stderr = &stderr
+		err := fixture.process.Execute(inputs.Input)
+		assertASRBoundedInvalidInputResult(t, err, stdout.String(), stderr.String(), jsonMode, testCase)
+	}
+}
 
-			for _, jsonMode := range []bool{false, true} {
-				args := []string{"you"}
-				if jsonMode {
-					args = append(args, "--json")
-				}
-				args = append(args, "models", "invoke", models.BuiltInModelNameASR)
-				args = append(args, arguments...)
-				if !jsonMode {
-					outputDir := t.TempDir()
-					args = append(args,
-						"--output-map", "transcript="+filepath.Join(outputDir, "transcript.txt"),
-						"--output-map", "segments="+filepath.Join(outputDir, "segments.json"),
-					)
-				}
+func assertASRBoundedInvalidInputResult(t *testing.T, err error, stdout, stderr string, jsonMode bool, testCase asrBoundedInvalidInputCase) {
+	t.Helper()
+	mode := map[bool]string{false: "human", true: "JSON"}[jsonMode]
+	if err == nil {
+		t.Fatalf("ASR %s invocation returned nil, want bounded failure", mode)
+	}
+	if stdout != "" {
+		t.Fatalf("ASR %s invalid-input stdout = %q, want empty", mode, stdout)
+	}
+	if testCase.wantClass != "" {
+		var failure *models.InvocationFailure
+		if !errors.As(err, &failure) || failure == nil || failure.Class != testCase.wantClass || (testCase.wantSlot != "" && failure.Slot != testCase.wantSlot) {
+			t.Fatalf("ASR %s typed failure = %v, failure = %#v, want class %s slot %q", mode, err, failure, testCase.wantClass, testCase.wantSlot)
+		}
+	}
 
-				var stdout, stderr bytes.Buffer
-				inputs := support.FakeInputs(t.Context(), args)
-				inputs.Input.Env = fixture.environment
-				inputs.Input.WorkingDirectory = fixture.directory
-				inputs.Input.Stdout = &stdout
-				inputs.Input.Stderr = &stderr
-				err := fixture.process.Execute(inputs.Input)
-				if err == nil {
-					t.Fatalf("ASR %s invocation returned nil, want bounded failure", map[bool]string{false: "human", true: "JSON"}[jsonMode])
-				}
-				if stdout.Len() != 0 {
-					t.Fatalf("ASR %s invalid-input stdout = %q, want empty", map[bool]string{false: "human", true: "JSON"}[jsonMode], stdout.String())
-				}
-
-				if testCase.wantClass != "" {
-					var failure *models.InvocationFailure
-					if !errors.As(err, &failure) || failure == nil || failure.Class != testCase.wantClass || (testCase.wantSlot != "" && failure.Slot != testCase.wantSlot) {
-						t.Fatalf("ASR %s typed failure = %v, failure = %#v, want class %s slot %q", map[bool]string{false: "human", true: "JSON"}[jsonMode], err, failure, testCase.wantClass, testCase.wantSlot)
-					}
-				}
-
-				diagnostic := decodeFirstDiagnostic(t, stderr.String())
-				if diagnostic.Code != testCase.wantCode || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || !strings.Contains(diagnostic.Message, testCase.wantMessage) {
-					t.Fatalf("ASR %s invalid-input diagnostic = %#v, want code %s and message containing %q", map[bool]string{false: "human", true: "JSON"}[jsonMode], diagnostic, testCase.wantCode, testCase.wantMessage)
-				}
-				if nonEmptyDiagnosticLines(stderr.String()) != 1 {
-					t.Fatalf("ASR %s invalid-input diagnostic lines = %d, want one", map[bool]string{false: "human", true: "JSON"}[jsonMode], nonEmptyDiagnosticLines(stderr.String()))
-				}
-			}
-
-			fixture.assertNoEffectsSince(t, beforeEffects)
-			t.Logf("ASR bounded invalid-input proof: human and JSON requests returned %s with no downstream model or asset effects", testCase.wantCode)
-		})
+	diagnostic := decodeFirstDiagnostic(t, stderr)
+	if diagnostic.Code != testCase.wantCode || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || !strings.Contains(diagnostic.Message, testCase.wantMessage) {
+		t.Fatalf("ASR %s invalid-input diagnostic = %#v, want code %s and message containing %q", mode, diagnostic, testCase.wantCode, testCase.wantMessage)
+	}
+	if nonEmptyDiagnosticLines(stderr) != 1 {
+		t.Fatalf("ASR %s invalid-input diagnostic lines = %d, want one", mode, nonEmptyDiagnosticLines(stderr))
 	}
 }
 
