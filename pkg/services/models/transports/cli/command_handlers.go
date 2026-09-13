@@ -161,13 +161,8 @@ func (h *CommandHandler) Invoke(
 	if err != nil {
 		return mapModelsClientError(err)
 	}
-	if invokeInputs.operationDefault && strings.TrimSpace(invokeInputs.text) == "" &&
-		len(invokeInputs.inputMappings) == 0 && len(invokeInputs.parameterSpecs) == 0 &&
-		len(invokeInputs.outputMappings) == 0 {
-		// The manifest's implicit TTS operation is the legacy direct-invoke
-		// default. Do not reinterpret it as an explicit generic operation-only
-		// request; only a caller-supplied --operation takes that path.
-		return fmt.Errorf("--text is required")
+	if err := validateModelsInvokeInputs(invokeInputs); err != nil {
+		return err
 	}
 	logger, err := h.buildLogger()
 	if err != nil {
@@ -239,6 +234,22 @@ type modelsInvokeInputs struct {
 	parameterSpecs   []string
 	outputPath       string
 	outputMappings   []string
+}
+
+func validateModelsInvokeInputs(inputs modelsInvokeInputs) error {
+	if !missingLegacyTTSInput(inputs) {
+		return nil
+	}
+	// The manifest's implicit TTS operation is the legacy direct-invoke
+	// default. Do not reinterpret it as an explicit generic operation-only
+	// request; only a caller-supplied --operation takes that path.
+	return fmt.Errorf("--text is required")
+}
+
+func missingLegacyTTSInput(inputs modelsInvokeInputs) bool {
+	return inputs.operationDefault && strings.TrimSpace(inputs.text) == "" &&
+		len(inputs.inputMappings) == 0 && len(inputs.parameterSpecs) == 0 &&
+		len(inputs.outputMappings) == 0
 }
 
 func inferGenericCLIModelOperation(modelName string) string {

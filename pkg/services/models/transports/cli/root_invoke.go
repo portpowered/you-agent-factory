@@ -350,12 +350,8 @@ func validateCLIOutputShape(
 	operation string,
 ) error {
 	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
-	if ok && hasGenericCLIInvocationBindings(cfg) && !hasGenericCLIInputs(cfg) &&
-		strings.TrimSpace(cfg.Text) == "" && genericCLIInputContractComplete(selected.Inputs) {
-		_, validNames := genericCLIInputSlots(selected.Inputs)
-		if err := validateMissingGenericCLIInputSlots(selected.Inputs, map[string]int{}, validNames); err != nil {
-			return err
-		}
+	if err := validateZeroInputCLIRequiredSlots(cfg, selected, ok); err != nil {
+		return err
 	}
 	if len(cfg.OutputMappings) > 0 {
 		if strings.TrimSpace(cfg.OutputPath) != "" {

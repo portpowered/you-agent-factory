@@ -69,6 +69,27 @@ func hasGenericCLIInvocationBindings(cfg InvokeConfig) bool {
 	return strings.TrimSpace(cfg.Operation) != "" && strings.TrimSpace(cfg.Text) == ""
 }
 
+func validateZeroInputCLIRequiredSlots(
+	cfg InvokeConfig,
+	selected modelinference.Operation,
+	ok bool,
+) error {
+	if !shouldValidateZeroInputCLIRequiredSlots(cfg, selected, ok) {
+		return nil
+	}
+	_, validNames := genericCLIInputSlots(selected.Inputs)
+	return validateMissingGenericCLIInputSlots(selected.Inputs, map[string]int{}, validNames)
+}
+
+func shouldValidateZeroInputCLIRequiredSlots(
+	cfg InvokeConfig,
+	selected modelinference.Operation,
+	ok bool,
+) bool {
+	return ok && hasGenericCLIInvocationBindings(cfg) && !hasGenericCLIInputs(cfg) &&
+		strings.TrimSpace(cfg.Text) == "" && genericCLIInputContractComplete(selected.Inputs)
+}
+
 // modelsRootError preserves a Models CLI sentinel and the originating Models
 // error while exposing the safe diagnostic fields expected by the central CLI
 // renderer. Its message is authored at this adapter boundary; the original
