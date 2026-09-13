@@ -22,6 +22,7 @@ func TestNewBuildsDetachedEffectiveLookups(t *testing.T) {
 		authored,
 		emptyDefinitions{},
 		[]factorydefinitions.PortableBundledFileReplacement{{TargetPath: "AGENTS.md"}},
+		func() string { return "activation-one" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -50,6 +51,7 @@ func TestMutateWorkersPreservesFactoryAndLookupErrorContext(t *testing.T) {
 		},
 		emptyDefinitions{},
 		nil,
+		func() string { return "activation-two" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -89,6 +91,7 @@ func TestNewKeepsPromptSourceIdentityOutsideFactoryConfiguration(t *testing.T) {
 		},
 		emptyDefinitions{},
 		nil,
+		func() string { return "activation-three" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -117,11 +120,11 @@ func TestNewPublishesStableSecretSafeActivationTuple(t *testing.T) {
 			Body: "private instructions",
 		}},
 	}
-	first, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil)
+	first, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil, func() string { return "activation-first" })
 	if err != nil {
 		t.Fatalf("New(first): %v", err)
 	}
-	second, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil)
+	second, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil, func() string { return "activation-second" })
 	if err != nil {
 		t.Fatalf("New(second): %v", err)
 	}

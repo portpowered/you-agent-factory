@@ -128,14 +128,15 @@ func composeService(
 		discardNamedFactory = discarder.DiscardNamedFactory
 	}
 	var removeCurrentFactoryPointer func(string) error
-	if remover, ok := namedPaths.(factorydefinitions.CurrentFactoryPointerRemover); ok {
+	if remover, ok := namedPaths.(interface {
+		RemoveCurrentPointer(string) error
+	}); ok {
 		removeCurrentFactoryPointer = remover.RemoveCurrentPointer
 	}
 	rollbackOptions = append(rollbackOptions, factorydefinitionsinternal.WithActivationRollback(
 		discardNamedFactory,
 		removeCurrentFactoryPointer,
 	))
-
 	definitions := factorydefinitionsinternal.NewWithAuthoringLayout(
 		sessionHost,
 		activationGateway,

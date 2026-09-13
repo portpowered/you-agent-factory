@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig"
 )
@@ -46,12 +45,16 @@ func New(
 	factoryConfig *factorydefinitions.FactoryConfig,
 	runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 	portableBundledReplacements []factorydefinitions.PortableBundledFileReplacement,
+	activationID func() string,
 ) (*Source, error) {
 	if factoryConfig == nil {
 		return &Source{
 			factoryDir:                  factoryDir,
 			portableBundledReplacements: cloneReplacements(portableBundledReplacements),
 		}, nil
+	}
+	if activationID == nil {
+		return nil, fmt.Errorf("Factory activation ID generator is required")
 	}
 	effectiveFactory, err := runtimeconfig.Merge(factoryConfig, runtimeDefinitions)
 	if err != nil {
@@ -74,7 +77,7 @@ func New(
 		workstationPromptSources:    make(map[string]factorydefinitions.PromptSource),
 		portableBundledReplacements: cloneReplacements(portableBundledReplacements),
 		activation: &factorydefinitions.FactoryActivationProvenance{
-			ActivationID:       uuid.NewString(),
+			ActivationID:       activationID(),
 			LoadedSourceDigest: loadedSourceDigest,
 			State:              factorydefinitions.FactoryActivationStateNotActivated,
 		},

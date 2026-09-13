@@ -27,6 +27,7 @@ func NewLoadedFactoryConfig(
 		factoryConfig,
 		runtimeDefinitions,
 		nil,
+		func() string { return "runtime-test-activation" },
 	)
 	return concreteLoadedSource(source, err)
 }

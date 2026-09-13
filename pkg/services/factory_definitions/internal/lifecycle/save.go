@@ -177,7 +177,7 @@ func (s *Service) persistAndActivateCurrentFactory(
 		return err
 	}
 	savedSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(
-		factorydefinitions.WithActivationReadBypass(ctx),
+		withActivationReadBypass(ctx),
 		sessionID,
 	)
 	if err != nil {

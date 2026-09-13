@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -52,7 +53,7 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 		if err != nil {
 			return err
 		}
-		pointerState, err := factorydefinitions.ReadCurrentFactoryPointerState(
+		pointerState, err := readCurrentFactoryPointerState(
 			func(rootDir string) (string, error) {
 				return readCurrentFactoryPointerFromHost(s.host, rootDir)
 			},
@@ -141,7 +142,7 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 	sessionID string,
 	sessionRootDir string,
 	persisted persistedNamedFactory,
-	pointerState factorydefinitions.CurrentFactoryPointerState,
+	pointerState currentFactoryPointerState,
 	request EditableFactory,
 ) (EditableFactory, error) {
 	restorePointer, err := s.publishUpsertCurrentPointer(
@@ -195,24 +196,73 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 }
 
 func (s *Service) publishUpsertCurrentPointer(
-	state factorydefinitions.CurrentFactoryPointerState,
+	state currentFactoryPointerState,
 	rootDir string,
 	name string,
 ) (func() error, error) {
-	remover := factorydefinitions.CurrentFactoryPointerRemoverFunc(func(rootDir string) error {
-		return removeCurrentFactoryPointerFromHost(s.host, rootDir)
-	})
-	restore, err := factorydefinitions.WriteCurrentFactoryPointerAfterState(
+	restore, err := writeCurrentFactoryPointerAfterState(
 		state,
 		rootDir,
 		name,
 		func(rootDir, name string) error {
 			return writeCurrentFactoryPointerFromHost(s.host, rootDir, name)
 		},
-		remover,
+		func(rootDir string) error {
+			return removeCurrentFactoryPointerFromHost(s.host, rootDir)
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("write session current factory pointer: %w", err)
+	}
+	return restore, nil
+}
+
+type currentFactoryPointerState struct {
+	name   string
+	exists bool
+}
+
+func readCurrentFactoryPointerState(
+	read factorydefinitions.CurrentFactoryPointerReader,
+	rootDir string,
+) (currentFactoryPointerState, error) {
+	if read == nil {
+		return currentFactoryPointerState{}, fmt.Errorf("current Factory pointer reader is required")
+	}
+	name, err := read(rootDir)
+	if err == nil {
+		return currentFactoryPointerState{name: name, exists: true}, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return currentFactoryPointerState{}, nil
+	}
+	return currentFactoryPointerState{}, err
+}
+
+func writeCurrentFactoryPointerAfterState(
+	state currentFactoryPointerState,
+	rootDir string,
+	name string,
+	write factorydefinitions.CurrentFactoryPointerWriter,
+	remove func(string) error,
+) (func() error, error) {
+	if write == nil {
+		return nil, fmt.Errorf("current Factory pointer writer is required")
+	}
+	restore := func() error {
+		if state.exists {
+			return write(rootDir, state.name)
+		}
+		if remove == nil {
+			return fmt.Errorf("current Factory pointer remover is required to restore an absent pointer")
+		}
+		return remove(rootDir)
+	}
+	if err := write(rootDir, name); err != nil {
+		if restoreErr := restore(); restoreErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("restore current Factory pointer after write failure: %w", restoreErr))
+		}
+		return nil, err
 	}
 	return restore, nil
 }

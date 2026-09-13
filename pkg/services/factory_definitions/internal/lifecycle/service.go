@@ -28,6 +28,23 @@ const (
 	SaveModeUpsertNamedAndActivate = factoryroot.SaveModeUpsertNamedAndActivate
 )
 
+type activationReadBypassContextKey struct{}
+
+func withActivationReadBypass(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, activationReadBypassContextKey{}, true)
+}
+
+func activationReadBypassed(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	bypassed, _ := ctx.Value(activationReadBypassContextKey{}).(bool)
+	return bypassed
+}
+
 // Service owns current and named factory definition reads, persistence, and
 // activation policy. UnimplementedService keeps the CTR-DEF root slice methods
 // assignable until nested IMP-DEF collaborators are wired.
@@ -459,7 +476,7 @@ func (s *Service) GetCurrentFactoryForSession(ctx context.Context, sessionID str
 		return err
 	}
 	var err error
-	if factoryroot.ActivationReadBypassed(ctx) {
+	if activationReadBypassed(ctx) {
 		err = read()
 	} else {
 		err = s.withActivationRead(read)
