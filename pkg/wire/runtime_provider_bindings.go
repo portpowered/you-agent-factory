@@ -59,14 +59,16 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 		return nil, err
 	}
 	environment := appendManagedBackendEnvironment(spec.Env, launch.Env)
-	startProcess := launcher.startProcess
-	if startProcess == nil {
-		startProcess = managedchild.Start
-	}
-	child, err := startProcess(ctx, managedchild.Spec{
+	managedSpec := managedchild.Spec{
 		Command: launch.Command, Args: append([]string(nil), launch.Args...),
 		Env: environment, WorkDir: launch.WorkDir,
-	})
+	}
+	var child *managedchild.Process
+	if launcher.startProcess != nil {
+		child, err = launcher.startProcess(ctx, managedSpec)
+	} else {
+		child, err = managedchild.Start(ctx, managedSpec)
+	}
 	if err == nil && child == nil {
 		err = errors.New("managed child starter returned a nil process")
 	}
@@ -255,6 +257,14 @@ type modelHostManagedProcessAdapter struct {
 	}
 }
 
+// managedProcessDiagnosticSource is an optional edge capability. It remains
+// private to composition so the process-edge aggregate does not grow another
+// service-root interface; the public Models effects adapter below translates
+// its detached value into the Models-owned private seam.
+type managedProcessDiagnosticSource interface {
+	DiagnosticSnapshot() (serviceedges.HostProcessDiagnosticSnapshot, bool)
+}
+
 func (adapter modelHostManagedProcessAdapter) HealthEndpoint() string {
 	return adapter.next.HealthEndpoint()
 }
@@ -277,7 +287,7 @@ func (adapter modelHostManagedProcessAdapter) DiagnosticSnapshot() (
 			ok = false
 		}
 	}()
-	source, ok := adapter.next.(serviceedges.HostManagedProcessDiagnosticSource)
+	source, ok := adapter.next.(managedProcessDiagnosticSource)
 	if !ok || isNilModelEdgeDependency(source) {
 		return modelswire.HostProcessDiagnosticSnapshot{}, false
 	}
