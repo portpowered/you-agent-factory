@@ -70,48 +70,57 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		decoder := newDecoder(request.ExecuteRequest.ObserveSession)
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
 		flushErr := decoder.flush()
-		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
-			if failure.SessionRef == nil {
-				failure.SessionRef = decoder.sessionRef()
-			}
-			if failure.Diagnostics == nil {
-				failure.Diagnostics = decoder.diagnostics()
-			}
-			return providers.ExecuteResult{}, failure
-		}
 		content, session, finalErr := decoder.final()
+		failure, failed := collectFailure(decoder, effectErr, flushErr)
 		if finalErr != nil {
-			failure := execution.AttemptFailure{
-				SessionRef:      decoder.sessionRef(),
-				FinalParseError: finalErr,
+			// Preserve an earlier native, decode, flush, declared, or resource
+			// classification when the same attempt also lacks a final message.
+			// A final-parse failure is the primary route only when no other
+			// failure was observed.
+			if !failed {
+				failure.FinalParseError = finalErr
+				// A skipped oversized record only fails the execution when the
+				// stream ends without a recoverable final agent decision. Keep the
+				// pre-existing record-limit classification for that terminal case.
+				if skipped := decoder.skippedRecordFailure(); skipped != nil {
+					failure.Declared = skipped
+					failure.Diagnostics = decoder.diagnostics()
+				}
+				failed = true
 			}
-			// A skipped oversized record only fails the execution when the
-			// stream ends without a recoverable final agent decision. Keep the
-			// pre-existing record-limit classification for that terminal case.
-			if skipped := decoder.skippedRecordFailure(); skipped != nil {
-				failure.Declared = skipped
-				failure.Diagnostics = decoder.diagnostics()
-			}
-			return providers.ExecuteResult{}, failure
 		}
-		metadata := cloneMetadata(effectResult.Metadata)
-		if metadata == nil {
-			metadata = make(map[string]string, 4)
+		if failure.SessionRef == nil {
+			failure.SessionRef = decoder.sessionRef()
 		}
-		for key, value := range decoder.diagnostics().Metadata {
-			metadata[key] = value
+		if failure.Diagnostics == nil {
+			failure.Diagnostics = decoder.diagnostics()
 		}
-		metadata["completion_evidence"] = "agent_message"
-		return providers.ExecuteResult{
+		result := providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Progress:       decoder.progressFacts(),
-				Metadata:       metadata,
+				Metadata:       completedMetadata(effectResult.Metadata, decoder.diagnostics().Metadata),
 			},
-		}, nil
+		}
+		if failed {
+			return result, failure
+		}
+		return result, nil
 	}
+}
+
+func completedMetadata(native, decoded map[string]string) map[string]string {
+	metadata := cloneMetadata(native)
+	if metadata == nil {
+		metadata = make(map[string]string, 4)
+	}
+	for key, value := range decoded {
+		metadata[key] = value
+	}
+	metadata["completion_evidence"] = "agent_message"
+	return metadata
 }
 
 func collectFailure(

@@ -3,7 +3,6 @@ package codex_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,7 +15,7 @@ import (
 
 const codexFailureSecret = "prompt-secret-that-must-not-escape"
 
-func TestCodexRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
+func TestCodexRootNormalizesFailureStagesWithoutFabricatingCandidates(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -230,7 +229,7 @@ func TestCodexRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T)
 	}
 }
 
-func TestCodexRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
+func TestCodexRootPreservesUsableResultAlongsideFailure(t *testing.T) {
 	t.Parallel()
 
 	effect := codex.EffectFunc(func(
@@ -241,19 +240,39 @@ func TestCodexRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 		if err := observe(codexSuccessStream()); err != nil {
 			return codex.EffectResult{}, err
 		}
-		return codex.EffectResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindAuthentication,
-			Message: "credential " + codexFailureSecret,
-		}
+		return codex.EffectResult{
+				DurationMillis: 29,
+				Metadata: map[string]string{
+					"transport": "jsonl",
+					"stderr":    codexFailureSecret,
+				},
+			}, execution.AttemptFailure{
+				FlushError: errors.New("flush " + codexFailureSecret),
+			}
 	})
 	result, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
-	assertCodexFailure(
-		t,
-		result,
-		err,
-		providers.ExecuteFailureKindAuthentication,
-		"",
-	)
+	if result.Content != "authoritative second answer" {
+		t.Fatalf("Execute() content = %q, want accepted stream result", result.Content)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "thread-codex-42" {
+		t.Fatalf("Execute() session = %#v, want parsed Codex session", result.SessionRef)
+	}
+	if result.Diagnostics == nil ||
+		result.Diagnostics.Metadata["completion_evidence"] != "agent_message" {
+		t.Fatalf("Execute() diagnostics = %#v, want completion evidence", result.Diagnostics)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("Execute() error = %#v, want dependency failure", err)
+	}
+	if failure.Diagnostics == nil ||
+		failure.Diagnostics.Metadata["failure_stage"] != "flush" {
+		t.Fatalf("Execute() failure diagnostics = %#v, want flush stage", failure.Diagnostics)
+	}
+	if strings.Contains(err.Error(), codexFailureSecret) {
+		t.Fatalf("Execute() error leaked sensitive native data: %v", err)
+	}
 }
 
 func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
@@ -292,8 +311,8 @@ func TestCodexRootCarriesBoundedRecordLimitThroughFailureDiagnostics(t *testing.
 	})
 
 	result, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
-	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-		t.Fatalf("Execute() result = %#v, want zero result", result)
+	if result.Content != "" {
+		t.Fatalf("Execute() content = %q, want no candidate", result.Content)
 	}
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency {
@@ -336,8 +355,8 @@ func assertCodexFailure(
 	wantStage string,
 ) {
 	t.Helper()
-	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
-		t.Fatalf("Execute() result = %#v, want zero result", result)
+	if result.Content != "" {
+		t.Fatalf("Execute() content = %q, want no candidate", result.Content)
 	}
 	if !errors.Is(err, sentinelForKind(wantKind)) {
 		t.Fatalf("Execute() error = %v, want sentinel for %q", err, wantKind)
