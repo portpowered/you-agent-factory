@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+const (
+	prebuiltArtifactEnv         = "INFINITE_YOU_OMNI_MEDIA_PROBE_ARTIFACT"
+	prebuiltArtifactRequiredEnv = "INFINITE_YOU_REQUIRE_OMNI_MEDIA_PROBE_ARTIFACT"
+	prebuiltArtifactIdentityEnv = "INFINITE_YOU_OMNI_MEDIA_PROBE_ARTIFACT_IDENTITY"
+)
+
 func TestProbeRunnerPreflightRecordsReadyEvidence(t *testing.T) {
 	input, inputPath, reportPath := validProbeInput(t, "ready")
 	if err := WriteProbeInputAtomic(inputPath, input); err != nil {
@@ -59,6 +65,79 @@ func TestProbeRunnerPreflightRecordsReadyEvidence(t *testing.T) {
 	if report.Cleanup != (CleanupEvidence{Checked: true}) || len(report.Processes) != 0 || len(report.Outputs) != 0 {
 		t.Fatalf("preflight cleanup/process/output evidence = %#v/%#v/%#v", report.Cleanup, report.Processes, report.Outputs)
 	}
+}
+
+// TestProbeRunnerPreflightConsumesInvokingLaneArtifact is the small compiled
+// integration witness. The build is owned by the invoking lane; this test only
+// supplies its absolute path and digest to the production-shaped preflight.
+func TestProbeRunnerPreflightConsumesInvokingLaneArtifact(t *testing.T) {
+	artifactPath := strings.TrimSpace(os.Getenv(prebuiltArtifactEnv))
+	if artifactPath == "" {
+		switch strings.ToLower(strings.TrimSpace(os.Getenv(prebuiltArtifactRequiredEnv))) {
+		case "1", "true", "yes":
+			t.Fatalf("%s is required for the compiled-artifact preflight", prebuiltArtifactEnv)
+		}
+		t.Skipf("compiled-artifact preflight: %s is unset; no in-test build fallback", prebuiltArtifactEnv)
+	}
+	if !filepath.IsAbs(artifactPath) {
+		t.Fatalf("compiled artifact path = %q, want absolute path", artifactPath)
+	}
+
+	input, inputPath, reportPath := validProbeInput(t, "prebuilt-artifact")
+	input.Build = ProbeBuildIdentity{
+		Path:     artifactPath,
+		Identity: strings.TrimSpace(os.Getenv(prebuiltArtifactIdentityEnv)),
+		SHA256:   fileSHA256(t, artifactPath),
+	}
+	if input.Build.Identity == "" {
+		input.Build.Identity = "factory-cli@invoking-lane-build"
+	}
+	if err := WriteProbeInputAtomic(inputPath, input); err != nil {
+		t.Fatalf("write compiled-artifact probe input: %v", err)
+	}
+
+	report, err := NewRunner(nil).Run(context.Background(), inputPath, reportPath)
+	if err != nil {
+		t.Fatalf("run compiled-artifact preflight: %v", err)
+	}
+	if report.Status != "READY" || report.Failure != nil {
+		t.Fatalf("compiled-artifact preflight report = %#v, want READY without failure", report)
+	}
+	artifactInfo, err := os.Stat(artifactPath)
+	if err != nil {
+		t.Fatalf("stat compiled artifact after preflight: %v", err)
+	}
+	if report.Build.Identity != input.Build.Identity || report.Build.SHA256 != input.Build.SHA256 || report.Build.Bytes != artifactInfo.Size() || report.Build.PathIdentity == artifactPath {
+		t.Fatalf("compiled-artifact identity = %#v, want supplied digest, size, label and redacted path", report.Build)
+	}
+	if report.Dependencies.Model.Identity != input.Dependencies.Model.Identity || report.Dependencies.Projector.Identity != input.Dependencies.Projector.Identity || report.Dependencies.Backend.Identity != input.Dependencies.Backend.Identity || len(report.Fixtures) != 2 || report.Fixtures[0].SHA256 != wantImageSHA256 || report.Fixtures[1].SHA256 != wantVideoSHA256 {
+		t.Fatalf("compiled-artifact dependency/fixture identities = %#v/%#v, want supplied controlled dependencies and pinned media", report.Dependencies, report.Fixtures)
+	}
+	if len(report.Journeys) != 2 || report.Journeys[0].Name != probeJourneyImage || report.Journeys[1].Name != probeJourneyVideo || report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun || len(report.Journeys[0].Command) == 0 || len(report.Journeys[1].Command) == 0 || len(report.Journeys[0].SemanticRubric) == 0 || len(report.Journeys[1].SemanticRubric) == 0 {
+		t.Fatalf("compiled-artifact journeys = %#v, want ordered image/video commands and rubrics", report.Journeys)
+	}
+	if report.Policy.Port == ProbeForbiddenPort || len(report.Policy.RootIdentities) < 6 || !uniqueStrings(report.Policy.RootIdentities) {
+		t.Fatalf("compiled-artifact policy = %#v, want isolated roots and non-7437 port", report.Policy)
+	}
+	if report.Policy.DownloadBytes != 0 || report.Policy.PaidUSD != 0 || len(report.Processes) != 0 || len(report.Outputs) != 0 || report.Cleanup != (CleanupEvidence{Checked: true}) {
+		t.Fatalf("compiled-artifact effects = policy=%#v processes=%#v outputs=%#v cleanup=%#v, want zero external activity and survivors", report.Policy, report.Processes, report.Outputs, report.Cleanup)
+	}
+	if _, err := ReadReport(reportPath); err != nil {
+		t.Fatalf("read compiled-artifact report: %v", err)
+	}
+	if _, err := os.Stat(input.ProbeRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("compiled-artifact probe root = %v, want removed after preflight", err)
+	}
+	body, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read compiled-artifact report bytes: %v", err)
+	}
+	for _, leaked := range []string{artifactPath, input.ProbeRoot, input.Dependencies.Model.Path, input.Dependencies.Projector.Path, input.Dependencies.Backend.Path, input.FixtureManifest.Path} {
+		if strings.Contains(string(body), leaked) {
+			t.Fatalf("compiled-artifact report leaked path %q: %s", leaked, body)
+		}
+	}
+	t.Logf("compiled-artifact preflight READY identity=%s sha256=%s bytes=%d port=%d roots=%d", report.Build.Identity, report.Build.SHA256, report.Build.Bytes, report.Policy.Port, len(report.Policy.RootIdentities))
 }
 
 func TestProbeRunnerRunsImageBeforeVideoWithControlledExecutor(t *testing.T) {
