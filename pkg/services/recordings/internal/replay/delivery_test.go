@@ -425,6 +425,38 @@ func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *t
 	}
 }
 
+func TestCompletionDeliveryPlan_ReplayResultExposesRecordedWorkBeforeClaim(t *testing.T) {
+	completion := replayTestCompletion("completion-1", "dispatch-1", "process", 3)
+	completion.Output = "recorded output"
+	completion.RecordedOutputWork = []work.FactoryWorkItem{{
+		ID: "work-recorded", WorkTypeID: "task", State: "done",
+	}}
+	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
+		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
+		completion,
+	))
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	observed := replayTestDispatch("observed-dispatch", "process", 2, "trace-1", "work-1", "tok-1")
+	planned, ok, err := plan.ReplayResultForDispatch(observed)
+	if err != nil {
+		t.Fatalf("ReplayResultForDispatch: %v", err)
+	}
+	if !ok || planned.Output != "recorded output" || len(planned.RecordedOutputWork) != 1 ||
+		planned.RecordedOutputWork[0].ID != "work-recorded" {
+		t.Fatalf("replay result = %#v, want recorded output Work", planned)
+	}
+
+	if _, ok, err := plan.ReplayResultForDispatch(observed); err != nil || !ok {
+		t.Fatalf("non-consuming replay lookup = (%t, %v), want (true, nil)", ok, err)
+	}
+	if _, ok, err := plan.DeliveryTickForDispatch(observed); err != nil || !ok {
+		t.Fatalf("DeliveryTickForDispatch = (%t, %v), want (true, nil)", ok, err)
+	}
+}
+
 func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
 		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),
