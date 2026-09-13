@@ -61,6 +61,68 @@ func TestProbeRunnerPreflightRecordsReadyEvidence(t *testing.T) {
 	}
 }
 
+func TestProbeRunnerPrebuiltPreflightRecordsProcessWithoutRunningJourneys(t *testing.T) {
+	input, _, reportPath := validProbeInput(t, "prebuilt-ready")
+	executor := &recordingExecutor{}
+
+	report, err := NewRunner(executor).RunPreflightInput(context.Background(), input, reportPath)
+	if err != nil {
+		t.Fatalf("run controlled prebuilt preflight: %v", err)
+	}
+	if report.Status != "READY" || report.Failure != nil {
+		t.Fatalf("prebuilt preflight report = %#v, want READY without failure", report)
+	}
+	if len(report.Processes) != 1 || !report.Processes[0].Started || !report.Processes[0].Exited || report.Processes[0].ExitCode != 0 {
+		t.Fatalf("prebuilt process evidence = %#v, want one successful process", report.Processes)
+	}
+	if len(report.Outputs) != 0 || report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun {
+		t.Fatalf("prebuilt semantic evidence = outputs=%#v journeys=%#v, want no outputs and NOT_RUN journeys", report.Outputs, report.Journeys)
+	}
+	executor.mu.Lock()
+	requests := append([]ExecutionRequest(nil), executor.requests...)
+	executor.mu.Unlock()
+	if len(requests) != 1 || requests[0].Journey != probeJourneyCLI || len(requests[0].Command) != 1 || requests[0].Command[0] != "--version" {
+		t.Fatalf("prebuilt request = %#v, want one --version request", requests)
+	}
+	if _, err := ReadReport(reportPath); err != nil {
+		t.Fatalf("read persisted prebuilt report: %v", err)
+	}
+}
+
+func TestProbeRunnerPrebuiltPreflightFailurePublishesNoFalseReady(t *testing.T) {
+	input, _, reportPath := validProbeInput(t, "prebuilt-failure")
+	executor := &recordingExecutor{failure: &ReportFailure{
+		Owner: "prebuilt-cli", Code: "CLI_COMMAND_FAILED", Expected: "--version exits successfully", Observed: "controlled non-zero exit", NextAction: "inspect the prebuilt artifact",
+	}}
+
+	report, err := NewRunner(executor).RunPreflightInput(context.Background(), input, reportPath)
+	if err != nil {
+		t.Fatalf("run controlled prebuilt failure: %v", err)
+	}
+	if report.Status != "FAIL" || report.Failure == nil || report.Failure.Code != "CLI_COMMAND_FAILED" {
+		t.Fatalf("prebuilt failure report = %#v, want typed FAIL", report)
+	}
+	if report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun {
+		t.Fatalf("prebuilt failure journeys = %#v, want both NOT_RUN", report.Journeys)
+	}
+	persisted, readErr := ReadReport(reportPath)
+	if readErr != nil || persisted.Status == "READY" {
+		t.Fatalf("persisted prebuilt failure report = %#v, err=%v, must not be READY", persisted, readErr)
+	}
+}
+
+func TestProbeRunnerPrebuiltPreflightRefusesSurvivorEvidence(t *testing.T) {
+	input, _, reportPath := validProbeInput(t, "prebuilt-survivor")
+	_, err := NewRunner(&survivorExecutor{}).RunPreflightInput(context.Background(), input, reportPath)
+	var validation *ValidationError
+	if err == nil || !errors.As(err, &validation) || validation.Code != CodeProbeCleanupFailure {
+		t.Fatalf("prebuilt survivor error = %v, want fail-closed cleanup error", err)
+	}
+	if _, statErr := os.Stat(reportPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("prebuilt survivor published report: %v", statErr)
+	}
+}
+
 func TestProbeRunnerRunsImageBeforeVideoWithControlledExecutor(t *testing.T) {
 	input, _, reportPath := validProbeInput(t, "ordered")
 	executor := &recordingExecutor{}

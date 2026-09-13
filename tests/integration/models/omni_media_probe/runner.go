@@ -34,6 +34,7 @@ const (
 	probeInputMaxBytes = 1 << 20
 	probeJourneyImage  = JourneyName("image")
 	probeJourneyVideo  = JourneyName("video")
+	probeJourneyCLI    = JourneyName("preflight")
 )
 
 const (
@@ -272,8 +273,39 @@ func (runner Runner) Run(ctx context.Context, inputPath, reportPath string) (Rep
 }
 
 func (runner Runner) RunInput(ctx context.Context, input ProbeInput, reportPath string) (Report, error) {
+	return runner.runInput(ctx, input, reportPath, probeRunJourneys)
+}
+
+// RunPreflight executes one supplied prebuilt-process check after the same
+// strict admission and isolated-root setup as the full probe. The executor
+// receives a --version-shaped request, while the report intentionally remains
+// READY with both semantic journeys NOT_RUN: this boundary proves executable
+// selection and process cleanup, not OMNI inference.
+func (runner Runner) RunPreflight(ctx context.Context, inputPath, reportPath string) (Report, error) {
+	input, err := ReadProbeInput(inputPath)
+	if err != nil {
+		return Report{}, err
+	}
+	return runner.RunPreflightInput(ctx, input, reportPath)
+}
+
+func (runner Runner) RunPreflightInput(ctx context.Context, input ProbeInput, reportPath string) (Report, error) {
+	return runner.runInput(ctx, input, reportPath, probeRunPrebuiltCLI)
+}
+
+type probeRunMode uint8
+
+const (
+	probeRunJourneys probeRunMode = iota
+	probeRunPrebuiltCLI
+)
+
+func (runner Runner) runInput(ctx context.Context, input ProbeInput, reportPath string, mode probeRunMode) (Report, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if mode == probeRunPrebuiltCLI && runner.Executor == nil {
+		return Report{}, validationError(CodeProbeExecutionFailure, "executor", "prebuilt CLI executor", "nil", nil)
 	}
 	prepared, err := admitProbeInput(ctx, input, reportPath)
 	if err != nil {
@@ -315,6 +347,30 @@ func (runner Runner) RunInput(ctx context.Context, input ProbeInput, reportPath 
 
 	if runner.Executor == nil {
 		report.Status = "READY"
+	} else if mode == probeRunPrebuiltCLI {
+		outcome := runner.executePrebuiltCLI(runContext, roots)
+		report.Processes = append(report.Processes, outcome.process)
+		report.Outputs = append(report.Outputs, outcome.outputs...)
+		if outcome.failure != nil {
+			report.Failure = outcome.failure
+			if outcome.failure.Code == string(CodeProbeCancelled) || outcome.failure.Code == string(CodeProbeTimedOut) {
+				report.Status = "INCONCLUSIVE"
+			} else {
+				report.Status = "FAIL"
+			}
+		} else {
+			report.Status = "READY"
+		}
+		if outcome.cleanupFailure != nil {
+			listenerErr := listener.Close()
+			cleanupErr := cleanupProbeRoots(roots, prepared.reportPath)
+			cleaned = true
+			return report, errors.Join(
+				validationError(CodeProbeCleanupFailure, "cleanup", "zero owned survivors", outcome.cleanupFailure.Observed, nil),
+				listenerErr,
+				cleanupErr,
+			)
+		}
 	} else {
 		executionErr := runner.executeJourneys(runContext, &report, roots)
 		if executionErr != nil {
@@ -1002,6 +1058,54 @@ type journeyOutcome struct {
 	outputs        []RecordedIdentity
 	failure        *ReportFailure
 	cleanupFailure *ReportFailure
+}
+
+func (runner Runner) executePrebuiltCLI(ctx context.Context, roots probeRoots) journeyOutcome {
+	request := ExecutionRequest{
+		Journey: probeJourneyCLI, Command: []string{"--version"}, Roots: roots.Paths, Port: roots.Port,
+	}
+	observation, err := runner.Executor.Execute(ctx, request)
+	process := observation.Process
+	if process.Identity == "" {
+		process.Identity = "not-started-preflight"
+	}
+	if process.Kind == "" {
+		process.Kind = "prebuilt-cli"
+	}
+	if process.Owner == "" {
+		process.Owner = "omni-media-probe"
+	}
+	if err != nil {
+		failure := probeFailure("executor", string(CodeProbeExecutionFailure), "prebuilt CLI returns a bounded observation", "executor returned an error", "inspect the prebuilt CLI process evidence")
+		return journeyOutcome{process: process, failure: failure}
+	}
+	if observation.OwnedProcessSurvivors != 0 || observation.OwnedListenerSurvivors != 0 || observation.PartialOutputs != 0 {
+		failure := probeFailure("harness", string(CodeProbeCleanupFailure), "owned processes, listeners, and partial outputs are zero", "owned resource survivors were reported", "repair prebuilt CLI cleanup before retrying")
+		return journeyOutcome{process: process, outputs: observation.Outputs, failure: failure, cleanupFailure: failure}
+	}
+	if observation.TimedOut || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		process.TimedOut = true
+		failure := probeFailure("harness", string(CodeProbeTimedOut), "prebuilt CLI finishes within the declared timeout", "prebuilt CLI timed out", "inspect the bounded timeout evidence and retry the handoff")
+		return journeyOutcome{process: process, outputs: observation.Outputs, failure: failure}
+	}
+	if observation.Cancelled || errors.Is(ctx.Err(), context.Canceled) {
+		failure := probeFailure("harness", string(CodeProbeCancelled), "prebuilt CLI completes before cancellation", "prebuilt CLI was cancelled", "inspect cleanup evidence before retrying")
+		return journeyOutcome{process: process, outputs: observation.Outputs, failure: failure}
+	}
+	if observation.Failure != nil {
+		return journeyOutcome{process: process, outputs: observation.Outputs, failure: normalizeReportFailure(*observation.Failure, "executor")}
+	}
+	if !process.Started || !process.Exited || process.ExitCode != 0 {
+		failure := probeFailure("executor", string(CodeProbeExecutionFailure), "started prebuilt CLI exits with code zero", "prebuilt CLI process observation was not successful", "inspect process evidence before retrying")
+		return journeyOutcome{process: process, outputs: observation.Outputs, failure: failure}
+	}
+	for index, output := range observation.Outputs {
+		if err := validateRecordedIdentity(output, fmt.Sprintf("outputs[%d]", index), false); err != nil {
+			failure := probeFailure("harness", string(CodeProbeOutputFailure), "output identity is complete and redacted", "output identity was invalid", "repair output recording before retrying")
+			return journeyOutcome{process: process, failure: failure}
+		}
+	}
+	return journeyOutcome{process: process, outputs: observation.Outputs}
 }
 
 func (runner Runner) executeJourney(ctx context.Context, journey *JourneyReport, roots probeRoots) journeyOutcome {
