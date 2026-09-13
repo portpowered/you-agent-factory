@@ -523,13 +523,7 @@ func runtimeEvidenceRecordFromDiagnostic(
 func normalizeRuntimeEvidenceRecord(
 	record RuntimeEvidenceRecord,
 ) (RuntimeEvidenceRecord, bool) {
-	if record.Kind != RuntimeEvidenceKindStage && record.Kind != RuntimeEvidenceKindTerminal {
-		return RuntimeEvidenceRecord{}, false
-	}
-	if !isRuntimeStage(record.Stage) {
-		return RuntimeEvidenceRecord{}, false
-	}
-	if record.Outcome != RuntimeEvidenceOutcomeCompleted && record.Outcome != RuntimeEvidenceOutcomeFailed {
+	if !validRuntimeEvidenceRecordShape(record) {
 		return RuntimeEvidenceRecord{}, false
 	}
 	if record.DurationMillis < 0 {
@@ -542,6 +536,18 @@ func normalizeRuntimeEvidenceRecord(
 		record = clearHostProcessDiagnostic(record)
 		return record, true
 	}
+	return normalizeFailedRuntimeEvidenceRecord(record)
+}
+
+func validRuntimeEvidenceRecordShape(record RuntimeEvidenceRecord) bool {
+	return (record.Kind == RuntimeEvidenceKindStage || record.Kind == RuntimeEvidenceKindTerminal) &&
+		isRuntimeStage(record.Stage) &&
+		(record.Outcome == RuntimeEvidenceOutcomeCompleted || record.Outcome == RuntimeEvidenceOutcomeFailed)
+}
+
+func normalizeFailedRuntimeEvidenceRecord(
+	record RuntimeEvidenceRecord,
+) (RuntimeEvidenceRecord, bool) {
 	if !isRuntimeFailureClass(record.Class) || !validRuntimeCauseSHA256(record.CauseSHA256) {
 		return RuntimeEvidenceRecord{}, false
 	}
@@ -554,29 +560,33 @@ func normalizeRuntimeEvidenceRecord(
 	}
 	record.Subcause = normalizeRuntimeFailureSubcause(record.Subcause)
 	record.CauseSHA256 = strings.ToLower(record.CauseSHA256)
-	if runtimeEvidenceHasHostProcessDiagnostic(record) {
-		var ok bool
-		record, ok = attachHostProcessDiagnostic(record, HostProcessDiagnosticSnapshot{
-			ExitClass:     record.ExitClass,
-			ExitCode:      record.ExitCode,
-			ExitCodeKnown: record.ExitCodeKnown,
-			Stdout: HostProcessStreamDiagnostic{
-				Bytes: record.StdoutBytes, SHA256: record.StdoutSHA256,
-				Truncated: record.StdoutTruncated,
-			},
-			Stderr: HostProcessStreamDiagnostic{
-				Bytes: record.StderrBytes, SHA256: record.StderrSHA256,
-				Truncated: record.StderrTruncated,
-			},
-			CauseCode:            record.CauseCode,
-			CauseMessage:         record.CauseMessage,
-			CauseMessageRedacted: record.CauseMessageRedacted,
-		})
-		if !ok {
-			record = clearHostProcessDiagnostic(record)
-		}
+	return normalizeRuntimeEvidenceHostProcess(record), true
+}
+
+func normalizeRuntimeEvidenceHostProcess(record RuntimeEvidenceRecord) RuntimeEvidenceRecord {
+	if !runtimeEvidenceHasHostProcessDiagnostic(record) {
+		return record
 	}
-	return record, true
+	normalized, ok := attachHostProcessDiagnostic(record, HostProcessDiagnosticSnapshot{
+		ExitClass:     record.ExitClass,
+		ExitCode:      record.ExitCode,
+		ExitCodeKnown: record.ExitCodeKnown,
+		Stdout: HostProcessStreamDiagnostic{
+			Bytes: record.StdoutBytes, SHA256: record.StdoutSHA256,
+			Truncated: record.StdoutTruncated,
+		},
+		Stderr: HostProcessStreamDiagnostic{
+			Bytes: record.StderrBytes, SHA256: record.StderrSHA256,
+			Truncated: record.StderrTruncated,
+		},
+		CauseCode:            record.CauseCode,
+		CauseMessage:         record.CauseMessage,
+		CauseMessageRedacted: record.CauseMessageRedacted,
+	})
+	if !ok {
+		return clearHostProcessDiagnostic(record)
+	}
+	return normalized
 }
 
 func validRuntimeCauseSHA256(value string) bool {

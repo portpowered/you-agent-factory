@@ -311,10 +311,31 @@ func TestModelsCompositionSanitizesOptionalHostProcessDiagnosticAtWireBoundary(t
 	if err != nil {
 		t.Fatalf("adapted process launcher: %v", err)
 	}
-	source, ok := gotProcess.(modelswire.HostManagedProcessDiagnosticSource)
+	source := requireWireDiagnosticSource(t, gotProcess)
+	assertWireDiagnosticSnapshot(t, source, private)
+	for _, code := range []string{"UNKNOWN", "PROJECTOR_LOAD_FAILED", "native-secret"} {
+		assertWireDiagnosticCauseRejected(t, source, process, code, private)
+	}
+}
+
+func requireWireDiagnosticSource(
+	t *testing.T,
+	process modelswire.HostManagedProcess,
+) modelswire.HostManagedProcessDiagnosticSource {
+	t.Helper()
+	source, ok := process.(modelswire.HostManagedProcessDiagnosticSource)
 	if !ok {
 		t.Fatal("adapted process did not preserve optional diagnostic capability")
 	}
+	return source
+}
+
+func assertWireDiagnosticSnapshot(
+	t *testing.T,
+	source modelswire.HostManagedProcessDiagnosticSource,
+	private string,
+) {
+	t.Helper()
 	snapshot, ready := source.DiagnosticSnapshot()
 	if !ready {
 		t.Fatal("adapted process did not return ready diagnostic snapshot")
@@ -330,14 +351,20 @@ func TestModelsCompositionSanitizesOptionalHostProcessDiagnosticAtWireBoundary(t
 	if strings.Contains(snapshot.CauseMessage, private) {
 		t.Fatalf("wire diagnostic snapshot leaked private cause: %#v", snapshot)
 	}
+}
 
-	for _, code := range []string{"UNKNOWN", "PROJECTOR_LOAD_FAILED", "native-secret"} {
-		process.diagnostic.CauseCode = code
-		process.diagnostic.CauseMessage = private
-		got, ready := source.DiagnosticSnapshot()
-		if !ready || got.CauseCode != "" || got.CauseMessage != "" {
-			t.Fatalf("unsupported wire cause %q crossed boundary: %#v, ready=%t", code, got, ready)
-		}
+func assertWireDiagnosticCauseRejected(
+	t *testing.T,
+	source modelswire.HostManagedProcessDiagnosticSource,
+	process *modelEdgeManagedProcess,
+	code, private string,
+) {
+	t.Helper()
+	process.diagnostic.CauseCode = code
+	process.diagnostic.CauseMessage = private
+	got, ready := source.DiagnosticSnapshot()
+	if !ready || got.CauseCode != "" || got.CauseMessage != "" {
+		t.Fatalf("unsupported wire cause %q crossed boundary: %#v, ready=%t", code, got, ready)
 	}
 }
 

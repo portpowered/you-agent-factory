@@ -658,21 +658,9 @@ func TestRuntimeHostPropagatesCrashSnapshotAndCanRestartTheSlot(t *testing.T) {
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-crash")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
-			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+		runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	ctx := modelseffects.WithRuntimeCorrelation(context.Background(), "managed-crash-42")
 	if _, err := host.EnsureModelHost(ctx, models.EnsureModelHostRequest{
@@ -726,27 +714,15 @@ func TestRuntimeHostProtocolFailureRetainsProcessSnapshotAndStableFailure(t *tes
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-protocol")
 	ref := openScope(t, scopes, cacheDirectory, managedLocalAIConfig(models.LoadPolicyOnDemand))
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
-		internalservice.SupervisorTestConfig{},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
+		internalservice.SupervisorTestConfig{}, runtimehost.Options{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator: &testProtocolNegotiator{result: modelseffects.HostProtocolNegotiationResult{
-				ProtocolVersion: "unsupported-version",
-				Backend:         "localai-llamacpp",
-				Ready:           true,
+				ProtocolVersion: "unsupported-version", Backend: "localai-llamacpp", Ready: true,
 			}},
 			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
 		})
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: managedModelName,
@@ -780,25 +756,11 @@ func TestRuntimeHostTimeoutProjectsSnapshotWithoutChangingFailureOrOutput(t *tes
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-timeout")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{
-			ReadinessTimeout:    40 * time.Millisecond,
-			HealthCheckInterval: 5 * time.Millisecond,
-			HealthChecker:       neverReadyHostChecker{},
-		},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
-			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker: neverReadyHostChecker{},
+		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -834,18 +796,8 @@ func TestRuntimeHostForcedStopEmitsOneStopDiagnosticWithoutCrashDuplicate(t *tes
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-stop")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
-		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
-		internalservice.HostPolicyTestConfig{},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
+		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}}, runtimehost.Options{})
 
 	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -886,25 +838,11 @@ func TestRuntimeHostIgnoresDefectiveOptionalDiagnosticSource(t *testing.T) {
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-optional")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{
-			ReadinessTimeout:    40 * time.Millisecond,
-			HealthCheckInterval: 5 * time.Millisecond,
-			HealthChecker:       neverReadyHostChecker{},
-		},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
-			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker: neverReadyHostChecker{},
+		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -938,25 +876,11 @@ func TestRuntimeHostCancellationProjectsSnapshotAndReleasesProcessOnce(t *testin
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-cancel")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{
-			ReadinessTimeout:    time.Second,
-			HealthCheckInterval: 25 * time.Millisecond,
-			HealthChecker:       neverReadyHostChecker{},
-		},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
-			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+			ReadinessTimeout: time.Second, HealthCheckInterval: 25 * time.Millisecond,
+			HealthChecker: neverReadyHostChecker{},
+		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -1006,25 +930,11 @@ func TestRuntimeHostIgnoresNotReadyOptionalDiagnosticSource(t *testing.T) {
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "managed-diagnostic-not-ready")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	host := internalservice.NewWithHostTestConfig(
-		scopes,
-		mustAssetsService(t, scopes),
-		launcher,
-		nil,
-		realHostClock{},
-		logger,
-		nil,
+	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{
-			ReadinessTimeout:    40 * time.Millisecond,
-			HealthCheckInterval: 5 * time.Millisecond,
-			HealthChecker:       neverReadyHostChecker{},
-		},
-		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
-			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
+			HealthChecker: neverReadyHostChecker{},
+		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",

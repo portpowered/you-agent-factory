@@ -445,7 +445,6 @@ func TestManagedEnvironmentFactsUseOnlyAllowlistedValueDigests(t *testing.T) {
 
 func TestManagedChildEvidenceUsesBoundedIdentityAndSharedSequence(t *testing.T) {
 	t.Parallel()
-
 	path := filepath.Join(t.TempDir(), "runtime.jsonl")
 	recorder := &modelRuntimeEvidenceFileRecorder{path: path}
 	recorder.RecordRuntimeEvidence(modelswire.RuntimeEvidenceRecord{
@@ -564,7 +563,6 @@ func TestProvideModelRuntimeEvidenceRecorderIsOptionalAndOwnerOnlyJSONL(t *testi
 	if recorder, err := provideModelRuntimeEvidenceRecorder(); err != nil || recorder != nil {
 		t.Fatalf("absent runtime evidence recorder = (%v, %v), want (nil, nil)", recorder, err)
 	}
-
 	path := filepath.Join(t.TempDir(), "runtime.jsonl")
 	t.Setenv(modelRuntimeEvidenceEnvironment, path)
 	recorder, err := provideModelRuntimeEvidenceRecorder()
@@ -978,7 +976,6 @@ func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.M
 
 func TestModelsManagedProcessRetainsCleanupErrorOnce(t *testing.T) {
 	t.Parallel()
-
 	cleanupErr := errors.New("bounded cleanup failure")
 	cleanupCalls := 0
 	process := &modelsManagedProcess{
