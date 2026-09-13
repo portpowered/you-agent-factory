@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:tts-clean-install-probe-manifest:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "build",
+    "distribution",
+    "acceptance",
+    "publicDocs",
+    "fixtures",
+    "limits"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "platform",
+        "architecture",
+        "artifactPath",
+        "artifactKind",
+        "sha256"
+      ],
+      "properties": {
+        "identity": { "type": "string", "minLength": 1 },
+        "platform": { "const": "windows" },
+        "architecture": { "const": "amd64" },
+        "artifactPath": { "type": "string", "minLength": 3 },
+        "artifactKind": {
+          "enum": ["installer", "archive", "executable"]
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installer", "archive", "checksums"],
+      "properties": {
+        "installer": { "$ref": "#/$defs/immutableFile" },
+        "archive": { "$ref": "#/$defs/immutableFile" },
+        "checksums": { "$ref": "#/$defs/immutableFile" }
+      }
+    },
+    "acceptance": { "$ref": "#/$defs/immutableFile" },
+    "publicDocs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/namedImmutableFile" }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "$ref": "#/$defs/namedImmutableFile" },
+        "voice": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/namedImmutableFile" }
+          ]
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeoutSeconds",
+        "diskBytes",
+        "downloadBytes",
+        "paidUsd",
+        "maxOwnedProcesses",
+        "networkPolicy"
+      ],
+      "properties": {
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "diskBytes": { "type": "integer", "minimum": 1 },
+        "downloadBytes": { "type": "integer", "minimum": 0 },
+        "paidUsd": { "type": "number", "const": 0 },
+        "maxOwnedProcesses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "networkPolicy": {
+          "enum": ["none", "staged-loopback-and-declared-public-origins"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "immutableFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "identity", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 3 },
+        "identity": { "type": "string", "minLength": 1 },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "namedImmutableFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "identity", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 3 },
+        "identity": { "type": "string", "minLength": 1 },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
