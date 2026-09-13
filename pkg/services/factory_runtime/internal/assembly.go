@@ -179,8 +179,14 @@ func (a *Assembly) Assemble(
 			"Recordings runtime opening is required",
 		)
 	}
+	// Replay hooks consume the same detached event history as world-state
+	// reconstruction. A successor recording can legitimately reset its local
+	// logical clock, but the replay engine must observe that history in one
+	// monotonic generation order. Keep spec.ReplayEvents raw below so the
+	// read-only canonical ledger remains byte-equivalent to the source.
+	replayExecutionArtifact := normalizedReplayArtifactForExecution(replayArtifact)
 	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
-		replayArtifact,
+		replayExecutionArtifact,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -303,6 +309,17 @@ func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []fa
 	return cloneFactoryEvents(artifact.Events)
 }
 
+func normalizedReplayArtifactForExecution(
+	artifact *factorydefinitions.ReplayArtifact,
+) *factorydefinitions.ReplayArtifact {
+	if artifact == nil {
+		return nil
+	}
+	clone := *artifact
+	clone.Events = normalizeRestoredEventTicks(cloneFactoryEvents(artifact.Events))
+	return &clone
+}
+
 func cloneFactoryEvents(events []factorydefinitions.FactoryEvent) []factorydefinitions.FactoryEvent {
 	if len(events) == 0 {
 		return nil
@@ -335,7 +352,11 @@ func reconstructRestoredWorldState(
 	opening recordings.RuntimeOpening,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
-	return reconstructRestoredWorldStateEvents(opening, events)
+	// A replay artifact may contain predecessor and successor generations even
+	// though replay itself is not a live daemon restart. Project its detached
+	// seed in append order so a reset logical clock cannot mix an early
+	// predecessor tick with the successor's final state.
+	return reconstructRestoredWorldStateEvents(opening, normalizeRestoredEventTicks(events))
 }
 
 func reconstructRestoredWorldStateForResume(

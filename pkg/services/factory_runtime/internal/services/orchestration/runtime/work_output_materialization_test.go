@@ -116,6 +116,90 @@ func TestAcceptWorkersResultMaterializesDetachedProposalOnce(t *testing.T) {
 	assertCanonicalProposal(t, workService, hook)
 }
 
+func TestAcceptWorkersResultUsesRecordedReplayOutputBeforeMaterialization(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	planner := dispatchplanningwire.New(func(context.Context, workers.WorkstationDispatchRequest) error {
+		return nil
+	}, nil)
+	workService := &countingMaterializationWorkService{Service: testMaterializationService()}
+	completionPlanner := replayResultCompletionPlanner{result: workers.WorkResult{
+		Outcome: workers.OutcomeAccepted,
+		Output:  "recorded primary",
+		RecordedOutputWork: []work.FactoryWorkItem{{
+			ID: "work-recorded", WorkTypeID: "task", State: "done",
+			Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded body"}},
+		}},
+	}}
+	hook := newCanonicalDispatchPlanningResultHook(
+		planner,
+		buildSimpleNet(),
+		buffers.NewTypedBuffer[workers.WorkResult](4),
+		completionPlanner,
+		workService,
+		func() string { return "generated-work-must-not-be-used" },
+		"session-replay-output",
+	)
+	dispatch := work.WorkDispatch{
+		DispatchID:      "dispatch-replay-output",
+		TransitionID:    "t-process",
+		WorkerType:      "mock",
+		WorkstationName: "workstation-a",
+		Execution: work.ExecutionMetadata{
+			RequestID: "request-replay-output", TraceID: "trace-replay-output",
+			ReplayKey: "replay-replay-output", WorkIDs: []string{"source-work"},
+		},
+		InputTokens: workers.InputTokens(workers.Token{Color: workers.Color{
+			WorkID: "source-work", WorkTypeID: "task", DataType: workers.DataTypeWork,
+			TraceID: "trace-replay-output",
+		}}),
+	}
+	if err := hook.SubmitDispatch(ctx, dispatch); err != nil {
+		t.Fatalf("SubmitDispatch() error = %v", err)
+	}
+	intent, ok := planner.Intent(dispatch.DispatchID)
+	if !ok {
+		t.Fatalf("planner intent for %q is missing", dispatch.DispatchID)
+	}
+	hook.acceptWorkersResult(ctx, intent.Action.Request, workers.WorkstationDispatchResult{
+		DispatchID:      dispatch.DispatchID,
+		WorkstationName: intent.Action.Request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
+			Outcome: workers.OutcomeAccepted, Output: "live output must be ignored",
+		},
+		ProposedOutput: &workers.ProposedOutput{
+			Primary:      []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "live output"}},
+			ProposedWork: []workers.ProposedWork{{WorkTypeID: "task", Name: "generated-work"}},
+		},
+	}, nil)
+
+	if calls := workService.calls.Load(); calls != 0 {
+		t.Fatalf("MaterializeWorkerOutput() calls = %d, want zero for recorded replay output", calls)
+	}
+	canonical, ok := hook.resultBuffer.Read()
+	if !ok {
+		t.Fatal("buffered replay result is missing")
+	}
+	if canonical.Output != "recorded primary" || len(canonical.RecordedOutputWork) != 1 ||
+		canonical.RecordedOutputWork[0].ID != "work-recorded" {
+		t.Fatalf("canonical replay result = %#v, want recorded output identity", canonical)
+	}
+}
+
+type replayResultCompletionPlanner struct {
+	result workers.WorkResult
+}
+
+func (p replayResultCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
+	return 0, false, nil
+}
+
+func (p replayResultCompletionPlanner) ReplayResultForDispatch(work.WorkDispatch) (workers.WorkResult, bool, error) {
+	return p.result, true, nil
+}
+
 func assertCanonicalProposal(
 	t *testing.T,
 	workService *countingMaterializationWorkService,

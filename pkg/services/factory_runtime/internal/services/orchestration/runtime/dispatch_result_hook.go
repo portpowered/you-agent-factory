@@ -258,25 +258,6 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	h.acceptLiveWorkersResult(ctx, request, dispatchID, result, workResult)
 }
 
-func (h *dispatchPlanningResultHook) plannedWorkersResult(
-	request workers.WorkstationDispatchRequest,
-	workResult workerexecution.WorkResult,
-) (workerexecution.WorkResult, bool, error) {
-	provider, ok := h.completionPlanner.(plannedCompletionResultProvider)
-	if !ok {
-		return workResult, false, nil
-	}
-	planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
-	if err != nil || !hasPlanned ||
-		(workResult.Outcome == workerexecution.OutcomeFailed &&
-			planned.Outcome != workerexecution.OutcomeFailed) {
-		return workResult, false, err
-	}
-	planned.DispatchID = request.Execution.Dispatch.DispatchID
-	planned.TransitionID = request.Execution.Dispatch.TransitionID
-	return planned, true, nil
-}
-
 func (h *dispatchPlanningResultHook) acceptPlannedWorkersResult(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
@@ -581,10 +562,6 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 			outcome,
 		)
 	}
-}
-
-type plannedCompletionResultProvider interface {
-	PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error)
 }
 
 func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {

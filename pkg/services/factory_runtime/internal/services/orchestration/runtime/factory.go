@@ -22,9 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -229,6 +227,7 @@ func New(
 	}
 	historicalWorkIDs := restoredHistoricalWorkIDs(cfg)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs, historicalWorkIDs)
+	replayHistoricalWorks := restoredHistoricalAdmissionWorks(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	if !cfg.skipRestoredDispatchReconciliation {
@@ -300,6 +299,9 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
 	}
+	if cfg.skipRestoredDispatchReconciliation {
+		runtimeEngine.SetReplayHistoricalWorks(replayHistoricalWorks)
+	}
 	impl.engine = runtimeEngine
 	return impl, nil
 }
@@ -310,52 +312,6 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 		return &schedulerAdapter{inner: cfg.scheduler}
 	}
 	return scheduler.NewWorkInQueueScheduler(50, cfg.runtimeConfig)
-}
-
-func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator, seededRestoredWorkIDs map[string]struct{}, historicalWorkIDs map[string]struct{}) (*token_transformer.Transformer, []subsystems.Subsystem) {
-	workIDGen := petri.NewWorkIDGenerator(sortedStringKeys(historicalWorkIDs)...)
-	var replayIDs factory.ReplayDispatchIDResolver
-	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
-		replayIDs = resolver
-	}
-	sharedTransformer := token_transformer.New(
-		cfg.net.Places,
-		cfg.net.WorkTypes,
-		workIDGen,
-	)
-	return sharedTransformer, []subsystems.Subsystem{
-		subsystems.NewCircuitBreakerWithClock(
-			cfg.net,
-			cfg.clock.Now,
-			logger,
-			cfg.runtimeConfig),
-
-		subsystems.NewDispatcherWithSeededReplay(
-			cfg.net,
-			sched,
-			cfg.workflowContext,
-			logger,
-			cfg.runtimeConfig,
-			cfg.clock.Now,
-			newID,
-			replayIDs,
-			seededRestoredWorkIDs),
-
-		subsystems.NewHistory(logger),
-		subsystems.NewTransitioner(
-			cfg.net,
-			logger,
-			cfg.clock.Now,
-			sharedTransformer,
-			cfg.runtimeConfig,
-			cfg.quorumPolicy,
-			cfg.outputShaping,
-			cfg.workPropagation,
-			cfg.decisionEnvelopes,
-		),
-		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
-		subsystems.NewTerminationCheckWithRuntime(cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now),
-	}
 }
 
 func firstDecisionEnvelopeService(

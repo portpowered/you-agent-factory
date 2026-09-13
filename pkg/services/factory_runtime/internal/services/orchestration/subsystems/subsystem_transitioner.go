@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +37,15 @@ type TransitionerSubsystem struct {
 	outputShaping     interfaces.InvocationOutputShapingService
 	workPropagation   interfaces.WorkPropagationPolicyService
 	decisionEnvelopes interfaces.DecisionEnvelopeService
+	// replayHistoricalWorks contains identities that are valid relation targets
+	// during deterministic replay even when their tokens are not currently on
+	// the board. It is populated only for restored replay runtimes; live
+	// admission remains scoped to the point-in-time board snapshot.
+	replayHistoricalWorks []work.ExistingWork
+	// replayHistoricalRelations preserves the exact target identity selected by
+	// the canonical request event when replayed worker output only carries a
+	// target name that is no longer unique on the restored board.
+	replayHistoricalRelations []work.FactoryRelation
 }
 
 var _ Subsystem = (*TransitionerSubsystem)(nil)
@@ -242,7 +250,7 @@ func (t *TransitionerSubsystem) resolveGeneratedBatchWork(
 		return nil, 0, resolved
 	}
 	generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(
-		resolved, inputColors, existingWorksForAdmission(snapshot),
+		resolved, inputColors, t.existingWorksForAdmission(snapshot),
 	)
 	if batchErr != nil {
 		resolved.outcome = workerexecution.OutcomeFailed
@@ -572,6 +580,7 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		request.RequestID = deterministicWorkerBatchRequestID(result, output)
 	}
 	enrichWorkerEmittedBatchRequest(&request, inputColors, result)
+	resolveReplayHistoricalRelationIDs(&request, t.replayHistoricalRelations)
 
 	metadata := work.GeneratedSubmissionBatchMetadata{Source: "worker-output:" + result.dispatchID}
 	if envelope.Metadata != nil {
@@ -593,61 +602,6 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		return generatedBatchWork{}, true, fmt.Errorf("worker-emitted work request batch: %w", err)
 	}
 	return generatedBatchWork{request: request, submits: normalized, metadata: metadata}, true, nil
-}
-
-// existingWorksForAdmission returns the point-in-time board identities visible
-// to a worker-emitted batch. A dispatched Work is absent from Marking while it
-// is active, so consumed dispatch tokens are included alongside marking
-// tokens. The engine performs the same snapshot for external admission before
-// queueing the request.
-func existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
-	if snapshot == nil {
-		return nil
-	}
-
-	byID := make(map[string]work.ExistingWork)
-	add := func(color factorytoken.Color) {
-		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
-			return
-		}
-		candidate := work.ExistingWork{
-			WorkID:     color.WorkID,
-			Name:       color.Name,
-			WorkTypeID: color.WorkTypeID,
-		}
-		if current, exists := byID[candidate.WorkID]; exists {
-			if current.Name == "" {
-				current.Name = candidate.Name
-			}
-			if current.WorkTypeID == "" {
-				current.WorkTypeID = candidate.WorkTypeID
-			}
-			byID[candidate.WorkID] = current
-			return
-		}
-		byID[candidate.WorkID] = candidate
-	}
-
-	for _, token := range snapshot.Marking.Tokens {
-		if token != nil {
-			add(token.Color)
-		}
-	}
-	for _, dispatch := range snapshot.Dispatches {
-		if dispatch == nil {
-			continue
-		}
-		for _, token := range dispatch.ConsumedTokens {
-			add(token.Color)
-		}
-	}
-
-	works := make([]work.ExistingWork, 0, len(byID))
-	for _, candidate := range byID {
-		works = append(works, candidate)
-	}
-	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
-	return works
 }
 
 type workerEmittedBatchEnvelope struct {
@@ -881,7 +835,6 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 				}
 				workOutputIndex++
 			}
-
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  arc.PlaceID,

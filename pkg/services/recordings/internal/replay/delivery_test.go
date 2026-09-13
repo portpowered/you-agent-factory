@@ -425,6 +425,50 @@ func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *t
 	}
 }
 
+func TestCompletionDeliveryPlan_ReplayResultExposesRecordedWorkBeforeClaim(t *testing.T) {
+	completion := replayTestCompletion("completion-1", "dispatch-1", "process", 3)
+	completion.Output = "recorded output"
+	completion.RecordedOutputWork = []work.FactoryWorkItem{{
+		ID: "work-1", WorkTypeID: "task", State: "done", PreviousChainingTraceIDs: []string{"trace-1"},
+	}}
+	dispatch := replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "work-1")
+	dispatch.Execution.RequestID = "request-1"
+	artifact := testReplayArtifact(t,
+		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
+			Name:         "routed work",
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			RequestId:    stringPtrIfNotEmpty("request-1"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+		}}, nil),
+		replayDispatchCreatedEvent(t, dispatch, 2),
+		replayDispatchCompletedEvent(t, "completion-1", completion, 3),
+	)
+	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact)
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+	observed := replayTestDispatch("observed-dispatch", "process", 2, "trace-1", "work-1", "work-1")
+	planned, ok, err := plan.ReplayResultForDispatch(observed)
+	if err != nil {
+		t.Fatalf("ReplayResultForDispatch: %v", err)
+	}
+	if !ok || planned.Output != "recorded output" || len(planned.RecordedOutputWork) != 1 ||
+		planned.RecordedOutputWork[0].ID != "work-1" {
+		t.Fatalf("replay result = %#v, want recorded output Work", planned)
+	}
+	if planned.RecordedOutputWork[0].PreviousChainingTraceIDs != nil {
+		t.Fatalf("replay previous chaining traces = %#v, want canonical nil", planned.RecordedOutputWork[0].PreviousChainingTraceIDs)
+	}
+
+	if _, ok, err := plan.ReplayResultForDispatch(observed); err != nil || !ok {
+		t.Fatalf("non-consuming replay lookup = (%t, %v), want (true, nil)", ok, err)
+	}
+	if _, ok, err := plan.DeliveryTickForDispatch(observed); err != nil || !ok {
+		t.Fatalf("DeliveryTickForDispatch = (%t, %v), want (true, nil)", ok, err)
+	}
+}
+
 func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 	plan, err := NewCompletionDeliveryPlan(testFactorySnapshotDecoder, testRuntimeConfigDecoder, deliveryArtifact(t,
 		replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1"),

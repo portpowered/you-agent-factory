@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -27,150 +26,37 @@ type restoredWorkRecovery struct {
 	legacyWorkIDs    map[string]struct{}
 }
 
-// restoredHistoricalWorkIDs returns every Work identity known to durable
-// replay, including Work no longer present in the restored marking.
-func restoredHistoricalWorkIDs(cfg *runtimeConfig) map[string]struct{} {
-	workIDs := make(map[string]struct{})
-	if cfg == nil {
-		return workIDs
-	}
-	addHistoricalWorldWorkIDs(workIDs, cfg.restoredWorldState)
-	for _, event := range cfg.restoredEventPrefix {
-		addHistoricalEventWorkIDs(workIDs, event)
-	}
-	return workIDs
-}
-
-func addHistoricalWorldWorkIDs(destination map[string]struct{}, restored *interfaces.FactoryWorldState) {
-	if restored == nil {
-		return
-	}
-	for _, items := range []map[string]work.FactoryWorkItem{
-		restored.WorkItemsByID, restored.ActiveWorkItemsByID, restored.FailedWorkItemsByID,
-	} {
-		for workID, item := range items {
-			addHistoricalWorkID(destination, workID)
-			addHistoricalWorkID(destination, item.ID)
-		}
-	}
-	for workID, terminal := range restored.TerminalWorkByID {
-		addHistoricalWorkID(destination, workID)
-		addHistoricalWorkID(destination, terminal.WorkItem.ID)
-	}
-	for workID := range restored.FailureDetailsByWorkID {
-		addHistoricalWorkID(destination, workID)
-	}
-	for workID := range restored.WorkStateChangesByWorkID {
-		addHistoricalWorkID(destination, workID)
-	}
-	for workID, relations := range restored.RelationsByWorkID {
-		addHistoricalWorkID(destination, workID)
-		for _, relation := range relations {
-			addHistoricalWorkID(destination, relation.TargetWorkID)
-		}
-	}
-	for _, request := range restored.WorkRequestsByID {
-		for _, item := range request.WorkItems {
-			addHistoricalWorkID(destination, item.ID)
-		}
-	}
-	for _, occupancy := range restored.PlaceOccupancyByID {
-		for _, workID := range occupancy.WorkItemIDs {
-			addHistoricalWorkID(destination, workID)
-		}
-	}
-	for _, dispatch := range restored.ActiveDispatches {
-		addRestoredDispatchIdentity(destination, dispatch.WorkItemIDs, dispatch.Inputs, nil, nil, nil)
-	}
-	completions := append(append([]interfaces.FactoryWorldDispatchCompletion(nil),
-		restored.CompletedDispatches...), restored.FailedDispatches...)
-	for _, completion := range completions {
-		addRestoredDispatchIdentity(destination, completion.WorkItemIDs, completion.ConsumedInputs,
-			completion.InputWorkItems, completion.OutputWorkItems, completion.TerminalWork)
-	}
-}
-
-func addHistoricalEventWorkIDs(destination map[string]struct{}, event interfaces.FactoryEvent) {
-	if event.Context.WorkIDs != nil {
-		for _, workID := range *event.Context.WorkIDs {
-			addHistoricalWorkID(destination, workID)
-		}
-	}
-	switch event.Type {
-	case interfaces.FactoryEventTypeWorkRequest:
-		var payload work.WorkRequestEventPayload
-		if json.Unmarshal(event.Payload, &payload) == nil {
-			for _, item := range payload.Works {
-				addHistoricalWorkID(destination, item.WorkID)
-			}
-		}
-	case interfaces.FactoryEventTypeDispatchResponse:
-		var payload workerexecution.DispatchResponseEventPayload
-		if json.Unmarshal(event.Payload, &payload) == nil && payload.OutputWork != nil {
-			for _, item := range *payload.OutputWork {
-				addHistoricalWorkID(destination, item.WorkID)
-			}
-		}
-	case interfaces.FactoryEventTypeWorkStateChange:
-		var payload interfaces.WorkStateChangeEventPayload
-		if json.Unmarshal(event.Payload, &payload) == nil {
-			addHistoricalWorkID(destination, payload.WorkID)
-			if payload.TriggerWorkID != nil {
-				addHistoricalWorkID(destination, *payload.TriggerWorkID)
-			}
-		}
-	}
-}
-
-func addHistoricalWorkID(destination map[string]struct{}, workID string) {
-	if workID = strings.TrimSpace(workID); workID != "" {
-		destination[workID] = struct{}{}
-	}
-}
-
-func addRestoredDispatchIdentity(
-	destination map[string]struct{},
-	workIDs []string,
-	inputs []interfaces.WorkstationInput,
-	inputWork []work.FactoryWorkItem,
-	outputWork []work.FactoryWorkItem,
-	terminal *interfaces.FactoryTerminalWork,
-) {
-	addRestoredDispatchWorkIDs(destination, workIDs)
-	for _, input := range inputs {
-		if input.WorkItem != nil {
-			addHistoricalWorkID(destination, input.WorkItem.ID)
-		}
-	}
-	for _, item := range append(append([]work.FactoryWorkItem(nil), inputWork...), outputWork...) {
-		addHistoricalWorkID(destination, item.ID)
-	}
-	if terminal != nil {
-		addHistoricalWorkID(destination, terminal.WorkItem.ID)
-	}
-}
-
 func restoreRestoredWorkMarking(
 	cfg *runtimeConfig,
 	marking *petri.Marking,
 	constructionNow time.Time,
 	resourcePlaceIDs, recordedDispatchWorkIDs map[string]struct{},
 ) (map[string]struct{}, error) {
-	restoredItems := restoredWorkItems(cfg.restoredWorldState)
-	recovery := classifyRestoredWorkRecovery(cfg.restoredWorldState, cfg.net, restoredItems)
+	restoredForMarking := restoredWorldStateForMarking(cfg)
+	restoredItems := restoredWorkItems(restoredForMarking)
+	if !cfg.skipRestoredDispatchReconciliation {
+		if err := materializeRestoredDispatchInputPlaces(restoredForMarking, cfg.net, restoredItems); err != nil {
+			return nil, err
+		}
+	}
+	recovery := classifyRestoredWorkRecovery(restoredForMarking, cfg.net, restoredItems)
 	excludedWorkIDs := cloneRestoredWorkIDSet(recovery.excludedWorkIDs)
 	if cfg.skipRestoredDispatchReconciliation {
 		if excludedWorkIDs == nil {
 			excludedWorkIDs = make(map[string]struct{}, len(recordedDispatchWorkIDs))
 		}
+		if recovery.toleratedWorkIDs == nil {
+			recovery.toleratedWorkIDs = make(map[string]struct{}, len(recordedDispatchWorkIDs))
+		}
 		for workID := range recordedDispatchWorkIDs {
 			excludedWorkIDs[workID] = struct{}{}
+			recovery.toleratedWorkIDs[workID] = struct{}{}
 		}
 	}
 	seededWorkIDs, err := seedRestoredWork(
 		marking,
 		cfg.net,
-		cfg.restoredWorldState,
+		restoredForMarking,
 		constructionNow,
 		resourcePlaceIDs,
 		excludedWorkIDs,

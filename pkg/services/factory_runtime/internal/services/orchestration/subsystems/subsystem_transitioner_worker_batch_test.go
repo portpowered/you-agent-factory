@@ -60,6 +60,55 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchResolvesExistingDepen
 	}
 }
 
+func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchResolvesReplayHistoricalDependency(t *testing.T) {
+	now := time.Date(2026, time.April, 16, 22, 3, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner.SetReplayHistoricalWorks([]work.ExistingWork{{
+		WorkID:     "work-historical",
+		Name:       "prior",
+		WorkTypeID: "child",
+	}})
+	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"follow-up","targetWorkId":"work-historical"}]}}`
+
+	result := executeWorkerBatchTransition(t, transitioner, workerBatchSnapshot(output))
+	if len(result.GeneratedBatches) != 1 || len(result.GeneratedBatches[0].Submissions) != 1 {
+		t.Fatalf("generated batches = %#v, want one normalized submission", result.GeneratedBatches)
+	}
+	generated := result.GeneratedBatches[0].Submissions[0]
+	if !hasRuntimeRelation(generated.Relations, work.RelationDependsOn, "work-historical") {
+		t.Fatalf("generated relations = %#v, want replay historical dependency", generated.Relations)
+	}
+}
+
+func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesRecordedRelationIdentity(t *testing.T) {
+	now := time.Date(2026, time.April, 16, 22, 4, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	transitioner.SetReplayHistoricalWorks([]work.ExistingWork{{
+		WorkID:     "work-historical",
+		Name:       "prior",
+		WorkTypeID: "child",
+	}})
+	transitioner.SetReplayHistoricalRelations([]work.FactoryRelation{{
+		RequestID:      "request-replay",
+		Type:           string(work.WorkRelationDependsOn),
+		SourceWorkName: "follow-up",
+		TargetWorkID:   "work-historical",
+		TargetWorkName: "prior",
+	}})
+	output := `{"request":{"requestId":"request-replay","type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"follow-up","targetWorkName":"prior"}]}}`
+
+	result := executeWorkerBatchTransition(t, transitioner, workerBatchSnapshot(output))
+	if len(result.GeneratedBatches) != 1 || len(result.GeneratedBatches[0].Submissions) != 1 {
+		t.Fatalf("generated batches = %#v, want one normalized submission", result.GeneratedBatches)
+	}
+	generated := result.GeneratedBatches[0].Submissions[0]
+	if !hasRuntimeRelation(generated.Relations, work.RelationDependsOn, "work-historical") {
+		t.Fatalf("generated relations = %#v, want recorded dependency identity", generated.Relations)
+	}
+}
+
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesInvocationArguments(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 5, 0, 0, time.UTC)
 	net := workerBatchTestNet()

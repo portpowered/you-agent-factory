@@ -132,6 +132,33 @@ func TestReconstructRestoredWorldStateUsesSuccessorTickAfterDispatchInterruption
 	}
 }
 
+func TestReconstructRestoredWorldStateNormalizesReplaySuccessorGeneration(t *testing.T) {
+	restartSource := "daemon-restart"
+	events := []interfaces.FactoryEvent{
+		{Id: "predecessor", Context: interfaces.FactoryEventContext{Tick: 10, Sequence: 1}},
+		{Id: "restart", Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 12, Sequence: 2, Source: &restartSource}},
+		{Id: "successor", Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 3}},
+		{Id: "successor-result", Context: interfaces.FactoryEventContext{Tick: 4, Sequence: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 16}}
+
+	if _, err := reconstructRestoredWorldState(opening, events); err != nil {
+		t.Fatalf("reconstructRestoredWorldState: %v", err)
+	}
+	wantTicks := []int{10, 12, 13, 16}
+	if opening.tick != 16 {
+		t.Fatalf("selected replay reconstruction tick = %d, want 16", opening.tick)
+	}
+	for index, want := range wantTicks {
+		if opening.events[index].Context.Tick != want {
+			t.Fatalf("replay event %d tick = %d, want %d", index, opening.events[index].Context.Tick, want)
+		}
+	}
+	if events[2].Context.Tick != 1 {
+		t.Fatalf("replay source event was mutated to tick %d", events[2].Context.Tick)
+	}
+}
+
 func TestNormalizeRestoredEventTicksPreservesMultipleCanonicalRestartGenerations(t *testing.T) {
 	restartSource := "daemon-restart"
 	events := []interfaces.FactoryEvent{
