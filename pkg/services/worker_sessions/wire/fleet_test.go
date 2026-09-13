@@ -128,6 +128,69 @@ func TestFleetLookaheadLimitSaturatesAtIntegerMaximum(t *testing.T) {
 func TestFleetObservationServiceMergesComplementaryFactsWithoutOverwriting(t *testing.T) {
 	t.Parallel()
 
+	primary, complementary, authoritativeModel, authoritativeAttempt := newComplementaryFleetObservations()
+
+	primarySource := newFleetObservationSource("primary", primary)
+	secondarySource := newFleetObservationSource("secondary", complementary)
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{primarySource, secondarySource}, nil
+	})
+
+	result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{
+		Scope:      workersessions.ObservationScopeAll,
+		MaxResults: 20,
+	})
+	if err != nil {
+		t.Fatalf("complementary fleet list: %v", err)
+	}
+	if len(result.Observations) != 1 {
+		t.Fatalf("complementary fleet rows = %d, want one unique identity", len(result.Observations))
+	}
+	got := result.Observations[0]
+	assertAuthoritativeFleetFacts(t, got, primary, authoritativeModel, authoritativeAttempt)
+	assertComplementaryFleetFacts(t, got, complementary)
+}
+
+func TestFleetObservationServiceRejectsMalformedSourcePages(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range malformedFleetPageCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			request := test.request
+			if request.MaxResults == 0 {
+				request.MaxResults = 2
+			}
+			bad := newFleetObservationSource("bad")
+			bad.resultFn = func(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+				return test.result, nil
+			}
+			later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
+			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+				return []workersessions.Service{bad, later}, nil
+			})
+
+			result, err := service.ListWorkerSessionObservations(context.Background(), request)
+			if !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+				t.Fatalf("malformed %s error = %v, want invalid pagination", test.name, err)
+			}
+			if len(result.Observations) != 0 || result.NextToken != "" {
+				t.Fatalf("malformed %s returned partial result: %#v", test.name, result)
+			}
+			if len(bad.requestsSnapshot()) != 1 || len(later.requestsSnapshot()) != 0 {
+				t.Fatalf("malformed %s calls = bad:%d later:%d, want one bounded call and no later source", test.name, len(bad.requestsSnapshot()), len(later.requestsSnapshot()))
+			}
+		})
+	}
+}
+
+func newComplementaryFleetObservations() (
+	workersessions.Observation,
+	workersessions.Observation,
+	string,
+	string,
+) {
 	primary := fleetObservation("merge-01", true, workersessions.StateFailed)
 	authoritativeModel := "authoritative-model"
 	primary.Model = &authoritativeModel
@@ -156,200 +219,134 @@ func TestFleetObservationServiceMergesComplementaryFactsWithoutOverwriting(t *te
 	complementary.Model = &conflictingModel
 	complementary.AttemptID = "secondary-attempt"
 	complementary.RecordingHealthReason = "secondary-recording"
+	return primary, complementary, authoritativeModel, authoritativeAttempt
+}
 
-	primarySource := newFleetObservationSource("primary", primary)
-	secondarySource := newFleetObservationSource("secondary", complementary)
-	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
-		return []workersessions.Service{primarySource, secondarySource}, nil
-	})
-
-	result, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{
-		Scope:      workersessions.ObservationScopeAll,
-		MaxResults: 20,
-	})
-	if err != nil {
-		t.Fatalf("complementary fleet list: %v", err)
-	}
-	if len(result.Observations) != 1 {
-		t.Fatalf("complementary fleet rows = %d, want one unique identity", len(result.Observations))
-	}
-	got := result.Observations[0]
+func assertAuthoritativeFleetFacts(
+	t *testing.T,
+	got workersessions.Observation,
+	primary workersessions.Observation,
+	authoritativeModel string,
+	authoritativeAttempt string,
+) {
+	t.Helper()
 	if got.Model == nil || *got.Model != authoritativeModel {
 		t.Fatalf("duplicate model = %#v, want authoritative primary model", got.Model)
 	}
-	if got.AttemptID != authoritativeAttempt || got.Direct != primary.Direct || got.State != primary.State {
-		t.Fatalf("authoritative identity facts changed: %#v", got)
+	if got.AttemptID != authoritativeAttempt {
+		t.Fatalf("duplicate attempt ID = %q, want authoritative primary attempt", got.AttemptID)
 	}
-	if got.FactorySessionID != complementary.FactorySessionID ||
-		got.ProviderSession != complementary.ProviderSession ||
-		!got.ProviderSessionAvailable ||
-		!reflect.DeepEqual(got.WorkIDs, complementary.WorkIDs) ||
-		got.TurnID != complementary.TurnID ||
-		got.ReasoningEffort == nil ||
-		got.StartedAt == nil || got.EndedAt == nil || got.Duration == nil ||
-		got.DurationBasis != complementary.DurationBasis ||
-		got.Transcript != complementary.Transcript ||
-		got.RecordingHealth != complementary.RecordingHealth ||
-		got.RecordingHealthReason != complementary.RecordingHealthReason ||
-		got.ConfirmationState != complementary.ConfirmationState ||
-		got.Failure == nil || got.Failure.Detail != complementary.Failure.Detail ||
-		!reflect.DeepEqual(got.Parse, complementary.Parse) ||
-		got.TokenUsage == nil || got.TurnUsage == nil {
-		t.Fatalf("complementary facts were not preserved: %#v", got)
+	if got.Direct != primary.Direct {
+		t.Fatalf("duplicate direct flag = %t, want %t", got.Direct, primary.Direct)
+	}
+	if got.State != primary.State {
+		t.Fatalf("duplicate state = %q, want authoritative primary state", got.State)
 	}
 }
 
-func TestFleetObservationServiceRejectsMalformedSourcePages(t *testing.T) {
-	t.Parallel()
-
-	pageObservation := func(id string, direct bool, state workersessions.State) workersessions.Observation {
-		return fleetObservation(id, direct, state)
-	}
-	cases := []struct {
-		name    string
-		request workersessions.ListWorkerSessionObservationsRequest
-		result  workersessions.ListWorkerSessionObservationsResult
+func assertComplementaryFleetFacts(
+	t *testing.T,
+	got workersessions.Observation,
+	complementary workersessions.Observation,
+) {
+	t.Helper()
+	checks := []struct {
+		name  string
+		match bool
 	}{
-		{
-			name: "overfull",
-			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
-				pageObservation("a", true, workersessions.StateCompleted),
-				pageObservation("b", true, workersessions.StateCompleted),
-				pageObservation("c", true, workersessions.StateCompleted),
-				pageObservation("d", true, workersessions.StateCompleted),
-			}},
-		},
-		{
-			name: "duplicate identity",
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("b", true, workersessions.StateCompleted),
-					pageObservation("b", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("b"),
-			},
-		},
-		{
-			name: "regressing identities",
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("b", true, workersessions.StateCompleted),
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("c", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("c"),
-			},
-		},
+		{name: "factory session", match: got.FactorySessionID == complementary.FactorySessionID},
+		{name: "provider session", match: reflect.DeepEqual(got.ProviderSession, complementary.ProviderSession)},
+		{name: "provider availability", match: got.ProviderSessionAvailable},
+		{name: "work IDs", match: reflect.DeepEqual(got.WorkIDs, complementary.WorkIDs)},
+		{name: "turn ID", match: got.TurnID == complementary.TurnID},
+		{name: "reasoning effort", match: got.ReasoningEffort != nil},
+		{name: "started at", match: got.StartedAt != nil},
+		{name: "ended at", match: got.EndedAt != nil},
+		{name: "duration", match: got.Duration != nil},
+		{name: "duration basis", match: got.DurationBasis == complementary.DurationBasis},
+		{name: "transcript", match: got.Transcript == complementary.Transcript},
+		{name: "recording health", match: got.RecordingHealth == complementary.RecordingHealth},
+		{name: "recording health reason", match: got.RecordingHealthReason == complementary.RecordingHealthReason},
+		{name: "confirmation state", match: got.ConfirmationState == complementary.ConfirmationState},
+		{name: "parse diagnostics", match: reflect.DeepEqual(got.Parse, complementary.Parse)},
+		{name: "token usage", match: got.TokenUsage != nil},
+		{name: "turn usage", match: got.TurnUsage != nil},
+	}
+	for _, check := range checks {
+		if !check.match {
+			t.Fatalf("complementary %s fact was not preserved: %#v", check.name, got)
+		}
+	}
+	if got.Failure == nil {
+		t.Fatalf("complementary failure fact was not preserved: %#v", got)
+	}
+	if got.Failure.Detail != complementary.Failure.Detail {
+		t.Fatalf("complementary failure detail = %q, want %q", got.Failure.Detail, complementary.Failure.Detail)
+	}
+}
+
+type malformedFleetPageCase struct {
+	name    string
+	request workersessions.ListWorkerSessionObservationsRequest
+	result  workersessions.ListWorkerSessionObservationsResult
+}
+
+func malformedFleetPageCases() []malformedFleetPageCase {
+	return []malformedFleetPageCase{
+		{name: "overfull", result: malformedFleetPage("", "a", "b", "c", "d")},
+		{name: "duplicate identity", result: malformedFleetPage(encodeFleetObservationCursor("b"), "a", "b", "b")},
+		{name: "regressing identities", result: malformedFleetPage(encodeFleetObservationCursor("c"), "b", "a", "c")},
 		{
 			name: "row before cursor",
 			request: workersessions.ListWorkerSessionObservationsRequest{
 				Scope: workersessions.ObservationScopeAll, MaxResults: 2,
 				NextToken: encodeFleetObservationCursor("b"),
 			},
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("c", true, workersessions.StateCompleted),
-					pageObservation("d", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("d"),
-			},
+			result: malformedFleetPage(encodeFleetObservationCursor("d"), "a", "c", "d"),
 		},
 		{
 			name: "scope mismatch",
 			request: workersessions.ListWorkerSessionObservationsRequest{
 				Scope: workersessions.ObservationScopeDirect, MaxResults: 2,
 			},
-			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
-				pageObservation("a", false, workersessions.StateCompleted),
-			}},
+			result: malformedFleetPageWithObservations("", fleetObservation("a", false, workersessions.StateCompleted)),
 		},
 		{
 			name: "state mismatch",
 			request: workersessions.ListWorkerSessionObservationsRequest{
 				Scope: workersessions.ObservationScopeAll, States: []workersessions.State{workersessions.StateCompleted}, MaxResults: 2,
 			},
-			result: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
-				pageObservation("a", true, workersessions.StateFailed),
-			}},
+			result: malformedFleetPageWithObservations("", fleetObservation("a", true, workersessions.StateFailed)),
 		},
-		{
-			name: "malformed continuation",
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("b", true, workersessions.StateCompleted),
-					pageObservation("c", true, workersessions.StateCompleted),
-				},
-				NextToken: "not-base64",
-			},
-		},
+		{name: "malformed continuation", result: malformedFleetPage("not-base64", "a", "b", "c")},
 		{
 			name: "repeated continuation",
 			request: workersessions.ListWorkerSessionObservationsRequest{
 				Scope: workersessions.ObservationScopeAll, MaxResults: 2,
 				NextToken: encodeFleetObservationCursor("cursor"),
 			},
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("cursor-a", true, workersessions.StateCompleted),
-					pageObservation("cursor-b", true, workersessions.StateCompleted),
-					pageObservation("cursor-c", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("cursor"),
-			},
+			result: malformedFleetPage(encodeFleetObservationCursor("cursor"), "cursor-a", "cursor-b", "cursor-c"),
 		},
-		{
-			name: "underfilled continuation",
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("b", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("b"),
-			},
-		},
-		{
-			name: "regressing continuation",
-			result: workersessions.ListWorkerSessionObservationsResult{
-				Observations: []workersessions.Observation{
-					pageObservation("a", true, workersessions.StateCompleted),
-					pageObservation("b", true, workersessions.StateCompleted),
-					pageObservation("c", true, workersessions.StateCompleted),
-				},
-				NextToken: encodeFleetObservationCursor("b"),
-			},
-		},
+		{name: "underfilled continuation", result: malformedFleetPage(encodeFleetObservationCursor("b"), "a", "b")},
+		{name: "regressing continuation", result: malformedFleetPage(encodeFleetObservationCursor("b"), "a", "b", "c")},
 	}
+}
 
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			request := test.request
-			if request.MaxResults == 0 {
-				request.MaxResults = 2
-			}
-			bad := newFleetObservationSource("bad")
-			bad.resultFn = func(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
-				return test.result, nil
-			}
-			later := newFleetObservationSource("later", fleetObservation("z", true, workersessions.StateCompleted))
-			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
-				return []workersessions.Service{bad, later}, nil
-			})
+func malformedFleetPage(nextToken string, ids ...string) workersessions.ListWorkerSessionObservationsResult {
+	observations := make([]workersessions.Observation, 0, len(ids))
+	for _, id := range ids {
+		observations = append(observations, fleetObservation(id, true, workersessions.StateCompleted))
+	}
+	return malformedFleetPageWithObservations(nextToken, observations...)
+}
 
-			result, err := service.ListWorkerSessionObservations(context.Background(), request)
-			if !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
-				t.Fatalf("malformed %s error = %v, want invalid pagination", test.name, err)
-			}
-			if len(result.Observations) != 0 || result.NextToken != "" {
-				t.Fatalf("malformed %s returned partial result: %#v", test.name, result)
-			}
-			if len(bad.requestsSnapshot()) != 1 || len(later.requestsSnapshot()) != 0 {
-				t.Fatalf("malformed %s calls = bad:%d later:%d, want one bounded call and no later source", test.name, len(bad.requestsSnapshot()), len(later.requestsSnapshot()))
-			}
-		})
+func malformedFleetPageWithObservations(
+	nextToken string,
+	observations ...workersessions.Observation,
+) workersessions.ListWorkerSessionObservationsResult {
+	return workersessions.ListWorkerSessionObservationsResult{
+		Observations: observations,
+		NextToken:    nextToken,
 	}
 }
 
