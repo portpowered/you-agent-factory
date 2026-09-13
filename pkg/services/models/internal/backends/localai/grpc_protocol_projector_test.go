@@ -35,7 +35,7 @@ func TestPinnedGRPCHostProtocolNegotiatorSendsWindowsCPUProjectorPlacementOption
 		t.Fatalf("Negotiate() error = %v", err)
 	}
 	assertWindowsCPUProjectorResult(t, result, connection)
-	assertWindowsCPUProjectorRequest(t, connection.loadRequest, modelFile, mmprojFile)
+	assertWindowsCPUProjectorRequest(t, &connection.loadRequest, modelFile, mmprojFile)
 	assertWindowsCPUProjectorWire(t, connection.loadPayload, modelFile, mmprojFile)
 }
 
@@ -46,7 +46,7 @@ func assertWindowsCPUProjectorResult(t *testing.T, result modelseffects.HostProt
 	}
 }
 
-func assertWindowsCPUProjectorRequest(t *testing.T, request ModelOptions, modelFile, mmprojFile string) {
+func assertWindowsCPUProjectorRequest(t *testing.T, request *ModelOptions, modelFile, mmprojFile string) {
 	t.Helper()
 	if request.GetModel() != models.BuiltInModelNameLLM || request.GetEmbeddings() ||
 		request.GetModelFile() != modelFile || request.GetMMProj() != mmprojFile ||
@@ -204,10 +204,10 @@ func assertProjectorPlacementRequest(t *testing.T, payload []byte, test projecto
 	}
 }
 
-func decodeLoadModelPayload(t *testing.T, payload []byte) ModelOptions {
+func decodeLoadModelPayload(t *testing.T, payload []byte) *ModelOptions {
 	t.Helper()
-	decoded := ModelOptions{}
-	if err := proto.Unmarshal(payload, &decoded); err != nil {
+	decoded := &ModelOptions{}
+	if err := proto.Unmarshal(payload, decoded); err != nil {
 		t.Fatalf("independent LoadModel wire decode: %v", err)
 	}
 	return decoded
