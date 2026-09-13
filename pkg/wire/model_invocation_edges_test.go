@@ -287,6 +287,95 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	}
 }
 
+func TestModelsCompositionSanitizesOptionalHostProcessDiagnosticAtWireBoundary(t *testing.T) {
+	t.Parallel()
+
+	private := "token=private endpoint=https://private.example.test/model prompt=secret"
+	var gotSpec serviceedges.HostProcessStartSpec
+	process := &modelEdgeManagedProcess{
+		healthEndpoint: "http://model-host/health",
+		diagnostic: serviceedges.HostProcessDiagnosticSnapshot{
+			ExitClass: "NONZERO_EXIT", ExitCode: 17, ExitCodeKnown: true,
+			Stdout: serviceedges.HostProcessStreamDiagnostic{
+				Bytes: 99, SHA256: strings.Repeat("A", 64), Truncated: true,
+			},
+			CauseCode: "RPC_REJECTED", CauseMessage: private,
+		},
+		diagnosticReady: true,
+	}
+	launcher := adaptModelHostProcessLauncher(&modelEdgeProcessLauncher{process: process, gotSpec: &gotSpec})
+	gotProcess, err := launcher.Start(context.Background(), modelswire.HostProcessStartSpec{
+		Command:       "model-host",
+		Configuration: modelswire.ResolvedHostConfiguration{Backend: "localai-llamacpp"},
+	})
+	if err != nil {
+		t.Fatalf("adapted process launcher: %v", err)
+	}
+	source, ok := gotProcess.(modelswire.HostManagedProcessDiagnosticSource)
+	if !ok {
+		t.Fatal("adapted process did not preserve optional diagnostic capability")
+	}
+	snapshot, ready := source.DiagnosticSnapshot()
+	if !ready {
+		t.Fatal("adapted process did not return ready diagnostic snapshot")
+	}
+	if snapshot.ExitClass != "NONZERO_EXIT" || snapshot.ExitCode != 17 ||
+		!snapshot.ExitCodeKnown || snapshot.Stdout.SHA256 != strings.Repeat("a", 64) ||
+		snapshot.Stdout.Bytes != 99 || !snapshot.Stdout.Truncated ||
+		snapshot.CauseCode != "RPC_REJECTED" ||
+		snapshot.CauseMessage != "backend RPC request rejected" ||
+		snapshot.CauseMessageRedacted {
+		t.Fatalf("wire diagnostic snapshot = %#v, want bounded allow-listed facts", snapshot)
+	}
+	if strings.Contains(snapshot.CauseMessage, private) {
+		t.Fatalf("wire diagnostic snapshot leaked private cause: %#v", snapshot)
+	}
+
+	for _, code := range []string{"UNKNOWN", "PROJECTOR_LOAD_FAILED", "native-secret"} {
+		process.diagnostic.CauseCode = code
+		process.diagnostic.CauseMessage = private
+		got, ready := source.DiagnosticSnapshot()
+		if !ready || got.CauseCode != "" || got.CauseMessage != "" {
+			t.Fatalf("unsupported wire cause %q crossed boundary: %#v, ready=%t", code, got, ready)
+		}
+	}
+}
+
+func TestManagedProcessCauseReducerUsesOnlySafeCodes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		marker  string
+		code    string
+		message string
+		redact  bool
+	}{
+		{name: "model", marker: "model load failed", code: "MODEL_LOAD_FAILED", message: "model load failed"},
+		{name: "projector", marker: "mmproj projector load error", code: "MODEL_LOAD_FAILED", message: "model load failed"},
+		{name: "protocol", marker: "protocol incompatible", code: "PROTOCOL_INCOMPATIBLE", message: "backend protocol incompatible"},
+		{name: "endpoint", marker: "endpoint bind: address already in use", code: "ENDPOINT_BIND_FAILED", message: "backend endpoint bind failed"},
+		{name: "rpc", marker: "rpc rejected invalid request", code: "RPC_REJECTED", message: "backend RPC request rejected"},
+		{name: "timeout", marker: "request timed out", code: "TIMEOUT", message: "backend operation timed out"},
+		{name: "cancel", marker: "operation cancelled", code: "CANCELLED", message: "backend operation cancelled"},
+		{name: "unknown", marker: "native token=https://private.example.test/model", code: "PROCESS_EXITED", message: "managed backend process exited", redact: true},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			code, message, redacted := reduceManagedProcessCause(
+				errors.New("controlled exit"), []byte(testCase.marker), nil,
+			)
+			if code != testCase.code || message != testCase.message || redacted != testCase.redact {
+				t.Fatalf("reduced cause = (%q, %q, %t), want (%q, %q, %t)", code, message, redacted, testCase.code, testCase.message, testCase.redact)
+			}
+			if strings.Contains(message, "private") || strings.Contains(message, "token") || strings.Contains(message, "https://") {
+				t.Fatalf("reduced cause leaked native output: %q", message)
+			}
+		})
+	}
+}
+
 func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
 	t.Parallel()
 
@@ -410,8 +499,10 @@ func assertAdaptedOptionalPorts(t *testing.T) {
 var modelEdgeClockTime = time.Unix(1_725_000_000, 0)
 
 type modelEdgeManagedProcess struct {
-	healthEndpoint string
-	stopped        bool
+	healthEndpoint  string
+	stopped         bool
+	diagnostic      serviceedges.HostProcessDiagnosticSnapshot
+	diagnosticReady bool
 }
 
 func (process *modelEdgeManagedProcess) HealthEndpoint() string { return process.healthEndpoint }
@@ -419,6 +510,10 @@ func (*modelEdgeManagedProcess) Wait() error                    { return nil }
 func (process *modelEdgeManagedProcess) Stop(context.Context) error {
 	process.stopped = true
 	return nil
+}
+
+func (process *modelEdgeManagedProcess) DiagnosticSnapshot() (serviceedges.HostProcessDiagnosticSnapshot, bool) {
+	return process.diagnostic, process.diagnosticReady
 }
 
 type modelEdgeProcessLauncher struct {

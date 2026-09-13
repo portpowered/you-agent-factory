@@ -114,6 +114,36 @@ type HostProcessStartSpec struct {
 	BackendFiles            []string
 }
 
+// HostProcessStreamDiagnostic contains bounded facts for one managed-host
+// output stream. SHA256 and Bytes cover the complete observed stream even
+// when Truncated is true.
+type HostProcessStreamDiagnostic struct {
+	Bytes     uint64
+	SHA256    string
+	Truncated bool
+}
+
+// HostProcessDiagnosticSnapshot is the optional terminal evidence supplied by
+// a managed host process. CauseMessage is accepted only after the Wire and
+// Models reducers replace it with an allow-listed message.
+type HostProcessDiagnosticSnapshot struct {
+	ExitClass            string
+	ExitCode             int
+	ExitCodeKnown        bool
+	Stdout               HostProcessStreamDiagnostic
+	Stderr               HostProcessStreamDiagnostic
+	CauseCode            string
+	CauseMessage         string
+	CauseMessageRedacted bool
+}
+
+// HostManagedProcessDiagnosticSource is optional so existing process effects
+// remain source-compatible. A false result means terminal evidence is not
+// available yet.
+type HostManagedProcessDiagnosticSource interface {
+	DiagnosticSnapshot() (HostProcessDiagnosticSnapshot, bool)
+}
+
 type RuntimeInspectFile func(string) (os.FileInfo, error)
 type RuntimeTempDirectory func() string
 type RuntimeCreateTempFile func(string, string) (interface {
