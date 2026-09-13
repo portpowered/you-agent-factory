@@ -461,13 +461,7 @@ func TestRuntimeEvidenceStageAttachesOneSafeHostProcessSnapshot(t *testing.T) {
 		t.Fatalf("host-process evidence records = %#v, want one stage record", records)
 	}
 	record := records[0]
-	if record.Kind != RuntimeEvidenceKindStage || record.Outcome != RuntimeEvidenceOutcomeFailed ||
-		record.Stage != RuntimeStageBackendStart || record.ExitClass != "NONZERO_EXIT" ||
-		record.ExitCode != 17 || !record.ExitCodeKnown || record.StdoutBytes != 98304 ||
-		record.StderrBytes != 2048 || !record.StdoutTruncated ||
-		record.CauseCode != "RPC_REJECTED" || record.CauseMessage != "backend RPC request rejected" {
-		t.Fatalf("host-process evidence = %#v, want one bounded snapshot", record)
-	}
+	assertSafeHostProcessEvidenceRecord(t, record)
 	body, err := json.Marshal(record)
 	if err != nil {
 		t.Fatalf("marshal host-process evidence: %v", err)
@@ -475,6 +469,17 @@ func TestRuntimeEvidenceStageAttachesOneSafeHostProcessSnapshot(t *testing.T) {
 	serialized := string(body)
 	if strings.Contains(serialized, private) || strings.Contains(serialized, "native") {
 		t.Fatalf("host-process evidence leaked private cause: %s", serialized)
+	}
+}
+
+func assertSafeHostProcessEvidenceRecord(t *testing.T, record RuntimeEvidenceRecord) {
+	t.Helper()
+	if record.Kind != RuntimeEvidenceKindStage || record.Outcome != RuntimeEvidenceOutcomeFailed ||
+		record.Stage != RuntimeStageBackendStart || record.ExitClass != "NONZERO_EXIT" ||
+		record.ExitCode != 17 || !record.ExitCodeKnown || record.StdoutBytes != 98304 ||
+		record.StderrBytes != 2048 || !record.StdoutTruncated ||
+		record.CauseCode != "RPC_REJECTED" || record.CauseMessage != "backend RPC request rejected" {
+		t.Fatalf("host-process evidence = %#v, want one bounded snapshot", record)
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 func TestEnsureModelHostReadinessTimeoutReturnsTypedFailure(t *testing.T) {
@@ -711,6 +712,31 @@ func assertFailedManagedProcessEvidence(
 	if failed.CauseMessage == "PRIVATE_BACKEND_DIAGNOSTIC_SENTINEL" {
 		t.Fatalf("evidence leaked cause sentinel: %#v", *failed)
 	}
+}
+
+func newManagedDiagnosticHost(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	launcher *runtimeDiagnosticLauncher,
+	logger *signalingDiagnosticsLogger,
+	supervisorConfig internalservice.SupervisorTestConfig,
+	options runtimehost.Options,
+) runtimehost.Service {
+	t.Helper()
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		supervisorConfig,
+		internalservice.HostPolicyTestConfig{},
+		options,
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	return host
 }
 
 type neverReadyHostChecker struct{}

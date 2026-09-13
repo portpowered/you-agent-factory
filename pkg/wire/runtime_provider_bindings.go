@@ -543,38 +543,62 @@ func reduceManagedProcessCause(waitErr error, stdoutTail, stderrTail []byte) (st
 	output := make([]byte, 0, len(stdoutTail)+len(stderrTail))
 	output = append(output, stdoutTail...)
 	output = append(output, stderrTail...)
-	lower := strings.ToLower(string(output))
+	if code, message, ok := managedProcessOutputCause(strings.ToLower(string(output))); ok {
+		return code, message, false
+	}
+	return managedProcessExitCause(waitErr, len(output))
+}
+
+func managedProcessOutputCause(output string) (string, string, bool) {
 	switch {
-	case (strings.Contains(lower, "projector") || strings.Contains(lower, "mmproj")) &&
-		(strings.Contains(lower, "load") || strings.Contains(lower, "fail") || strings.Contains(lower, "error")):
-		return managedProcessCauseModelLoad, "model load failed", false
-	case strings.Contains(lower, "protocol") &&
-		(strings.Contains(lower, "incompat") || strings.Contains(lower, "reject")):
-		return managedProcessCauseProtocolIncompat, "backend protocol incompatible", false
-	case strings.Contains(lower, "rpc") &&
-		(strings.Contains(lower, "reject") || strings.Contains(lower, "invalid")):
-		return managedProcessCauseRPCRejected, "backend RPC request rejected", false
-	case strings.Contains(lower, "timeout") || strings.Contains(lower, "timed out"):
-		return managedProcessCauseTimedOut, "backend operation timed out", false
-	case strings.Contains(lower, "cancel"):
-		return managedProcessCauseCancelled, "backend operation cancelled", false
-	case strings.Contains(lower, "address already in use") ||
-		(strings.Contains(lower, "endpoint") && strings.Contains(lower, "bind")):
-		return managedProcessCauseEndpointBind, "backend endpoint bind failed", false
-	case strings.Contains(lower, "model") &&
-		(strings.Contains(lower, "load") || strings.Contains(lower, "fail")):
-		return managedProcessCauseModelLoad, "model load failed", false
+	case isManagedModelLoadFailure(output):
+		return managedProcessCauseModelLoad, "model load failed", true
+	case isManagedProtocolFailure(output):
+		return managedProcessCauseProtocolIncompat, "backend protocol incompatible", true
+	case isManagedRPCFailure(output):
+		return managedProcessCauseRPCRejected, "backend RPC request rejected", true
+	case strings.Contains(output, "timeout") || strings.Contains(output, "timed out"):
+		return managedProcessCauseTimedOut, "backend operation timed out", true
+	case strings.Contains(output, "cancel"):
+		return managedProcessCauseCancelled, "backend operation cancelled", true
+	case isManagedEndpointBindFailure(output):
+		return managedProcessCauseEndpointBind, "backend endpoint bind failed", true
+	case isManagedModelFailure(output):
+		return managedProcessCauseModelLoad, "model load failed", true
 	}
-	if len(output) > 0 {
-		if waitErr != nil {
-			return managedProcessCauseProcessExited, "managed backend process exited", true
-		}
-		return "", "", false
-	}
+	return "", "", false
+}
+
+func isManagedModelLoadFailure(output string) bool {
+	return (strings.Contains(output, "projector") || strings.Contains(output, "mmproj")) &&
+		(strings.Contains(output, "load") || strings.Contains(output, "fail") || strings.Contains(output, "error"))
+}
+
+func isManagedProtocolFailure(output string) bool {
+	return strings.Contains(output, "protocol") &&
+		(strings.Contains(output, "incompat") || strings.Contains(output, "reject"))
+}
+
+func isManagedRPCFailure(output string) bool {
+	return strings.Contains(output, "rpc") &&
+		(strings.Contains(output, "reject") || strings.Contains(output, "invalid"))
+}
+
+func isManagedEndpointBindFailure(output string) bool {
+	return strings.Contains(output, "address already in use") ||
+		(strings.Contains(output, "endpoint") && strings.Contains(output, "bind"))
+}
+
+func isManagedModelFailure(output string) bool {
+	return strings.Contains(output, "model") &&
+		(strings.Contains(output, "load") || strings.Contains(output, "fail"))
+}
+
+func managedProcessExitCause(waitErr error, outputBytes int) (string, string, bool) {
 	if waitErr == nil {
 		return "", "", false
 	}
-	return managedProcessCauseProcessExited, "managed backend process exited", false
+	return managedProcessCauseProcessExited, "managed backend process exited", outputBytes > 0
 }
 
 func (p *modelsManagedProcess) DiagnosticSnapshot() (
