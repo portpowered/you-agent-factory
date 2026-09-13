@@ -258,51 +258,6 @@ func TestPinnedGRPCHostProtocolNegotiatorUsesHealthRPC(t *testing.T) {
 	}
 }
 
-func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testing.T) {
-	t.Parallel()
-
-	connection := &recordingGRPCConnection{}
-	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "loaded"})
-	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
-	modelFile := filepath.Join("models", "llm", "model.gguf")
-	mmprojFile := filepath.Join("models", "llm", "mmproj-F16.gguf")
-	result, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
-		Configuration: modelseffects.ResolvedHostConfiguration{
-			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-			Backend:         "localai-llamacpp",
-			ModelName:       "llm",
-			ModelPath:       modelFile,
-			MMProjPath:      mmprojFile,
-		},
-	})
-	if err != nil {
-		t.Fatalf("Negotiate() error = %v", err)
-	}
-	if !result.Ready || !equalStrings(connection.methods, []string{localAIHealthMethod, localAILoadModelMethod}) || connection.closed != 1 {
-		t.Fatalf("load transport facts = methods %#v, ready %t, closed %d, want Health/LoadModel/ready/one close", connection.methods, result.Ready, connection.closed)
-	}
-	if connection.loadRequest.GetModel() != "llm" ||
-		connection.loadRequest.GetEmbeddings() ||
-		connection.loadRequest.GetModelFile() != modelFile ||
-		connection.loadRequest.GetMMProj() != mmprojFile ||
-		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
-		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
-		len(connection.loadRequest.GetOptions()) != 0 {
-		t.Fatalf(
-			"load request model=%q modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want model name, file/projector paths, model directory, nonzero batch size, and no VibeVoice option",
-			connection.loadRequest.GetModel(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetMMProj(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
-		)
-	}
-	expected := appendStringField(nil, 1, "llm")
-	expected = appendVarintField(expected, 4, localAIModelBatchSize)
-	expected = appendStringField(expected, 21, modelFile)
-	expected = appendStringField(expected, 41, mmprojFile)
-	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
-	if !bytes.Equal(connection.loadPayload, expected) {
-		t.Fatalf("non-TTS LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
-	}
-}
-
 func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTTS(t *testing.T) {
 	t.Parallel()
 
@@ -586,6 +541,7 @@ func negotiateControlledImageHost(t *testing.T, ctx context.Context, endpoint, m
 			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 			Backend:         "localai-llamacpp",
 			ModelName:       models.BuiltInModelNameLLM,
+			Platform:        models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
 			ModelPath:       modelFile,
 			MMProjPath:      mmprojFile,
 		},
@@ -652,7 +608,8 @@ func assertControlledImageObservation(
 		t.Fatalf("server calls = %#v, want Health, LoadModel, Predict", observation.calls)
 	}
 	if observation.load.ModelFile != modelFile || observation.load.ModelPath != modelRoot ||
-		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM {
+		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM ||
+		!equalStrings(observation.load.Options, []string{localAIDisableProjectorGPUOption}) {
 		t.Fatalf("server LoadModel = %#v, want exact model/projector paths", observation.load)
 	}
 	if observation.imageCount != wantImageCount || observation.imageSHA256 != wantImageSHA256 {

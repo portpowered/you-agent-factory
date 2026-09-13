@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	localAIHealthMethod    = "/backend.Backend/Health"
-	localAILoadModelMethod = "/backend.Backend/LoadModel"
-	localAIPredictMethod   = "/backend.Backend/Predict"
-	localAIEmbeddingMethod = "/backend.Backend/Embedding"
-	localAIModelBatchSize  = 512
+	localAIHealthMethod              = "/backend.Backend/Health"
+	localAILoadModelMethod           = "/backend.Backend/LoadModel"
+	localAIPredictMethod             = "/backend.Backend/Predict"
+	localAIEmbeddingMethod           = "/backend.Backend/Embedding"
+	localAIModelBatchSize            = 512
+	localAIDisableProjectorGPUOption = "mmproj_use_gpu:false"
 )
 
 type invocationEndpointContextKey struct{}
@@ -150,6 +151,7 @@ func loadModel(
 			models.ErrHostProtocolIncompatible,
 		)
 	}
+	options = append(options, projectorLoadOptions(configuration)...)
 	payload, err := proto.Marshal(&ModelOptions{
 		Model:      configuration.ModelName,
 		NBatch:     localAIModelBatchSize,
@@ -190,6 +192,17 @@ func loadModel(
 		return fmt.Errorf("%w: %s", models.ErrHostProtocolIncompatible, message)
 	}
 	return nil
+}
+
+func projectorLoadOptions(configuration modelseffects.ResolvedHostConfiguration) []string {
+	if !strings.EqualFold(strings.TrimSpace(configuration.Backend), "localai-llamacpp") ||
+		!strings.EqualFold(strings.TrimSpace(configuration.ModelName), models.BuiltInModelNameLLM) ||
+		!strings.EqualFold(strings.TrimSpace(configuration.Platform.OperatingSystem), "windows") ||
+		!strings.EqualFold(strings.TrimSpace(configuration.Platform.Architecture), "amd64") ||
+		strings.TrimSpace(configuration.MMProjPath) == "" {
+		return nil
+	}
+	return []string{localAIDisableProjectorGPUOption}
 }
 
 type grpcProtocolClient struct {
