@@ -329,13 +329,62 @@ func TestRestoreRestoredActiveDispatchUsesLatestCanonicalMutation(t *testing.T) 
 
 func TestRestoreRestoredActiveDispatchIgnoresEmptyRecordedWorkstationPlaces(t *testing.T) {
 	restored := restoredMissingPlaceDispatchFixture()
-	restored.Topology.Workstations[0].InputPlaceIDs = nil
+	restored.Topology.Workstations[0].InputPlaceIDs = []string{""}
 
 	if err := materializeRestoredDispatchInputPlaces(restored, buildSimpleNet(), restoredWorkItems(restored)); err != nil {
 		t.Fatalf("materializeRestoredDispatchInputPlaces: %v", err)
 	}
 	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "task:init" {
 		t.Fatalf("resolved dispatch input PlaceID = %q, want loaded transition place task:init", got)
+	}
+}
+
+func TestRestoreRestoredActiveDispatchUsesLoadedArcWhenCurrentWorkStateAdvanced(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.Topology.Workstations[0].InputPlaceIDs = nil
+	restored.WorkItemsByID["work-missing-place"] = work.FactoryWorkItem{
+		ID: "work-missing-place", WorkTypeID: "task", State: "complete",
+	}
+	net := buildSimpleNet()
+	net.Places["task:complete"] = &petri.Place{ID: "task:complete", TypeID: "task", State: "complete"}
+
+	if err := materializeRestoredDispatchInputPlaces(restored, net, restoredWorkItems(restored)); err != nil {
+		t.Fatalf("materializeRestoredDispatchInputPlaces: %v", err)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "task:init" {
+		t.Fatalf("resolved dispatch input PlaceID = %q, want loaded transition place task:init", got)
+	}
+}
+
+func TestRestoreRestoredWorkMarkingSkipsActiveDispatchClaimsForReplay(t *testing.T) {
+	restored := restoredMissingPlaceDispatchFixture()
+	restored.WorkItemsByID["work-missing-place"] = work.FactoryWorkItem{
+		ID: "work-missing-place", WorkTypeID: "task", State: "done",
+	}
+	restored.PlaceOccupancyByID = map[string]interfaces.FactoryPlaceOccupancy{
+		"task:done": {PlaceID: "task:done", WorkItemIDs: []string{"work-missing-place"}},
+	}
+	net := buildSimpleNet()
+	marking := petri.NewMarking("test-net")
+	cfg := &runtimeConfig{
+		net:                                net,
+		clock:                              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState:                 restored,
+		skipRestoredDispatchReconciliation: true,
+	}
+
+	seeded, err := restoreRestoredWorkMarking(
+		cfg, marking, time.Unix(0, 0).UTC(), nil,
+		map[string]struct{}{"work-missing-place": {}},
+	)
+	if err != nil {
+		t.Fatalf("restoreRestoredWorkMarking: %v", err)
+	}
+	if len(seeded) != 0 || len(marking.Tokens) != 0 {
+		t.Fatalf("replay seed = %#v tokens=%#v, want no active dispatch board claim", seeded, marking.Tokens)
+	}
+	if got := restored.ActiveDispatches["dispatch-missing-place"].Inputs[0].PlaceID; got != "" {
+		t.Fatalf("replay source dispatch input PlaceID = %q, want source unchanged", got)
 	}
 }
 

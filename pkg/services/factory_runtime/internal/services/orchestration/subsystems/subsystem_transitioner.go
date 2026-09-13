@@ -38,6 +38,15 @@ type TransitionerSubsystem struct {
 	outputShaping     interfaces.InvocationOutputShapingService
 	workPropagation   interfaces.WorkPropagationPolicyService
 	decisionEnvelopes interfaces.DecisionEnvelopeService
+	// replayHistoricalWorks contains identities that are valid relation targets
+	// during deterministic replay even when their tokens are not currently on
+	// the board. It is populated only for restored replay runtimes; live
+	// admission remains scoped to the point-in-time board snapshot.
+	replayHistoricalWorks []work.ExistingWork
+	// replayHistoricalRelations preserves the exact target identity selected by
+	// the canonical request event when replayed worker output only carries a
+	// target name that is no longer unique on the restored board.
+	replayHistoricalRelations []work.FactoryRelation
 }
 
 var _ Subsystem = (*TransitionerSubsystem)(nil)
@@ -111,6 +120,25 @@ func NewTransitioner(
 		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 	return tr
+}
+
+// SetReplayHistoricalWorks supplies durable Work identities for replay-only
+// relation admission. The slice is copied so callers can reuse their source
+// collection without changing transitioner behavior after construction.
+func (t *TransitionerSubsystem) SetReplayHistoricalWorks(existing []work.ExistingWork) {
+	if t == nil {
+		return
+	}
+	t.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
+}
+
+// SetReplayHistoricalRelations supplies canonical request relations for
+// replay-only name-to-ID resolution. Live admission remains name/board scoped.
+func (t *TransitionerSubsystem) SetReplayHistoricalRelations(relations []work.FactoryRelation) {
+	if t == nil {
+		return
+	}
+	t.replayHistoricalRelations = append([]work.FactoryRelation(nil), relations...)
 }
 
 // TickGroup returns Transitioner (12).
@@ -242,7 +270,7 @@ func (t *TransitionerSubsystem) resolveGeneratedBatchWork(
 		return nil, 0, resolved
 	}
 	generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(
-		resolved, inputColors, existingWorksForAdmission(snapshot),
+		resolved, inputColors, t.existingWorksForAdmission(snapshot),
 	)
 	if batchErr != nil {
 		resolved.outcome = workerexecution.OutcomeFailed
@@ -572,6 +600,7 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		request.RequestID = deterministicWorkerBatchRequestID(result, output)
 	}
 	enrichWorkerEmittedBatchRequest(&request, inputColors, result)
+	resolveReplayHistoricalRelationIDs(&request, t.replayHistoricalRelations)
 
 	metadata := work.GeneratedSubmissionBatchMetadata{Source: "worker-output:" + result.dispatchID}
 	if envelope.Metadata != nil {
@@ -595,12 +624,44 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 	return generatedBatchWork{request: request, submits: normalized, metadata: metadata}, true, nil
 }
 
+// resolveReplayHistoricalRelationIDs restores the target identity chosen by
+// the original Work admission. A worker output can legitimately contain only
+// targetWorkName; replay must use the immutable request relation when the
+// restored final board contains more than one Work with that name. No guess is
+// made when the canonical relation is absent or ambiguous.
+func resolveReplayHistoricalRelationIDs(request *work.WorkRequest, historical []work.FactoryRelation) {
+	if request == nil || request.RequestID == "" || len(request.Relations) == 0 || len(historical) == 0 {
+		return
+	}
+	for relationIndex := range request.Relations {
+		relation := &request.Relations[relationIndex]
+		if strings.TrimSpace(relation.TargetWorkID) != "" {
+			continue
+		}
+		var match work.FactoryRelation
+		matches := 0
+		for _, candidate := range historical {
+			if candidate.RequestID != request.RequestID || candidate.Type != string(relation.Type) ||
+				candidate.SourceWorkName != relation.SourceWorkName ||
+				candidate.TargetWorkName != relation.TargetWorkName ||
+				candidate.RequiredState != relation.RequiredState || candidate.TargetWorkID == "" {
+				continue
+			}
+			match = candidate
+			matches++
+		}
+		if matches == 1 {
+			relation.TargetWorkID = match.TargetWorkID
+		}
+	}
+}
+
 // existingWorksForAdmission returns the point-in-time board identities visible
 // to a worker-emitted batch. A dispatched Work is absent from Marking while it
 // is active, so consumed dispatch tokens are included alongside marking
 // tokens. The engine performs the same snapshot for external admission before
 // queueing the request.
-func existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
+func (t *TransitionerSubsystem) existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
 	if snapshot == nil {
 		return nil
 	}
@@ -640,6 +701,22 @@ func existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.Ma
 		for _, token := range dispatch.ConsumedTokens {
 			add(token.Color)
 		}
+	}
+	for _, historical := range t.replayHistoricalWorks {
+		if historical.WorkID == "" {
+			continue
+		}
+		if current, exists := byID[historical.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = historical.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = historical.WorkTypeID
+			}
+			byID[historical.WorkID] = current
+			continue
+		}
+		byID[historical.WorkID] = historical
 	}
 
 	works := make([]work.ExistingWork, 0, len(byID))
@@ -881,7 +958,6 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 				}
 				workOutputIndex++
 			}
-
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  arc.PlaceID,

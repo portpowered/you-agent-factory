@@ -208,7 +208,8 @@ func generatedSubmissionSource(batch workdomain.GeneratedSubmissionBatch, defaul
 }
 
 func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch workdomain.GeneratedSubmissionBatch) ([]workdomain.SubmitRequest, string, error) {
-	normalized, err := workdomain.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{ValidWorkTypes: e.validWorkTypes(), ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes), IDGenerator: e.workRequestIDs, ExistingWorks: e.existingWorksForAdmissionLocked()})
+	existingWorks := e.existingWorksForAdmissionLocked()
+	normalized, err := workdomain.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{ValidWorkTypes: e.validWorkTypes(), ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes), IDGenerator: e.workRequestIDs, ExistingWorks: existingWorks})
 	if err != nil {
 		return nil, "", err
 	}

@@ -263,10 +263,26 @@ func (h *dispatchPlanningResultHook) plannedWorkersResult(
 	workResult workerexecution.WorkResult,
 ) (workerexecution.WorkResult, bool, error) {
 	provider, ok := h.completionPlanner.(plannedCompletionResultProvider)
+	if ok {
+		planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
+		if err != nil {
+			return workResult, false, err
+		}
+		if hasPlanned {
+			if workResult.Outcome == workerexecution.OutcomeFailed &&
+				planned.Outcome != workerexecution.OutcomeFailed {
+				return workResult, false, nil
+			}
+			planned.DispatchID = request.Execution.Dispatch.DispatchID
+			planned.TransitionID = request.Execution.Dispatch.TransitionID
+			return planned, true, nil
+		}
+	}
+	replayProvider, ok := h.completionPlanner.(replayCompletionResultProvider)
 	if !ok {
 		return workResult, false, nil
 	}
-	planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
+	planned, hasPlanned, err := replayProvider.ReplayResultForDispatch(request.Execution.Dispatch)
 	if err != nil || !hasPlanned ||
 		(workResult.Outcome == workerexecution.OutcomeFailed &&
 			planned.Outcome != workerexecution.OutcomeFailed) {
@@ -585,6 +601,10 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 
 type plannedCompletionResultProvider interface {
 	PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error)
+}
+
+type replayCompletionResultProvider interface {
+	ReplayResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error)
 }
 
 func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {

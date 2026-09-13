@@ -79,6 +79,81 @@ func restoredHistoricalWorkIDs(cfg *runtimeConfig) map[string]struct{} {
 	return workIDs
 }
 
+// restoredHistoricalAdmissionWorks returns the durable identities that replay
+// may use as relation targets while rebuilding recorded dispatches. These
+// identities are deliberately not added to ordinary live admission: a Work
+// that has left the current board must not become a new live dependency target
+// merely because it appears in historical state.
+func restoredHistoricalAdmissionWorks(cfg *runtimeConfig) []work.ExistingWork {
+	if cfg == nil || !cfg.skipRestoredDispatchReconciliation {
+		return nil
+	}
+
+	items := restoredWorkItems(cfg.restoredWorldState)
+	workIDs := restoredHistoricalWorkIDs(cfg)
+	works := make([]work.ExistingWork, 0, len(workIDs))
+	for workID := range workIDs {
+		candidate := work.ExistingWork{WorkID: workID}
+		if item, ok := items[workID]; ok {
+			candidate.Name = item.DisplayName
+			candidate.WorkTypeID = item.WorkTypeID
+		}
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
+}
+
+// restoredHistoricalRelations returns canonical relation identities retained
+// by the Recordings projection. Replay uses these only to resolve a worker
+// output's name-only relation against the request that originally admitted it.
+func restoredHistoricalRelations(cfg *runtimeConfig) []work.FactoryRelation {
+	if cfg == nil || !cfg.skipRestoredDispatchReconciliation || cfg.restoredWorldState == nil {
+		return nil
+	}
+
+	byKey := make(map[string]work.FactoryRelation)
+	for _, relations := range cfg.restoredWorldState.RelationsByWorkID {
+		for _, relation := range relations {
+			if relation.RequestID == "" || relation.TargetWorkID == "" {
+				continue
+			}
+			key := strings.Join([]string{
+				relation.RequestID,
+				relation.Type,
+				relation.SourceWorkID,
+				relation.SourceWorkName,
+				relation.TargetWorkID,
+				relation.TargetWorkName,
+				relation.RequiredState,
+			}, "\x00")
+			byKey[key] = relation
+		}
+	}
+	relations := make([]work.FactoryRelation, 0, len(byKey))
+	for _, relation := range byKey {
+		relations = append(relations, relation)
+	}
+	sort.Slice(relations, func(i, j int) bool {
+		left, right := relations[i], relations[j]
+		for _, pair := range [][2]string{
+			{left.RequestID, right.RequestID},
+			{left.Type, right.Type},
+			{left.SourceWorkID, right.SourceWorkID},
+			{left.SourceWorkName, right.SourceWorkName},
+			{left.TargetWorkID, right.TargetWorkID},
+			{left.TargetWorkName, right.TargetWorkName},
+			{left.RequiredState, right.RequiredState},
+		} {
+			if pair[0] != pair[1] {
+				return pair[0] < pair[1]
+			}
+		}
+		return false
+	})
+	return relations
+}
+
 func addHistoricalWorldWorkIDs(destination map[string]struct{}, restored *interfaces.FactoryWorldState) {
 	if restored == nil {
 		return
@@ -194,11 +269,14 @@ func restoreRestoredWorkMarking(
 	constructionNow time.Time,
 	resourcePlaceIDs, recordedDispatchWorkIDs map[string]struct{},
 ) (map[string]struct{}, error) {
-	restoredItems := restoredWorkItems(cfg.restoredWorldState)
-	if err := materializeRestoredDispatchInputPlaces(cfg.restoredWorldState, cfg.net, restoredItems); err != nil {
-		return nil, err
+	restoredForMarking := restoredWorldStateForMarking(cfg)
+	restoredItems := restoredWorkItems(restoredForMarking)
+	if !cfg.skipRestoredDispatchReconciliation {
+		if err := materializeRestoredDispatchInputPlaces(restoredForMarking, cfg.net, restoredItems); err != nil {
+			return nil, err
+		}
 	}
-	recovery := classifyRestoredWorkRecovery(cfg.restoredWorldState, cfg.net, restoredItems)
+	recovery := classifyRestoredWorkRecovery(restoredForMarking, cfg.net, restoredItems)
 	excludedWorkIDs := cloneRestoredWorkIDSet(recovery.excludedWorkIDs)
 	if cfg.skipRestoredDispatchReconciliation {
 		if excludedWorkIDs == nil {
@@ -211,7 +289,7 @@ func restoreRestoredWorkMarking(
 	seededWorkIDs, err := seedRestoredWork(
 		marking,
 		cfg.net,
-		cfg.restoredWorldState,
+		restoredForMarking,
 		constructionNow,
 		resourcePlaceIDs,
 		excludedWorkIDs,
@@ -222,6 +300,24 @@ func restoreRestoredWorkMarking(
 	}
 	logRestoredWorkRecovery(cfg, recovery)
 	return seededWorkIDs, nil
+}
+
+// restoredWorldStateForMarking detaches replayed dispatch claims from the
+// initial board. Deterministic replay re-materializes those claims from the
+// recorded event stream; carrying an active projection into the seed would
+// duplicate the dispatch and can conflict with a later recorded occupancy
+// when a legacy artifact spans a logical-clock restart. The original state is
+// retained on runtimeConfig for replay identity resolution and event history.
+func restoredWorldStateForMarking(cfg *runtimeConfig) *interfaces.FactoryWorldState {
+	if cfg == nil || cfg.restoredWorldState == nil || !cfg.skipRestoredDispatchReconciliation {
+		if cfg == nil {
+			return nil
+		}
+		return cfg.restoredWorldState
+	}
+	restored := *cfg.restoredWorldState
+	restored.ActiveDispatches = nil
+	return &restored
 }
 
 // materializeRestoredDispatchInputPlaces resolves only missing Work input
@@ -298,35 +394,42 @@ func restoredDispatchPlaceCandidates(
 	if !ok || transition == nil {
 		return nil
 	}
-	candidateSets := make([][]string, 0, 5)
 	canonicalPlaces := restoredCanonicalWorkStatePlaces(net, item)
-	if len(canonicalPlaces) == 0 {
-		return nil
-	}
-	candidateSets = append(candidateSets, canonicalPlaces)
 	loadedArcPlaces := restoredWorkTypeDispatchPlaces(net, item, transitionInputPlaceIDs(transition.InputArcs))
 	if len(loadedArcPlaces) == 0 {
 		return nil
 	}
-	candidateSets = append(candidateSets, loadedArcPlaces)
+	// A legacy active dispatch can survive a later canonical Work mutation in
+	// the detached history. In that case the current Work state no longer
+	// names the consumed input place, but the loaded transition arc still does.
+	// Keep the canonical state as the primary constraint whenever it agrees;
+	// use the authored arc as the bounded historical fallback when it does not.
+	candidates := append([]string(nil), loadedArcPlaces...)
+	if len(canonicalPlaces) > 0 {
+		if canonicalCandidates := intersectRestoredDispatchPlaceIDs(canonicalPlaces, loadedArcPlaces); len(canonicalCandidates) > 0 {
+			candidates = canonicalCandidates
+		}
+	}
 
 	if len(restored.Topology.Workstations) > 0 {
 		recordedPlaces, found := restoredRecordedWorkstationPlaces(restored.Topology, dispatch.TransitionID)
-		if found && len(recordedPlaces) > 0 {
-			candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
+		recordedCandidates := restoredWorkTypeDispatchPlaces(net, item, recordedPlaces)
+		if found && len(recordedCandidates) > 0 {
+			candidates = intersectRestoredDispatchPlaceIDs(candidates, recordedCandidates)
+			if len(candidates) == 0 {
+				return nil
+			}
 		}
 	}
 
 	if placeID, found := latestRestoredNonEmptyWorkStateChangePlace(restored, workID); found {
-		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, []string{placeID}))
+		candidates = intersectRestoredDispatchPlaceIDs(candidates, restoredWorkTypeDispatchPlaces(net, item, []string{placeID}))
+		if len(candidates) == 0 {
+			return nil
+		}
 	}
 	if recordedPlaces, found := restoredRecordedExactWorkstationInputPlaces(restored, dispatch.TransitionID, workID); found {
-		candidateSets = append(candidateSets, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
-	}
-
-	candidates := candidateSets[0]
-	for _, candidateSet := range candidateSets[1:] {
-		candidates = intersectRestoredDispatchPlaceIDs(candidates, candidateSet)
+		candidates = intersectRestoredDispatchPlaceIDs(candidates, restoredWorkTypeDispatchPlaces(net, item, recordedPlaces))
 		if len(candidates) == 0 {
 			return nil
 		}

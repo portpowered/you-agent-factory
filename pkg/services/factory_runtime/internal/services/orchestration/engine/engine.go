@@ -39,6 +39,7 @@ type FactoryEngine struct {
 	seededRestoredWorkIDs map[string]struct{}
 	replayDispatchWorkIDs map[string]struct{}
 	historicalWorkIDs     map[string]struct{}
+	replayHistoricalWorks []workdomain.ExistingWork
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -166,6 +167,18 @@ func NewFactoryEngine(
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
 	e.submissionHooks = sortedSubmissionHooks(e.submissionHooks)
 	return e, nil
+}
+
+// SetReplayHistoricalWorks supplies durable Work identities for replay-only
+// relation admission. The live admission snapshot remains board-scoped; this
+// index is used only by restored runtimes that replay an immutable event log.
+func (e *FactoryEngine) SetReplayHistoricalWorks(existing []workdomain.ExistingWork) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.replayHistoricalWorks = append([]workdomain.ExistingWork(nil), existing...)
 }
 
 // drainPendingResults moves any buffered results into runtimeState.Results.
@@ -478,6 +491,22 @@ func (e *FactoryEngine) existingWorksForAdmissionLocked() []workdomain.ExistingW
 				add(token.Color)
 			}
 		}
+	}
+	for _, historical := range e.replayHistoricalWorks {
+		if historical.WorkID == "" {
+			continue
+		}
+		if current, exists := byID[historical.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = historical.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = historical.WorkTypeID
+			}
+			byID[historical.WorkID] = current
+			continue
+		}
+		byID[historical.WorkID] = historical
 	}
 
 	works := make([]workdomain.ExistingWork, 0, len(byID))

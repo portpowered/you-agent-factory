@@ -584,6 +584,36 @@ func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch work.WorkDispa
 	)
 }
 
+// ReplayResultForDispatch returns the immutable completion payload associated
+// with an equivalent dispatch without consuming the delivery record. Runtime
+// uses this before live worker-output materialization so replay preserves the
+// Work identities recorded on the original completion. DeliveryTickForDispatch
+// still performs the one consuming claim after the result is accepted.
+func (p *CompletionDeliveryPlan) ReplayResultForDispatch(
+	dispatch work.WorkDispatch,
+) (workerexecution.WorkResult, bool, error) {
+	if p == nil {
+		return workerexecution.WorkResult{}, false, nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for _, record := range p.records {
+		if record.used || !record.hasCompletion || record.completion == nil {
+			continue
+		}
+		if !recordedDispatchMatches(record.dispatch, dispatch) {
+			continue
+		}
+		planned := cloneReplayPlannedResult(record.completion.result)
+		planned.DispatchID = dispatch.DispatchID
+		planned.TransitionID = dispatch.TransitionID
+		return planned, true, nil
+	}
+	return workerexecution.WorkResult{}, false, nil
+}
+
 // ValidateReplayTick is retained for the runtime hook contract. Replay dispatch
 // matching is intentionally based on logical dispatch identity instead of exact
 // ticks because repaired runs can reschedule equivalent dispatches or terminally

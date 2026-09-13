@@ -229,6 +229,7 @@ func New(
 	}
 	historicalWorkIDs := restoredHistoricalWorkIDs(cfg)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs, historicalWorkIDs)
+	replayHistoricalWorks := restoredHistoricalAdmissionWorks(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
 	if !cfg.skipRestoredDispatchReconciliation {
@@ -300,6 +301,9 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
 	}
+	if cfg.skipRestoredDispatchReconciliation {
+		runtimeEngine.SetReplayHistoricalWorks(replayHistoricalWorks)
+	}
 	impl.engine = runtimeEngine
 	return impl, nil
 }
@@ -323,6 +327,21 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 		cfg.net.WorkTypes,
 		workIDGen,
 	)
+	transitioner := subsystems.NewTransitioner(
+		cfg.net,
+		logger,
+		cfg.clock.Now,
+		sharedTransformer,
+		cfg.runtimeConfig,
+		cfg.quorumPolicy,
+		cfg.outputShaping,
+		cfg.workPropagation,
+		cfg.decisionEnvelopes,
+	)
+	if cfg.skipRestoredDispatchReconciliation {
+		transitioner.SetReplayHistoricalWorks(restoredHistoricalAdmissionWorks(cfg))
+		transitioner.SetReplayHistoricalRelations(restoredHistoricalRelations(cfg))
+	}
 	return sharedTransformer, []subsystems.Subsystem{
 		subsystems.NewCircuitBreakerWithClock(
 			cfg.net,
@@ -342,17 +361,7 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			seededRestoredWorkIDs),
 
 		subsystems.NewHistory(logger),
-		subsystems.NewTransitioner(
-			cfg.net,
-			logger,
-			cfg.clock.Now,
-			sharedTransformer,
-			cfg.runtimeConfig,
-			cfg.quorumPolicy,
-			cfg.outputShaping,
-			cfg.workPropagation,
-			cfg.decisionEnvelopes,
-		),
+		transitioner,
 		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
 		subsystems.NewTerminationCheckWithRuntime(cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now),
 	}
