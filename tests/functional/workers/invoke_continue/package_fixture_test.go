@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -554,7 +555,7 @@ func (runner *invokeContinueBlockingProviderRunner) CancellationObserved() <-cha
 var _ platformprocess.CommandRunner = (*invokeContinueBlockingProviderRunner)(nil)
 
 func invokeContinueEnvironment(homeDir string) []string {
-	return append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	return builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
 }
 
 func writeInvokeContinueExecution(
