@@ -301,11 +301,12 @@ func TestResumedSuccessorResponseScopeAndWorkAdmission(t *testing.T) {
 	} else if terminationStatus != http.StatusOK && terminationStatus != http.StatusAccepted {
 		t.Fatalf("terminate successor Factory Session status = %d: %s", terminationStatus, strings.TrimSpace(string(terminationBody)))
 	}
-	support.WaitForSessionStopped(t, baseURL, sessionID, resumedResponseScopeObservationTimeout)
+	// The live Response Event stream closes on the terminal lifecycle event;
+	// use that customer-visible signal instead of polling the status endpoint.
+	responseStream.WaitClosed(resumedResponseScopeStreamTimeout)
 	terminalSession := support.GetDefaultSession(t, baseURL)
 	assertTerminalResumedSession(t, terminalSession)
 	t.Log("resumed successor terminal lifecycle observed")
-	responseStream.WaitClosed(resumedResponseScopeStreamTimeout)
 	responseStream.Close()
 
 	terminalResponseEvents := readClosedResumedResponseEvents(t, baseURL, sessionID)
