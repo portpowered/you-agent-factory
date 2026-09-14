@@ -51,6 +51,8 @@ export function useCurrentActivityFactoryDocumentState({
         return {
           data: undefined,
           error: null,
+          // Keep observer rendering settled for legacy events. The editor
+          // separately fails closed when this document is absent.
           status: "success",
         };
       }
