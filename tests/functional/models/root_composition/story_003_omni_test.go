@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,7 +17,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	omnimedia "github.com/portpowered/infinite-you/tests/integration/models/omni_media_probe"
 )
 
 func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildProcess(t *testing.T) {
@@ -86,7 +86,7 @@ func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildP
 	if fixture.network.Calls() != 0 {
 		t.Fatalf("asset network calls = %d, want 0 from content-addressed fixtures", fixture.network.Calls())
 	}
-	if fixture.media.manifest.SchemaVersion != omnimedia.ManifestSchemaV1 {
+	if fixture.media.manifest.SchemaVersion != omniMediaManifestSchemaV1 {
 		t.Fatalf("fixture manifest schema = %q, want pinned OMNI schema", fixture.media.manifest.SchemaVersion)
 	}
 	closeRootProcess(t, process, "close Omni file-input root process")
@@ -157,10 +157,55 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 // root-composition probes. LoadManifest is the only authority that resolves
 // the promoted bytes, so the tests cannot silently replace them with a small
 // placeholder while retaining the same MIME suffix.
+const (
+	omniMediaManifestSchemaV1 = "you.localai.omni-media-fixture.v1"
+	omniImageID               = "omni-image-v1"
+	omniImagePath             = "infinite-you.png"
+	omniImageMediaType        = "image/png"
+	omniImageBytes            = int64(1381559)
+	omniImageSHA256           = "6d8f7075d2314a19be2a5b8fe52ffc44f2ab8c0fcc5b68935abbd57788e8c3d8"
+	omniVideoID               = "omni-video-v1"
+	omniVideoPath             = "groundtruth-fixture.mp4"
+	omniVideoMediaType        = "video/mp4"
+	omniVideoBytes            = int64(30039)
+	omniVideoSHA256           = "80db7ed6a38cb8de371ef6e732d317102b67b54977d7b0d535a7862f0f05e9b7"
+)
+
+type omniFixtureImageMetadata struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type omniFixtureVideoMetadata struct {
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	DurationMillis int64  `json:"durationMillis"`
+	FrameRate      string `json:"frameRate"`
+	Frames         int64  `json:"frames"`
+}
+
+type omniExactMediaArtifact struct {
+	ID             string                    `json:"id"`
+	Path           string                    `json:"path"`
+	MediaType      string                    `json:"mediaType"`
+	Bytes          int64                     `json:"bytes"`
+	SHA256         string                    `json:"sha256"`
+	Provenance     json.RawMessage           `json:"provenance"`
+	Image          *omniFixtureImageMetadata `json:"image"`
+	Video          *omniFixtureVideoMetadata `json:"video"`
+	SemanticRubric json.RawMessage           `json:"semanticRubric"`
+	ResolvedPath   string                    `json:"-"`
+}
+
+type omniExactMediaManifest struct {
+	SchemaVersion string                   `json:"schemaVersion"`
+	Artifacts     []omniExactMediaArtifact `json:"artifacts"`
+}
+
 type omniExactMediaFixture struct {
-	manifest    omnimedia.Manifest
-	image       omnimedia.Artifact
-	video       omnimedia.Artifact
+	manifest    omniExactMediaManifest
+	image       omniExactMediaArtifact
+	video       omniExactMediaArtifact
 	promptPath  string
 	promptBytes []byte
 	imageBytes  []byte
@@ -178,7 +223,7 @@ func newExactOmniMediaFixture(t testing.TB, directory string) omniExactMediaFixt
 		filepath.Dir(sourceFile), "..", "..", "..", "..",
 		"tests", "integration", "models", "testdata", "omni_media", "manifest.json",
 	)
-	manifest, err := omnimedia.LoadManifest(manifestPath)
+	manifest, err := loadOmniFunctionalManifest(manifestPath)
 	if err != nil {
 		t.Fatalf("load exact OMNI media manifest: %v", err)
 	}
@@ -206,6 +251,51 @@ func newExactOmniMediaFixture(t testing.TB, directory string) omniExactMediaFixt
 		promptPath: promptPath, promptBytes: promptBytes,
 		imageBytes: imageBytes, videoBytes: videoBytes, inputReader: reader,
 	}
+}
+
+func loadOmniFunctionalManifest(path string) (omniExactMediaManifest, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return omniExactMediaManifest{}, err
+	}
+	var manifest omniExactMediaManifest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
+		return omniExactMediaManifest{}, err
+	}
+	if manifest.SchemaVersion != omniMediaManifestSchemaV1 || len(manifest.Artifacts) != 2 {
+		return omniExactMediaManifest{}, fmt.Errorf("unexpected OMNI manifest schema or artifact count")
+	}
+	wants := []struct {
+		id, name, mediaType, sha256 string
+		bytes                       int64
+	}{
+		{id: omniImageID, name: omniImagePath, mediaType: omniImageMediaType, bytes: omniImageBytes, sha256: omniImageSHA256},
+		{id: omniVideoID, name: omniVideoPath, mediaType: omniVideoMediaType, bytes: omniVideoBytes, sha256: omniVideoSHA256},
+	}
+	for index, want := range wants {
+		artifact := &manifest.Artifacts[index]
+		if artifact.ID != want.id || artifact.Path != want.name || artifact.MediaType != want.mediaType || artifact.Bytes != want.bytes || artifact.SHA256 != want.sha256 || artifact.Path == filepath.Clean("..") || filepath.IsAbs(artifact.Path) || filepath.Clean(artifact.Path) != artifact.Path {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d identity drift", index)
+		}
+		artifact.ResolvedPath = filepath.Join(filepath.Dir(path), artifact.Path)
+		info, err := os.Lstat(artifact.ResolvedPath)
+		if err != nil {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d fixture stat: %w", index, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d is not a regular fixture", index)
+		}
+		data, err := os.ReadFile(artifact.ResolvedPath)
+		if err != nil {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d read: %w", index, err)
+		}
+		if int64(len(data)) != artifact.Bytes || fmt.Sprintf("%x", sha256.Sum256(data)) != artifact.SHA256 {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d bytes or digest drift", index)
+		}
+	}
+	return manifest, nil
 }
 
 type omniExactInputReader struct {

@@ -21,7 +21,7 @@
     "fixtures": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/recordedIdentity"}},
     "policy": {
       "type": "object", "additionalProperties": false,
-      "required": ["rootIdentities", "port", "timeoutSeconds", "networkPolicy", "downloadBytes", "paidUsd", "maxHeavyProcesses"],
+      "required": ["rootIdentities", "port", "timeoutSeconds", "networkPolicy", "downloadBytes", "paidUsd", "maxHeavyProcesses", "maxCompilerTestProcesses", "maxDiskBytes"],
       "properties": {
         "rootIdentities": {"type": "array", "minItems": 6, "uniqueItems": true, "items": {"type": "string"}},
         "port": {"type": "integer", "minimum": 1, "maximum": 65535, "not": {"const": 7437}},
@@ -29,7 +29,9 @@
         "networkPolicy": {"const": "declared-local-assets-and-loopback-only"},
         "downloadBytes": {"const": 0},
         "paidUsd": {"const": 0},
-        "maxHeavyProcesses": {"const": 1}
+        "maxHeavyProcesses": {"const": 1},
+        "maxCompilerTestProcesses": {"const": 4},
+        "maxDiskBytes": {"type": "integer", "minimum": 1, "maximum": 1073741824}
       }
     },
     "journeys": {

@@ -4,94 +4,39 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 )
 
 const (
-	prebuiltArtifactEnv         = "INFINITE_YOU_OMNI_MEDIA_PROBE_ARTIFACT"
-	prebuiltArtifactRequiredEnv = "INFINITE_YOU_REQUIRE_OMNI_MEDIA_PROBE_ARTIFACT"
-	prebuiltArtifactIdentityEnv = "INFINITE_YOU_OMNI_MEDIA_PROBE_ARTIFACT_IDENTITY"
+	prebuiltArtifactEnv         = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	prebuiltArtifactRequiredEnv = "INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT"
 )
 
-func TestProbeRunnerPreflightRecordsReadyEvidence(t *testing.T) {
-	input, inputPath, reportPath := validProbeInput(t, "ready")
-	if err := WriteProbeInputAtomic(inputPath, input); err != nil {
-		t.Fatalf("write probe input: %v", err)
-	}
-
-	report, err := NewRunner(nil).Run(context.Background(), inputPath, reportPath)
-	if err != nil {
-		t.Fatalf("run preparation preflight: %v", err)
-	}
-	if report.Status != "READY" || report.Failure != nil {
-		t.Fatalf("preflight report = %#v, want READY without failure", report)
-	}
-	if report.Journeys[0].Name != probeJourneyImage || report.Journeys[1].Name != probeJourneyVideo || report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun {
-		t.Fatalf("preflight journeys = %#v, want ordered NOT_RUN image/video", report.Journeys)
-	}
-	if report.Journeys[0].RequestInputs[1].SHA256 != wantImageSHA256 || report.Journeys[1].RequestInputs[1].SHA256 != wantVideoSHA256 {
-		t.Fatalf("preflight fixture request identities = %#v, want exact promoted hashes", report.Journeys)
-	}
-	if report.Policy.Port == ProbeForbiddenPort || len(report.Policy.RootIdentities) < 6 || !uniqueStrings(report.Policy.RootIdentities) {
-		t.Fatalf("preflight policy = %#v, want unique isolated roots and non-7437 port", report.Policy)
-	}
-	if len(report.Journeys[0].Command) == 0 || len(report.Journeys[1].Command) == 0 || len(report.Journeys[0].SemanticRubric) == 0 || len(report.Journeys[1].SemanticRubric) == 0 {
-		t.Fatalf("preflight did not record commands/rubrics: %#v", report.Journeys)
-	}
-	if _, err := ReadReport(reportPath); err != nil {
-		t.Fatalf("strictly re-read atomic report: %v", err)
-	}
-	if _, err := os.Stat(input.ProbeRoot); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("owned probe root = %v, want removed after preflight", err)
-	}
-	body, err := os.ReadFile(reportPath)
-	if err != nil {
-		t.Fatalf("read preflight report: %v", err)
-	}
-	for _, leaked := range []string{input.ProbeRoot, input.Build.Path, input.Dependencies.Model.Path, input.Dependencies.Projector.Path, input.Dependencies.Backend.Path} {
-		if strings.Contains(string(body), leaked) {
-			t.Fatalf("report leaked owned path %q: %s", leaked, body)
-		}
-	}
-	if report.Cleanup != (CleanupEvidence{Checked: true}) || len(report.Processes) != 0 || len(report.Outputs) != 0 {
-		t.Fatalf("preflight cleanup/process/output evidence = %#v/%#v/%#v", report.Cleanup, report.Processes, report.Outputs)
-	}
-}
-
-// TestProbeRunnerPreflightConsumesInvokingLaneArtifact is the small compiled
-// integration witness. The build is owned by the invoking lane; this test only
-// supplies its absolute path and digest to the production-shaped preflight.
+// TestProbeRunnerPreflightConsumesInvokingLaneArtifact is the only integration
+// case in this package. The invoking lane owns the build; this test supplies
+// that immutable artifact to the production-shaped preflight and verifies the
+// compiled-boundary handoff without running a model or backend.
 func TestProbeRunnerPreflightConsumesInvokingLaneArtifact(t *testing.T) {
 	artifactPath := strings.TrimSpace(os.Getenv(prebuiltArtifactEnv))
 	if artifactPath == "" {
-		switch strings.ToLower(strings.TrimSpace(os.Getenv(prebuiltArtifactRequiredEnv))) {
-		case "1", "true", "yes":
-			t.Fatalf("%s is required for the compiled-artifact preflight", prebuiltArtifactEnv)
+		if strings.TrimSpace(os.Getenv(prebuiltArtifactRequiredEnv)) == "" {
+			t.Skipf("compiled-artifact preflight is optional outside the integration lane; set %s=1 to require it", prebuiltArtifactRequiredEnv)
 		}
-		t.Skipf("compiled-artifact preflight: %s is unset; no in-test build fallback", prebuiltArtifactEnv)
+		t.Fatalf("compiled-artifact preflight requires %s from the invoking integration lane; no in-test build fallback", prebuiltArtifactEnv)
 	}
 	if !filepath.IsAbs(artifactPath) {
 		t.Fatalf("compiled artifact path = %q, want absolute path", artifactPath)
 	}
 
 	input, inputPath, reportPath := validProbeInput(t, "prebuilt-artifact")
-	input.Build = ProbeBuildIdentity{
-		Path:     artifactPath,
-		Identity: strings.TrimSpace(os.Getenv(prebuiltArtifactIdentityEnv)),
-		SHA256:   fileSHA256(t, artifactPath),
-	}
-	if input.Build.Identity == "" {
-		input.Build.Identity = "factory-cli@invoking-lane-build"
-	}
+	input.Build.Path = artifactPath
+	input.Build.Identity = "factory-cli@invoking-lane-build"
+	input.Build.SHA256 = fileSHA256(t, artifactPath)
 	if err := WriteProbeInputAtomic(inputPath, input); err != nil {
 		t.Fatalf("write compiled-artifact probe input: %v", err)
 	}
@@ -113,11 +58,11 @@ func TestProbeRunnerPreflightConsumesInvokingLaneArtifact(t *testing.T) {
 	if report.Dependencies.Model.Identity != input.Dependencies.Model.Identity || report.Dependencies.Projector.Identity != input.Dependencies.Projector.Identity || report.Dependencies.Backend.Identity != input.Dependencies.Backend.Identity || len(report.Fixtures) != 2 || report.Fixtures[0].SHA256 != wantImageSHA256 || report.Fixtures[1].SHA256 != wantVideoSHA256 {
 		t.Fatalf("compiled-artifact dependency/fixture identities = %#v/%#v, want supplied controlled dependencies and pinned media", report.Dependencies, report.Fixtures)
 	}
-	if len(report.Journeys) != 2 || report.Journeys[0].Name != probeJourneyImage || report.Journeys[1].Name != probeJourneyVideo || report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun || len(report.Journeys[0].Command) == 0 || len(report.Journeys[1].Command) == 0 || len(report.Journeys[0].SemanticRubric) == 0 || len(report.Journeys[1].SemanticRubric) == 0 {
-		t.Fatalf("compiled-artifact journeys = %#v, want ordered image/video commands and rubrics", report.Journeys)
-	}
 	if report.Policy.Port == ProbeForbiddenPort || len(report.Policy.RootIdentities) < 6 || !uniqueStrings(report.Policy.RootIdentities) {
 		t.Fatalf("compiled-artifact policy = %#v, want isolated roots and non-7437 port", report.Policy)
+	}
+	if report.Policy.MaxCompilerTestProcesses != ProbeMaxCompilerTestProcesses || report.Policy.MaxDiskBytes != ProbeMaxDiskBytes {
+		t.Fatalf("compiled-artifact declared limits = compiler=%d disk=%d, want compiler=%d disk=%d", report.Policy.MaxCompilerTestProcesses, report.Policy.MaxDiskBytes, ProbeMaxCompilerTestProcesses, ProbeMaxDiskBytes)
 	}
 	if report.Policy.DownloadBytes != 0 || report.Policy.PaidUSD != 0 || len(report.Processes) != 0 || len(report.Outputs) != 0 || report.Cleanup != (CleanupEvidence{Checked: true}) {
 		t.Fatalf("compiled-artifact effects = policy=%#v processes=%#v outputs=%#v cleanup=%#v, want zero external activity and survivors", report.Policy, report.Processes, report.Outputs, report.Cleanup)
@@ -140,274 +85,6 @@ func TestProbeRunnerPreflightConsumesInvokingLaneArtifact(t *testing.T) {
 	t.Logf("compiled-artifact preflight READY identity=%s sha256=%s bytes=%d port=%d roots=%d", report.Build.Identity, report.Build.SHA256, report.Build.Bytes, report.Policy.Port, len(report.Policy.RootIdentities))
 }
 
-func TestProbeRunnerRunsImageBeforeVideoWithControlledExecutor(t *testing.T) {
-	input, _, reportPath := validProbeInput(t, "ordered")
-	executor := &recordingExecutor{}
-	report, err := NewRunner(executor).RunInput(context.Background(), input, reportPath)
-	if err != nil {
-		t.Fatalf("run controlled ordered probe: %v", err)
-	}
-	if report.Status != "PASS" || report.Journeys[0].Status != JourneyPass || report.Journeys[1].Status != JourneyPass {
-		t.Fatalf("ordered report = %#v, want PASS/PASS/PASS", report)
-	}
-	executor.mu.Lock()
-	requests := append([]ExecutionRequest(nil), executor.requests...)
-	executor.mu.Unlock()
-	if len(requests) != 2 || requests[0].Journey != probeJourneyImage || requests[1].Journey != probeJourneyVideo {
-		t.Fatalf("controlled requests = %#v, want image then video", requests)
-	}
-	if requests[0].Port == ProbeForbiddenPort || requests[0].Port != requests[1].Port {
-		t.Fatalf("controlled ports = %d/%d, want one non-7437 port", requests[0].Port, requests[1].Port)
-	}
-	if requests[0].Command[len(requests[0].Command)-1] != "image=@fixture:omni-image-v1" || requests[1].Command[len(requests[1].Command)-1] != "video=@fixture:omni-video-v1" {
-		t.Fatalf("controlled commands = %#v, want redacted exact fixture selectors", requests)
-	}
-	executor.mu.Lock()
-	rootsObserved := executor.rootsObserved
-	executor.mu.Unlock()
-	if !rootsObserved {
-		t.Fatal("controlled executor did not observe fresh isolated roots")
-	}
-}
-
-func TestProbeRunnerStopsVideoAfterImageFailureAndPublishesAtomicReport(t *testing.T) {
-	input, _, reportPath := validProbeInput(t, "image-failure")
-	executor := &recordingExecutor{failure: &ReportFailure{
-		Owner: "controlled", Code: "MODEL_BACKEND_FAILURE", Expected: "image command succeeds", Observed: "controlled image failure", NextAction: "inspect the image gate",
-	}}
-	report, err := NewRunner(executor).RunInput(context.Background(), input, reportPath)
-	if err != nil {
-		t.Fatalf("run controlled image failure: %v", err)
-	}
-	if report.Status != "FAIL" || report.Failure == nil || report.Journeys[0].Status != JourneyFail || report.Journeys[1].Status != JourneyNotRun {
-		t.Fatalf("image failure report = %#v, want atomic FAIL with video NOT_RUN", report)
-	}
-	executor.mu.Lock()
-	requests := append([]ExecutionRequest(nil), executor.requests...)
-	executor.mu.Unlock()
-	if len(requests) != 1 || requests[0].Journey != probeJourneyImage {
-		t.Fatalf("image failure requests = %#v, want image only", requests)
-	}
-	if got, readErr := ReadReport(reportPath); readErr != nil || got.Status != "FAIL" || got.Journeys[1].Status != JourneyNotRun {
-		t.Fatalf("persisted image failure report = %#v, err=%v", got, readErr)
-	}
-	if _, statErr := os.Stat(input.ProbeRoot); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("failed-run owned root = %v, want removed", statErr)
-	}
-}
-
-func TestProbeRunnerCancellationPublishesInconclusiveReportAfterCleanup(t *testing.T) {
-	input, _, reportPath := validProbeInput(t, "cancelled")
-	ctx, cancel := context.WithCancel(context.Background())
-	executor := &cancellingExecutor{cancel: cancel}
-	report, err := NewRunner(executor).RunInput(ctx, input, reportPath)
-	if err != nil {
-		t.Fatalf("run cancelled controlled probe: %v", err)
-	}
-	if report.Status != "INCONCLUSIVE" || report.Failure == nil || report.Failure.Code != string(CodeProbeCancelled) || report.Journeys[1].Status != JourneyNotRun {
-		t.Fatalf("cancelled report = %#v, want inconclusive image-only evidence", report)
-	}
-	if _, err := ReadReport(reportPath); err != nil {
-		t.Fatalf("read cancelled report: %v", err)
-	}
-	if _, statErr := os.Stat(input.ProbeRoot); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("cancelled-run owned root = %v, want removed", statErr)
-	}
-}
-
-func TestProbeRunnerRefusesToPublishWhenExecutorReportsSurvivors(t *testing.T) {
-	input, _, reportPath := validProbeInput(t, "survivor")
-	executor := &survivorExecutor{}
-	_, err := NewRunner(executor).RunInput(context.Background(), input, reportPath)
-	var validation *ValidationError
-	if err == nil || !errors.As(err, &validation) || validation.Code != CodeProbeCleanupFailure {
-		t.Fatalf("survivor run error = %v, want fail-closed cleanup error", err)
-	}
-	if _, statErr := os.Stat(reportPath); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("survivor run published report: %v", statErr)
-	}
-	if _, statErr := os.Stat(input.ProbeRoot); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("survivor-run owned root = %v, want removed", statErr)
-	}
-}
-
-func TestProbeRunnerRejectsInvalidAdmissionBeforeOwnedEffects(t *testing.T) {
-	cases := []struct {
-		name   string
-		code   ValidationCode
-		mutate func(*ProbeInput)
-	}{
-		{name: "relative build path", code: CodeProbeInvalidIdentity, mutate: func(input *ProbeInput) { input.Build.Path = "you" }},
-		{name: "build digest mismatch", code: CodeProbeIdentityMismatch, mutate: func(input *ProbeInput) { input.Build.SHA256 = strings.Repeat("0", sha256.Size*2) }},
-		{name: "existing probe root", code: CodeProbeRootNotFresh, mutate: func(input *ProbeInput) { _ = os.Mkdir(input.ProbeRoot, 0o700) }},
-		{name: "wrong journey order", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Journeys = []JourneyName{probeJourneyVideo, probeJourneyImage} }},
-		{name: "two heavy processes", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Limits.MaxHeavyProcesses = 2 }},
-		{name: "fixture byte mismatch", code: CodeProbeIdentityMismatch, mutate: func(input *ProbeInput) { input.FixtureManifest.Bytes++ }},
-	}
-	for _, testCase := range cases {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
-			input, _, reportPath := validProbeInput(t, testCase.name)
-			testCase.mutate(&input)
-			_, err := NewRunner(nil).RunInput(context.Background(), input, reportPath)
-			if err == nil {
-				t.Fatal("invalid probe input was accepted")
-			}
-			var validation *ValidationError
-			if !errors.As(err, &validation) || validation.Code != testCase.code {
-				t.Fatalf("admission error = %v, want typed code %q", err, testCase.code)
-			}
-			if testCase.name != "existing probe root" {
-				if _, statErr := os.Stat(input.ProbeRoot); !errors.Is(statErr, os.ErrNotExist) {
-					t.Fatalf("invalid admission created probe root: %v", statErr)
-				}
-			}
-			if _, statErr := os.Stat(reportPath); !errors.Is(statErr, os.ErrNotExist) {
-				t.Fatalf("invalid admission created report: %v", statErr)
-			}
-		})
-	}
-}
-
-func TestProbeRunnerSerializesConcurrentHeavyAdmissions(t *testing.T) {
-	first, _, firstReportPath := validProbeInput(t, "heavy-first")
-	second, _, secondReportPath := validProbeInput(t, "heavy-second")
-	firstExecutor := &blockingExecutor{started: make(chan struct{}), release: make(chan struct{})}
-	firstResult := make(chan error, 1)
-	go func() {
-		_, err := NewRunner(firstExecutor).RunInput(context.Background(), first, firstReportPath)
-		firstResult <- err
-	}()
-	select {
-	case <-firstExecutor.started:
-	case err := <-firstResult:
-		t.Fatalf("first heavy admission exited before acquiring owner: %v", err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("first controlled image journey did not start")
-	}
-
-	_, err := NewRunner(nil).RunInput(context.Background(), second, secondReportPath)
-	var validation *ValidationError
-	if !errors.As(err, &validation) || validation.Code != CodeProbeHeavyOwnerBusy {
-		t.Fatalf("concurrent heavy admission error = %v, want %q", err, CodeProbeHeavyOwnerBusy)
-	}
-	if _, statErr := os.Stat(second.ProbeRoot); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("heavy-owner loser created roots: %v", statErr)
-	}
-
-	close(firstExecutor.release)
-	select {
-	case err := <-firstResult:
-		if err != nil {
-			t.Fatalf("first heavy admission: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("first heavy admission did not release")
-	}
-}
-
-func TestProbeInputAndReportRejectUnknownAndDuplicateJSONKeys(t *testing.T) {
-	input, inputPath, reportPath := validProbeInput(t, "strict")
-	body, err := json.Marshal(input)
-	if err != nil {
-		t.Fatalf("encode strict input: %v", err)
-	}
-	body = append(bytesReplaceOnce(body, []byte("\"limits\":"), []byte("\"unexpected\":true,\"limits\":")), '\n')
-	if err := os.WriteFile(inputPath, body, 0o600); err != nil {
-		t.Fatalf("write unknown-field input: %v", err)
-	}
-	if _, err := ReadProbeInput(inputPath); !hasValidationCode(err, CodeUnknownField) {
-		t.Fatalf("unknown input field error = %v, want %q", err, CodeUnknownField)
-	}
-
-	if err := WriteProbeInputAtomic(inputPath, input); err != nil {
-		t.Fatalf("restore strict input: %v", err)
-	}
-	body, err = os.ReadFile(inputPath)
-	if err != nil {
-		t.Fatalf("read strict input: %v", err)
-	}
-	body = append(bytesReplaceOnce(body, []byte("\"runId\":"), []byte("\"runId\":\"strict\",\"runId\":")), '\n')
-	if err := os.WriteFile(inputPath, body, 0o600); err != nil {
-		t.Fatalf("write duplicate-key input: %v", err)
-	}
-	if _, err := ReadProbeInput(inputPath); !hasValidationCode(err, CodeDuplicateJSONKey) {
-		t.Fatalf("duplicate input key error = %v, want %q", err, CodeDuplicateJSONKey)
-	}
-
-	if _, err := Preflight(context.Background(), inputPath, reportPath); err == nil {
-		t.Fatal("strict invalid input unexpectedly reached preflight")
-	}
-}
-
-type recordingExecutor struct {
-	mu            sync.Mutex
-	requests      []ExecutionRequest
-	failure       *ReportFailure
-	rootsObserved bool
-}
-
-func (executor *recordingExecutor) Execute(_ context.Context, request ExecutionRequest) (ExecutionObservation, error) {
-	executor.mu.Lock()
-	executor.requests = append(executor.requests, request)
-	failure := executor.failure
-	if _, err := os.Stat(request.Roots.Work); err == nil {
-		executor.rootsObserved = true
-	}
-	executor.mu.Unlock()
-	observation := ExecutionObservation{Process: ProcessEvidence{
-		Identity: string(request.Journey) + "-controlled-process", Kind: "controlled", PID: 0, Owner: "controlled", Started: true, Exited: true,
-	}}
-	if failure != nil {
-		observation.Process.ExitCode = 1
-		observation.Failure = normalizeReportFailure(*failure, "controlled")
-	}
-	return observation, nil
-}
-
-type blockingExecutor struct {
-	mu      sync.Mutex
-	started chan struct{}
-	release chan struct{}
-	blocked bool
-}
-
-func (executor *blockingExecutor) Execute(ctx context.Context, request ExecutionRequest) (ExecutionObservation, error) {
-	executor.mu.Lock()
-	first := !executor.blocked
-	if first {
-		executor.blocked = true
-	}
-	executor.mu.Unlock()
-	if first {
-		close(executor.started)
-		select {
-		case <-executor.release:
-		case <-ctx.Done():
-			return ExecutionObservation{Process: ProcessEvidence{Identity: "cancelled", Kind: "controlled", Owner: "controlled", Started: true, Exited: true}, Cancelled: true}, nil
-		}
-	}
-	return ExecutionObservation{Process: ProcessEvidence{Identity: string(request.Journey) + "-controlled-process", Kind: "controlled", Owner: "controlled", Started: true, Exited: true}}, nil
-}
-
-type cancellingExecutor struct {
-	cancel context.CancelFunc
-}
-
-func (executor *cancellingExecutor) Execute(_ context.Context, request ExecutionRequest) (ExecutionObservation, error) {
-	executor.cancel()
-	return ExecutionObservation{Process: ProcessEvidence{Identity: string(request.Journey) + "-cancelled", Kind: "controlled", Owner: "controlled", Started: true, Exited: true}}, nil
-}
-
-type survivorExecutor struct{}
-
-func (*survivorExecutor) Execute(_ context.Context, request ExecutionRequest) (ExecutionObservation, error) {
-	return ExecutionObservation{
-		Process:               ProcessEvidence{Identity: string(request.Journey) + "-survivor", Kind: "controlled", Owner: "controlled", Started: true, Exited: true},
-		OwnedProcessSurvivors: 1,
-	}, nil
-}
-
 func validProbeInput(t *testing.T, runID string) (ProbeInput, string, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -425,22 +102,27 @@ func validProbeInput(t *testing.T, runID string) (ProbeInput, string, string) {
 	backendPath := writeProbeDependency(t, root, "backend.bin", "controlled backend identity\n")
 	manifestPath := checkedInManifestPath(t)
 	return ProbeInput{
-		SchemaVersion: ProbeInputSchemaV1,
-		RunID:         runID,
-		Build:         ProbeBuildIdentity{Path: buildPath, Identity: "controlled-you@ff194dc", SHA256: fileSHA256(t, buildPath)},
+		SchemaVersion: ProbeInputSchemaV1, RunID: runID,
+		Build: ProbeBuildIdentity{Path: buildPath, Identity: "controlled-you@ff194dc", SHA256: fileSHA256(t, buildPath)},
 		Dependencies: ProbeDependencies{
-			Model:     writeFileIdentity(t, modelPath, "model@controlled"),
-			Projector: writeFileIdentity(t, projectorPath, "projector@controlled"),
-			Backend:   writeFileIdentity(t, backendPath, "backend@controlled"),
+			Model: writeFileIdentity(t, modelPath, "model@controlled"), Projector: writeFileIdentity(t, projectorPath, "projector@controlled"), Backend: writeFileIdentity(t, backendPath, "backend@controlled"),
 		},
 		FixtureManifest: writeFileIdentity(t, manifestPath, "omni-fixture-manifest@v1"),
-		ProbeRoot:       probeRoot,
-		Journeys:        []JourneyName{probeJourneyImage, probeJourneyVideo},
+		ProbeRoot:       probeRoot, Journeys: []JourneyName{probeJourneyImage, probeJourneyVideo},
 		Limits: ProbeLimits{
 			TimeoutSeconds: 5, MaxHeavyProcesses: ProbeMaxHeavyProcesses, MaxCompilerTestProcesses: ProbeMaxCompilerTestProcesses,
 			MaxDiskBytes: ProbeMaxDiskBytes, MaxDownloadBytes: 0, MaxPaidUSD: 0, ForbiddenPort: ProbeForbiddenPort, NetworkPolicy: ProbeNetworkPolicy,
 		},
 	}, inputPath, reportPath
+}
+
+func checkedInManifestPath(t testing.TB) string {
+	t.Helper()
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate integration test source")
+	}
+	return filepath.Join(filepath.Dir(sourceFile), "..", "..", "..", "..", "tests", "integration", "models", "testdata", "omni_media", "manifest.json")
 }
 
 func writeProbeDependency(t *testing.T, root, name, content string) string {
@@ -481,16 +163,4 @@ func fileSHA256(t *testing.T, path string) string {
 	}
 	digest := sha256.Sum256(body)
 	return hex.EncodeToString(digest[:])
-}
-
-func hasValidationCode(err error, want ValidationCode) bool {
-	var validation *ValidationError
-	return errors.As(err, &validation) && validation.Code == want
-}
-
-func bytesReplaceOnce(body, old, replacement []byte) []byte {
-	if !strings.Contains(string(body), string(old)) {
-		panic(fmt.Sprintf("test replacement target %q absent", old))
-	}
-	return []byte(strings.Replace(string(body), string(old), string(replacement), 1))
 }

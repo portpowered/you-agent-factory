@@ -140,49 +140,42 @@ func TestManifestFixtureNegativeCases(t *testing.T) {
 				replaceManifestText(t, manifestPath, ",\n          "+textPredicate, "")
 			},
 		},
-		{
-			name: "missing rubric object",
-			code: CodeRubricAmbiguous,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				removeImageRubric(t, manifestPath)
-			},
-		},
-		{
-			name: "invalid phase range",
-			code: CodeInvalidPhaseRange,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				replaceManifestText(t, manifestPath, `"endMillisExclusive": 2000`, `"endMillisExclusive": 1999`)
-			},
-		},
-		{
-			name: "path escape",
-			code: CodePathEscape,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				replaceManifestText(t, manifestPath, `"path": "infinite-you.png"`, `"path": "../infinite-you.png"`)
-			},
-		},
-		{
-			name: "provenance drift",
-			code: CodeProvenanceMismatch,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				replaceManifestTextAll(t, manifestPath, wantRevision, "0000000000000000000000000000000000000000")
-			},
-		},
-		{
-			name: "unknown field",
-			code: CodeUnknownField,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				replaceManifestText(t, manifestPath, `"schemaVersion": "`+ManifestSchemaV1+`",`, "\"schemaVersion\": \""+ManifestSchemaV1+"\",\n  \"unexpected\": true,")
-			},
-		},
-		{
-			name: "duplicate JSON key",
-			code: CodeDuplicateJSONKey,
-			mutate: func(t *testing.T, _, manifestPath string) {
-				replaceManifestText(t, manifestPath, `"schemaVersion": "`+ManifestSchemaV1+`",`, "\"schemaVersion\": \""+ManifestSchemaV1+"\",\n  \"schemaVersion\": \""+ManifestSchemaV1+"\",")
-			},
-		},
 	}
+	runManifestNegativeCases(t, cases)
+}
+
+func TestManifestRubricAndPathNegativeCases(t *testing.T) {
+	cases := []struct {
+		name   string
+		code   ValidationCode
+		mutate func(t *testing.T, root, manifestPath string)
+	}{
+		{name: "missing rubric object", code: CodeRubricAmbiguous, mutate: func(t *testing.T, _, manifestPath string) { removeImageRubric(t, manifestPath) }},
+		{name: "invalid phase range", code: CodeInvalidPhaseRange, mutate: func(t *testing.T, _, manifestPath string) {
+			replaceManifestText(t, manifestPath, `"endMillisExclusive": 2000`, `"endMillisExclusive": 1999`)
+		}},
+		{name: "path escape", code: CodePathEscape, mutate: func(t *testing.T, _, manifestPath string) {
+			replaceManifestText(t, manifestPath, `"path": "infinite-you.png"`, `"path": "../infinite-you.png"`)
+		}},
+		{name: "provenance drift", code: CodeProvenanceMismatch, mutate: func(t *testing.T, _, manifestPath string) {
+			replaceManifestTextAll(t, manifestPath, wantRevision, "0000000000000000000000000000000000000000")
+		}},
+		{name: "unknown field", code: CodeUnknownField, mutate: func(t *testing.T, _, manifestPath string) {
+			replaceManifestText(t, manifestPath, `"schemaVersion": "`+ManifestSchemaV1+`",`, "\"schemaVersion\": \""+ManifestSchemaV1+"\",\n  \"unexpected\": true,")
+		}},
+		{name: "duplicate JSON key", code: CodeDuplicateJSONKey, mutate: func(t *testing.T, _, manifestPath string) {
+			replaceManifestText(t, manifestPath, `"schemaVersion": "`+ManifestSchemaV1+`",`, "\"schemaVersion\": \""+ManifestSchemaV1+"\",\n  \"schemaVersion\": \""+ManifestSchemaV1+"\",")
+		}},
+	}
+	runManifestNegativeCases(t, cases)
+}
+
+func runManifestNegativeCases(t *testing.T, cases []struct {
+	name   string
+	code   ValidationCode
+	mutate func(t *testing.T, root, manifestPath string)
+}) {
+	t.Helper()
 	for _, testCase := range cases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
