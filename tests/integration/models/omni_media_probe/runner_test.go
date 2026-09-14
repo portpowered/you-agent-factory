@@ -153,6 +153,29 @@ func TestProbeRunnerRunsImageBeforeVideoWithControlledExecutor(t *testing.T) {
 	}
 }
 
+func TestProbeRunnerEnforcesDeclaredExecutorCallBudget(t *testing.T) {
+	input, _, reportPath := validProbeInput(t, "call-budget")
+	input.Limits.MaxCalls = 1
+	executor := &recordingExecutor{}
+
+	report, err := NewRunner(executor).RunInput(context.Background(), input, reportPath)
+	if err != nil {
+		t.Fatalf("run call-budget probe: %v", err)
+	}
+	if report.Status != "FAIL" || report.Failure == nil || report.Failure.Code != string(CodeProbeExecutionFailure) {
+		t.Fatalf("call-budget report = %#v, want typed execution failure", report)
+	}
+	executor.mu.Lock()
+	requests := append([]ExecutionRequest(nil), executor.requests...)
+	executor.mu.Unlock()
+	if len(requests) != 1 || requests[0].Journey != probeJourneyImage {
+		t.Fatalf("executor requests = %#v, want one image call before the budget closes", requests)
+	}
+	if report.Policy.MaxCalls != 1 || report.Policy.MaxRetries != ProbeMaxRetries {
+		t.Fatalf("reported call budget = %#v, want maxCalls=1/maxRetries=%d", report.Policy, ProbeMaxRetries)
+	}
+}
+
 func TestProbeRunnerStopsVideoAfterImageFailureAndPublishesAtomicReport(t *testing.T) {
 	input, _, reportPath := validProbeInput(t, "image-failure")
 	executor := &recordingExecutor{failure: &ReportFailure{
@@ -225,6 +248,8 @@ func TestProbeRunnerRejectsInvalidAdmissionBeforeOwnedEffects(t *testing.T) {
 		{name: "existing probe root", code: CodeProbeRootNotFresh, mutate: func(input *ProbeInput) { _ = os.Mkdir(input.ProbeRoot, 0o700) }},
 		{name: "wrong journey order", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Journeys = []JourneyName{probeJourneyVideo, probeJourneyImage} }},
 		{name: "two heavy processes", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Limits.MaxHeavyProcesses = 2 }},
+		{name: "missing call budget", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Limits.MaxCalls = 0 }},
+		{name: "retry budget is not permitted", code: CodeProbeInvalidInput, mutate: func(input *ProbeInput) { input.Limits.MaxRetries = 1 }},
 		{name: "fixture byte mismatch", code: CodeProbeIdentityMismatch, mutate: func(input *ProbeInput) { input.FixtureManifest.Bytes++ }},
 	}
 	for _, testCase := range cases {
@@ -320,6 +345,35 @@ func TestProbeInputAndReportRejectUnknownAndDuplicateJSONKeys(t *testing.T) {
 
 	if _, err := Preflight(context.Background(), inputPath, reportPath); err == nil {
 		t.Fatal("strict invalid input unexpectedly reached preflight")
+	}
+}
+
+func TestProbeReportRejectsAbsoluteOutputIdentityBeforePersistence(t *testing.T) {
+	input, _, reportPath := validProbeInput(t, "output-redaction")
+	report, err := NewRunner(nil).RunInput(context.Background(), input, reportPath)
+	if err != nil {
+		t.Fatalf("create baseline report: %v", err)
+	}
+	original, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read baseline report: %v", err)
+	}
+	secretOutput := filepath.Join(t.TempDir(), "secret-output.bin")
+	report.Outputs = []RecordedIdentity{{
+		Identity:     secretOutput,
+		PathIdentity: pathIdentity(secretOutput),
+		Bytes:        1,
+		SHA256:       strings.Repeat("a", sha256.Size*2),
+	}}
+	if err := WriteReportAtomic(reportPath, report); !hasValidationCode(err, CodeProbeInvalidReport) {
+		t.Fatalf("absolute output identity write error = %v, want report validation failure", err)
+	}
+	unchanged, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read report after rejected output: %v", err)
+	}
+	if string(unchanged) != string(original) {
+		t.Fatal("report changed after absolute output identity was rejected")
 	}
 }
 
@@ -421,7 +475,8 @@ func validProbeInput(t *testing.T, runID string) (ProbeInput, string, string) {
 		Journeys:        []JourneyName{probeJourneyImage, probeJourneyVideo},
 		Limits: ProbeLimits{
 			TimeoutSeconds: 5, MaxHeavyProcesses: ProbeMaxHeavyProcesses, MaxCompilerTestProcesses: ProbeMaxCompilerTestProcesses,
-			MaxDiskBytes: ProbeMaxDiskBytes, MaxDownloadBytes: 0, MaxPaidUSD: 0, ForbiddenPort: ProbeForbiddenPort, NetworkPolicy: ProbeNetworkPolicy,
+			MaxDiskBytes: ProbeMaxDiskBytes, MaxDownloadBytes: 0, MaxPaidUSD: 0, MaxCalls: ProbeMaxCalls, MaxRetries: ProbeMaxRetries,
+			ForbiddenPort: ProbeForbiddenPort, NetworkPolicy: ProbeNetworkPolicy,
 		},
 	}, inputPath, reportPath
 }

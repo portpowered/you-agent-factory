@@ -30,7 +30,7 @@
     "journeys": {"const": ["image", "video"]},
     "limits": {
       "type": "object", "additionalProperties": false,
-      "required": ["timeoutSeconds", "maxHeavyProcesses", "maxCompilerTestProcesses", "maxDiskBytes", "maxDownloadBytes", "maxPaidUsd", "forbiddenPort", "networkPolicy"],
+      "required": ["timeoutSeconds", "maxHeavyProcesses", "maxCompilerTestProcesses", "maxDiskBytes", "maxDownloadBytes", "maxPaidUsd", "maxCalls", "maxRetries", "forbiddenPort", "networkPolicy"],
       "properties": {
         "timeoutSeconds": {"type": "integer", "minimum": 1},
         "maxHeavyProcesses": {"const": 1},
@@ -38,6 +38,8 @@
         "maxDiskBytes": {"type": "integer", "maximum": 1073741824},
         "maxDownloadBytes": {"const": 0},
         "maxPaidUsd": {"const": 0},
+        "maxCalls": {"type": "integer", "minimum": 1, "maximum": 2},
+        "maxRetries": {"const": 0},
         "forbiddenPort": {"const": 7437},
         "networkPolicy": {"const": "declared-local-assets-and-loopback-only"}
       }

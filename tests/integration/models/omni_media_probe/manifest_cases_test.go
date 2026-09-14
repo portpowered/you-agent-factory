@@ -88,11 +88,7 @@ func TestManifestRubricConformance(t *testing.T) {
 }
 
 func TestManifestFixtureNegativeCases(t *testing.T) {
-	cases := []struct {
-		name   string
-		code   ValidationCode
-		mutate func(t *testing.T, root, manifestPath string)
-	}{
+	testManifestNegativeCases(t, []manifestNegativeCase{
 		{
 			name: "missing fixture",
 			code: CodeMissingFile,
@@ -140,6 +136,11 @@ func TestManifestFixtureNegativeCases(t *testing.T) {
 				replaceManifestText(t, manifestPath, ",\n          "+textPredicate, "")
 			},
 		},
+	})
+}
+
+func TestManifestFixtureNegativePathAndJSONCases(t *testing.T) {
+	testManifestNegativeCases(t, []manifestNegativeCase{
 		{
 			name: "missing rubric object",
 			code: CodeRubricAmbiguous,
@@ -182,7 +183,17 @@ func TestManifestFixtureNegativeCases(t *testing.T) {
 				replaceManifestText(t, manifestPath, `"schemaVersion": "`+ManifestSchemaV1+`",`, "\"schemaVersion\": \""+ManifestSchemaV1+"\",\n  \"schemaVersion\": \""+ManifestSchemaV1+"\",")
 			},
 		},
-	}
+	})
+}
+
+type manifestNegativeCase struct {
+	name   string
+	code   ValidationCode
+	mutate func(t *testing.T, root, manifestPath string)
+}
+
+func testManifestNegativeCases(t *testing.T, cases []manifestNegativeCase) {
+	t.Helper()
 	for _, testCase := range cases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
