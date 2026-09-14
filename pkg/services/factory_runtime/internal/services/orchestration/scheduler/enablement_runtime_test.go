@@ -426,11 +426,12 @@ func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
 	if _, _, _, _, ok := repeatedBindingTokensForInput(&petri.Arc{Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}}, &marking, 0); ok {
 		t.Fatal("non-single repeated-binding cardinality unexpectedly matched")
 	}
-	if got := ExpandRepeatedBindings(nil, &marking, nil); got != nil {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	if got := eval.ExpandRepeatedBindings(nil, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, nil); got != nil {
 		t.Fatalf("nil topology expansion = %#v, want nil", got)
 	}
 	base := []interfaces.EnabledTransition{{TransitionID: "unknown"}}
-	if got := ExpandRepeatedBindings(&state.Net{Transitions: map[string]*petri.Transition{}}, &marking, base); len(got) != 1 || got[0].TransitionID != "unknown" {
+	if got := eval.ExpandRepeatedBindings(&state.Net{Transitions: map[string]*petri.Transition{}}, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, base); len(got) != 1 || got[0].TransitionID != "unknown" {
 		t.Fatalf("unknown transition expansion = %#v, want base", got)
 	}
 	if got := runtimeTokens(nil); got != nil {
@@ -623,7 +624,7 @@ func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransi
 	if len(enabled) != 1 {
 		t.Fatalf("base enabled candidates = %d, want 1", len(enabled))
 	}
-	expanded := ExpandRepeatedBindings(n, &marking, enabled)
+	expanded := eval.ExpandRepeatedBindings(n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, enabled)
 	if len(expanded) != 2 {
 		t.Fatalf("expanded candidates = %d, want 2", len(expanded))
 	}

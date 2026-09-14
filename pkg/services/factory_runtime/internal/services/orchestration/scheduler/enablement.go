@@ -267,26 +267,41 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 	if !singleTokenGuardedTransition(tr) {
 		return interfaces.EnabledTransition{}, false
 	}
-	search := singleTokenBindingSearch{
-		evaluator:           e,
-		transition:          tr,
-		snapshot:            snapshot,
-		runtime:             singleTokenRuntimeContext(e, tr, snapshot),
-		order:               singleTokenBindingOrder(tr),
-		bindings:            make(map[string]*factorytoken.Token, len(tr.InputArcs)),
-		result:              make(map[string][]factorytoken.Token, len(tr.InputArcs)),
-		arcModes:            make(map[string]interfaces.ArcMode, len(tr.InputArcs)),
-		usedConsumeTokenIDs: make(map[string]bool),
-	}
+	search := e.newSingleTokenBindingSearch(tr, snapshot, nil, nil)
 	if !search.search(0) {
 		return interfaces.EnabledTransition{}, false
 	}
+	return search.enabledTransition(), true
+}
+
+func (e *EnablementEvaluator) newSingleTokenBindingSearch(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	excludedConsumeTokenIDs map[string]bool,
+	excludedConsumeWorkIDs map[string]bool,
+) *singleTokenBindingSearch {
+	return &singleTokenBindingSearch{
+		evaluator:               e,
+		transition:              tr,
+		snapshot:                snapshot,
+		runtime:                 singleTokenRuntimeContext(e, tr, snapshot),
+		order:                   singleTokenBindingOrder(tr),
+		bindings:                make(map[string]*factorytoken.Token, len(tr.InputArcs)),
+		result:                  make(map[string][]factorytoken.Token, len(tr.InputArcs)),
+		arcModes:                make(map[string]interfaces.ArcMode, len(tr.InputArcs)),
+		usedConsumeTokenIDs:     make(map[string]bool),
+		excludedConsumeTokenIDs: excludedConsumeTokenIDs,
+		excludedConsumeWorkIDs:  excludedConsumeWorkIDs,
+	}
+}
+
+func (s *singleTokenBindingSearch) enabledTransition() interfaces.EnabledTransition {
 	return interfaces.EnabledTransition{
-		TransitionID: tr.ID,
-		WorkerType:   tr.WorkerType,
-		Bindings:     workerBindings(search.result),
-		ArcModes:     search.arcModes,
-	}, true
+		TransitionID: s.transition.ID,
+		WorkerType:   s.transition.WorkerType,
+		Bindings:     workerBindings(s.result),
+		ArcModes:     s.arcModes,
+	}
 }
 
 func singleTokenGuardedTransition(tr *petri.Transition) bool {
@@ -345,15 +360,17 @@ func stateCategoryForPlace(topology *state.Net) func(string) string {
 }
 
 type singleTokenBindingSearch struct {
-	evaluator           *EnablementEvaluator
-	transition          *petri.Transition
-	snapshot            *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-	runtime             petri.RuntimeGuardContext
-	order               []int
-	bindings            map[string]*factorytoken.Token
-	result              map[string][]factorytoken.Token
-	arcModes            map[string]interfaces.ArcMode
-	usedConsumeTokenIDs map[string]bool
+	evaluator               *EnablementEvaluator
+	transition              *petri.Transition
+	snapshot                *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	runtime                 petri.RuntimeGuardContext
+	order                   []int
+	bindings                map[string]*factorytoken.Token
+	result                  map[string][]factorytoken.Token
+	arcModes                map[string]interfaces.ArcMode
+	usedConsumeTokenIDs     map[string]bool
+	excludedConsumeTokenIDs map[string]bool
+	excludedConsumeWorkIDs  map[string]bool
 }
 
 func (s *singleTokenBindingSearch) search(position int) bool {
@@ -432,8 +449,13 @@ func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates 
 }
 
 func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, key string, candidate factorytoken.Token) bool {
-	if arc.Mode != interfaces.ArcModeObserve && s.usedConsumeTokenIDs[candidate.ID] {
-		return false
+	if arc.Mode != interfaces.ArcModeObserve {
+		if s.usedConsumeTokenIDs[candidate.ID] || s.excludedConsumeTokenIDs[candidate.ID] {
+			return false
+		}
+		if candidate.Color.WorkID != "" && s.excludedConsumeWorkIDs[candidate.Color.WorkID] {
+			return false
+		}
 	}
 
 	candidateCopy := candidate
@@ -490,8 +512,12 @@ func transitionWorkerTypes(topology *state.Net, current *petri.Transition) map[s
 // ExpandRepeatedBindings converts single-token work transitions into one enabled
 // candidate per disjoint token binding. It is intended for schedulers that can
 // batch multiple firings of the same transition in a tick.
-func ExpandRepeatedBindings(n *state.Net, marking *petri.MarkingSnapshot, enabled []interfaces.EnabledTransition) []interfaces.EnabledTransition {
-	if n == nil || marking == nil || len(enabled) == 0 {
+func (e *EnablementEvaluator) ExpandRepeatedBindings(
+	n *state.Net,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	enabled []interfaces.EnabledTransition,
+) []interfaces.EnabledTransition {
+	if e == nil || n == nil || snapshot == nil || len(enabled) == 0 {
 		return enabled
 	}
 
@@ -502,9 +528,133 @@ func ExpandRepeatedBindings(n *state.Net, marking *petri.MarkingSnapshot, enable
 			expanded = append(expanded, et)
 			continue
 		}
-		expanded = append(expanded, expandRepeatedCardinalityOneBindings(tr, marking, et)...)
+		if transitionUsesSameNameGuard(tr) {
+			expanded = append(expanded, e.expandRepeatedSameNameBindings(tr, snapshot, et)...)
+			continue
+		}
+		expanded = append(expanded, expandRepeatedCardinalityOneBindings(tr, &snapshot.Marking, et)...)
 	}
 	return expanded
+}
+
+func (e *EnablementEvaluator) expandRepeatedSameNameBindings(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	base interfaces.EnabledTransition,
+) []interfaces.EnabledTransition {
+	if !singleTokenGuardedTransition(tr) || !transitionHasConsumableWorkInput(tr, &snapshot.Marking) {
+		return []interfaces.EnabledTransition{base}
+	}
+
+	excludedTokenIDs, excludedWorkIDs := activeConsumedBindingIdentities(snapshot)
+	expanded := make([]interfaces.EnabledTransition, 0, len(base.Bindings))
+	for {
+		search := e.newSingleTokenBindingSearch(tr, snapshot, excludedTokenIDs, excludedWorkIDs)
+		if !search.search(0) {
+			break
+		}
+		expanded = append(expanded, search.enabledTransition())
+		if !excludeSelectedConsumeBindings(tr, search.result, excludedTokenIDs, excludedWorkIDs) {
+			break
+		}
+	}
+	if len(expanded) == 0 {
+		if bindingUsesExcludedConsumeIdentity(base, excludedTokenIDs, excludedWorkIDs) {
+			return nil
+		}
+		// Some SAME_NAME shapes intentionally use the legacy phased evaluator
+		// when no registered current-child binding exists. Preserve that valid
+		// single binding when guard-aware repeated search has nothing to expand.
+		return []interfaces.EnabledTransition{base}
+	}
+	return expanded
+}
+
+func bindingUsesExcludedConsumeIdentity(
+	binding interfaces.EnabledTransition,
+	excludedTokenIDs map[string]bool,
+	excludedWorkIDs map[string]bool,
+) bool {
+	for key, workerTokens := range binding.Bindings {
+		if binding.ArcModes[key] == interfaces.ArcModeObserve {
+			continue
+		}
+		for _, workerToken := range workerTokens {
+			token := factorytoken.FromWorker(workerToken)
+			if excludedTokenIDs[token.ID] || (token.Color.WorkID != "" && excludedWorkIDs[token.Color.WorkID]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func transitionHasConsumableWorkInput(tr *petri.Transition, marking *petri.MarkingSnapshot) bool {
+	for index := range tr.InputArcs {
+		arc := &tr.InputArcs[index]
+		if arc.Mode == interfaces.ArcModeObserve {
+			continue
+		}
+		if containsWorkCandidateToken(marking.TokensInPlace(arc.PlaceID)) {
+			return true
+		}
+	}
+	return false
+}
+
+func activeConsumedBindingIdentities(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) (map[string]bool, map[string]bool) {
+	tokenIDs := make(map[string]bool)
+	workIDs := make(map[string]bool)
+	completed := make(map[string]bool, len(snapshot.Results))
+	for _, result := range snapshot.Results {
+		completed[result.DispatchID] = true
+	}
+	for dispatchID, dispatch := range snapshot.Dispatches {
+		if dispatch == nil {
+			continue
+		}
+		// Results are applied after dispatch selection in the engine tick. Once a
+		// result exists, its output token may legitimately retain the same Work
+		// identity as the consumed input and must remain eligible in this pass.
+		if completed[dispatchID] || completed[dispatch.DispatchID] {
+			continue
+		}
+		for _, workerToken := range dispatch.ConsumedTokens {
+			token := factorytoken.FromWorker(workerToken)
+			tokenIDs[token.ID] = true
+			if token.Color.WorkID != "" {
+				workIDs[token.Color.WorkID] = true
+			}
+		}
+	}
+	return tokenIDs, workIDs
+}
+
+func excludeSelectedConsumeBindings(
+	tr *petri.Transition,
+	bindings map[string][]factorytoken.Token,
+	excludedTokenIDs map[string]bool,
+	excludedWorkIDs map[string]bool,
+) bool {
+	added := false
+	for index := range tr.InputArcs {
+		arc := &tr.InputArcs[index]
+		if arc.Mode == interfaces.ArcModeObserve {
+			continue
+		}
+		for _, token := range bindings[arcKey(arc)] {
+			if !excludedTokenIDs[token.ID] {
+				excludedTokenIDs[token.ID] = true
+				added = true
+			}
+			if token.Color.WorkID != "" {
+				excludedWorkIDs[token.Color.WorkID] = true
+			}
+		}
+	}
+	return added
 }
 
 func expandRepeatedCardinalityOneBindings(tr *petri.Transition, marking *petri.MarkingSnapshot, base interfaces.EnabledTransition) []interfaces.EnabledTransition {
