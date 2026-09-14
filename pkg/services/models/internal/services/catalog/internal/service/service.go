@@ -80,6 +80,7 @@ func (s *service) ListCatalog(
 			}
 			summary.ManagedRuntime = overlayResolvedRuntime(summary.ManagedRuntime, current)
 		}
+		summary = projectEffectiveSummary(summary)
 		summary = ProjectAvailability(summary)
 		result.Models = append(result.Models, summary)
 	}
@@ -135,6 +136,50 @@ func overlayResolvedRuntime(base, current models.Runtime) models.Runtime {
 	return projected
 }
 
+func projectEffectiveSummary(summary models.Summary) models.Summary {
+	if summary.ManagedRuntime.Diagnostics[localmodels.EffectiveOperationsDiagnostic] != "verified-runtime-assets" ||
+		summary.ManagedRuntime.SupportedOperations == nil {
+		return summary
+	}
+	summary.Operations = make([]models.Operation, len(summary.ManagedRuntime.SupportedOperations))
+	for index, operation := range summary.ManagedRuntime.SupportedOperations {
+		summary.Operations[index] = operation.Clone()
+	}
+	summary.Modalities = catalogModalities(summary.Operations)
+	return summary
+}
+
+func projectEffectiveCapabilities(
+	capabilities []models.Capability,
+	summary models.Summary,
+) []models.Capability {
+	if summary.ManagedRuntime.Diagnostics[localmodels.EffectiveOperationsDiagnostic] != "verified-runtime-assets" {
+		return capabilities
+	}
+	byName := make(map[string]models.Operation, len(summary.Operations))
+	for _, operation := range summary.Operations {
+		byName[strings.ToUpper(strings.TrimSpace(operation.Name))] = operation
+	}
+	projected := make([]models.Capability, len(capabilities))
+	for index, capability := range capabilities {
+		projected[index] = capability
+		projected[index].Operations = make([]models.Operation, 0, len(capability.Operations))
+		for _, operation := range capability.Operations {
+			if effective, ok := byName[strings.ToUpper(strings.TrimSpace(operation.Name))]; ok {
+				projected[index].Operations = append(projected[index].Operations, effective.Clone())
+				continue
+			}
+			projected[index].Operations = append(projected[index].Operations, operation.Clone())
+		}
+		projected[index].ResourceNames = append([]string(nil), capability.ResourceNames...)
+		if capability.ModelProvider != nil {
+			provider := *capability.ModelProvider
+			projected[index].ModelProvider = &provider
+		}
+	}
+	return projected
+}
+
 func (s *service) GetCatalogModel(
 	ctx context.Context,
 	request models.GetModelRequest,
@@ -168,6 +213,8 @@ func (s *service) GetCatalogModel(
 		}
 		detail.Summary.ManagedRuntime = overlayResolvedRuntime(detail.Summary.ManagedRuntime, current)
 	}
+	detail.Summary = projectEffectiveSummary(detail.Summary)
+	detail.Capabilities = projectEffectiveCapabilities(detail.Capabilities, detail.Summary)
 	detail.Summary = ProjectAvailability(detail.Summary)
 	// Detail diagnostics historically includes the managed-runtime state for
 	// compatibility. Keep that duplicate projection sourced from the same
@@ -550,7 +597,10 @@ func stableReadiness(detail models.Detail, current models.Runtime) models.Runtim
 	if current.Locality == "" {
 		current.Locality = detail.ProviderLocality
 	}
-	current.SupportedOperations = detail.ManagedRuntime.Clone().SupportedOperations
+	if current.Diagnostics[localmodels.EffectiveOperationsDiagnostic] != "verified-runtime-assets" ||
+		current.SupportedOperations == nil {
+		current.SupportedOperations = detail.ManagedRuntime.Clone().SupportedOperations
+	}
 	current.Diagnostics = mergeDiagnostics(
 		detail.ManagedRuntime.Diagnostics,
 		current.Diagnostics,

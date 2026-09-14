@@ -249,15 +249,24 @@ func projectManagedRuntimeCacheInspection(
 	baseline models.Runtime,
 	inspection RuntimeCacheInspection,
 ) models.Runtime {
+	operations, capabilityDiagnostics := ProjectEffectiveVideoOperations(
+		baseline.Identity,
+		baseline.SupportedOperations,
+		inspection,
+	)
+	baseDiagnostics := baseline.Diagnostics
+	if len(capabilityDiagnostics) > 0 {
+		baseDiagnostics = mergeRuntimeDiagnostics(baseDiagnostics, capabilityDiagnostics)
+	}
 	projection := buildManagedRuntimeProjection(managedRuntimeProjection{
 		summary: managedRuntimeSummary{
 			name:       baseline.Identity,
 			locality:   managedruntime.Locality(baseline.Locality),
 			readiness:  managedruntime.ReadinessState(baseline.ReadinessState),
 			lifecycle:  managedruntime.LifecycleState(baseline.LifecycleState),
-			operations: baseline.SupportedOperations,
+			operations: operations,
 		},
-		baseDiagnostics: baseline.Diagnostics,
+		baseDiagnostics: baseDiagnostics,
 		cacheInspection: &inspection,
 		includeInspect:  true,
 	})
@@ -272,6 +281,20 @@ func projectManagedRuntimeCacheInspection(
 		SupportedOperations: projection.SupportedOperations,
 		Diagnostics:         projection.Diagnostics,
 	}
+}
+
+func mergeRuntimeDiagnostics(
+	base map[string]string,
+	current map[string]string,
+) map[string]string {
+	merged := make(map[string]string, len(base)+len(current))
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range current {
+		merged[key] = value
+	}
+	return merged
 }
 
 type fixedRuntimeCacheInspector struct {
