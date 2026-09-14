@@ -12,12 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 const (
 	naturalNonzeroOutputBytes = 70 << 10
 	readinessTimeout          = 15 * time.Second
-	readinessPoll             = 10 * time.Millisecond
 )
 
 func main() {
@@ -61,7 +62,9 @@ func runProductionHost(name string) {
 	descendantReadyPath := requiredOption("descendant-ready-file")
 	rootHealthServer := requiredOption("health-server")
 	descendantHealthServer := requiredOption("descendant-health-server")
+	rootReadyPath := requiredOption("root-ready-file")
 	crashPath := optionalOption("crash-file")
+	crashCompletePath := optionalOption("crash-complete-file")
 	releasePath := optionalOption("release-file")
 
 	if err := writePIDFile(rootPIDPath, os.Getpid()); err != nil {
@@ -92,10 +95,17 @@ func runProductionHost(name string) {
 		_ = child.Process.Kill()
 		fail("start root health server: %v", err)
 	}
+	if err := writeMarkerFile(rootReadyPath); err != nil {
+		_ = child.Process.Kill()
+		fail("write root readiness: %v", err)
+	}
 	if name == "production-crash" {
 		go func() {
 			if !waitForFile(crashPath) {
 				fail("crash trigger was not published")
+			}
+			if err := writeMarkerFile(crashCompletePath); err != nil {
+				fail("write crash completion: %v", err)
 			}
 			os.Exit(23)
 		}()
@@ -201,20 +211,45 @@ func waitForFile(path string) bool {
 	if strings.TrimSpace(path) == "" {
 		return false
 	}
+	directory := filepath.Dir(path)
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return false
+	}
+	defer watcher.Close()
+	if err := watcher.Add(directory); err != nil {
+		return false
+	}
 	deadline := time.NewTimer(readinessTimeout)
 	defer deadline.Stop()
-	ticker := time.NewTicker(readinessPoll)
-	defer ticker.Stop()
 	for {
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
 			return true
 		}
 		select {
-		case <-ticker.C:
+		case _, ok := <-watcher.Events:
+			if !ok {
+				return false
+			}
+		case _, ok := <-watcher.Errors:
+			if !ok {
+				return false
+			}
 		case <-deadline.C:
 			return false
 		}
 	}
+}
+
+func writeMarkerFile(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("marker path is required")
+	}
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, []byte("ready\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, path)
 }
 
 func fileExists(path string) bool {
