@@ -25,9 +25,6 @@ func requireWindowsProcessBoundary(t *testing.T) {
 	if _, err := verifiedHelperPath(); err != nil {
 		t.Fatalf("verified deterministic helper: %v", err)
 	}
-	if _, err := verifiedPowerShellPath(); err != nil {
-		t.Fatalf("verified PowerShell host: %v", err)
-	}
 }
 
 func TestI01DynamicOwnedListenerAndI05SentinelIsolation(t *testing.T) {
@@ -264,6 +261,49 @@ func TestI04TimeoutAndCancellationTerminateOnlyRecordedTree(t *testing.T) {
 				t.Fatalf("cleanup owned tree roots: %v", err)
 			}
 		})
+	}
+}
+
+func TestI04OwnedTreeCreationIsBehindAttachedStartGate(t *testing.T) {
+	requireWindowsProcessBoundary(t)
+	for iteration := 0; iteration < 4; iteration++ {
+		f := newFixture(t)
+		preflight, err := Preflight(f.invocation)
+		if err != nil {
+			t.Fatalf("iteration %d Preflight: %v", iteration, err)
+		}
+		readyPath := filepath.Join(f.outputRoot, "tree.ready")
+		descendantReadyPath := filepath.Join(f.outputRoot, "descendant.ready")
+		run, err := startHelper(preflight.Plan, "tree", true, "-ReadyPath", readyPath, "-DescendantReadyPath", descendantReadyPath)
+		if err != nil {
+			t.Fatalf("iteration %d start gated tree helper: %v", iteration, err)
+		}
+		readyContext, cancelReady := context.WithTimeout(context.Background(), helperReadinessTimeout)
+		ready, err := run.WaitReady(readyContext, "ready")
+		cancelReady()
+		if err != nil {
+			stopUnfinishedHelper(run)
+			t.Fatalf("iteration %d gated tree readiness: %v", iteration, err)
+		}
+		if ready.DescendantPID <= 0 || !processAlive(ready.DescendantPID) {
+			stopUnfinishedHelper(run)
+			t.Fatalf("iteration %d gated tree readiness=%#v, want live descendant", iteration, ready)
+		}
+		cancelContext, cancel := context.WithCancel(context.Background())
+		cancel()
+		result, err := run.Wait(cancelContext)
+		cancel()
+		if err != nil || !result.Cancelled || result.OwnedSurvivors != 0 || processAlive(ready.DescendantPID) {
+			t.Fatalf("iteration %d gated tree cleanup result=%+v err=%v descendantAlive=%t", iteration, result, err, processAlive(ready.DescendantPID))
+		}
+		for _, path := range []string{readyPath, descendantReadyPath} {
+			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("iteration %d remove readiness file %s: %v", iteration, path, err)
+			}
+		}
+		if _, err := cleanupOwnedRoots(preflight.Plan); err != nil {
+			t.Fatalf("iteration %d cleanup gated tree roots: %v", iteration, err)
+		}
 	}
 }
 

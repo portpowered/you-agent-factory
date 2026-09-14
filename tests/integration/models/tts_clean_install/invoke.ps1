@@ -83,6 +83,21 @@ function Assert-Properties {
     }
 }
 
+function Assert-NoReparsePath {
+    param([string]$Path, [string]$Name)
+
+    $current = [System.IO.Path]::GetFullPath($Path)
+    while ($true) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Name contains a reparse-point path component"
+        }
+        $parent = [System.IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrEmpty($parent) -or $parent -ieq $current) { break }
+        $current = $parent
+    }
+}
+
 function Assert-FileRecord {
     param([object]$Value, [string]$Name, [bool]$Named)
     $required = if ($Named) { @('name', 'path', 'identity', 'sha256') } else { @('path', 'identity', 'sha256') }
@@ -92,6 +107,7 @@ function Assert-FileRecord {
     if (-not (Is-AbsolutePath ([string]$Value.path))) { throw "$Name.path is not absolute" }
     if (-not ([string]$Value.sha256 -cmatch '^[0-9a-f]{64}$')) { throw "$Name.sha256 is not lowercase SHA-256" }
     if ($Named -and [string]::IsNullOrWhiteSpace([string]$Value.name)) { throw "$Name.name is empty" }
+    Assert-NoReparsePath (Normalize-Path ([string]$Value.path)) $Name
 }
 
 function Get-FileRecord {
@@ -137,10 +153,12 @@ try {
     $manifestPath = Normalize-Path $ManifestPath
     $reportPath = Normalize-Path $ReportPath
     $outputRoot = [System.IO.Path]::GetDirectoryName($reportPath)
+    Assert-NoReparsePath $outputRoot 'report parent'
     if (-not (Test-Path -LiteralPath $outputRoot -PathType Container)) { throw 'report parent must be an existing empty output root' }
     if (@(Get-ChildItem -LiteralPath $outputRoot -Force).Count -ne 0) { throw 'report parent must be empty' }
     if ($artifact -ieq $manifestPath -or $artifact -ieq $reportPath -or $manifestPath -ieq $reportPath) { throw 'manifest, artifact, and report paths must be distinct' }
 
+    Assert-NoReparsePath $manifestPath 'manifest'
     $manifestItem = Get-Item -LiteralPath $manifestPath -Force -ErrorAction Stop
     if ($manifestItem.PSIsContainer -or $manifestItem.LinkType) { throw 'manifest is not a regular file' }
     $manifestBytes = [System.IO.File]::ReadAllBytes($manifestPath)
@@ -160,7 +178,10 @@ try {
     foreach ($doc in @($manifestJson.publicDocs)) { Assert-FileRecord $doc 'manifest.publicDocs' $true }
     Assert-Properties $manifestJson.fixtures @('text') @('text', 'voice') 'manifest.fixtures'
     Assert-FileRecord $manifestJson.fixtures.text 'manifest.fixtures.text' $true
-    if ($null -ne $manifestJson.fixtures.voice) { Assert-FileRecord $manifestJson.fixtures.voice 'manifest.fixtures.voice' $true }
+    $fixtureProperties = @($manifestJson.fixtures.PSObject.Properties.Name)
+    if ($fixtureProperties -contains 'voice') {
+        if ($null -ne $manifestJson.fixtures.voice) { Assert-FileRecord $manifestJson.fixtures.voice 'manifest.fixtures.voice' $true }
+    }
     Assert-Properties $manifestJson.limits @('timeoutSeconds', 'diskBytes', 'downloadBytes', 'paidUsd', 'maxOwnedProcesses', 'networkPolicy') @('timeoutSeconds', 'diskBytes', 'downloadBytes', 'paidUsd', 'maxOwnedProcesses', 'networkPolicy') 'manifest.limits'
     if ([int]$manifestJson.limits.timeoutSeconds -lt 1 -or [int64]$manifestJson.limits.diskBytes -lt 1 -or [int64]$manifestJson.limits.downloadBytes -lt 0 -or [double]$manifestJson.limits.paidUsd -ne 0 -or [int]$manifestJson.limits.maxOwnedProcesses -lt 1 -or [int]$manifestJson.limits.maxOwnedProcesses -gt 4) { throw 'manifest limits are outside the declared range' }
     if ([string]$manifestJson.limits.networkPolicy -notin @('none', 'staged-loopback-and-declared-public-origins')) { throw 'manifest network policy is unsupported' }
@@ -183,7 +204,9 @@ try {
         @{ name = 'fixtures.text'; value = $manifestJson.fixtures.text; text = $true }
     )
     foreach ($doc in @($manifestJson.publicDocs)) { $fileInputs += @{ name = 'publicDocs.' + [string]$doc.name; value = $doc; text = $true } }
-    if ($null -ne $manifestJson.fixtures.voice) { $fileInputs += @{ name = 'fixtures.voice.' + [string]$manifestJson.fixtures.voice.name; value = $manifestJson.fixtures.voice; text = $false } }
+    if ($fixtureProperties -contains 'voice') {
+        if ($null -ne $manifestJson.fixtures.voice) { $fileInputs += @{ name = 'fixtures.voice.' + [string]$manifestJson.fixtures.voice.name; value = $manifestJson.fixtures.voice; text = $false } }
+    }
     foreach ($input in $fileInputs) {
         $path = Normalize-Path ([string]$input.value.path)
         $key = $path.ToLowerInvariant()
@@ -238,7 +261,7 @@ catch {
         if (-not [string]::IsNullOrWhiteSpace($ReportPath) -and (Is-AbsolutePath $ReportPath)) {
             $candidate = Normalize-Path $ReportPath
             $parent = [System.IO.Path]::GetDirectoryName($candidate)
-            if ((Test-Path -LiteralPath $parent -PathType Container) -and (@(Get-ChildItem -LiteralPath $parent -Force).Count -eq 0)) { Write-AtomicReport $candidate $report }
+            if ((Test-Path -LiteralPath $parent -PathType Container) -and (@(Get-ChildItem -LiteralPath $parent -Force).Count -eq 0)) { Assert-NoReparsePath $parent 'report parent'; Write-AtomicReport $candidate $report }
         }
     }
     catch { }

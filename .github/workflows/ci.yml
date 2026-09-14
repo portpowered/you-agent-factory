@@ -589,6 +589,13 @@ jobs:
         run: |
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
           test -x .artifacts/integration/bin/platform-conformance-helper
+      - name: Build TTS clean-install helper artifact
+        run: |
+          go test -c -o .artifacts/integration/bin/tts-clean-install-helper ./tests/integration/models/tts_clean_install
+          test -x .artifacts/integration/bin/tts-clean-install-helper
+          helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
+          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
+          echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:
