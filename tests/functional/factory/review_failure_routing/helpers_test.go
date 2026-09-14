@@ -16,7 +16,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,7 +26,6 @@ type reviewFailureScenario struct {
 	fixture    *reviewFailureProcessFixture
 	rootDir    string
 	factoryDir string
-	homeDir    string
 	marker     string
 	sessionID  string
 }
@@ -54,10 +52,6 @@ func openReviewFailureScenario(
 	rootDir, err := os.MkdirTemp(filepath.Join(fixture.rootDir, "scenarios"), marker+"-")
 	if err != nil {
 		t.Fatalf("create review-failure scenario root: %v", err)
-	}
-	homeDir := filepath.Join(rootDir, "home")
-	if err := os.MkdirAll(homeDir, 0o755); err != nil {
-		t.Fatalf("create review-failure scenario home: %v", err)
 	}
 	factoryDir := filepath.Join(rootDir, "factory")
 	if err := os.CopyFS(factoryDir, os.DirFS(fixture.sourceFactory)); err != nil {
@@ -90,7 +84,6 @@ func openReviewFailureScenario(
 		fixture:    fixture,
 		rootDir:    rootDir,
 		factoryDir: factoryDir,
-		homeDir:    homeDir,
 		marker:     marker,
 		sessionID:  sessionID,
 	}
@@ -363,21 +356,4 @@ func reviewFailureRejected(feedback string) platformprocess.CommandResult {
 		`{"decision":"REJECTED","feedback":%q}`,
 		feedback,
 	))}
-}
-
-func reviewFailureFailed(stderr string) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{
-			ExitCode: 1,
-			Stderr:   []byte(stderr),
-		}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: stderr,
-		}
-}
-
-func reviewFailureScriptFailed(stderr string) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte(stderr),
-	}, nil
 }

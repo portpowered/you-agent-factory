@@ -382,6 +382,39 @@ func TestSameNameGuardRuntime_PreservesUnrelatedEquality(t *testing.T) {
 	}
 }
 
+func TestSameNameGuardRuntime_UsesSingleExactLegacyChildWithoutRegistration(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "task-token",
+		Color: factorytoken.Color{WorkID: "task-work", Name: "restore-review"},
+	}
+	historical := factorytoken.Token{
+		ID: "historical-review",
+		Color: factorytoken.Color{
+			Name:     "restore-review",
+			WorkID:   "review-old",
+			ParentID: "other-task",
+		},
+	}
+	current := factorytoken.Token{
+		ID: "current-review",
+		Color: factorytoken.Color{
+			Name:     "restore-review",
+			WorkID:   "review-current",
+			ParentID: "task-work",
+		},
+	}
+
+	matched, ok := (&SameNameGuard{MatchBinding: "task"}).EvaluateRuntime(
+		RuntimeGuardContext{},
+		[]factorytoken.Token{historical, current},
+		map[string]*factorytoken.Token{"task": parent},
+		&MarkingSnapshot{},
+	)
+	if !ok || len(matched) != 1 || matched[0].Color.WorkID != "review-current" {
+		t.Fatalf("legacy same-name binding = %#v, %t; want exact child review-current", matched, ok)
+	}
+}
+
 func TestSameNameGuardRuntime_CanceledCurrentAdmissionDoesNotFallback(t *testing.T) {
 	parent := &factorytoken.Token{
 		ID:    "project-token",
@@ -454,7 +487,7 @@ func TestSameNameGuardRuntime_FailsClosedForIncompleteParentRegistration(t *test
 		})
 	}
 
-	assertBlocked("missing projection", RuntimeGuardContext{}, []factorytoken.Token{historical, current}, baseSnapshot(historical, current))
+	assertBlocked("ambiguous missing projection", RuntimeGuardContext{}, []factorytoken.Token{historical, current}, baseSnapshot(historical, current))
 	assertBlocked("incomplete projection", RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
 		"project-work": {Children: []factorytoken.Token{historical, current}, Complete: false},
 	}}, []factorytoken.Token{historical, current}, baseSnapshot(historical, current))
