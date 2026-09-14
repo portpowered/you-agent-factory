@@ -5072,6 +5072,56 @@ func TestWorkerSessionInterrupt_CoversCancellationAndSuccessorRejection(t *testi
 	}
 }
 
+func TestWorkerSessionInterrupt_CancellationFailurePreservesSourceAndOwnership(t *testing.T) {
+	r := newTestRegistry(t)
+	const sourceID = "interrupt-cancel-failure-source"
+	const dispatchID = "interrupt-cancel-failure-dispatch"
+	const successorID = "interrupt-cancel-failure-successor"
+	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "interrupt-cancel-failure-provider"}
+	association := validAssociation(sourceID, dispatchID, ref)
+	supervision := newSupervision(dispatchID, "", dispatchHandoff(dispatchID))
+	setCoverageAccepted(supervision, true)
+	supervision.installCancelFailure(func() error { return errors.New("cancel gateway unavailable") })
+	r.sessions[sourceID] = workersessions.Session{
+		ID:                         sourceID,
+		State:                      workersessions.StateRunning,
+		ProviderSessionAssociation: &association,
+	}
+	r.supervisions[sourceID] = supervision
+	r.dispatchOwners[dispatchID] = sourceID
+
+	result, err := r.Interrupt(context.Background(), workersessions.InterruptRequest{
+		RequestID:                "interrupt-cancel-failure-request",
+		SourceWorkerSessionID:    sourceID,
+		SuccessorWorkerSessionID: successorID,
+		ReplacementMessage:       "replacement",
+	})
+	var interruptErr *workersessions.InterruptError
+	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseSourceCancellation ||
+		!errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed) || result.Accepted ||
+		result.Source.State != workersessions.StateRunning || result.Successor.ID != "" {
+		t.Fatalf("cancellation failure = %#v, %v, want typed source failure with unchanged RUNNING source", result, err)
+	}
+	if _, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: successorID}); !errors.Is(getErr, workersessions.ErrSessionNotFound) {
+		t.Fatalf("cancellation failure successor Get() error = %v, want not found", getErr)
+	}
+	supervision.mu.Lock()
+	interrupting := supervision.interrupting
+	controlActive := supervision.controlActive
+	requestedAction := supervision.requestedAction
+	supervision.mu.Unlock()
+	if interrupting || controlActive || requestedAction != "" {
+		t.Fatalf("cancellation failure left control ownership active: interrupting=%v controlActive=%v requestedAction=%q", interrupting, controlActive, requestedAction)
+	}
+	r.mu.RLock()
+	owner := r.dispatchOwners[dispatchID]
+	activeStarts := r.activeStarts
+	r.mu.RUnlock()
+	if owner != sourceID || activeStarts != 0 {
+		t.Fatalf("cancellation failure ownership = dispatch owner %q, active starts %d, want %q/0", owner, activeStarts, sourceID)
+	}
+}
+
 func TestWorkerSessionInterrupt_WaitCancellationIsReplaySafe(t *testing.T) {
 	r := newTestRegistry(t)
 	ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "interrupt-provider"}
@@ -5572,3 +5622,1242 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 		t.Fatalf("failure cause detail = %q, want adapter contradiction detail", session.Result.Cause.Detail)
 	}
 }
+
+func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
+	workersExecution, _ := execution.(workers.Service)
+	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, nil)
+	if err != nil {
+		return nil, err
+	}
+	registry, ok := service.(*registry)
+	if !ok {
+		return nil, fmt.Errorf("interrupt characterization: New() returned %T", service)
+	}
+	return registry, nil
+}
+
+func newServiceWithRecording(
+	execution any,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	recording recordings.WorkerSessionRecordingService,
+) (*registry, error) {
+	workersExecution, _ := execution.(workers.Service)
+	service, err := New(workersExecution, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{}, recording)
+	if err != nil {
+		return nil, err
+	}
+	registry, ok := service.(*registry)
+	if !ok {
+		return nil, fmt.Errorf("interrupt characterization: New() returned %T", service)
+	}
+	return registry, nil
+}
+
+const controlledBoundaryWaitTimeout = 2 * time.Second
+
+func controlledBoundaryTimeoutError(dispatchID string) error {
+	return fmt.Errorf("interrupt characterization: dispatch %q did not reach its completion barrier", dispatchID)
+}
+
+func waitControlledSignal(signal <-chan struct{}, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-signal:
+		return nil
+	case <-timer.C:
+		return errors.New("interrupt characterization: controlled signal timeout")
+	}
+}
+
+func newEventsAppender() *internalTestEventsService {
+	return newInternalTestEventsService()
+}
+
+type terminalAppendObserver struct {
+	events.Service
+	mu      sync.Mutex
+	signals map[events.Topic]chan struct{}
+	once    map[events.Topic]*sync.Once
+}
+
+func newTerminalAppendObserver(inner events.Service, topics ...events.Topic) *terminalAppendObserver {
+	observer := &terminalAppendObserver{
+		Service: inner,
+		signals: make(map[events.Topic]chan struct{}, len(topics)),
+		once:    make(map[events.Topic]*sync.Once, len(topics)),
+	}
+	for _, topic := range topics {
+		observer.signals[topic] = make(chan struct{})
+		observer.once[topic] = &sync.Once{}
+	}
+	return observer
+}
+
+func (observer *terminalAppendObserver) Append(ctx context.Context, request events.AppendRequest) (events.AppendResult, error) {
+	result, err := observer.Service.Append(ctx, request)
+	if err != nil || !isWorkerSessionTerminalAppend(request) {
+		return result, err
+	}
+	observer.mu.Lock()
+	signal := observer.signals[request.Topic]
+	once := observer.once[request.Topic]
+	observer.mu.Unlock()
+	if signal != nil && once != nil {
+		once.Do(func() { close(signal) })
+	}
+	return result, nil
+}
+
+func (observer *terminalAppendObserver) waitForTerminalAppend(t *testing.T, topic events.Topic) {
+	t.Helper()
+	observer.mu.Lock()
+	signal := observer.signals[topic]
+	observer.mu.Unlock()
+	if signal == nil {
+		t.Fatalf("terminal append signal for topic %q is not registered", topic)
+	}
+	select {
+	case <-signal:
+	case <-time.After(controlledBoundaryWaitTimeout):
+		t.Fatalf("terminal append for topic %q was not observed", topic)
+	}
+}
+
+func isWorkerSessionTerminalAppend(request events.AppendRequest) bool {
+	return request.SourceType == "worker_session_lifecycle" &&
+		request.SourceSequence == 2 &&
+		request.SourceEventID == "terminal" &&
+		request.SchemaID == "workers.draft.v1"
+}
+
+type controlledBoundary struct {
+	mu sync.Mutex
+
+	admitted      chan struct{}
+	admittedOnce  sync.Once
+	dispatches    map[string]*controlledCharacterizationDispatch
+	dispatchReady chan struct{}
+	publishCalls  int
+	cancelled     []workers.WorkstationDispatchCancelRequest
+	waitForCancel bool
+	waitTimeout   time.Duration
+}
+
+type controlledCharacterizationDispatch struct {
+	mu sync.Mutex
+
+	request        workers.ExecuteRequest
+	admitted       chan struct{}
+	admittedOnce   sync.Once
+	prepared       chan struct{}
+	preparedOnce   sync.Once
+	completed      chan struct{}
+	completedOnce  sync.Once
+	returned       chan struct{}
+	returnedOnce   sync.Once
+	cancelObserved chan struct{}
+	cancelOnce     sync.Once
+	cancelRelease  chan struct{}
+	releaseOnce    sync.Once
+	result         workers.ExecuteResult
+	err            error
+	completionSet  bool
+}
+
+func newControlledBoundary() *controlledBoundary {
+	return newCharacterizationBoundary(false)
+}
+
+type interruptRaceBoundary = controlledBoundary
+
+func newInterruptRaceBoundary() *interruptRaceBoundary {
+	return newCharacterizationBoundary(true)
+}
+
+func newCharacterizationBoundary(waitForCancel bool) *controlledBoundary {
+	return &controlledBoundary{
+		admitted:      make(chan struct{}),
+		dispatches:    make(map[string]*controlledCharacterizationDispatch),
+		dispatchReady: make(chan struct{}),
+		waitForCancel: waitForCancel,
+		waitTimeout:   controlledBoundaryWaitTimeout,
+	}
+}
+
+func (boundary *controlledBoundary) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	dispatch, err := boundary.prepare(request)
+	if err != nil {
+		return workers.ExecuteResult{}, err
+	}
+	boundary.admittedOnce.Do(func() { close(boundary.admitted) })
+	dispatch.admittedOnce.Do(func() { close(dispatch.admitted) })
+	defer dispatch.returnedOnce.Do(func() { close(dispatch.returned) })
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timer := time.NewTimer(boundary.waitTimeout)
+	defer timer.Stop()
+	select {
+	case <-dispatch.completed:
+		return boundary.dispatchResult(dispatch)
+	case <-ctx.Done():
+		boundary.recordCancellation(dispatch)
+		if boundary.waitForCancel {
+			select {
+			case <-dispatch.cancelRelease:
+			case <-timer.C:
+				return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeFailed}, controlledBoundaryTimeoutError(request.Input.Dispatch.DispatchID)
+			}
+		}
+		dispatch.mu.Lock()
+		complete := dispatch.completionSet
+		result, dispatchErr := dispatch.result, dispatch.err
+		dispatch.mu.Unlock()
+		if complete {
+			return result, dispatchErr
+		}
+		return workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     workers.ExecutionOutcomeCanceled,
+			Cancellation: &workers.DispatchCancellation{
+				Reason: workers.DispatchCancellationReasonCanceled,
+			},
+		}, ctx.Err()
+	case <-timer.C:
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeFailed}, controlledBoundaryTimeoutError(request.Input.Dispatch.DispatchID)
+	}
+}
+
+func (boundary *controlledBoundary) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, workers.ErrExecuteUnavailable
+}
+
+func (boundary *controlledBoundary) prepare(request workers.ExecuteRequest) (*controlledCharacterizationDispatch, error) {
+	dispatchID := request.Input.Dispatch.DispatchID
+	if dispatchID == "" {
+		return nil, errors.New("interrupt characterization: dispatch ID is required")
+	}
+	boundary.mu.Lock()
+	defer boundary.mu.Unlock()
+	if _, exists := boundary.dispatches[dispatchID]; exists {
+		return nil, fmt.Errorf("interrupt characterization: duplicate dispatch %q", dispatchID)
+	}
+	dispatch := &controlledCharacterizationDispatch{
+		request:        request,
+		admitted:       make(chan struct{}),
+		prepared:       make(chan struct{}),
+		completed:      make(chan struct{}),
+		returned:       make(chan struct{}),
+		cancelObserved: make(chan struct{}),
+		cancelRelease:  make(chan struct{}),
+	}
+	boundary.dispatches[dispatchID] = dispatch
+	boundary.publishCalls++
+	close(boundary.dispatchReady)
+	boundary.dispatchReady = make(chan struct{})
+	close(dispatch.prepared)
+	return dispatch, nil
+}
+
+func (boundary *controlledBoundary) dispatchResult(dispatch *controlledCharacterizationDispatch) (workers.ExecuteResult, error) {
+	dispatch.mu.Lock()
+	defer dispatch.mu.Unlock()
+	return dispatch.result, dispatch.err
+}
+
+func (boundary *controlledBoundary) recordCancellation(dispatch *controlledCharacterizationDispatch) {
+	dispatch.cancelOnce.Do(func() {
+		boundary.mu.Lock()
+		boundary.cancelled = append(boundary.cancelled, workers.WorkstationDispatchCancelRequest{
+			DispatchID: dispatch.request.Input.Dispatch.DispatchID,
+		})
+		boundary.mu.Unlock()
+		close(dispatch.cancelObserved)
+	})
+}
+
+func (boundary *controlledBoundary) dispatchFor(t *testing.T, dispatchID string) *controlledCharacterizationDispatch {
+	t.Helper()
+	timer := time.NewTimer(boundary.waitTimeout)
+	defer timer.Stop()
+	for {
+		boundary.mu.Lock()
+		dispatch := boundary.dispatches[dispatchID]
+		ready := boundary.dispatchReady
+		boundary.mu.Unlock()
+		if dispatch != nil {
+			return dispatch
+		}
+		select {
+		case <-ready:
+		case <-timer.C:
+			t.Fatalf("dispatch %q was not prepared", dispatchID)
+		}
+	}
+}
+
+func (boundary *controlledBoundary) requestFor(t *testing.T, dispatchID string) workers.WorkstationDispatchRequest {
+	dispatch := boundary.dispatchFor(t, dispatchID)
+	return workstationRequestForCharacterization(dispatch.request)
+}
+
+func workstationRequestForCharacterization(request workers.ExecuteRequest) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: request.Target.WorkstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			Dispatch:     work.CloneWorkDispatch(request.Input.Dispatch),
+			UserMessage:  request.Target.Prompt.UserMessage,
+			Continuation: (request.Input.Resume).ClonePtr(),
+		},
+	}
+}
+
+func (boundary *controlledBoundary) complete(result workers.WorkstationDispatchResult, dispatchErr error) {
+	dispatchID := result.DispatchID
+	if dispatchID == "" {
+		dispatchID = result.Result.DispatchID
+	}
+	boundary.mu.Lock()
+	dispatch := boundary.dispatches[dispatchID]
+	boundary.mu.Unlock()
+	if dispatch == nil {
+		panic(fmt.Sprintf("dispatch %q was not prepared", dispatchID))
+	}
+	dispatch.mu.Lock()
+	dispatch.result = characterizationExecuteResult(dispatch.request, result)
+	dispatch.err = dispatchErr
+	dispatch.completionSet = true
+	dispatch.mu.Unlock()
+	dispatch.completedOnce.Do(func() { close(dispatch.completed) })
+}
+
+func characterizationExecuteResult(
+	request workers.ExecuteRequest,
+	result workers.WorkstationDispatchResult,
+) workers.ExecuteResult {
+	outcome := workers.ExecutionOutcomeAccepted
+	switch {
+	case result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled,
+		result.Result.Outcome == workers.OutcomeCanceled:
+		outcome = workers.ExecutionOutcomeCanceled
+	case result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed,
+		result.Result.Outcome == workers.OutcomeFailed,
+		result.Result.Outcome == workers.OutcomeRejected:
+		outcome = workers.ExecutionOutcomeFailed
+	case result.Result.Outcome == workers.OutcomeContinue:
+		outcome = workers.ExecutionOutcomeContinue
+	}
+	return workers.ExecuteResult{
+		Correlation:  request.Correlation,
+		Outcome:      outcome,
+		Continuation: (result.Result.Continuation).ClonePtr(),
+	}
+}
+
+func (boundary *controlledBoundary) waitAdmitted(t *testing.T, dispatchID string) {
+	dispatch := boundary.dispatchFor(t, dispatchID)
+	dispatch.admittedOnce.Do(func() { close(dispatch.admitted) })
+}
+
+func (boundary *controlledBoundary) waitCancellation(t *testing.T, dispatchID string) {
+	dispatch := boundary.dispatchFor(t, dispatchID)
+	select {
+	case <-dispatch.cancelObserved:
+	case <-time.After(boundary.waitTimeout):
+		t.Fatalf("dispatch %q cancellation was not observed", dispatchID)
+	}
+}
+
+func (boundary *controlledBoundary) releaseCancellation(dispatchID string) {
+	dispatch := boundary.dispatchForWithoutTest(dispatchID)
+	dispatch.releaseOnce.Do(func() { close(dispatch.cancelRelease) })
+}
+
+func (boundary *controlledBoundary) dispatchForWithoutTest(dispatchID string) *controlledCharacterizationDispatch {
+	timer := time.NewTimer(boundary.waitTimeout)
+	defer timer.Stop()
+	for {
+		boundary.mu.Lock()
+		dispatch := boundary.dispatches[dispatchID]
+		ready := boundary.dispatchReady
+		boundary.mu.Unlock()
+		if dispatch != nil {
+			return dispatch
+		}
+		select {
+		case <-ready:
+		case <-timer.C:
+			panic(controlledBoundaryTimeoutError(dispatchID))
+		}
+	}
+}
+
+func (boundary *controlledBoundary) waitReturned(t *testing.T, dispatchID string) {
+	dispatch := boundary.dispatchFor(t, dispatchID)
+	select {
+	case <-dispatch.returned:
+	case <-time.After(boundary.waitTimeout):
+		t.Fatalf("dispatch %q did not join", dispatchID)
+	}
+}
+
+func (boundary *controlledBoundary) nextDispatchID(t *testing.T, sourceID string) string {
+	t.Helper()
+	timer := time.NewTimer(boundary.waitTimeout)
+	defer timer.Stop()
+	for {
+		boundary.mu.Lock()
+		for dispatchID := range boundary.dispatches {
+			if dispatchID != sourceID {
+				boundary.mu.Unlock()
+				return dispatchID
+			}
+		}
+		ready := boundary.dispatchReady
+		boundary.mu.Unlock()
+		select {
+		case <-ready:
+		case <-timer.C:
+			t.Fatalf("successor dispatch was not prepared")
+		}
+	}
+}
+
+func (boundary *controlledBoundary) publishCount() int {
+	boundary.mu.Lock()
+	defer boundary.mu.Unlock()
+	return boundary.publishCalls
+}
+
+func (boundary *controlledBoundary) cancelCount() int {
+	boundary.mu.Lock()
+	defer boundary.mu.Unlock()
+	return len(boundary.cancelled)
+}
+
+func (boundary *controlledBoundary) cancellations() []workers.WorkstationDispatchCancelRequest {
+	boundary.mu.Lock()
+	defer boundary.mu.Unlock()
+	return append([]workers.WorkstationDispatchCancelRequest(nil), boundary.cancelled...)
+}
+
+func validStartRequest(id, dispatchID string) workersessions.InvokeSessionRequest {
+	return workersessions.InvokeSessionRequest{
+		ID: id,
+		Execution: workers.WorkstationDispatchRequest{
+			WorkstationName: "review",
+			Execution: workers.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{DispatchID: dispatchID, WorkstationName: "review"},
+			},
+		},
+	}
+}
+
+func completedDispatchResult(dispatchID string) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      dispatchID,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result:          workers.WorkResult{DispatchID: dispatchID, Outcome: workers.OutcomeAccepted},
+	}
+}
+
+func completedDispatchWithProviderSession(dispatchID string, reference providers.SessionRef) workers.WorkstationDispatchResult {
+	result := completedDispatchResult(dispatchID)
+	continuation := reference.ContinuationRef()
+	result.Result.Continuation = continuation.ClonePtr()
+	return result
+}
+
+func progressDraft(label string) workers.Draft {
+	payload, err := json.Marshal(workers.ProgressPayload{Label: label})
+	if err != nil {
+		panic(err)
+	}
+	return workers.Draft{Kind: workers.KindProgress, Phase: workers.PhaseUpdated, Payload: payload}
+}
+
+func validPublishRecordRequest(sessionID string, sequence events.SourceSequence, draft workers.Draft) workersessions.PublishRecordRequest {
+	return workersessions.PublishRecordRequest{
+		SessionID:      sessionID,
+		Draft:          draft,
+		SourceType:     "worker_provider",
+		SourceID:       events.SourceID(sessionID),
+		SourceSequence: sequence,
+		SourceEventID:  events.SourceEventID(fmt.Sprintf("evt-%d", sequence)),
+		SchemaID:       "workers.draft.v1",
+	}
+}
+
+func readAllDrafts(t *testing.T, eventsSvc events.Service, topic events.Topic) []workers.Draft {
+	t.Helper()
+	result, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 100})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	drafts := make([]workers.Draft, len(result.Records))
+	for index, record := range result.Records {
+		if err := json.Unmarshal(record.Payload, &drafts[index]); err != nil {
+			t.Fatalf("unmarshal record payload error = %v", err)
+		}
+	}
+	return drafts
+}
+
+func prepareInterruptSource(t *testing.T, registry *registry, boundary *controlledBoundary) (<-chan workersessions.InvokeSessionResult, providers.SessionRef) {
+	sourceResult := startInterruptCharacterizationSession(t, registry, boundary, validStartRequest("source-session", "dispatch-source"))
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-interrupt-characterization"}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "source-session", DispatchID: "dispatch-source", Reference: reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	return sourceResult, reference
+}
+
+type recordedLogEntry struct {
+	message string
+	fields  map[string]any
+}
+
+type recordingLogger struct {
+	mu      sync.Mutex
+	entries []recordedLogEntry
+}
+
+func (logger *recordingLogger) Debug(message string, values ...any)   { logger.record(message, values) }
+func (logger *recordingLogger) Info(message string, values ...any)    { logger.record(message, values) }
+func (logger *recordingLogger) Warn(message string, values ...any)    { logger.record(message, values) }
+func (logger *recordingLogger) Error(message string, values ...any)   { logger.record(message, values) }
+func (logger *recordingLogger) Verbose(message string, values ...any) { logger.record(message, values) }
+
+func (logger *recordingLogger) record(message string, values []any) {
+	fields := make(map[string]any, len(values)/2)
+	for index := 0; index+1 < len(values); index += 2 {
+		key, ok := values[index].(string)
+		if ok {
+			fields[key] = values[index+1]
+		}
+	}
+	logger.mu.Lock()
+	logger.entries = append(logger.entries, recordedLogEntry{message: message, fields: fields})
+	logger.mu.Unlock()
+}
+
+func (logger *recordingLogger) entriesFor(message string) []recordedLogEntry {
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	matches := make([]recordedLogEntry, 0)
+	for _, entry := range logger.entries {
+		if entry.message == message {
+			matches = append(matches, entry)
+		}
+	}
+	return matches
+}
+
+type interruptRaceCharacterizationFixture struct {
+	boundary       *interruptRaceBoundary
+	registry       workersessions.Service
+	events         *terminalAppendObserver
+	sourceID       string
+	sourceDispatch string
+	successorID    string
+	sourceTopic    events.Topic
+	successorTopic events.Topic
+	reference      providers.SessionRef
+	sourceResult   <-chan workersessions.InvokeSessionResult
+	completionWins bool
+}
+
+type interruptCharacterizationOutcome struct {
+	result workersessions.InterruptResult
+	err    error
+}
+
+func TestInterrupt_RaceCharacterization(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		completionWins bool
+	}{
+		{name: "interrupt wins", completionWins: false},
+		{name: "completion wins", completionWins: true},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runInterruptRaceCharacterization(t, test.name, test.completionWins)
+		})
+	}
+}
+
+func newInterruptRaceCharacterizationFixture(
+	t *testing.T,
+	name string,
+	completionWins bool,
+) *interruptRaceCharacterizationFixture {
+	t.Helper()
+	suffix := strings.ReplaceAll(name, " ", "-")
+	fixture := &interruptRaceCharacterizationFixture{
+		boundary:       newInterruptRaceBoundary(),
+		sourceID:       "race-source-" + suffix,
+		sourceDispatch: "race-dispatch-" + suffix,
+		successorID:    "race-successor-" + suffix,
+		completionWins: completionWins,
+	}
+	fixture.sourceTopic = workersessions.Topic(fixture.sourceID)
+	fixture.successorTopic = workersessions.Topic(fixture.successorID)
+	fixture.events = newTerminalAppendObserver(newEventsAppender(), fixture.sourceTopic, fixture.successorTopic)
+	registry, err := newService(fixture.boundary, fixture.events, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	fixture.registry = registry
+	fixture.sourceResult = startInterruptRaceCharacterizationSession(t, registry, fixture.boundary, validStartRequest(fixture.sourceID, fixture.sourceDispatch))
+	fixture.reference = providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-" + suffix,
+	}
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: fixture.sourceID,
+		DispatchID:      fixture.sourceDispatch,
+		Reference:       fixture.reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	return fixture
+}
+
+func runInterruptRaceCharacterization(t *testing.T, name string, completionWins bool) {
+	fixture := newInterruptRaceCharacterizationFixture(t, name, completionWins)
+	request := workersessions.InterruptRequest{
+		RequestID:                "race-request-" + strings.ReplaceAll(name, " ", "-"),
+		SourceWorkerSessionID:    fixture.sourceID,
+		SuccessorWorkerSessionID: fixture.successorID,
+		ReplacementMessage:       "replacement input",
+	}
+	outcomes := startInterruptCharacterization(t, fixture.registry, request)
+	fixture.boundary.waitCancellation(t, fixture.sourceDispatch)
+	if completionWins {
+		fixture.boundary.complete(completedDispatchResult(fixture.sourceDispatch), nil)
+	}
+	fixture.boundary.releaseCancellation(fixture.sourceDispatch)
+	fixture.boundary.waitReturned(t, fixture.sourceDispatch)
+
+	outcome := <-outcomes
+	source := <-fixture.sourceResult
+	if completionWins {
+		assertCompletionWins(t, fixture, outcome, source)
+		return
+	}
+	assertInterruptWins(t, fixture, outcome, source)
+}
+
+func startInterruptCharacterization(
+	t *testing.T,
+	registry workersessions.Service,
+	request workersessions.InterruptRequest,
+) <-chan interruptCharacterizationOutcome {
+	t.Helper()
+	outcomes := make(chan interruptCharacterizationOutcome, 1)
+	go func() {
+		result, err := registry.Interrupt(context.Background(), request)
+		outcomes <- interruptCharacterizationOutcome{result: result, err: err}
+	}()
+	return outcomes
+}
+
+func assertCompletionWins(
+	t *testing.T,
+	fixture *interruptRaceCharacterizationFixture,
+	outcome interruptCharacterizationOutcome,
+	source workersessions.InvokeSessionResult,
+) {
+	t.Helper()
+	assertSourceCancellationFailure(t, outcome)
+	if source.Session.State != workersessions.StateCompleted {
+		t.Fatalf("completion-wins source = %#v, want COMPLETED", source.Session)
+	}
+	assertNoSuccessor(t, fixture.registry, fixture.successorID)
+	fixture.events.waitForTerminalAppend(t, fixture.sourceTopic)
+	if got := countWorkerSessionTerminalRecords(t, fixture.events, fixture.sourceTopic); got != 1 {
+		t.Fatalf("completion-wins terminal record count = %d, want exactly one", got)
+	}
+	assertBoundaryEffects(t, fixture.boundary, 1, 1, "completion-wins")
+}
+
+func assertSourceCancellationFailure(t *testing.T, outcome interruptCharacterizationOutcome) {
+	t.Helper()
+	var interruptErr *workersessions.InterruptError
+	if outcome.err == nil {
+		t.Fatalf("completion-wins Interrupt() = %#v, nil, want typed source-cancellation refusal", outcome.result)
+	}
+	if !errors.As(outcome.err, &interruptErr) {
+		t.Fatalf("completion-wins Interrupt() error = %v, want InterruptError", outcome.err)
+	}
+	if interruptErr.Phase != workersessions.InterruptPhaseSourceCancellation {
+		t.Fatalf("completion-wins interrupt phase = %q, want source cancellation", interruptErr.Phase)
+	}
+	if !errors.Is(outcome.err, workersessions.ErrInterruptSourceCancellationFailed) {
+		t.Fatalf("completion-wins Interrupt() error = %v, want source cancellation failure", outcome.err)
+	}
+}
+
+func assertNoSuccessor(t *testing.T, registry workersessions.Service, successorID string) {
+	t.Helper()
+	_, err := registry.Get(context.Background(), workersessions.GetRequest{ID: successorID})
+	if !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("completion-wins successor Get() error = %v, want not found", err)
+	}
+}
+
+func assertInterruptWins(
+	t *testing.T,
+	fixture *interruptRaceCharacterizationFixture,
+	outcome interruptCharacterizationOutcome,
+	source workersessions.InvokeSessionResult,
+) {
+	t.Helper()
+	successorDispatchID := fixture.boundary.nextDispatchID(t, fixture.sourceDispatch)
+	fixture.boundary.complete(completedDispatchWithProviderSession(successorDispatchID, fixture.reference), nil)
+	fixture.boundary.waitReturned(t, successorDispatchID)
+	if outcome.err != nil {
+		t.Fatalf("interrupt-wins Interrupt() error = %v, want nil", outcome.err)
+	}
+	if !outcome.result.Accepted {
+		t.Fatalf("interrupt-wins result = %#v, want accepted", outcome.result)
+	}
+	if outcome.result.Source.State != workersessions.StateCanceled {
+		t.Fatalf("interrupt-wins source result = %#v, want CANCELED", outcome.result.Source)
+	}
+	if outcome.result.Successor.State != workersessions.StateRunning {
+		t.Fatalf("interrupt-wins successor result = %#v, want RUNNING", outcome.result.Successor)
+	}
+	if source.Session.State != workersessions.StateCanceled {
+		t.Fatalf("interrupt-wins source = %#v, want CANCELED", source.Session)
+	}
+	fixture.events.waitForTerminalAppend(t, fixture.sourceTopic)
+	fixture.events.waitForTerminalAppend(t, fixture.successorTopic)
+	assertOneTerminalEach(t, fixture.events, fixture.sourceTopic, fixture.successorTopic)
+	assertBoundaryEffects(t, fixture.boundary, 2, 1, "interrupt-wins")
+}
+
+func assertOneTerminalEach(t *testing.T, eventsSvc events.Service, topics ...events.Topic) {
+	t.Helper()
+	for _, topic := range topics {
+		if got := countWorkerSessionTerminalRecords(t, eventsSvc, topic); got != 1 {
+			t.Fatalf("topic %q terminal record count = %d, want exactly one", topic, got)
+		}
+	}
+}
+
+func assertBoundaryEffects(t *testing.T, boundary *controlledBoundary, publishes, cancellations int, label string) {
+	t.Helper()
+	if boundary.publishCount() != publishes {
+		t.Fatalf("%s publishes = %d, want %d", label, boundary.publishCount(), publishes)
+	}
+	if boundary.cancelCount() != cancellations {
+		t.Fatalf("%s cancellations = %d, want %d", label, boundary.cancelCount(), cancellations)
+	}
+}
+
+func TestInterrupt_LateOutputCharacterizationPreservesReplayAndPublicationBoundary(t *testing.T) {
+	boundary := newControlledBoundary()
+	sourceTopic := workersessions.Topic("source-session")
+	successorTopic := workersessions.Topic("successor-session")
+	eventsSvc := newTerminalAppendObserver(newEventsAppender(), sourceTopic, successorTopic)
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	_, reference := prepareInterruptSource(t, registry, boundary)
+	request := workersessions.InterruptRequest{
+		RequestID:                "interrupt-late-output",
+		SourceWorkerSessionID:    "source-session",
+		SuccessorWorkerSessionID: "successor-session",
+		ReplacementMessage:       "replacement",
+	}
+	accepted := requireAcceptedInterrupt(t, registry, request)
+	baseline := captureCanceledSourceSnapshot(t, registry, eventsSvc, sourceTopic, request.SourceWorkerSessionID)
+	deliverLateSourceEffects(t, registry, boundary, eventsSvc, sourceTopic, request)
+	assertLateSourceUnchanged(t, registry, eventsSvc, sourceTopic, request, accepted, baseline)
+	completeCharacterizationSuccessor(t, boundary, eventsSvc, successorTopic, accepted, reference)
+}
+
+type lateOutputSnapshot struct {
+	session workersessions.Session
+	records int
+}
+
+func requireAcceptedInterrupt(
+	t *testing.T,
+	registry workersessions.Service,
+	request workersessions.InterruptRequest,
+) workersessions.InterruptResult {
+	t.Helper()
+	result, err := registry.Interrupt(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Interrupt() error = %v, want accepted interrupt", err)
+	}
+	if !result.Accepted {
+		t.Fatalf("Interrupt() = %#v, want accepted interrupt", result)
+	}
+	return result
+}
+
+func captureCanceledSourceSnapshot(
+	t *testing.T,
+	registry workersessions.Service,
+	eventsSvc events.Service,
+	topic events.Topic,
+	sourceID string,
+) lateOutputSnapshot {
+	t.Helper()
+	session, err := registry.Get(context.Background(), workersessions.GetRequest{ID: sourceID})
+	if err != nil {
+		t.Fatalf("Get(source) error = %v", err)
+	}
+	records := len(readAllDrafts(t, eventsSvc, topic))
+	if session.State != workersessions.StateCanceled {
+		t.Fatalf("interrupt baseline state = %q, want CANCELED", session.State)
+	}
+	if countWorkerSessionTerminalRecords(t, eventsSvc, topic) != 1 {
+		t.Fatalf("interrupt baseline terminal record count = %d, want one", countWorkerSessionTerminalRecords(t, eventsSvc, topic))
+	}
+	return lateOutputSnapshot{session: session, records: records}
+}
+
+func deliverLateSourceEffects(
+	t *testing.T,
+	registry workersessions.Service,
+	boundary *controlledBoundary,
+	eventsSvc events.Service,
+	topic events.Topic,
+	request workersessions.InterruptRequest,
+) {
+	t.Helper()
+	boundary.complete(completedDispatchWithProviderSession("dispatch-source", providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-interrupt-characterization",
+	}), nil)
+	_, err := registry.PublishRecord(context.Background(), validPublishRecordRequest(
+		request.SourceWorkerSessionID,
+		1,
+		progressDraft("late-work-advance"),
+	))
+	if !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("late PublishRecord() error = %v, want ErrPublicationNotOpen", err)
+	}
+	assertBoundaryEffects(t, boundary, 2, 1, "late output")
+	if countWorkerSessionTerminalRecords(t, eventsSvc, topic) != 1 {
+		t.Fatalf("late output terminal record count = %d, want one", countWorkerSessionTerminalRecords(t, eventsSvc, topic))
+	}
+}
+
+func assertLateSourceUnchanged(
+	t *testing.T,
+	registry workersessions.Service,
+	eventsSvc events.Service,
+	topic events.Topic,
+	request workersessions.InterruptRequest,
+	accepted workersessions.InterruptResult,
+	baseline lateOutputSnapshot,
+) {
+	t.Helper()
+	replayed, err := registry.Interrupt(context.Background(), request)
+	if err != nil {
+		t.Fatalf("late-output replay error = %v", err)
+	}
+	if !reflect.DeepEqual(replayed, accepted) {
+		t.Fatalf("late-output replay = %#v, want original %#v", replayed, accepted)
+	}
+	afterLate, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SourceWorkerSessionID})
+	if err != nil {
+		t.Fatalf("Get(source) after late output error = %v", err)
+	}
+	afterLateRecords := len(readAllDrafts(t, eventsSvc, topic))
+	if !reflect.DeepEqual(afterLate, baseline.session) {
+		t.Fatalf("late output changed source: got %#v, want %#v", afterLate, baseline.session)
+	}
+	if afterLateRecords != baseline.records {
+		t.Fatalf("late output record count = %d, want %d", afterLateRecords, baseline.records)
+	}
+	if countWorkerSessionTerminalRecords(t, eventsSvc, topic) != 1 {
+		t.Fatalf("late output terminal record count = %d, want one", countWorkerSessionTerminalRecords(t, eventsSvc, topic))
+	}
+}
+
+func completeCharacterizationSuccessor(
+	t *testing.T,
+	boundary *controlledBoundary,
+	eventsSvc *terminalAppendObserver,
+	topic events.Topic,
+	accepted workersessions.InterruptResult,
+	reference providers.SessionRef,
+) {
+	t.Helper()
+	handoff := boundary.requestFor(t, accepted.Successor.ProviderSessionAssociation.DispatchID)
+	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+	eventsSvc.waitForTerminalAppend(t, topic)
+}
+
+func TestInterrupt_CleanupCharacterizationIsolatedSiblingAndExactRecordingClose(t *testing.T) {
+	fixture := newCleanupCharacterizationFixture(t)
+	accepted := requireAcceptedInterrupt(t, fixture.registry, fixture.request)
+	assertCleanupSiblingAndEffects(t, fixture)
+	assertCleanupSuccessorInput(t, fixture, accepted)
+	finishCleanupCharacterization(t, fixture, accepted)
+	assertCleanupReplay(t, fixture, accepted)
+}
+
+type cleanupCharacterizationFixture struct {
+	boundary       *controlledBoundary
+	registry       *registry
+	events         *terminalAppendObserver
+	recording      *interruptRecordingService
+	sourceID       string
+	siblingID      string
+	successorID    string
+	sourceDispatch string
+	sourceTopic    events.Topic
+	siblingTopic   events.Topic
+	successorTopic events.Topic
+	reference      providers.SessionRef
+	request        workersessions.InterruptRequest
+	sourceResult   <-chan workersessions.InvokeSessionResult
+	siblingResult  <-chan workersessions.InvokeSessionResult
+	siblingBefore  workersessions.Session
+}
+
+func newCleanupCharacterizationFixture(t *testing.T) *cleanupCharacterizationFixture {
+	t.Helper()
+	fixture := &cleanupCharacterizationFixture{
+		boundary:       newControlledBoundary(),
+		recording:      newInterruptRecordingService(),
+		sourceID:       "cleanup-source",
+		siblingID:      "cleanup-sibling",
+		successorID:    "cleanup-successor",
+		sourceDispatch: "cleanup-dispatch-source",
+		reference:      providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-cleanup"},
+	}
+	fixture.sourceTopic = workersessions.Topic(fixture.sourceID)
+	fixture.siblingTopic = workersessions.Topic(fixture.siblingID)
+	fixture.successorTopic = workersessions.Topic(fixture.successorID)
+	fixture.events = newTerminalAppendObserver(newEventsAppender(), fixture.sourceTopic, fixture.siblingTopic, fixture.successorTopic)
+	registry, err := newServiceWithRecording(fixture.boundary, fixture.events, logging.NoopLogger{}, fixture.recording)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	fixture.registry = registry
+	sourceRequest := validStartRequest(fixture.sourceID, fixture.sourceDispatch)
+	sourceRequest.Execution.Execution.RecordingID = "cleanup-recording"
+	fixture.sourceResult = startInterruptCharacterizationSession(t, registry, fixture.boundary, sourceRequest)
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: fixture.sourceID,
+		DispatchID:      fixture.sourceDispatch,
+		Reference:       fixture.reference,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+	fixture.siblingResult = startInterruptCharacterizationSession(t, registry, fixture.boundary, validStartRequest(fixture.siblingID, "cleanup-dispatch-sibling"))
+	fixture.siblingBefore = getCharacterizationSession(t, registry, fixture.siblingID)
+	fixture.request = workersessions.InterruptRequest{
+		RequestID:                "cleanup-interrupt",
+		SourceWorkerSessionID:    fixture.sourceID,
+		SuccessorWorkerSessionID: fixture.successorID,
+		ReplacementMessage:       "cleanup replacement",
+	}
+	return fixture
+}
+
+func getCharacterizationSession(t *testing.T, registry workersessions.Service, id string) workersessions.Session {
+	t.Helper()
+	session, err := registry.Get(context.Background(), workersessions.GetRequest{ID: id})
+	if err != nil {
+		t.Fatalf("Get(%q) error = %v", id, err)
+	}
+	return session
+}
+
+func assertCleanupSiblingAndEffects(t *testing.T, fixture *cleanupCharacterizationFixture) {
+	t.Helper()
+	siblingAfter := getCharacterizationSession(t, fixture.registry, fixture.siblingID)
+	if !reflect.DeepEqual(siblingAfter, fixture.siblingBefore) {
+		t.Fatalf("sibling changed during interrupt: before=%#v after=%#v", fixture.siblingBefore, siblingAfter)
+	}
+	if fixture.boundary.publishCount() != 3 {
+		t.Fatalf("interrupt publish count = %d, want 3", fixture.boundary.publishCount())
+	}
+	cancellations := fixture.boundary.cancellations()
+	if len(cancellations) != 1 {
+		t.Fatalf("interrupt cancellations = %#v, want one source cancellation", cancellations)
+	}
+	if cancellations[0].DispatchID != fixture.sourceDispatch {
+		t.Fatalf("cancelled dispatch = %q, want %q", cancellations[0].DispatchID, fixture.sourceDispatch)
+	}
+	sourceRecording := fixture.recording.handleFor(t, fixture.sourceID)
+	assertRecordingCleanup(t, sourceRecording, fixture.sourceID)
+}
+
+func assertRecordingCleanup(t *testing.T, recording *interruptRecording, label string) {
+	t.Helper()
+	closeCalls, terminalCalls := recording.counts()
+	if closeCalls != 1 {
+		t.Fatalf("%s recording close calls = %d, want 1", label, closeCalls)
+	}
+	if terminalCalls != 1 {
+		t.Fatalf("%s recording terminal calls = %d, want 1", label, terminalCalls)
+	}
+}
+
+func assertCleanupSuccessorInput(t *testing.T, fixture *cleanupCharacterizationFixture, accepted workersessions.InterruptResult) {
+	t.Helper()
+	handoff := fixture.boundary.requestFor(t, accepted.Successor.ProviderSessionAssociation.DispatchID)
+	if handoff.Execution.UserMessage != fixture.request.ReplacementMessage {
+		t.Fatalf("successor input = %q, want exact %q", handoff.Execution.UserMessage, fixture.request.ReplacementMessage)
+	}
+}
+
+func finishCleanupCharacterization(t *testing.T, fixture *cleanupCharacterizationFixture, accepted workersessions.InterruptResult) {
+	t.Helper()
+	handoff := fixture.boundary.requestFor(t, accepted.Successor.ProviderSessionAssociation.DispatchID)
+	fixture.boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, fixture.reference), nil)
+	fixture.boundary.complete(completedDispatchResult("cleanup-dispatch-sibling"), nil)
+	fixture.events.waitForTerminalAppend(t, fixture.successorTopic)
+	fixture.events.waitForTerminalAppend(t, fixture.siblingTopic)
+	assertInvokeSessionState(t, fixture.sourceResult, workersessions.StateCanceled, "source")
+	assertInvokeSessionState(t, fixture.siblingResult, workersessions.StateCompleted, "sibling")
+	successorRecording := fixture.recording.handleFor(t, fixture.successorID)
+	assertRecordingCleanup(t, successorRecording, fixture.successorID)
+	assertOneTerminalEach(t, fixture.events, fixture.sourceTopic, fixture.siblingTopic, fixture.successorTopic)
+}
+
+func assertInvokeSessionState(
+	t *testing.T,
+	result <-chan workersessions.InvokeSessionResult,
+	want workersessions.State,
+	label string,
+) {
+	t.Helper()
+	got := <-result
+	if got.Session.State != want {
+		t.Fatalf("%s InvokeSession() = %#v, want %s", label, got.Session, want)
+	}
+}
+
+func assertCleanupReplay(t *testing.T, fixture *cleanupCharacterizationFixture, accepted workersessions.InterruptResult) {
+	t.Helper()
+	replayed, err := fixture.registry.Interrupt(context.Background(), fixture.request)
+	if err != nil {
+		t.Fatalf("cleanup replay error = %v", err)
+	}
+	if !reflect.DeepEqual(replayed, accepted) {
+		t.Fatalf("cleanup replay = %#v, want original %#v", replayed, accepted)
+	}
+	conflict := fixture.request
+	conflict.ReplacementMessage = "different cleanup replacement"
+	_, err = fixture.registry.Interrupt(context.Background(), conflict)
+	if !errors.Is(err, workersessions.ErrInterruptRequestIDConflict) {
+		t.Fatalf("cleanup conflicting replay error = %v, want request ID conflict", err)
+	}
+	assertBoundaryEffects(t, fixture.boundary, 3, 1, "cleanup replay")
+}
+
+func TestInterrupt_FailureCharacterizationKeepsTypedCauseAndSafeDiagnostics(t *testing.T) {
+	boundary := newControlledBoundary()
+	logger := &recordingLogger{}
+	registry, err := newService(boundary, newEventsAppender(), logger)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	secret := "replacement-secret-must-not-be-logged"
+	request := workersessions.InterruptRequest{
+		RequestID:                "failure-diagnostics",
+		SourceWorkerSessionID:    "missing-source",
+		SuccessorWorkerSessionID: "failure-successor",
+		ReplacementMessage:       secret,
+	}
+	result, err := registry.Interrupt(context.Background(), request)
+	var interruptErr *workersessions.InterruptError
+	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseValidation ||
+		!errors.Is(err, workersessions.ErrInterruptSourceNotFound) || result.Accepted || result.Phase != workersessions.InterruptPhaseValidation {
+		t.Fatalf("missing-source Interrupt() = %#v, %v, want typed validation/source-not-found failure", result, err)
+	}
+	if boundary.publishCount() != 0 || len(boundary.cancellations()) != 0 {
+		t.Fatalf("failed interrupt effects = publishes %d, cancellations %d, want 0/0", boundary.publishCount(), len(boundary.cancellations()))
+	}
+	entries := logger.entriesFor("worker session interrupt rejected")
+	if len(entries) == 0 {
+		t.Fatal("missing-source interrupt did not emit a rejection diagnostic")
+	}
+	for _, entry := range entries {
+		for key, value := range entry.fields {
+			if key == "replacementMessage" || strings.Contains(fmt.Sprint(value), secret) {
+				t.Fatalf("interrupt diagnostic leaked replacement payload: key=%q value=%v fields=%#v", key, value, entry.fields)
+			}
+		}
+	}
+}
+
+func startInterruptCharacterizationSession(
+	t *testing.T,
+	registry workersessions.Service,
+	boundary *controlledBoundary,
+	request workersessions.InvokeSessionRequest,
+) <-chan workersessions.InvokeSessionResult {
+	t.Helper()
+	result := make(chan workersessions.InvokeSessionResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		started, err := registry.InvokeSession(ctx, request)
+		if err != nil {
+			t.Errorf("InvokeSession(%q) error = %v", request.ID, err)
+		}
+		result <- started
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(done, boundary.waitTimeout); err != nil {
+			t.Errorf("InvokeSession(%q) cleanup: %v", request.ID, err)
+		}
+	})
+	boundary.requestFor(t, request.Execution.Execution.Dispatch.DispatchID)
+	if err := waitControlledSignal(boundary.admitted, boundary.waitTimeout); err != nil {
+		t.Fatalf("InvokeSession(%q) admission: %v", request.ID, err)
+	}
+	return result
+}
+
+func countWorkerSessionTerminalRecords(t *testing.T, eventsSvc events.Service, topic events.Topic) int {
+	t.Helper()
+	result, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 100,
+	})
+	if err != nil {
+		t.Fatalf("Read(%q) error = %v", topic, err)
+	}
+	count := 0
+	for _, record := range result.Records {
+		if record.SourceType == "worker_session_lifecycle" &&
+			record.SourceSequence == 2 &&
+			record.SourceEventID == "terminal" &&
+			record.SchemaID == "workers.draft.v1" {
+			count++
+		}
+	}
+	return count
+}
+
+func startInterruptRaceCharacterizationSession(
+	t *testing.T,
+	registry workersessions.Service,
+	boundary *interruptRaceBoundary,
+	request workersessions.InvokeSessionRequest,
+) <-chan workersessions.InvokeSessionResult {
+	t.Helper()
+	result := make(chan workersessions.InvokeSessionResult, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		started, err := registry.InvokeSession(ctx, request)
+		if err != nil {
+			t.Errorf("InvokeSession(%q) error = %v", request.ID, err)
+		}
+		result <- started
+	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := waitControlledSignal(done, controlledBoundaryWaitTimeout); err != nil {
+			t.Errorf("InvokeSession(%q) cleanup: %v", request.ID, err)
+		}
+	})
+	boundary.waitAdmitted(t, request.Execution.Execution.Dispatch.DispatchID)
+	return result
+}
+
+type interruptRecordingService struct {
+	mu      sync.Mutex
+	handles map[string]*interruptRecording
+}
+
+type interruptRecording struct {
+	mu            sync.Mutex
+	closeCalls    int
+	terminalCalls int
+	abortCalls    int
+	terminals     []recordings.WorkerRecordingTerminal
+}
+
+func newInterruptRecordingService() *interruptRecordingService {
+	return &interruptRecordingService{handles: make(map[string]*interruptRecording)}
+}
+
+func (service *interruptRecordingService) StartWorkerSessionRecording(
+	_ context.Context,
+	request recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	handle := &interruptRecording{}
+	service.mu.Lock()
+	service.handles[request.WorkerSessionID] = handle
+	service.mu.Unlock()
+	return handle, nil
+}
+
+func (service *interruptRecordingService) handleFor(t *testing.T, workerSessionID string) *interruptRecording {
+	t.Helper()
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	handle := service.handles[workerSessionID]
+	if handle == nil {
+		t.Fatalf("recording handle for %q was not started", workerSessionID)
+	}
+	return handle
+}
+
+func (*interruptRecording) AwaitOpening(context.Context) error { return nil }
+
+func (recording *interruptRecording) Abort(context.Context, error) error {
+	recording.mu.Lock()
+	recording.abortCalls++
+	recording.mu.Unlock()
+	return nil
+}
+
+func (recording *interruptRecording) Close(context.Context) error {
+	recording.mu.Lock()
+	recording.closeCalls++
+	recording.mu.Unlock()
+	return nil
+}
+
+func (recording *interruptRecording) CloseWithTerminal(
+	_ context.Context,
+	terminal recordings.WorkerRecordingTerminal,
+) error {
+	recording.mu.Lock()
+	recording.closeCalls++
+	recording.terminalCalls++
+	recording.terminals = append(recording.terminals, terminal)
+	recording.mu.Unlock()
+	return nil
+}
+
+func (recording *interruptRecording) counts() (closeCalls, terminalCalls int) {
+	recording.mu.Lock()
+	defer recording.mu.Unlock()
+	return recording.closeCalls, recording.terminalCalls
+}
+
+var _ recordings.WorkerSessionRecordingService = (*interruptRecordingService)(nil)
+var _ recordings.WorkerSessionRecordingFinalizer = (*interruptRecording)(nil)
