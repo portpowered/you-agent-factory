@@ -258,42 +258,18 @@ func TestReviewFailureRouting_RejectionCarriesFeedbackToTheCurrentCorrection(t *
 	if first.Feedback == nil || *first.Feedback != feedback {
 		t.Fatalf("first review feedback = %#v, want exact %q", first.Feedback, feedback)
 	}
-	var replacementReviewID string
-	if second.OutputWork != nil {
-		for _, work := range *second.OutputWork {
-			if work.WorkId != nil && work.WorkTypeName != nil && *work.WorkTypeName == "review" &&
-				work.State != nil && work.State.Name == "complete" {
-				replacementReviewID = *work.WorkId
-				break
-			}
-		}
-	}
-	if replacementReviewID == "" {
-		t.Fatalf("accepted review output has no current completed review Work: %#v", second.OutputWork)
-	}
+	replacementReviewID := replacementReviewWorkID(t, second)
 	assertReviewFailureDispatchOutputStates(t, second, map[string]string{
 		scenario.marker + "-rejection-task-current": "to-complete",
 		replacementReviewID:                         "complete",
 	})
 
 	requests := scenario.fixture.router.requestsFor(scenario.factoryDir)
-	providerRequests := make([]platformprocess.CommandRequest, 0, len(requests))
-	for _, request := range requests {
-		if isReviewFailureProviderCommand(request.Command) {
-			providerRequests = append(providerRequests, request)
-		}
-	}
+	providerRequests := reviewFailureProviderRequests(requests)
 	if len(providerRequests) != 3 {
 		t.Fatalf("provider request count = %d, want reviewer/processor/reviewer sequence; requests = %#v", len(providerRequests), requests)
 	}
-	feedbackPrompt := false
-	for _, request := range providerRequests[1:] {
-		if strings.Contains(providerCommandPrompt(request), feedback) {
-			feedbackPrompt = true
-			break
-		}
-	}
-	if !feedbackPrompt {
+	if !hasReviewFailureFeedbackPrompt(providerRequests[1:], feedback) {
 		t.Fatalf("no current correction provider prompt carried exact feedback %q", feedback)
 	}
 
@@ -301,28 +277,68 @@ func TestReviewFailureRouting_RejectionCarriesFeedbackToTheCurrentCorrection(t *
 	if len(dispatches) != 4 {
 		t.Fatalf("rejection dispatch count = %d, want review/process/ci-wait/review; dispatches = %#v", len(dispatches), dispatches)
 	}
-	var reviewDispatches []support.DispatchEventObservation
-	for index, dispatch := range dispatches {
-		if dispatch.Request.TransitionId == "review" {
-			reviewDispatches = append(reviewDispatches, dispatch)
-			if len(reviewDispatches) == 1 {
-				assertExactReviewFailureInputIDs(t, dispatch, scenario.marker+"-rejection-task-current", scenario.marker+"-rejection-review-current")
-			} else if len(reviewDispatches) == 2 {
-				assertExactReviewFailureInputIDs(t, dispatch, scenario.marker+"-rejection-task-current", replacementReviewID)
-			} else {
-				t.Fatalf("review dispatch index %d is an unexpected third attempt: %#v", index, dispatch)
-			}
-		}
-	}
-	if len(reviewDispatches) != 2 {
-		t.Fatalf("review dispatches = %d, want two exact current attempts", len(reviewDispatches))
-	}
+	assertRejectionReviewDispatches(t, dispatches, scenario.marker+"-rejection-task-current", scenario.marker+"-rejection-review-current", replacementReviewID)
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
 		scenario.marker + "-rejection-task-current": "to-complete",
 		replacementReviewID:                         "complete",
 		scenario.marker + "-rejection-task-old":     "failed",
 		scenario.marker + "-rejection-review-old":   "fin",
 	})
+}
+
+func replacementReviewWorkID(t *testing.T, response factoryapi.DispatchResponseEventPayload) string {
+	t.Helper()
+	if response.OutputWork != nil {
+		for _, work := range *response.OutputWork {
+			if work.WorkId != nil && work.WorkTypeName != nil && *work.WorkTypeName == "review" &&
+				work.State != nil && work.State.Name == "complete" {
+				return *work.WorkId
+			}
+		}
+	}
+	t.Fatalf("accepted review output has no current completed review Work: %#v", response.OutputWork)
+	return ""
+}
+
+func reviewFailureProviderRequests(requests []platformprocess.CommandRequest) []platformprocess.CommandRequest {
+	providerRequests := make([]platformprocess.CommandRequest, 0, len(requests))
+	for _, request := range requests {
+		if isReviewFailureProviderCommand(request.Command) {
+			providerRequests = append(providerRequests, request)
+		}
+	}
+	return providerRequests
+}
+
+func hasReviewFailureFeedbackPrompt(requests []platformprocess.CommandRequest, feedback string) bool {
+	for _, request := range requests {
+		if strings.Contains(providerCommandPrompt(request), feedback) {
+			return true
+		}
+	}
+	return false
+}
+
+func assertRejectionReviewDispatches(t *testing.T, dispatches []support.DispatchEventObservation, taskID, originalReviewID, replacementReviewID string) {
+	t.Helper()
+	reviewCount := 0
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != "review" {
+			continue
+		}
+		reviewCount++
+		switch reviewCount {
+		case 1:
+			assertExactReviewFailureInputIDs(t, dispatch, taskID, originalReviewID)
+		case 2:
+			assertExactReviewFailureInputIDs(t, dispatch, taskID, replacementReviewID)
+		default:
+			t.Fatalf("review dispatch count = %d, want no unchanged third attempt: %#v", reviewCount, dispatch)
+		}
+	}
+	if reviewCount != 2 {
+		t.Fatalf("review dispatches = %d, want two exact current attempts", reviewCount)
+	}
 }
 
 // TestReviewFailureRouting_CompletesCurrentTaskAfterFailedIdea proves F-07.
