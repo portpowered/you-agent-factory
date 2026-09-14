@@ -278,6 +278,7 @@ func (client *rejectingModelAssetHTTP) Calls() int {
 type recordingModelHostLauncher struct {
 	mu        sync.Mutex
 	calls     int
+	stops     int
 	endpoint  string
 	exclusive bool
 	active    bool
@@ -306,6 +307,7 @@ func (launcher *recordingModelHostLauncher) Start(
 		onStop: func() {
 			launcher.mu.Lock()
 			launcher.active = false
+			launcher.stops++
 			launcher.mu.Unlock()
 		},
 	}, nil
@@ -315,6 +317,12 @@ func (launcher *recordingModelHostLauncher) Calls() int {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return launcher.calls
+}
+
+func (launcher *recordingModelHostLauncher) StopCalls() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.stops
 }
 
 type functionalModelHostProcess struct {
