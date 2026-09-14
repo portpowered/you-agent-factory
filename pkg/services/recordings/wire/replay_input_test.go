@@ -298,6 +298,35 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 	}
 }
 
+func TestReplayInputLoaderTreatsReplayV2JSONLAsLegacyDespiteNestedRecordingKind(t *testing.T) {
+	t.Parallel()
+
+	legacy := &recordings.ReplayArtifact{SchemaVersion: "agent-factory.replay.v2"}
+	legacyCalls := 0
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			return []byte("{\"recordType\":\"header\",\"schemaVersion\":\"agent-factory.replay.v2\"}\n" +
+				"{\"recordType\":\"event\",\"event\":{\"metadata\":{\"recordingKind\":\"" + recordings.KindJavaScriptFactorySession + "\"}}}\n"), nil
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			legacyCalls++
+			return legacy, nil
+		},
+		logging.NoopLogger{},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "legacy.jsonl"})
+	if err != nil {
+		t.Fatalf("LoadReplayInput() error = %v", err)
+	}
+	if result.Legacy != legacy || result.Portable != nil {
+		t.Fatalf("result = %#v, want legacy replay result", result)
+	}
+	if legacyCalls != 1 {
+		t.Fatalf("legacy loader calls = %d, want 1", legacyCalls)
+	}
+}
+
 func TestReplayInputLoaderRejectsMissingReader(t *testing.T) {
 	t.Parallel()
 

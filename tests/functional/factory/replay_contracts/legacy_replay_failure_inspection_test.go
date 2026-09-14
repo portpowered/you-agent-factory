@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -35,12 +37,16 @@ const (
 
 	legacyReplayFixture0SHA256 = "a4ce2fd1f587573224db5283f797b12fa549315cebb1e152aa3b6cac60873ee9"
 	legacyReplayFixture1SHA256 = "21d00963d5645a9799b90a22cb91046639a2afeb4160125f29e436a0ecb64dc5"
+
+	legacyReplayDefaultFixtureRoot = "tests/functional/factory/replay_contracts/testdata/legacy/fixtures"
+	legacyReplayDefaultFactoryRoot = "tests/functional/factory/replay_contracts/testdata/legacy/factory"
 )
 
 // TestLegacyReplayFailureInspection proves the public process boundary for
-// historical replay. Real legacy ledgers are configured at invocation time so
-// this repository test never embeds private fixture data or mutates a source
-// recording. One root-built process serves every subtest; all execution and
+// historical replay. The exact-hash ledgers and their Factory source default
+// to checked-in immutable fixture copies; invocation-local environment values
+// can select an independently staged copy without mutating a source recording.
+// One root-built process serves every subtest; all execution and
 // recording-write edges are audited and fail closed.
 func TestLegacyReplayFailureInspection(t *testing.T) {
 	fixtures, ok := configuredLegacyReplayFixtures(t)
@@ -53,25 +59,27 @@ func TestLegacyReplayFailureInspection(t *testing.T) {
 	if got := effects.forbiddenCalls(); got != 0 {
 		t.Fatalf("root.BuildProcess called forbidden replay effect %d times, want 0", got)
 	}
+	audit := newLegacyReplayResourceAudit()
 
+	// The reusable Process owns process-scoped lifecycle state and the immutable
+	// fail-on-call edge audit. Serialize these customer invocations so one
+	// process-owned audit cannot be attributed to the wrong scenario. The
+	// delivered-CLI integration procedure covers concurrent OS processes.
 	t.Run("legacy-fixture-0", func(t *testing.T) {
-		t.Parallel()
 		exerciseLegacyReplayFixture(t, process, fixtures[0])
 	})
 	t.Run("legacy-fixture-1", func(t *testing.T) {
-		t.Parallel()
 		exerciseLegacyReplayFixture(t, process, fixtures[1])
 	})
 	t.Run("portable-replay-without-factory-work-facts", func(t *testing.T) {
-		t.Parallel()
 		exercisePortableReplay(t, process, fixtures[0].factorySource)
 	})
 	t.Run("first-corrupt-event-is-typed-and-atomic", func(t *testing.T) {
-		t.Parallel()
 		exerciseCorruptReplay(t, process, fixtures[0])
 	})
 
 	t.Cleanup(func() {
+		audit.report(t, effects)
 		if got := effects.forbiddenCalls(); got != 0 {
 			t.Errorf("forbidden provider/model/process/recording effects during replay = %d, want 0", got)
 		}
@@ -89,6 +97,7 @@ type legacyReplayFixture struct {
 	wantLineage   int
 	wantRelations int
 	wantFailures  int
+	wantManifest  string
 	data          []byte
 	events        []legacyReplayEvent
 }
@@ -107,8 +116,14 @@ func configuredLegacyReplayFixtures(t *testing.T) ([2]legacyReplayFixture, bool)
 		}
 	}
 	factorySource := strings.TrimSpace(os.Getenv(legacyReplayFactoryEnv))
+	if rootDir == "" && fixture0Path == "" && fixture1Path == "" && factorySource == "" {
+		rootDir = testutil.MustRepoPath(t, legacyReplayDefaultFixtureRoot)
+		fixture0Path = filepath.Join(rootDir, "0", "preserved-before-restart.jsonl")
+		fixture1Path = filepath.Join(rootDir, "1", "live-final-sol-snapshot-20260911T0618Z.jsonl")
+		factorySource = testutil.MustRepoPath(t, legacyReplayDefaultFactoryRoot)
+	}
 	if fixture0Path == "" || fixture1Path == "" || factorySource == "" {
-		t.Skipf("legacy replay fixtures are invocation-configured; set %s, %s, %s, and %s", legacyReplayFixtureRootEnv, legacyReplayFixture0Env, legacyReplayFixture1Env, legacyReplayFactoryEnv)
+		t.Fatalf("legacy replay fixtures are incomplete; set %s, %s, %s, and %s together", legacyReplayFixtureRootEnv, legacyReplayFixture0Env, legacyReplayFixture1Env, legacyReplayFactoryEnv)
 		return [2]legacyReplayFixture{}, false
 	}
 
@@ -123,6 +138,7 @@ func configuredLegacyReplayFixtures(t *testing.T) ([2]legacyReplayFixture, bool)
 			wantLineage:   446,
 			wantRelations: 387,
 			wantFailures:  57,
+			wantManifest:  "d052b775f427f62b0354930235f08eb482e5ea97439515a4d620f534efec2c1b",
 		},
 		{
 			name:          "fixture-1",
@@ -134,6 +150,7 @@ func configuredLegacyReplayFixtures(t *testing.T) ([2]legacyReplayFixture, bool)
 			wantLineage:   381,
 			wantRelations: 351,
 			wantFailures:  53,
+			wantManifest:  "7209333f8274f41e1d8c52af99fe92211112dd3023e49b2a5cb9c3ef61ced8c4",
 		},
 	}
 	for index := range fixtures {
@@ -203,10 +220,10 @@ func exerciseLegacyReplayFixture(t *testing.T, process support.Process, fixture 
 	first := executeReplay(t, process, factoryDir, replayPath, env)
 	second := executeReplay(t, process, factoryDir, replayPath, env)
 	if first.err != nil {
-		t.Fatalf("first %s replay: %v\nstdout=%s\nstderr=%s", fixture.name, first.err, first.stdout, first.stderr)
+		t.Fatalf("first %s replay: %v\nerror-chain=%s\nstdout=%s\nstderr=%s", fixture.name, first.err, replayErrorChain(first.err), first.stdout, first.stderr)
 	}
 	if second.err != nil {
-		t.Fatalf("second %s replay: %v\nstdout=%s\nstderr=%s", fixture.name, second.err, second.stdout, second.stderr)
+		t.Fatalf("second %s replay: %v\nerror-chain=%s\nstdout=%s\nstderr=%s", fixture.name, second.err, replayErrorChain(second.err), second.stdout, second.stderr)
 	}
 	if first.stdout != second.stdout {
 		t.Fatalf("%s replay output is not deterministic across repeated read-only invocations", fixture.name)
@@ -219,6 +236,14 @@ func exerciseLegacyReplayFixture(t *testing.T, process support.Process, fixture 
 		t.Fatalf("%s Factory copy changed during historical replay: before=%v after=%v", fixture.name, factoryBefore, got)
 	}
 	t.Logf("%s: events=%d work=%d lineage=%d relations=%d failures=%d source-sha256=%s", fixture.name, fixture.wantEvents, fixture.wantWork, fixture.wantLineage, fixture.wantRelations, fixture.wantFailures, fixture.wantSHA256)
+}
+
+func replayErrorChain(err error) string {
+	var parts []string
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		parts = append(parts, fmt.Sprintf("%T: %v", current, current))
+	}
+	return strings.Join(parts, " <- ")
 }
 
 func assertLegacyReplayOutput(t *testing.T, fixture legacyReplayFixture, output string) {
@@ -250,6 +275,12 @@ func assertLegacyReplayOutput(t *testing.T, fixture legacyReplayFixture, output 
 		t.Fatalf("%s replay output omitted terminal lifecycle facts", fixture.name)
 	}
 	assertSortedOutputGroups(t, output, fixture.name)
+	manifest := buildLegacyReplayOutputManifest(output)
+	manifestHash := manifest.sha256()
+	if fixture.wantManifest != "" && manifestHash != fixture.wantManifest {
+		t.Fatalf("%s output manifest SHA-256 = %s, want %s", fixture.name, manifestHash, fixture.wantManifest)
+	}
+	t.Logf("%s output manifest SHA-256=%s (work=%d lineage=%d relation=%d failure=%d event=%d)", fixture.name, manifestHash, len(manifest.Work), len(manifest.Lineage), len(manifest.Relation), len(manifest.Failure), len(manifest.Event))
 	lastIndex := -1
 	for index, event := range fixture.events {
 		want := fmt.Sprintf("Event %d: %s (%s)", index, event.Type, event.ID)
@@ -262,6 +293,59 @@ func assertLegacyReplayOutput(t *testing.T, fixture legacyReplayFixture, output 
 		}
 		lastIndex = position
 	}
+}
+
+// legacyReplayOutputManifest is the complete customer-visible history
+// manifest. Hashing the ordered row groups keeps the expected fixture identity
+// compact while making every Work, lineage, relation, failure, and event row
+// part of the comparison.
+type legacyReplayOutputManifest struct {
+	Work     []string
+	Lineage  []string
+	Relation []string
+	Failure  []string
+	Event    []string
+}
+
+func buildLegacyReplayOutputManifest(output string) legacyReplayOutputManifest {
+	var manifest legacyReplayOutputManifest
+	for _, line := range strings.Split(output, "\n") {
+		switch {
+		case strings.HasPrefix(line, "Work: "):
+			manifest.Work = append(manifest.Work, line)
+		case strings.HasPrefix(line, "Lineage: "):
+			manifest.Lineage = append(manifest.Lineage, line)
+		case strings.HasPrefix(line, "Relation: "):
+			manifest.Relation = append(manifest.Relation, line)
+		case strings.HasPrefix(line, "Failure: "):
+			manifest.Failure = append(manifest.Failure, line)
+		case strings.HasPrefix(line, "Event "):
+			manifest.Event = append(manifest.Event, line)
+		}
+	}
+	return manifest
+}
+
+func (manifest legacyReplayOutputManifest) sha256() string {
+	var content strings.Builder
+	for _, group := range []struct {
+		name string
+		rows []string
+	}{
+		{name: "work", rows: manifest.Work},
+		{name: "lineage", rows: manifest.Lineage},
+		{name: "relation", rows: manifest.Relation},
+		{name: "failure", rows: manifest.Failure},
+		{name: "event", rows: manifest.Event},
+	} {
+		content.WriteString(group.name)
+		content.WriteByte('\n')
+		for _, row := range group.rows {
+			content.WriteString(row)
+			content.WriteByte('\n')
+		}
+	}
+	return sha256Hex([]byte(content.String()))
 }
 
 func assertSortedOutputGroups(t *testing.T, output, fixtureName string) {
@@ -543,6 +627,60 @@ func mustReadFile(t *testing.T, path string) []byte {
 func sha256Hex(data []byte) string {
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:])
+}
+
+const legacyReplayMaxFunctionalRSS = uint64(1 << 30)
+
+type legacyReplayResourceAudit struct {
+	heapAllocBefore  uint64
+	sysBefore        uint64
+	rssBefore        uint64
+	rssAvailable     bool
+	goroutinesBefore int
+}
+
+func newLegacyReplayResourceAudit() legacyReplayResourceAudit {
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	rss, err := platformprocessmemory.CurrentRSS()
+	return legacyReplayResourceAudit{
+		heapAllocBefore:  stats.HeapAlloc,
+		sysBefore:        stats.Sys,
+		rssBefore:        rss,
+		rssAvailable:     err == nil,
+		goroutinesBefore: runtime.NumGoroutine(),
+	}
+}
+
+func (audit legacyReplayResourceAudit) report(t *testing.T, effects *legacyReplayEffects) {
+	t.Helper()
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	rss, rssErr := platformprocessmemory.CurrentRSS()
+	if !legacyReplayRaceBuild && rssErr == nil && rss > legacyReplayMaxFunctionalRSS {
+		t.Errorf("functional replay RSS = %d bytes, exceeds declared 1 GiB bound", rss)
+	}
+	rssReport := "unavailable"
+	if audit.rssAvailable && rssErr == nil {
+		rssReport = fmt.Sprintf("%d->%d", audit.rssBefore, rss)
+		if legacyReplayRaceBuild {
+			rssReport += " (race-instrumented; bound not comparable)"
+		}
+	}
+	t.Logf(
+		"functional replay resource audit: product-processes=1 child-processes=0 rss=%s heap-alloc=%d->%d sys=%d->%d goroutines=%d->%d reads=%d opens=%d forbidden=%d writes=%d",
+		rssReport,
+		audit.heapAllocBefore,
+		stats.HeapAlloc,
+		audit.sysBefore,
+		stats.Sys,
+		audit.goroutinesBefore,
+		runtime.NumGoroutine(),
+		effects.reads.Load(),
+		effects.opens.Load(),
+		effects.forbiddenCalls(),
+		effects.writeCalls.Load()+effects.appendCalls.Load()+effects.directoryCalls.Load()+effects.temporaryCalls.Load()+effects.removeCalls.Load()+effects.renameCalls.Load(),
+	)
 }
 
 type legacyReplayEffects struct {
