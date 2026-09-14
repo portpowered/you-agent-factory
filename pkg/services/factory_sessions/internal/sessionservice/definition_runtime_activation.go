@@ -70,17 +70,64 @@ func ActivateSessionRuntime(
 	requireIdle func(context.Context, string) error,
 	replace func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
 ) error {
+	_, err := ActivateSessionRuntimeWithResult(
+		ctx,
+		session,
+		sessionID,
+		sessionRootDir,
+		factoryDir,
+		name,
+		runtimeName,
+		build,
+		requireIdle,
+		replace,
+	)
+	return err
+}
+
+// ActivateSessionRuntimeWithResult builds, validates, and installs one
+// persisted definition replacement, returning the exact loaded source that
+// was handed to the live runtime. The source is validated before replacement
+// so a successful result can be used for response assembly without a
+// failure-prone post-swap read.
+func ActivateSessionRuntimeWithResult(
+	ctx context.Context,
+	session *livesession.LiveSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name string,
+	runtimeName string,
+	build func(context.Context, string, string, string) (runtimeports.RuntimeInstance, error),
+	requireIdle func(context.Context, string) error,
+	replace func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
+) (factorydefinitions.LoadedFactorySource, error) {
 	if build == nil || requireIdle == nil || replace == nil {
-		return fmt.Errorf("factory runtime activation dependencies are required")
+		return nil, fmt.Errorf("factory runtime activation dependencies are required")
 	}
 	replacement, err := build(ctx, sessionRootDir, factoryDir, sessionID)
 	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %w", factorydefinitions.ErrInvalidNamedFactory, name, err)
+		return nil, fmt.Errorf("%w: build replacement factory %q: %w", factorydefinitions.ErrInvalidNamedFactory, name, err)
+	}
+	if replacement == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime is unavailable")
+	}
+	loadedConfig := replacement.LoadedRuntimeConfig()
+	loaded, ok := loadedConfig.(factorydefinitions.LoadedFactorySource)
+	if !ok || loaded == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime loaded source is required")
+	}
+	activationSource, ok := loaded.(factorydefinitions.LoadedFactoryActivationSource)
+	if !ok || activationSource.FactoryActivationProvenance() == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime activation provenance is required")
 	}
 	if err := requireIdle(ctx, sessionID); err != nil {
-		return err
+		return nil, err
 	}
-	return replace(ctx, session, runtimeName, replacement)
+	if err := replace(ctx, session, runtimeName, replacement); err != nil {
+		return nil, err
+	}
+	return loaded, nil
 }
 
 // ApplyNamedReplacement installs a built named Factory definition using the

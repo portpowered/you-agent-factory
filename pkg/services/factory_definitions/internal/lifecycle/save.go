@@ -162,7 +162,27 @@ func (s *Service) persistAndActivateCurrentFactory(
 	if err != nil {
 		return err
 	}
-	if err := s.activationGateway.ActivateSessionEditableFactory(
+	commit := false
+	defer func() {
+		if !commit && replaceResult != nil && replaceResult.Restore != nil {
+			replaceResult.Restore()
+		}
+	}()
+
+	var responseSnapshot *factorydefinitions.FactorySnapshot
+	var responseVersion *factorydefinitions.FactoryVersion
+	if s.activationResultSupported() {
+		responseSnapshot, responseVersion, err = s.prepareActivationResponse(
+			currentName,
+			activateFactoryDir,
+			true,
+			nextVersion,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	activatedSource, resultAvailable, err := s.activateSessionEditableFactory(
 		ctx,
 		session,
 		sessionID,
@@ -170,11 +190,22 @@ func (s *Service) persistAndActivateCurrentFactory(
 		activateFactoryDir,
 		currentName,
 		currentName,
-	); err != nil {
-		if replaceResult != nil && replaceResult.Restore != nil {
-			replaceResult.Restore()
-		}
+	)
+	if err != nil {
 		return err
+	}
+	if resultAvailable {
+		*saved = EditableFactory{
+			Name:       currentName,
+			Snapshot:   responseSnapshot.Clone(),
+			Version:    responseVersion,
+			Activation: currentFactoryActivationProvenance(activatedSource),
+		}
+		if replaceResult != nil && replaceResult.DiscardBackup != nil {
+			replaceResult.DiscardBackup()
+		}
+		commit = true
+		return nil
 	}
 	savedSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(
 		withActivationReadBypass(ctx),
@@ -200,6 +231,7 @@ func (s *Service) persistAndActivateCurrentFactory(
 	if replaceResult != nil && replaceResult.DiscardBackup != nil {
 		replaceResult.DiscardBackup()
 	}
+	commit = true
 	return nil
 }
 

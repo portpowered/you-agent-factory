@@ -82,6 +82,7 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 			persisted,
 			pointerState,
 			request,
+			nextVersion,
 		)
 		return finalizeErr
 	})
@@ -144,7 +145,30 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 	persisted persistedNamedFactory,
 	pointerState currentFactoryPointerState,
 	request EditableFactory,
+	nextVersion factorydefinitions.FactoryVersion,
 ) (EditableFactory, error) {
+	var responseSnapshot *factorydefinitions.FactorySnapshot
+	var responseVersion *factorydefinitions.FactoryVersion
+	if s.activationResultSupported() {
+		var err error
+		responseSnapshot, responseVersion, err = s.prepareActivationResponse(
+			request.Name,
+			persisted.factoryDir,
+			false,
+			nextVersion,
+		)
+		if err != nil {
+			return EditableFactory{}, rollbackUpsertFailure(
+				err,
+				s.host,
+				sessionRootDir,
+				request.Name,
+				persisted,
+				nil,
+			)
+		}
+	}
+
 	restorePointer, err := s.publishUpsertCurrentPointer(
 		pointerState,
 		sessionRootDir,
@@ -161,7 +185,7 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		)
 	}
 
-	if err := s.activationGateway.ActivateSessionEditableFactory(
+	activatedSource, resultAvailable, err := s.activateSessionEditableFactory(
 		ctx,
 		session,
 		sessionID,
@@ -169,7 +193,8 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		persisted.factoryDir,
 		request.Name,
 		request.Name,
-	); err != nil {
+	)
+	if err != nil {
 		return EditableFactory{}, rollbackUpsertFailure(
 			err,
 			s.host,
@@ -178,6 +203,16 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 			persisted,
 			restorePointer,
 		)
+	}
+	if resultAvailable {
+		saved := EditableFactory{
+			Name:       request.Name,
+			Snapshot:   responseSnapshot.Clone(),
+			Version:    responseVersion,
+			Activation: currentFactoryActivationProvenance(activatedSource),
+		}
+		persisted.commit()
+		return saved, nil
 	}
 
 	saved, err := s.upsertActivationResponse(sessionID, sessionRootDir, request.Name)

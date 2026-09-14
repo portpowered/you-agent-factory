@@ -189,6 +189,83 @@ func TestApplyNamedReplacement_RestoresPointerWhenRuntimeReplacementFails(t *tes
 	}
 }
 
+func TestActivateSessionRuntimeWithResultReturnsExactSourceBeforeSwap(t *testing.T) {
+	t.Parallel()
+
+	loaded := &activationLoadedSource{
+		factoryDir: "/factory/beta",
+		provenance: &factorydefinitions.FactoryActivationProvenance{
+			ActivationID:       "activation-beta",
+			LoadedSourceDigest: "digest-beta",
+		},
+	}
+	record := &loadedActivationRuntime{loaded: loaded}
+	var idleCalls int
+	var replaceCalls int
+	var replaced runtimeports.RuntimeInstance
+
+	got, err := factorysessionservice.ActivateSessionRuntimeWithResult(
+		context.Background(),
+		&livesession.LiveSession{ID: "session"},
+		"session",
+		"/persist",
+		"/factory/beta",
+		"beta",
+		"beta",
+		func(context.Context, string, string, string) (runtimeports.RuntimeInstance, error) {
+			return record, nil
+		},
+		func(context.Context, string) error {
+			idleCalls++
+			return nil
+		},
+		func(_ context.Context, _ *livesession.LiveSession, _ string, replacement runtimeports.RuntimeInstance) error {
+			replaceCalls++
+			replaced = replacement
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("ActivateSessionRuntimeWithResult: %v", err)
+	}
+	if got != loaded {
+		t.Fatalf("returned loaded source = %p, want exact source %p", got, loaded)
+	}
+	if replaced != record || replaceCalls != 1 || idleCalls != 1 {
+		t.Fatalf("runtime swap = %v, replace calls = %d, idle calls = %d; want one swap of built record after one idle check", replaced, replaceCalls, idleCalls)
+	}
+}
+
+type loadedActivationRuntime struct {
+	factory.RuntimeRecord
+	loaded factory.LoadedConfig
+}
+
+func (r *loadedActivationRuntime) LoadedRuntimeConfig() factory.LoadedConfig { return r.loaded }
+
+type activationLoadedSource struct {
+	factoryDir string
+	provenance *factorydefinitions.FactoryActivationProvenance
+}
+
+func (*activationLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	return nil, false
+}
+
+func (*activationLoadedSource) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	return nil, false
+}
+
+func (s *activationLoadedSource) FactoryDir() string { return s.factoryDir }
+
+func (*activationLoadedSource) RuntimeBaseDir() string { return "" }
+
+func (*activationLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return nil }
+
+func (s *activationLoadedSource) FactoryActivationProvenance() *factorydefinitions.FactoryActivationProvenance {
+	return s.provenance
+}
+
 type emptyRuntimeRecord struct {
 	factory.RuntimeRecord
 }
