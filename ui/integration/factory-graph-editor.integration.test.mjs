@@ -142,6 +142,12 @@ const editableGraphFactoryDefinition = {
   ],
 };
 
+const editableGraphFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const editableGraphFactoryReplayLines = [
   JSON.stringify({
     context: {
@@ -152,6 +158,7 @@ const editableGraphFactoryReplayLines = [
     id: "editable-graph-1",
     payload: {
       factory: {
+        activation: editableGraphFactoryActivation,
         resources: [
           {
             capacity: 2,
