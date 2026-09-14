@@ -31,27 +31,24 @@ const invokeContinuePackageFixtureTimeout = 15 * time.Second
 // after setup; scenario state is carried by explicit Factory Session IDs and
 // the provider runner's recorded calls.
 type invokeContinuePackageFixture struct {
-	rootDir              string
-	hostDir              string
-	homeDir              string
-	baseURL              string
-	process              support.ApplicationProcess
-	command              *invokeContinuePackageCommand
-	router               *invokeContinueStaticCommandRoute
-	apiStopped           <-chan struct{}
-	apiStarts            *atomic.Int32
-	processBuilds        *atomic.Int32
-	processClosed        atomic.Bool
-	streamsOpened        atomic.Int32
-	streamsClosed        atomic.Int32
-	scenarioRuns         atomic.Uint64
-	scenarios            []invokeContinueScenario
-	managerRunner        *s8RemoteProviderRunner
-	managerRepositoryA   s8Repository
-	managerRepositoryB   s8Repository
-	interruptRunner      *s8InterruptProviderRunner
-	interruptRepositoryA s8Repository
-	interruptRepositoryB s8Repository
+	rootDir            string
+	hostDir            string
+	homeDir            string
+	baseURL            string
+	process            support.ApplicationProcess
+	command            *invokeContinuePackageCommand
+	router             *invokeContinueStaticCommandRoute
+	apiStopped         <-chan struct{}
+	apiStarts          *atomic.Int32
+	processBuilds      *atomic.Int32
+	processClosed      atomic.Bool
+	streamsOpened      atomic.Int32
+	streamsClosed      atomic.Int32
+	scenarioRuns       atomic.Uint64
+	scenarios          []invokeContinueScenario
+	managerRunner      *s8RemoteProviderRunner
+	managerRepositoryA s8Repository
+	managerRepositoryB s8Repository
 
 	sessionsMu        sync.Mutex
 	openedSessionIDs  []string
@@ -74,7 +71,14 @@ type invokeContinueScenario struct {
 	blockingRunner      *invokeContinueBlockingProviderRunner
 	unsupportedProvider providers.Service
 	reset               func()
+	interrupt           *invokeContinueInterruptScenario
 	session             *invokeContinueFactorySession
+}
+
+type invokeContinueInterruptScenario struct {
+	runner      *s8InterruptProviderRunner
+	repositoryA s8Repository
+	repositoryB s8Repository
 }
 
 type invokeContinueProviderCommandRunner interface {
@@ -120,8 +124,8 @@ func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixt
 	t.Helper()
 
 	invokeContinuePackageFixtureState.Lock()
+	defer invokeContinuePackageFixtureState.Unlock()
 	fixture := invokeContinuePackageFixtureState.fixture
-	invokeContinuePackageFixtureState.Unlock()
 	if fixture != nil {
 		return fixture
 	}
@@ -130,16 +134,8 @@ func ensureInvokeContinuePackageFixture(t *testing.T) *invokeContinuePackageFixt
 	if err != nil {
 		t.Fatalf("set up invoke/continue package fixture: %v", err)
 	}
-
-	invokeContinuePackageFixtureState.Lock()
-	if invokeContinuePackageFixtureState.fixture == nil {
-		invokeContinuePackageFixtureState.fixture = created
-		fixture = created
-	} else {
-		fixture = invokeContinuePackageFixtureState.fixture
-	}
-	invokeContinuePackageFixtureState.Unlock()
-	return fixture
+	invokeContinuePackageFixtureState.fixture = created
+	return created
 }
 
 func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixture, error) {
@@ -184,23 +180,20 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	}
 	keepRoot = true
 	return &invokeContinuePackageFixture{
-		rootDir:              rootDir,
-		hostDir:              hostDir,
-		homeDir:              homeDir,
-		baseURL:              started.baseURL,
-		process:              started.process,
-		command:              started.command,
-		router:               route,
-		apiStopped:           started.apiStopped,
-		apiStarts:            started.apiStarts,
-		processBuilds:        started.processBuilds,
-		scenarios:            setup.scenarios,
-		managerRunner:        setup.managerRunner,
-		managerRepositoryA:   setup.managerRepositoryA,
-		managerRepositoryB:   setup.managerRepositoryB,
-		interruptRunner:      setup.interruptRunner,
-		interruptRepositoryA: setup.interruptRepositoryA,
-		interruptRepositoryB: setup.interruptRepositoryB,
+		rootDir:            rootDir,
+		hostDir:            hostDir,
+		homeDir:            homeDir,
+		baseURL:            started.baseURL,
+		process:            started.process,
+		command:            started.command,
+		router:             route,
+		apiStopped:         started.apiStopped,
+		apiStarts:          started.apiStarts,
+		processBuilds:      started.processBuilds,
+		scenarios:          setup.scenarios,
+		managerRunner:      setup.managerRunner,
+		managerRepositoryA: setup.managerRepositoryA,
+		managerRepositoryB: setup.managerRepositoryB,
 	}, nil
 }
 
@@ -334,8 +327,10 @@ func (fixture *invokeContinuePackageFixture) activeProviderCallCount() int {
 	if fixture.managerRunner != nil {
 		active += fixture.managerRunner.ActiveCallCount()
 	}
-	if fixture.interruptRunner != nil {
-		active += fixture.interruptRunner.ActiveCallCount()
+	for _, scenario := range fixture.scenarios {
+		if scenario.interrupt != nil && scenario.interrupt.runner != nil {
+			active += scenario.interrupt.runner.ActiveCallCount()
+		}
 	}
 	return active
 }

@@ -24,9 +24,10 @@ import (
 // sibling overlap before the CLI interrupt; the exact HTTP replay is made
 // after admission and before either provider edge is released.
 func TestInterruptSingleSuccessor(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	scenario := newS8InterruptScenario(t, ctx)
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-single-successor")
 	defer scenario.runner.releaseAll()
 	ids := scenario.ids
 
@@ -77,40 +78,35 @@ func TestInterruptSingleSuccessor(t *testing.T) {
 // identities and admission snapshots, while the provider edge is called only
 // once for the source and once for the admitted successor.
 func TestInterruptParity(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	fixture := ensureInvokeContinuePackageFixture(t)
-	owned := fixture.scenario(t, "manager-interrupt")
-	scenario := s8InterruptScenario{
-		ctx: ctx, fixture: fixture, manager: fixture.process, env: invokeContinueEnvironment(fixture.homeDir),
-		factoryDir: fixture.hostDir, serverURL: fixture.baseURL, session: owned.session,
-		repositoryA: fixture.interruptRepositoryA, repositoryB: fixture.interruptRepositoryB,
-		runner: fixture.interruptRunner, ids: newS8ScenarioIdentities("parity", owned.runNumber),
-	}
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-parity")
+	fixture := scenario.fixture
 	defer scenario.runner.releaseAll()
 	ids := scenario.ids
 
-	invokeS8RemoteWorker(t, ctx, fixture.process, scenario.env, scenario.repositoryA.path, fixture.baseURL, s8RemoteWorkerInvocation{
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
 		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
-		factorySessionID: scenario.session.id, repository: fixture.interruptRepositoryA.path, workID: ids.workA, message: s8MessageA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
 	})
 	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, fixture.router.requests)
 
-	first := postS8Interrupt(t, ctx, fixture.baseURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	first := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
 	assertS8APIInterruptAdmission(t, first, ids)
 	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
 	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, fixture.router.requests)
-	cliResult := interruptS8RemoteWorker(t, ctx, fixture.process, scenario.env, scenario.repositoryA.path, fixture.baseURL, ids.workerA, ids.interruptRequest, ids.successor)
+	cliResult := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
 	if got := s8InterruptResultFromAPI(first); !reflect.DeepEqual(got, cliResult) {
 		t.Fatalf("HTTP-first/CLI-replay mismatch: HTTP=%#v CLI=%#v", first, cliResult)
 	}
-	replayed := postS8Interrupt(t, ctx, fixture.baseURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+	replayed := postS8Interrupt(t, ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
 	if !reflect.DeepEqual(first, replayed) {
 		t.Fatalf("HTTP replay = %#v, want original HTTP response %#v", replayed, first)
 	}
 
 	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
-	_ = replayS8RemoteWorker(t, ctx, fixture.process, scenario.env, scenario.repositoryA.path, fixture.baseURL, ids.successor)
+	_ = replayS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
 	if got := scenario.runner.CallCount(); got != 2 {
 		t.Fatalf("provider calls after CLI/HTTP parity replay = %d, want source plus one successor", got)
 	}
@@ -122,25 +118,20 @@ func TestInterruptParity(t *testing.T) {
 // CLI callers. The public result is absorbing: exactly one source cancellation
 // and one successor provider admission survive the race.
 func TestInterruptRace(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	fixture := ensureInvokeContinuePackageFixture(t)
-	owned := fixture.scenario(t, "manager-interrupt")
-	scenario := s8InterruptScenario{
-		ctx: ctx, fixture: fixture, manager: fixture.process, env: invokeContinueEnvironment(fixture.homeDir),
-		factoryDir: fixture.hostDir, serverURL: fixture.baseURL, session: owned.session,
-		repositoryA: fixture.interruptRepositoryA, repositoryB: fixture.interruptRepositoryB,
-		runner: fixture.interruptRunner, ids: newS8ScenarioIdentities("race", owned.runNumber),
-	}
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-race")
+	fixture := scenario.fixture
 	defer scenario.runner.releaseAll()
 	ids := scenario.ids
 	env := scenario.env
 
-	invokeS8RemoteWorker(t, ctx, fixture.process, env, fixture.interruptRepositoryA.path, fixture.baseURL, s8RemoteWorkerInvocation{
+	invokeS8RemoteWorker(t, ctx, scenario.manager, env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
 		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
-		factorySessionID: scenario.session.id, repository: fixture.interruptRepositoryA.path, workID: ids.workA, message: s8MessageA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
 	})
-	scenario.runner.waitStarted(t, fixture.interruptRepositoryA.path, s8InterruptCallAInitial, fixture.router.requests)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, fixture.router.requests)
 
 	start := make(chan struct{})
 	outcomes := make(chan publicInterruptOutcome, 2)
@@ -149,13 +140,13 @@ func TestInterruptRace(t *testing.T) {
 	go func() {
 		defer wait.Done()
 		<-start
-		status, body, response, err := sendS8InterruptHTTP(ctx, fixture.baseURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
+		status, body, response, err := sendS8InterruptHTTP(ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage)
 		outcomes <- publicInterruptOutcome{api: response, status: status, body: body, err: err}
 	}()
 	go func() {
 		defer wait.Done()
 		<-start
-		result, err := executeS8InterruptCLI(ctx, fixture.process, env, fixture.interruptRepositoryA.path, fixture.baseURL, ids.workerA, ids.interruptRequest, ids.successor)
+		result, err := executeS8InterruptCLI(ctx, scenario.manager, env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
 		outcomes <- publicInterruptOutcome{cli: result, err: err}
 	}()
 	close(start)
@@ -179,16 +170,16 @@ func TestInterruptRace(t *testing.T) {
 	if len(accepted) != 2 || !reflect.DeepEqual(accepted[0], accepted[1]) || !accepted[0].Accepted {
 		t.Fatalf("concurrent interrupt results = %#v, want two identical accepted results", accepted)
 	}
-	scenario.runner.waitCanceled(t, fixture.interruptRepositoryA.path, s8InterruptCallAInitial)
-	scenario.runner.waitStarted(t, fixture.interruptRepositoryA.path, s8InterruptCallASuccessor, fixture.router.requests)
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, fixture.router.requests)
 	if got := scenario.runner.cancellationCount(s8InterruptCallAInitial); got != 1 {
 		t.Fatalf("concurrent interrupt cancellation count = %d, want one", got)
 	}
 	if got := scenario.runner.CallCount(); got != 2 {
 		t.Fatalf("concurrent interrupt provider calls = %d, want source plus one successor", got)
 	}
-	scenario.runner.release(t, fixture.interruptRepositoryA.path, s8InterruptCallASuccessor)
-	_ = replayS8RemoteWorker(t, ctx, fixture.process, env, fixture.interruptRepositoryA.path, fixture.baseURL, ids.successor)
+	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	_ = replayS8RemoteWorker(t, ctx, scenario.manager, env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
 	assertS8WorkNotAdvanced(t, fixture, scenario.session.id, ids.workA)
 	scenario.close(t)
 }
@@ -199,10 +190,12 @@ func TestInterruptRace(t *testing.T) {
 // CLI and REST error projections exact without pretending a provider command
 // can inject a Workers cancellation-gateway error.
 func TestInterruptFailure(t *testing.T) {
+	t.Parallel()
 	t.Run("successor-conflict", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		scenario := newS8InterruptScenario(t, ctx)
+		scenario := newS8InterruptScenario(t, ctx, "manager-interrupt-failure")
 		defer scenario.runner.releaseAll()
 		ids := scenario.ids
 
@@ -245,10 +238,11 @@ func TestInterruptFailure(t *testing.T) {
 	})
 
 	t.Run("source-cancellation-transport-parity", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		fixture := ensureInvokeContinuePackageFixture(t)
-		scenario := fixture.scenario(t, "remote-interrupt")
+		scenario := fixture.scenario(t, "remote-interrupt-failure")
 		defer scenario.close(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/interrupt" {
