@@ -7,6 +7,7 @@ import {
   saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { defaultFactoryActivation } from "../../../testing/factory-activation-fixtures";
 import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
@@ -204,6 +205,7 @@ describe("useFactoryDocumentSave", () => {
     });
     const savedDocument: CurrentFactoryDocument = {
       ...editableFactoryDefinition,
+      activation: defaultFactoryActivation,
       version: {
         logical: "8",
         physical: "2026-05-27T08:00:00Z",
@@ -412,6 +414,7 @@ describe("useFactoryDocumentSave", () => {
         payload: {
           factory: {
             ...editableFactoryDefinition,
+            activation: defaultFactoryActivation,
             version: {
               logical: "9",
               physical: "2026-05-27T08:00:01Z",

@@ -1,7 +1,58 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("getSessionFactory response normalization", () => {
+  it("returns typed activation provenance from a successful response", async () => {
+    const document = await getSessionFactory("~default", {
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            activation: defaultSessionFactoryActivation,
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+            version: { logical: "1", physical: "2026-05-31T00:00:00Z" },
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document.activation).toEqual(defaultSessionFactoryActivation);
+  });
+
+  it("rejects an otherwise editable response without activation provenance", async () => {
+    await expect(
+      getSessionFactory("~default", {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Current Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+              version: { logical: "1", physical: "2026-05-31T00:00:00Z" },
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: sessionFactoryAPIErrorMessages.invalidResponse,
+    });
+  });
+
   it("rejects a successful response without an editable factory shape", async () => {
     await expect(
       getSessionFactory("~default", {
@@ -49,10 +100,60 @@ describe("getSessionFactory response normalization", () => {
 });
 
 describe("saveSessionFactory version increment", () => {
+  it("strips server-owned activation provenance from the save payload", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          activation: defaultSessionFactoryActivation,
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: { logical: "2", physical: "2026-05-31T00:00:00Z" },
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveSessionFactory(
+      {
+        sessionID: "~default",
+        mode: "REPLACE_CURRENT",
+        factory: {
+          activation: {
+            activationId: "forged-activation",
+            loadedSourceDigest: `sha256:${"f".repeat(64)}`,
+            state: "AUTHORED_CHANGED",
+          },
+          name: "Current Factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        baseVersion: {
+          logical: "1",
+          physical: "2026-05-31T00:00:00Z",
+        },
+      },
+      { fetch },
+    );
+
+    const requestBody = JSON.parse(
+      (fetch.mock.calls[0]?.[1] as RequestInit | undefined)?.body as string,
+    ) as { factory: Record<string, unknown> };
+    expect(requestBody.factory).not.toHaveProperty("activation");
+    expect(JSON.stringify(requestBody)).not.toContain("forged-activation");
+  });
+
   it("keeps a non-parseable physical version unchanged when incrementing", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],

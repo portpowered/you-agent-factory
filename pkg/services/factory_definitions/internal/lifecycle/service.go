@@ -28,6 +28,23 @@ const (
 	SaveModeUpsertNamedAndActivate = factoryroot.SaveModeUpsertNamedAndActivate
 )
 
+type activationReadBypassContextKey struct{}
+
+func withActivationReadBypass(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, activationReadBypassContextKey{}, true)
+}
+
+func activationReadBypassed(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	bypassed, _ := ctx.Value(activationReadBypassContextKey{}).(bool)
+	return bypassed
+}
+
 // Service owns current and named factory definition reads, persistence, and
 // activation policy. UnimplementedService keeps the CTR-DEF root slice methods
 // assignable until nested IMP-DEF collaborators are wired.
@@ -397,16 +414,29 @@ func (s *Service) Save(ctx context.Context, sessionID string, mode factoryroot.S
 	if mode == SaveModeUpsertNamedAndActivate {
 		return s.SaveUpsertNamedSnapshotAndActivateForSession(ctx, sessionID, request)
 	}
-	snapshot, err := s.SaveReplaceCurrentSnapshotForSession(ctx, sessionID, request)
+	saved, err := s.saveReplaceCurrentFactoryForSession(ctx, sessionID, request)
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	return EditableFactory{Snapshot: snapshot}, nil
+	return saved, nil
 }
 
 // GetCurrentNamedFactory returns the durable current named-factory snapshot
 // resolved from the persisted pointer and canonical on-disk layout.
-func (s *Service) GetCurrentNamedFactory(context.Context) (*factoryroot.FactorySnapshot, error) {
+func (s *Service) GetCurrentNamedFactory(ctx context.Context) (*factoryroot.FactorySnapshot, error) {
+	if s == nil || s.host == nil {
+		return nil, fmt.Errorf("factory definition service is required")
+	}
+	var snapshot *factoryroot.FactorySnapshot
+	err := s.withActivationRead(func() error {
+		var err error
+		snapshot, err = s.getCurrentNamedFactory(ctx)
+		return err
+	})
+	return snapshot, err
+}
+
+func (s *Service) getCurrentNamedFactory(context.Context) (*factoryroot.FactorySnapshot, error) {
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}
@@ -435,7 +465,26 @@ func (s *Service) GetCurrentNamedFactory(context.Context) (*factoryroot.FactoryS
 
 // GetCurrentFactoryForSession returns the editable Factory snapshot and durable
 // optimistic-concurrency version for one live session.
-func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID string) (EditableFactory, error) {
+func (s *Service) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (EditableFactory, error) {
+	if s == nil || s.host == nil {
+		return EditableFactory{}, fmt.Errorf("factory definition service is required")
+	}
+	var current EditableFactory
+	read := func() error {
+		var err error
+		current, err = s.getCurrentFactoryForSession(ctx, sessionID)
+		return err
+	}
+	var err error
+	if activationReadBypassed(ctx) {
+		err = read()
+	} else {
+		err = s.withActivationRead(read)
+	}
+	return current, err
+}
+
+func (s *Service) getCurrentFactoryForSession(_ context.Context, sessionID string) (EditableFactory, error) {
 	if s == nil || s.host == nil {
 		return EditableFactory{}, fmt.Errorf("factory definition service is required")
 	}
@@ -464,11 +513,30 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 	if err != nil {
 		return EditableFactory{}, err
 	}
-	version, err := s.CurrentFactoryDefinitionVersionAtRoot(versionRootDir, factoryName)
-	if err != nil {
-		return EditableFactory{}, err
+	version, loadedVersion := loadedFactoryDefinitionVersion(runtimeCfg)
+	if !loadedVersion {
+		resolvedVersion, err := s.CurrentFactoryDefinitionVersionAtRoot(versionRootDir, factoryName)
+		if err != nil {
+			return EditableFactory{}, err
+		}
+		version = &resolvedVersion
 	}
-	return EditableFactory{Name: factoryName, Snapshot: snapshot, Version: &version}, nil
+	return EditableFactory{
+		Name:       factoryName,
+		Snapshot:   snapshot,
+		Version:    version,
+		Activation: currentFactoryActivationProvenance(runtimeCfg),
+	}, nil
+}
+
+func (s *Service) withActivationRead(fn func() error) error {
+	if fn == nil {
+		return fmt.Errorf("Factory Definition read operation is required")
+	}
+	if s == nil || s.activationGateway == nil {
+		return fn()
+	}
+	return s.activationGateway.WithActivationLock(fn)
 }
 
 // CurrentFactoryDefinitionVersionAtRoot returns optimistic-concurrency metadata.

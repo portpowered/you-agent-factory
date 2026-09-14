@@ -1,5 +1,6 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("saveSessionFactory environment and version edge cases", () => {
@@ -7,6 +8,7 @@ describe("saveSessionFactory environment and version edge cases", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -83,6 +85,7 @@ describe("saveSessionFactory environment and version edge cases", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],

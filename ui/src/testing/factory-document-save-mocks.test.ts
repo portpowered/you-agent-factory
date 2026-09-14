@@ -6,6 +6,7 @@ import {
   mockFactoryDocumentSave,
   mockPendingFactoryDocumentSave,
 } from "./factory-document-save-mocks";
+import { defaultFactoryActivation } from "./factory-activation-fixtures";
 
 describe("factory-document-save-mocks", () => {
   it("mockFactoryDocumentSave exposes the useFactoryDocumentSave hook contract", () => {
@@ -23,6 +24,7 @@ describe("factory-document-save-mocks", () => {
     const success = mockFactoryDocumentSave({ mode: "success" });
     expect(success.isPending).toBe(false);
     await expect(success.saveAsync({} as never)).resolves.toEqual({
+      activation: defaultFactoryActivation,
       name: "Current Factory",
       version: {
         logical: "7",
@@ -57,6 +59,7 @@ describe("factory-document-save-mocks", () => {
 
   it("mockFactoryDocumentSave resolves custom documents for success mode", async () => {
     const resolvedDocument = {
+      activation: defaultFactoryActivation,
       name: "Custom Factory",
       version: { logical: "11", physical: "2026-05-30T00:00:00Z" },
       workers: [],
@@ -79,6 +82,7 @@ describe("factory-document-save-mocks", () => {
 
     const savePromise = pending.saveAsync({} as never);
     pending.deferred.resolve({
+      activation: defaultFactoryActivation,
       name: "Saved",
       version: { logical: "8", physical: "2026-05-23T15:52:00.001Z" },
       workers: [],
@@ -87,6 +91,7 @@ describe("factory-document-save-mocks", () => {
     });
 
     await expect(savePromise).resolves.toEqual({
+      activation: defaultFactoryActivation,
       name: "Saved",
       version: { logical: "8", physical: "2026-05-23T15:52:00.001Z" },
       workers: [],

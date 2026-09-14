@@ -60,3 +60,12 @@ type DefinitionActivationGateway interface {
 		name string,
 	) error
 }
+
+// DefinitionActivationResult is the result of a successful editable Factory
+// activation. LoadedSource is the exact source returned by the replacement
+// runtime, while Available distinguishes a legacy gateway that only implements
+// the original error-only activation contract.
+type DefinitionActivationResult struct {
+	LoadedSource LoadedFactorySource
+	Available    bool
+}

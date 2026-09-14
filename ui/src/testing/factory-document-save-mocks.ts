@@ -13,6 +13,7 @@ import {
 } from "../api/current-factory-definition";
 import type { FactoryDocumentSaveInput } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import { createDeferredPromise } from "./app-shell-export-test-utils";
+import { defaultFactoryActivation } from "./factory-activation-fixtures";
 import { staleFactoryVersionTarget } from "./factory-validation-target-fixtures";
 
 export type FactoryDocumentSaveMode = "idle" | "pending" | "success" | "error";
@@ -53,6 +54,7 @@ export interface MockPendingFactoryDocumentSave {
 }
 
 const defaultSavedDocument: CurrentFactoryDocument = {
+  activation: defaultFactoryActivation,
   name: "Current Factory",
   version: {
     logical: "7",

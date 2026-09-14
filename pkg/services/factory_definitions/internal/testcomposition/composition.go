@@ -98,7 +98,13 @@ func loadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 		runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 		replacements []factorydefinitions.PortableBundledFileReplacement,
 	) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return compilationloadedsource.New(factoryDir, factoryConfig, runtimeDefinitions, replacements)
+		return compilationloadedsource.New(
+			factoryDir,
+			factoryConfig,
+			runtimeDefinitions,
+			replacements,
+			func() string { return "test-activation-id" },
+		)
 	}
 }
 

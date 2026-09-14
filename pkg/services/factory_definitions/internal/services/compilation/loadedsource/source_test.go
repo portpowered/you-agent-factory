@@ -22,6 +22,7 @@ func TestNewBuildsDetachedEffectiveLookups(t *testing.T) {
 		authored,
 		emptyDefinitions{},
 		[]factorydefinitions.PortableBundledFileReplacement{{TargetPath: "AGENTS.md"}},
+		func() string { return "activation-one" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -50,6 +51,7 @@ func TestMutateWorkersPreservesFactoryAndLookupErrorContext(t *testing.T) {
 		},
 		emptyDefinitions{},
 		nil,
+		func() string { return "activation-two" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -89,6 +91,7 @@ func TestNewKeepsPromptSourceIdentityOutsideFactoryConfiguration(t *testing.T) {
 		},
 		emptyDefinitions{},
 		nil,
+		func() string { return "activation-three" },
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -104,6 +107,79 @@ func TestNewKeepsPromptSourceIdentityOutsideFactoryConfiguration(t *testing.T) {
 	if source.FactoryConfig().Workers[0].PromptSourcePath != "" ||
 		source.FactoryConfig().Workstations[0].PromptSourcePath != "" {
 		t.Fatal("prompt source identity leaked into Factory configuration")
+	}
+}
+
+func TestNewPublishesStableSecretSafeActivationTuple(t *testing.T) {
+	t.Parallel()
+
+	authored := &factorydefinitions.FactoryConfig{
+		Name: "alpha",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker",
+			Body: "private instructions",
+		}},
+	}
+	first, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil, func() string { return "activation-first" })
+	if err != nil {
+		t.Fatalf("New(first): %v", err)
+	}
+	second, err := loadedsource.New("factory", authored, emptyDefinitions{}, nil, func() string { return "activation-second" })
+	if err != nil {
+		t.Fatalf("New(second): %v", err)
+	}
+	firstTuple := first.FactoryActivationProvenance()
+	secondTuple := second.FactoryActivationProvenance()
+	if firstTuple == nil || secondTuple == nil {
+		t.Fatalf("activation tuples = (%#v, %#v), want both present", firstTuple, secondTuple)
+	}
+	if firstTuple.ActivationID == "" || firstTuple.LoadedSourceDigest == "" {
+		t.Fatalf("first activation tuple = %#v, want non-empty identity and digest", firstTuple)
+	}
+	if firstTuple.ActivationID == secondTuple.ActivationID {
+		t.Fatal("separate source constructions reused activation identity")
+	}
+	if firstTuple.LoadedSourceDigest != secondTuple.LoadedSourceDigest {
+		t.Fatalf("same effective source digest changed: first=%q second=%q", firstTuple.LoadedSourceDigest, secondTuple.LoadedSourceDigest)
+	}
+	if firstTuple.State != factorydefinitions.FactoryActivationStateNotActivated {
+		t.Fatalf("initial activation state = %q, want NOT_ACTIVATED until the loader proves the source", firstTuple.State)
+	}
+
+	first.SetAuthoredSourceComparison(func() (factorydefinitions.FactoryActivationState, error) {
+		return factorydefinitions.FactoryActivationStateActive, nil
+	})
+	state, err := first.CompareAuthoredSource()
+	if err != nil || state != factorydefinitions.FactoryActivationStateActive {
+		t.Fatalf("CompareAuthoredSource() = (%q, %v), want ACTIVE", state, err)
+	}
+	updatedTuple := first.FactoryActivationProvenance()
+	if updatedTuple == nil || updatedTuple.ActivationID != firstTuple.ActivationID || updatedTuple.LoadedSourceDigest != firstTuple.LoadedSourceDigest {
+		t.Fatalf("activation identity changed after comparison: before=%#v after=%#v", firstTuple, updatedTuple)
+	}
+}
+
+func TestLoadedSourceDigestChangesWhenResolvedInstructionsChange(t *testing.T) {
+	t.Parallel()
+
+	base := &factorydefinitions.FactoryConfig{
+		Name:    "alpha",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker", Body: "first"}},
+	}
+	changed := &factorydefinitions.FactoryConfig{
+		Name:    "alpha",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "worker", Body: "second"}},
+	}
+	baseDigest, err := loadedsource.LoadedSourceDigest(base)
+	if err != nil {
+		t.Fatalf("LoadedSourceDigest(base): %v", err)
+	}
+	changedDigest, err := loadedsource.LoadedSourceDigest(changed)
+	if err != nil {
+		t.Fatalf("LoadedSourceDigest(changed): %v", err)
+	}
+	if baseDigest == changedDigest {
+		t.Fatalf("instruction edit kept digest %q", baseDigest)
 	}
 }
 

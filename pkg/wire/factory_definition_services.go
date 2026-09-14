@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -404,6 +405,7 @@ func provideFactoryDefinitionLoader(
 		sourceResolver,
 		inspectSource,
 		requiredToolChecker,
+		uuid.NewString,
 	)
 }
 

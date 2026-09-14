@@ -1,5 +1,6 @@
 import {
   CURRENT_FACTORY_EDITOR_SAVE_MODE,
+  type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
   getCurrentFactoryDocument,
   saveFactoryForSessionDocument,
@@ -13,6 +14,7 @@ import {
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "./workstation-editable-values";
+import { defaultFactoryActivation } from "../../../testing/factory-activation-fixtures";
 
 const reviewWorkstationNode: DashboardWorkstationNode = {
   model: "gpt-5",
@@ -24,6 +26,7 @@ const reviewWorkstationNode: DashboardWorkstationNode = {
 
 function buildGuardedFactoryFixture(): CurrentFactoryDocument {
   return {
+    activation: defaultFactoryActivation,
     name: "Guarded Factory",
     version: {
       logical: "7",
@@ -97,15 +100,23 @@ function buildEditedVisitCountGuardDraft(
 }
 
 function buildSavedDocumentVersion(
-  normalizedFactory: CurrentFactoryDocument,
+  normalizedFactory: CanonicalFactoryDefinition,
 ): CurrentFactoryDocument {
   return {
     ...normalizedFactory,
+    activation: defaultFactoryActivation,
     version: {
       logical: "8",
       physical: "2026-06-01T14:00:00Z",
     },
   };
+}
+
+function editableFactoryFromDocument(
+  document: CurrentFactoryDocument,
+): CanonicalFactoryDefinition {
+  const { activation: _activation, ...editableFactory } = document;
+  return editableFactory;
 }
 
 describe("workstation guard save round-trip", () => {
@@ -144,7 +155,9 @@ describe("workstation guard save round-trip", () => {
       return;
     }
 
-    const normalizedFactory = normalizeFactoryDefinition(pendingFactory);
+    const normalizedFactory = normalizeFactoryDefinition(
+      editableFactoryFromDocument(pendingFactory),
+    );
     expect(normalizedFactory.workstations?.[1]).toMatchObject({
       guards: [{ maxVisits: 4, type: "VISIT_COUNT", workstation: "Plan" }],
       inputs: [
@@ -264,7 +277,9 @@ describe("workstation guard MATCHES_FIELDS save round-trip", () => {
       return;
     }
 
-    const normalizedFactory = normalizeFactoryDefinition(pendingFactory);
+    const normalizedFactory = normalizeFactoryDefinition(
+      editableFactoryFromDocument(pendingFactory),
+    );
     expect(normalizedFactory.workstations?.[1]?.guards).toEqual([
       {
         matchConfig: { inputKey: editedSelector },

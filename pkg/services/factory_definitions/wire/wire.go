@@ -119,7 +119,24 @@ func composeService(
 	if err != nil {
 		return nil, err
 	}
-
+	rollbackOptions := make([]factorydefinitionsinternal.CompositionOption, 0, len(options)+1)
+	rollbackOptions = append(rollbackOptions, options...)
+	var discardNamedFactory func(string, string) error
+	if discarder, ok := persistence.(interface {
+		DiscardNamedFactory(string, string) error
+	}); ok {
+		discardNamedFactory = discarder.DiscardNamedFactory
+	}
+	var removeCurrentFactoryPointer func(string) error
+	if remover, ok := namedPaths.(interface {
+		RemoveCurrentPointer(string) error
+	}); ok {
+		removeCurrentFactoryPointer = remover.RemoveCurrentPointer
+	}
+	rollbackOptions = append(rollbackOptions, factorydefinitionsinternal.WithActivationRollback(
+		discardNamedFactory,
+		removeCurrentFactoryPointer,
+	))
 	definitions := factorydefinitionsinternal.NewWithAuthoringLayout(
 		sessionHost,
 		activationGateway,
@@ -154,7 +171,7 @@ func composeService(
 		requiredToolChecker,
 		orchestratorValidator,
 		authoringLayout,
-		options...,
+		rollbackOptions...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")

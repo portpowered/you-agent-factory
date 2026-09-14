@@ -1,5 +1,8 @@
 import { activateImportedFactoryForSession } from "./import-activation";
-import { defaultSessionFactoryVersion } from "./import-activation.test-helpers";
+import {
+  defaultSessionFactoryActivation,
+  defaultSessionFactoryVersion,
+} from "./import-activation.test-helpers";
 
 describe("session factory import activation errors — preserves non-timestamp version physical values when upserting the current factory name", () => {
   it("preserves non-timestamp version physical values when upserting the current factory name", async () => {
@@ -8,6 +11,7 @@ describe("session factory import activation errors — preserves non-timestamp v
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -28,6 +32,7 @@ describe("session factory import activation errors — preserves non-timestamp v
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -123,6 +128,7 @@ describe("session factory import activation errors — maps unknown API error co
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],

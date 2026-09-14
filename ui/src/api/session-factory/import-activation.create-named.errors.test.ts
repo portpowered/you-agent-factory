@@ -1,4 +1,27 @@
 import { activateImportedFactoryForSession } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
+
+function successfulFactoryResponse(version: {
+  logical: string;
+  physical: string;
+}): Response {
+  return new Response(
+    JSON.stringify({
+      activation: defaultSessionFactoryActivation,
+      name: "Session Current Name",
+      workTypes: [],
+      workers: [],
+      workstations: [],
+      version,
+    }),
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      status: 200,
+    },
+  );
+}
 
 describe("session factory import activation create-new-named validation errors", () => {
   it("requires a factory name for create-new-named activation", async () => {
@@ -62,24 +85,10 @@ describe("session factory import activation create-new-named save errors", () =>
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Session Current Name",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "9",
-              physical: "2026-05-18T14:25:00Z",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        ),
+        successfulFactoryResponse({
+          logical: "9",
+          physical: "2026-05-18T14:25:00Z",
+        }),
       )
       .mockResolvedValueOnce(
         new Response(
@@ -120,44 +129,16 @@ describe("session factory import activation create-new-named save errors", () =>
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Session Current Name",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "9",
-              physical: "legacy-physical",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        ),
+        successfulFactoryResponse({
+          logical: "9",
+          physical: "legacy-physical",
+        }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Session Current Name",
-            workTypes: [],
-            workers: [],
-            workstations: [],
-            version: {
-              logical: "10",
-              physical: "legacy-physical",
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        ),
+        successfulFactoryResponse({
+          logical: "10",
+          physical: "legacy-physical",
+        }),
       );
 
     await activateImportedFactoryForSession(

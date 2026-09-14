@@ -1,4 +1,5 @@
 import { getSessionFactory, saveSessionFactory } from "./api";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 import { sessionFactoryOperatorErrorMessages } from "./operator-errors";
 
@@ -18,6 +19,7 @@ describe("getSessionFactory version normalization", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Numeric Version Factory",
           workers: [],
           workstations: [],

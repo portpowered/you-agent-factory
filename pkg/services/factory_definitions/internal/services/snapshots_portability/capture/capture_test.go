@@ -243,7 +243,7 @@ func TestCaptureLoadedUsesOneCanonicalEffectiveRuntimeDefinition(t *testing.T) {
 
 	authored, runtime := canonicalRuntimeFixtures()
 
-	loaded, err := loadedsource.New("factory", authored, runtime, nil)
+	loaded, err := loadedsource.New("factory", authored, runtime, nil, func() string { return "capture-test-activation" })
 	if err != nil {
 		t.Fatalf("construct loaded source: %v", err)
 	}

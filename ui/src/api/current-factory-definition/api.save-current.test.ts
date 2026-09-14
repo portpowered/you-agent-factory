@@ -4,6 +4,7 @@ import {
   staleFactoryVersionTarget,
 } from "../../testing/factory-validation-target-fixtures";
 import { sessionFactoryOperatorErrorMessages } from "../session-factory/operator-errors";
+import { defaultSessionFactoryActivation } from "../session-factory/import-activation.test-helpers";
 import { saveCurrentFactoryDocument } from "./api";
 
 describe("saveCurrentFactoryDocument", () => {
@@ -15,6 +16,7 @@ describe("saveCurrentFactoryDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -79,6 +81,7 @@ describe("saveCurrentFactoryDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -138,6 +141,7 @@ describe("saveCurrentFactoryDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],
@@ -185,6 +189,7 @@ describe("saveCurrentFactoryDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Scoped Factory",
           workers: [],
           workstations: [],

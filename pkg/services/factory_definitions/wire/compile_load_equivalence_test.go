@@ -148,6 +148,7 @@ func newCompileLoadLoader(
 		sourceResolver,
 		fileSystem,
 		stubRequiredToolChecker{},
+		func() string { return "compile-equivalence-activation" },
 	)
 }
 

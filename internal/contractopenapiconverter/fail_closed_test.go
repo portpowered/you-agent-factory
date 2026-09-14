@@ -121,6 +121,61 @@ func TestConvertFailClosedSchemaPreservesNegatedDispatchIdentityConstraint(t *te
 	}
 }
 
+func TestConvertFailClosedSchemaOmitsReadOnlyPropertiesFromWritableProjection(t *testing.T) {
+	source := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"editable": map[string]any{
+				"type":     "string",
+				"readOnly": false,
+			},
+			"serverOwned": map[string]any{
+				"type":     "string",
+				"readOnly": true,
+			},
+		},
+		"required": []any{"editable", "serverOwned"},
+	}
+
+	converted, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(source, nil)
+	if len(diagnostics) != 0 {
+		t.Fatalf("ConvertFailClosedSchema() diagnostics = %#v, want none", diagnostics)
+	}
+
+	properties, ok := converted["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("converted properties = %#v, want object", converted["properties"])
+	}
+	if _, ok := properties["serverOwned"]; ok {
+		t.Fatalf("converted properties = %#v, want serverOwned omitted", properties)
+	}
+	editable, ok := properties["editable"].(map[string]any)
+	if !ok {
+		t.Fatalf("converted editable property = %#v, want object", properties["editable"])
+	}
+	if _, ok := editable["readOnly"]; ok {
+		t.Fatalf("converted editable property = %#v, want readOnly annotation omitted", editable)
+	}
+
+	required, ok := converted["required"].([]any)
+	if !ok {
+		t.Fatalf("converted required = %#v, want array", converted["required"])
+	}
+	if len(required) != 1 || required[0] != "editable" {
+		t.Fatalf("converted required = %#v, want only editable", required)
+	}
+
+	// Conversion is a projection and must not erase the OpenAPI response
+	// annotation from the caller-owned schema graph.
+	sourceProperties := source["properties"].(map[string]any)
+	if _, ok := sourceProperties["serverOwned"]; !ok {
+		t.Fatal("source schema lost serverOwned property during conversion")
+	}
+	if sourceProperties["serverOwned"].(map[string]any)["readOnly"] != true {
+		t.Fatal("source schema lost serverOwned readOnly annotation during conversion")
+	}
+}
+
 type expectedDiagnostic struct {
 	Code     string
 	Path     string

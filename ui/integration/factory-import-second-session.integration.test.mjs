@@ -20,9 +20,16 @@ import {
   waitForDashboardReady,
 } from "./factory-name-preservation-browser-helpers.mjs";
 
+const editableFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const nonDefaultSessionID = "session-review";
 
 const defaultFactoryDefinition = {
+  activation: editableFactoryActivation,
   name: "Browser Session Harness Factory",
   workers: [
     {
@@ -69,6 +76,7 @@ const defaultFactoryDefinition = {
 };
 
 const reviewSessionFactoryDefinition = {
+  activation: editableFactoryActivation,
   metadata: {
     owner: "operations",
   },
@@ -327,6 +335,10 @@ async function importFactoryPngAndActivate(page, options) {
 }
 
 function assertSessionScopedImportActivation(tracking) {
+  const {
+    activation: _activation,
+    ...editableReviewSessionFactoryDefinition
+  } = reviewSessionFactoryDefinition;
   expect(tracking.sessionFactoryPutRequests).toHaveLength(1);
   expect(tracking.sessionFactoryPutRequests[0]?.sessionID).toBe(
     nonDefaultSessionID,
@@ -335,8 +347,7 @@ function assertSessionScopedImportActivation(tracking) {
     expect(tracking.sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
   }
   expect(tracking.sessionFactoryPutRequests[0]?.body).toMatchObject({
-    ...reviewSessionFactoryDefinition,
-    name: reviewSessionFactoryDefinition.name,
+    ...editableReviewSessionFactoryDefinition,
     version: {
       logical: "2",
       physical: "2026-05-19T00:00:00.001Z",
