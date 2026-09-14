@@ -250,6 +250,77 @@ func TestService_PublishFailsAtomicallyWhenEventsRejectsTheAppend(t *testing.T) 
 	}
 }
 
+func TestService_PublishAfterCompletionReturnsTypedErrorWithoutAuthorityMutation(t *testing.T) {
+	t.Parallel()
+
+	eventsService := newTestEventsService(t)
+	service, err := serviceWithEvents(t, eventsService)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+	published := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-before-terminal")
+	topic := responseEventTopicForTest(store.FactorySessionID())
+
+	before, err := eventsService.Read(context.Background(), events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("read authority before completion: %v", err)
+	}
+	if before.Outcome != events.ReadOutcomeProgress || len(before.Records) != 1 {
+		t.Fatalf("authority before completion = outcome %v records %d, want one progress record", before.Outcome, len(before.Records))
+	}
+
+	service.Complete(store)
+	completedAt := store.CompletedAt()
+	if completedAt.IsZero() {
+		t.Fatal("CompletedAt is zero after service.Complete")
+	}
+
+	postTerminal := responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-after-terminal",
+		RunID:      "run-1",
+		Kind:       responseevents.KindMessage,
+		Phase:      responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta",
+			Delivery:       responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationDelta,
+			Fidelity:       responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":1,"contentBlockKind":"TEXT","textDelta":"late"}`),
+	}
+	if _, err := service.Publish(store, postTerminal); !errors.Is(err, responseeventstore.ErrStoreCompleted) {
+		t.Fatalf("post-terminal Publish error = %v, want ErrStoreCompleted", err)
+	}
+
+	if got := store.LatestSequence(); got != published.Sequence {
+		t.Fatalf("store.LatestSequence after rejected post-terminal publish = %d, want %d", got, published.Sequence)
+	}
+	retained := store.Events()
+	if len(retained) != 1 || retained[0].EventID != published.EventID || retained[0].Sequence != published.Sequence {
+		t.Fatalf("retained events after rejected post-terminal publish = %#v, want only %q at sequence %d", retained, published.EventID, published.Sequence)
+	}
+
+	after, err := eventsService.Read(context.Background(), events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("read authority after rejected post-terminal publish: %v", err)
+	}
+	if after.Outcome != events.ReadOutcomeProgress || len(after.Records) != len(before.Records) {
+		t.Fatalf("authority after completion = outcome %v records %d, want unchanged progress record count %d", after.Outcome, len(after.Records), len(before.Records))
+	}
+	if after.Records[0].ID != before.Records[0].ID || after.Records[0].SourceEventID != before.Records[0].SourceEventID || string(after.Records[0].Payload) != string(before.Records[0].Payload) {
+		t.Fatalf("authority record changed after rejected post-terminal publish: before=%#v after=%#v", before.Records[0], after.Records[0])
+	}
+}
+
 // TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents races
 // Publish against Complete/Close on the same store -- the exact interleaving
 // the earlier two-phase-commit design could lose (an Events-accepted record
