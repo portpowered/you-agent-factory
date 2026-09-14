@@ -1812,7 +1812,7 @@
           "guards": [
             {
               "matchInput": "task",
-              "type": "SAME_NAME"
+              "type": "SAME_TRACE_ID"
             }
           ],
           "state": "to-complete",
@@ -1950,7 +1950,7 @@
           "guards": [
             {
               "matchInput": "task",
-              "type": "SAME_NAME"
+              "type": "SAME_TRACE_ID"
             }
           ],
           "state": "init",
@@ -2097,7 +2097,7 @@
           "state": "to-complete",
           "guards": [
             {
-              "type": "SAME_NAME",
+              "type": "SAME_TRACE_ID",
               "matchInput": "plan"
             }
           ]
@@ -2129,7 +2129,7 @@
           "state": "to-complete",
           "guards": [
             {
-              "type": "SAME_NAME",
+              "type": "SAME_TRACE_ID",
               "matchInput": "task"
             }
           ]
@@ -2147,6 +2147,52 @@
         {
           "workType": "task",
           "state": "failed"
+        }
+      ]
+    },
+    {
+      "id": "complete-reviewed-task-after-failed-idea",
+      "name": "complete-reviewed-task-after-failed-idea",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_TRACE_ID"
+            }
+          ],
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_TRACE_ID"
+            }
+          ],
+          "state": "complete",
+          "workType": "review"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
         }
       ]
     },

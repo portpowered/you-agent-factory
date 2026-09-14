@@ -197,3 +197,92 @@ func TestConfigMapping_PerInputGuard_SameTraceIDBuildsConsumeGuardAgainstPeerInp
 		t.Fatalf("same-trace guard binding = %q, want %q", guard.MatchBinding, planArc.Name)
 	}
 }
+
+func TestConfigMapping_ExactLineageFailedIdeaRouteMapsAllThreeInputs(t *testing.T) {
+	net, err := (testConfigMapper{}).Map(context.Background(), exactLineageFailedIdeaFactoryConfig())
+	if err != nil {
+		t.Fatalf("Map: %v", err)
+	}
+
+	transition := net.Transitions["complete-reviewed-task-after-failed-idea"]
+	if transition == nil {
+		t.Fatal("expected exact-lineage completion transition")
+	}
+	arcs := make(map[string]*factoryruntime.PetriArc, len(transition.InputArcs))
+	for index := range transition.InputArcs {
+		arc := &transition.InputArcs[index]
+		arcs[arc.PlaceID] = arc
+	}
+	ideaArc, taskArc, reviewArc := arcs["idea:failed"], arcs["task:to-complete"], arcs["review:complete"]
+	if ideaArc == nil || taskArc == nil || reviewArc == nil {
+		t.Fatalf("expected all exact-lineage inputs, got %#v", transition.InputArcs)
+	}
+	for name, arc := range map[string]*factoryruntime.PetriArc{"idea": ideaArc, "review": reviewArc} {
+		guard, ok := arc.Guard.(*factoryruntime.PetriSameTraceIDGuard)
+		if !ok {
+			t.Fatalf("%s arc guard = %T, want *factoryruntime.PetriSameTraceIDGuard", name, arc.Guard)
+		}
+		if guard.MatchBinding != taskArc.Name {
+			t.Fatalf("%s arc guard binding = %q, want %q", name, guard.MatchBinding, taskArc.Name)
+		}
+	}
+	if got := len(transition.OutputArcs); got != 3 {
+		t.Fatalf("output arc count = %d, want 3", got)
+	}
+}
+
+func exactLineageFailedIdeaFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "idea",
+				States: []interfaces.StateConfig{
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "to-complete", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				},
+			},
+			{
+				Name: "review",
+				States: []interfaces.StateConfig{
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "complete-reviewed-task-after-failed-idea",
+				Type: interfaces.WorkstationTypeLogical,
+				Inputs: []interfaces.IOConfig{
+					{
+						StateName:    "failed",
+						WorkTypeName: "idea",
+						Guard: &interfaces.InputGuardConfig{
+							Type:       interfaces.GuardTypeSameTraceID,
+							MatchInput: "task",
+						},
+					},
+					{StateName: "to-complete", WorkTypeName: "task"},
+					{
+						StateName:    "complete",
+						WorkTypeName: "review",
+						Guard: &interfaces.InputGuardConfig{
+							Type:       interfaces.GuardTypeSameTraceID,
+							MatchInput: "task",
+						},
+					},
+				},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "failed", WorkTypeName: "idea"},
+					{StateName: "complete", WorkTypeName: "task"},
+					{StateName: "complete", WorkTypeName: "review"},
+				},
+			},
+		},
+	}
+}

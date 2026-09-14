@@ -12,6 +12,121 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
+func TestEnablementEvaluator_SameTraceIDGuardBindsCurrentLineageOnly(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameTraceIDJoinNet()
+	idea := &factorytoken.Token{
+		ID:      "idea-current",
+		PlaceID: "idea:to-complete",
+		Color: factorytoken.Color{
+			Name:                   "repeated-delivery",
+			WorkID:                 "idea-current",
+			WorkTypeID:             "idea",
+			DataType:               factorytoken.DataTypeWork,
+			CurrentChainingTraceID: "chain-current",
+		},
+	}
+	historicalTask := &factorytoken.Token{
+		ID:      "a-task-history",
+		PlaceID: "task:failed",
+		Color: factorytoken.Color{
+			Name:                   "repeated-delivery",
+			WorkID:                 "task-history",
+			WorkTypeID:             "task",
+			DataType:               factorytoken.DataTypeWork,
+			CurrentChainingTraceID: "chain-history",
+		},
+	}
+	currentTask := &factorytoken.Token{
+		ID:      "z-task-current",
+		PlaceID: "task:failed",
+		Color: factorytoken.Color{
+			Name:                   "repeated-delivery",
+			WorkID:                 "task-current",
+			WorkTypeID:             "task",
+			DataType:               factorytoken.DataTypeWork,
+			CurrentChainingTraceID: "chain-current",
+		},
+	}
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		idea.ID:           idea,
+		historicalTask.ID: historicalTask,
+		currentTask.ID:    currentTask,
+	})
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != currentTask.ID {
+		t.Fatalf("task binding = %v, want [%s] despite historical same-name task sorting first", got, currentTask.ID)
+	}
+}
+
+func TestEnablementEvaluator_SameTraceIDGuardFailsClosedWithoutLineage(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameTraceIDJoinNet()
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"idea-current": {
+			ID:      "idea-current",
+			PlaceID: "idea:to-complete",
+			Color: factorytoken.Color{
+				Name:       "repeated-delivery",
+				WorkID:     "idea-current",
+				WorkTypeID: "idea",
+				DataType:   factorytoken.DataTypeWork,
+			},
+		},
+		"task-current": {
+			ID:      "task-current",
+			PlaceID: "task:failed",
+			Color: factorytoken.Color{
+				Name:                   "repeated-delivery",
+				WorkID:                 "task-current",
+				WorkTypeID:             "task",
+				DataType:               factorytoken.DataTypeWork,
+				CurrentChainingTraceID: "chain-current",
+			},
+		},
+	})
+
+	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+		t.Fatalf("same-name binding without trace identity enabled %d transitions, want 0: %#v", len(enabled), enabled)
+	}
+}
+
+func sameTraceIDJoinNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"idea:to-complete": {ID: "idea:to-complete"},
+			"task:failed":      {ID: "task:failed"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"exact-lineage-join": {
+				ID:   "exact-lineage-join",
+				Name: "exact-lineage-join",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "idea-in",
+						Name:        "idea",
+						PlaceID:     "idea:to-complete",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameTraceIDGuard{MatchBinding: "task"},
+					},
+					{
+						ID:          "task-in",
+						Name:        "task",
+						PlaceID:     "task:failed",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 	n := sameNameGuardNet()
