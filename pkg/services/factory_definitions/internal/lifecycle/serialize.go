@@ -1,12 +1,29 @@
 package lifecycle
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+// activationResultGateway is intentionally private to the two consumers that
+// need the response-safe activation result. The stable Definitions root
+// contract remains the error-only activation gateway.
+type activationResultGateway interface {
+	factorydefinitions.DefinitionActivationGateway
+	ActivateSessionEditableFactoryWithResult(
+		ctx context.Context,
+		session *factorydefinitions.DefinitionSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name string,
+		runtimeName string,
+	) (factorydefinitions.DefinitionActivationResult, error)
+}
 
 func loadedFactoryDefinitionVersion(
 	current factorydefinitions.LoadedFactorySource,
@@ -175,4 +192,105 @@ func (s *Service) SerializeNamedFactoryUpsertResponse(
 		return nil, fmt.Errorf("name upsert factory snapshot: %w", err)
 	}
 	return namedSnapshot, nil
+}
+
+// prepareActivationResponse loads and serializes the persisted candidate
+// before the live runtime is replaced. Any filesystem, decoding, materialized
+// response, or version failure therefore leaves the previous runtime active.
+func (s *Service) prepareActivationResponse(
+	name string,
+	factoryDir string,
+	inlineBundledFiles bool,
+	fallbackVersion factorydefinitions.FactoryVersion,
+) (*factorydefinitions.FactorySnapshot, *factorydefinitions.FactoryVersion, error) {
+	candidate, err := loadFactoryFromHost(s.host, factoryDir, s.host.WorkstationLoader())
+	if err != nil {
+		return nil, nil, fmt.Errorf("load activation response candidate: %w", err)
+	}
+	if candidate == nil {
+		return nil, nil, fmt.Errorf("activation response candidate is unavailable")
+	}
+
+	var snapshot *factorydefinitions.FactorySnapshot
+	if inlineBundledFiles {
+		snapshot, err = s.serializeNamedFactory(name, candidate, true)
+	} else {
+		snapshot, err = s.SerializeNamedFactoryUpsertResponse(name, candidate)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if snapshot == nil {
+		return nil, nil, fmt.Errorf("activation response snapshot is unavailable")
+	}
+
+	version := fallbackVersion
+	if loadedVersion, loaded := loadedFactoryDefinitionVersion(candidate); loaded {
+		version = *loadedVersion
+	}
+	return snapshot, &version, nil
+}
+
+func (s *Service) prepareActivationResponseIfSupported(
+	name string,
+	factoryDir string,
+	inlineBundledFiles bool,
+	fallbackVersion factorydefinitions.FactoryVersion,
+) (*factorydefinitions.FactorySnapshot, *factorydefinitions.FactoryVersion, error) {
+	if !s.activationResultSupported() {
+		return nil, nil, nil
+	}
+	return s.prepareActivationResponse(name, factoryDir, inlineBundledFiles, fallbackVersion)
+}
+
+func (s *Service) activationResultSupported() bool {
+	if s == nil || s.activationGateway == nil {
+		return false
+	}
+	_, ok := s.activationGateway.(activationResultGateway)
+	return ok
+}
+
+func (s *Service) activateSessionEditableFactory(
+	ctx context.Context,
+	session *factorydefinitions.DefinitionSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name string,
+	runtimeName string,
+) (factorydefinitions.LoadedFactorySource, bool, error) {
+	if resultGateway, ok := s.activationGateway.(activationResultGateway); ok {
+		result, err := resultGateway.ActivateSessionEditableFactoryWithResult(
+			ctx,
+			session,
+			sessionID,
+			sessionRootDir,
+			factoryDir,
+			name,
+			runtimeName,
+		)
+		if err != nil {
+			return nil, false, err
+		}
+		if result.Available {
+			if result.LoadedSource == nil {
+				return nil, true, fmt.Errorf("activation returned no loaded Factory source")
+			}
+			return result.LoadedSource, true, nil
+		}
+	}
+
+	if err := s.activationGateway.ActivateSessionEditableFactory(
+		ctx,
+		session,
+		sessionID,
+		sessionRootDir,
+		factoryDir,
+		name,
+		runtimeName,
+	); err != nil {
+		return nil, false, err
+	}
+	return nil, false, nil
 }

@@ -61,28 +61,11 @@ type DefinitionActivationGateway interface {
 	) error
 }
 
-// DefinitionActivationResult is the optional result of a successful editable
-// Factory activation. LoadedSource is the exact source returned by the
-// replacement runtime, while Available distinguishes a legacy gateway that
-// only implements the original error-only activation contract.
+// DefinitionActivationResult is the result of a successful editable Factory
+// activation. LoadedSource is the exact source returned by the replacement
+// runtime, while Available distinguishes a legacy gateway that only implements
+// the original error-only activation contract.
 type DefinitionActivationResult struct {
 	LoadedSource LoadedFactorySource
 	Available    bool
-}
-
-// DefinitionActivationResultGateway is the response-safe activation edge.
-// Definitions uses it when available so response assembly can use the source
-// that was actually swapped into the live runtime without performing
-// failure-prone reads after the swap.
-type DefinitionActivationResultGateway interface {
-	DefinitionActivationGateway
-	ActivateSessionEditableFactoryWithResult(
-		ctx context.Context,
-		session *DefinitionSession,
-		sessionID string,
-		sessionRootDir string,
-		factoryDir string,
-		name string,
-		runtimeName string,
-	) (DefinitionActivationResult, error)
 }

@@ -56,35 +56,6 @@ func RequireIdleBeforeNamedActivation(
 	return requireRuntimeIdle(ctx)
 }
 
-// ActivateSessionRuntime builds, validates, and installs one persisted
-// definition replacement using the canonical ordering and error policy.
-func ActivateSessionRuntime(
-	ctx context.Context,
-	session *livesession.LiveSession,
-	sessionID string,
-	sessionRootDir string,
-	factoryDir string,
-	name string,
-	runtimeName string,
-	build func(context.Context, string, string, string) (runtimeports.RuntimeInstance, error),
-	requireIdle func(context.Context, string) error,
-	replace func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
-) error {
-	_, err := ActivateSessionRuntimeWithResult(
-		ctx,
-		session,
-		sessionID,
-		sessionRootDir,
-		factoryDir,
-		name,
-		runtimeName,
-		build,
-		requireIdle,
-		replace,
-	)
-	return err
-}
-
 // ActivateSessionRuntimeWithResult builds, validates, and installs one
 // persisted definition replacement, returning the exact loaded source that
 // was handed to the live runtime. The source is validated before replacement

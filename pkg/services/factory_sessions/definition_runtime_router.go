@@ -245,7 +245,18 @@ type definitionActivationGatewayRouter struct {
 	router *DefinitionRuntimeRouter
 }
 
-var _ factorydefinitions.DefinitionActivationResultGateway = definitionActivationGatewayRouter{}
+var _ interface {
+	DefinitionActivationGateway
+	ActivateSessionEditableFactoryWithResult(
+		ctx context.Context,
+		session *factorydefinitions.DefinitionSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name string,
+		runtimeName string,
+	) (factorydefinitions.DefinitionActivationResult, error)
+} = definitionActivationGatewayRouter{}
 
 func (g definitionActivationGatewayRouter) target(sessionID string) (DefinitionActivationGateway, error) {
 	target, err := g.router.target(sessionID)
@@ -366,7 +377,18 @@ func (g definitionActivationGatewayRouter) ActivateSessionEditableFactoryWithRes
 	if err != nil {
 		return factorydefinitions.DefinitionActivationResult{}, err
 	}
-	resultGateway, ok := target.(factorydefinitions.DefinitionActivationResultGateway)
+	resultGateway, ok := target.(interface {
+		DefinitionActivationGateway
+		ActivateSessionEditableFactoryWithResult(
+			ctx context.Context,
+			session *factorydefinitions.DefinitionSession,
+			sessionID string,
+			sessionRootDir string,
+			factoryDir string,
+			name string,
+			runtimeName string,
+		) (factorydefinitions.DefinitionActivationResult, error)
+	})
 	if !ok {
 		return factorydefinitions.DefinitionActivationResult{}, nil
 	}

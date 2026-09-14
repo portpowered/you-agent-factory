@@ -14,6 +14,19 @@ type definitionActivationGateway struct {
 	runtime *SessionRuntime
 }
 
+type definitionActivationResultGateway interface {
+	factorysessions.DefinitionActivationGateway
+	ActivateSessionEditableFactoryWithResult(
+		ctx context.Context,
+		session *factorydefinitions.DefinitionSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name string,
+		runtimeName string,
+	) (factorydefinitions.DefinitionActivationResult, error)
+}
+
 // NewDefinitionActivationGateway publishes the narrow Sessions-root activation
 // edge for definition save/activate/swap without the attach-capable SessionHost
 // bundle.
@@ -159,4 +172,4 @@ func (g definitionActivationGateway) liveSession(
 }
 
 var _ factorysessions.DefinitionActivationGateway = definitionActivationGateway{}
-var _ factorydefinitions.DefinitionActivationResultGateway = definitionActivationGateway{}
+var _ definitionActivationResultGateway = definitionActivationGateway{}

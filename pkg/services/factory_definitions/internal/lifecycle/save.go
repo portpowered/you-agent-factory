@@ -145,15 +145,12 @@ func (s *Service) persistAndActivateCurrentFactory(
 	if err := s.activationGateway.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 		return err
 	}
-	currentVersion, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, currentName)
-	if err != nil {
-		return err
-	}
-	if err := s.RequireFreshEditableFactoryVersion(request.Version, currentVersion); err != nil {
-		return err
-	}
-	nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.activationGateway.SaveNow())
-	prepared, err := s.PreparePersistedFactoryPayload(currentName, sanitized, nextVersion)
+	nextVersion, prepared, err := s.prepareCurrentFactoryPersistence(
+		sessionRootDir,
+		currentName,
+		request,
+		sanitized,
+	)
 	if err != nil {
 		return err
 	}
@@ -169,18 +166,14 @@ func (s *Service) persistAndActivateCurrentFactory(
 		}
 	}()
 
-	var responseSnapshot *factorydefinitions.FactorySnapshot
-	var responseVersion *factorydefinitions.FactoryVersion
-	if s.activationResultSupported() {
-		responseSnapshot, responseVersion, err = s.prepareActivationResponse(
-			currentName,
-			activateFactoryDir,
-			true,
-			nextVersion,
-		)
-		if err != nil {
-			return err
-		}
+	responseSnapshot, responseVersion, err := s.prepareActivationResponseIfSupported(
+		currentName,
+		activateFactoryDir,
+		true,
+		nextVersion,
+	)
+	if err != nil {
+		return err
 	}
 	activatedSource, resultAvailable, err := s.activateSessionEditableFactory(
 		ctx,
@@ -194,25 +187,74 @@ func (s *Service) persistAndActivateCurrentFactory(
 	if err != nil {
 		return err
 	}
+	*saved, err = s.currentFactorySaveResult(
+		ctx,
+		sessionID,
+		currentName,
+		nextVersion,
+		activatedSource,
+		resultAvailable,
+		responseSnapshot,
+		responseVersion,
+	)
+	if err != nil {
+		return err
+	}
+	if replaceResult != nil && replaceResult.DiscardBackup != nil {
+		replaceResult.DiscardBackup()
+	}
+	commit = true
+	return nil
+}
+
+func (s *Service) prepareCurrentFactoryPersistence(
+	sessionRootDir string,
+	currentName string,
+	request EditableFactory,
+	sanitized *factorydefinitions.FactorySnapshot,
+) (factorydefinitions.FactoryVersion, *factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	currentVersion, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, currentName)
+	if err != nil {
+		return factorydefinitions.FactoryVersion{}, nil, err
+	}
+	if err := s.RequireFreshEditableFactoryVersion(request.Version, currentVersion); err != nil {
+		return factorydefinitions.FactoryVersion{}, nil, err
+	}
+	nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.activationGateway.SaveNow())
+	prepared, err := s.PreparePersistedFactoryPayload(currentName, sanitized, nextVersion)
+	if err != nil {
+		return factorydefinitions.FactoryVersion{}, nil, err
+	}
+	return nextVersion, prepared, nil
+}
+
+func (s *Service) currentFactorySaveResult(
+	ctx context.Context,
+	sessionID string,
+	currentName string,
+	nextVersion factorydefinitions.FactoryVersion,
+	activatedSource factorydefinitions.LoadedFactorySource,
+	resultAvailable bool,
+	responseSnapshot *factorydefinitions.FactorySnapshot,
+	responseVersion *factorydefinitions.FactoryVersion,
+) (EditableFactory, error) {
 	if resultAvailable {
-		*saved = EditableFactory{
+		if responseSnapshot == nil || responseVersion == nil {
+			return EditableFactory{}, fmt.Errorf("activation response is unavailable")
+		}
+		return EditableFactory{
 			Name:       currentName,
 			Snapshot:   responseSnapshot.Clone(),
 			Version:    responseVersion,
 			Activation: currentFactoryActivationProvenance(activatedSource),
-		}
-		if replaceResult != nil && replaceResult.DiscardBackup != nil {
-			replaceResult.DiscardBackup()
-		}
-		commit = true
-		return nil
+		}, nil
 	}
 	savedSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(
 		withActivationReadBypass(ctx),
 		sessionID,
 	)
 	if err != nil {
-		return err
+		return EditableFactory{}, err
 	}
 	version := &nextVersion
 	var activation *factorydefinitions.FactoryActivationProvenance
@@ -222,17 +264,12 @@ func (s *Service) persistAndActivateCurrentFactory(
 		}
 		activation = currentFactoryActivationProvenance(runtimeCfg)
 	}
-	*saved = EditableFactory{
+	return EditableFactory{
 		Name:       currentName,
 		Snapshot:   savedSnapshot.Clone(),
 		Version:    version,
 		Activation: activation,
-	}
-	if replaceResult != nil && replaceResult.DiscardBackup != nil {
-		replaceResult.DiscardBackup()
-	}
-	commit = true
-	return nil
+	}, nil
 }
 
 func resolveReplaceCurrentLayoutTarget(
