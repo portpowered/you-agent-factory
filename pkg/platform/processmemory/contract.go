@@ -8,7 +8,3 @@ type CommitReader func() (uint64, error)
 // ErrUnavailable identifies platforms or process states where committed
 // process memory cannot be read without substituting a different signal.
 var ErrUnavailable = errors.New("process commit is unavailable")
-
-// ErrRSSUnavailable identifies platforms or process states where resident
-// process memory cannot be read without substituting a different signal.
-var ErrRSSUnavailable = errors.New("process RSS is unavailable")

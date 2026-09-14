@@ -205,6 +205,44 @@ func loadRuntime(
 	preloadedReplayInput *recording.LoadReplayInputResult,
 	sessionID string,
 ) (RuntimeLoad, error) {
+	return loadRuntimeWithReplayMode(
+		dir,
+		executionBaseDir,
+		replayPath,
+		operatorDefaults,
+		workstationLoader,
+		root,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		replayInputs,
+		captureLoadedFactorySnapshot,
+		newSessionLogger,
+		resolvedSnapshot,
+		preloadedReplayInput,
+		sessionID,
+		true,
+	)
+}
+
+func loadRuntimeWithReplayMode(
+	dir string,
+	executionBaseDir string,
+	replayPath string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	root RuntimeRoot,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recording.ReplayInputLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
+	preloadedReplayInput *recording.LoadReplayInputResult,
+	sessionID string,
+	historicalInspection bool,
+) (RuntimeLoad, error) {
 	if newSessionLogger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory is required")
 	}
@@ -226,6 +264,7 @@ func loadRuntime(
 		replayInputs,
 		preloadedReplayInput,
 		sessionID,
+		historicalInspection,
 	)
 	if err != nil {
 		return RuntimeLoad{}, err
@@ -360,6 +399,7 @@ func loadRuntimeReplay(
 	replayInputs recording.ReplayInputLoader,
 	preloadedReplayInput *recording.LoadReplayInputResult,
 	sessionID string,
+	historicalInspection bool,
 ) (runtimeReplayLoad, error) {
 	if replayPath == "" {
 		return runtimeReplayLoad{}, nil
@@ -384,6 +424,9 @@ func loadRuntimeReplay(
 	if result.Portable == nil {
 		if result.Legacy == nil {
 			return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: replay artifact is required")
+		}
+		if !historicalInspection {
+			return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
 		}
 		reconstructor, ok := replayInputs.(interface {
 			ReconstructCanonicalFactoryWorldState([]recording.FactoryEvent, int) (recording.FactoryWorldState, error)

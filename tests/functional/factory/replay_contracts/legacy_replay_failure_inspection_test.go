@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -22,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -642,7 +642,7 @@ type legacyReplayResourceAudit struct {
 func newLegacyReplayResourceAudit() legacyReplayResourceAudit {
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
-	rss, err := platformprocessmemory.CurrentRSS()
+	rss, err := currentLegacyReplayRSS()
 	return legacyReplayResourceAudit{
 		heapAllocBefore:  stats.HeapAlloc,
 		sysBefore:        stats.Sys,
@@ -656,7 +656,7 @@ func (audit legacyReplayResourceAudit) report(t *testing.T, effects *legacyRepla
 	t.Helper()
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
-	rss, rssErr := platformprocessmemory.CurrentRSS()
+	rss, rssErr := currentLegacyReplayRSS()
 	if !legacyReplayRaceBuild && rssErr == nil && rss > legacyReplayMaxFunctionalRSS {
 		t.Errorf("functional replay RSS = %d bytes, exceeds declared 1 GiB bound", rss)
 	}
@@ -681,6 +681,25 @@ func (audit legacyReplayResourceAudit) report(t *testing.T, effects *legacyRepla
 		effects.forbiddenCalls(),
 		effects.writeCalls.Load()+effects.appendCalls.Load()+effects.directoryCalls.Load()+effects.temporaryCalls.Load()+effects.removeCalls.Load()+effects.renameCalls.Load(),
 	)
+}
+
+func currentLegacyReplayRSS() (uint64, error) {
+	if runtime.GOOS != "linux" {
+		return 0, errors.New("process RSS is unavailable on this platform")
+	}
+	data, err := os.ReadFile("/proc/self/statm")
+	if err != nil {
+		return 0, fmt.Errorf("read process RSS: %w", err)
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 2 {
+		return 0, errors.New("read process RSS: malformed statm")
+	}
+	residentPages, err := strconv.ParseUint(fields[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("read process RSS: resident pages: %w", err)
+	}
+	return residentPages * uint64(os.Getpagesize()), nil
 }
 
 type legacyReplayEffects struct {

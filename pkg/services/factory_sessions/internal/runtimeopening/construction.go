@@ -106,7 +106,7 @@ func PrepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	load, err = loadRuntime(
+	load, err = loadRuntimeWithReplayMode(
 		selectedDefinitionPath,
 		prepared.Definition.ExecutionBaseDir,
 		prepared.Recordings.ReplayPath,
@@ -122,6 +122,7 @@ func PrepareRuntime(
 		prepared.DefinitionSnapshot,
 		replayInput,
 		prepared.Session.FactorySessionID,
+		prepared.Session.Host.Port <= 0,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
