@@ -30,13 +30,20 @@ LA-14, or LA-15 acceptance as PASS.
 
 ## OS-boundary self-test
 
-The focused integration matrix uses the checked-in script-only helper at
-`testdata/tts_clean_install/helper.ps1`. The runner verifies its regular-file
-identity and SHA-256 before starting PowerShell:
+The focused integration matrix consumes a helper test executable compiled once
+by the integration/build lane. It must be supplied by absolute path and its
+lowercase SHA-256; the runner rejects a missing, non-regular, reparse-point, or
+hash-mismatched helper before starting any child:
 
-`tts-clean-install-helper/v1`
+`tts-clean-install-helper/v2`
 
-`7f5855a19af3b7f0892f4524f62058ca71c190fba275eb8c25c8248f59242e70`
+```powershell
+$helper = Join-Path $env:TEMP 'tts-clean-install-helper.exe'
+go test -c -o $helper ./tests/integration/models/tts_clean_install
+$hash = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+$env:INFINITE_YOU_TTS_PREBUILT_HELPER_PATH = $helper
+$env:INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256 = $hash
+```
 
 The helper creates no LocalAI, model, download, or external-network activity.
 It only emits deterministic events/WAV bytes and held processes for the real
@@ -57,5 +64,7 @@ git diff --check
 ```
 
 OS-boundary cases skip on non-Windows hosts; the pure component tests remain
-portable. These tests are preparation evidence only and do not claim real
-installer, backend, model, or speech semantics.
+portable. The integration lane builds the helper once and passes the same
+absolute path/hash through `INFINITE_YOU_TTS_PREBUILT_HELPER_PATH` and
+`INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256`. These tests are preparation evidence
+only and do not claim real installer, backend, model, or speech semantics.

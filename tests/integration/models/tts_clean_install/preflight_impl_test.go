@@ -401,7 +401,10 @@ func absoluteClean(path string) (string, error) {
 }
 
 func validateEmptyOutputRoot(root, reportPath string) error {
-	info, err := os.Stat(root)
+	if err := rejectReparsePath(root); err != nil {
+		return fmt.Errorf("output root contains a reparse point: %w", err)
+	}
+	info, err := os.Lstat(root)
 	if err != nil {
 		return err
 	}
@@ -439,6 +442,9 @@ func validateNoPathAlias(first, second, firstName, secondName string) error {
 }
 
 func readManifest(path string) (Manifest, []byte, error) {
+	if err := rejectReparsePath(path); err != nil {
+		return Manifest{}, nil, fmt.Errorf("manifest path contains a reparse point: %w", err)
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Manifest{}, nil, err
@@ -603,6 +609,9 @@ func manifestReferences(manifest Manifest) []fileReference {
 }
 
 func inspectFile(name, path, expectedIdentity, expectedSHA string, textFile bool) (Identity, int64, error) {
+	if err := rejectReparsePath(path); err != nil {
+		return Identity{}, 0, fmt.Errorf("input path contains a reparse point: %w", err)
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Identity{}, 0, err

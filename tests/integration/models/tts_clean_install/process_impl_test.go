@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -21,12 +20,20 @@ import (
 )
 
 const (
-	deterministicHelperIdentity = "tts-clean-install-helper/v1"
-	deterministicHelperSHA256   = "7f5855a19af3b7f0892f4524f62058ca71c190fba275eb8c25c8248f59242e70"
-	deterministicHelperRelative = "testdata/tts_clean_install/helper.ps1"
-	helperProcessWaitCeiling    = 15 * time.Second
-	helperOutputBytes           = 256 << 10
-	forbiddenListenerPort       = 7437
+	deterministicHelperIdentity               = "tts-clean-install-helper/v2"
+	deterministicHelperPathEnvironment        = "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH"
+	deterministicHelperHashEnvironment        = "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256"
+	deterministicHelperModeEnvironment        = "TTS_CLEAN_INSTALL_HELPER_MODE"
+	deterministicHelperReadyEnvironment       = "TTS_CLEAN_INSTALL_HELPER_READY_PATH"
+	deterministicHelperDescendantEnvironment  = "TTS_CLEAN_INSTALL_HELPER_DESCENDANT_READY_PATH"
+	deterministicHelperOutputEnvironment      = "TTS_CLEAN_INSTALL_HELPER_OUTPUT_ROOT"
+	deterministicHelperArtifactEnvironment    = "TTS_CLEAN_INSTALL_HELPER_ARTIFACT_PATH"
+	deterministicHelperOutputBytesEnvironment = "TTS_CLEAN_INSTALL_HELPER_OUTPUT_BYTES"
+	deterministicHelperOfflineEnvironment     = "TTS_CLEAN_INSTALL_HELPER_OFFLINE"
+	deterministicHelperFailPhaseEnvironment   = "TTS_CLEAN_INSTALL_HELPER_FAIL_PHASE"
+	helperProcessWaitCeiling                  = 15 * time.Second
+	helperOutputBytes                         = 256 << 10
+	forbiddenListenerPort                     = 7437
 )
 
 var errHelperEventsClosed = errors.New("deterministic helper exited before readiness")
@@ -152,10 +159,6 @@ func startHelper(plan SealedPlan, mode string, ownedTree bool, arguments ...stri
 	if err != nil {
 		return nil, err
 	}
-	pwshPath, err := verifiedPowerShellPath()
-	if err != nil {
-		return nil, err
-	}
 	if _, err := absoluteClean(plan.Isolation.OutputRoot); err != nil {
 		return nil, fmt.Errorf("helper working root: %w", err)
 	}
@@ -166,14 +169,9 @@ func startHelper(plan SealedPlan, mode string, ownedTree bool, arguments ...stri
 		return nil, errors.New("helper working root is not a directory")
 	}
 
-	argv := []string{
-		"-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-		"-File", helperPath, "-Mode", mode,
-	}
-	argv = append(argv, arguments...)
-	command := exec.Command(pwshPath, argv...)
+	command := exec.Command(helperPath)
 	command.Dir = plan.Isolation.OutputRoot
-	command.Env = helperEnvironment(plan)
+	command.Env = helperInvocationEnvironment(plan, mode, arguments...)
 	configureProcessCommand(command)
 
 	events := make(chan helperEvent, 64)
@@ -186,6 +184,10 @@ func startHelper(plan SealedPlan, mode string, ownedTree bool, arguments ...stri
 	stderrPipe, err := command.StderrPipe()
 	if err != nil {
 		return nil, fmt.Errorf("helper stderr pipe: %w", err)
+	}
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("helper stdin pipe: %w", err)
 	}
 
 	var tree processTree
@@ -211,6 +213,22 @@ func startHelper(plan SealedPlan, mode string, ownedTree bool, arguments ...stri
 			return nil, fmt.Errorf("attach helper process tree: %w", err)
 		}
 		run.treeAttached = true
+	}
+	// The compiled helper blocks on stdin before it can create a descendant,
+	// bind a listener, or write journey state. Release that gate only after the
+	// root is attached to its Job Object; this closes the command.Start to
+	// AssignProcessToJobObject child-creation race.
+	if _, err := stdin.Write([]byte{0}); err != nil {
+		_ = run.Stop()
+		_ = command.Wait()
+		tree.close()
+		return nil, fmt.Errorf("release helper start gate: %w", err)
+	}
+	if err := stdin.Close(); err != nil {
+		_ = run.Stop()
+		_ = command.Wait()
+		tree.close()
+		return nil, fmt.Errorf("close helper start gate: %w", err)
 	}
 
 	run.stdoutDone = make(chan struct{})
@@ -358,49 +376,83 @@ func drainHelperEvents(events <-chan helperEvent) []helperEvent {
 }
 
 func verifiedHelperPath() (string, error) {
-	_, sourcePath, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", errors.New("cannot locate deterministic helper source")
+	path := strings.TrimSpace(os.Getenv(deterministicHelperPathEnvironment))
+	if path == "" {
+		return "", fmt.Errorf("%s is required for compiled helper evidence", deterministicHelperPathEnvironment)
 	}
-	path := filepath.Join(filepath.Dir(sourcePath), deterministicHelperRelative)
-	path, err := filepath.Abs(path)
+	absolute, err := absoluteClean(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("compiled helper path: %w", err)
 	}
-	info, err := os.Lstat(path)
+	if err := rejectReparsePath(absolute); err != nil {
+		return "", fmt.Errorf("compiled helper path: %w", err)
+	}
+	info, err := os.Lstat(absolute)
 	if err != nil {
-		return "", fmt.Errorf("deterministic helper: %w", err)
+		return "", fmt.Errorf("compiled helper: %w", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return "", errors.New("deterministic helper is not a regular non-reparse file")
+		return "", errors.New("compiled helper is not a regular non-reparse file")
 	}
-	body, err := os.ReadFile(path)
+	want := strings.TrimSpace(os.Getenv(deterministicHelperHashEnvironment))
+	if !sha256Pattern.MatchString(want) {
+		return "", fmt.Errorf("%s must be lowercase SHA-256", deterministicHelperHashEnvironment)
+	}
+	body, err := os.ReadFile(absolute)
 	if err != nil {
-		return "", fmt.Errorf("read deterministic helper: %w", err)
+		return "", fmt.Errorf("read compiled helper: %w", err)
 	}
-	if got := sha256Hex(body); got != deterministicHelperSHA256 {
-		return "", fmt.Errorf("%s SHA-256=%s, want %s", deterministicHelperIdentity, got, deterministicHelperSHA256)
+	if got := sha256Hex(body); got != want {
+		return "", fmt.Errorf("%s SHA-256=%s, want %s", deterministicHelperIdentity, got, want)
 	}
-	return path, nil
+	return absolute, nil
 }
 
-func verifiedPowerShellPath() (string, error) {
-	path, err := exec.LookPath("pwsh")
-	if err != nil {
-		return "", fmt.Errorf("pwsh is required for deterministic helper: %w", err)
+func helperInvocationEnvironment(plan SealedPlan, mode string, arguments ...string) []string {
+	environment := helperEnvironment(plan)
+	environment = setEnvironmentValue(environment, deterministicHelperModeEnvironment, mode)
+	for index := 0; index < len(arguments); index++ {
+		argument := arguments[index]
+		name := ""
+		value := ""
+		switch argument {
+		case "-ReadyPath":
+			name = deterministicHelperReadyEnvironment
+		case "-DescendantReadyPath":
+			name = deterministicHelperDescendantEnvironment
+		case "-OutputRoot":
+			name = deterministicHelperOutputEnvironment
+		case "-ArtifactPath":
+			name = deterministicHelperArtifactEnvironment
+		case "-OutputBytes":
+			name = deterministicHelperOutputBytesEnvironment
+		case "-FailPhase":
+			name = deterministicHelperFailPhaseEnvironment
+		case "-Offline":
+			environment = setEnvironmentValue(environment, deterministicHelperOfflineEnvironment, "1")
+			continue
+		default:
+			continue
+		}
+		if index+1 < len(arguments) {
+			index++
+			value = arguments[index]
+		}
+		environment = setEnvironmentValue(environment, name, value)
 	}
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return "", err
+	return environment
+}
+
+func setEnvironmentValue(environment []string, name, value string) []string {
+	result := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(key, name) {
+			continue
+		}
+		result = append(result, entry)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", fmt.Errorf("pwsh path: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", errors.New("pwsh is not a regular file")
-	}
-	return path, nil
+	return append(result, name+"="+value)
 }
 
 func helperEnvironment(plan SealedPlan) []string {
