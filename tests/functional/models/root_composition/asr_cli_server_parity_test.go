@@ -662,27 +662,27 @@ func TestModelsASRControlledStartupCrashDoesNotPublish(t *testing.T) {
 	}
 }
 
-// TestModelsASRControlledHealthTimeoutStopsReadiness proves a cancelled ASR
-// readiness negotiation stops the managed host and publishes no result.
+// TestModelsASRControlledHealthTimeoutStopsReadiness proves repeated non-ready
+// ASR negotiation times out, stops the managed host, and publishes no result.
 func TestModelsASRControlledHealthTimeoutStopsReadiness(t *testing.T) {
 	t.Parallel()
-	protocol := &blockingGenericCLIProtocol{}
-	protocol.init()
+	protocol := &nonReadyGenericCLIProtocol{started: make(chan struct{})}
+	clock := newControlledGenericCLIHostClock()
 	process, dir, environment, fixture, network, launcher := buildLocalAIASRProcess(t, localai.Options{}, func(edges *serviceedges.Edges) {
 		edges.ModelHostProtocolNegotiator = protocol
+		edges.ModelHostClock = clock
 	})
 	row := localAIASRConformanceRow(t, "health-timeout")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	inputs := support.FakeInputs(ctx, localAIASRCLIArgs(row, ""))
+	inputs := support.FakeInputs(context.Background(), localAIASRCLIArgs(row, ""))
 	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = dir
 	done := make(chan error, 1)
 	go func() { done <- process.Execute(inputs.Input) }()
 	waitForGenericCLIEventOrResult(t, protocol.started, done, "ASR health negotiation start")
+	clock.expireNextReadinessInterval(t)
 	err := waitForGenericCLIResult(t, done, "ASR health timeout")
-	if err == nil || (!errors.Is(err, models.ErrInferenceCancelled) && !errors.Is(err, context.DeadlineExceeded)) {
-		t.Fatalf("ASR health-timeout error = %v, want cancellation-class timeout", err)
+	if err == nil || !errors.Is(err, models.ErrHostLoadingTimeout) {
+		t.Fatalf("ASR health-timeout error = %v, want host loading timeout", err)
 	}
 	if inputs.Stdout() != "" {
 		t.Fatalf("ASR health-timeout stdout = %q, want no output", inputs.Stdout())

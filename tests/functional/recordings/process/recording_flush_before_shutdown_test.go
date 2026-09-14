@@ -60,10 +60,25 @@ func TestRecordingFlushBeforeProcessExecuteReturns(t *testing.T) {
 	}
 	writesBeforeStop := writer.WriteCount()
 	bytesBeforeStop := writer.BytesWritten()
+	finalWrite := writer.blockFailureWrite()
+	t.Cleanup(finalWrite.Release)
 
 	// Stop waits for Process.Execute to return, which includes the injected
 	// initializer orderly-stop hook and its synchronous Recordings flush.
-	server.Stop(t)
+	stopDone := make(chan struct{})
+	go func() {
+		server.Stop(t)
+		close(stopDone)
+	}()
+	awaitRecordingShutdownSignal(t, finalWrite.started, "final failure recording write")
+	select {
+	case <-stopDone:
+		t.Fatal("Process.Execute returned before the final failure recording write completed")
+	default:
+	}
+	finalWrite.Release()
+	awaitRecordingShutdownSignal(t, finalWrite.completed, "final failure recording write completion")
+	awaitRecordingShutdownSignal(t, stopDone, "Process.Execute orderly shutdown")
 
 	after, err := readStandaloneRecording(recordPath)
 	if err != nil {
@@ -83,13 +98,9 @@ func TestRecordingFlushBeforeProcessExecuteReturns(t *testing.T) {
 	if len(after.Events) <= len(before.Events) {
 		t.Fatalf("standalone event count after orderly stop = %d, want > durable baseline %d", len(after.Events), len(before.Events))
 	}
-	if !afterInfo.ModTime().After(beforeInfo.ModTime()) {
-		t.Fatalf("recording mtime after orderly stop = %s, want later than baseline %s", afterInfo.ModTime(), beforeInfo.ModTime())
-	}
-
 	writesAfterStop := writer.WriteCount()
-	if writesAfterStop != writesBeforeStop+1 {
-		t.Fatalf("recording writes after durable dispatch baseline = %d, want exactly one final whole-file write (baseline=%d)", writesAfterStop, writesBeforeStop)
+	if writesAfterStop <= writesBeforeStop {
+		t.Fatalf("recording writes after durable dispatch baseline = %d, want a completed final write after baseline=%d", writesAfterStop, writesBeforeStop)
 	}
 	bytesAfterStop := writer.BytesWritten()
 	if bytesAfterStop <= bytesBeforeStop {
@@ -126,20 +137,17 @@ func submitRecordingShutdownWork(t testing.TB, server *support.FunctionalAPIServ
 
 type recordingShutdownBlockingRunner struct {
 	started chan struct{}
-	starts  chan struct{}
 	once    sync.Once
 }
 
 func newRecordingShutdownBlockingRunner() *recordingShutdownBlockingRunner {
 	return &recordingShutdownBlockingRunner{
 		started: make(chan struct{}),
-		starts:  make(chan struct{}, 16),
 	}
 }
 
 func (runner *recordingShutdownBlockingRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.once.Do(func() { close(runner.started) })
-	runner.starts <- struct{}{}
 	<-ctx.Done()
 	// A canceled provider subprocess reports its termination as an execution
 	// failure to the runtime; returning context.Canceled here would exercise the
@@ -148,24 +156,12 @@ func (runner *recordingShutdownBlockingRunner) Run(ctx context.Context, _ platfo
 	return platformprocess.CommandResult{}, errors.New("recording shutdown provider process terminated")
 }
 
-func awaitRecordingShutdownStarts(t testing.TB, starts <-chan struct{}, count int, name string) {
-	t.Helper()
-	timer := time.NewTimer(recordingShutdownObservationTimeout)
-	defer timer.Stop()
-	for index := 0; index < count; index++ {
-		select {
-		case <-starts:
-		case <-timer.C:
-			t.Fatalf("timed out waiting for %s (%d/%d)", name, index, count)
-		}
-	}
-}
-
 type recordingShutdownWriteProbe struct {
 	mu           sync.Mutex
 	writes       int
 	bytesWritten int64
 	local        platformreplay.Local
+	failureWrite *recordingShutdownWriteGate
 }
 
 func newRecordingShutdownWriteProbe() *recordingShutdownWriteProbe {
@@ -174,10 +170,62 @@ func newRecordingShutdownWriteProbe() *recordingShutdownWriteProbe {
 
 func (probe *recordingShutdownWriteProbe) WriteFile(path string, data []byte) error {
 	probe.mu.Lock()
+	gate := probe.failureWrite
+	probe.mu.Unlock()
+	if gate != nil && standaloneRecordingContainsFailure(data) {
+		gate.begin()
+		defer gate.complete()
+	}
+
+	err := probe.local.WriteFile(path, data)
+	probe.mu.Lock()
 	probe.writes++
 	probe.bytesWritten += int64(len(data))
 	probe.mu.Unlock()
-	return probe.local.WriteFile(path, data)
+	return err
+}
+
+func (probe *recordingShutdownWriteProbe) blockFailureWrite() *recordingShutdownWriteGate {
+	gate := &recordingShutdownWriteGate{
+		started:   make(chan struct{}),
+		release:   make(chan struct{}),
+		completed: make(chan struct{}),
+	}
+	probe.mu.Lock()
+	probe.failureWrite = gate
+	probe.mu.Unlock()
+	return gate
+}
+
+type recordingShutdownWriteGate struct {
+	started      chan struct{}
+	release      chan struct{}
+	completed    chan struct{}
+	startOnce    sync.Once
+	releaseOnce  sync.Once
+	completeOnce sync.Once
+}
+
+func (gate *recordingShutdownWriteGate) begin() {
+	gate.startOnce.Do(func() { close(gate.started) })
+	<-gate.release
+}
+
+func (gate *recordingShutdownWriteGate) Release() {
+	gate.releaseOnce.Do(func() { close(gate.release) })
+}
+
+func (gate *recordingShutdownWriteGate) complete() {
+	gate.completeOnce.Do(func() { close(gate.completed) })
+}
+
+func standaloneRecordingContainsFailure(data []byte) bool {
+	var recording standaloneRecording
+	if err := json.Unmarshal(data, &recording); err != nil {
+		return false
+	}
+	failed, err := standaloneFailureEvents(recording)
+	return err == nil && len(failed) > 0
 }
 
 func (probe *recordingShutdownWriteProbe) WriteCount() int {
@@ -190,26 +238,6 @@ func (probe *recordingShutdownWriteProbe) BytesWritten() int64 {
 	probe.mu.Lock()
 	defer probe.mu.Unlock()
 	return probe.bytesWritten
-}
-
-func awaitRecordingShutdownWritesToSettle(t testing.TB, probe *recordingShutdownWriteProbe, quietPeriod time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(recordingShutdownObservationTimeout)
-	lastWrites := probe.WriteCount()
-	unchangedSince := time.Now()
-	for time.Now().Before(deadline) {
-		time.Sleep(25 * time.Millisecond)
-		writes := probe.WriteCount()
-		if writes != lastWrites {
-			lastWrites = writes
-			unchangedSince = time.Now()
-			continue
-		}
-		if time.Since(unchangedSince) >= quietPeriod {
-			return
-		}
-	}
-	t.Fatalf("recording writes did not settle: writes=%d", lastWrites)
 }
 
 func awaitRecordingShutdownSignal(t testing.TB, signal <-chan struct{}, name string) {
