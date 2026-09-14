@@ -78,7 +78,7 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		return work.OperatorMoveResult{}, fmt.Errorf("apply operator move: %w", err)
 	}
 	e.publishRuntimeSnapshotLocked()
-	e.wakeForOperatorControl()
+	e.WakeForOperatorControl()
 
 	return work.OperatorMoveResult{
 		WorkID:     workID,

@@ -40,7 +40,19 @@ func startBoardPersistenceDaemon(
 	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
 	t.Helper()
-	daemon := startBoardPersistenceDaemonProcess(t, binaryPath, factoryDir, homeDir, recordPath, releasePath)
+	daemon := startBoardPersistenceDaemonProcessWithResume(t, binaryPath, factoryDir, homeDir, "", recordPath, releasePath)
+	waitForBoardDaemonReady(t, daemon, 45*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
+	return daemon
+}
+
+func startBoardPersistenceResumeDaemon(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
+	daemon := startBoardPersistenceDaemonProcessWithResume(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath)
 	waitForBoardDaemonReady(t, daemon, 45*time.Second)
 	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
 	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
@@ -52,16 +64,26 @@ func startBoardPersistenceDaemonProcess(
 	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
 	t.Helper()
+	return startBoardPersistenceDaemonProcessWithResume(t, binaryPath, factoryDir, homeDir, "", recordPath, releasePath)
+}
+
+func startBoardPersistenceDaemonProcessWithResume(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
-	command := exec.CommandContext(
-		t.Context(),
-		binaryPath,
+	args := []string{
 		"-test.run=^TestBoardPersistenceCLIProcessHelper$", "--", "you",
 		"run", "--dir", factoryDir,
 		"--continuously", "--with-server",
 		"--listen", address,
-		"--record", recordPath,
-	)
+	}
+	if resumePath != "" {
+		args = append(args, "--resume", resumePath)
+	}
+	args = append(args, "--record", recordPath)
+	command := exec.CommandContext(t.Context(), binaryPath, args...)
 	command.Dir = factoryDir
 	command.Env = append(
 		builtcliacceptance.ProcessEnvForIsolatedHome(homeDir),
