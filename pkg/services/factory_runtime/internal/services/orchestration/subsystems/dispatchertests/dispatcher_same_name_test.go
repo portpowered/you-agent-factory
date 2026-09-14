@@ -46,7 +46,15 @@ func TestDispatcher_SameNameWakeDispatchesEveryEligiblePairExceptActiveAndStaleB
 					*tokens["00-active-task"], *tokens["00-active-review"], *tokens["00-active-slot"],
 				}),
 			},
+			"completed-predecessor": {
+				DispatchID: "completed-predecessor",
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{
+					*sameNameDispatcherWorkToken("completed-task-input", "task:ready", "eligible-1", "work-eligible-1-task"),
+					*sameNameDispatcherWorkToken("completed-review-input", "review:classifying", "eligible-1", "work-eligible-1-review"),
+				}),
+			},
 		},
+		Results: []workers.WorkResult{{DispatchID: "completed-predecessor"}},
 	}
 	dispatcher := subsystems.NewDispatcher(
 		n,

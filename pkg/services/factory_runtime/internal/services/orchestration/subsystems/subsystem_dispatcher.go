@@ -147,7 +147,7 @@ func (d *DispatcherSubsystem) dispatchDecisions(ctx context.Context, snapshot *i
 		return nil
 	}
 	if scheduler.SupportsRepeatedTransitionBindings(d.sched) {
-		expanded := scheduler.ExpandRepeatedBindings(d.state, &snapshot.Marking, enabled)
+		expanded := d.evaluator.ExpandRepeatedBindings(d.state, d.schedulerSnapshot(snapshot), enabled)
 		if len(expanded) != len(enabled) {
 			d.logger.Debug("dispatcher: expanded repeated transition bindings", "enabled", len(enabled), "expanded", len(expanded))
 		}
