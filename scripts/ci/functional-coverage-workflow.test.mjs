@@ -178,3 +178,24 @@ test("pinned real ACP evidence belongs to backend integration, not functional co
 	assert.match(integrationJob, /name: Require pinned real ACP integration evidence/);
 	assert.match(integrationJob, /if-no-files-found: error/);
 });
+
+test("TTS clean-install integration evidence is required on the Windows boundary", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const makefile = readFileSync(join(process.cwd(), "Makefile"), "utf8");
+	const integrationJob = jobSection(workflow, "backend-integration");
+	const windowsJob = jobSection(workflow, "tts-clean-install-windows");
+	const policyJob = jobSection(workflow, "verification-policy");
+
+	assert.match(makefile, /test-integration:[\s\S]*\.\/tests\/integration\/models\/tts_clean_install/);
+	assert.match(integrationJob, /name: Build TTS clean-install helper artifact/);
+	assert.match(integrationJob, /INFINITE_YOU_TTS_PREBUILT_HELPER_PATH/);
+	assert.match(windowsJob, /runs-on: windows-latest/);
+	assert.match(windowsJob, /go test -c -o \$helperPath \.\/tests\/integration\/models\/tts_clean_install/);
+	assert.match(
+		windowsJob,
+		/go test \.\/tests\/integration\/models\/tts_clean_install -count=1 -v -timeout=20m/,
+	);
+	assert.match(windowsJob, /INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256/);
+	assert.match(policyJob, /needs: \[[^\]]*\btts-clean-install-windows\b[^\]]*\]/s);
+	assert.match(policyJob, /needs\.tts-clean-install-windows\.result/);
+});
