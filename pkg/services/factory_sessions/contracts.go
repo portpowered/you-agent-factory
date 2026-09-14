@@ -156,10 +156,35 @@ type OpeningPresentationOwner interface {
 	Close(OpeningScopeID)
 }
 
+// HistoricalReplayFactoryProjectionAvailability identifies whether a historical
+// recording carried enough canonical Factory events to reconstruct its Work
+// projection. Legacy event recordings can be available; portable recordings
+// intentionally report unavailable until their contract captures these facts.
+type HistoricalReplayFactoryProjectionAvailability string
+
+const (
+	HistoricalReplayFactoryProjectionAvailable   HistoricalReplayFactoryProjectionAvailability = "AVAILABLE"
+	HistoricalReplayFactoryProjectionUnavailable HistoricalReplayFactoryProjectionAvailability = "UNAVAILABLE"
+
+	// HistoricalReplayFactoryProjectionReasonNotRecorded explains why a
+	// portable recording cannot claim canonical Factory Work history.
+	HistoricalReplayFactoryProjectionReasonNotRecorded = "RECORDING_DID_NOT_CAPTURE_CANONICAL_FACTORY_WORK_FACTS"
+)
+
+// HistoricalReplayFactoryProjection exposes canonical Factory history only
+// when the recording carried the required events. State is nil when the
+// projection is unavailable; callers must not fabricate Work rows.
+type HistoricalReplayFactoryProjection struct {
+	Availability HistoricalReplayFactoryProjectionAvailability
+	Reason       string
+	State        *recordings.FactoryWorldState
+}
+
 // HistoricalReplayInspection is the detached public read model restored from
-// a portable Factory Session recording. It uses the same Factory Session,
+// a historical Factory Session recording. It uses the same Factory Session,
 // artifact, result, and ordered-event facts as the ordinary inspection
-// surfaces while making its read-only and redaction boundaries explicit.
+// surfaces while making its read-only, projection-availability, and redaction
+// boundaries explicit.
 type HistoricalReplayInspection struct {
 	Session   SessionReadResult
 	Events    EventReadResult
@@ -167,9 +192,10 @@ type HistoricalReplayInspection struct {
 	Result    ResultReadResult
 	// WorkerHistory is derived from the recording schema. Legacy recordings
 	// report an explicit unavailable outcome instead of an empty history.
-	WorkerHistory recordings.PortableRecordingWorkerHistory
-	Checkpoint    *HistoricalReplayCheckpoint
-	Redaction     HistoricalReplayRedaction
+	WorkerHistory     recordings.PortableRecordingWorkerHistory
+	FactoryProjection HistoricalReplayFactoryProjection
+	Checkpoint        *HistoricalReplayCheckpoint
+	Redaction         HistoricalReplayRedaction
 }
 
 // HistoricalReplayCheckpoint is the public checkpoint summary available from

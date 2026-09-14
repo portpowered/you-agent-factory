@@ -11,12 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
@@ -24,7 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -119,51 +116,6 @@ func provideRemoteInvocationOperation(
 	transport standardCLIHTTPProtocol,
 ) runcli.RemoteInvocationOperation {
 	return runcli.NewRemoteInvocation(transport.Protocol)
-}
-
-func provideRunRuntimeRunnerBuilder(
-	build initializer.RuntimeRunnerBuilder,
-	open *factorysessionwire.ApplicationService,
-) (runcli.RuntimeRunnerBuilder, error) {
-	if build == nil || open == nil {
-		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
-	}
-	return func(
-		ctx context.Context,
-		request *factorysessions.RuntimeOpeningRequest,
-		cancellation initializer.InvocationCancellation,
-		sinkID factorysessions.VisualizationSinkID,
-	) (initializer.LocalRuntimeRunner, error) {
-		var replay *factorysessions.HistoricalReplayInspection
-		var replayMetadataWarnings []recordings.MetadataMismatchWarning
-		var hostedInvocation runcli.HostedInvocationOperation
-		var cleanInvocation factoryruntime.Service
-		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplicationWithCancellation(openCtx, request, cancellation, sinkID)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			replay = opened.HistoricalReplay
-			replayMetadataWarnings = append(
-				[]recordings.MetadataMismatchWarning(nil),
-				opened.ReplayMetadataWarnings...,
-			)
-			hostedInvocation = opened.HostedInvocation
-			cleanInvocation = opened.CleanInvocation
-			return initializer.OpenedApplication{
-				Plan:        opened.Plan,
-				Diagnostics: runtimeartifact.Diagnostics(opened.Diagnostics),
-				Ready:       opened.Ready,
-			}, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
-		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
-		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
-		return runcli.WithHistoricalReplay(runner, replay), nil
-	}, nil
 }
 
 func provideExtendedCLIHTTPProtocol() (extendedCLIHTTPProtocol, error) {

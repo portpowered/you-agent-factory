@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
 )
 
@@ -368,7 +369,12 @@ func ParseReplayV2(data []byte) (*ReplayV2Stream, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan replay v2 artifact: %w", err)
+		return nil, replayEventStructuralError(
+			recordings.ReplayArtifactDiagnosticMalformed,
+			len(stream.Events),
+			"",
+			fmt.Errorf("scan replay v2 artifact: %w", err),
+		)
 	}
 	if stream.Header.SchemaVersion == "" {
 		return nil, fmt.Errorf("replay v2 header is required")
@@ -391,6 +397,14 @@ func parseReplayV2Line(
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		if finalLineMayBeIncomplete && stream.Header.SchemaVersion != "" && stream.Terminal == nil {
 			return true, nil
+		}
+		if stream.Header.SchemaVersion != "" && stream.Terminal == nil {
+			return false, replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticMalformed,
+				len(stream.Events),
+				"",
+				fmt.Errorf("replay v2 line %d is malformed: %w", lineNumber, err),
+			)
 		}
 		return false, fmt.Errorf("replay v2 line %d is malformed: %w", lineNumber, err)
 	}
@@ -434,27 +448,35 @@ func parseReplayV2Event(
 		return fmt.Errorf("replay v2 event appears before header at line %d", lineNumber)
 	}
 	if stream.Terminal != nil {
-		return fmt.Errorf("replay v2 event appears after terminal record at line %d", lineNumber)
+		return replayEventStructuralError(
+			recordings.ReplayArtifactDiagnosticInvalidOrder,
+			len(stream.Events),
+			"",
+			fmt.Errorf("replay v2 event appears after terminal record at line %d", lineNumber),
+		)
 	}
 	var record replayV2EventRecord
 	if err := json.Unmarshal(line, &record); err != nil {
-		return fmt.Errorf("replay v2 event line %d is malformed: %w", lineNumber, err)
+		return replayEventStructuralError(
+			recordings.ReplayArtifactDiagnosticMalformed,
+			len(stream.Events),
+			"",
+			fmt.Errorf("replay v2 event line %d is malformed: %w", lineNumber, err),
+		)
 	}
-	if !validReplayV2Event(record.Event, len(stream.Events)) {
-		return fmt.Errorf("replay v2 event line %d has invalid identity, order, schema, timestamp, or payload", lineNumber)
+	if code, err := replayV2EventStructuralFailure(record.Event, len(stream.Events)); err != nil {
+		return replayEventStructuralError(code, len(stream.Events), record.Event.Id, err)
 	}
 	if replayV2HasEventID(stream.Events, record.Event.Id) {
-		return fmt.Errorf("replay v2 event line %d duplicates event %q", lineNumber, record.Event.Id)
+		return replayEventStructuralError(
+			recordings.ReplayArtifactDiagnosticInvalidIdentity,
+			len(stream.Events),
+			record.Event.Id,
+			fmt.Errorf("replay v2 event line %d duplicates event", lineNumber),
+		)
 	}
 	stream.Events = append(stream.Events, record.Event)
 	return nil
-}
-
-func validReplayV2Event(event interfaces.FactoryEvent, sequence int) bool {
-	return event.SchemaVersion == interfaces.FactoryEventSchemaVersionV1 &&
-		event.Id != "" && event.Type != "" &&
-		event.Context.Sequence == sequence &&
-		!event.Context.EventTime.IsZero() && json.Valid(event.Payload)
 }
 
 func replayV2HasEventID(events []interfaces.FactoryEvent, id string) bool {
@@ -508,6 +530,9 @@ func DecodeReplayV2(
 			return nil, nil, err
 		}
 		if err := Validate(artifact); err != nil {
+			return nil, nil, err
+		}
+		if err := validateReplayEventReferences(artifact); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -744,6 +769,9 @@ func LoadWithMetadata(
 		return nil, ReplayReadMetadata{}, err
 	}
 	if err := Validate(artifact); err != nil {
+		return nil, ReplayReadMetadata{}, err
+	}
+	if err := validateReplayEventReferences(artifact); err != nil {
 		return nil, ReplayReadMetadata{}, err
 	}
 	return artifact, ReplayReadMetadata{SchemaVersion: artifact.SchemaVersion}, nil

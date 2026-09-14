@@ -55,6 +55,17 @@ func (s *Service) Inspection() factorysessions.HistoricalReplayInspection {
 			SecretsRedacted:            s.projection.Redaction.SecretsRedacted,
 		},
 	}
+	if s.projection.FactoryProjection != nil {
+		inspection.FactoryProjection = factorysessions.HistoricalReplayFactoryProjection{
+			Availability: factorysessions.HistoricalReplayFactoryProjectionAvailable,
+			State:        s.projection.FactoryProjection,
+		}
+	} else {
+		inspection.FactoryProjection = factorysessions.HistoricalReplayFactoryProjection{
+			Availability: factorysessions.HistoricalReplayFactoryProjectionUnavailable,
+			Reason:       factorysessions.HistoricalReplayFactoryProjectionReasonNotRecorded,
+		}
+	}
 	if checkpoint := s.projection.Checkpoint; checkpoint != nil {
 		inspection.Checkpoint = &factorysessions.HistoricalReplayCheckpoint{
 			ID: checkpoint.ID, Label: checkpoint.Label, Summary: checkpoint.Summary,

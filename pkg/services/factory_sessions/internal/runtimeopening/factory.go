@@ -615,9 +615,9 @@ func (f *Factory) openForRequest(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (runtimeProducts, error) {
-	// Historical portable replay is an inspection-only product and must not
-	// acquire live Runtime state. Legacy replay artifacts still use the normal
-	// activation path and therefore retain the live replay behavior.
+	// Historical replay, whether portable or legacy, is an inspection-only
+	// product and must select its detached projection before live Factory
+	// Runtime assembly. Resume remains an explicit live successor path below.
 	if request != nil && request.Recordings.ReplayPath != "" {
 		// A compatibility Factory without a Runtime root still needs the direct
 		// historical/replay opener used by narrow tests and migration callers.
@@ -629,16 +629,28 @@ func (f *Factory) openForRequest(
 		input, err := f.replayInputs.LoadReplayInput(
 			recordings.LoadReplayInputRequest{Path: request.Recordings.ReplayPath},
 		)
-		if err != nil || input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
-			if err != nil {
-				// The loader has already classified and safely detached the
-				// replay input. Propagating that result preserves the one-read
-				// runtime-opening contract; routing the error through openRuntime
-				// would ask the same loader to read the artifact again.
-				return runtimeProducts{}, err
-			}
+		if err != nil {
+			// The loader has already classified and safely detached the
+			// replay input. Propagating that result preserves the one-read
+			// runtime-opening contract; routing the error through openRuntime
+			// would ask the same loader to read the artifact again.
+			return runtimeProducts{}, err
+		}
+		// Offline replay is a detached historical inspection. A caller that
+		// explicitly requested a hosted process still owns the established
+		// ordinary replay contract, which exposes the replay through its live
+		// API and metrics surfaces. Keeping that distinction here prevents the
+		// inspection-only product from being wrapped in host-readiness or live
+		// transport lifecycle requirements.
+		if replayRequestsHistoricalInspection(request) &&
+			(input.Portable != nil || input.Legacy == nil || legacyReplayArtifactHasCanonicalEventShape(*input.Legacy)) {
 			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
 		}
+		// Hosted replay retains the ordinary activated runtime path for both
+		// portable artifacts and structurally complete legacy artifacts. Keep
+		// intentionally incomplete synthetic inputs used by narrow compatibility
+		// callers on that same path; the real Recordings loader rejects such an
+		// artifact before this branch.
 		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
 	if request != nil && strings.TrimSpace(request.Recordings.ResumePath) != "" {
@@ -654,6 +666,17 @@ func (f *Factory) openForRequest(
 		return f.openActivatedRuntimeWithResumeInput(ctx, request, &input)
 	}
 	return f.openActivatedRuntime(ctx, request)
+}
+
+func replayRequestsHistoricalInspection(request *factorysessions.RuntimeOpeningRequest) bool {
+	if request == nil {
+		return false
+	}
+	host := request.FactorySession.Host
+	// The CLI clears Port when the API transport is disabled but retains the
+	// parsed AutoPort default. AutoPort is meaningful only with a concrete
+	// listener request, so the effective hosting decision is the resolved port.
+	return host.Port <= 0
 }
 
 // OpenInvocationRuntime opens one Factory Session and returns only the roles

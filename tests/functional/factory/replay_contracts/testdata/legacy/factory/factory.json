@@ -1,0 +1,2273 @@
+{
+  "layout": {
+    "schemaVersion": 1,
+    "preferences": {
+      "direction": "RIGHT"
+    },
+    "nodes": [
+      {
+        "id": "work-state:thoughts:init",
+        "position": {
+          "x": 40,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:thoughts:complete",
+        "position": {
+          "x": 325,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:thoughts:failed",
+        "position": {
+          "x": 610,
+          "y": 185
+        }
+      },
+      {
+        "id": "worker:ideafier",
+        "position": {
+          "x": 895,
+          "y": 185
+        }
+      },
+      {
+        "id": "workstation:ideafy",
+        "position": {
+          "x": 40,
+          "y": 375
+        }
+      },
+      {
+        "id": "workstation:though-retrigger",
+        "position": {
+          "x": 325,
+          "y": 375
+        }
+      },
+      {
+        "id": "resource:supervisor-slot",
+        "position": {
+          "x": 610,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:idea:init",
+        "position": {
+          "x": 2440,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:idea:to-complete",
+        "position": {
+          "x": 2725,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:idea:complete",
+        "position": {
+          "x": 3010,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:idea:failed",
+        "position": {
+          "x": 3295,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:plan:init",
+        "position": {
+          "x": 2440,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:plan:complete",
+        "position": {
+          "x": 2725,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:plan:failed",
+        "position": {
+          "x": 3010,
+          "y": 375
+        }
+      },
+      {
+        "id": "worker:workspace-setup",
+        "position": {
+          "x": 3295,
+          "y": 375
+        }
+      },
+      {
+        "id": "worker:planner",
+        "position": {
+          "x": 2440,
+          "y": 565
+        }
+      },
+      {
+        "id": "workstation:plan",
+        "position": {
+          "x": 2725,
+          "y": 565
+        }
+      },
+      {
+        "id": "workstation:setup-workspace",
+        "position": {
+          "x": 3010,
+          "y": 565
+        }
+      },
+      {
+        "id": "workstation:escalate-plan-failure",
+        "position": {
+          "x": 3295,
+          "y": 565
+        }
+      },
+      {
+        "id": "resource:concurrent-planners",
+        "position": {
+          "x": 2440,
+          "y": 755
+        }
+      },
+      {
+        "id": "work-state:task:init",
+        "position": {
+          "x": 40,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:task:awaiting-ci",
+        "position": {
+          "x": 325,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:task:in-review",
+        "position": {
+          "x": 610,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:task:to-complete",
+        "position": {
+          "x": 895,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:task:complete",
+        "position": {
+          "x": 1180,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:task:failed",
+        "position": {
+          "x": 1465,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:review:init",
+        "position": {
+          "x": 1750,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:review:complete",
+        "position": {
+          "x": 2035,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:review:fin",
+        "position": {
+          "x": 40,
+          "y": 2075
+        }
+      },
+      {
+        "id": "worker:processor",
+        "position": {
+          "x": 325,
+          "y": 2075
+        }
+      },
+      {
+        "id": "worker:reviewer",
+        "position": {
+          "x": 610,
+          "y": 2075
+        }
+      },
+      {
+        "id": "worker:ci-waiter",
+        "position": {
+          "x": 895,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:consume",
+        "position": {
+          "x": 1180,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:ci-wait",
+        "position": {
+          "x": 1465,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:process",
+        "position": {
+          "x": 1750,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:review",
+        "position": {
+          "x": 2035,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:executor-loop-breaker",
+        "position": {
+          "x": 40,
+          "y": 2265
+        }
+      },
+      {
+        "id": "workstation:review-loop-breaker",
+        "position": {
+          "x": 325,
+          "y": 2265
+        }
+      },
+      {
+        "id": "workstation:escalate-task-failure",
+        "position": {
+          "x": 610,
+          "y": 2265
+        }
+      },
+      {
+        "id": "resource:executor-slot",
+        "position": {
+          "x": 895,
+          "y": 2265
+        }
+      },
+      {
+        "id": "work-state:validation:init",
+        "position": {
+          "x": 2440,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:validation:ready",
+        "position": {
+          "x": 2725,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:validation:complete",
+        "position": {
+          "x": 3010,
+          "y": 1885
+        }
+      },
+      {
+        "id": "work-state:validation:failed",
+        "position": {
+          "x": 3295,
+          "y": 1885
+        }
+      },
+      {
+        "id": "worker:validation-setup",
+        "position": {
+          "x": 2440,
+          "y": 2075
+        }
+      },
+      {
+        "id": "worker:validator",
+        "position": {
+          "x": 2725,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:prepare-validation",
+        "position": {
+          "x": 3010,
+          "y": 2075
+        }
+      },
+      {
+        "id": "workstation:validate",
+        "position": {
+          "x": 3295,
+          "y": 2075
+        }
+      },
+      {
+        "id": "resource:validation-slot",
+        "position": {
+          "x": 2440,
+          "y": 2265
+        }
+      },
+      {
+        "id": "work-type:thoughts",
+        "position": {
+          "x": 895,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-type:cron-triggers",
+        "position": {
+          "x": 40,
+          "y": 565
+        }
+      },
+      {
+        "id": "work-type:idea",
+        "position": {
+          "x": 2725,
+          "y": 755
+        }
+      },
+      {
+        "id": "work-type:plan",
+        "position": {
+          "x": 3010,
+          "y": 755
+        }
+      },
+      {
+        "id": "work-type:task",
+        "position": {
+          "x": 1180,
+          "y": 2265
+        }
+      },
+      {
+        "id": "work-type:review",
+        "position": {
+          "x": 1465,
+          "y": 2265
+        }
+      },
+      {
+        "id": "work-type:validation",
+        "position": {
+          "x": 2725,
+          "y": 2265
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/implementation-standards.md",
+        "position": {
+          "x": 1240,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/meta-planning-standards.md",
+        "position": {
+          "x": 1790,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/plan-template.md",
+        "position": {
+          "x": 1240,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/planning-standards.md",
+        "position": {
+          "x": 1790,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/README.md",
+        "position": {
+          "x": 1240,
+          "y": 3085
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/review-standards.md",
+        "position": {
+          "x": 1790,
+          "y": 3085
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/task-template.md",
+        "position": {
+          "x": 1240,
+          "y": 3235
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/testing-standards.md",
+        "position": {
+          "x": 1790,
+          "y": 3235
+        }
+      },
+      {
+        "id": "doc:factory/docs/standards/validation-loopback-template.md",
+        "position": {
+          "x": 1240,
+          "y": 3385
+        }
+      },
+      {
+        "id": "doc:factory/scripts/ci-wait.py",
+        "position": {
+          "x": 2440,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/scripts/decide-project-cycle.py",
+        "position": {
+          "x": 2990,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/scripts/prepare-validation.py",
+        "position": {
+          "x": 2440,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/scripts/reconcile-projects.py",
+        "position": {
+          "x": 2990,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/scripts/setup-workspace.py",
+        "position": {
+          "x": 2440,
+          "y": 3085
+        }
+      },
+      {
+        "id": "work-state:project:init",
+        "position": {
+          "x": 1240,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:project:waiting",
+        "position": {
+          "x": 1525,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:project:complete",
+        "position": {
+          "x": 1810,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:project:blocked",
+        "position": {
+          "x": 2095,
+          "y": 185
+        }
+      },
+      {
+        "id": "work-state:project-cycle:init",
+        "position": {
+          "x": 1240,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:project-cycle:continue",
+        "position": {
+          "x": 1525,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:project-cycle:complete",
+        "position": {
+          "x": 1810,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:project-cycle:failed",
+        "position": {
+          "x": 2095,
+          "y": 375
+        }
+      },
+      {
+        "id": "work-state:project-cycle:blocked",
+        "position": {
+          "x": 1240,
+          "y": 565
+        }
+      },
+      {
+        "id": "worker:project-lead",
+        "position": {
+          "x": 1525,
+          "y": 565
+        }
+      },
+      {
+        "id": "worker:project-cycle-decider",
+        "position": {
+          "x": 1810,
+          "y": 565
+        }
+      },
+      {
+        "id": "workstation:project-lead",
+        "position": {
+          "x": 2095,
+          "y": 565
+        }
+      },
+      {
+        "id": "workstation:decide-project-cycle",
+        "position": {
+          "x": 1240,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:continue-project",
+        "position": {
+          "x": 1525,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:complete-project",
+        "position": {
+          "x": 1810,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:retry-project-after-cycle-failure",
+        "position": {
+          "x": 2095,
+          "y": 755
+        }
+      },
+      {
+        "id": "workstation:block-project",
+        "position": {
+          "x": 1240,
+          "y": 945
+        }
+      },
+      {
+        "id": "workstation:project-loop-breaker",
+        "position": {
+          "x": 1525,
+          "y": 945
+        }
+      },
+      {
+        "id": "resource:concurrent-project-leads",
+        "position": {
+          "x": 1810,
+          "y": 945
+        }
+      },
+      {
+        "id": "work-type:project",
+        "position": {
+          "x": 2095,
+          "y": 945
+        }
+      },
+      {
+        "id": "work-type:project-cycle",
+        "position": {
+          "x": 1240,
+          "y": 1135
+        }
+      },
+      {
+        "id": "work-state:project:needs-supervision",
+        "position": {
+          "x": 1525,
+          "y": 1135
+        }
+      },
+      {
+        "id": "workstation:escalate-project",
+        "position": {
+          "x": 1810,
+          "y": 1135
+        }
+      },
+      {
+        "id": "worker:project-reconciler",
+        "position": {
+          "x": 2095,
+          "y": 1135
+        }
+      },
+      {
+        "id": "workstation:project-reconcile",
+        "position": {
+          "x": 1240,
+          "y": 1325
+        }
+      },
+      {
+        "id": "work-type:project-reconcile",
+        "position": {
+          "x": 325,
+          "y": 565
+        }
+      },
+      {
+        "id": "work-state:project-reconcile:init",
+        "position": {
+          "x": 610,
+          "y": 565
+        }
+      },
+      {
+        "id": "work-state:project-reconcile:complete",
+        "position": {
+          "x": 895,
+          "y": 565
+        }
+      },
+      {
+        "id": "work-state:project-reconcile:failed",
+        "position": {
+          "x": 40,
+          "y": 755
+        }
+      },
+      {
+        "id": "doc:factory/docs/overview.md",
+        "position": {
+          "x": 40,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/docs/operating-policy.md",
+        "position": {
+          "x": 590,
+          "y": 2785
+        }
+      },
+      {
+        "id": "doc:factory/docs/projects.md",
+        "position": {
+          "x": 40,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/docs/batch-inputs.md",
+        "position": {
+          "x": 590,
+          "y": 2935
+        }
+      },
+      {
+        "id": "doc:factory/docs/idea-payload-template.md",
+        "position": {
+          "x": 40,
+          "y": 3085
+        }
+      },
+      {
+        "id": "doc:factory/docs/decision-envelope.md",
+        "position": {
+          "x": 590,
+          "y": 3085
+        }
+      }
+    ],
+    "edges": [],
+    "groups": [
+      {
+        "id": "supervision",
+        "label": "Factory supervision",
+        "color": "#ddd6fe",
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1140,
+          "height": 985
+        },
+        "nodeIds": [
+          "work-state:thoughts:init",
+          "work-state:thoughts:complete",
+          "work-state:thoughts:failed",
+          "worker:ideafier",
+          "workstation:ideafy",
+          "workstation:though-retrigger",
+          "resource:supervisor-slot",
+          "work-type:thoughts",
+          "work-type:cron-triggers",
+          "work-type:project-reconcile",
+          "work-state:project-reconcile:init",
+          "work-state:project-reconcile:complete",
+          "work-state:project-reconcile:failed"
+        ]
+      },
+      {
+        "id": "projects",
+        "label": "Project control",
+        "color": "#bfdbfe",
+        "bounds": {
+          "x": 1200,
+          "y": 0,
+          "width": 1140,
+          "height": 1555
+        },
+        "nodeIds": [
+          "work-state:project:init",
+          "work-state:project:waiting",
+          "work-state:project:complete",
+          "work-state:project:blocked",
+          "work-state:project-cycle:init",
+          "work-state:project-cycle:continue",
+          "work-state:project-cycle:complete",
+          "work-state:project-cycle:failed",
+          "work-state:project-cycle:blocked",
+          "worker:project-lead",
+          "worker:project-cycle-decider",
+          "workstation:project-lead",
+          "workstation:decide-project-cycle",
+          "workstation:continue-project",
+          "workstation:complete-project",
+          "workstation:retry-project-after-cycle-failure",
+          "workstation:block-project",
+          "workstation:project-loop-breaker",
+          "resource:concurrent-project-leads",
+          "work-type:project",
+          "work-type:project-cycle",
+          "work-state:project:needs-supervision",
+          "workstation:escalate-project",
+          "worker:project-reconciler",
+          "workstation:project-reconcile"
+        ]
+      },
+      {
+        "id": "planning",
+        "label": "Planning and admission",
+        "color": "#fde68a",
+        "bounds": {
+          "x": 2400,
+          "y": 0,
+          "width": 1140,
+          "height": 985
+        },
+        "nodeIds": [
+          "work-state:idea:init",
+          "work-state:idea:to-complete",
+          "work-state:idea:complete",
+          "work-state:idea:failed",
+          "work-state:plan:init",
+          "work-state:plan:complete",
+          "work-state:plan:failed",
+          "worker:workspace-setup",
+          "worker:planner",
+          "workstation:plan",
+          "workstation:setup-workspace",
+          "workstation:escalate-plan-failure",
+          "resource:concurrent-planners",
+          "work-type:idea",
+          "work-type:plan"
+        ]
+      },
+      {
+        "id": "delivery",
+        "label": "Implementation, CI and review",
+        "color": "#fed7aa",
+        "bounds": {
+          "x": 0,
+          "y": 1700,
+          "width": 2280,
+          "height": 795
+        },
+        "nodeIds": [
+          "work-state:task:init",
+          "work-state:task:awaiting-ci",
+          "work-state:task:in-review",
+          "work-state:task:to-complete",
+          "work-state:task:complete",
+          "work-state:task:failed",
+          "work-state:review:init",
+          "work-state:review:complete",
+          "work-state:review:fin",
+          "worker:processor",
+          "worker:reviewer",
+          "worker:ci-waiter",
+          "workstation:consume",
+          "workstation:ci-wait",
+          "workstation:process",
+          "workstation:review",
+          "workstation:executor-loop-breaker",
+          "workstation:review-loop-breaker",
+          "workstation:escalate-task-failure",
+          "resource:executor-slot",
+          "work-type:task",
+          "work-type:review"
+        ]
+      },
+      {
+        "id": "validation",
+        "label": "Independent validation and retrospectives",
+        "color": "#bbf7d0",
+        "bounds": {
+          "x": 2400,
+          "y": 1700,
+          "width": 1140,
+          "height": 795
+        },
+        "nodeIds": [
+          "work-state:validation:init",
+          "work-state:validation:ready",
+          "work-state:validation:complete",
+          "work-state:validation:failed",
+          "worker:validation-setup",
+          "worker:validator",
+          "workstation:prepare-validation",
+          "workstation:validate",
+          "resource:validation-slot",
+          "work-type:validation"
+        ]
+      },
+      {
+        "id": "guides",
+        "label": "Factory operating guides",
+        "color": "#cbd5e1",
+        "bounds": {
+          "x": 0,
+          "y": 2600,
+          "width": 1140,
+          "height": 675
+        },
+        "nodeIds": [
+          "doc:factory/docs/overview.md",
+          "doc:factory/docs/operating-policy.md",
+          "doc:factory/docs/projects.md",
+          "doc:factory/docs/batch-inputs.md",
+          "doc:factory/docs/idea-payload-template.md",
+          "doc:factory/docs/decision-envelope.md"
+        ]
+      },
+      {
+        "id": "standards",
+        "label": "Planning and delivery standards",
+        "color": "#cbd5e1",
+        "bounds": {
+          "x": 1200,
+          "y": 2600,
+          "width": 1140,
+          "height": 975
+        },
+        "nodeIds": [
+          "doc:factory/docs/standards/implementation-standards.md",
+          "doc:factory/docs/standards/meta-planning-standards.md",
+          "doc:factory/docs/standards/plan-template.md",
+          "doc:factory/docs/standards/planning-standards.md",
+          "doc:factory/docs/standards/README.md",
+          "doc:factory/docs/standards/review-standards.md",
+          "doc:factory/docs/standards/task-template.md",
+          "doc:factory/docs/standards/testing-standards.md",
+          "doc:factory/docs/standards/validation-loopback-template.md"
+        ]
+      },
+      {
+        "id": "scripts",
+        "label": "Runtime scripts",
+        "color": "#cbd5e1",
+        "bounds": {
+          "x": 2400,
+          "y": 2600,
+          "width": 1140,
+          "height": 675
+        },
+        "nodeIds": [
+          "doc:factory/scripts/ci-wait.py",
+          "doc:factory/scripts/decide-project-cycle.py",
+          "doc:factory/scripts/prepare-validation.py",
+          "doc:factory/scripts/reconcile-projects.py",
+          "doc:factory/scripts/setup-workspace.py"
+        ]
+      }
+    ],
+    "viewport": {
+      "x": 40,
+      "y": 40,
+      "zoom": 0.3
+    }
+  },
+  "name": "you-agent-factory",
+  "resources": [
+    {
+      "capacity": 16,
+      "id": "executor-slot",
+      "name": "executor-slot"
+    },
+    {
+      "capacity": 2,
+      "id": "concurrent-planners",
+      "name": "concurrent-planners"
+    },
+    {
+      "capacity": 2,
+      "id": "concurrent-project-leads",
+      "name": "concurrent-project-leads"
+    },
+    {
+      "id": "validation-slot",
+      "name": "validation-slot",
+      "capacity": 2
+    },
+    {
+      "id": "supervisor-slot",
+      "name": "supervisor-slot",
+      "capacity": 1
+    }
+  ],
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/docs/batch-inputs.md",
+        "targetPath": "factory/docs/batch-inputs.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/docs/overview.md",
+        "targetPath": "factory/docs/overview.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/docs/projects.md",
+        "targetPath": "factory/docs/projects.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/setup-workspace.py",
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/ci-wait.py",
+        "targetPath": "factory/scripts/ci-wait.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/decide-project-cycle.py",
+        "targetPath": "factory/scripts/decide-project-cycle.py",
+        "type": "SCRIPT"
+      },
+      {
+        "id": "factory/docs/operating-policy.md",
+        "targetPath": "factory/docs/operating-policy.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/scripts/prepare-validation.py",
+        "targetPath": "factory/scripts/prepare-validation.py",
+        "type": "SCRIPT",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/implementation-standards.md",
+        "targetPath": "factory/docs/standards/implementation-standards.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/meta-planning-standards.md",
+        "targetPath": "factory/docs/standards/meta-planning-standards.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/plan-template.md",
+        "targetPath": "factory/docs/standards/plan-template.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/planning-standards.md",
+        "targetPath": "factory/docs/standards/planning-standards.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/README.md",
+        "targetPath": "factory/docs/standards/README.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/review-standards.md",
+        "targetPath": "factory/docs/standards/review-standards.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/task-template.md",
+        "targetPath": "factory/docs/standards/task-template.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/testing-standards.md",
+        "targetPath": "factory/docs/standards/testing-standards.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/standards/validation-loopback-template.md",
+        "targetPath": "factory/docs/standards/validation-loopback-template.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/scripts/reconcile-projects.py",
+        "targetPath": "factory/scripts/reconcile-projects.py",
+        "type": "SCRIPT",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/idea-payload-template.md",
+        "targetPath": "factory/docs/idea-payload-template.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      },
+      {
+        "id": "factory/docs/decision-envelope.md",
+        "targetPath": "factory/docs/decision-envelope.md",
+        "type": "DOC",
+        "content": {
+          "encoding": "utf-8"
+        }
+      }
+    ]
+  },
+  "version": {
+    "logical": "1780219232503513624",
+    "physical": "2026-06-17T05:43:19.294602Z"
+  },
+  "workTypes": [
+    {
+      "id": "thoughts",
+      "name": "thoughts",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "name": "project",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "waiting",
+          "name": "waiting",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "blocked",
+          "name": "blocked",
+          "type": "FAILED"
+        },
+        {
+          "id": "needs-supervision",
+          "name": "needs-supervision",
+          "type": "PROCESSING"
+        }
+      ]
+    },
+    {
+      "id": "project-cycle",
+      "name": "project-cycle",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "continue",
+          "name": "continue",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        },
+        {
+          "id": "blocked",
+          "name": "blocked",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "task",
+      "name": "task",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "awaiting-ci",
+          "name": "awaiting-ci",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "in-review",
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "to-complete",
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "idea",
+      "name": "idea",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "to-complete",
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "name": "plan",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "cron-triggers",
+      "name": "cron-triggers",
+      "states": []
+    },
+    {
+      "id": "review",
+      "name": "review",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "fin",
+          "name": "fin",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "validation",
+      "name": "validation",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "ready",
+          "name": "ready",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "project-reconcile",
+      "name": "project-reconcile",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high",
+      "id": "project-lead",
+      "name": "project-lead",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/decide-project-cycle.py",
+        "{{ (index .Inputs 0).Payload }}"
+      ],
+      "command": "python",
+      "id": "project-cycle-decider",
+      "name": "project-cycle-decider",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
+      "name": "processor",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
+      "name": "reviewer",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/setup-workspace.py",
+        "{{ (index .Inputs 0).Name }}"
+      ],
+      "command": "python",
+      "id": "workspace-setup",
+      "name": "workspace-setup",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/ci-wait.py",
+        "{{ (index .Inputs 0).Name }}"
+      ],
+      "command": "python",
+      "id": "ci-waiter",
+      "name": "ci-waiter",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
+      "id": "planner",
+      "name": "planner",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "id": "ideafier",
+      "name": "ideafier",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "id": "validation-setup",
+      "name": "validation-setup",
+      "type": "SCRIPT_WORKER",
+      "command": "python",
+      "args": [
+        "factory/scripts/prepare-validation.py",
+        "{{ (index .Inputs 0).Name }}",
+        "{{ (index .Inputs 0).Payload }}"
+      ]
+    },
+    {
+      "id": "validator",
+      "name": "validator",
+      "type": "AGENT_WORKER",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
+      "skipPermissions": true
+    },
+    {
+      "id": "project-reconciler",
+      "name": "project-reconciler",
+      "type": "SCRIPT_WORKER",
+      "command": "python",
+      "args": [
+        "factory/scripts/reconcile-projects.py",
+        "--server",
+        "http://127.0.0.1:7437",
+        "--session",
+        "{{ .Context.SessionID }}"
+      ]
+    }
+  ],
+  "workstations": [
+    {
+      "id": "project-lead",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "name": "project-lead",
+      "onFailure": [
+        {
+          "state": "needs-supervision",
+          "workType": "project"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "waiting",
+          "workType": "project"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "concurrent-project-leads"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "project-lead",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "classificationRoutes": [
+        {
+          "label": "continue",
+          "outputs": [
+            {
+              "state": "continue",
+              "workType": "project-cycle"
+            }
+          ]
+        },
+        {
+          "label": "complete",
+          "outputs": [
+            {
+              "state": "complete",
+              "workType": "project-cycle"
+            }
+          ]
+        },
+        {
+          "label": "blocked",
+          "outputs": [
+            {
+              "state": "blocked",
+              "workType": "project-cycle"
+            }
+          ]
+        }
+      ],
+      "id": "decide-project-cycle",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "decide-project-cycle",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "project-cycle"
+        }
+      ],
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "project-cycle-decider"
+    },
+    {
+      "id": "continue-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "continue",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "continue-project",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "complete-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "complete",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "complete-project",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "retry-project-after-cycle-failure",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "failed",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "retry-project-after-cycle-failure",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "block-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "blocked",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "block-project",
+      "outputs": [
+        {
+          "state": "needs-supervision",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "project-lead"
+        }
+      ],
+      "id": "project-loop-breaker",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "name": "project-loop-breaker",
+      "outputs": [
+        {
+          "state": "needs-supervision",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "ideafy",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "thoughts"
+        }
+      ],
+      "name": "ideafy",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "thoughts"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "thoughts"
+        }
+      ],
+      "resources": [
+        {
+          "name": "supervisor-slot",
+          "capacity": 1
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "ideafier"
+    },
+    {
+      "id": "plan",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "idea"
+        }
+      ],
+      "name": "plan",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "idea"
+        }
+      ],
+      "onRejection": [
+        {
+          "workType": "idea",
+          "state": "failed"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "to-complete",
+          "workType": "idea"
+        },
+        {
+          "state": "init",
+          "workType": "plan"
+        }
+      ],
+      "resources": [
+        {
+          "name": "concurrent-planners",
+          "capacity": 1
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "planner",
+      "outcomeFormat": "decision-envelope",
+      "onContinue": [
+        {
+          "workType": "idea",
+          "state": "failed"
+        }
+      ]
+    },
+    {
+      "id": "consume",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "to-complete",
+          "workType": "idea"
+        },
+        {
+          "state": "to-complete",
+          "workType": "task"
+        }
+      ],
+      "name": "consume",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "setup-workspace",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "plan"
+        }
+      ],
+      "name": "setup-workspace",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "plan"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "plan"
+        },
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "workspace-setup"
+    },
+    {
+      "id": "ci-wait",
+      "inputs": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        }
+      ],
+      "name": "ci-wait",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "ci-waiter"
+    },
+    {
+      "behavior": "REPEATER",
+      "id": "process",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "process",
+      "onContinue": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "onRejection": [
+        {
+          "workType": "task",
+          "state": "failed"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "processor",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
+      "outcomeFormat": "decision-envelope"
+    },
+    {
+      "behavior": "REPEATER",
+      "id": "review",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        },
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "name": "review",
+      "onContinue": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        },
+        {
+          "state": "fin",
+          "workType": "review"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "reviewer",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
+      "outcomeFormat": "decision-envelope"
+    },
+    {
+      "guards": [
+        {
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "process"
+        }
+      ],
+      "id": "executor-loop-breaker",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "executor-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "review"
+        }
+      ],
+      "id": "review-loop-breaker",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "name": "review-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "behavior": "CRON",
+      "cron": {
+        "schedule": "0 */4 * * *"
+      },
+      "id": "though-retrigger",
+      "inputs": [],
+      "name": "though-retrigger",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "thoughts"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "escalate-plan-failure",
+      "name": "escalate-plan-failure",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "idea",
+          "state": "to-complete",
+          "guards": [
+            {
+              "type": "SAME_NAME",
+              "matchInput": "plan"
+            }
+          ]
+        },
+        {
+          "workType": "plan",
+          "state": "failed"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "idea",
+          "state": "failed"
+        },
+        {
+          "workType": "plan",
+          "state": "failed"
+        }
+      ]
+    },
+    {
+      "id": "escalate-task-failure",
+      "name": "escalate-task-failure",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "idea",
+          "state": "to-complete",
+          "guards": [
+            {
+              "type": "SAME_NAME",
+              "matchInput": "task"
+            }
+          ]
+        },
+        {
+          "workType": "task",
+          "state": "failed"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "idea",
+          "state": "failed"
+        },
+        {
+          "workType": "task",
+          "state": "failed"
+        }
+      ]
+    },
+    {
+      "id": "prepare-validation",
+      "name": "prepare-validation",
+      "type": "SCRIPT_RUN",
+      "worker": "validation-setup",
+      "inputs": [
+        {
+          "workType": "validation",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "validation",
+          "state": "ready"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "validation",
+          "state": "failed"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "validate",
+      "name": "validate",
+      "type": "AGENT_RUN",
+      "worker": "validator",
+      "outcomeFormat": "decision-envelope",
+      "inputs": [
+        {
+          "workType": "validation",
+          "state": "ready"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "validation",
+          "state": "complete"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "validation",
+          "state": "failed"
+        }
+      ],
+      "onRejection": [
+        {
+          "workType": "validation",
+          "state": "failed"
+        }
+      ],
+      "onContinue": [
+        {
+          "workType": "validation",
+          "state": "failed"
+        }
+      ],
+      "resources": [
+        {
+          "name": "validation-slot",
+          "capacity": 1
+        }
+      ],
+      "workingDirectory": "docs/temp/probes/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "id": "escalate-project",
+      "name": "escalate-project",
+      "type": "LOGICAL_MOVE",
+      "inputs": [
+        {
+          "workType": "project",
+          "state": "needs-supervision"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "project",
+          "state": "blocked"
+        },
+        {
+          "workType": "thoughts",
+          "state": "init"
+        }
+      ]
+    },
+    {
+      "id": "project-reconcile",
+      "name": "project-reconcile",
+      "type": "SCRIPT_RUN",
+      "behavior": "CRON",
+      "cron": {
+        "schedule": "*/15 * * * *"
+      },
+      "worker": "project-reconciler",
+      "inputs": [],
+      "outputs": [
+        {
+          "workType": "project-reconcile",
+          "state": "complete"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "project-reconcile",
+          "state": "failed"
+        },
+        {
+          "workType": "thoughts",
+          "state": "init"
+        }
+      ]
+    }
+  ]
+}

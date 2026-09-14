@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -306,21 +307,56 @@ func validateReplayEventEnvelope(artifact *interfaces.ReplayArtifact) error {
 	if len(artifact.Events) == 0 {
 		return fmt.Errorf("replay artifact events is required")
 	}
+	seenEventIDs := make(map[string]struct{}, len(artifact.Events))
 	for i, event := range artifact.Events {
 		if event.SchemaVersion != interfaces.FactoryEventSchemaVersionV1 {
-			return fmt.Errorf("replay artifact events[%d].schemaVersion = %q, want %q", i, event.SchemaVersion, interfaces.FactoryEventSchemaVersionV1)
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticMalformed,
+				i,
+				event.Id,
+				fmt.Errorf("replay artifact event schemaVersion = %q, want %q", event.SchemaVersion, interfaces.FactoryEventSchemaVersionV1),
+			)
 		}
 		if event.Context.Sequence != i {
-			return fmt.Errorf("replay artifact events[%d].context.sequence = %d, want %d", i, event.Context.Sequence, i)
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticInvalidOrder,
+				i,
+				event.Id,
+				fmt.Errorf("replay artifact event sequence = %d, want %d", event.Context.Sequence, i),
+			)
 		}
 		if event.Id == "" {
-			return fmt.Errorf("replay artifact events[%d].id is required", i)
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticInvalidIdentity,
+				i,
+				"",
+				fmt.Errorf("replay artifact event id is required"),
+			)
 		}
+		if _, exists := seenEventIDs[event.Id]; exists {
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticInvalidIdentity,
+				i,
+				event.Id,
+				fmt.Errorf("replay artifact event id is duplicated"),
+			)
+		}
+		seenEventIDs[event.Id] = struct{}{}
 		if event.Type == "" {
-			return fmt.Errorf("replay artifact events[%d].type is required", i)
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticMalformed,
+				i,
+				event.Id,
+				fmt.Errorf("replay artifact event type is required"),
+			)
 		}
 		if event.Context.EventTime.IsZero() {
-			return fmt.Errorf("replay artifact events[%d].context.eventTime is required", i)
+			return replayEventStructuralError(
+				recordings.ReplayArtifactDiagnosticMalformed,
+				i,
+				event.Id,
+				fmt.Errorf("replay artifact event eventTime is required"),
+			)
 		}
 	}
 	return nil
