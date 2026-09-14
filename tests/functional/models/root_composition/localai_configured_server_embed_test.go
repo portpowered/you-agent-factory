@@ -45,6 +45,7 @@ func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
 		directHome, fixture, directResolver, directBackendSelection, directLauncher, directInvocation,
 	)
 	directProcess := functionalBuildProcess(t, directEdges)
+	warmLocalAIConfiguredEmbedCache(t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true, directInvocation)
 	direct := executeLocalAIConfiguredEmbedInvoke(
 		t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true,
 	)
@@ -52,6 +53,11 @@ func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
 	assertLocalAIConfiguredEmbedSelection(
 		t, directHome, directResolver, directBackendSelection, directLauncher, directNetwork,
 	)
+	directRequests := directInvocation.Requests()
+	if len(directRequests) != 1 {
+		t.Fatalf("direct configured EMBED backend requests = %d, want one", len(directRequests))
+	}
+	assertLocalAIConfiguredEmbedRequest(t, "direct", directRequests[0])
 	directRequest := directInvocation.Signatures()
 	if err := directProcess.Close(context.Background()); err != nil {
 		t.Fatalf("close direct configured EMBED process: %v", err)
@@ -86,6 +92,7 @@ func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
 	clientEdges.ModelInvocationProtocolClient = nil
 	clientEdges.ModelInvocationGRPCDialer = nil
 	clientProcess := functionalBuildProcess(t, clientEdges)
+	warmLocalAIConfiguredEmbedCache(t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false, serverInvocation)
 	remote := executeLocalAIConfiguredEmbedInvoke(
 		t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
 	)
@@ -96,6 +103,8 @@ func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
 	} else if len(directRequest) != 1 || got[0] != directRequest[0] {
 		t.Fatalf("direct/configured-server EMBED request signatures = %#v / %#v, want identical ordered inputs", directRequest, got)
 	}
+	serverRequests := serverInvocation.Requests()
+	assertLocalAIConfiguredEmbedRequest(t, "explicit --server", serverRequests[0])
 	if direct.Observation != remote.Observation {
 		t.Fatalf("direct/configured-server EMBED observations differ: %#v / %#v", direct.Observation, remote.Observation)
 	}
@@ -183,19 +192,32 @@ func TestLocalAIConfiguredServerEMBEDValidationParity(t *testing.T) {
 		name           string
 		inputSpecs     []string
 		parameterSpecs []string
+		expected       factoryapi.ErrorResponse
 	}{
 		{
 			name:       "missing required text input",
 			inputSpecs: localAIConfiguredEmbedInputSpecs(t, false),
+			expected: factoryapi.ErrorResponse{
+				Code:    "BAD_REQUEST",
+				Family:  factoryapi.ErrorFamilyBadRequest,
+				Message: "required input slot is missing: text",
+			},
 		},
 		{
 			name:           "malformed parameter flag",
 			inputSpecs:     localAIConfiguredEmbedInputSpecs(t, true),
 			parameterSpecs: []string{"{"},
+			expected: factoryapi.ErrorResponse{
+				Code:    "BAD_REQUEST",
+				Family:  factoryapi.ErrorFamilyBadRequest,
+				Message: "parse --parameter 1: invalid JSON",
+			},
 		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
+			directCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, directHome)
+			serverCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 			direct := executeLocalAIConfiguredEmbedCommand(
 				t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true,
 				testCase.inputSpecs, testCase.parameterSpecs,
@@ -204,7 +226,13 @@ func TestLocalAIConfiguredServerEMBEDValidationParity(t *testing.T) {
 				t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
 				testCase.inputSpecs, testCase.parameterSpecs,
 			)
-			assertLocalAIConfiguredEmbedValidationFailureParity(t, testCase.name, direct, remote)
+			assertLocalAIConfiguredEmbedValidationFailureParity(t, testCase.name, testCase.expected, direct, remote)
+			assertLocalAIConfiguredEmbedCacheUnchanged(
+				t, testCase.name+" direct", directCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, directHome),
+			)
+			assertLocalAIConfiguredEmbedCacheUnchanged(
+				t, testCase.name+" explicit --server", serverCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, serverHome),
+			)
 		})
 	}
 
@@ -235,6 +263,7 @@ func TestLocalAIConfiguredServerEMBEDValidationParity(t *testing.T) {
 func assertLocalAIConfiguredEmbedValidationFailureParity(
 	t *testing.T,
 	name string,
+	expected factoryapi.ErrorResponse,
 	direct, remote localAIConfiguredEmbedInvokeResult,
 ) {
 	t.Helper()
@@ -253,6 +282,13 @@ func assertLocalAIConfiguredEmbedValidationFailureParity(
 	}
 	directDiagnostic := decodeLocalAIConfiguredEmbedDiagnostic(t, name+" direct", direct.Stderr)
 	remoteDiagnostic := decodeLocalAIConfiguredEmbedDiagnostic(t, name+" explicit --server", remote.Stderr)
+	for path, diagnostic := range map[string]factoryapi.ErrorResponse{
+		"direct": directDiagnostic, "explicit --server": remoteDiagnostic,
+	} {
+		if diagnostic.Code != expected.Code || diagnostic.Family != expected.Family || diagnostic.Message != expected.Message {
+			t.Fatalf("%s %s validation diagnostic = %#v, want %#v", name, path, diagnostic, expected)
+		}
+	}
 	if directDiagnostic.Code != remoteDiagnostic.Code ||
 		directDiagnostic.Family != remoteDiagnostic.Family ||
 		directDiagnostic.Message != remoteDiagnostic.Message {
@@ -309,6 +345,8 @@ func runLocalAIConfiguredEmbedFailureParity(t *testing.T, mode localai.Mode) {
 		directHome, fixture, directResolver, directBackendSelection, directLauncher, directInvocation,
 	)
 	directProcess := functionalBuildProcess(t, directEdges)
+	warmLocalAIConfiguredEmbedCache(t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true, directInvocation)
+	directCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, directHome)
 	direct := executeLocalAIConfiguredEmbedInvoke(
 		t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true,
 	)
@@ -331,6 +369,7 @@ func runLocalAIConfiguredEmbedFailureParity(t *testing.T, mode localai.Mode) {
 	})
 	serverURL := server.URL()
 	assertLocalAIConfiguredServerLoopbackPort(t, serverURL)
+	serverCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 
 	clientHome := functionalTempDir(t)
 	clientLauncher := &cacheSelectionHostLauncherFailure{}
@@ -341,6 +380,8 @@ func runLocalAIConfiguredEmbedFailureParity(t *testing.T, mode localai.Mode) {
 	clientEdges.ModelInvocationProtocolClient = nil
 	clientEdges.ModelInvocationGRPCDialer = nil
 	clientProcess := functionalBuildProcess(t, clientEdges)
+	warmLocalAIConfiguredEmbedCache(t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false, serverInvocation)
+	serverCacheBefore = snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 	remote := executeLocalAIConfiguredEmbedInvoke(
 		t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
 	)
@@ -352,6 +393,12 @@ func runLocalAIConfiguredEmbedFailureParity(t *testing.T, mode localai.Mode) {
 	assertLocalAIConfiguredEmbedFailure(t, direct, "direct", wantClass)
 	assertLocalAIConfiguredEmbedFailure(t, remote, "explicit --server", wantClass)
 	assertLocalAIConfiguredEmbedFailureDiagnostics(t, fixture, direct, remote)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "backend failure direct", directCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, directHome),
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "backend failure explicit --server", serverCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, serverHome),
+	)
 	if len(directInvocation.Signatures()) != 1 || len(serverInvocation.Signatures()) != 1 {
 		t.Fatalf("configured EMBED failure backend requests = direct:%d server:%d, want one each", len(directInvocation.Signatures()), len(serverInvocation.Signatures()))
 	}
@@ -431,12 +478,17 @@ func TestLocalAIConfiguredServerEMBEDRecoveryAfterFailure(t *testing.T) {
 		directHome, fixture, directResolver, directBackendSelection, directLauncher, directInvocation,
 	)
 	directProcess := functionalBuildProcess(t, directEdges)
+	warmLocalAIConfiguredEmbedCache(t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true, directInvocation)
 	directInvocation.FailNext(localAIConfiguredEmbedBackendFailure())
+	directCacheBeforeFailure := snapshotLocalAIConfiguredEmbedCache(t, directHome)
 	directFailure := executeLocalAIConfiguredEmbedInvoke(
 		t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true,
 	)
 	assertLocalAIConfiguredEmbedFailure(
 		t, directFailure, "direct failure before recovery", models.InvocationFailureClassBackendProtocol,
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "recovery direct failure", directCacheBeforeFailure, snapshotLocalAIConfiguredEmbedCache(t, directHome),
 	)
 	if directLauncher.Active() {
 		t.Fatal("direct configured EMBED host remained active after backend failure")
@@ -464,6 +516,7 @@ func TestLocalAIConfiguredServerEMBEDRecoveryAfterFailure(t *testing.T) {
 	})
 	serverURL := server.URL()
 	assertLocalAIConfiguredServerLoopbackPort(t, serverURL)
+	serverCacheBeforeFailure := snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 
 	clientHome := functionalTempDir(t)
 	clientLauncher := &cacheSelectionHostLauncherFailure{}
@@ -474,12 +527,17 @@ func TestLocalAIConfiguredServerEMBEDRecoveryAfterFailure(t *testing.T) {
 	clientEdges.ModelInvocationProtocolClient = nil
 	clientEdges.ModelInvocationGRPCDialer = nil
 	clientProcess := functionalBuildProcess(t, clientEdges)
+	warmLocalAIConfiguredEmbedCache(t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false, serverInvocation)
+	serverCacheBeforeFailure = snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 	serverInvocation.FailNext(localAIConfiguredEmbedBackendFailure())
 	remoteFailure := executeLocalAIConfiguredEmbedInvoke(
 		t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
 	)
 	assertLocalAIConfiguredEmbedFailure(
 		t, remoteFailure, "explicit --server failure before recovery", models.InvocationFailureClassBackendProtocol,
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "recovery explicit --server failure", serverCacheBeforeFailure, snapshotLocalAIConfiguredEmbedCache(t, serverHome),
 	)
 	remoteSuccess := executeLocalAIConfiguredEmbedInvoke(
 		t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
@@ -540,8 +598,6 @@ func TestLocalAIConfiguredServerEMBEDUnavailableAddressIsRedacted(t *testing.T) 
 	})
 	serverURL := server.URL()
 	assertLocalAIConfiguredServerLoopbackPort(t, serverURL)
-	server.Close(t)
-	assertLocalAIConfiguredServerReleased(t, server, serverURL)
 
 	clientHome := functionalTempDir(t)
 	clientLauncher := &cacheSelectionHostLauncherFailure{}
@@ -552,6 +608,12 @@ func TestLocalAIConfiguredServerEMBEDUnavailableAddressIsRedacted(t *testing.T) 
 	clientEdges.ModelInvocationProtocolClient = nil
 	clientEdges.ModelInvocationGRPCDialer = nil
 	clientProcess := functionalBuildProcess(t, clientEdges)
+	warmLocalAIConfiguredEmbedCache(t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false, serverInvocation)
+	server.Close(t)
+	assertLocalAIConfiguredServerReleased(t, server, serverURL)
+	serverCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, serverHome)
+	serverHostStartsBeforeClosedRequest := serverLauncher.Starts()
+	clientCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, clientHome)
 	const (
 		endpointCanary = "SERVER_PARITY_ENDPOINT_CANARY"
 		tokenCanary    = "SERVER_PARITY_TOKEN_CANARY"
@@ -585,8 +647,14 @@ func TestLocalAIConfiguredServerEMBEDUnavailableAddressIsRedacted(t *testing.T) 
 	if _, err := os.Stat(clientCacheRoot); !os.IsNotExist(err) {
 		t.Fatalf("closed explicit-server EMBED client model cache root = %q, %v; want absent", clientCacheRoot, err)
 	}
-	if serverLauncher.Starts() != 0 || serverLauncher.Active() {
-		t.Fatalf("closed explicit-server EMBED server host lifecycle = starts:%d active:%t, want no invocation host", serverLauncher.Starts(), serverLauncher.Active())
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "closed explicit-server server cache", serverCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, serverHome),
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "closed explicit-server client cache", clientCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, clientHome),
+	)
+	if serverLauncher.Starts() != serverHostStartsBeforeClosedRequest || serverLauncher.Active() {
+		t.Fatalf("closed explicit-server EMBED server host lifecycle = starts:%d active:%t, want no additional host start after warm-up (%d)", serverLauncher.Starts(), serverLauncher.Active(), serverHostStartsBeforeClosedRequest)
 	}
 
 	if err := clientProcess.Close(context.Background()); err != nil {
@@ -617,6 +685,8 @@ func TestLocalAIConfiguredServerEMBEDNonFiniteFailureParity(t *testing.T) {
 	directEdges.ModelInvocationBackend = nil
 	directEdges.ModelEmbeddingBackend = directBackend.Invoke
 	directProcess := functionalBuildProcess(t, directEdges)
+	warmLocalAIConfiguredEmbedTypedCache(t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true, directBackend)
+	directCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, directHome)
 	direct := executeLocalAIConfiguredEmbedInvoke(
 		t, directProcess, factoryDir, cleanModelsEnvironment(directHome), "", true,
 	)
@@ -642,6 +712,7 @@ func TestLocalAIConfiguredServerEMBEDNonFiniteFailureParity(t *testing.T) {
 	})
 	serverURL := server.URL()
 	assertLocalAIConfiguredServerLoopbackPort(t, serverURL)
+	serverCacheBefore := snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 
 	clientHome := functionalTempDir(t)
 	clientLauncher := &cacheSelectionHostLauncherFailure{}
@@ -653,11 +724,19 @@ func TestLocalAIConfiguredServerEMBEDNonFiniteFailureParity(t *testing.T) {
 	clientEdges.ModelInvocationProtocolClient = nil
 	clientEdges.ModelInvocationGRPCDialer = nil
 	clientProcess := functionalBuildProcess(t, clientEdges)
+	warmLocalAIConfiguredEmbedTypedCache(t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false, serverBackend)
+	serverCacheBefore = snapshotLocalAIConfiguredEmbedCache(t, serverHome)
 	remote := executeLocalAIConfiguredEmbedInvoke(
 		t, clientProcess, factoryDir, cleanModelsEnvironment(clientHome), serverURL, false,
 	)
 	assertLocalAIConfiguredEmbedFailure(
 		t, remote, "explicit --server non-finite response", models.InvocationFailureClassMalformedResponse,
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "non-finite direct", directCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, directHome),
+	)
+	assertLocalAIConfiguredEmbedCacheUnchanged(
+		t, "non-finite explicit --server", serverCacheBefore, snapshotLocalAIConfiguredEmbedCache(t, serverHome),
 	)
 	assertLocalAIConfiguredEmbedNonFiniteObservations(t, fixture, direct, remote, directBackend, serverBackend)
 	if clientLauncher.called || clientNetwork.Calls() != 0 {

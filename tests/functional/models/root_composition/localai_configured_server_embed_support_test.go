@@ -3,11 +3,13 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -23,6 +25,7 @@ type localAIConfiguredEmbedTypedBackend struct {
 	mu        sync.Mutex
 	fixture   *localai.Fixture
 	nonFinite bool
+	warmup    bool
 	requests  []models.EmbeddingBackendRequest
 }
 
@@ -36,7 +39,12 @@ func (backend *localAIConfiguredEmbedTypedBackend) Invoke(
 	})
 	fixture := backend.fixture
 	nonFinite := backend.nonFinite
+	warmup := backend.warmup
+	backend.warmup = false
 	backend.mu.Unlock()
+	if warmup {
+		return models.EmbeddingBackendResponse{Embeddings: []float64{0.1, 0.2, 0.3, 0.4, 0.5}}, nil
+	}
 	if fixture == nil {
 		return models.EmbeddingBackendResponse{}, fmt.Errorf("configured EMBED typed fixture is nil")
 	}
@@ -100,6 +108,19 @@ func (backend *localAIConfiguredEmbedTypedBackend) Signatures() []string {
 	return result
 }
 
+func (backend *localAIConfiguredEmbedTypedBackend) WarmNext() {
+	backend.mu.Lock()
+	backend.warmup = true
+	backend.mu.Unlock()
+}
+
+func (backend *localAIConfiguredEmbedTypedBackend) Reset() {
+	backend.mu.Lock()
+	backend.requests = nil
+	backend.warmup = false
+	backend.mu.Unlock()
+}
+
 func assertLocalAIConfiguredEmbedFixtureCalls(t *testing.T, calls []localai.Call, wantEmbeddings int) {
 	t.Helper()
 	embeddings := 0
@@ -115,6 +136,137 @@ func assertLocalAIConfiguredEmbedFixtureCalls(t *testing.T, calls []localai.Call
 	if embeddings != wantEmbeddings {
 		t.Fatalf("configured EMBED fixture embedding calls = %d, want %d (all calls=%#v)", embeddings, wantEmbeddings, calls)
 	}
+}
+
+func assertLocalAIConfiguredEmbedRequest(
+	t *testing.T,
+	path string,
+	request localAIConfiguredEmbedRequestObservation,
+) {
+	t.Helper()
+	if request.Model != models.BuiltInModelNameEmbed || request.Operation != models.OperationEMBED {
+		t.Fatalf("%s configured EMBED request = %#v, want model=%q operation=%q", path, request, models.BuiltInModelNameEmbed, models.OperationEMBED)
+	}
+	if len(request.Inputs) != 2 {
+		t.Fatalf("%s configured EMBED inputs = %#v, want ordered text and parameters inputs", path, request.Inputs)
+	}
+	wantInputs := []localAIConfiguredEmbedInputObservation{
+		{
+			Name: "text", Modality: models.ModalityText, ContentType: "text/plain",
+			MediaType: "text/plain", Content: localAIConfiguredEmbedPrompt,
+		},
+		{
+			Name: "parameters", Modality: models.ModalityJSON, ContentType: "application/json",
+			MediaType: "application/json", Content: localAIConfiguredEmbedParameters,
+		},
+	}
+	if !reflect.DeepEqual(request.Inputs, wantInputs) {
+		t.Fatalf("%s configured EMBED inputs = %#v, want ordered %#v", path, request.Inputs, wantInputs)
+	}
+	if len(request.Parameters) != 0 {
+		t.Fatalf("%s configured EMBED named parameters = %#v, want parameters input only", path, request.Parameters)
+	}
+	var parameters map[string]any
+	if err := json.Unmarshal([]byte(request.Inputs[1].Content), &parameters); err != nil {
+		t.Fatalf("decode %s configured EMBED parameters: %v", path, err)
+	}
+	if dimensions, ok := parameters["dimensions"].(float64); !ok || dimensions != 5 {
+		t.Fatalf("%s configured EMBED dimensions = %#v, want 5", path, parameters["dimensions"])
+	}
+	if normalize, ok := parameters["normalize"].(bool); !ok || !normalize {
+		t.Fatalf("%s configured EMBED normalize = %#v, want true", path, parameters["normalize"])
+	}
+}
+
+type localAIConfiguredEmbedCacheSnapshot map[string]string
+
+func snapshotLocalAIConfiguredEmbedCache(t *testing.T, home string) localAIConfiguredEmbedCacheSnapshot {
+	t.Helper()
+	root := filepath.Join(home, ".agent-factory", "models")
+	snapshot := make(localAIConfiguredEmbedCacheSnapshot)
+	if _, err := os.Lstat(root); os.IsNotExist(err) {
+		snapshot["<root>"] = "absent"
+		return snapshot
+	} else if err != nil {
+		t.Fatalf("inspect configured EMBED cache root %q: %v", root, err)
+	}
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			snapshot[relative] = "directory:" + entry.Type().String()
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			snapshot[relative] = "symlink:" + target
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256(body)
+		snapshot[relative] = fmt.Sprintf("file:%d:%s:%x", info.Size(), info.Mode().String(), digest)
+		return nil
+	}); err != nil {
+		t.Fatalf("snapshot configured EMBED cache root %q: %v", root, err)
+	}
+	return snapshot
+}
+
+func assertLocalAIConfiguredEmbedCacheUnchanged(
+	t *testing.T,
+	path string,
+	before, after localAIConfiguredEmbedCacheSnapshot,
+) {
+	t.Helper()
+	for label, snapshot := range map[string]localAIConfiguredEmbedCacheSnapshot{
+		"before": before, "after": after,
+	} {
+		for name := range snapshot {
+			normalized := filepath.ToSlash(name)
+			if strings.Contains(normalized, ".partial") || strings.Contains(normalized, ".previous") {
+				t.Fatalf("%s configured EMBED owner cache %s contains temporary artifact %q", path, label, name)
+			}
+		}
+	}
+	if !reflect.DeepEqual(
+		localAIConfiguredEmbedPersistentCacheSnapshot(before),
+		localAIConfiguredEmbedPersistentCacheSnapshot(after),
+	) {
+		t.Fatalf("%s configured EMBED owner cache changed across failure: before=%#v after=%#v", path, before, after)
+	}
+}
+
+func localAIConfiguredEmbedPersistentCacheSnapshot(
+	snapshot localAIConfiguredEmbedCacheSnapshot,
+) localAIConfiguredEmbedCacheSnapshot {
+	const lockRoot = ".you-asset-locks"
+	persistent := make(localAIConfiguredEmbedCacheSnapshot, len(snapshot))
+	for name, value := range snapshot {
+		normalized := filepath.ToSlash(name)
+		if normalized == lockRoot || strings.HasPrefix(normalized, lockRoot+"/") {
+			// Invocation leases are owned by the live process and can remain
+			// until Process.Close. They are checked by the lifecycle assertions;
+			// persistent cache entries must still remain byte-for-byte stable.
+			continue
+		}
+		persistent[name] = value
+	}
+	return persistent
 }
 
 type localAIConfiguredEmbedInvokeResult struct {
@@ -146,6 +298,44 @@ func executeLocalAIConfiguredEmbedInvoke(
 		t, process, factoryDir, environment, serverURL, offline,
 		localAIConfiguredEmbedInputSpecs(t, true), nil,
 	)
+}
+
+func warmLocalAIConfiguredEmbedCache(
+	t *testing.T,
+	process support.Process,
+	factoryDir string,
+	environment []string,
+	serverURL string,
+	offline bool,
+	invocation *localAIConfiguredEmbedInvocationRecorder,
+) {
+	t.Helper()
+	invocation.WarmNext()
+	result := executeLocalAIConfiguredEmbedInvoke(t, process, factoryDir, environment, serverURL, offline)
+	assertLocalAIConfiguredEmbedSuccess(t, result, "configured EMBED cache warm-up")
+	invocation.Reset()
+	if result.Stderr != "" {
+		t.Fatalf("configured EMBED cache warm-up stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func warmLocalAIConfiguredEmbedTypedCache(
+	t *testing.T,
+	process support.Process,
+	factoryDir string,
+	environment []string,
+	serverURL string,
+	offline bool,
+	backend *localAIConfiguredEmbedTypedBackend,
+) {
+	t.Helper()
+	backend.WarmNext()
+	result := executeLocalAIConfiguredEmbedInvoke(t, process, factoryDir, environment, serverURL, offline)
+	assertLocalAIConfiguredEmbedSuccess(t, result, "typed configured EMBED cache warm-up")
+	backend.Reset()
+	if result.Stderr != "" {
+		t.Fatalf("typed configured EMBED cache warm-up stderr = %q, want empty", result.Stderr)
+	}
 }
 
 func executeLocalAIConfiguredEmbedCommand(
@@ -329,6 +519,7 @@ type localAIConfiguredEmbedInvocationRecorder struct {
 	next     serviceedges.ModelInvocationBackend
 	requests []localAIConfiguredEmbedRequestObservation
 	failure  error
+	warmup   bool
 }
 
 type localAIConfiguredEmbedRequestObservation struct {
@@ -368,7 +559,18 @@ func (recorder *localAIConfiguredEmbedInvocationRecorder) Invoke(
 	recorder.mu.Lock()
 	recorder.requests = append(recorder.requests, observation)
 	next := recorder.next
+	warmup := recorder.warmup
+	recorder.warmup = false
 	recorder.mu.Unlock()
+	if warmup {
+		return []models.InferenceContent{{
+			Name:        "embedding",
+			Modality:    models.ModalityJSON,
+			ContentType: "application/json",
+			MediaType:   "application/json",
+			Content:     `[0.1,0.2,0.3,0.4,0.5]`,
+		}}, nil, nil
+	}
 	if next == nil {
 		return nil, nil, fmt.Errorf("configured EMBED invocation recorder has no backend")
 	}
@@ -392,10 +594,38 @@ func (recorder *localAIConfiguredEmbedInvocationRecorder) FailNext(err error) {
 	recorder.mu.Unlock()
 }
 
-func (recorder *localAIConfiguredEmbedInvocationRecorder) Signatures() []string {
+func (recorder *localAIConfiguredEmbedInvocationRecorder) WarmNext() {
+	recorder.mu.Lock()
+	recorder.warmup = true
+	recorder.mu.Unlock()
+}
+
+func (recorder *localAIConfiguredEmbedInvocationRecorder) Reset() {
+	recorder.mu.Lock()
+	recorder.requests = nil
+	recorder.failure = nil
+	recorder.warmup = false
+	recorder.mu.Unlock()
+}
+
+func (recorder *localAIConfiguredEmbedInvocationRecorder) Requests() []localAIConfiguredEmbedRequestObservation {
 	recorder.mu.Lock()
 	requests := append([]localAIConfiguredEmbedRequestObservation(nil), recorder.requests...)
 	recorder.mu.Unlock()
+	cloned := make([]localAIConfiguredEmbedRequestObservation, len(requests))
+	for index, request := range requests {
+		cloned[index] = request
+		cloned[index].Inputs = append([]localAIConfiguredEmbedInputObservation(nil), request.Inputs...)
+		cloned[index].Parameters = make([]models.OperationParameter, len(request.Parameters))
+		for parameterIndex, parameter := range request.Parameters {
+			cloned[index].Parameters[parameterIndex] = parameter.Clone()
+		}
+	}
+	return cloned
+}
+
+func (recorder *localAIConfiguredEmbedInvocationRecorder) Signatures() []string {
+	requests := recorder.Requests()
 	signatures := make([]string, 0, len(requests))
 	for _, request := range requests {
 		encoded, err := json.Marshal(request)
