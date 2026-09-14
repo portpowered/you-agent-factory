@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,7 +18,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	omnimedia "github.com/portpowered/infinite-you/tests/integration/models/omni_media_probe"
 )
 
 func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildProcess(t *testing.T) {
@@ -86,7 +87,7 @@ func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildP
 	if fixture.network.Calls() != 0 {
 		t.Fatalf("asset network calls = %d, want 0 from content-addressed fixtures", fixture.network.Calls())
 	}
-	if fixture.media.manifest.SchemaVersion != omnimedia.ManifestSchemaV1 {
+	if fixture.media.manifest.SchemaVersion != functionalOmniManifestSchemaV1 {
 		t.Fatalf("fixture manifest schema = %q, want pinned OMNI schema", fixture.media.manifest.SchemaVersion)
 	}
 	closeRootProcess(t, process, "close Omni file-input root process")
@@ -154,13 +155,28 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 }
 
 // omniExactMediaFixture is the shared local-real input used by the controlled
-// root-composition probes. LoadManifest is the only authority that resolves
-// the promoted bytes, so the tests cannot silently replace them with a small
-// placeholder while retaining the same MIME suffix.
+// root-composition probes. This local test reader validates the same checked-in
+// manifest identity and bytes without importing an integration-only package.
+const functionalOmniManifestSchemaV1 = "you.localai.omni-media-fixture.v1"
+
+type functionalOmniManifest struct {
+	SchemaVersion string                   `json:"schemaVersion"`
+	Artifacts     []functionalOmniArtifact `json:"artifacts"`
+}
+
+type functionalOmniArtifact struct {
+	ID           string `json:"id"`
+	Path         string `json:"path"`
+	MediaType    string `json:"mediaType"`
+	Bytes        int64  `json:"bytes"`
+	SHA256       string `json:"sha256"`
+	ResolvedPath string `json:"-"`
+}
+
 type omniExactMediaFixture struct {
-	manifest    omnimedia.Manifest
-	image       omnimedia.Artifact
-	video       omnimedia.Artifact
+	manifest    functionalOmniManifest
+	image       functionalOmniArtifact
+	video       functionalOmniArtifact
 	promptPath  string
 	promptBytes []byte
 	imageBytes  []byte
@@ -178,7 +194,7 @@ func newExactOmniMediaFixture(t testing.TB, directory string) omniExactMediaFixt
 		filepath.Dir(sourceFile), "..", "..", "..", "..",
 		"tests", "integration", "models", "testdata", "omni_media", "manifest.json",
 	)
-	manifest, err := omnimedia.LoadManifest(manifestPath)
+	manifest, err := loadFunctionalOmniManifest(manifestPath)
 	if err != nil {
 		t.Fatalf("load exact OMNI media manifest: %v", err)
 	}
@@ -206,6 +222,39 @@ func newExactOmniMediaFixture(t testing.TB, directory string) omniExactMediaFixt
 		promptPath: promptPath, promptBytes: promptBytes,
 		imageBytes: imageBytes, videoBytes: videoBytes, inputReader: reader,
 	}
+}
+
+func loadFunctionalOmniManifest(path string) (functionalOmniManifest, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return functionalOmniManifest{}, err
+	}
+	var manifest functionalOmniManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		return functionalOmniManifest{}, fmt.Errorf("decode OMNI manifest: %w", err)
+	}
+	if manifest.SchemaVersion != functionalOmniManifestSchemaV1 || len(manifest.Artifacts) != 2 {
+		return functionalOmniManifest{}, fmt.Errorf("OMNI manifest schema=%q artifacts=%d", manifest.SchemaVersion, len(manifest.Artifacts))
+	}
+	root := filepath.Dir(path)
+	for index := range manifest.Artifacts {
+		artifact := &manifest.Artifacts[index]
+		resolved := filepath.Join(root, filepath.Clean(artifact.Path))
+		relative, err := filepath.Rel(root, resolved)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return functionalOmniManifest{}, fmt.Errorf("OMNI artifact[%d] escapes fixture root", index)
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			return functionalOmniManifest{}, fmt.Errorf("read OMNI artifact[%d]: %w", index, err)
+		}
+		digest := sha256.Sum256(data)
+		if int64(len(data)) != artifact.Bytes || hex.EncodeToString(digest[:]) != artifact.SHA256 {
+			return functionalOmniManifest{}, fmt.Errorf("OMNI artifact[%d] identity mismatch", index)
+		}
+		artifact.ResolvedPath = resolved
+	}
+	return manifest, nil
 }
 
 type omniExactInputReader struct {
