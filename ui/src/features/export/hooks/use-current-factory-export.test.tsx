@@ -232,6 +232,12 @@ describe("useCurrentFactoryExport", () => {
         (workstation) => workstation.name,
       ) ?? [];
 
+    expect(
+      result.current.currentFactoryExport.factoryDefinition,
+    ).not.toHaveProperty("activation");
+    expect(
+      result.current.currentFactoryExport.factoryDefinition,
+    ).not.toHaveProperty("version");
     expect(workstationNames).toContain("Document Only");
     expect(workstationNames).not.toContain("Snapshot Only");
   });

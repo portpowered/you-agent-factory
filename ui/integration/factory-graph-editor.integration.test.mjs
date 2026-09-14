@@ -20,6 +20,12 @@ import {
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
+const editableGraphFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const exportFactoryDefinition = {
   metadata: {
     owner: "operations",
@@ -82,6 +88,7 @@ const exportFactoryDefinition = {
 };
 
 const editableGraphFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   metadata: {
     owner: "operations",
   },
@@ -140,12 +147,6 @@ const editableGraphFactoryDefinition = {
       worker: "writer",
     },
   ],
-};
-
-const editableGraphFactoryActivation = {
-  activationId: "browser-fixture-activation",
-  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
-  state: "ACTIVE",
 };
 
 const editableGraphFactoryReplayLines = [

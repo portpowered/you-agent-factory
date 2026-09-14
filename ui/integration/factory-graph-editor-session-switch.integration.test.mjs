@@ -10,6 +10,12 @@ import {
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
+const editableGraphFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const betaSessionID = "session-beta";
 
 const defaultSession = {
@@ -36,6 +42,7 @@ const betaSession = {
 };
 
 const alphaGraphFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   name: "Alpha Graph Factory",
   workers: [
     {
@@ -82,6 +89,7 @@ const alphaGraphFactoryDefinition = {
 };
 
 const betaGraphFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   name: "Beta Graph Factory",
   workers: [
     {
@@ -138,6 +146,7 @@ function buildEditableGraphReplayLines(workstationName, workTypeName) {
       id: `editable-graph-${workstationName}`,
       payload: {
         factory: {
+          activation: editableGraphFactoryActivation,
           workTypes: [
             {
               name: workTypeName,
