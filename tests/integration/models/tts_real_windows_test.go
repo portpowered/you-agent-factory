@@ -387,7 +387,7 @@ func localAIRealSelectorCommand(binaryPath string, spec localAIRealSelectorSpec,
 
 func localAIKnownFixturePath(t testing.TB) string {
 	t.Helper()
-	return filepath.Clean(filepath.Join(testutil.MustRepoPath(t, filepath.ToSlash(filepath.Join("tests", "integration", "models", "testdata", knownASRFixtureFile)))))
+	return filepath.Clean(filepath.Join(testutil.MustRepoPath(t, knownASRFixtureDirectory), knownASRFixtureFile))
 }
 
 func readLocalAIRealBuildIdentity(t testing.TB) (string, string, bool) {
