@@ -3,9 +3,15 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -16,26 +22,20 @@ import (
 func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	const generated = "The fixture sees every input in order"
+	const generated = "The fixture sees every exact input in order"
 	fixture := buildOmniFileInputFixture(t, generated)
 	process := fixture.process
 	home := fixture.home
 	dir := fixture.dir
 
-	promptPath := filepath.Join(dir, "prompt.txt")
-	imageAPath := filepath.Join(dir, "a.png")
-	imageBPath := filepath.Join(dir, "b.png")
-	audioPath := filepath.Join(dir, "voice.wav")
-	videoPath := filepath.Join(dir, "clip.mp4")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "llm",
-		"--input", "prompt=@" + promptPath,
-		"--input", "image=@" + imageAPath,
-		"--input", "image=@" + imageBPath,
-		"--input", "audio=@" + audioPath,
-		"--input", "video=@" + videoPath,
+		"--input", "prompt=@" + fixture.media.promptPath,
+		"--input", "image=@" + fixture.media.image.ResolvedPath,
+		"--input", "image=@" + fixture.media.image.ResolvedPath,
+		"--input", "video=@" + fixture.media.video.ResolvedPath,
 	})
 	inputs.Input.Env = functionalHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = dir
@@ -44,7 +44,7 @@ func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildP
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(models invoke llm --input files) error = %v", err)
 	}
-	t.Logf("command: you models invoke llm --input prompt=@%s --input image=@%s --input image=@%s --input audio=@%s --input video=@%s", promptPath, imageAPath, imageBPath, audioPath, videoPath)
+	t.Logf("command: you models invoke llm --input prompt=@%s --input image=@%s --input image=@%s --input video=@%s", fixture.media.promptPath, fixture.media.image.ResolvedPath, fixture.media.image.ResolvedPath, fixture.media.video.ResolvedPath)
 	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
 	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
 	if stdout.String() != generated {
@@ -53,51 +53,53 @@ func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildP
 	if stderr.Len() != 0 {
 		t.Fatalf("models invoke stderr = %q, want diagnostics-free fixture output", stderr.String())
 	}
-	wantReads := []string{promptPath, imageAPath, imageBPath, audioPath, videoPath}
+	wantReads := []string{fixture.media.promptPath, fixture.media.image.ResolvedPath, fixture.media.image.ResolvedPath, fixture.media.video.ResolvedPath}
 	request := fixture.protocol.Request()
-	t.Logf("protocol request: operation=%q prompt=%q inputs=%#v", request.Operation, request.Prompt, request.Inputs)
-	if request.Operation != models.OperationOMNI || request.Prompt != "Compare these inputs" || len(request.Inputs) != 5 {
-		t.Fatalf("protocol request = %#v, want ordered OMNI file request", request)
+	t.Logf("protocol request: %s", omniRequestSummary(request))
+	if request.Operation != models.OperationOMNI || request.Prompt != string(fixture.media.promptBytes) || len(request.Inputs) != 4 {
+		t.Fatalf("protocol request identity = operation=%q prompt=%q inputs=%d, want ordered OMNI prompt/image/image/video request", request.Operation, request.Prompt, len(request.Inputs))
 	}
 	wantInputs := []struct {
-		slot, modality, mediaType, content string
+		slot, modality, mediaType string
+		content                   []byte
 	}{
-		{slot: "prompt", modality: string(models.ModalityText), mediaType: "text/plain", content: "Compare these inputs"},
-		{slot: "image", modality: string(models.ModalityImage), mediaType: "image/png", content: "PNG-A"},
-		{slot: "image", modality: string(models.ModalityImage), mediaType: "image/png", content: "PNG-B"},
-		{slot: "audio", modality: string(models.ModalityAudio), mediaType: "audio/wav", content: "RIFF-VOICE"},
-		{slot: "video", modality: string(models.ModalityVideo), mediaType: "video/mp4", content: "MP4-CLIP"},
+		{slot: "prompt", modality: string(models.ModalityText), mediaType: "text/plain", content: fixture.media.promptBytes},
+		{slot: "image", modality: string(models.ModalityImage), mediaType: fixture.media.image.MediaType, content: fixture.media.imageBytes},
+		{slot: "image", modality: string(models.ModalityImage), mediaType: fixture.media.image.MediaType, content: fixture.media.imageBytes},
+		{slot: "video", modality: string(models.ModalityVideo), mediaType: fixture.media.video.MediaType, content: fixture.media.videoBytes},
 	}
 	for index, want := range wantInputs {
-		got := request.Inputs[index]
-		if got.Slot != want.slot || string(got.Modality) != want.modality || got.MediaType != want.mediaType || got.Content != want.content {
-			t.Fatalf("protocol input[%d] = %#v, want slot=%q modality=%q media=%q content=%q", index, got, want.slot, want.modality, want.mediaType, want.content)
-		}
+		assertExactOmniProtocolInput(t, index, request.Inputs[index], want.slot, models.Modality(want.modality), want.mediaType, want.content)
 	}
 	if fixture.protocol.Calls() != 1 {
 		t.Fatalf("protocol fixture calls = %d, want one codec-backed generation", fixture.protocol.Calls())
 	}
-	if len(fixture.inputReads) != len(wantReads) {
-		t.Fatalf("input read order = %#v, want %#v", fixture.inputReads, wantReads)
+	inputReads := fixture.inputReader.Paths()
+	if len(inputReads) != len(wantReads) {
+		t.Fatalf("input read order = %#v, want %#v", inputReads, wantReads)
 	}
 	for index, want := range wantReads {
-		if fixture.inputReads[index] != want {
-			t.Fatalf("input read[%d] = %q, want %q", index, fixture.inputReads[index], want)
+		if inputReads[index] != want {
+			t.Fatalf("input read[%d] = %q, want %q", index, inputReads[index], want)
 		}
 	}
 	if fixture.network.Calls() != 0 {
 		t.Fatalf("asset network calls = %d, want 0 from content-addressed fixtures", fixture.network.Calls())
 	}
+	if fixture.media.manifest.SchemaVersion != omniMediaManifestSchemaV1 {
+		t.Fatalf("fixture manifest schema = %q, want pinned OMNI schema", fixture.media.manifest.SchemaVersion)
+	}
 	closeRootProcess(t, process, "close Omni file-input root process")
 }
 
 type omniFileInputFixture struct {
-	process    support.Process
-	home       string
-	dir        string
-	inputReads []string
-	protocol   *omniTextProtocolFixture
-	network    *rejectingModelAssetHTTP
+	process     support.Process
+	home        string
+	dir         string
+	media       omniExactMediaFixture
+	inputReader *omniExactInputReader
+	protocol    *omniTextProtocolFixture
+	network     *rejectingModelAssetHTTP
 }
 
 func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixture {
@@ -121,20 +123,13 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 	}
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
 
+	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	media := newExactOmniMediaFixture(t, dir)
 	fixture := &omniFileInputFixture{
-		home:     home,
-		dir:      functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
-		protocol: &omniTextProtocolFixture{response: response},
-		network:  &rejectingModelAssetHTTP{},
+		home: home, dir: dir, media: media, inputReader: media.inputReader,
+		protocol: &omniTextProtocolFixture{response: response}, network: &rejectingModelAssetHTTP{},
 	}
 	assetFiles := functionalModelAssetFileSystem{home: home}
-	fileInputs := map[string][]byte{
-		filepath.Join(fixture.dir, "prompt.txt"): []byte("Compare these inputs"),
-		filepath.Join(fixture.dir, "a.png"):      []byte("PNG-A"),
-		filepath.Join(fixture.dir, "b.png"):      []byte("PNG-B"),
-		filepath.Join(fixture.dir, "voice.wav"):  []byte("RIFF-VOICE"),
-		filepath.Join(fixture.dir, "clip.mp4"):   []byte("MP4-CLIP"),
-	}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
@@ -145,14 +140,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelAssetRenamePath: assetFiles.Rename, ModelAssetRemovePath: assetFiles.Remove,
 		ModelAssetReadFile: assetFiles.ReadFile, ModelAssetReadDirectory: assetFiles.ReadDir,
 		ModelAssetCreateFile: assetFiles.Create, ModelAssetOpenFile: assetFiles.Open,
-		ModelCLIInputReadFile: func(_ context.Context, path string, _ int64) ([]byte, error) {
-			fixture.inputReads = append(fixture.inputReads, path)
-			data, ok := fileInputs[path]
-			if !ok {
-				return nil, fmt.Errorf("unexpected fixture input path %q", path)
-			}
-			return append([]byte(nil), data...), nil
-		},
+		ModelCLIInputReadFile:    fixture.inputReader.Read,
 		ModelHostProcessLauncher: hostLauncher, ModelHostProtocolNegotiator: protocol,
 		ModelHostCompatibilityChecker: compatibility,
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
@@ -163,4 +151,220 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelInvocationProtocolClient: fixture.protocol,
 	})
 	return fixture
+}
+
+// omniExactMediaFixture is the shared local-real input used by the controlled
+// root-composition probes. LoadManifest is the only authority that resolves
+// the promoted bytes, so the tests cannot silently replace them with a small
+// placeholder while retaining the same MIME suffix.
+const (
+	omniMediaManifestSchemaV1 = "you.localai.omni-media-fixture.v1"
+	omniImageID               = "omni-image-v1"
+	omniImagePath             = "infinite-you.png"
+	omniImageMediaType        = "image/png"
+	omniImageBytes            = int64(1381559)
+	omniImageSHA256           = "6d8f7075d2314a19be2a5b8fe52ffc44f2ab8c0fcc5b68935abbd57788e8c3d8"
+	omniVideoID               = "omni-video-v1"
+	omniVideoPath             = "groundtruth-fixture.mp4"
+	omniVideoMediaType        = "video/mp4"
+	omniVideoBytes            = int64(30039)
+	omniVideoSHA256           = "80db7ed6a38cb8de371ef6e732d317102b67b54977d7b0d535a7862f0f05e9b7"
+)
+
+type omniFixtureImageMetadata struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type omniFixtureVideoMetadata struct {
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	DurationMillis int64  `json:"durationMillis"`
+	FrameRate      string `json:"frameRate"`
+	Frames         int64  `json:"frames"`
+}
+
+type omniExactMediaArtifact struct {
+	ID             string                    `json:"id"`
+	Path           string                    `json:"path"`
+	MediaType      string                    `json:"mediaType"`
+	Bytes          int64                     `json:"bytes"`
+	SHA256         string                    `json:"sha256"`
+	Provenance     json.RawMessage           `json:"provenance"`
+	Image          *omniFixtureImageMetadata `json:"image"`
+	Video          *omniFixtureVideoMetadata `json:"video"`
+	SemanticRubric json.RawMessage           `json:"semanticRubric"`
+	ResolvedPath   string                    `json:"-"`
+}
+
+type omniExactMediaManifest struct {
+	SchemaVersion string                   `json:"schemaVersion"`
+	Artifacts     []omniExactMediaArtifact `json:"artifacts"`
+}
+
+type omniExactMediaFixture struct {
+	manifest    omniExactMediaManifest
+	image       omniExactMediaArtifact
+	video       omniExactMediaArtifact
+	promptPath  string
+	promptBytes []byte
+	imageBytes  []byte
+	videoBytes  []byte
+	inputReader *omniExactInputReader
+}
+
+func newExactOmniMediaFixture(t testing.TB, directory string) omniExactMediaFixture {
+	t.Helper()
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate OMNI functional test")
+	}
+	manifestPath := filepath.Join(
+		filepath.Dir(sourceFile), "..", "..", "..", "..",
+		"tests", "integration", "models", "testdata", "omni_media", "manifest.json",
+	)
+	manifest, err := loadOmniFunctionalManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("load exact OMNI media manifest: %v", err)
+	}
+	if len(manifest.Artifacts) != 2 {
+		t.Fatalf("exact OMNI media artifacts = %d, want image and video", len(manifest.Artifacts))
+	}
+	imageArtifact := manifest.Artifacts[0]
+	videoArtifact := manifest.Artifacts[1]
+	imageBytes, err := os.ReadFile(imageArtifact.ResolvedPath)
+	if err != nil {
+		t.Fatalf("read exact OMNI image fixture: %v", err)
+	}
+	videoBytes, err := os.ReadFile(videoArtifact.ResolvedPath)
+	if err != nil {
+		t.Fatalf("read exact OMNI video fixture: %v", err)
+	}
+	promptBytes := []byte("Compare these exact inputs")
+	promptPath := filepath.Join(directory, "prompt.txt")
+	if err := os.WriteFile(promptPath, promptBytes, 0o644); err != nil {
+		t.Fatalf("write exact OMNI prompt fixture: %v", err)
+	}
+	reader := newOmniExactInputReader(promptPath, imageArtifact.ResolvedPath, videoArtifact.ResolvedPath)
+	return omniExactMediaFixture{
+		manifest: manifest, image: imageArtifact, video: videoArtifact,
+		promptPath: promptPath, promptBytes: promptBytes,
+		imageBytes: imageBytes, videoBytes: videoBytes, inputReader: reader,
+	}
+}
+
+func loadOmniFunctionalManifest(path string) (omniExactMediaManifest, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return omniExactMediaManifest{}, err
+	}
+	var manifest omniExactMediaManifest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
+		return omniExactMediaManifest{}, err
+	}
+	if manifest.SchemaVersion != omniMediaManifestSchemaV1 || len(manifest.Artifacts) != 2 {
+		return omniExactMediaManifest{}, fmt.Errorf("unexpected OMNI manifest schema or artifact count")
+	}
+	wants := []struct {
+		id, name, mediaType, sha256 string
+		bytes                       int64
+	}{
+		{id: omniImageID, name: omniImagePath, mediaType: omniImageMediaType, bytes: omniImageBytes, sha256: omniImageSHA256},
+		{id: omniVideoID, name: omniVideoPath, mediaType: omniVideoMediaType, bytes: omniVideoBytes, sha256: omniVideoSHA256},
+	}
+	for index, want := range wants {
+		artifact := &manifest.Artifacts[index]
+		if artifact.ID != want.id || artifact.Path != want.name || artifact.MediaType != want.mediaType || artifact.Bytes != want.bytes || artifact.SHA256 != want.sha256 || artifact.Path == filepath.Clean("..") || filepath.IsAbs(artifact.Path) || filepath.Clean(artifact.Path) != artifact.Path {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d identity drift", index)
+		}
+		artifact.ResolvedPath = filepath.Join(filepath.Dir(path), artifact.Path)
+		info, err := os.Lstat(artifact.ResolvedPath)
+		if err != nil {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d fixture stat: %w", index, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d is not a regular fixture", index)
+		}
+		data, err := os.ReadFile(artifact.ResolvedPath)
+		if err != nil {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d read: %w", index, err)
+		}
+		if int64(len(data)) != artifact.Bytes || fmt.Sprintf("%x", sha256.Sum256(data)) != artifact.SHA256 {
+			return omniExactMediaManifest{}, fmt.Errorf("OMNI artifact %d bytes or digest drift", index)
+		}
+	}
+	return manifest, nil
+}
+
+type omniExactInputReader struct {
+	mu      sync.Mutex
+	allowed map[string]struct{}
+	reads   []string
+}
+
+func newOmniExactInputReader(paths ...string) *omniExactInputReader {
+	allowed := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		allowed[path] = struct{}{}
+	}
+	return &omniExactInputReader{allowed: allowed}
+}
+
+func (reader *omniExactInputReader) Read(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if _, ok := reader.allowed[path]; !ok {
+		return nil, fmt.Errorf("unexpected exact OMNI input path %q", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("exact OMNI input %q exceeds %d bytes", path, maxBytes)
+	}
+	reader.mu.Lock()
+	reader.reads = append(reader.reads, path)
+	reader.mu.Unlock()
+	return append([]byte(nil), data...), nil
+}
+
+func (reader *omniExactInputReader) Paths() []string {
+	reader.mu.Lock()
+	defer reader.mu.Unlock()
+	return append([]string(nil), reader.reads...)
+}
+
+func assertExactOmniProtocolInput(
+	t testing.TB,
+	index int,
+	got models.InvocationProtocolInput,
+	wantSlot string,
+	wantModality models.Modality,
+	wantMediaType string,
+	wantContent []byte,
+) {
+	t.Helper()
+	gotContent := []byte(got.Content)
+	gotHash := omniExactDigest(gotContent)
+	wantHash := omniExactDigest(wantContent)
+	if got.Slot != wantSlot || got.Modality != wantModality || got.MediaType != wantMediaType || !bytes.Equal(gotContent, wantContent) {
+		t.Fatalf("protocol input[%d] identity = slot=%q modality=%q mediaType=%q bytes=%d sha256=%s, want slot=%q modality=%q mediaType=%q bytes=%d sha256=%s", index, got.Slot, got.Modality, got.MediaType, len(gotContent), gotHash, wantSlot, wantModality, wantMediaType, len(wantContent), wantHash)
+	}
+}
+
+func omniExactDigest(content []byte) string {
+	return fmt.Sprintf("%x", sha256.Sum256(content))
+}
+
+func omniRequestSummary(request models.InvocationProtocolRequest) string {
+	inputs := make([]string, len(request.Inputs))
+	for index, input := range request.Inputs {
+		content := []byte(input.Content)
+		inputs[index] = fmt.Sprintf("%d:%s/%s/%s/%d/%s", index, input.Slot, input.Modality, input.MediaType, len(content), omniExactDigest(content))
+	}
+	return fmt.Sprintf("operation=%q prompt=%q inputs=[%s]", request.Operation, request.Prompt, strings.Join(inputs, ", "))
 }

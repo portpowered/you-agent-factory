@@ -89,6 +89,8 @@ func invokeBoundOmni(t *testing.T, client *recordingInvocationProtocolClient) in
 			Inputs: []models.InferenceInput{
 				{Name: "prompt", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "compare these"},
 				{Name: "image", Modality: models.ModalityImage, ContentType: "image/png", MediaType: "image/png", Content: "PNG-A"},
+				{Name: "image", Modality: models.ModalityImage, ContentType: "image/png", MediaType: "image/png", Content: "PNG-A"},
+				{Name: "video", Modality: models.ModalityVideo, ContentType: "video/mp4", MediaType: "video/mp4", Content: "MP4-CLIP"},
 			},
 		},
 		Operation: operation,
@@ -115,6 +117,11 @@ func assertBoundOmniContent(t *testing.T, result inference.InvocationRuntimeResu
 	if len(result.Content) != 2 || result.Content[0].Name != "text" || result.Content[0].Content != "fixture answer" || result.Content[1].Name != "usage" {
 		t.Fatalf("Invoke content = %#v, want text and declared usage", result.Content)
 	}
+	if result.Content[0].Modality != models.ModalityText || result.Content[0].ContentType != "text/plain" || result.Content[0].MediaType != "text/plain" ||
+		result.Content[1].Modality != models.ModalityJSON || result.Content[1].ContentType != "application/json" || result.Content[1].MediaType != "application/json" ||
+		result.Content[1].Content != `{"tokens":3}` {
+		t.Fatalf("Invoke content metadata = %#v, want typed text and JSON usage", result.Content)
+	}
 	if len(result.Artifacts) != 1 {
 		t.Fatalf("Invoke artifacts = %#v, want one forwarded descriptor", result.Artifacts)
 	}
@@ -137,8 +144,22 @@ func assertBoundOmniRequest(t *testing.T, client *recordingInvocationProtocolCli
 	if client.request.Operation != models.OperationOMNI || client.request.Prompt != "compare these" {
 		t.Fatalf("protocol request = %#v, want OMNI prompt", client.request)
 	}
-	if len(client.request.Inputs) != 2 || client.request.Inputs[0].Slot != "prompt" || client.request.Inputs[1].Slot != "image" || client.request.Inputs[1].MediaType != "image/png" {
-		t.Fatalf("protocol inputs = %#v, want ordered prompt/image inputs", client.request.Inputs)
+	if len(client.request.Inputs) != 4 {
+		t.Fatalf("protocol input count = %d, want ordered prompt/image/image/video inputs", len(client.request.Inputs))
+	}
+	want := []struct {
+		slot, modality, mediaType, content string
+	}{
+		{slot: "prompt", modality: string(models.ModalityText), mediaType: "text/plain", content: "compare these"},
+		{slot: "image", modality: string(models.ModalityImage), mediaType: "image/png", content: "PNG-A"},
+		{slot: "image", modality: string(models.ModalityImage), mediaType: "image/png", content: "PNG-A"},
+		{slot: "video", modality: string(models.ModalityVideo), mediaType: "video/mp4", content: "MP4-CLIP"},
+	}
+	for index, expected := range want {
+		got := client.request.Inputs[index]
+		if got.Slot != expected.slot || string(got.Modality) != expected.modality || got.MediaType != expected.mediaType || got.Content != expected.content {
+			t.Fatalf("protocol input[%d] = slot=%q modality=%q mediaType=%q bytes=%d, want slot=%q modality=%q mediaType=%q bytes=%d", index, got.Slot, got.Modality, got.MediaType, len([]byte(got.Content)), expected.slot, expected.modality, expected.mediaType, len([]byte(expected.content)))
+		}
 	}
 }
 
