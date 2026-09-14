@@ -127,6 +127,80 @@ func sameTraceIDJoinNet() *state.Net {
 	}
 }
 
+func TestEnablementEvaluator_ExpandsRepeatedSameTraceIDBindings(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := repeatedSameTraceIDNet()
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"01-task-a":     repeatedSameTraceIDToken("01-task-a", "task:in-review", "delivery", "work-task-a", "trace-a"),
+		"02-task-b":     repeatedSameTraceIDToken("02-task-b", "task:in-review", "delivery", "work-task-b", "trace-b"),
+		"00-review-old": repeatedSameTraceIDToken("00-review-old", "review:init", "delivery", "work-review-old", "trace-old"),
+		"03-review-a":   repeatedSameTraceIDToken("03-review-a", "review:init", "delivery", "work-review-a", "trace-a"),
+		"04-review-b":   repeatedSameTraceIDToken("04-review-b", "review:init", "delivery", "work-review-b", "trace-b"),
+		"01-slot-a":     repeatedSameTraceIDResourceToken("01-slot-a"),
+		"02-slot-b":     repeatedSameTraceIDResourceToken("02-slot-b"),
+	})
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("base enabled candidates = %d, want 1", len(enabled))
+	}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n}
+	for repetition := 0; repetition < 3; repetition++ {
+		expanded := eval.ExpandRepeatedBindings(n, snapshot, enabled)
+		if len(expanded) != 2 {
+			t.Fatalf("repetition %d expanded candidates = %d, want 2", repetition, len(expanded))
+		}
+		for index, want := range [][3]string{{"01-task-a", "03-review-a", "01-slot-a"}, {"02-task-b", "04-review-b", "02-slot-b"}} {
+			if got := strings.Join(tokenIDs(expanded[index].Bindings["task"]), ","); got != want[0] {
+				t.Fatalf("repetition %d candidate %d task binding = %q, want %q", repetition, index, got, want[0])
+			}
+			if got := strings.Join(tokenIDs(expanded[index].Bindings["review"]), ","); got != want[1] {
+				t.Fatalf("repetition %d candidate %d review binding = %q, want %q", repetition, index, got, want[1])
+			}
+			if got := strings.Join(tokenIDs(expanded[index].Bindings["slot"]), ","); got != want[2] {
+				t.Fatalf("repetition %d candidate %d slot binding = %q, want %q", repetition, index, got, want[2])
+			}
+		}
+	}
+}
+
+func repeatedSameTraceIDNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:in-review":          {ID: "task:in-review"},
+			"review:init":             {ID: "review:init"},
+			"executor-slot:available": {ID: "executor-slot:available"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"review": {
+				ID: "review", Name: "review", WorkerType: "reviewer",
+				InputArcs: []petri.Arc{
+					{ID: "task-in", Name: "task", PlaceID: "task:in-review", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "review-in", Name: "review", PlaceID: "review:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}, Guard: &petri.SameTraceIDGuard{MatchBinding: "task"}},
+					{ID: "slot-in", Name: "slot", PlaceID: "executor-slot:available", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+			},
+		},
+	}
+}
+
+func repeatedSameTraceIDToken(id, placeID, name, workID, traceID string) *factorytoken.Token {
+	workTypeID := strings.Split(placeID, ":")[0]
+	return &factorytoken.Token{
+		ID: id, PlaceID: placeID,
+		Color: factorytoken.Color{
+			Name: name, WorkID: workID, WorkTypeID: workTypeID, DataType: factorytoken.DataTypeWork,
+			CurrentChainingTraceID: traceID,
+		},
+	}
+}
+
+func repeatedSameTraceIDResourceToken(id string) *factorytoken.Token {
+	return &factorytoken.Token{
+		ID: id, PlaceID: "executor-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource},
+	}
+}
+
 func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *testing.T) {
 	eval := NewEnablementEvaluator(nil, testNow, nil)
 	n := sameNameGuardNet()

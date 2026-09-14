@@ -528,8 +528,8 @@ func (e *EnablementEvaluator) ExpandRepeatedBindings(
 			expanded = append(expanded, et)
 			continue
 		}
-		if transitionUsesSameNameGuard(tr) {
-			expanded = append(expanded, e.expandRepeatedSameNameBindings(tr, snapshot, et)...)
+		if transitionUsesPeerBindingGuard(tr) {
+			expanded = append(expanded, e.expandRepeatedGuardedBindings(tr, snapshot, et)...)
 			continue
 		}
 		expanded = append(expanded, expandRepeatedCardinalityOneBindings(tr, &snapshot.Marking, et)...)
@@ -537,7 +537,19 @@ func (e *EnablementEvaluator) ExpandRepeatedBindings(
 	return expanded
 }
 
-func (e *EnablementEvaluator) expandRepeatedSameNameBindings(
+func transitionUsesPeerBindingGuard(tr *petri.Transition) bool {
+	if tr == nil {
+		return false
+	}
+	for index := range tr.InputArcs {
+		if guardRequiresPeerBinding(tr.InputArcs[index].Guard) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *EnablementEvaluator) expandRepeatedGuardedBindings(
 	tr *petri.Transition,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	base interfaces.EnabledTransition,
@@ -562,9 +574,9 @@ func (e *EnablementEvaluator) expandRepeatedSameNameBindings(
 		if bindingUsesExcludedConsumeIdentity(base, excludedTokenIDs, excludedWorkIDs) {
 			return nil
 		}
-		// Some SAME_NAME shapes intentionally use the legacy phased evaluator
-		// when no registered current-child binding exists. Preserve that valid
-		// single binding when guard-aware repeated search has nothing to expand.
+		// Some guarded shapes intentionally use the legacy phased evaluator when
+		// guard-aware repeated search has nothing to expand. Preserve that valid
+		// single binding unless the base binding was already excluded as active.
 		return []interfaces.EnabledTransition{base}
 	}
 	return expanded
