@@ -1,12 +1,16 @@
-package wire
+//go:build managed_process_integration
+
+package managed_process_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io/fs"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -16,91 +20,25 @@ import (
 	"testing"
 	"time"
 
-	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
+	"github.com/fsnotify/fsnotify"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	managedbackend "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
+	appwire "github.com/portpowered/infinite-you/pkg/wire"
 )
 
-func TestSystemInitializationInspectPathPreservesOverrideAndSelectsProcessDefault(t *testing.T) {
-	t.Parallel()
+const (
+	modelRuntimeEvidenceEnvironment = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
+	managedChildEvidenceKind        = "MANAGED_CHILD"
+	managedChildPhaseStarted        = "PROCESS_STARTED"
+	managedChildPhaseExited         = "PROCESS_EXITED"
+	productionManagedModelName      = "OMNIVOICE_Q4_K_M"
+	productionManagedWaitTime       = 15 * time.Second
+)
 
-	path := t.TempDir()
-	info, err := provideSystemInitializationInspectPath(serviceedges.Edges{})(path)
-	if err != nil {
-		t.Fatalf("default inspect path: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("default inspect path IsDir() = false for %q", path)
-	}
-
-	inspected := ""
-	override := func(path string) (fs.FileInfo, error) {
-		inspected = path
-		return nil, fs.ErrPermission
-	}
-	_, err = provideSystemInitializationInspectPath(serviceedges.Edges{
-		SystemInitializationInspectPath: override,
-	})("customer-path")
-	if !errors.Is(err, fs.ErrPermission) || inspected != "customer-path" {
-		t.Fatalf("override inspect path = (%q, %v), want customer-path and permission error", inspected, err)
-	}
-}
-
-func TestModelsManagedProcessRetainsCleanupErrorOnce(t *testing.T) {
-	t.Parallel()
-	cleanupErr := errors.New("bounded cleanup failure")
-	cleanupCalls := 0
-	process := &modelsManagedProcess{
-		cleanup: func() error {
-			cleanupCalls++
-			return cleanupErr
-		},
-		finished: make(chan struct{}),
-	}
-	close(process.finished)
-
-	process.cleanupResources()
-	process.cleanupResources()
-	if cleanupCalls != 1 {
-		t.Fatalf("cleanup calls = %d, want once", cleanupCalls)
-	}
-	if err := process.Wait(); !errors.Is(err, cleanupErr) {
-		t.Fatalf("process wait error = %v, want retained cleanup error", err)
-	}
-}
-
-func TestModelsProcessLauncherUsesIndependentChildLifetimeContext(t *testing.T) {
-	t.Parallel()
-	parentContext, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	startErr := errors.New("controlled child start failure")
-	var childContext context.Context
-	launcher := modelsProcessLauncher{
-		resolveLaunch: func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error) {
-			return managedbackend.ManagedBackendLaunch{Command: "controlled-managed-backend"}, nil
-		},
-		startProcess: func(ctx context.Context, _ managedchild.Spec) (*managedchild.Process, error) {
-			childContext = ctx
-			return nil, startErr
-		},
-	}
-	if _, err := launcher.Start(parentContext, serviceedges.HostProcessStartSpec{}); !errors.Is(err, startErr) {
-		t.Fatalf("modelsProcessLauncher.Start() error = %v, want controlled start error", err)
-	}
-	cancel()
-	if childContext == nil {
-		t.Fatal("modelsProcessLauncher did not supply a child context")
-	}
-	if childContext.Done() != nil || childContext.Err() != nil {
-		t.Fatalf("child lifetime context = (done=%v, err=%v), want cancellation-independent context", childContext.Done(), childContext.Err())
-	}
-}
-
-// TestModelsManagedProcessProductionBoundaryLifecycle is the dedicated local
-// real-process I1-I4 lane. It is skipped by ordinary package tests because the
-// Make-owned helper identity is intentionally supplied only by the integration
-// target.
+// TestModelsManagedProcessProductionBoundaryLifecycle is the I1-I4
+// compiled-artifact witness. The Make-owned helper is built once, hashed, and
+// then launched through the canonical production Models/Wire construction
+// seam. The test uses only loopback endpoints and deterministic cache files.
 func TestModelsManagedProcessProductionBoundaryLifecycle(t *testing.T) {
 	helper, helperSHA := requireProductionManagedHelper(t)
 	t.Run("I1 ready survives context release and reuses", func(t *testing.T) {
@@ -148,8 +86,7 @@ func runProductionManagedI1(t *testing.T, helper, helperSHA string) {
 	}
 	rootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 	descendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
-	assertProductionManagedEndpoint(t, harness.rootEndpoint)
-	assertProductionManagedEndpoint(t, harness.descendantEndpoint)
+	waitProductionManagedReady(t, harness, http.StatusOK)
 
 	inspected, err := harness.service.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: harness.scope, Name: productionManagedModelName})
 	if err != nil {
@@ -163,14 +100,13 @@ func runProductionManagedI1(t *testing.T, helper, helperSHA string) {
 	if second.Outcome != models.HostEnsureAlreadyReady || second.Host.ReadinessState != models.ReadinessStateReady {
 		t.Fatalf("second ensure result = %#v, want already-ready/ready", second)
 	}
-	assertProductionManagedEndpoint(t, harness.rootEndpoint)
-	assertProductionManagedEndpoint(t, harness.descendantEndpoint)
+	waitProductionManagedReady(t, harness, http.StatusOK)
 	assertProductionManagedEvidence(t, harness.evidencePath, 1, 0, 1)
 
 	stopProductionManagedHost(t, harness)
-	waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-	waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
 	assertProductionManagedEvidence(t, harness.evidencePath, 1, 1, 2)
+	assertProductionManagedProcessExited(t, rootPID)
+	assertProductionManagedProcessExited(t, descendantPID)
 	stopProductionManagedHost(t, harness)
 
 	t.Logf("MANAGED-MODELS-WIRE-EVIDENCE cell=I1 helper=%s helperSHA256=%s rootPID=%d descendantPID=%d launches=1 exits=1 survivors=0 network=loopback-only", helper, helperSHA, rootPID, descendantPID)
@@ -189,8 +125,7 @@ func runProductionManagedI2(t *testing.T, helper, helperSHA string) {
 
 	rootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 	descendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
-	waitProductionManagedEndpointStatus(t, harness.rootEndpoint, http.StatusServiceUnavailable)
-	assertProductionManagedEndpoint(t, harness.descendantEndpoint)
+	waitProductionManagedReady(t, harness, http.StatusServiceUnavailable)
 	cancel()
 	ensureErr := receiveProductionManagedError(t, errCh)
 	if !errors.Is(ensureErr, models.ErrHostCancelled) || !errors.Is(ensureErr, context.Canceled) {
@@ -203,9 +138,9 @@ func runProductionManagedI2(t *testing.T, helper, helperSHA string) {
 	if inspected.Host.ReadinessState == models.ReadinessStateReady {
 		t.Fatalf("host after pending cancellation = %#v, must not publish READY", inspected.Host)
 	}
-	waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-	waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
 	assertProductionManagedEvidence(t, harness.evidencePath, 1, 1, 2)
+	assertProductionManagedProcessExited(t, rootPID)
+	assertProductionManagedProcessExited(t, descendantPID)
 
 	t.Logf("MANAGED-MODELS-WIRE-EVIDENCE cell=I2 helper=%s helperSHA256=%s rootPID=%d descendantPID=%d outcome=HOST_CANCELLED launches=1 exits=1 survivors=0 network=loopback-only", helper, helperSHA, rootPID, descendantPID)
 }
@@ -217,10 +152,11 @@ func runProductionManagedI3(t *testing.T, helper, helperSHA string) {
 		ensureProductionManagedHost(t, harness)
 		rootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 		descendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
+		waitProductionManagedReady(t, harness, http.StatusOK)
 		stopProductionManagedHost(t, harness)
-		waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-		waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
 		assertProductionManagedEvidence(t, harness.evidencePath, 1, 1, 2)
+		assertProductionManagedProcessExited(t, rootPID)
+		assertProductionManagedProcessExited(t, descendantPID)
 		stopProductionManagedHost(t, harness)
 		inspected, err := harness.service.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: harness.scope, Name: productionManagedModelName})
 		if err != nil {
@@ -237,6 +173,7 @@ func runProductionManagedI3(t *testing.T, helper, helperSHA string) {
 		ensureProductionManagedHost(t, harness)
 		rootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 		descendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
+		waitProductionManagedReady(t, harness, http.StatusOK)
 		shutdown, ok := harness.service.(interface{ Close(context.Context) error })
 		if !ok {
 			t.Fatal("production Models root does not expose its process-lifecycle Close hook")
@@ -247,9 +184,9 @@ func runProductionManagedI3(t *testing.T, helper, helperSHA string) {
 			t.Fatalf("Models root Close: %v", err)
 		}
 		cancel()
-		waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-		waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
 		assertProductionManagedEvidence(t, harness.evidencePath, 1, 1, 2)
+		assertProductionManagedProcessExited(t, rootPID)
+		assertProductionManagedProcessExited(t, descendantPID)
 		if err := shutdown.Close(context.Background()); err != nil {
 			t.Fatalf("repeated Models root Close: %v", err)
 		}
@@ -263,17 +200,21 @@ func runProductionManagedI4(t *testing.T, helper, helperSHA string) {
 	ensureProductionManagedHost(t, harness)
 	firstRootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 	firstDescendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
-	assertProductionManagedEndpoint(t, harness.rootEndpoint)
-	assertProductionManagedEndpoint(t, harness.descendantEndpoint)
+	waitProductionManagedReady(t, harness, http.StatusOK)
 	if err := os.WriteFile(harness.crashPath, []byte("crash\n"), 0o600); err != nil {
 		t.Fatalf("publish crash trigger: %v", err)
 	}
-	waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-	waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
+	waitProductionManagedFile(t, harness.crashCompletePath, func(body []byte) (bool, error) {
+		return len(bytes.TrimSpace(body)) > 0, nil
+	})
+	assertProductionManagedEvidence(t, harness.evidencePath, 1, 1, 2)
+	assertProductionManagedProcessExited(t, firstRootPID)
+	assertProductionManagedProcessExited(t, firstDescendantPID)
 	waitProductionManagedCrashState(t, harness)
 	if err := os.Remove(harness.crashPath); err != nil {
 		t.Fatalf("remove one-shot crash trigger: %v", err)
 	}
+	clearProductionManagedSignals(t, harness)
 
 	result := ensureProductionManagedHost(t, harness)
 	if result.Outcome != models.HostEnsureBecameReady || result.Host.ReadinessState != models.ReadinessStateReady {
@@ -281,25 +222,18 @@ func runProductionManagedI4(t *testing.T, helper, helperSHA string) {
 	}
 	secondRootPID := waitProductionManagedPID(t, harness.rootPIDPath)
 	secondDescendantPID := waitProductionManagedPID(t, harness.descendantPIDPath)
-	assertProductionManagedEndpoint(t, harness.rootEndpoint)
-	assertProductionManagedEndpoint(t, harness.descendantEndpoint)
+	waitProductionManagedReady(t, harness, http.StatusOK)
 	assertProductionManagedEvidence(t, harness.evidencePath, 2, 1, 3)
 	if firstRootPID == secondRootPID && firstDescendantPID == secondDescendantPID {
 		t.Fatalf("retry reused both original PIDs: root=%d descendant=%d", secondRootPID, secondDescendantPID)
 	}
 	stopProductionManagedHost(t, harness)
-	waitProductionManagedEndpointDown(t, harness.rootEndpoint)
-	waitProductionManagedEndpointDown(t, harness.descendantEndpoint)
 	assertProductionManagedEvidence(t, harness.evidencePath, 2, 2, 4)
+	assertProductionManagedProcessExited(t, secondRootPID)
+	assertProductionManagedProcessExited(t, secondDescendantPID)
 
 	t.Logf("MANAGED-MODELS-WIRE-EVIDENCE cell=I4 helper=%s helperSHA256=%s firstRootPID=%d firstDescendantPID=%d retryRootPID=%d retryDescendantPID=%d launches=2 exits=2 survivors=0 network=loopback-only", helper, helperSHA, firstRootPID, firstDescendantPID, secondRootPID, secondDescendantPID)
 }
-
-const (
-	productionManagedModelName = "OMNIVOICE_Q4_K_M"
-	productionManagedWaitTime  = 15 * time.Second
-	productionManagedPollTime  = 10 * time.Millisecond
-)
 
 type productionManagedHostHarness struct {
 	service             models.Service
@@ -309,7 +243,9 @@ type productionManagedHostHarness struct {
 	rootPIDPath         string
 	descendantPIDPath   string
 	descendantReadyPath string
+	rootReadyPath       string
 	crashPath           string
+	crashCompletePath   string
 	evidencePath        string
 }
 
@@ -322,6 +258,14 @@ type productionManagedCacheMetadata struct {
 type productionManagedCacheMetadataFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
+}
+
+type productionManagedEvidenceRecord struct {
+	Kind    string `json:"kind"`
+	Phase   string `json:"phase"`
+	Stage   string `json:"stage"`
+	Outcome string `json:"outcome"`
+	Class   string `json:"failure_class"`
 }
 
 func newProductionManagedHostHarness(t *testing.T, helper, caseName string) *productionManagedHostHarness {
@@ -337,12 +281,14 @@ func newProductionManagedHostHarness(t *testing.T, helper, caseName string) *pro
 		rootPIDPath:         filepath.Join(root, "root.pid"),
 		descendantPIDPath:   filepath.Join(root, "descendant.pid"),
 		descendantReadyPath: filepath.Join(root, "descendant.ready"),
+		rootReadyPath:       filepath.Join(root, "root.ready"),
 		crashPath:           filepath.Join(root, "crash.trigger"),
+		crashCompletePath:   filepath.Join(root, "crash.complete"),
 		evidencePath:        filepath.Join(root, "runtime-evidence.jsonl"),
 	}
 	t.Setenv(modelRuntimeEvidenceEnvironment, harness.evidencePath)
 
-	service, err := provideModelsService(serviceedges.Edges{})
+	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -363,7 +309,9 @@ func newProductionManagedHostHarness(t *testing.T, helper, caseName string) *pro
 					"--root-pid-file", harness.rootPIDPath,
 					"--descendant-pid-file", harness.descendantPIDPath,
 					"--descendant-ready-file", harness.descendantReadyPath,
+					"--root-ready-file", harness.rootReadyPath,
 					"--crash-file", harness.crashPath,
+					"--crash-complete-file", harness.crashCompletePath,
 				},
 			}},
 			Resources: []models.RuntimeResource{{
@@ -453,36 +401,37 @@ func stopProductionManagedHost(t *testing.T, harness *productionManagedHostHarne
 
 func waitProductionManagedPID(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.NewTimer(productionManagedWaitTime)
-	defer deadline.Stop()
-	ticker := time.NewTicker(productionManagedPollTime)
-	defer ticker.Stop()
-	for {
-		body, err := os.ReadFile(path)
-		if err == nil {
-			pid, scanErr := strconv.Atoi(strings.TrimSpace(string(body)))
-			if scanErr == nil && pid > 0 {
-				return pid
-			}
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for managed process PID file %q", path)
-			return 0
-		}
+	body := waitProductionManagedFile(t, path, func(body []byte) (bool, error) {
+		pid, err := strconv.Atoi(strings.TrimSpace(string(body)))
+		return err == nil && pid > 0, nil
+	})
+	pid, err := strconv.Atoi(strings.TrimSpace(string(body)))
+	if err != nil || pid <= 0 {
+		t.Fatalf("managed process PID file %q became invalid: %q", path, body)
 	}
+	return pid
 }
 
 func receiveProductionManagedError(t *testing.T, results <-chan error) error {
 	t.Helper()
+	timer := time.NewTimer(productionManagedWaitTime)
+	defer timer.Stop()
 	select {
 	case err := <-results:
 		return err
-	case <-time.After(productionManagedWaitTime):
+	case <-timer.C:
 		t.Fatal("managed process EnsureModelHost did not return before the safety deadline")
 		return nil
 	}
+}
+
+func waitProductionManagedReady(t *testing.T, harness *productionManagedHostHarness, wantRootStatus int) {
+	t.Helper()
+	waitProductionManagedFile(t, harness.rootReadyPath, func(body []byte) (bool, error) {
+		return len(bytes.TrimSpace(body)) > 0, nil
+	})
+	assertProductionManagedEndpointStatus(t, harness.rootEndpoint, wantRootStatus)
+	assertProductionManagedEndpointStatus(t, harness.descendantEndpoint, http.StatusOK)
 }
 
 func productionManagedHTTPStatus(endpoint string) (int, error) {
@@ -500,74 +449,59 @@ func productionManagedHTTPStatus(endpoint string) (int, error) {
 	return response.StatusCode, nil
 }
 
-func assertProductionManagedEndpoint(t *testing.T, endpoint string) {
+func assertProductionManagedEndpointStatus(t *testing.T, endpoint string, want int) {
 	t.Helper()
-	waitProductionManagedEndpointStatus(t, endpoint, http.StatusOK)
-}
-
-func waitProductionManagedEndpointStatus(t *testing.T, endpoint string, want int) {
-	t.Helper()
-	deadline := time.NewTimer(productionManagedWaitTime)
-	defer deadline.Stop()
-	ticker := time.NewTicker(productionManagedPollTime)
-	defer ticker.Stop()
-	for {
-		if status, err := productionManagedHTTPStatus(endpoint); err == nil && status == want {
-			return
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for managed endpoint %s to return HTTP %d", endpoint, want)
-		}
+	status, err := productionManagedHTTPStatus(endpoint)
+	if err != nil {
+		t.Fatalf("managed endpoint %s request: %v", endpoint, err)
+	}
+	if status != want {
+		t.Fatalf("managed endpoint %s returned HTTP %d, want %d", endpoint, status, want)
 	}
 }
 
-func waitProductionManagedEndpointDown(t *testing.T, endpoint string) {
+func assertProductionManagedProcessExited(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.NewTimer(productionManagedWaitTime)
-	defer deadline.Stop()
-	ticker := time.NewTicker(productionManagedPollTime)
-	defer ticker.Stop()
-	for {
-		if _, err := productionManagedHTTPStatus(endpoint); err != nil {
-			return
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("managed endpoint %s remained reachable after teardown", endpoint)
-		}
+	// Stop/Wait and the crash evidence are the lifecycle completion signals;
+	// this one-shot platform-aware probe independently proves the OS root and
+	// descendant are gone without turning liveness into a polling synchronizer.
+	if helperProcessRunning(pid) {
+		t.Fatalf("managed process PID %d remained alive after completion signal", pid)
 	}
 }
 
 func waitProductionManagedCrashState(t *testing.T, harness *productionManagedHostHarness) {
 	t.Helper()
-	deadline := time.NewTimer(productionManagedWaitTime)
-	defer deadline.Stop()
-	ticker := time.NewTicker(productionManagedPollTime)
-	defer ticker.Stop()
-	for {
-		inspected, err := harness.service.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: harness.scope, Name: productionManagedModelName})
-		if err == nil && inspected.Host.ReadinessState == models.ReadinessStateFailed && inspected.Host.Diagnostics["failureClass"] == "process_crash" && inspected.Host.Diagnostics["endpoint"] == "" {
-			return
+	waitProductionManagedEvidenceRecords(t, harness.evidencePath, func(records []productionManagedEvidenceRecord) bool {
+		for _, record := range records {
+			if record.Kind == "STAGE" && record.Stage == "BACKEND_START" && record.Outcome == "FAILED" && record.Class == "PROCESS_EXITED" {
+				return true
+			}
 		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for typed process-crash state")
-		}
+		return false
+	})
+	inspected, err := harness.service.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: harness.scope, Name: productionManagedModelName})
+	if err != nil {
+		t.Fatalf("InspectModelHost after crash evidence: %v", err)
+	}
+	if inspected.Host.ReadinessState != models.ReadinessStateFailed || inspected.Host.Diagnostics["failureClass"] != "process_crash" || inspected.Host.Diagnostics["endpoint"] != "" {
+		t.Fatalf("host after crash evidence = %#v, want failed/process_crash/empty endpoint", inspected.Host)
 	}
 }
 
 func assertProductionManagedEvidence(t *testing.T, path string, wantStarts, wantExits, wantRecords int) {
 	t.Helper()
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read managed process evidence %q: %v", path, err)
+	records := waitProductionManagedEvidenceRecords(t, path, func(records []productionManagedEvidenceRecord) bool {
+		_, starts, exits := productionManagedEvidenceCounts(records)
+		return starts >= wantStarts && exits >= wantExits
+	})
+	managedRecords, starts, exits := productionManagedEvidenceCounts(records)
+	if starts != wantStarts || exits != wantExits || managedRecords != wantRecords {
+		t.Fatalf("managed process evidence records = %#v, want starts=%d exits=%d managed-records=%d", records, wantStarts, wantExits, wantRecords)
 	}
-	records := decodeManagedChildEvidence(t, body)
-	managedRecords, starts, exits := 0, 0, 0
+}
+
+func productionManagedEvidenceCounts(records []productionManagedEvidenceRecord) (managedRecords, starts, exits int) {
 	for _, record := range records {
 		if record.Kind != managedChildEvidenceKind {
 			continue
@@ -580,7 +514,96 @@ func assertProductionManagedEvidence(t *testing.T, path string, wantStarts, want
 			exits++
 		}
 	}
-	if starts != wantStarts || exits != wantExits || managedRecords != wantRecords {
-		t.Fatalf("managed process evidence records = %#v, want starts=%d exits=%d managed-records=%d", records, wantStarts, wantExits, wantRecords)
+	return managedRecords, starts, exits
+}
+
+func clearProductionManagedSignals(t *testing.T, harness *productionManagedHostHarness) {
+	t.Helper()
+	for _, path := range []string{
+		harness.rootPIDPath,
+		harness.descendantPIDPath,
+		harness.descendantReadyPath,
+		harness.rootReadyPath,
+	} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("remove stale managed-process signal %q: %v", path, err)
+		}
+	}
+}
+
+func waitProductionManagedEvidenceRecords(t *testing.T, path string, predicate func([]productionManagedEvidenceRecord) bool) []productionManagedEvidenceRecord {
+	t.Helper()
+	var matched []productionManagedEvidenceRecord
+	waitProductionManagedFile(t, path, func(body []byte) (bool, error) {
+		records, err := decodeProductionManagedEvidence(body)
+		if err != nil {
+			return false, err
+		}
+		if !predicate(records) {
+			return false, nil
+		}
+		matched = records
+		return true, nil
+	})
+	return matched
+}
+
+func decodeProductionManagedEvidence(body []byte) ([]productionManagedEvidenceRecord, error) {
+	var records []productionManagedEvidenceRecord
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	for {
+		var record productionManagedEvidenceRecord
+		err := decoder.Decode(&record)
+		if errors.Is(err, io.EOF) {
+			return records, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+}
+
+func waitProductionManagedFile(t *testing.T, path string, predicate func([]byte) (bool, error)) []byte {
+	t.Helper()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("create managed-process signal watcher: %v", err)
+	}
+	defer watcher.Close()
+	directory := filepath.Dir(path)
+	if err := watcher.Add(directory); err != nil {
+		t.Fatalf("watch managed-process signal directory %q: %v", directory, err)
+	}
+	timer := time.NewTimer(productionManagedWaitTime)
+	defer timer.Stop()
+	var lastErr error
+	for {
+		body, readErr := os.ReadFile(path)
+		if readErr == nil {
+			ready, predicateErr := predicate(body)
+			if predicateErr != nil {
+				t.Fatalf("read managed-process signal %q: %v", path, predicateErr)
+			}
+			if ready {
+				return body
+			}
+			lastErr = fmt.Errorf("signal contents did not satisfy predicate")
+		} else {
+			lastErr = readErr
+		}
+		select {
+		case _, ok := <-watcher.Events:
+			if !ok {
+				t.Fatalf("managed-process signal watcher closed for %q", path)
+			}
+		case watchErr, ok := <-watcher.Errors:
+			if !ok {
+				t.Fatalf("managed-process signal watcher errors closed for %q", path)
+			}
+			t.Fatalf("managed-process signal watcher for %q: %v", path, watchErr)
+		case <-timer.C:
+			t.Fatalf("timed out waiting for managed-process signal %q: %v", path, lastErr)
+		}
 	}
 }

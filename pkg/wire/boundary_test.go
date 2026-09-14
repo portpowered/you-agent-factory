@@ -54,6 +54,7 @@ func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 		t.Fatalf("CanonicalIdentity(codex) = %q, want codex", canonical)
 	}
 }
+
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
