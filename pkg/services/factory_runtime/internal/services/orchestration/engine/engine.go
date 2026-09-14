@@ -254,7 +254,10 @@ func (e *FactoryEngine) NotifyResult() {
 	}
 }
 
-func (e *FactoryEngine) wakeForOperatorControl() {
+// WakeForOperatorControl schedules a tick after an operator changes runtime
+// state. Unlike buffered-input wakes, it must run even when no submission or
+// worker result is pending.
+func (e *FactoryEngine) WakeForOperatorControl() {
 	select {
 	case e.submitSignal <- struct{}{}:
 	default:

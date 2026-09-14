@@ -717,7 +717,7 @@ func (f *factoryImpl) applyResumeControl() (factory.ControlOutcome, interfaces.F
 	f.recordSessionLifecycleResume()
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
-	f.engine.WakeForPendingProcessing()
+	f.engine.WakeForOperatorControl()
 	return factory.ControlOutcomeAccepted, previousState, nil
 }
 
