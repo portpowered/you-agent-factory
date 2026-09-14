@@ -13,6 +13,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -41,7 +42,7 @@ func newConfiguredProvidersService(
 type modelsProcessLauncher struct {
 	recorder      managedChildEnvironmentRecorder
 	resolveLaunch func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error)
-	startCommand  func(*exec.Cmd) error
+	startProcess  func(context.Context, managedchild.Spec) (*managedchild.Process, error)
 }
 
 func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
@@ -57,28 +58,39 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(launch.Command, launch.Args...)
-	if env := appendManagedBackendEnvironment(spec.Env, launch.Env); len(env) > 0 {
-		cmd.Env = env
+	environment := appendManagedBackendEnvironment(spec.Env, launch.Env)
+	managedSpec := managedchild.Spec{
+		Command: launch.Command, Args: append([]string(nil), launch.Args...),
+		Env: environment, WorkDir: launch.WorkDir,
 	}
-	if launch.WorkDir != "" {
-		cmd.Dir = launch.WorkDir
+	// Runtime Host owns cancellation while the child is starting and becoming
+	// ready. Once managedchild has started the process, the supervisor owns its
+	// lifetime and will stop it explicitly on cancellation, unload, shutdown,
+	// or failure. Passing the temporary readiness context into managedchild
+	// would make its context watcher tear down a successfully ready host when
+	// Runtime Host releases that startup context.
+	childContext := ctx
+	if childContext == nil {
+		childContext = context.Background()
 	}
-	startCommand := launcher.startCommand
-	if startCommand == nil {
-		startCommand = (*exec.Cmd).Start
+	childContext = context.WithoutCancel(childContext)
+	var child *managedchild.Process
+	if launcher.startProcess != nil {
+		child, err = launcher.startProcess(childContext, managedSpec)
+	} else {
+		child, err = managedchild.Start(childContext, managedSpec)
 	}
-	if err := startCommand(cmd); err != nil {
+	if err == nil && child == nil {
+		err = errors.New("managed child starter returned a nil process")
+	}
+	if err != nil {
 		var cleanupErr error
 		if launch.Cleanup != nil {
 			cleanupErr = launch.Cleanup()
 		}
 		return nil, managedbackend.WrapBackendStartFailureWithCleanup(err, cleanupErr)
 	}
-	processID := 0
-	if cmd.Process != nil {
-		processID = cmd.Process.Pid
-	}
+	processID := child.PID()
 	if processID > 0 {
 		recorder := launcher.recorder
 		if recorder != nil {
@@ -87,12 +99,12 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 				Backend:     boundedManagedBackendID(spec.Backend),
 				ProcessID:   processID,
 				Phase:       managedChildPhaseStarted,
-				Environment: managedEnvironmentFacts(effectiveManagedBackendEnvironment(cmd.Env)),
+				Environment: managedEnvironmentFacts(effectiveManagedBackendEnvironment(environment)),
 			})
 		}
 	}
 	managed := &modelsManagedProcess{
-		cmd:            cmd,
+		child:          child,
 		healthEndpoint: launch.Endpoint,
 		cleanup:        launch.Cleanup,
 		finished:       make(chan struct{}),
@@ -101,11 +113,15 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 		recorder:       launcher.recorder,
 	}
 	go func() {
-		waitErr := cmd.Wait()
-		managed.recordProcessExit(waitErr)
+		waitErr := child.Wait()
+		childSnapshot, snapshotReady := child.Snapshot()
+		diagnostic := managedProcessDiagnostic(waitErr, childSnapshot, snapshotReady)
+		managed.recordProcessExit(diagnostic)
 		managed.cleanupResources()
 		managed.mu.Lock()
 		managed.waitErr = waitErr
+		managed.diagnostic = diagnostic
+		managed.diagnosticReady = snapshotReady
 		close(managed.finished)
 		managed.mu.Unlock()
 	}()
@@ -238,7 +254,127 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 	if err != nil || process == nil {
 		return modelswire.HostManagedProcess(process), err
 	}
-	return modelswire.HostManagedProcess(process), nil
+	return modelHostManagedProcessAdapter{next: process}, nil
+}
+
+// modelHostManagedProcessAdapter preserves the base Models lifecycle methods
+// while translating the optional edge-owned diagnostic capability. Older edge
+// doubles remain valid because the type assertion is deliberately optional.
+type modelHostManagedProcessAdapter struct {
+	next interface {
+		HealthEndpoint() string
+		Wait() error
+		Stop(context.Context) error
+	}
+}
+
+// managedProcessDiagnosticSource is an optional edge capability. It remains
+// private to composition so the process-edge aggregate does not grow another
+// service-root interface; the public Models effects adapter below translates
+// its detached value into the Models-owned private seam.
+type managedProcessDiagnosticSource interface {
+	DiagnosticSnapshot() (serviceedges.HostProcessDiagnosticSnapshot, bool)
+}
+
+func (adapter modelHostManagedProcessAdapter) HealthEndpoint() string {
+	return adapter.next.HealthEndpoint()
+}
+
+func (adapter modelHostManagedProcessAdapter) Wait() error {
+	return adapter.next.Wait()
+}
+
+func (adapter modelHostManagedProcessAdapter) Stop(ctx context.Context) error {
+	return adapter.next.Stop(ctx)
+}
+
+func (adapter modelHostManagedProcessAdapter) DiagnosticSnapshot() (
+	snapshot modelswire.HostProcessDiagnosticSnapshot,
+	ok bool,
+) {
+	defer func() {
+		if recover() != nil {
+			snapshot = modelswire.HostProcessDiagnosticSnapshot{}
+			ok = false
+		}
+	}()
+	source, ok := adapter.next.(managedProcessDiagnosticSource)
+	if !ok || isNilModelEdgeDependency(source) {
+		return modelswire.HostProcessDiagnosticSnapshot{}, false
+	}
+	edgeSnapshot, ready := source.DiagnosticSnapshot()
+	if !ready {
+		return modelswire.HostProcessDiagnosticSnapshot{}, false
+	}
+	edgeSnapshot, valid := normalizeManagedProcessDiagnostic(edgeSnapshot)
+	if !valid {
+		return modelswire.HostProcessDiagnosticSnapshot{}, false
+	}
+	return modelswire.HostProcessDiagnosticSnapshot{
+		ExitClass:            edgeSnapshot.ExitClass,
+		ExitCode:             edgeSnapshot.ExitCode,
+		ExitCodeKnown:        edgeSnapshot.ExitCodeKnown,
+		Stdout:               modelswire.HostProcessStreamDiagnostic(edgeSnapshot.Stdout),
+		Stderr:               modelswire.HostProcessStreamDiagnostic(edgeSnapshot.Stderr),
+		CauseCode:            edgeSnapshot.CauseCode,
+		CauseMessage:         edgeSnapshot.CauseMessage,
+		CauseMessageRedacted: edgeSnapshot.CauseMessageRedacted,
+	}, true
+}
+
+func normalizeManagedProcessDiagnostic(
+	snapshot serviceedges.HostProcessDiagnosticSnapshot,
+) (serviceedges.HostProcessDiagnosticSnapshot, bool) {
+	if strings.TrimSpace(snapshot.ExitClass) == "" {
+		return serviceedges.HostProcessDiagnosticSnapshot{}, false
+	}
+	switch strings.ToUpper(strings.TrimSpace(snapshot.ExitClass)) {
+	case managedChildExitClassExited, managedChildExitClassNonzero, managedChildExitClassWaitFailed:
+		snapshot.ExitClass = strings.ToUpper(strings.TrimSpace(snapshot.ExitClass))
+	default:
+		snapshot.ExitClass = "UNKNOWN"
+	}
+	if !snapshot.ExitCodeKnown || snapshot.ExitCode < 0 {
+		snapshot.ExitCode = 0
+		snapshot.ExitCodeKnown = false
+	}
+	snapshot.Stdout.SHA256 = normalizeManagedProcessDigest(snapshot.Stdout.SHA256)
+	snapshot.Stderr.SHA256 = normalizeManagedProcessDigest(snapshot.Stderr.SHA256)
+	snapshot.CauseCode, snapshot.CauseMessage, snapshot.CauseMessageRedacted =
+		normalizeManagedProcessCause(snapshot.CauseCode, snapshot.CauseMessageRedacted)
+	return snapshot, true
+}
+
+func normalizeManagedProcessDigest(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if len(value) != sha256.Size*2 {
+		return ""
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return ""
+	}
+	return value
+}
+
+func normalizeManagedProcessCause(code string, redacted bool) (string, string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case managedProcessCauseCancelled:
+		return managedProcessCauseCancelled, "backend operation cancelled", redacted
+	case managedProcessCauseEndpointBind:
+		return managedProcessCauseEndpointBind, "backend endpoint bind failed", redacted
+	case managedProcessCauseModelLoad:
+		return managedProcessCauseModelLoad, "model load failed", redacted
+	case managedProcessCauseProcessExited:
+		return managedProcessCauseProcessExited, "managed backend process exited", redacted
+	case managedProcessCauseProtocolIncompat:
+		return managedProcessCauseProtocolIncompat, "backend protocol incompatible", redacted
+	case managedProcessCauseRPCRejected:
+		return managedProcessCauseRPCRejected, "backend RPC request rejected", redacted
+	case managedProcessCauseTimedOut:
+		return managedProcessCauseTimedOut, "backend operation timed out", redacted
+	default:
+		return "", "", false
+	}
 }
 
 type modelHostClockAdapter struct {
@@ -334,15 +470,17 @@ func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRun
 }
 
 type modelsManagedProcess struct {
-	mu             sync.Mutex
-	cmd            *exec.Cmd
-	healthEndpoint string
-	cleanup        func() error
-	cleanupOnce    sync.Once
-	cleanupErr     error
-	processID      int
-	backend        string
-	recorder       managedChildEnvironmentRecorder
+	mu              sync.Mutex
+	child           *managedchild.Process
+	healthEndpoint  string
+	cleanup         func() error
+	cleanupOnce     sync.Once
+	cleanupErr      error
+	processID       int
+	backend         string
+	recorder        managedChildEnvironmentRecorder
+	diagnostic      serviceedges.HostProcessDiagnosticSnapshot
+	diagnosticReady bool
 	// finished is broadcast to both the supervisor's Wait observer and the
 	// application lifecycle closer; a one-shot error channel would let one
 	// consumer strand the other during normal teardown.
@@ -351,17 +489,142 @@ type modelsManagedProcess struct {
 	stopped  bool
 }
 
-func (p *modelsManagedProcess) recordProcessExit(waitErr error) {
+func (p *modelsManagedProcess) recordProcessExit(
+	diagnostic serviceedges.HostProcessDiagnosticSnapshot,
+) {
 	if p == nil || p.processID <= 0 || p.recorder == nil {
 		return
 	}
 	p.recorder.RecordManagedChildEnvironment(managedChildEnvironmentEvidence{
-		Kind:      managedChildEvidenceKind,
-		Backend:   p.backend,
-		ProcessID: p.processID,
-		Phase:     managedChildPhaseExited,
-		ExitClass: managedChildExitClass(waitErr),
+		Kind:                 managedChildEvidenceKind,
+		Backend:              p.backend,
+		ProcessID:            p.processID,
+		Phase:                managedChildPhaseExited,
+		ExitClass:            diagnostic.ExitClass,
+		ExitCode:             diagnostic.ExitCode,
+		ExitCodeKnown:        diagnostic.ExitCodeKnown,
+		StdoutBytes:          diagnostic.Stdout.Bytes,
+		StdoutSHA256:         diagnostic.Stdout.SHA256,
+		StdoutTruncated:      diagnostic.Stdout.Truncated,
+		StderrBytes:          diagnostic.Stderr.Bytes,
+		StderrSHA256:         diagnostic.Stderr.SHA256,
+		StderrTruncated:      diagnostic.Stderr.Truncated,
+		CauseCode:            diagnostic.CauseCode,
+		CauseMessage:         diagnostic.CauseMessage,
+		CauseMessageRedacted: diagnostic.CauseMessageRedacted,
 	})
+}
+
+func managedProcessDiagnostic(
+	waitErr error,
+	childSnapshot managedchild.Snapshot,
+	snapshotReady bool,
+) serviceedges.HostProcessDiagnosticSnapshot {
+	if !snapshotReady {
+		return serviceedges.HostProcessDiagnosticSnapshot{
+			ExitClass: managedChildExitClass(waitErr),
+		}
+	}
+	causeCode, causeMessage, causeMessageRedacted := reduceManagedProcessCause(
+		waitErr, childSnapshot.Stdout.Tail, childSnapshot.Stderr.Tail,
+	)
+	return serviceedges.HostProcessDiagnosticSnapshot{
+		ExitClass:            string(childSnapshot.ExitClass),
+		ExitCode:             childSnapshot.ExitCode,
+		ExitCodeKnown:        childSnapshot.ExitCodeKnown,
+		Stdout:               serviceedges.HostProcessStreamDiagnostic{Bytes: childSnapshot.Stdout.Bytes, SHA256: childSnapshot.Stdout.SHA256, Truncated: childSnapshot.Stdout.Truncated},
+		Stderr:               serviceedges.HostProcessStreamDiagnostic{Bytes: childSnapshot.Stderr.Bytes, SHA256: childSnapshot.Stderr.SHA256, Truncated: childSnapshot.Stderr.Truncated},
+		CauseCode:            causeCode,
+		CauseMessage:         causeMessage,
+		CauseMessageRedacted: causeMessageRedacted,
+	}
+}
+
+const (
+	managedProcessCauseCancelled        = "CANCELLED"
+	managedProcessCauseEndpointBind     = "ENDPOINT_BIND_FAILED"
+	managedProcessCauseModelLoad        = "MODEL_LOAD_FAILED"
+	managedProcessCauseProcessExited    = "PROCESS_EXITED"
+	managedProcessCauseProtocolIncompat = "PROTOCOL_INCOMPATIBLE"
+	managedProcessCauseRPCRejected      = "RPC_REJECTED"
+	managedProcessCauseTimedOut         = "TIMEOUT"
+)
+
+func reduceManagedProcessCause(waitErr error, stdoutTail, stderrTail []byte) (string, string, bool) {
+	output := make([]byte, 0, len(stdoutTail)+len(stderrTail))
+	output = append(output, stdoutTail...)
+	output = append(output, stderrTail...)
+	if code, message, ok := managedProcessOutputCause(strings.ToLower(string(output))); ok {
+		return code, message, false
+	}
+	return managedProcessExitCause(waitErr, len(output))
+}
+
+func managedProcessOutputCause(output string) (string, string, bool) {
+	switch {
+	case isManagedModelLoadFailure(output):
+		return managedProcessCauseModelLoad, "model load failed", true
+	case isManagedProtocolFailure(output):
+		return managedProcessCauseProtocolIncompat, "backend protocol incompatible", true
+	case isManagedRPCFailure(output):
+		return managedProcessCauseRPCRejected, "backend RPC request rejected", true
+	case strings.Contains(output, "timeout") || strings.Contains(output, "timed out"):
+		return managedProcessCauseTimedOut, "backend operation timed out", true
+	case strings.Contains(output, "cancel"):
+		return managedProcessCauseCancelled, "backend operation cancelled", true
+	case isManagedEndpointBindFailure(output):
+		return managedProcessCauseEndpointBind, "backend endpoint bind failed", true
+	case isManagedModelFailure(output):
+		return managedProcessCauseModelLoad, "model load failed", true
+	}
+	return "", "", false
+}
+
+func isManagedModelLoadFailure(output string) bool {
+	return (strings.Contains(output, "projector") || strings.Contains(output, "mmproj")) &&
+		(strings.Contains(output, "load") || strings.Contains(output, "fail") || strings.Contains(output, "error"))
+}
+
+func isManagedProtocolFailure(output string) bool {
+	return strings.Contains(output, "protocol") &&
+		(strings.Contains(output, "incompat") || strings.Contains(output, "reject"))
+}
+
+func isManagedRPCFailure(output string) bool {
+	return strings.Contains(output, "rpc") &&
+		(strings.Contains(output, "reject") || strings.Contains(output, "invalid"))
+}
+
+func isManagedEndpointBindFailure(output string) bool {
+	return strings.Contains(output, "address already in use") ||
+		(strings.Contains(output, "endpoint") && strings.Contains(output, "bind"))
+}
+
+func isManagedModelFailure(output string) bool {
+	return strings.Contains(output, "model") &&
+		(strings.Contains(output, "load") || strings.Contains(output, "fail"))
+}
+
+func managedProcessExitCause(waitErr error, outputBytes int) (string, string, bool) {
+	if waitErr == nil {
+		return "", "", false
+	}
+	return managedProcessCauseProcessExited, "managed backend process exited", outputBytes > 0
+}
+
+func (p *modelsManagedProcess) DiagnosticSnapshot() (
+	serviceedges.HostProcessDiagnosticSnapshot,
+	bool,
+) {
+	if p == nil {
+		return serviceedges.HostProcessDiagnosticSnapshot{}, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.diagnosticReady {
+		return serviceedges.HostProcessDiagnosticSnapshot{}, false
+	}
+	return p.diagnostic, true
 }
 
 func managedChildExitClass(waitErr error) string {
@@ -427,17 +690,15 @@ func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	p.mu.Lock()
-	if p.stopped || p.cmd == nil || p.cmd.Process == nil {
+	if p.stopped || p.child == nil {
 		p.mu.Unlock()
 		return nil
 	}
 	p.stopped = true
-	command := p.cmd
+	child := p.child
 	p.mu.Unlock()
-	if !p.processFinished() {
-		if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && !p.processFinished() {
-			return err
-		}
+	if err := child.Stop(ctx); err != nil {
+		return err
 	}
 	if p.finished == nil {
 		return nil
@@ -448,18 +709,4 @@ func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-func (p *modelsManagedProcess) processFinished() bool {
-	if p == nil {
-		return true
-	}
-	if p.finished != nil {
-		select {
-		case <-p.finished:
-			return true
-		default:
-		}
-	}
-	return p.cmd != nil && p.cmd.ProcessState != nil
 }

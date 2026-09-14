@@ -4,6 +4,7 @@ package process
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"time"
 	"unsafe"
@@ -23,7 +24,8 @@ type jobobjectBasicAccountingInformation struct {
 }
 
 type commandProcessTree struct {
-	job windows.Handle
+	job     windows.Handle
+	rootPID uint32
 }
 
 func configureCommandProcessTree(_ *exec.Cmd) {}
@@ -64,7 +66,7 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 		windows.CloseHandle(job)
 		return nil, err
 	}
-	return &commandProcessTree{job: job}, nil
+	return &commandProcessTree{job: job, rootPID: uint32(cmd.Process.Pid)}, nil
 }
 
 // terminateCommandJobGroup waits up to grace for job members to exit, then
@@ -152,8 +154,118 @@ func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, clock Clock,
 		return
 	}
 	_ = terminateCommandJobGroup(tree.job, postRunCleanupGracePeriod(), clock, logCtx)
+	// A process can spawn a descendant between CreateProcess and the
+	// AssignProcessToJobObject call above. That descendant is not a job member,
+	// so JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE cannot reach it after the root exits.
+	// Reconcile the parent-PID tree before publishing post-run completion so the
+	// managed-child boundary still guarantees that the full owned tree is gone.
+	if err := terminateEscapedProcessDescendants(tree.rootPID, postRunCleanupGracePeriod()); err != nil {
+		logCtx.logger.Warn(
+			"command runner: escaped descendant cleanup failed",
+			"event_name", "command_runner.escaped_descendant_cleanup_failed",
+			"process_group_id", tree.rootPID,
+			"error", err.Error(),
+		)
+	}
 	windows.CloseHandle(tree.job)
 	tree.job = 0
+}
+
+func terminateEscapedProcessDescendants(rootPID uint32, wait time.Duration) error {
+	if rootPID == 0 {
+		return nil
+	}
+	descendants, err := windowsDescendantProcessIDs(rootPID)
+	if err != nil {
+		return err
+	}
+	var cleanupErr error
+	for _, pid := range descendants {
+		process, openErr := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, pid)
+		if openErr != nil {
+			if errors.Is(openErr, windows.ERROR_INVALID_PARAMETER) {
+				continue
+			}
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("open escaped descendant %d: %w", pid, openErr))
+			continue
+		}
+
+		terminateErr := windows.TerminateProcess(process, 1)
+		waitResult, waitErr := windows.WaitForSingleObject(process, windowsWaitMilliseconds(wait))
+		closeErr := windows.CloseHandle(process)
+		if closeErr != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("close escaped descendant %d: %w", pid, closeErr))
+		}
+		if waitErr != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("wait for escaped descendant %d: %w", pid, waitErr))
+			continue
+		}
+		if waitResult == windows.WAIT_OBJECT_0 {
+			continue
+		}
+		if terminateErr != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("terminate escaped descendant %d: %w", pid, terminateErr))
+		}
+		if waitResult == uint32(windows.WAIT_TIMEOUT) {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("escaped descendant %d remained alive after %s", pid, wait))
+		}
+	}
+	return cleanupErr
+}
+
+func windowsDescendantProcessIDs(rootPID uint32) ([]uint32, error) {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.CloseHandle(snapshot)
+
+	children := make(map[uint32][]uint32)
+	entry := windows.ProcessEntry32{Size: uint32(unsafe.Sizeof(windows.ProcessEntry32{}))}
+	if err := windows.Process32First(snapshot, &entry); err != nil {
+		return nil, err
+	}
+	for {
+		if entry.ProcessID != 0 && entry.ParentProcessID != 0 {
+			children[entry.ParentProcessID] = append(children[entry.ParentProcessID], entry.ProcessID)
+		}
+		if err := windows.Process32Next(snapshot, &entry); err != nil {
+			if errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+				break
+			}
+			return nil, err
+		}
+	}
+
+	visited := make(map[uint32]struct{})
+	var descendants []uint32
+	var visit func(uint32)
+	visit = func(parentPID uint32) {
+		for _, childPID := range children[parentPID] {
+			if childPID == rootPID {
+				continue
+			}
+			if _, ok := visited[childPID]; ok {
+				continue
+			}
+			visited[childPID] = struct{}{}
+			visit(childPID)
+			descendants = append(descendants, childPID)
+		}
+	}
+	visit(rootPID)
+	return descendants, nil
+}
+
+func windowsWaitMilliseconds(wait time.Duration) uint32 {
+	if wait <= 0 {
+		return 0
+	}
+	milliseconds := uint64(wait / time.Millisecond)
+	if milliseconds >= uint64(windows.INFINITE) {
+		return windows.INFINITE - 1
+	}
+	return uint32(milliseconds)
 }
 
 func commandJobActiveProcesses(job windows.Handle) uint32 {

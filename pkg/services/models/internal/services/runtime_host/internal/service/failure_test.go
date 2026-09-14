@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 func TestEnsureModelHostReadinessTimeoutReturnsTypedFailure(t *testing.T) {
@@ -257,6 +259,9 @@ func TestEnsureModelHostDiagnosticsReadinessTimeoutEmitsFailureLogAndMetric(t *t
 	}
 	if entry.fields["failure_class"] != "TIMED_OUT" {
 		t.Fatalf("failure_class = %q, want TIMED_OUT", entry.fields["failure_class"])
+	}
+	if _, present := entry.fields["exit_class"]; present {
+		t.Fatalf("absent diagnostic source emitted process fields: %#v", entry.fields)
 	}
 	if !metrics.contains("model_host.load.failure", map[string]string{
 		"managed_runtime_identity": "OMNIVOICE_Q4_K_M",
@@ -615,4 +620,374 @@ func (sink *runtimeEvidenceSink) snapshot() []modelseffects.RuntimeEvidenceRecor
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
 	return append([]modelseffects.RuntimeEvidenceRecord(nil), sink.records...)
+}
+
+func runtimeDiagnosticSnapshot(causeCode string) modelseffects.HostProcessDiagnosticSnapshot {
+	return modelseffects.HostProcessDiagnosticSnapshot{
+		ExitClass:     "NONZERO_EXIT",
+		ExitCode:      17,
+		ExitCodeKnown: true,
+		Stdout: modelseffects.HostProcessStreamDiagnostic{
+			Bytes: 98304, SHA256: strings.Repeat("a", 64), Truncated: true,
+		},
+		Stderr: modelseffects.HostProcessStreamDiagnostic{
+			Bytes: 2048, SHA256: strings.Repeat("b", 64), Truncated: false,
+		},
+		CauseCode:            causeCode,
+		CauseMessage:         "PRIVATE_BACKEND_DIAGNOSTIC_SENTINEL",
+		CauseMessageRedacted: false,
+	}
+}
+
+func assertManagedProcessDiagnosticFields(
+	t *testing.T,
+	fields map[string]string,
+	wantCause string,
+) {
+	t.Helper()
+	want := map[string]string{
+		"exit_class":             "NONZERO_EXIT",
+		"exit_code":              "17",
+		"exit_code_known":        "true",
+		"stdout_bytes":           "98304",
+		"stdout_sha256":          strings.Repeat("a", 64),
+		"stdout_truncated":       "true",
+		"stderr_bytes":           "2048",
+		"stderr_sha256":          strings.Repeat("b", 64),
+		"stderr_truncated":       "false",
+		"cause_code":             wantCause,
+		"cause_message":          causeMessageForTest(wantCause),
+		"cause_message_redacted": "false",
+	}
+	for key, value := range want {
+		if fields[key] != value {
+			t.Fatalf("diagnostic field %q = %q, want %q; fields = %#v", key, fields[key], value, fields)
+		}
+	}
+	if strings.Contains(fields["cause_message"], "PRIVATE_BACKEND_DIAGNOSTIC_SENTINEL") {
+		t.Fatalf("diagnostic fields leaked cause sentinel: %#v", fields)
+	}
+}
+
+func causeMessageForTest(code string) string {
+	switch code {
+	case "CANCELLED":
+		return "backend operation cancelled"
+	case "RPC_REJECTED":
+		return "backend RPC request rejected"
+	case "TIMEOUT":
+		return "backend operation timed out"
+	case "PROCESS_EXITED":
+		return "managed backend process exited"
+	default:
+		return ""
+	}
+}
+
+func assertFailedManagedProcessEvidence(
+	t *testing.T,
+	records []modelseffects.RuntimeEvidenceRecord,
+	wantStage modelseffects.RuntimeStage,
+) {
+	t.Helper()
+	var failed *modelseffects.RuntimeEvidenceRecord
+	for index := range records {
+		if records[index].Outcome == modelseffects.RuntimeEvidenceOutcomeFailed {
+			if failed != nil {
+				t.Fatalf("multiple failed evidence records = %#v", records)
+			}
+			failed = &records[index]
+		}
+	}
+	if failed == nil {
+		t.Fatalf("evidence = %#v, want failed managed-process stage", records)
+	}
+	if failed.Stage != wantStage || failed.ExitClass != "NONZERO_EXIT" ||
+		failed.ExitCode != 17 || !failed.ExitCodeKnown ||
+		failed.StdoutBytes != 98304 || failed.StderrBytes != 2048 ||
+		failed.StdoutSHA256 != strings.Repeat("a", 64) ||
+		failed.StderrSHA256 != strings.Repeat("b", 64) {
+		t.Fatalf("failed managed-process evidence = %#v, want bounded snapshot", *failed)
+	}
+	if failed.CauseMessage == "PRIVATE_BACKEND_DIAGNOSTIC_SENTINEL" {
+		t.Fatalf("evidence leaked cause sentinel: %#v", *failed)
+	}
+}
+
+func newManagedDiagnosticHost(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	launcher *runtimeDiagnosticLauncher,
+	logger *signalingDiagnosticsLogger,
+	supervisorConfig internalservice.SupervisorTestConfig,
+	options runtimehost.Options,
+) runtimehost.Service {
+	t.Helper()
+	host := internalservice.NewWithHostTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		nil,
+		realHostClock{},
+		logger,
+		nil,
+		supervisorConfig,
+		internalservice.HostPolicyTestConfig{},
+		options,
+	)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	return host
+}
+
+type neverReadyHostChecker struct{}
+
+func (neverReadyHostChecker) Check(context.Context, string) error {
+	return models.ErrHostRuntimeNotReady
+}
+
+type diagnosticEvidenceSink struct {
+	mu          sync.Mutex
+	records     []modelseffects.RuntimeEvidenceRecord
+	failure     chan struct{}
+	failureOnce sync.Once
+}
+
+func newDiagnosticEvidenceSink() *diagnosticEvidenceSink {
+	return &diagnosticEvidenceSink{failure: make(chan struct{})}
+}
+
+func (sink *diagnosticEvidenceSink) RecordRuntimeEvidence(
+	record modelseffects.RuntimeEvidenceRecord,
+) {
+	if sink == nil {
+		return
+	}
+	sink.mu.Lock()
+	sink.records = append(sink.records, record)
+	sink.mu.Unlock()
+	if record.Outcome == modelseffects.RuntimeEvidenceOutcomeFailed {
+		sink.failureOnce.Do(func() { close(sink.failure) })
+	}
+}
+
+func (sink *diagnosticEvidenceSink) awaitFailure(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	select {
+	case <-sink.failure:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for failed runtime evidence")
+	}
+}
+
+func (sink *diagnosticEvidenceSink) snapshot() []modelseffects.RuntimeEvidenceRecord {
+	if sink == nil {
+		return nil
+	}
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	return append([]modelseffects.RuntimeEvidenceRecord(nil), sink.records...)
+}
+
+type runtimeDiagnosticLauncher struct {
+	mu         sync.Mutex
+	newProcess func() *runtimeDiagnosticProcess
+	processes  []*runtimeDiagnosticProcess
+	started    chan struct{}
+	startOnce  sync.Once
+}
+
+func (launcher *runtimeDiagnosticLauncher) Start(
+	_ context.Context,
+	_ modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	process := launcher.newProcess()
+	launcher.processes = append(launcher.processes, process)
+	launcher.startOnce.Do(func() {
+		if launcher.started != nil {
+			close(launcher.started)
+		}
+	})
+	return process, nil
+}
+
+func (launcher *runtimeDiagnosticLauncher) process(index int) *runtimeDiagnosticProcess {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.processes[index]
+}
+
+func (launcher *runtimeDiagnosticLauncher) startCount() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return len(launcher.processes)
+}
+
+type runtimeDiagnosticProcess struct {
+	mu                    sync.Mutex
+	endpoint              string
+	snapshot              modelseffects.HostProcessDiagnosticSnapshot
+	diagnosticPanics      bool
+	diagnosticUnavailable bool
+	diagnosticCalls       int
+	ready                 bool
+	waitErr               error
+	exitCh                chan error
+	waited                chan struct{}
+	exitOnce              sync.Once
+	waitOnce              sync.Once
+	stopOnce              sync.Once
+	stopCalls             int
+}
+
+func newRuntimeDiagnosticProcess(
+	snapshot modelseffects.HostProcessDiagnosticSnapshot,
+) *runtimeDiagnosticProcess {
+	return &runtimeDiagnosticProcess{
+		endpoint: "http://127.0.0.1:1",
+		snapshot: snapshot,
+		exitCh:   make(chan error, 1),
+		waited:   make(chan struct{}),
+	}
+}
+
+func (process *runtimeDiagnosticProcess) HealthEndpoint() string {
+	return process.endpoint
+}
+
+func (process *runtimeDiagnosticProcess) Wait() error {
+	process.waitOnce.Do(func() {
+		err := <-process.exitCh
+		process.mu.Lock()
+		process.waitErr = err
+		process.ready = true
+		process.mu.Unlock()
+		close(process.waited)
+	})
+	<-process.waited
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	return process.waitErr
+}
+
+func (process *runtimeDiagnosticProcess) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	process.stopOnce.Do(func() {
+		process.mu.Lock()
+		process.stopCalls++
+		process.mu.Unlock()
+		process.exitOnce.Do(func() { process.exitCh <- errors.New("controlled forced stop") })
+	})
+	select {
+	case <-process.waited:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (process *runtimeDiagnosticProcess) crash(err error) {
+	if err == nil {
+		err = errors.New("controlled process crash")
+	}
+	process.exitOnce.Do(func() { process.exitCh <- err })
+}
+
+func (process *runtimeDiagnosticProcess) DiagnosticSnapshot() (modelseffects.HostProcessDiagnosticSnapshot, bool) {
+	process.mu.Lock()
+	process.diagnosticCalls++
+	ready := process.ready
+	panics := process.diagnosticPanics
+	unavailable := process.diagnosticUnavailable
+	snapshot := process.snapshot
+	process.mu.Unlock()
+	if panics {
+		panic("controlled diagnostic source failure")
+	}
+	if !ready || unavailable {
+		return modelseffects.HostProcessDiagnosticSnapshot{}, false
+	}
+	return snapshot, true
+}
+
+func (process *runtimeDiagnosticProcess) stopCount() int {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	return process.stopCalls
+}
+
+func (process *runtimeDiagnosticProcess) diagnosticCallCount() int {
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	return process.diagnosticCalls
+}
+
+type signalingDiagnosticsLogger struct {
+	mu     sync.Mutex
+	logs   []diagnosticLogEntry
+	events chan diagnosticLogEntry
+}
+
+func newSignalingDiagnosticsLogger() *signalingDiagnosticsLogger {
+	return &signalingDiagnosticsLogger{events: make(chan diagnosticLogEntry, 32)}
+}
+
+func (logger *signalingDiagnosticsLogger) Info(msg string, fields map[string]string) {
+	logger.record("info", msg, fields)
+}
+
+func (logger *signalingDiagnosticsLogger) Warn(msg string, fields map[string]string) {
+	logger.record("warn", msg, fields)
+}
+
+func (logger *signalingDiagnosticsLogger) record(level, msg string, fields map[string]string) {
+	cloned := make(map[string]string, len(fields))
+	for key, value := range fields {
+		cloned[key] = value
+	}
+	entry := diagnosticLogEntry{level: level, msg: msg, fields: cloned}
+	logger.mu.Lock()
+	logger.logs = append(logger.logs, entry)
+	logger.mu.Unlock()
+	select {
+	case logger.events <- entry:
+	default:
+	}
+}
+
+func (logger *signalingDiagnosticsLogger) awaitMessage(
+	t *testing.T,
+	wantMessage string,
+) diagnosticLogEntry {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		select {
+		case entry := <-logger.events:
+			if entry.msg == wantMessage {
+				return entry
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for diagnostic message %q", wantMessage)
+			return diagnosticLogEntry{}
+		}
+	}
+}
+
+func (logger *signalingDiagnosticsLogger) countMessage(wantMessage string) int {
+	logger.mu.Lock()
+	defer logger.mu.Unlock()
+	count := 0
+	for _, entry := range logger.logs {
+		if entry.msg == wantMessage {
+			count++
+		}
+	}
+	return count
 }
