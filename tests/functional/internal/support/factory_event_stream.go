@@ -78,6 +78,11 @@ func (s *FactoryEventStream) read(response *http.Response) {
 	defer response.Body.Close()
 
 	scanner := bufio.NewScanner(response.Body)
+	// Authored Factory snapshots are customer-visible event payloads and can
+	// exceed Scanner's 64 KiB default even though they remain bounded by the
+	// HTTP contract. Keep the stream reader bounded while allowing the
+	// generated event envelope to arrive as one SSE data line.
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	var dataLines []string
 	flush := func() {
 		if len(dataLines) == 0 {
