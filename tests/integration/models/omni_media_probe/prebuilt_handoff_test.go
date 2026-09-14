@@ -83,7 +83,7 @@ func assertPrebuiltReadyReport(t *testing.T, input ProbeInput, report Report, re
 	if report.Policy.Port == ProbeForbiddenPort || len(report.Policy.RootIdentities) < 6 || !uniqueStrings(report.Policy.RootIdentities) {
 		t.Fatalf("prebuilt policy = %#v, want isolated roots and dynamic non-7437 port", report.Policy)
 	}
-	if report.Policy.NetworkPolicy != ProbeNetworkPolicy || report.Policy.DownloadBytes != 0 || report.Policy.PaidUSD != 0 || report.Policy.MaxHeavyProcesses != ProbeMaxHeavyProcesses || report.Policy.MaxCalls < 1 || report.Policy.MaxCalls > ProbeMaxCalls || report.Policy.MaxRetries != ProbeMaxRetries {
+	if report.Policy.NetworkPolicy != ProbeNetworkPolicy || report.Policy.DownloadBytes != 0 || report.Policy.PaidUSD != 0 || report.Policy.MaxHeavyProcesses != ProbeMaxHeavyProcesses || report.Policy.MaxCalls != input.Limits.MaxCalls || report.Policy.MaxRetries != input.Limits.MaxRetries {
 		t.Fatalf("prebuilt activity policy = %#v, want local zero-download one-heavy bounded-call policy", report.Policy)
 	}
 	if len(report.Journeys) != 2 || report.Journeys[0].Status != JourneyNotRun || report.Journeys[1].Status != JourneyNotRun || len(report.Outputs) != 0 {
