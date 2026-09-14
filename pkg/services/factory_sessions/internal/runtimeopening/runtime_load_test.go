@@ -500,6 +500,7 @@ func TestLoadRuntimeUsesDetachedSnapshotWithoutReloadingAuthoredSource(t *testin
 		&snapshot,
 		nil,
 		"session-1",
+		true,
 	)
 	if err != nil {
 		t.Fatalf("loadRuntime(snapshot) error = %v", err)

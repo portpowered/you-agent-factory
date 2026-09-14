@@ -106,7 +106,7 @@ func PrepareRuntime(
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
 	}
-	load, err = loadRuntimeWithReplayMode(
+	load, err = loadRuntime(
 		selectedDefinitionPath,
 		prepared.Definition.ExecutionBaseDir,
 		prepared.Recordings.ReplayPath,

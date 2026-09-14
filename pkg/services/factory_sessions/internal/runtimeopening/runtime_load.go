@@ -185,47 +185,11 @@ func LoadRuntime(
 		nil,
 		nil,
 		factorysessions.DefaultSessionID,
-	)
-}
-
-func loadRuntime(
-	dir string,
-	executionBaseDir string,
-	replayPath string,
-	operatorDefaults operatorconfig.ResolvedDefaults,
-	workstationLoader factorydefinitions.WorkstationLoader,
-	root RuntimeRoot,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recording.ReplayInputLoader,
-	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	newSessionLogger factoryruntime.SessionLoggerFactory,
-	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
-	preloadedReplayInput *recording.LoadReplayInputResult,
-	sessionID string,
-) (RuntimeLoad, error) {
-	return loadRuntimeWithReplayMode(
-		dir,
-		executionBaseDir,
-		replayPath,
-		operatorDefaults,
-		workstationLoader,
-		root,
-		loadFactory,
-		newLoadedFactory,
-		decodeReplayConfig,
-		replayInputs,
-		captureLoadedFactorySnapshot,
-		newSessionLogger,
-		resolvedSnapshot,
-		preloadedReplayInput,
-		sessionID,
 		true,
 	)
 }
 
-func loadRuntimeWithReplayMode(
+func loadRuntime(
 	dir string,
 	executionBaseDir string,
 	replayPath string,
