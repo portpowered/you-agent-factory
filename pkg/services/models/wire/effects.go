@@ -37,7 +37,10 @@ type HostCompatibilityChecker = effects.HostCompatibilityChecker
 type PinnedGRPCNegotiator = effects.PinnedGRPCNegotiator
 
 type HostProcessStartSpec = effects.HostProcessStartSpec
+type HostProcessStreamDiagnostic = effects.HostProcessStreamDiagnostic
+type HostProcessDiagnosticSnapshot = effects.HostProcessDiagnosticSnapshot
 type HostManagedProcess = effects.HostManagedProcess
+type HostManagedProcessDiagnosticSource = effects.HostManagedProcessDiagnosticSource
 type HostProcessLauncher = effects.HostProcessLauncher
 type HostHTTPDoer = effects.HostHTTPDoer
 type HostTimer = effects.HostTimer

@@ -289,6 +289,10 @@
       "minimum": 42.80
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/process/managedchild",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/pty",
       "minimum": 0.56
     },

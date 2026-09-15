@@ -123,6 +123,8 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 		"ModelCLIInputReadFile":        {},
 		"ModelCLIOutputCreateTempFile": {}, "ModelCLIOutputInspectPath": {},
 		"HostProcessStartSpec":                 {},
+		"HostProcessStreamDiagnostic":          {},
+		"HostProcessDiagnosticSnapshot":        {},
 		"ModelBackendArtifactSelectionRequest": {}, "ModelBackendArtifactSelection": {},
 		"ModelResolveBackendArtifact":         {},
 		"ModelInvocationBackend":              {},

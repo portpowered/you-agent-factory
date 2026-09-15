@@ -204,7 +204,7 @@ func (r *supervisedRuntime) startLoad(
 				subcause = modelseffects.RuntimeSubcauseCleanup
 			}
 		}
-		return r.markFailed(
+		return r.markFailedWithProcess(
 			loadDone,
 			identity,
 			hostFailureClassProcessCrash,
@@ -214,6 +214,7 @@ func (r *supervisedRuntime) startLoad(
 				subcause,
 				errors.Join(models.ErrHostProcessCrash, failureCause),
 			),
+			process,
 		)
 	}
 	if process == nil {
@@ -440,6 +441,19 @@ func (r *supervisedRuntime) markFailed(
 	err error,
 ) error {
 	r.mu.Lock()
+	process := r.process
+	r.mu.Unlock()
+	return r.markFailedWithProcess(loadDone, identity, class, err, process)
+}
+
+func (r *supervisedRuntime) markFailedWithProcess(
+	loadDone chan struct{},
+	identity supervisedIdentity,
+	class hostFailureClass,
+	err error,
+	process modelseffects.HostManagedProcess,
+) error {
+	r.mu.Lock()
 	if r.state != supervisedStateLoading || r.loadDone != loadDone {
 		r.mu.Unlock()
 		return loadCancelledOutcome()
@@ -454,7 +468,7 @@ func (r *supervisedRuntime) markFailed(
 	failure := r.failureOutcomeLocked()
 	r.mu.Unlock()
 	r.cfg.Diagnostics.logLoadFailed(
-		identity, correlation, class, err, runtimeLoadElapsed(r.cfg.Clock, loadStarted),
+		identity, correlation, class, err, runtimeLoadElapsed(r.cfg.Clock, loadStarted), process,
 	)
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
@@ -524,7 +538,7 @@ func (r *supervisedRuntime) watchProcessExit(
 	failureErr := r.failureErr
 	r.mu.Unlock()
 	r.cfg.Diagnostics.logProcessCrash(
-		identity, correlation, failureErr, runtimeLoadElapsed(r.cfg.Clock, loadStarted),
+		identity, correlation, failureErr, runtimeLoadElapsed(r.cfg.Clock, loadStarted), process,
 	)
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
@@ -606,7 +620,7 @@ func (r *supervisedRuntime) stop(ctx context.Context) error {
 	}
 	if process != nil || loadDone != nil {
 		r.cfg.Diagnostics.logStop(
-			identity, correlation, runtimeLoadElapsed(r.cfg.Clock, loadStarted), stopErr,
+			identity, correlation, runtimeLoadElapsed(r.cfg.Clock, loadStarted), stopErr, process,
 		)
 	}
 	return stopErr
