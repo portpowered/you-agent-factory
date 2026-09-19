@@ -26,6 +26,31 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestRecordedWorkerSessionLiveIdentityOnlyRebindsForResumedRuntime(t *testing.T) {
+	t.Parallel()
+	const (
+		workerSessionID  = "worker-live-identity"
+		explicitSession  = "factory-explicit"
+		successorSession = "factory-successor"
+	)
+	live := &processLocalWorkerSessionService{getByWorkerResult: workersessions.Observation{
+		WorkerSessionID: workerSessionID, FactorySessionID: explicitSession,
+	}}
+	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}
+	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: successorSession}
+	observation, err := fresh.GetObservationByWorkerSessionID(context.Background(), request)
+	if err != nil || observation.FactorySessionID != explicitSession {
+		t.Fatalf("fresh GetObservationByWorkerSessionID() = %#v, %v; want explicit Factory Session", observation, err)
+	}
+	resumed := &recordedWorkerSessionObservation{
+		Service: live, factorySessionID: successorSession, restoredWorldState: &interfaces.FactoryWorldState{},
+	}
+	observation, err = resumed.GetObservationByWorkerSessionID(context.Background(), request)
+	if err != nil || observation.FactorySessionID != successorSession {
+		t.Fatalf("resumed GetObservationByWorkerSessionID() = %#v, %v; want successor Factory Session", observation, err)
+	}
+}
+
 func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-restored-growth"

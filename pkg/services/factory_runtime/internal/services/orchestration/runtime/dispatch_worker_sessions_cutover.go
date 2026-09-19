@@ -801,11 +801,33 @@ func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
-	observation, err = s.withRecordingHealth(ctx, observation)
+	observation, err = s.withLiveRecordingHealth(ctx, observation)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
 	return s.confirmedObservation(observation), nil
+}
+
+func (s *recordedWorkerSessionObservation) withLiveRecordingHealth(
+	ctx context.Context,
+	observation workersessions.Observation,
+) (workersessions.Observation, error) {
+	// A resumed runtime owns a successor identity that differs from the Factory
+	// Session captured by its restored live registry. Fresh runtimes, however,
+	// can share that registry with direct Worker Session invocations carrying an
+	// explicit customer-selected Factory Session; preserve that live identity.
+	if s != nil && (s.restoredWorldState != nil || len(s.restoredEventPrefix) > 0) {
+		return s.withRecordingHealth(ctx, observation)
+	}
+	health, err := s.recordingHealth(ctx)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	if current, ok := health[observation.WorkerSessionID]; ok {
+		observation.RecordingHealth = current.status
+		observation.RecordingHealthReason = current.reason
+	}
+	return observation, nil
 }
 
 func (s *recordedWorkerSessionObservation) ReadTranscript(
