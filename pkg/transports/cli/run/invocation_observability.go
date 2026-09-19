@@ -197,9 +197,8 @@ func runRecoveryMetadataFields(
 		successorRecordingID = safeRunRecoveryField(metadata.SuccessorRecordingID)
 		previousRecordedAt = safeRunRecoveryTimestamp(metadata.PreviousRecordedAt)
 	}
-	var replayInputErr *recordings.ReplayInputError
-	if errors.As(err, &replayInputErr) && replayInputErr != nil && strings.TrimSpace(replayInputErr.ArtifactDigest) != "" {
-		sourceRecordingID = safeRunRecoveryField(replayInputErr.ArtifactDigest)
+	if identity := recordingscli.ReplayInputRecordingIdentity(err); identity != "" {
+		sourceRecordingID = safeRunRecoveryField(identity)
 	}
 	return []zap.Field{
 		zap.String("recorded_definition_id", recordedDefinitionID),

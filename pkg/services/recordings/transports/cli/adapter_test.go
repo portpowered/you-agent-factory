@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -415,6 +416,37 @@ func TestMapReplayInputFailureUsesMalformedGuidanceAndKnownFallbackCode(t *testi
 	}
 	if MapReplayInputFailure(errors.New("ordinary error")) != nil {
 		t.Fatal("MapReplayInputFailure(ordinary error) != nil")
+	}
+}
+
+func TestReplayInputRecordingIdentityReturnsOnlyCanonicalDigest(t *testing.T) {
+	t.Parallel()
+
+	digest := "sha256:" + strings.Repeat("a", 64)
+	tests := []struct {
+		name  string
+		cause error
+		want  string
+	}{
+		{
+			name:  "wrapped replay input",
+			cause: fmt.Errorf("load recording: %w", &recordings.ReplayInputError{ArtifactDigest: digest}),
+			want:  digest,
+		},
+		{
+			name:  "untrusted source path",
+			cause: &recordings.ReplayInputError{ArtifactDigest: `C:\private\recording.json`},
+		},
+		{name: "ordinary error", cause: errors.New("startup failed")},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ReplayInputRecordingIdentity(test.cause); got != test.want {
+				t.Fatalf("ReplayInputRecordingIdentity() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 
