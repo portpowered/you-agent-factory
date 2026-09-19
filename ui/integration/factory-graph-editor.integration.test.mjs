@@ -748,13 +748,19 @@ describe.concurrent("factory graph editor browser integration", () => {
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
           resolvedDefaultFactorySessionID,
         );
+        const { activation, ...authoredExportFactoryDefinition } =
+          exportFactoryDefinition;
+        expect(activation).toEqual(editableGraphFactoryActivation);
         expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
-          ...exportFactoryDefinition,
+          ...authoredExportFactoryDefinition,
           name: exportName,
           version: {
             logical: "2",
           },
         });
+        expect(sessionFactoryPutRequests[0]?.body).not.toHaveProperty(
+          "activation",
+        );
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
