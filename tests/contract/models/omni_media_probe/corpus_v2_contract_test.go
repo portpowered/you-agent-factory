@@ -120,6 +120,19 @@ func TestCorpusNegativeFailuresAreTypedAndPreHeavyweight(t *testing.T) {
 		_, _, err := corpusV2ReadIdentity(filepath.Join(t.TempDir(), "prompt.md"))
 		assertCorpusV2Code(t, err, CorpusV2CodeMissingSibling)
 	})
+	t.Run("unsupported stream metadata", func(t *testing.T) {
+		first := corpusV2SyntheticPair("study-a", "a1", 1, 10)
+		unsupported := corpusV2SyntheticPair("study-a", "a2", 2, 20)
+		unsupported.Stream.Codec = "vp9"
+		last := corpusV2SyntheticPair("study-a", "a3", 3, 30)
+		manifest := CorpusV2Manifest{Commit: "commit-a", Pairs: []CorpusV2Pair{first, unsupported, last}}
+
+		samples, err := SelectCorpusV2Representatives(manifest, CorpusV2Authority{RequiredStudies: []string{"study-a"}})
+		assertCorpusV2Code(t, err, CorpusV2CodeInvalidMedia)
+		if samples != nil {
+			t.Fatalf("selected %d samples from unsupported stream metadata, want none", len(samples))
+		}
+	})
 	t.Run("insufficient study", func(t *testing.T) {
 		root := t.TempDir()
 		index, err := ParseCorpusV2Index(corpusV2SyntheticIndex(t, root, "study-a", []corpusV2SyntheticRow{{Attempt: "a1"}, {Attempt: "a2"}}), root)

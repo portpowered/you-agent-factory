@@ -745,8 +745,8 @@ func corpusV2RunGit(ctx context.Context, root string, args ...string) error {
 }
 
 func validateCorpusV2Metadata(metadata CorpusV2StreamMetadata) error {
-	if metadata.Codec == "" || metadata.Width <= 0 || metadata.Height <= 0 || metadata.FrameRate == "" || metadata.DurationMillis <= 0 || metadata.Frames <= 0 || math.IsNaN(metadata.DurationSeconds) || math.IsInf(metadata.DurationSeconds, 0) || metadata.DurationSeconds <= 0 {
-		return corpusV2Error(CorpusV2CodeInvalidMedia, "stream", "positive codec, dimensions, frame rate, duration, and frame count", fmt.Sprintf("%+v", metadata), nil)
+	if (metadata.Codec != "avc1" && metadata.Codec != "avc3") || metadata.Width <= 0 || metadata.Height <= 0 || metadata.FrameRate == "" || metadata.DurationMillis <= 0 || metadata.Frames <= 0 || math.IsNaN(metadata.DurationSeconds) || math.IsInf(metadata.DurationSeconds, 0) || metadata.DurationSeconds <= 0 {
+		return corpusV2Error(CorpusV2CodeInvalidMedia, "stream", "H.264 codec, positive dimensions, frame rate, duration, and frame count", fmt.Sprintf("%+v", metadata), nil)
 	}
 	return nil
 }
