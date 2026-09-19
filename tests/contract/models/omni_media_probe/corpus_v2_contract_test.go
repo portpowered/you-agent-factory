@@ -68,6 +68,54 @@ func TestCorpusParserRejectsMalformedAndDuplicate(t *testing.T) {
 	assertCorpusV2Code(t, err, CorpusV2CodePathEscape)
 }
 
+func TestCorpusSymlinkedParentsAreRejectedBeforeReading(t *testing.T) {
+	t.Parallel()
+	t.Run("media parent", func(t *testing.T) {
+		root := t.TempDir()
+		outside := t.TempDir()
+		outsideClip := filepath.Join(outside, "clip.mp4")
+		if err := os.WriteFile(outsideClip, []byte("outside media bytes"), 0o600); err != nil {
+			t.Fatalf("write external clip: %v", err)
+		}
+		attemptParent := filepath.Join(root, "production", "study-a", "attempts", "a1")
+		if err := os.MkdirAll(filepath.Dir(attemptParent), 0o700); err != nil {
+			t.Fatalf("create controlled corpus parent: %v", err)
+		}
+		if err := os.Symlink(outside, attemptParent); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("directory symlinks unavailable in this Windows environment: %v", err)
+			}
+			t.Fatalf("create media parent symlink: %v", err)
+		}
+
+		identity, data, err := corpusV2ReadIdentity(root, filepath.Join(attemptParent, "clip.mp4"))
+		assertCorpusV2Code(t, err, CorpusV2CodePathEscape)
+		if data != nil || identity.Identity != "" {
+			t.Fatalf("escaped clip returned bytes or identity: bytes=%d identity=%q", len(data), identity.Identity)
+		}
+	})
+	t.Run("index parent", func(t *testing.T) {
+		root := t.TempDir()
+		outside := t.TempDir()
+		if err := os.WriteFile(filepath.Join(outside, "video-output-index.md"), []byte("outside index bytes"), 0o600); err != nil {
+			t.Fatalf("write external index: %v", err)
+		}
+		indexParent := filepath.Join(root, "docs", "selfiepostx")
+		if err := os.MkdirAll(filepath.Dir(indexParent), 0o700); err != nil {
+			t.Fatalf("create controlled index parent: %v", err)
+		}
+		if err := os.Symlink(outside, indexParent); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("directory symlinks unavailable in this Windows environment: %v", err)
+			}
+			t.Fatalf("create index parent symlink: %v", err)
+		}
+
+		_, err := corpusV2IndexAbsolutePath(CorpusV2Authority{RepositoryRoot: root, IndexPath: "docs/selfiepostx/video-output-index.md"})
+		assertCorpusV2Code(t, err, CorpusV2CodePathEscape)
+	})
+}
+
 func TestCorpusSelectionIsDeterministic(t *testing.T) {
 	t.Parallel()
 	authority := CorpusV2Authority{RequiredStudies: []string{"study-a"}}
@@ -102,11 +150,13 @@ func TestCorpusSelectionIsDeterministic(t *testing.T) {
 func TestCorpusNegativeFailuresAreTypedAndPreHeavyweight(t *testing.T) {
 	t.Parallel()
 	t.Run("index mutation", func(t *testing.T) {
+		root := t.TempDir()
 		original := []byte("pinned index")
 		digest := sha256.Sum256(original)
 		authority := DefaultCorpusV2Authority()
+		authority.RepositoryRoot = root
 		authority.IndexSHA256 = hex.EncodeToString(digest[:])
-		path := filepath.Join(t.TempDir(), "video-output-index.md")
+		path := filepath.Join(root, "video-output-index.md")
 		if err := os.WriteFile(path, []byte("mutated index"), 0o600); err != nil {
 			t.Fatalf("write mutated index: %v", err)
 		}
@@ -117,7 +167,8 @@ func TestCorpusNegativeFailuresAreTypedAndPreHeavyweight(t *testing.T) {
 		assertCorpusV2Code(t, err, CorpusV2CodeIndexHashMismatch)
 	})
 	t.Run("missing sibling", func(t *testing.T) {
-		_, _, err := corpusV2ReadIdentity(filepath.Join(t.TempDir(), "prompt.md"))
+		root := t.TempDir()
+		_, _, err := corpusV2ReadIdentity(root, filepath.Join(root, "prompt.md"))
 		assertCorpusV2Code(t, err, CorpusV2CodeMissingSibling)
 	})
 	t.Run("unsupported stream metadata", func(t *testing.T) {

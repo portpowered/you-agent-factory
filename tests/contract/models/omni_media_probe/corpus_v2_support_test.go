@@ -415,12 +415,67 @@ func corpusV2AbsoluteRoot(value string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
+func corpusV2ResolveContainedPath(root, path, field string) (string, error) {
+	absoluteRoot, err := corpusV2AbsoluteRoot(root)
+	if err != nil {
+		return "", err
+	}
+	absolutePath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", corpusV2Error(CorpusV2CodePathEscape, field, "absolute path below repository root", path, err)
+	}
+	relativePath, err := filepath.Rel(absoluteRoot, absolutePath)
+	if err != nil || relativePath == "." || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) || !corpusV2PathWithin(corpusV2Slash(absoluteRoot), corpusV2Slash(absolutePath)) {
+		return "", corpusV2Error(CorpusV2CodePathEscape, field, "path below repository root", absoluteRoot+"; observed="+absolutePath, err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(absoluteRoot)
+	if err != nil {
+		return "", corpusV2Error(CorpusV2CodeAuthorityUnavailable, "repositoryRoot", "existing resolvable repository root", absoluteRoot, err)
+	}
+	resolvedRoot = filepath.Clean(resolvedRoot)
+
+	candidate := absolutePath
+	var missingParts []string
+	for {
+		resolvedPath, resolveErr := filepath.EvalSymlinks(candidate)
+		if resolveErr == nil {
+			for index := len(missingParts) - 1; index >= 0; index-- {
+				resolvedPath = filepath.Join(resolvedPath, missingParts[index])
+			}
+			resolvedPath = filepath.Clean(resolvedPath)
+			expectedPath := filepath.Clean(filepath.Join(resolvedRoot, relativePath))
+			if !corpusV2PathWithin(corpusV2Slash(resolvedRoot), corpusV2Slash(resolvedPath)) || !corpusV2SamePath(resolvedPath, expectedPath) {
+				return "", corpusV2Error(CorpusV2CodePathEscape, field, "path without symlink or junction aliases below repository root", resolvedRoot+"; observed="+resolvedPath, nil)
+			}
+			return resolvedPath, nil
+		}
+		if info, lstatErr := os.Lstat(candidate); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			return "", corpusV2Error(CorpusV2CodePathEscape, field, "path without symlink or junction aliases below repository root", candidate, resolveErr)
+		} else if lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist) {
+			return "", corpusV2Error(CorpusV2CodeUnreadableFile, field, "resolvable path below repository root", candidate, lstatErr)
+		}
+		if !errors.Is(resolveErr, os.ErrNotExist) {
+			return "", corpusV2Error(CorpusV2CodeUnreadableFile, field, "resolvable path below repository root", candidate, resolveErr)
+		}
+		parent := filepath.Dir(candidate)
+		if parent == candidate {
+			return "", corpusV2Error(CorpusV2CodePathEscape, field, "path below repository root", absoluteRoot+"; observed="+absolutePath, resolveErr)
+		}
+		missingParts = append(missingParts, filepath.Base(candidate))
+		candidate = parent
+	}
+}
+
+func corpusV2SamePath(first, second string) bool {
+	return strings.EqualFold(corpusV2Slash(filepath.Clean(first)), corpusV2Slash(filepath.Clean(second)))
+}
+
 func corpusV2Slash(value string) string {
 	return strings.TrimSuffix(strings.ReplaceAll(value, "\\", "/"), "/")
 }
 
 func corpusV2IsAbsoluteSlashPath(value string) bool {
-	return len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && value[2] == '/'
+	return strings.HasPrefix(value, "/") || len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && value[2] == '/'
 }
 
 func corpusV2PathWithin(root, candidate string) bool {
@@ -549,8 +604,12 @@ func corpusV2IdentityForStream(metadata CorpusV2StreamMetadata) string {
 	return "stream:" + hex.EncodeToString(digest[:])
 }
 
-func corpusV2ReadIdentity(path string) (CorpusV2FileIdentity, []byte, error) {
-	info, err := os.Lstat(path)
+func corpusV2ReadIdentity(root, path string) (CorpusV2FileIdentity, []byte, error) {
+	resolvedPath, err := corpusV2ResolveContainedPath(root, path, path)
+	if err != nil {
+		return CorpusV2FileIdentity{}, nil, err
+	}
+	info, err := os.Lstat(resolvedPath)
 	if err != nil {
 		code := CorpusV2CodeUnreadableFile
 		if errors.Is(err, os.ErrNotExist) {
@@ -561,7 +620,7 @@ func corpusV2ReadIdentity(path string) (CorpusV2FileIdentity, []byte, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return CorpusV2FileIdentity{}, nil, corpusV2Error(CorpusV2CodeNonRegularFile, path, "regular non-aliased file", info.Mode().String(), nil)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return CorpusV2FileIdentity{}, nil, corpusV2Error(CorpusV2CodeUnreadableFile, path, "readable indexed file", path, err)
 	}
@@ -576,7 +635,11 @@ func corpusV2ReadIdentity(path string) (CorpusV2FileIdentity, []byte, error) {
 }
 
 func corpusV2ReadIndexBytes(path string, authority CorpusV2Authority) ([]byte, string, error) {
-	data, err := os.ReadFile(path)
+	resolvedPath, err := corpusV2ResolveContainedPath(authority.RepositoryRoot, path, "indexPath")
+	if err != nil {
+		return nil, "", err
+	}
+	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return nil, "", corpusV2Error(CorpusV2CodeAuthorityUnavailable, path, "readable pinned index", path, err)
 	}
@@ -600,6 +663,9 @@ func corpusV2IndexAbsolutePath(authority CorpusV2Authority) (string, error) {
 	if !corpusV2PathWithin(corpusV2Slash(root), corpusV2Slash(indexPath)) {
 		return "", corpusV2Error(CorpusV2CodePathEscape, "indexPath", "path below repository root", root+"; observed="+indexPath, nil)
 	}
+	if _, err := corpusV2ResolveContainedPath(root, indexPath, "indexPath"); err != nil {
+		return "", err
+	}
 	return indexPath, nil
 }
 
@@ -622,7 +688,7 @@ func readCorpusV2Index(ctx context.Context, authority CorpusV2Authority) (Corpus
 	if err := ValidateCorpusV2Index(index, authority); err != nil {
 		return CorpusV2Index{}, err
 	}
-	if err := validateCorpusV2IndexedFiles(index.Pairs); err != nil {
+	if err := validateCorpusV2IndexedFiles(authority.RepositoryRoot, index.Pairs); err != nil {
 		return CorpusV2Index{}, err
 	}
 	if err := corpusV2VerifyGitAuthority(ctx, authority, indexPath, index.Pairs); err != nil {
@@ -631,10 +697,14 @@ func readCorpusV2Index(ctx context.Context, authority CorpusV2Authority) (Corpus
 	return index, nil
 }
 
-func validateCorpusV2IndexedFiles(pairs []CorpusV2Pair) error {
+func validateCorpusV2IndexedFiles(root string, pairs []CorpusV2Pair) error {
 	for _, pair := range pairs {
 		for _, path := range []string{pair.Clip.Path, pair.Prompt.Path} {
-			info, err := os.Lstat(path)
+			resolvedPath, err := corpusV2ResolveContainedPath(root, path, path)
+			if err != nil {
+				return err
+			}
+			info, err := os.Lstat(resolvedPath)
 			if err != nil {
 				code := CorpusV2CodeUnreadableFile
 				if errors.Is(err, os.ErrNotExist) {
@@ -664,11 +734,11 @@ func readCorpusV2Manifest(ctx context.Context, authority CorpusV2Authority) (Cor
 	copy(pairs, index.Pairs)
 	for index := range pairs {
 		pair := &pairs[index]
-		clip, data, err := corpusV2ReadIdentity(pair.Clip.Path)
+		clip, data, err := corpusV2ReadIdentity(authority.RepositoryRoot, pair.Clip.Path)
 		if err != nil {
 			return CorpusV2Manifest{}, err
 		}
-		prompt, _, err := corpusV2ReadIdentity(pair.Prompt.Path)
+		prompt, _, err := corpusV2ReadIdentity(authority.RepositoryRoot, pair.Prompt.Path)
 		if err != nil {
 			return CorpusV2Manifest{}, err
 		}
