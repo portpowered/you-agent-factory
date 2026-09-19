@@ -69,6 +69,9 @@ func TestSharedCurrentFactoryActivationProvenanceAtomic(t *testing.T) {
 	if put.value.Activation.ActivationId == before.Activation.ActivationId {
 		t.Fatalf("saved activation ID = %q, want a single new ID after success", put.value.Activation.ActivationId)
 	}
+	if put.value.Activation.LoadedSourceDigest == before.Activation.LoadedSourceDigest {
+		t.Fatalf("saved loaded source digest = %q, want digest for the changed Factory", put.value.Activation.LoadedSourceDigest)
+	}
 
 	for result := range readResults {
 		if result.err != nil {
@@ -143,17 +146,23 @@ func assertCompleteActivationTuple(
 	if got.Name != before.Name || got.Activation.LoadedSourceDigest == "" {
 		t.Fatalf("concurrent result identity = %#v, want named Factory %q with digest", got, before.Name)
 	}
+	var expected factoryapi.Factory
 	switch (*got.WorkTypes)[0].Name {
 	case (*before.WorkTypes)[0].Name:
-		if got.Activation.ActivationId != before.Activation.ActivationId || !sameVersion(got.Version, before.Version) {
-			t.Fatalf("old concurrent tuple = %#v, want activation/version from before=%#v", got, before)
-		}
+		expected = before
 	case (*after.WorkTypes)[0].Name:
-		if got.Activation.ActivationId != after.Activation.ActivationId || !sameVersion(got.Version, after.Version) {
-			t.Fatalf("new concurrent tuple = %#v, want activation/version from after=%#v", got, after)
-		}
+		expected = after
 	default:
 		t.Fatalf("concurrent result work type = %q, want old %q or new %q", (*got.WorkTypes)[0].Name, (*before.WorkTypes)[0].Name, (*after.WorkTypes)[0].Name)
+	}
+	if expected.Activation == nil || expected.Version == nil {
+		t.Fatalf("expected concurrent tuple is incomplete: %#v", expected)
+	}
+	if got.Activation.ActivationId != expected.Activation.ActivationId ||
+		got.Activation.LoadedSourceDigest != expected.Activation.LoadedSourceDigest ||
+		got.Activation.State != expected.Activation.State ||
+		!sameVersion(got.Version, expected.Version) {
+		t.Fatalf("concurrent result = %#v, want the complete activation/version tuple from %#v", got, expected)
 	}
 }
 

@@ -108,10 +108,16 @@ func TestQuery_WritesJSONDefaultRootFactory(t *testing.T) {
 func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	factoryID := "customer-factory"
 	workers := []factoryapi.Worker{{Name: "executor"}}
+	activation := &factoryapi.FactoryActivationProvenance{
+		ActivationId:       "activation-beta",
+		LoadedSourceDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		State:              factoryapi.FactoryActivationStateAuthoredChanged,
+	}
 	srv := currentFactoryServer(t, factoryapi.Factory{
-		Name:    "beta",
-		Id:      &factoryID,
-		Workers: &workers,
+		Name:       "beta",
+		Id:         &factoryID,
+		Workers:    &workers,
+		Activation: activation,
 	})
 	defer srv.Close()
 
@@ -129,6 +135,16 @@ func TestQuery_WritesJSONNamedFactory(t *testing.T) {
 	}
 	if got["name"] != "beta" || got["id"] != factoryID {
 		t.Fatalf("factory JSON = %#v, want name beta and id %q", got, factoryID)
+	}
+	activationJSON, ok := got["activation"].(map[string]any)
+	if !ok {
+		t.Fatalf("activation JSON = %#v, want activation provenance", got["activation"])
+	}
+	if len(activationJSON) != 3 ||
+		activationJSON["activationId"] != activation.ActivationId ||
+		activationJSON["loadedSourceDigest"] != activation.LoadedSourceDigest ||
+		activationJSON["state"] != string(activation.State) {
+		t.Fatalf("activation JSON = %#v, want only the stable ID, loaded digest, and state", activationJSON)
 	}
 	workerPayloads, ok := got["workers"].([]any)
 	if !ok || len(workerPayloads) != 1 {

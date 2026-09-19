@@ -33,7 +33,12 @@ describe("useCurrentActivityFactoryDocumentState", () => {
     });
   });
 
-  it("projects activation-bearing events into an editable current document", () => {
+  it.each([
+    "ACTIVE",
+    "AUTHORED_CHANGED",
+    "NOT_ACTIVATED",
+    "AUTHORED_SOURCE_UNAVAILABLE",
+  ] as const)("projects %s event provenance into the current document", (state) => {
     const factory = structuredClone(semanticWorkflowDashboardSnapshot.factory);
     if (factory == null) {
       throw new Error("dashboard fixture must include a Factory");
@@ -44,7 +49,7 @@ describe("useCurrentActivityFactoryDocumentState", () => {
       activation: {
         activationId: "authoritative-activation",
         loadedSourceDigest: `sha256:${"a".repeat(64)}`,
-        state: "ACTIVE",
+        state,
       },
       version: {
         logical: "8",

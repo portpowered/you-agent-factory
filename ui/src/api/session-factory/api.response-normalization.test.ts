@@ -3,12 +3,18 @@ import { defaultSessionFactoryActivation } from "./import-activation.test-helper
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("getSessionFactory response normalization", () => {
-  it("returns typed activation provenance from a successful response", async () => {
+  it.each([
+    "ACTIVE",
+    "AUTHORED_CHANGED",
+    "NOT_ACTIVATED",
+    "AUTHORED_SOURCE_UNAVAILABLE",
+  ] as const)("returns typed %s activation provenance", async (state) => {
+    const activation = { ...defaultSessionFactoryActivation, state };
     const document = await getSessionFactory("~default", {
       fetch: vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            activation: defaultSessionFactoryActivation,
+            activation,
             name: "Current Factory",
             workers: [],
             workstations: [],
@@ -24,7 +30,7 @@ describe("getSessionFactory response normalization", () => {
       ),
     });
 
-    expect(document.activation).toEqual(defaultSessionFactoryActivation);
+    expect(document.activation).toEqual(activation);
   });
 
   it("rejects an otherwise editable response without activation provenance", async () => {
