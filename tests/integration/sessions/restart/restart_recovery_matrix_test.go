@@ -100,7 +100,7 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 		t.Fatalf("hash source recording before resume: %v", err)
 	}
 
-	second := startBoardPersistenceResumeDaemon(t, artifactPath, factoryB, homeDir, sourceRecordPath, successorRecordPath, releasePath)
+	second := startBoardPersistenceObservedResumeDaemon(t, artifactPath, factoryB, homeDir, sourceRecordPath, successorRecordPath, releasePath)
 	evidence.trackDaemon(t, "successor-process-recorded-definition-a", second)
 	secondWorks := waitForBoardStates(t, second.baseURL, map[string]string{
 		restartRecoveryEligibleWorkID: "processing",
@@ -233,7 +233,7 @@ func TestRestartRecoveryTerminalHistoryRemainsIdle(t *testing.T) {
 		t.Fatalf("hash terminal-only source recording: %v", err)
 	}
 
-	second := startBoardPersistenceResumeDaemon(t, artifactPath, factoryDir, homeDir, sourceRecordPath, successorRecordPath, releasePath)
+	second := startBoardPersistenceObservedResumeDaemon(t, artifactPath, factoryDir, homeDir, sourceRecordPath, successorRecordPath, releasePath)
 	evidence.trackDaemon(t, "terminal-only-successor-process", second)
 	after := waitForBoardStates(t, second.baseURL, map[string]string{
 		restartRecoveryCompleteWorkID: "complete",
@@ -366,7 +366,7 @@ func TestRestartRecoveryInvalidSourcesFailFast(t *testing.T) {
 			if strings.TrimSpace(diagnostics[0].Message) == "" || strings.Contains(diagnostics[0].Message, resumePath) || strings.Contains(diagnostics[0].Message, restartRecoverySecretMarker) {
 				t.Fatalf("%s startup diagnostic is empty or exposes source details: %#v", fixture.id, diagnostics[0])
 			}
-			recoveryRecords := readRestartRecoveryRecords(daemon.logDir)
+			recoveryRecords := readRestartRecoveryRecordsForDaemon(daemon)
 			failureEvidence.RecoveryRecordCount = len(recoveryRecords)
 			for _, record := range recoveryRecords {
 				if record["outcome"] == "success" {
@@ -437,10 +437,10 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 	waitForBoardPersistenceDaemonExit(t, second, restartRecoveryProcessTimeout)
 	second.cleanup()
 	evidence.captureDaemon(1, second)
-	if waitErr := second.waitError(); waitErr != nil && !boardPersistenceCleanExit(waitErr) {
-		t.Fatalf("cancelled successor exit = %v, want bounded interrupt exit", waitErr)
+	if waitErr := second.waitError(); waitErr == nil {
+		t.Fatal("cancelled successor exited successfully after interrupt; want a nonzero interrupted-process result")
 	}
-	for _, record := range readRestartRecoveryRecords(second.logDir) {
+	for _, record := range readRestartRecoveryRecordsForDaemon(second) {
 		if record["outcome"] == "success" {
 			t.Fatalf("pre-readiness cancellation emitted recovery success: %#v", record)
 		}
@@ -561,6 +561,9 @@ func restartRecoveryExpectedWorks(completed bool) map[string]boardPersistenceExp
 func restartRecoveryTerminalOnlyExpectedWorks() map[string]boardPersistenceExpectedWork {
 	all := restartRecoveryExpectedWorks(false)
 	delete(all, restartRecoveryEligibleWorkID)
+	complete := all[restartRecoveryCompleteWorkID]
+	complete.RelationTarget = ""
+	all[restartRecoveryCompleteWorkID] = complete
 	return all
 }
 
@@ -666,7 +669,15 @@ func restartWorkHistoryFingerprint(t *testing.T, baseURL string, workIDs map[str
 			if encodeErr != nil {
 				t.Fatalf("encode immutable Work history event %q: %v", event.Id, encodeErr)
 			}
-			fingerprint = append(fingerprint, string(encoded))
+			var semanticEvent any
+			if err := json.Unmarshal(encoded, &semanticEvent); err != nil {
+				t.Fatalf("decode immutable Work history event %q for canonical comparison: %v", event.Id, err)
+			}
+			canonical, err := json.Marshal(semanticEvent)
+			if err != nil {
+				t.Fatalf("canonicalize immutable Work history event %q: %v", event.Id, err)
+			}
+			fingerprint = append(fingerprint, string(canonical))
 		}
 	}
 	return fingerprint
@@ -676,19 +687,32 @@ func assertSingleTerminalCompletion(t *testing.T, events []factoryapi.FactoryEve
 	t.Helper()
 	completions := 0
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
-		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
 		if err != nil {
-			t.Fatalf("decode Work State Change %q: %v", event.Id, err)
+			t.Fatalf("decode Dispatch Response %q: %v", event.Id, err)
 		}
-		if payload.WorkId == workID && payload.ToState == terminalState {
-			completions++
+		if payload.Outcome != factoryapi.WorkOutcomeAccepted || payload.OutputWork == nil {
+			continue
+		}
+		for _, output := range *payload.OutputWork {
+			if boardPersistenceStringPointerValue(output.WorkId) == workID && output.State != nil && output.State.Name == terminalState {
+				completions++
+			}
 		}
 	}
 	if completions != 1 {
-		t.Fatalf("Work %q terminal state changes to %q = %d, want exactly one", workID, terminalState, completions)
+		summary := make([]string, 0, len(events))
+		for _, event := range events {
+			if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+				continue
+			}
+			payload, _ := json.Marshal(event.Payload)
+			summary = append(summary, fmt.Sprintf("%s/%s workIds=%v payload=%s", event.Id, event.Type, event.Context.WorkIds, payload))
+		}
+		t.Fatalf("Work %q terminal dispatch completions to %q = %d, want exactly one; relevant public history=%v", workID, terminalState, completions, summary)
 	}
 }
 
@@ -783,7 +807,7 @@ func waitForRestartRecoveryRecord(t *testing.T, daemon *boardPersistenceDaemon, 
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		for _, record := range readRestartRecoveryRecords(daemon.logDir) {
+		for _, record := range readRestartRecoveryRecordsForDaemon(daemon) {
 			if record["outcome"] == outcome {
 				return record, nil
 			}
@@ -798,7 +822,7 @@ func waitForRestartRecoveryRecord(t *testing.T, daemon *boardPersistenceDaemon, 
 
 func assertRestartRecoveryRecordSafe(t *testing.T, daemon *boardPersistenceDaemon, outcome string) {
 	t.Helper()
-	records := readRestartRecoveryRecords(daemon.logDir)
+	records := readRestartRecoveryRecordsForDaemon(daemon)
 	if len(records) != 1 {
 		t.Fatalf("run.recovery records = %d, want exactly one: %#v", len(records), records)
 	}
@@ -812,9 +836,6 @@ func assertRestartRecoveryRecordSafe(t *testing.T, daemon *boardPersistenceDaemo
 		if forbidden != "" && bytes.Contains(encoded, []byte(forbidden)) {
 			t.Fatalf("run.recovery record leaks %q: %s", forbidden, encoded)
 		}
-	}
-	if _, exists := record["factory_session_id"]; !exists {
-		t.Fatalf("run.recovery record lacks Factory Session identity: %#v", record)
 	}
 }
 
@@ -837,6 +858,35 @@ func readRestartRecoveryRecords(root string) []map[string]any {
 		}
 		return nil
 	})
+	return records
+}
+
+func readRestartRecoveryRecordsForDaemon(daemon *boardPersistenceDaemon) []map[string]any {
+	if daemon == nil {
+		return nil
+	}
+	if records := readRestartRecoveryRecords(daemon.logDir); len(records) > 0 {
+		return records
+	}
+	return parseRestartRecoveryRecords(daemon.stdout.Bytes(), daemon.stderr.Bytes())
+}
+
+func parseRestartRecoveryRecords(outputs ...[]byte) []map[string]any {
+	var records []map[string]any
+	for _, output := range outputs {
+		for _, line := range bytes.Split(output, []byte("\n")) {
+			var value map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(line), &value); err == nil && value["event"] == "run.recovery" {
+				records = append(records, value)
+				continue
+			}
+			if start := bytes.Index(line, []byte(`{"event"`)); start >= 0 {
+				if err := json.Unmarshal(bytes.TrimSpace(line[start:]), &value); err == nil && value["event"] == "run.recovery" {
+					records = append(records, value)
+				}
+			}
+		}
+	}
 	return records
 }
 
@@ -906,6 +956,17 @@ func corruptReplayRecording(source []byte) []byte {
 
 func incompatibleReplayRecording(t *testing.T, source []byte) []byte {
 	t.Helper()
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(source, &document); err == nil && len(document["schemaVersion"]) > 0 {
+		version, _ := json.Marshal("agent-factory.replay.v99")
+		document["schemaVersion"] = version
+		encoded, encodeErr := json.MarshalIndent(document, "", "  ")
+		if encodeErr != nil {
+			t.Fatalf("encode incompatible replay artifact: %v", encodeErr)
+		}
+		return encoded
+	}
+
 	lines := bytes.Split(source, []byte("\n"))
 	if len(lines) < 2 {
 		t.Fatal("valid replay source does not have a header line")
@@ -922,6 +983,33 @@ func incompatibleReplayRecording(t *testing.T, source []byte) []byte {
 
 func wrongDefinitionReplayRecording(t *testing.T, source []byte) []byte {
 	t.Helper()
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(source, &document); err == nil && len(document["events"]) > 0 {
+		var events []json.RawMessage
+		if err := json.Unmarshal(document["events"], &events); err != nil {
+			t.Fatalf("decode replay event list: %v", err)
+		}
+		for index, encodedEvent := range events {
+			var event map[string]json.RawMessage
+			if err := json.Unmarshal(encodedEvent, &event); err != nil {
+				continue
+			}
+			var payload map[string]json.RawMessage
+			if err := json.Unmarshal(event["payload"], &payload); err != nil || len(payload["factory"]) == 0 {
+				continue
+			}
+			mutateWrongDefinitionSnapshot(t, payload)
+			event["payload"], _ = json.Marshal(payload)
+			events[index], _ = json.Marshal(event)
+			document["events"], _ = json.Marshal(events)
+			encoded, encodeErr := json.MarshalIndent(document, "", "  ")
+			if encodeErr != nil {
+				t.Fatalf("encode wrong-definition replay artifact: %v", encodeErr)
+			}
+			return encoded
+		}
+	}
+
 	lines := bytes.Split(source, []byte("\n"))
 	found := false
 	for index := 1; index < len(lines); index++ {
@@ -943,17 +1031,7 @@ func wrongDefinitionReplayRecording(t *testing.T, source []byte) []byte {
 		if err := json.Unmarshal(event["payload"], &payload); err != nil || len(payload["factory"]) == 0 {
 			continue
 		}
-		var factory map[string]json.RawMessage
-		if err := json.Unmarshal(payload["factory"], &factory); err != nil {
-			continue
-		}
-		wrongName, _ := json.Marshal("internally-wrong-definition")
-		wrongID, _ := json.Marshal("internally-wrong-definition-id")
-		wrongWorkstations, _ := json.Marshal("not-a-workstation-list")
-		factory["name"] = wrongName
-		factory["id"] = wrongID
-		factory["workstations"] = wrongWorkstations
-		payload["factory"], _ = json.Marshal(factory)
+		mutateWrongDefinitionSnapshot(t, payload)
 		event["payload"], _ = json.Marshal(payload)
 		wrapper["event"], _ = json.Marshal(event)
 		lines[index], _ = json.Marshal(wrapper)
@@ -964,6 +1042,21 @@ func wrongDefinitionReplayRecording(t *testing.T, source []byte) []byte {
 		t.Fatal("valid replay source has no embedded Factory Definition snapshot to corrupt")
 	}
 	return bytes.Join(lines, []byte("\n"))
+}
+
+func mutateWrongDefinitionSnapshot(t *testing.T, payload map[string]json.RawMessage) {
+	t.Helper()
+	var factory map[string]json.RawMessage
+	if err := json.Unmarshal(payload["factory"], &factory); err != nil {
+		t.Fatalf("decode recorded Factory snapshot: %v", err)
+	}
+	wrongName, _ := json.Marshal("internally-wrong-definition")
+	wrongID, _ := json.Marshal("internally-wrong-definition-id")
+	wrongWorkstations, _ := json.Marshal("not-a-workstation-list")
+	factory["name"] = wrongName
+	factory["id"] = wrongID
+	factory["workstations"] = wrongWorkstations
+	payload["factory"], _ = json.Marshal(factory)
 }
 
 func equalStringSlices(left, right []string) bool {

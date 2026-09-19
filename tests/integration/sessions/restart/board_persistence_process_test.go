@@ -75,26 +75,41 @@ func startBoardPersistenceDaemonProcessWithResume(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
-	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false)
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, false)
 }
 
 func startBoardPersistenceJSONResumeProcess(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
-	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, true)
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, true, true)
+}
+
+func startBoardPersistenceObservedResumeDaemon(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
+	daemon := startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, true)
+	waitForBoardDaemonReady(t, daemon, 45*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	t.Logf("isolated observed resume session ID: %q", daemon.sessionID)
+	return daemon
 }
 
 func startBoardPersistenceDaemonProcessWithResumeOutput(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
-	jsonOutput bool,
+	jsonOutput, debugOutput bool,
 ) *boardPersistenceDaemon {
 	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
 	args := make([]string, 0, 12)
 	if jsonOutput {
 		args = append(args, "--json")
+	}
+	if debugOutput {
+		args = append(args, "--debug")
 	}
 	args = append(args,
 		"run", "--dir", factoryDir,
