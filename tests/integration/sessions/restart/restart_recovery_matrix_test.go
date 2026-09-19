@@ -31,6 +31,26 @@ type restartRecoveryFailureFixture struct {
 	contents   []byte
 }
 
+type restartRecoveryH01Fixture struct {
+	artifactPath        string
+	evidence            *restartBaselineEvidence
+	factoryA            string
+	factoryB            string
+	homeDir             string
+	releasePath         string
+	sourceRecordPath    string
+	successorRecordPath string
+}
+
+type restartRecoveryH01SourceState struct {
+	expectedWorks         map[string]boardPersistenceExpectedWork
+	oldDispatchID         string
+	oldWorkerSessionID    string
+	oldOwnerID            string
+	workEventsBefore      []string
+	terminalHistoryBefore []string
+}
+
 // TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner is the H-01
 // compiled-artifact witness. The authored Factory B cannot consume the
 // processing Work. A new dispatch therefore demonstrates that resume selected
@@ -40,39 +60,64 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	artifactPath := requireRestartCLIArtifact(t)
 	evidence := newRestartScenarioEvidence(*restartCLIArtifact, "H-01", t.Name())
 	t.Cleanup(func() { evidence.publishRestartScenario(t) })
+	fixture := prepareRestartRecoveryH01Fixture(t, artifactPath, evidence)
+	source := runRestartRecoveryH01SourceGeneration(t, fixture)
+	verifyRestartRecoveryH01SuccessorGeneration(t, fixture, source)
+}
 
+func prepareRestartRecoveryH01Fixture(
+	t *testing.T,
+	artifactPath string,
+	evidence *restartBaselineEvidence,
+) restartRecoveryH01Fixture {
+	t.Helper()
 	factoryA := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(true))
 	factoryB := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(false))
 	workerPath := currentRestartWorkerExecutable(t)
 	writeBoardPersistenceAgentConfig(t, factoryA, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
 	writeBoardPersistenceAgentConfig(t, factoryB, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
-	homeDir := t.TempDir()
-	releasePath := filepath.Join(t.TempDir(), "release-recovered-worker")
-	sourceRecordPath := filepath.Join(t.TempDir(), "source.recording.json")
-	successorRecordPath := filepath.Join(t.TempDir(), "successor.recording.json")
-	if err := recordRestartFixtureHash(evidence, "factory-a/factory.json", filepath.Join(factoryA, "factory.json")); err != nil {
+	fixture := restartRecoveryH01Fixture{
+		artifactPath: artifactPath, evidence: evidence, factoryA: factoryA, factoryB: factoryB,
+		homeDir: t.TempDir(), releasePath: filepath.Join(t.TempDir(), "release-recovered-worker"),
+		sourceRecordPath:    filepath.Join(t.TempDir(), "source.recording.json"),
+		successorRecordPath: filepath.Join(t.TempDir(), "successor.recording.json"),
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-a/factory.json", filepath.Join(fixture.factoryA, "factory.json")); err != nil {
 		t.Fatal(err)
 	}
-	if err := recordRestartFixtureHash(evidence, "factory-b/factory.json", filepath.Join(factoryB, "factory.json")); err != nil {
+	if err := recordRestartFixtureHash(evidence, "factory-b/factory.json", filepath.Join(fixture.factoryB, "factory.json")); err != nil {
 		t.Fatal(err)
 	}
-	if err := recordRestartFixtureHash(evidence, "factory-b/workstation/AGENTS.md", filepath.Join(factoryB, "workstations", "hold-processing", "AGENTS.md")); err != nil {
+	if err := recordRestartFixtureHash(evidence, "factory-b/workstation/AGENTS.md", filepath.Join(fixture.factoryB, "workstations", "hold-processing", "AGENTS.md")); err != nil {
 		t.Fatal(err)
 	}
 	if evidence.FixtureSHA256["factory-a/factory.json"] == evidence.FixtureSHA256["factory-b/factory.json"] {
 		t.Fatal("Factory A and authored Factory B have identical fixture hashes")
 	}
-	if err := recordRestartFixtureHash(evidence, "factory-a/workstation/AGENTS.md", filepath.Join(factoryA, "workstations", "hold-processing", "AGENTS.md")); err != nil {
+	if err := recordRestartFixtureHash(evidence, "factory-a/workstation/AGENTS.md", filepath.Join(fixture.factoryA, "workstations", "hold-processing", "AGENTS.md")); err != nil {
 		t.Fatal(err)
 	}
-	if err := recordRestartFixtureHash(evidence, "factory-a/worker/AGENTS.md", filepath.Join(factoryA, "workers", restartRecoveryWorkerName, "AGENTS.md")); err != nil {
+	if err := recordRestartFixtureHash(evidence, "factory-a/worker/AGENTS.md", filepath.Join(fixture.factoryA, "workers", restartRecoveryWorkerName, "AGENTS.md")); err != nil {
 		t.Fatal(err)
 	}
+	return fixture
+}
 
-	first := startBoardPersistenceDaemon(t, artifactPath, factoryA, homeDir, sourceRecordPath, releasePath)
-	evidence.trackDaemon(t, "source-process-a", first)
+func runRestartRecoveryH01SourceGeneration(
+	t *testing.T,
+	fixture restartRecoveryH01Fixture,
+) restartRecoveryH01SourceState {
+	t.Helper()
+	first := startBoardPersistenceDaemon(
+		t, fixture.artifactPath, fixture.factoryA, fixture.homeDir,
+		fixture.sourceRecordPath, fixture.releasePath,
+	)
+	fixture.evidence.trackDaemon(t, "source-process-a", first)
 	batch := restartRecoveryBatchJSON(t)
-	submitBoardPersistenceBatchThroughCLI(t, first, artifactPath, factoryA, homeDir, batch, restartRecoveryRequestID, 3)
+	submitBoardPersistenceBatchThroughCLI(
+		t, first, fixture.artifactPath, fixture.factoryA, fixture.homeDir,
+		batch, restartRecoveryRequestID, 3,
+	)
 	wantBefore := restartRecoveryExpectedWorks(false)
 	before := waitForBoardStates(t, first.baseURL, map[string]string{
 		restartRecoveryEligibleWorkID: "processing",
@@ -94,43 +139,64 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	}
 	workEventsBefore := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryWorkIDs())
 	terminalHistoryBefore := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryTerminalWorkIDs())
-	firstObservation := evidence.capturePublicObservation(t, "source-a-before-stop", first.baseURL)
+	firstObservation := fixture.evidence.capturePublicObservation(t, "source-a-before-stop", first.baseURL)
 	assertRestartPublicCounts(t, firstObservation, 1, 3, 1, 1)
 	assertRestartActiveWorkerCount(t, firstObservation, 1)
 	first.stop(t)
-	evidence.captureDaemon(0, first)
-	if err := evidence.recordSourceRecording(sourceRecordPath); err != nil {
+	fixture.evidence.captureDaemon(0, first)
+	if err := fixture.evidence.recordSourceRecording(fixture.sourceRecordPath); err != nil {
 		t.Fatalf("hash source recording before resume: %v", err)
 	}
+	return restartRecoveryH01SourceState{
+		expectedWorks: wantBefore, oldDispatchID: oldDispatchID,
+		oldWorkerSessionID: oldWorker.WorkerSessionId, oldOwnerID: oldOwnerID,
+		workEventsBefore: workEventsBefore, terminalHistoryBefore: terminalHistoryBefore,
+	}
+}
 
-	second := startBoardPersistenceObservedResumeDaemon(t, artifactPath, factoryB, homeDir, sourceRecordPath, successorRecordPath, releasePath)
-	evidence.trackDaemon(t, "successor-process-recorded-definition-a", second)
+func verifyRestartRecoveryH01SuccessorGeneration(
+	t *testing.T,
+	fixture restartRecoveryH01Fixture,
+	source restartRecoveryH01SourceState,
+) {
+	t.Helper()
+	second := startBoardPersistenceObservedResumeDaemon(
+		t, fixture.artifactPath, fixture.factoryB, fixture.homeDir,
+		fixture.sourceRecordPath, fixture.successorRecordPath, fixture.releasePath,
+	)
+	fixture.evidence.trackDaemon(t, "successor-process-recorded-definition-a", second)
 	secondWorks := waitForBoardStates(t, second.baseURL, map[string]string{
 		restartRecoveryEligibleWorkID: "processing",
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
 	}, 30*time.Second)
-	assertBoardList(t, secondWorks, wantBefore)
-	assertRestartWorkIDsUnique(t, secondWorks, wantBefore)
-	if got := restartWorkHistoryFingerprint(t, second.baseURL, restartRecoveryWorkIDs()); !equalStringSlices(got, workEventsBefore) {
-		t.Fatalf("admitted and terminal Work history changed during resume:\nbefore=%v\nafter=%v", workEventsBefore, got)
+	assertBoardList(t, secondWorks, source.expectedWorks)
+	assertRestartWorkIDsUnique(t, secondWorks, source.expectedWorks)
+	if got := restartWorkHistoryFingerprint(t, second.baseURL, restartRecoveryWorkIDs()); !equalStringSlices(got, source.workEventsBefore) {
+		t.Fatalf("admitted and terminal Work history changed during resume:\nbefore=%v\nafter=%v", source.workEventsBefore, got)
 	}
-	newDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, restartRecoveryEligibleWorkID, oldDispatchID, 30*time.Second)
+	newDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, restartRecoveryEligibleWorkID, source.oldDispatchID, 30*time.Second)
 	newWorker := waitForBoardWorkerObservation(t, second.baseURL, second.sessionID, restartRecoveryEligibleWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
 		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
 	}, 30*time.Second)
-	if newWorker.WorkerSessionId == oldWorker.WorkerSessionId {
-		t.Fatalf("successor reused source Worker Session %q", oldWorker.WorkerSessionId)
+	if newWorker.WorkerSessionId == source.oldWorkerSessionID {
+		t.Fatalf("successor reused source Worker Session %q", source.oldWorkerSessionID)
 	}
 	newOwnerDispatch, newOwnerID := waitForBoardActiveOwner(t, second.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
-	if newOwnerDispatch != newDispatchID || newOwnerID != newWorker.WorkerSessionId || newOwnerID == oldOwnerID {
-		t.Fatalf("successor active owner = %q/%q; dispatch=%q worker=%q oldOwner=%q", newOwnerDispatch, newOwnerID, newDispatchID, newWorker.WorkerSessionId, oldOwnerID)
+	if newOwnerDispatch != newDispatchID || newOwnerID != newWorker.WorkerSessionId || newOwnerID == source.oldOwnerID {
+		t.Fatalf("successor active owner = %q/%q; dispatch=%q worker=%q oldOwner=%q", newOwnerDispatch, newOwnerID, newDispatchID, newWorker.WorkerSessionId, source.oldOwnerID)
 	}
-	resumedObservation := evidence.capturePublicObservation(t, "successor-before-worker-release", second.baseURL)
+	resumedObservation := fixture.evidence.capturePublicObservation(t, "successor-before-worker-release", second.baseURL)
 	assertRestartPublicCounts(t, resumedObservation, 1, 3, 1, 1)
 	assertRestartActiveWorkerCount(t, resumedObservation, 1)
-	completeRestartRecoveryDispatch(t, evidence, second, releasePath, oldDispatchID, newDispatchID, terminalHistoryBefore)
-	finalizeRestartRecoveryEvidence(t, evidence, second, sourceRecordPath, successorRecordPath, factoryA, factoryB)
+	completeRestartRecoveryDispatch(
+		t, fixture.evidence, second, fixture.releasePath,
+		source.oldDispatchID, newDispatchID, source.terminalHistoryBefore,
+	)
+	finalizeRestartRecoveryEvidence(
+		t, fixture.evidence, second, fixture.sourceRecordPath,
+		fixture.successorRecordPath, fixture.factoryA, fixture.factoryB,
+	)
 }
 
 func completeRestartRecoveryDispatch(t *testing.T, evidence *restartBaselineEvidence, daemon *boardPersistenceDaemon, releasePath, oldDispatchID, newDispatchID string, terminalHistoryBefore []string) {
