@@ -42,7 +42,7 @@ type s8InterruptScenario struct {
 func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	scenario := newS8InterruptScenario(t, ctx)
+	scenario := newS8InterruptScenario(t, ctx, "manager-interrupt")
 	defer scenario.runner.releaseAll()
 	ids := scenario.ids
 
@@ -75,16 +75,20 @@ func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	scenario.close(t)
 }
 
-func newS8InterruptScenario(t *testing.T, ctx context.Context) s8InterruptScenario {
+func newS8InterruptScenario(t *testing.T, ctx context.Context, name string) s8InterruptScenario {
 	t.Helper()
 	fixture := ensureInvokeContinuePackageFixture(t)
-	ownedScenario := fixture.scenario(t, "manager-interrupt")
+	ownedScenario := fixture.scenario(t, name)
+	interrupt := ownedScenario.interrupt
+	if interrupt == nil {
+		t.Fatalf("invoke/continue scenario %q has no interrupt fixture", name)
+	}
 	return s8InterruptScenario{
 		ctx: ctx, fixture: fixture, manager: fixture.process,
-		env: invokeContinueEnvironment(fixture.homeDir), factoryDir: fixture.hostDir,
+		env: ownedScenario.environment(), factoryDir: fixture.hostDir,
 		serverURL: fixture.baseURL, session: ownedScenario.session,
-		repositoryA: fixture.interruptRepositoryA, repositoryB: fixture.interruptRepositoryB,
-		runner: fixture.interruptRunner, ids: newS8ScenarioIdentities("interrupt", ownedScenario.runNumber),
+		repositoryA: interrupt.repositoryA, repositoryB: interrupt.repositoryB,
+		runner: interrupt.runner, ids: newS8ScenarioIdentities("interrupt", ownedScenario.runNumber),
 	}
 }
 

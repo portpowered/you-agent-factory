@@ -75,13 +75,24 @@ func (recorder *modelRuntimeEvidenceFileRecorder) RecordRuntimeEvidence(
 }
 
 type managedChildEnvironmentEvidence struct {
-	Sequence    uint64                   `json:"sequence"`
-	Kind        string                   `json:"kind"`
-	Backend     string                   `json:"backend"`
-	ProcessID   int                      `json:"process_id"`
-	Phase       string                   `json:"phase"`
-	Environment []managedEnvironmentFact `json:"environment,omitempty"`
-	ExitClass   string                   `json:"exit_class,omitempty"`
+	Sequence             uint64                   `json:"sequence"`
+	Kind                 string                   `json:"kind"`
+	Backend              string                   `json:"backend"`
+	ProcessID            int                      `json:"process_id"`
+	Phase                string                   `json:"phase"`
+	Environment          []managedEnvironmentFact `json:"environment,omitempty"`
+	ExitClass            string                   `json:"exit_class,omitempty"`
+	ExitCode             int                      `json:"exit_code,omitempty"`
+	ExitCodeKnown        bool                     `json:"exit_code_known,omitempty"`
+	StdoutBytes          uint64                   `json:"stdout_bytes,omitempty"`
+	StdoutSHA256         string                   `json:"stdout_sha256,omitempty"`
+	StdoutTruncated      bool                     `json:"stdout_truncated,omitempty"`
+	StderrBytes          uint64                   `json:"stderr_bytes,omitempty"`
+	StderrSHA256         string                   `json:"stderr_sha256,omitempty"`
+	StderrTruncated      bool                     `json:"stderr_truncated,omitempty"`
+	CauseCode            string                   `json:"cause_code,omitempty"`
+	CauseMessage         string                   `json:"cause_message,omitempty"`
+	CauseMessageRedacted bool                     `json:"cause_message_redacted,omitempty"`
 }
 
 type managedEnvironmentFact struct {

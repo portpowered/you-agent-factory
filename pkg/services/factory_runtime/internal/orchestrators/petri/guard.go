@@ -97,10 +97,10 @@ func (g *SameNameGuard) Evaluate(candidates []factorytoken.Token, bindings map[s
 }
 
 // EvaluateRuntime preserves ordinary same-name matching unless the bound
-// input and at least one candidate prove a parent-child join. For that
-// customer-facing join, the ordered registration projection is the only
-// authority for choosing the current child; incomplete or contradictory
-// registration facts fail closed.
+// input and at least one candidate prove a parent-child join. A single exact
+// child remains usable when restoring state recorded before registration facts
+// existed. When registrations do exist, their ordering remains authoritative;
+// incomplete, contradictory, or ambiguous facts fail closed.
 func (g *SameNameGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	matched, ok := g.Evaluate(candidates, bindings, marking)
 	if !ok {
@@ -118,6 +118,12 @@ func (g *SameNameGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []fa
 		// Same-name joins that do not prove a parent-child population retain the
 		// historical equality behavior and do not depend on runtime history.
 		return matched, true
+	}
+	if _, registered := ctx.ParentChildRegistrations[parentWorkID]; !registered {
+		if len(parentBoundMatches) == 1 {
+			return parentBoundMatches, true
+		}
+		return nil, false
 	}
 
 	return selectCurrentRegisteredSameNameChild(ctx, parentWorkID, bound.Color.Name, matched, marking)

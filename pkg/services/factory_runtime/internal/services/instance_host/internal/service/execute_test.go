@@ -127,9 +127,11 @@ func (*invalidHostedInstance) StartTime() time.Time                             
 func (*invalidHostedInstance) LoadedRuntimeConfig() factory.LoadedConfig              { return nil }
 func (*invalidHostedInstance) CanonicalEvents() []interfaces.FactoryEvent             { return nil }
 func (*invalidHostedInstance) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {}
-func (*invalidHostedInstance) StreamGeneration() string                               { return "" }
-func (*invalidHostedInstance) RuntimeLogger() *zap.Logger                             { return zap.NewNop() }
-func (*invalidHostedInstance) RuntimeMetrics() factory.MetricsEmitter                 { return nil }
+func (*invalidHostedInstance) AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func()) {
+}
+func (*invalidHostedInstance) StreamGeneration() string               { return "" }
+func (*invalidHostedInstance) RuntimeLogger() *zap.Logger             { return zap.NewNop() }
+func (*invalidHostedInstance) RuntimeMetrics() factory.MetricsEmitter { return nil }
 func (*invalidHostedInstance) RuntimeDiagnostics() factory.RuntimeLogDiagnostics {
 	return factory.RuntimeLogDiagnostics{}
 }

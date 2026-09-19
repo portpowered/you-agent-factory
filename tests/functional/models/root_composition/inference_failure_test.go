@@ -19,6 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const genericCLIControlledSignalTimeout = 15 * time.Second
+
 type genericCLIHostLauncher interface {
 	Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
 		HealthEndpoint() string
@@ -33,6 +35,14 @@ type genericCLIProtocolNegotiator interface {
 
 type genericCLICompatibilityChecker interface {
 	Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error
+}
+
+type genericCLIHostClock interface {
+	Now() time.Time
+	NewTimer(time.Duration) interface {
+		C() <-chan time.Time
+		Stop() bool
+	}
 }
 
 type genericCLIOutputFailureEffects struct {
@@ -82,7 +92,7 @@ func (effects *genericCLIOutputFailureEffects) Calls() [4]int {
 func TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly(t *testing.T) {
 	t.Parallel()
 
-	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, nil, nil, nil)
+	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, nil, nil, nil, nil)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "stdout payload",
 	})
@@ -114,7 +124,7 @@ func TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges(t *testing.T)
 		t.Fatalf("seed usage output: %v", err)
 	}
 	effects := &genericCLIOutputFailureEffects{failedTarget: usagePath}
-	process, directory, environment := buildGenericCLIProcess(t, multiOutputModelFactoryConfig, effects, nil, nil, nil)
+	process, directory, environment := buildGenericCLIProcess(t, multiOutputModelFactoryConfig, effects, nil, nil, nil, nil)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "new outputs",
 		"--output-map", "text=" + textPath, "--output-map", "usage=" + usagePath,
@@ -149,7 +159,7 @@ func TestModelsGenericCLIProcessCancellationStopsReadinessAndPublishesNothing(t 
 	protocol := &blockingGenericCLIProtocol{}
 	launcher := &stoppableGenericCLIHostLauncher{}
 	protocol.init()
-	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, protocol, nil)
+	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, protocol, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	inputs := support.FakeInputs(ctx, []string{
@@ -178,13 +188,11 @@ func TestModelsGenericCLIProcessCancellationStopsReadinessAndPublishesNothing(t 
 func TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
-	protocol := &blockingGenericCLIProtocol{}
+	protocol := &nonReadyGenericCLIProtocol{started: make(chan struct{})}
 	launcher := &stoppableGenericCLIHostLauncher{}
-	protocol.init()
-	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, protocol, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	inputs := support.FakeInputs(ctx, []string{
+	clock := newControlledGenericCLIHostClock()
+	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, protocol, nil, clock)
+	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "timeout me",
 	})
 	inputs.Input.Env = environment
@@ -192,11 +200,10 @@ func TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing(t *test
 	done := make(chan error, 1)
 	go func() { done <- process.Execute(inputs.Input) }()
 	waitForGenericCLIEventOrResult(t, protocol.started, done, "readiness negotiation start")
-	// The protocol returns only after the context deadline; the bounded select
-	// below joins the customer-boundary operation without polling or sleeping.
+	clock.expireNextReadinessInterval(t)
 	err := waitForGenericCLIResult(t, done, "timeout")
-	if err == nil || !errors.Is(err, models.ErrInferenceCancelled) {
-		t.Fatalf("timed-out Process.Execute error = %v, want cancellation-class timeout", err)
+	if err == nil || !errors.Is(err, models.ErrHostLoadingTimeout) {
+		t.Fatalf("timed-out Process.Execute error = %v, want host loading timeout", err)
 	}
 	if inputs.Stdout() != "" {
 		t.Fatalf("timed-out stdout = %q, want no successful publication", inputs.Stdout())
@@ -213,7 +220,7 @@ func TestModelsGenericCLIProcessRedactsCrashedHostDetails(t *testing.T) {
 
 	const secret = "HF_TOKEN=fixture-secret endpoint=https://private.invalid:7437/cache"
 	launcher := &crashedGenericCLIHostLauncher{waitErr: errors.New(secret)}
-	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, nil, nil)
+	process, directory, environment := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, nil, launcher, nil, nil, nil)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "crash me",
 	})
@@ -242,6 +249,7 @@ func buildGenericCLIProcess(
 	launcher genericCLIHostLauncher,
 	protocol genericCLIProtocolNegotiator,
 	compatibility genericCLICompatibilityChecker,
+	clock genericCLIHostClock,
 ) (support.Process, string, []string) {
 	t.Helper()
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -291,6 +299,9 @@ func buildGenericCLIProcess(
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 		ModelInvocationProtocolClient:  genericCLIProtocolClient{},
+	}
+	if clock != nil {
+		edges.ModelHostClock = clock
 	}
 	if outputEffects != nil {
 		edges.ModelCLIOutputCreateTempFile = outputEffects.CreateTemp
@@ -355,7 +366,7 @@ func waitForGenericCLIEventOrResult(t testing.TB, event <-chan struct{}, done <-
 	case <-event:
 	case err := <-done:
 		t.Fatalf("Process.Execute returned before %s: %v", name, err)
-	case <-time.After(2 * time.Second):
+	case <-time.After(genericCLIControlledSignalTimeout):
 		t.Fatalf("timed out waiting for %s", name)
 	}
 }
@@ -365,7 +376,7 @@ func waitForGenericCLIResult(t testing.TB, done <-chan error, name string) error
 	select {
 	case err := <-done:
 		return err
-	case <-time.After(2 * time.Second):
+	case <-time.After(genericCLIControlledSignalTimeout):
 		t.Fatalf("timed out waiting for %s Process.Execute result", name)
 		return nil
 	}
@@ -394,6 +405,82 @@ func (protocol *blockingGenericCLIProtocol) Negotiate(
 	}
 	<-ctx.Done()
 	return serviceedges.ModelHostProtocolNegotiationResult{}, ctx.Err()
+}
+
+type nonReadyGenericCLIProtocol struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (protocol *nonReadyGenericCLIProtocol) Negotiate(
+	_ context.Context,
+	_ string,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	protocol.once.Do(func() { close(protocol.started) })
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		Ready:           false,
+	}, nil
+}
+
+type controlledGenericCLIHostClock struct {
+	mu     sync.Mutex
+	now    time.Time
+	timers chan *controlledGenericCLIHostTimer
+}
+
+func newControlledGenericCLIHostClock() *controlledGenericCLIHostClock {
+	return &controlledGenericCLIHostClock{
+		now:    time.Unix(0, 0),
+		timers: make(chan *controlledGenericCLIHostTimer, 1),
+	}
+}
+
+func (clock *controlledGenericCLIHostClock) Now() time.Time {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	return clock.now
+}
+
+func (clock *controlledGenericCLIHostClock) NewTimer(time.Duration) interface {
+	C() <-chan time.Time
+	Stop() bool
+} {
+	timer := &controlledGenericCLIHostTimer{events: make(chan time.Time, 1)}
+	clock.timers <- timer
+	return timer
+}
+
+func (clock *controlledGenericCLIHostClock) expireNextReadinessInterval(t testing.TB) {
+	t.Helper()
+	var timer *controlledGenericCLIHostTimer
+	select {
+	case timer = <-clock.timers:
+	case <-time.After(genericCLIControlledSignalTimeout):
+		t.Fatal("timed out waiting for controlled readiness interval")
+	}
+	clock.mu.Lock()
+	clock.now = clock.now.Add(31 * time.Second)
+	now := clock.now
+	clock.mu.Unlock()
+	timer.fire(now)
+}
+
+type controlledGenericCLIHostTimer struct {
+	events  chan time.Time
+	stopped atomic.Bool
+}
+
+func (timer *controlledGenericCLIHostTimer) C() <-chan time.Time { return timer.events }
+func (timer *controlledGenericCLIHostTimer) Stop() bool {
+	return timer.stopped.CompareAndSwap(false, true)
+}
+func (timer *controlledGenericCLIHostTimer) fire(at time.Time) {
+	if !timer.stopped.Load() {
+		timer.events <- at
+	}
 }
 
 type stoppableGenericCLIHostLauncher struct {

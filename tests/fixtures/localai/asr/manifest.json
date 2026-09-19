@@ -1,5 +1,5 @@
 {
-  "schema": "localai.asr-known-fixture.v1",
+  "schema": "localai.asr-semantic-fixture.v1",
   "file": "localai-asr-known.wav",
   "bytes": 10340,
   "sha256": "eea86018ce1730baaf7f5dd6ec88c1f727dd90203521a9115b489310a248ea05",
@@ -10,12 +10,31 @@
     "sampleRateHz": 8000,
     "bitsPerSample": 16,
     "dataBytes": 10296,
-    "durationMillis": 644
+    "durationMillis": 643.5
   },
   "transcript": {
     "language": "en",
-    "text": "zero",
+    "raw": "Zero.",
+    "normalized": "zero",
     "normalization": "lowercase-trim-space-and-terminal-punctuation"
+  },
+  "segments": {
+    "timeUnit": "milliseconds",
+    "items": [
+      {
+        "id": 0,
+        "start": 0,
+        "end": 500,
+        "text": " Zero.",
+        "normalizedText": "zero"
+      }
+    ],
+    "constraints": {
+      "finite": true,
+      "monotonic": true,
+      "minimumStart": 0,
+      "maximumEnd": 643.5
+    }
   },
   "source": {
     "repository": "https://github.com/Jakobovski/free-spoken-digit-dataset",

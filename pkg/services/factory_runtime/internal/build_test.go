@@ -112,6 +112,95 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 	}
 }
 
+func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	const (
+		compatibilitySessionID = "~default"
+		canonicalSessionID     = "550e8400-e29b-41d4-a716-446655440000"
+	)
+	var capturedRequest recordings.RuntimeScopeRequest
+	runtimeOpening := &testRuntimeOpeningStub{
+		ledger:          &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "identity-handoff"},
+		capturedRequest: &capturedRequest,
+	}
+
+	bundle, err := testRuntimeFactory().Build(
+		context.Background(), dir, dir, compatibilitySessionID, canonicalSessionID,
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		runtimeOpening,
+		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if bundle.FactorySessionID != compatibilitySessionID {
+		t.Fatalf("bundle FactorySessionID = %q, want compatibility selector %q", bundle.FactorySessionID, compatibilitySessionID)
+	}
+	workflowContext, ok := bundle.Factory.(factory.WorkflowContextProvider)
+	if !ok {
+		t.Fatalf("Factory = %T, want WorkflowContextProvider", bundle.Factory)
+	}
+	contextValue := workflowContext.WorkflowContext()
+	if contextValue == nil {
+		t.Fatal("workflow context = nil")
+	}
+	if got := contextValue.SessionID; got != canonicalSessionID {
+		t.Fatalf("workflow context session ID = %q, want canonical identity %q", got, canonicalSessionID)
+	}
+	if capturedRequest.FactorySessionID != compatibilitySessionID || capturedRequest.CanonicalSessionID != canonicalSessionID {
+		t.Fatalf("Recordings scope identities = factory=%q canonical=%q, want factory=%q canonical=%q",
+			capturedRequest.FactorySessionID, capturedRequest.CanonicalSessionID,
+			compatibilitySessionID, canonicalSessionID,
+		)
+	}
+}
+
+func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+
+	loaded, err := loadedFactoryFixture(dir)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	bundle, err := testRuntimeFactory().Build(
+		context.Background(), dir, dir, "~default", "",
+		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
+		"", factory.RuntimeLogStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
+		testRuntimeOpening(newTestRuntimeLedger),
+		testRuntimeWorkers{},
+		testRuntimeWorkerSessionsFactory(t),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	workflowContext, ok := bundle.Factory.(factory.WorkflowContextProvider)
+	if !ok {
+		t.Fatalf("Factory = %T, want WorkflowContextProvider", bundle.Factory)
+	}
+	if got := workflowContext.WorkflowContext().SessionID; got != "~default" {
+		t.Fatalf("workflow context session ID = %q, want effective compatibility identity %q", got, "~default")
+	}
+}
+
 func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *testing.T) {
 	dir := t.TempDir()
 	logDir := t.TempDir()
@@ -421,10 +510,11 @@ func testRuntimeOpening(
 }
 
 type testRuntimeOpeningStub struct {
-	ledger         recordings.RuntimeEventLedger
-	ledgerFactory  func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
-	recorder       recordings.RuntimeRecorder
-	capturedSource *recordings.InitialStructureSource
+	ledger          recordings.RuntimeEventLedger
+	ledgerFactory   func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
+	recorder        recordings.RuntimeRecorder
+	capturedSource  *recordings.InitialStructureSource
+	capturedRequest *recordings.RuntimeScopeRequest
 }
 
 func (opening *testRuntimeOpeningStub) OpenRuntime(
@@ -433,6 +523,9 @@ func (opening *testRuntimeOpeningStub) OpenRuntime(
 ) (recordings.RuntimeScopeResult, error) {
 	if opening.capturedSource != nil {
 		*opening.capturedSource = request.Topology
+	}
+	if opening.capturedRequest != nil {
+		*opening.capturedRequest = request
 	}
 	ledger := opening.ledger
 	if opening.ledgerFactory != nil {

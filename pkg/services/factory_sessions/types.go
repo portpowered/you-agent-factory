@@ -109,9 +109,10 @@ type OpenResult struct {
 // returned by Service. Function fields keep cursor behavior explicit without
 // publishing an additional service-root interface.
 type ResponseEventCursor struct {
-	NextEvents   func(context.Context) ([]FactoryResponseEvent, error)
-	DrainEvents  func() ([]FactoryResponseEvent, error)
-	DetachCursor func()
+	NextEvents           func(context.Context) ([]FactoryResponseEvent, error)
+	DrainEvents          func() ([]FactoryResponseEvent, error)
+	DetachCursor         func()
+	RetainedEventCountFn func() (int, bool)
 }
 
 func (c *ResponseEventCursor) Next(ctx context.Context) ([]FactoryResponseEvent, error) {
@@ -121,6 +122,17 @@ func (c *ResponseEventCursor) Next(ctx context.Context) ([]FactoryResponseEvent,
 func (c *ResponseEventCursor) Drain() ([]FactoryResponseEvent, error) { return c.DrainEvents() }
 
 func (c *ResponseEventCursor) Detach() { c.DetachCursor() }
+
+// RetainedEventCount reports the exact number of records captured by this
+// cursor's retained-history prefix, when the cursor implementation can expose
+// that boundary. The boolean is false for compatibility cursors that cannot
+// provide a point-in-time prefix count.
+func (c *ResponseEventCursor) RetainedEventCount() (int, bool) {
+	if c == nil || c.RetainedEventCountFn == nil {
+		return 0, false
+	}
+	return c.RetainedEventCountFn()
+}
 
 var (
 	// ErrResponseEventStoreExpired reports that a completed response-event

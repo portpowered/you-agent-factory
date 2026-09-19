@@ -271,17 +271,30 @@ const (
 
 // RuntimeEvidenceRecord is the private, ordered representation shared by the
 // Models runtime and its integration witness. It deliberately contains only
-// bounded enums, elapsed time, and a cause digest; callers never publish a
-// raw error, endpoint, path, prompt, token, or media payload through it.
+// bounded enums, elapsed time, cause digests, and bounded managed-process
+// terminal facts; callers never publish a raw error, endpoint, path, prompt,
+// token, or media payload through it.
 type RuntimeEvidenceRecord struct {
-	Sequence       uint64                 `json:"sequence"`
-	Kind           string                 `json:"kind"`
-	Stage          RuntimeStage           `json:"stage,omitempty"`
-	Outcome        string                 `json:"outcome"`
-	Class          RuntimeFailureClass    `json:"failure_class,omitempty"`
-	Subcause       RuntimeFailureSubcause `json:"failure_subcause,omitempty"`
-	DurationMillis int64                  `json:"duration_millis"`
-	CauseSHA256    string                 `json:"cause_sha256,omitempty"`
+	Sequence             uint64                 `json:"sequence"`
+	Kind                 string                 `json:"kind"`
+	Stage                RuntimeStage           `json:"stage,omitempty"`
+	Outcome              string                 `json:"outcome"`
+	Class                RuntimeFailureClass    `json:"failure_class,omitempty"`
+	Subcause             RuntimeFailureSubcause `json:"failure_subcause,omitempty"`
+	DurationMillis       int64                  `json:"duration_millis"`
+	CauseSHA256          string                 `json:"cause_sha256,omitempty"`
+	ExitClass            string                 `json:"exit_class,omitempty"`
+	ExitCode             int                    `json:"exit_code,omitempty"`
+	ExitCodeKnown        bool                   `json:"exit_code_known,omitempty"`
+	StdoutBytes          uint64                 `json:"stdout_bytes,omitempty"`
+	StdoutSHA256         string                 `json:"stdout_sha256,omitempty"`
+	StdoutTruncated      bool                   `json:"stdout_truncated,omitempty"`
+	StderrBytes          uint64                 `json:"stderr_bytes,omitempty"`
+	StderrSHA256         string                 `json:"stderr_sha256,omitempty"`
+	StderrTruncated      bool                   `json:"stderr_truncated,omitempty"`
+	CauseCode            string                 `json:"cause_code,omitempty"`
+	CauseMessage         string                 `json:"cause_message,omitempty"`
+	CauseMessageRedacted bool                   `json:"cause_message_redacted,omitempty"`
 }
 
 // RuntimeEvidenceRecorder accepts one private runtime observation. The
@@ -413,23 +426,55 @@ func RecordRuntimeEvidenceStage(
 	err error,
 	elapsed time.Duration,
 ) {
+	recordRuntimeEvidenceStage(recorder, stage, err, elapsed, HostProcessDiagnosticSnapshot{}, false)
+}
+
+// RecordRuntimeEvidenceStageWithHostProcessDiagnostic emits one bounded stage
+// observation and attaches the optional terminal facts to that same record.
+// The helper is intentionally private to the Models effects boundary so the
+// Runtime Host cannot create a second process-diagnostic record.
+func RecordRuntimeEvidenceStageWithHostProcessDiagnostic(
+	recorder RuntimeEvidenceRecorder,
+	stage RuntimeStage,
+	err error,
+	elapsed time.Duration,
+	snapshot HostProcessDiagnosticSnapshot,
+) {
+	recordRuntimeEvidenceStage(recorder, stage, err, elapsed, snapshot, true)
+}
+
+func recordRuntimeEvidenceStage(
+	recorder RuntimeEvidenceRecorder,
+	stage RuntimeStage,
+	err error,
+	elapsed time.Duration,
+	snapshot HostProcessDiagnosticSnapshot,
+	hasSnapshot bool,
+) {
 	if isNilRuntimeEvidenceRecorder(recorder) {
 		return
 	}
 	if err == nil {
-		recorder.RecordRuntimeEvidence(RuntimeEvidenceRecord{
+		record := RuntimeEvidenceRecord{
 			Kind:           RuntimeEvidenceKindStage,
 			Stage:          normalizeRuntimeStage(stage),
 			Outcome:        RuntimeEvidenceOutcomeCompleted,
 			DurationMillis: durationMillis(elapsed),
-		})
+		}
+		recorder.RecordRuntimeEvidence(record)
 		return
 	}
 	diagnostic := ProjectRuntimeFailure(WrapRuntimeFailure(stage, err), elapsed)
-	recorder.RecordRuntimeEvidence(runtimeEvidenceRecordFromDiagnostic(
+	record := runtimeEvidenceRecordFromDiagnostic(
 		RuntimeEvidenceKindStage,
 		diagnostic,
-	))
+	)
+	if hasSnapshot {
+		if attached, ok := attachHostProcessDiagnostic(record, snapshot); ok {
+			record = attached
+		}
+	}
+	recorder.RecordRuntimeEvidence(record)
 }
 
 // RecordRuntimeEvidenceTerminal emits the single bounded terminal decision
@@ -478,13 +523,7 @@ func runtimeEvidenceRecordFromDiagnostic(
 func normalizeRuntimeEvidenceRecord(
 	record RuntimeEvidenceRecord,
 ) (RuntimeEvidenceRecord, bool) {
-	if record.Kind != RuntimeEvidenceKindStage && record.Kind != RuntimeEvidenceKindTerminal {
-		return RuntimeEvidenceRecord{}, false
-	}
-	if !isRuntimeStage(record.Stage) {
-		return RuntimeEvidenceRecord{}, false
-	}
-	if record.Outcome != RuntimeEvidenceOutcomeCompleted && record.Outcome != RuntimeEvidenceOutcomeFailed {
+	if !validRuntimeEvidenceRecordShape(record) {
 		return RuntimeEvidenceRecord{}, false
 	}
 	if record.DurationMillis < 0 {
@@ -494,8 +533,21 @@ func normalizeRuntimeEvidenceRecord(
 		record.Class = ""
 		record.Subcause = ""
 		record.CauseSHA256 = ""
+		record = clearHostProcessDiagnostic(record)
 		return record, true
 	}
+	return normalizeFailedRuntimeEvidenceRecord(record)
+}
+
+func validRuntimeEvidenceRecordShape(record RuntimeEvidenceRecord) bool {
+	return (record.Kind == RuntimeEvidenceKindStage || record.Kind == RuntimeEvidenceKindTerminal) &&
+		isRuntimeStage(record.Stage) &&
+		(record.Outcome == RuntimeEvidenceOutcomeCompleted || record.Outcome == RuntimeEvidenceOutcomeFailed)
+}
+
+func normalizeFailedRuntimeEvidenceRecord(
+	record RuntimeEvidenceRecord,
+) (RuntimeEvidenceRecord, bool) {
 	if !isRuntimeFailureClass(record.Class) || !validRuntimeCauseSHA256(record.CauseSHA256) {
 		return RuntimeEvidenceRecord{}, false
 	}
@@ -508,7 +560,33 @@ func normalizeRuntimeEvidenceRecord(
 	}
 	record.Subcause = normalizeRuntimeFailureSubcause(record.Subcause)
 	record.CauseSHA256 = strings.ToLower(record.CauseSHA256)
-	return record, true
+	return normalizeRuntimeEvidenceHostProcess(record), true
+}
+
+func normalizeRuntimeEvidenceHostProcess(record RuntimeEvidenceRecord) RuntimeEvidenceRecord {
+	if !runtimeEvidenceHasHostProcessDiagnostic(record) {
+		return record
+	}
+	normalized, ok := attachHostProcessDiagnostic(record, HostProcessDiagnosticSnapshot{
+		ExitClass:     record.ExitClass,
+		ExitCode:      record.ExitCode,
+		ExitCodeKnown: record.ExitCodeKnown,
+		Stdout: HostProcessStreamDiagnostic{
+			Bytes: record.StdoutBytes, SHA256: record.StdoutSHA256,
+			Truncated: record.StdoutTruncated,
+		},
+		Stderr: HostProcessStreamDiagnostic{
+			Bytes: record.StderrBytes, SHA256: record.StderrSHA256,
+			Truncated: record.StderrTruncated,
+		},
+		CauseCode:            record.CauseCode,
+		CauseMessage:         record.CauseMessage,
+		CauseMessageRedacted: record.CauseMessageRedacted,
+	})
+	if !ok {
+		return clearHostProcessDiagnostic(record)
+	}
+	return normalized
 }
 
 func validRuntimeCauseSHA256(value string) bool {

@@ -23,20 +23,21 @@ import (
 // Registration contains the host-independent state needed to register one
 // live Factory Session runtime.
 type Registration struct {
-	SessionID               string
-	RuntimeFactorySessionID string
-	RuntimeEventSessionID   string
-	FactoryDir              string
-	FolderPath              string
-	ExecutionBaseDir        string
-	Target                  factorysessions.TargetRef
-	Handle                  any
-	Runtime                 *factorysessions.LiveRuntime
-	Default                 bool
-	Project                 string
-	Select                  bool
-	AllocateDefaultID       bool
-	AddEventTypeRecorder    func(func(interfaces.FactoryEventType))
+	SessionID                     string
+	RuntimeFactorySessionID       string
+	RuntimeEventSessionID         string
+	FactoryDir                    string
+	FolderPath                    string
+	ExecutionBaseDir              string
+	Target                        factorysessions.TargetRef
+	Handle                        any
+	Runtime                       *factorysessions.LiveRuntime
+	Default                       bool
+	Project                       string
+	Select                        bool
+	AllocateDefaultID             bool
+	AddEventTypeRecorder          func(func(interfaces.FactoryEventType))
+	AddEventTypeRecorderWithReady func(func(interfaces.FactoryEventType), func())
 }
 
 // RegistrationInput contains raw runtime and target paths used to normalize a
@@ -334,7 +335,7 @@ func (s *Service) Register(registration Registration) string {
 	}
 	session.RetainedRuntimeMetricsSessionIDs = retainedMetricsSessionIDs
 	session.Runtime = registration.Runtime
-	s.bindResponseEventCompletion(session, registration.AddEventTypeRecorder)
+	s.bindResponseEventCompletion(session, registration.AddEventTypeRecorder, registration.AddEventTypeRecorderWithReady)
 	s.registry.Upsert(session, registration.Select)
 	return sessionID
 }
@@ -374,23 +375,53 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	return session
 }
 
-func (s *Service) bindResponseEventCompletion(session *livesession.LiveSession, addRecorder func(func(interfaces.FactoryEventType))) {
-	if session == nil || addRecorder == nil {
+func (s *Service) bindResponseEventCompletion(
+	session *livesession.LiveSession,
+	addRecorder func(func(interfaces.FactoryEventType)),
+	addRecorderWithReady func(func(interfaces.FactoryEventType), func()),
+) {
+	if session == nil || (addRecorder == nil && addRecorderWithReady == nil) {
 		return
 	}
-	if s.responseEvents != nil {
-		addRecorder(func(eventType interfaces.FactoryEventType) {
-			if eventType == interfaces.FactoryEventTypeSessionCompleted {
+	// The concrete event-history registrar invokes ready while its history lock
+	// still excludes concurrent appends. This makes the replay-to-live handoff
+	// one synchronization boundary instead of a boolean written after a
+	// callback registration has already returned.
+	var handoffMu sync.Mutex
+	liveTail := false
+	var completeOnce sync.Once
+	complete := func() {
+		completeOnce.Do(func() {
+			if s.responseEvents != nil {
 				s.responseEvents.Complete(session.ResponseEvents)
+				return
 			}
-		})
-	} else {
-		addRecorder(func(eventType interfaces.FactoryEventType) {
-			if eventType == interfaces.FactoryEventTypeSessionCompleted {
-				session.CompleteResponseEvents()
-			}
+			session.CompleteResponseEvents()
 		})
 	}
+	recordTerminal := func(eventType interfaces.FactoryEventType) {
+		handoffMu.Lock()
+		shouldComplete := liveTail && eventType == interfaces.FactoryEventTypeSessionCompleted
+		handoffMu.Unlock()
+		if !shouldComplete {
+			return
+		}
+		complete()
+	}
+	armLiveTail := func() {
+		handoffMu.Lock()
+		liveTail = true
+		handoffMu.Unlock()
+	}
+	if addRecorderWithReady != nil {
+		addRecorderWithReady(recordTerminal, armLiveTail)
+		return
+	}
+	// Older test doubles and hosted-era adapters do not expose the stronger
+	// registrar. Keep their registration behavior compatible; production
+	// bundles use AddEventTypeRecorderWithReady above.
+	addRecorder(recordTerminal)
+	armLiveTail()
 }
 
 // Unregister closes session-owned streams and removes the live session.

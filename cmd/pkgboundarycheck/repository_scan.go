@@ -297,6 +297,12 @@ func scanRepositoryProcessBoundaries(repoRoot string, result *scanResult) error 
 	if err != nil {
 		return err
 	}
+	if hasProcessEdgeContractSurface(repoRoot) {
+		result.processEdgeContractFindings, err = scanProcessEdgeContracts(repoRoot)
+		if err != nil {
+			return err
+		}
+	}
 	result.testWorkNormalizationFindings, err = scanTestWorkNormalization(repoRoot)
 	return err
 }

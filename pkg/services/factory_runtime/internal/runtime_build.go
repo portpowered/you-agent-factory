@@ -485,6 +485,7 @@ func newRuntimeWorkersService(
 	runtimeFactory *RuntimeFactory,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) workers.Service {
+	canonicalSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
 	var invocationOverride *bool
 	if invocationSkipPermissionsOverride != nil {
 		value := *invocationSkipPermissionsOverride
@@ -499,7 +500,7 @@ func newRuntimeWorkersService(
 		modelInvocationOverride:           spec.ModelInvocationOverride,
 		skipBuiltInPrerequisiteValidation: skipBuiltInPrerequisiteValidation,
 		invocationSkipPermissionsOverride: invocationOverride,
-		factorySessionID:                  sessionID,
+		factorySessionID:                  canonicalSessionID,
 		runtimeID:                         spec.RuntimeInstanceID,
 		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
 	}
@@ -510,8 +511,8 @@ func newRuntimeWorkersService(
 			InvocationInterpolation:    runtimeFactory.invocationInterpolation,
 			InvocationFileReader:       invocationFileReader(runtimeFactory.inputFiles),
 			PromptSourceReader:         invocationFileReader(runtimeFactory.inputFiles),
-			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), sessionID),
-			FactorySessionID:           sessionID,
+			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID),
+			FactorySessionID:           canonicalSessionID,
 			RuntimeID:                  spec.RuntimeInstanceID,
 			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
 			NewID:                      runtimeFactory.newID,

@@ -801,11 +801,33 @@ func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
-	observation, err = s.withRecordingHealth(ctx, observation)
+	observation, err = s.withLiveRecordingHealth(ctx, observation)
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
 	return s.confirmedObservation(observation), nil
+}
+
+func (s *recordedWorkerSessionObservation) withLiveRecordingHealth(
+	ctx context.Context,
+	observation workersessions.Observation,
+) (workersessions.Observation, error) {
+	// A resumed runtime owns live attempts restored from its historical prefix,
+	// but the process-local registry can also return attempts admitted by another
+	// Factory Session. Rebind only restored lineage and preserve that foreign
+	// attempt's authoritative live identity for the fleet reader.
+	if s.liveObservationBelongsToRestoredPrefix(observation) {
+		return s.withRecordingHealth(ctx, observation)
+	}
+	health, err := s.recordingHealth(ctx)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	if current, ok := health[observation.WorkerSessionID]; ok {
+		observation.RecordingHealth = current.status
+		observation.RecordingHealthReason = current.reason
+	}
+	return observation, nil
 }
 
 func (s *recordedWorkerSessionObservation) ReadTranscript(

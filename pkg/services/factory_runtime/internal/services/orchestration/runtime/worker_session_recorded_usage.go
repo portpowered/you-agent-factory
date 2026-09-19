@@ -969,3 +969,21 @@ func newRecordedWorkerSessionObservationWithRestoredState(
 		factorySessionID:    factorySessionID,
 	}
 }
+
+func (s *recordedWorkerSessionObservation) liveObservationBelongsToRestoredPrefix(
+	observation workersessions.Observation,
+) bool {
+	if s == nil || observation.Direct || len(s.restoredEventPrefix) == 0 {
+		return false
+	}
+	observationSessionID := strings.TrimSpace(observation.FactorySessionID)
+	if observationSessionID == "" {
+		return false
+	}
+	for _, event := range s.restoredEventPrefix {
+		if event.Context.SessionID != nil && strings.TrimSpace(*event.Context.SessionID) == observationSessionID {
+			return true
+		}
+	}
+	return false
+}

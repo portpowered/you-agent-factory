@@ -703,7 +703,7 @@ func (f *factoryImpl) PlanDispatch(
 			Execution: dispatchplanning.ExecutionFacts{
 				WorkerType:       req.WorkerType,
 				InputPayload:     make([]any, 0),
-				FactorySessionID: sessionIDFromFactoryConfig(f.cfg),
+				FactorySessionID: canonicalSessionIDFromFactoryConfig(f.cfg),
 				RecordingID:      f.cfg.recordingID,
 			},
 		}},

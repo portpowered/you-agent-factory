@@ -365,6 +365,8 @@ func (hostedRuntime) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
 func (hostedRuntime) CanonicalEvents() []interfaces.FactoryEvent { return nil }
 func (hostedRuntime) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {
 }
+func (hostedRuntime) AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func()) {
+}
 func (hostedRuntime) StreamGeneration() string                      { return "" }
 func (runtime hostedRuntime) RuntimeLogger() *zap.Logger            { return runtime.logger }
 func (hostedRuntime) RuntimeMetrics() factoryruntime.MetricsEmitter { return nil }

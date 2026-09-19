@@ -25,6 +25,7 @@ type RuntimeRecord interface {
 	LoadedRuntimeConfig() LoadedConfig
 	CanonicalEvents() []interfaces.FactoryEvent
 	AddEventTypeRecorder(func(interfaces.FactoryEventType))
+	AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func())
 	StreamGeneration() string
 	RuntimeLogger() *zap.Logger
 	RuntimeMetrics() MetricsEmitter

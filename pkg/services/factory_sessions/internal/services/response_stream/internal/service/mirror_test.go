@@ -250,6 +250,92 @@ func TestService_PublishFailsAtomicallyWhenEventsRejectsTheAppend(t *testing.T) 
 	}
 }
 
+func TestService_PublishAfterCompletionReturnsTypedErrorWithoutAuthorityMutation(t *testing.T) {
+	t.Parallel()
+
+	eventsService := newTestEventsService(t)
+	service, err := serviceWithEvents(t, eventsService)
+	if err != nil {
+		t.Fatalf("construct response-stream service: %v", err)
+	}
+	store := newStore(t, service)
+	published := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-before-terminal")
+	topic := responseEventTopicForTest(store.FactorySessionID())
+	before := readMirrorAuthority(t, eventsService, topic, "before completion")
+	assertMirrorAuthorityHasOneRecord(t, before, "before completion")
+	completeMirrorStore(t, service, store)
+	assertRejectedMirrorPublish(t, service, store)
+	assertMirrorStoreAndAuthorityUnchanged(t, eventsService, store, topic, published, before)
+}
+
+func readMirrorAuthority(t testing.TB, service events.Service, topic events.Topic, phase string) events.ReadResult {
+	t.Helper()
+	result, err := service.Read(context.Background(), events.ReadRequest{
+		Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("read authority %s: %v", phase, err)
+	}
+	return result
+}
+
+func assertMirrorAuthorityHasOneRecord(t testing.TB, result events.ReadResult, phase string) {
+	t.Helper()
+	if result.Outcome != events.ReadOutcomeProgress || len(result.Records) != 1 {
+		t.Fatalf("authority %s = outcome %v records %d, want one progress record", phase, result.Outcome, len(result.Records))
+	}
+}
+
+func completeMirrorStore(t testing.TB, service responsestreamservice.Service, store *responseeventstore.SessionResponseEventStore) {
+	t.Helper()
+	service.Complete(store)
+	if store.CompletedAt().IsZero() {
+		t.Fatal("CompletedAt is zero after service.Complete")
+	}
+}
+
+func assertRejectedMirrorPublish(t testing.TB, service responsestreamservice.Service, store *responseeventstore.SessionResponseEventStore) {
+	t.Helper()
+	postTerminal := responseevents.FactoryResponseEvent{
+		DispatchID: "dispatch-after-terminal", RunID: "run-1",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "test", NativeEventType: "delta",
+			Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta,
+			Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":1,"contentBlockKind":"TEXT","textDelta":"late"}`),
+	}
+	if _, err := service.Publish(store, postTerminal); !errors.Is(err, responseeventstore.ErrStoreCompleted) {
+		t.Fatalf("post-terminal Publish error = %v, want ErrStoreCompleted", err)
+	}
+}
+
+func assertMirrorStoreAndAuthorityUnchanged(
+	t testing.TB,
+	eventsService events.Service,
+	store *responseeventstore.SessionResponseEventStore,
+	topic events.Topic,
+	published responseevents.FactoryResponseEvent,
+	before events.ReadResult,
+) {
+	t.Helper()
+	if got := store.LatestSequence(); got != published.Sequence {
+		t.Fatalf("store.LatestSequence after rejected post-terminal publish = %d, want %d", got, published.Sequence)
+	}
+	retained := store.Events()
+	if len(retained) != 1 || retained[0].EventID != published.EventID || retained[0].Sequence != published.Sequence {
+		t.Fatalf("retained events after rejected post-terminal publish = %#v, want only %q at sequence %d", retained, published.EventID, published.Sequence)
+	}
+	after := readMirrorAuthority(t, eventsService, topic, "after rejected post-terminal publish")
+	if after.Outcome != events.ReadOutcomeProgress || len(after.Records) != len(before.Records) {
+		t.Fatalf("authority after completion = outcome %v records %d, want unchanged progress record count %d", after.Outcome, len(after.Records), len(before.Records))
+	}
+	if after.Records[0].ID != before.Records[0].ID || after.Records[0].SourceEventID != before.Records[0].SourceEventID || string(after.Records[0].Payload) != string(before.Records[0].Payload) {
+		t.Fatalf("authority record changed after rejected post-terminal publish: before=%#v after=%#v", before.Records[0], after.Records[0])
+	}
+}
+
 // TestService_ConcurrentPublishAndCompletionNeverDivergesFromEvents races
 // Publish against Complete/Close on the same store -- the exact interleaving
 // the earlier two-phase-commit design could lose (an Events-accepted record
