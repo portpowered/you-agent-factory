@@ -55,7 +55,7 @@ func waitForBoardStartupLogBeforeReadiness(
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for {
-		if path := boardPersistenceFirstNonEmptyLog(daemon.logDir); path != "" {
+		if path := boardPersistenceFirstLog(daemon.logDir); path != "" {
 			if boardPersistenceDaemonReady(t, daemon) {
 				t.Fatalf("successor reached public readiness before the parent observed runtime log write %q", path)
 			}
@@ -73,7 +73,7 @@ func waitForBoardStartupLogBeforeReadiness(
 					}
 				}
 			}
-			if event.Op&fsnotify.Write != 0 && strings.HasSuffix(strings.ToLower(event.Name), ".log") {
+			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 && strings.HasSuffix(strings.ToLower(event.Name), ".log") {
 				if boardPersistenceDaemonReady(t, daemon) {
 					t.Fatalf("successor reached public readiness before the parent observed runtime log write %q", event.Name)
 				}
@@ -93,18 +93,14 @@ func waitForBoardStartupLogBeforeReadiness(
 	}
 }
 
-func boardPersistenceFirstNonEmptyLog(logDir string) string {
+func boardPersistenceFirstLog(logDir string) string {
 	var first string
 	_ = filepath.WalkDir(logDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
 			return nil
 		}
-		info, err := entry.Info()
-		if err == nil && info.Size() > 0 {
-			first = path
-			return filepath.SkipAll
-		}
-		return nil
+		first = path
+		return filepath.SkipAll
 	})
 	return first
 }
