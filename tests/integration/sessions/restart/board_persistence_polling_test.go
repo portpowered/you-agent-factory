@@ -49,18 +49,17 @@ func waitForBoardStartupLogBeforeReadiness(
 	t *testing.T,
 	daemon *boardPersistenceDaemon,
 	watcher *fsnotify.Watcher,
-	fragments []string,
 	timeout time.Duration,
-) {
+) string {
 	t.Helper()
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	for {
-		if boardPersistenceLogsContain(daemon.logDir, fragments) {
+		if path := boardPersistenceFirstNonEmptyLog(daemon.logDir); path != "" {
 			if boardPersistenceDaemonReady(t, daemon) {
-				t.Fatalf("successor reached public readiness before the parent observed startup log %q", fragments)
+				t.Fatalf("successor reached public readiness before the parent observed runtime log write %q", path)
 			}
-			return
+			return path
 		}
 		select {
 		case event, ok := <-watcher.Events:
@@ -74,6 +73,12 @@ func waitForBoardStartupLogBeforeReadiness(
 					}
 				}
 			}
+			if event.Op&fsnotify.Write != 0 && strings.HasSuffix(strings.ToLower(event.Name), ".log") {
+				if boardPersistenceDaemonReady(t, daemon) {
+					t.Fatalf("successor reached public readiness before the parent observed runtime log write %q", event.Name)
+				}
+				return event.Name
+			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				t.Fatal("runtime log watcher error stream closed before startup barrier")
@@ -83,30 +88,38 @@ func waitForBoardStartupLogBeforeReadiness(
 			dumpBoardPersistenceDiagnostics(t, daemon)
 			t.Fatalf("successor exited before observed startup barrier: %v", daemon.waitError())
 		case <-deadline.C:
-			t.Fatalf("timed out waiting for startup log %q before readiness in %q", fragments, daemon.logDir)
+			t.Fatalf("timed out waiting for runtime log write before readiness in %q", daemon.logDir)
 		}
 	}
 }
 
-func boardPersistenceLogsContain(logDir string, fragments []string) bool {
-	found := false
-	_ = filepath.WalkDir(logDir, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+func boardPersistenceFirstNonEmptyLog(logDir string) string {
+	var first string
+	_ = filepath.WalkDir(logDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
 			return nil
 		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return nil
+		info, err := entry.Info()
+		if err == nil && info.Size() > 0 {
+			first = path
+			return filepath.SkipAll
 		}
-		for _, fragment := range fragments {
-			if !strings.Contains(string(contents), fragment) {
-				return nil
-			}
-		}
-		found = true
-		return filepath.SkipAll
+		return nil
 	})
-	return found
+	return first
+}
+
+func assertBoardStartupLogContains(t *testing.T, path string, fragments []string) {
+	t.Helper()
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read successor startup log %q after exit: %v", path, err)
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(string(contents), fragment) {
+			t.Fatalf("successor startup log %q does not contain %q", path, fragment)
+		}
+	}
 }
 
 func boardPersistenceDaemonReady(t *testing.T, daemon *boardPersistenceDaemon) bool {
