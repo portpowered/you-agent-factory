@@ -787,6 +787,45 @@ func TestStreamObservationsByWorkerSessionIDPassesCursorToLiveSubscribe(t *testi
 	}
 }
 
+func TestStreamObservationsByWorkerSessionIDCloseCancelsBlockedNext(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	reader := &observationEventReaderFake{subscription: events.Subscription(func(ctx context.Context) events.Delivery {
+		close(started)
+		<-ctx.Done()
+		return events.Delivery{Kind: events.DeliveryCanceled}
+	})}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+
+	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-1",
+	})
+	if err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID() error = %v", err)
+	}
+
+	delivery := make(chan workersessions.ObservationDelivery, 1)
+	go func() { delivery <- subscription.Next(context.Background()) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("live subscription did not enter its blocking Next call")
+	}
+	subscription.Close()
+	subscription.Close()
+
+	select {
+	case got := <-delivery:
+		if got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
+			t.Fatalf("closed live delivery = %#v, want typed canceled outcome", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close() did not unblock the active live Next call")
+	}
+}
+
 func TestReplayObservationSubscriptionRejectsInitialReadFailures(t *testing.T) {
 	topic := workersessions.Topic("worker-1")
 	valid := replayProgressResult(topic, 1, 1)

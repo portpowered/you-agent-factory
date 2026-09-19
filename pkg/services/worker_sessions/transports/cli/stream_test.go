@@ -89,6 +89,52 @@ func TestStreamByWorkerSessionIDUsesTopLevelIdentityRoute(t *testing.T) {
 	}
 }
 
+func TestStreamByWorkerSessionIDUsesFactorySessionScopedIdentityRoute(t *testing.T) {
+	var gotPath string
+	var gotQuery map[string][]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w,
+			"data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-1\",\"factorySessionId\":\"session-1\",\"providerSession\":{\"provider\":\"codex\",\"kind\":\"session_id\",\"id\":\"provider-1\"},\"workIds\":[\"work-1\"],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-1\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{}},\"errorCode\":null,\"errorMessage\":null}\n\n",
+			"data: {\"delivery\":\"REPLAY_SUMMARY\",\"workerSessionId\":\"worker-1\",\"factorySessionId\":\"session-1\",\"providerSession\":{\"provider\":\"codex\",\"kind\":\"session_id\",\"id\":\"provider-1\"},\"workIds\":[\"work-1\"],\"event\":null,\"errorCode\":null,\"errorMessage\":null,\"replaySummary\":{\"kind\":\"replay-summary\",\"complete\":false,\"reason\":\"session-active\",\"eventsEmitted\":1}}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, SessionID: "session-1",
+		WorkerSessionID: "worker-1", ReplayOnly: true, OutputFormat: "json", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	if gotPath != "/factory-sessions/session-1/worker-sessions/worker-1/events" || len(gotQuery) != 1 || len(gotQuery["replayOnly"]) != 1 || gotQuery["replayOnly"][0] != "true" {
+		t.Fatalf("request = path=%q query=%#v, want Factory Session scoped identity stream", gotPath, gotQuery)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("JSON stream lines = %d, output=%q, want event and replay summary", len(lines), output.String())
+	}
+	var frame map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(lines[0]), &frame); err != nil {
+		t.Fatalf("decode scoped stream frame: %v", err)
+	}
+	var factorySessionID string
+	var workIDs []string
+	if err := json.Unmarshal(frame["factorySessionId"], &factorySessionID); err != nil {
+		t.Fatalf("decode stream Factory Session ID: %v", err)
+	}
+	if err := json.Unmarshal(frame["workIds"], &workIDs); err != nil {
+		t.Fatalf("decode stream Work IDs: %v", err)
+	}
+	if factorySessionID != "session-1" || len(workIDs) != 1 || workIDs[0] != "work-1" {
+		t.Fatalf("stream frame identity = factorySession:%q workIds:%v, want session-1/work-1", factorySessionID, workIDs)
+	}
+}
+
 func TestStreamReplayOnlyWritesEventFramesAndFinalSummary(t *testing.T) {
 	var gotReplayOnly string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,8 +269,8 @@ func TestStreamHumanRendersExplicitSourceFailureAndReturnsStableError(t *testing
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprint(w,
-			"data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":{\"provider\":\"cursor\",\"kind\":\"session_id\",\"id\":\"cursor-session-1\"},\"workIds\":[],\"event\":{\"position\":4,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-1\",\"sourceSequence\":4,\"sourceEventId\":\"event-4\",\"schemaId\":\"worker_session.output\",\"payload\":{\"text\":\"hello\"}},\"errorCode\":null,\"errorMessage\":null}\n\n",
-			"data: {\"delivery\":\"SOURCE_FAILURE\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":{\"provider\":\"cursor\",\"kind\":\"session_id\",\"id\":\"cursor-session-1\"},\"workIds\":[],\"event\":null,\"errorCode\":\"WORKER_SESSION_STREAM_GAP\",\"errorMessage\":\"retained Worker Session event history is unavailable\"}\n\n",
+			"data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"factorySessionId\":\"factory-session-1\",\"providerSession\":{\"provider\":\"cursor\",\"kind\":\"session_id\",\"id\":\"cursor-session-1\"},\"workIds\":[],\"event\":{\"position\":4,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-1\",\"sourceSequence\":4,\"sourceEventId\":\"event-4\",\"schemaId\":\"worker_session.output\",\"payload\":{\"text\":\"hello\"}},\"errorCode\":null,\"errorMessage\":null}\n\n",
+			"data: {\"delivery\":\"SOURCE_FAILURE\",\"workerSessionId\":\"worker-session-1\",\"factorySessionId\":\"factory-session-1\",\"providerSession\":{\"provider\":\"cursor\",\"kind\":\"session_id\",\"id\":\"cursor-session-1\"},\"workIds\":[],\"event\":null,\"errorCode\":\"WORKER_SESSION_STREAM_GAP\",\"errorMessage\":\"retained Worker Session event history is unavailable\"}\n\n",
 		)
 	}))
 	defer server.Close()
@@ -240,7 +286,7 @@ func TestStreamHumanRendersExplicitSourceFailureAndReturnsStableError(t *testing
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_GAP" {
 		t.Fatalf("error = %v, want WORKER_SESSION_STREAM_GAP", err)
 	}
-	for _, want := range []string{"delivery=RECORD", "position=4", "payload={\"text\":\"hello\"}", "delivery=SOURCE_FAILURE", "errorCode=WORKER_SESSION_STREAM_GAP"} {
+	for _, want := range []string{"delivery=RECORD", "factorySession=factory-session-1", "position=4", "payload={\"text\":\"hello\"}", "delivery=SOURCE_FAILURE", "errorCode=WORKER_SESSION_STREAM_GAP"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("human output %q missing %q", output.String(), want)
 		}
