@@ -392,33 +392,10 @@ func loadRuntimeReplay(
 		if !historicalInspection {
 			return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
 		}
-		reconstructor, ok := replayInputs.(interface {
-			ReconstructCanonicalFactoryWorldState([]recording.FactoryEvent, int) (recording.FactoryWorldState, error)
-		})
-		if !ok {
-			// A few narrow compatibility tests pass an intentionally incomplete
-			// synthetic artifact through the old loader-only capability. Keep that
-			// fixture path available, while a structurally valid artifact must not
-			// silently fall back to live activation when its canonical projection
-			// capability is missing.
-			if !legacyReplayArtifactHasCanonicalEventShape(*result.Legacy) {
-				return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
-			}
-			return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: canonical Factory projection capability is required")
+		if !selectsHistoricalReplayInspection(result) {
+			return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
 		}
-		selectedTick := legacyReplaySelectedTick(result.Legacy.Events)
-		state, err := reconstructor.ReconstructCanonicalFactoryWorldState(result.Legacy.Events, selectedTick)
-		if err != nil {
-			return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: reconstruct Factory projection: %w", err)
-		}
-		projection, err := recordingreplay.ReplayLegacyRecording(*result.Legacy, sessionID, state)
-		if err != nil {
-			return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: inspect historical recording: %w", err)
-		}
-		return runtimeReplayLoad{
-			legacyArtifact:   result.Legacy,
-			historicalReplay: &projection,
-		}, nil
+		return loadHistoricalLegacyReplay(replayInputs, result.Legacy, sessionID)
 	}
 	projection, err := recordingreplay.ReplayRecording(*result.Portable)
 	if err != nil {
@@ -427,6 +404,40 @@ func loadRuntimeReplay(
 	return runtimeReplayLoad{
 		portableRecording: result.Portable,
 		historicalReplay:  &projection,
+	}, nil
+}
+
+func loadHistoricalLegacyReplay(
+	replayInputs recording.ReplayInputLoader,
+	artifact *recording.ReplayArtifact,
+	sessionID string,
+) (runtimeReplayLoad, error) {
+	reconstructor, ok := replayInputs.(interface {
+		ReconstructCanonicalFactoryWorldState([]recording.FactoryEvent, int) (recording.FactoryWorldState, error)
+	})
+	if !ok {
+		// A few narrow compatibility tests pass an intentionally incomplete
+		// synthetic artifact through the old loader-only capability. Keep that
+		// fixture path available, while a structurally valid artifact must not
+		// silently fall back to live activation when its canonical projection
+		// capability is missing.
+		if !legacyReplayArtifactHasCanonicalEventShape(*artifact) {
+			return runtimeReplayLoad{legacyArtifact: artifact}, nil
+		}
+		return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: canonical Factory projection capability is required")
+	}
+	selectedTick := legacyReplaySelectedTick(artifact.Events)
+	state, err := reconstructor.ReconstructCanonicalFactoryWorldState(artifact.Events, selectedTick)
+	if err != nil {
+		return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: reconstruct Factory projection: %w", err)
+	}
+	projection, err := recordingreplay.ReplayLegacyRecording(*artifact, sessionID, state)
+	if err != nil {
+		return runtimeReplayLoad{}, fmt.Errorf("load legacy replay: inspect historical recording: %w", err)
+	}
+	return runtimeReplayLoad{
+		legacyArtifact:   artifact,
+		historicalReplay: &projection,
 	}, nil
 }
 

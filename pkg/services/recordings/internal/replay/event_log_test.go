@@ -1376,7 +1376,9 @@ func TestLoadReplayV2ForeignReferenceReturnsSafeFirstCorruptDiagnostic(t *testin
 				test.wantEvent,
 				test.wantKind,
 			)
-			if strings.Contains(err.Error(), path) || strings.Contains(err.Error(), "foreign-work") {
+			if strings.Contains(err.Error(), path) ||
+				strings.Contains(err.Error(), fmt.Sprintf("%q", path)) ||
+				strings.Contains(err.Error(), "foreign-work") {
 				t.Fatalf("LoadWithMetadata() leaked private or payload data: %v", err)
 			}
 		})

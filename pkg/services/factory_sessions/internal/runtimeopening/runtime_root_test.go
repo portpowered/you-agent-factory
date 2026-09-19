@@ -464,7 +464,10 @@ func (loader *canonicalProjectionReplayInputLoader) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
 	loader.loadCalls++
-	return recordings.LoadReplayInputResult{Legacy: loader.artifact}, nil
+	return recordings.LoadReplayInputResult{
+		Legacy:       loader.artifact,
+		LegacyFormat: string(recordings.RecordedSessionFormatV2JSONL),
+	}, nil
 }
 
 func (loader *canonicalProjectionReplayInputLoader) ReconstructCanonicalFactoryWorldState(

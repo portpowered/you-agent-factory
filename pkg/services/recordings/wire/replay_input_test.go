@@ -293,6 +293,9 @@ func TestReplayInputLoaderDelegatesLegacyArtifact(t *testing.T) {
 	if result.Legacy != want {
 		t.Fatalf("Legacy = %v, want %v", result.Legacy, want)
 	}
+	if result.LegacyFormat != string(recordings.RecordedSessionFormatV1JSON) {
+		t.Fatalf("LegacyFormat = %q, want %q", result.LegacyFormat, recordings.RecordedSessionFormatV1JSON)
+	}
 	if requestedPath != tempFile {
 		t.Fatalf("legacy loader path = %q, want %q", requestedPath, tempFile)
 	}
@@ -321,6 +324,9 @@ func TestReplayInputLoaderTreatsReplayV2JSONLAsLegacyDespiteNestedRecordingKind(
 	}
 	if result.Legacy != legacy || result.Portable != nil {
 		t.Fatalf("result = %#v, want legacy replay result", result)
+	}
+	if result.LegacyFormat != string(recordings.RecordedSessionFormatV2JSONL) {
+		t.Fatalf("LegacyFormat = %q, want %q", result.LegacyFormat, recordings.RecordedSessionFormatV2JSONL)
 	}
 	if legacyCalls != 1 {
 		t.Fatalf("legacy loader calls = %d, want 1", legacyCalls)

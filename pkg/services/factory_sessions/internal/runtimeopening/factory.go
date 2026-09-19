@@ -642,15 +642,13 @@ func (f *Factory) openForRequest(
 		// API and metrics surfaces. Keeping that distinction here prevents the
 		// inspection-only product from being wrapped in host-readiness or live
 		// transport lifecycle requirements.
-		if replayRequestsHistoricalInspection(request) &&
-			(input.Portable != nil || input.Legacy == nil || legacyReplayArtifactHasCanonicalEventShape(*input.Legacy)) {
+		if replayRequestsHistoricalInspection(request) && selectsHistoricalReplayInspection(input) {
 			return f.openRuntimeWithReplayInput(ctx, request, f.baseLogger, &input)
 		}
-		// Hosted replay retains the ordinary activated runtime path for both
-		// portable artifacts and structurally complete legacy artifacts. Keep
-		// intentionally incomplete synthetic inputs used by narrow compatibility
-		// callers on that same path; the real Recordings loader rejects such an
-		// artifact before this branch.
+		// Hosted replay and legacy V1 JSON retain the ordinary activated runtime
+		// path. Keep intentionally incomplete synthetic inputs used by narrow
+		// compatibility callers on that same path; the real Recordings loader
+		// reports the format before this branch.
 		return f.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
 	if request != nil && strings.TrimSpace(request.Recordings.ResumePath) != "" {
@@ -677,6 +675,19 @@ func replayRequestsHistoricalInspection(request *factorysessions.RuntimeOpeningR
 	// parsed AutoPort default. AutoPort is meaningful only with a concrete
 	// listener request, so the effective hosting decision is the resolved port.
 	return host.Port <= 0
+}
+
+func selectsHistoricalReplayInspection(input recordings.LoadReplayInputResult) bool {
+	if input.Portable != nil || input.Legacy == nil {
+		return true
+	}
+	if input.LegacyFormat != "" {
+		return input.LegacyFormat == string(recordings.RecordedSessionFormatV2JSONL)
+	}
+	// Preserve the established compatibility contract for narrow callers that
+	// return a legacy artifact without the newer framing metadata. Production
+	// path loaders always identify V1 versus V2 above.
+	return legacyReplayArtifactHasCanonicalEventShape(*input.Legacy)
 }
 
 // OpenInvocationRuntime opens one Factory Session and returns only the roles

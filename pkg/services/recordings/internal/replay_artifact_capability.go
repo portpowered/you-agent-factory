@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 var _ recordings.RecordingReplayArtifacts = (*combinedService)(nil)
@@ -198,7 +199,11 @@ func (loader *replayInputLoader) LoadReplayInput(
 	if isPortableReplayInput(data) {
 		return loader.loadPortableReplayInput(data)
 	}
-	return loader.loadLegacyReplayInput(request.Path)
+	legacyFormat := recordings.RecordedSessionFormatV1JSON
+	if replayimpl.IsReplayV2Artifact(data) {
+		legacyFormat = recordings.RecordedSessionFormatV2JSONL
+	}
+	return loader.loadLegacyReplayInput(request.Path, legacyFormat)
 }
 
 func isPortableReplayInput(data []byte) bool {
@@ -232,6 +237,7 @@ func (loader *replayInputLoader) loadPortableReplayInput(
 
 func (loader *replayInputLoader) loadLegacyReplayInput(
 	path string,
+	format recordings.RecordedSessionFormat,
 ) (recordings.LoadReplayInputResult, error) {
 	if loader.loadLegacy == nil {
 		return loader.replayInputDependencyFailure("legacy_loader_unavailable", fmt.Errorf("replay artifact loader is required"))
@@ -250,7 +256,10 @@ func (loader *replayInputLoader) loadLegacyReplayInput(
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy))
-	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+	return recordings.LoadReplayInputResult{
+		Legacy:       artifact,
+		LegacyFormat: string(format),
+	}, nil
 }
 
 func (loader *replayInputLoader) loadReplayInputMetadata(

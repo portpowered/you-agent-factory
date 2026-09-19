@@ -753,6 +753,12 @@ func LoadWithMetadata(
 	if IsReplayV2Artifact(data) {
 		artifact, stream, err := DecodeReplayV2(data, decodeFactorySnapshot)
 		if err != nil {
+			var replayErr *recordings.ReplayArtifactError
+			if errors.As(err, &replayErr) {
+				// ReplayArtifactError.Error renders only its detached diagnostic.
+				// Do not wrap it with the private source path at this boundary.
+				return nil, ReplayReadMetadata{}, replayErr
+			}
 			return nil, ReplayReadMetadata{}, fmt.Errorf("parse replay artifact %q: %w", path, err)
 		}
 		return artifact, ReplayReadMetadata{
