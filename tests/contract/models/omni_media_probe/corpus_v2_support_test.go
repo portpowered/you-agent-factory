@@ -467,7 +467,70 @@ func corpusV2ResolveContainedPath(root, path, field string) (string, error) {
 }
 
 func corpusV2SamePath(first, second string) bool {
-	return strings.EqualFold(corpusV2Slash(filepath.Clean(first)), corpusV2Slash(filepath.Clean(second)))
+	// Case-only spellings are equivalent only when the filesystem resolves
+	// them to one directory entry.
+	first, err := filepath.Abs(filepath.Clean(filepath.FromSlash(first)))
+	if err != nil {
+		return false
+	}
+	second, err = filepath.Abs(filepath.Clean(filepath.FromSlash(second)))
+	if err != nil {
+		return false
+	}
+	if first == second {
+		return true
+	}
+
+	firstVolume, firstParts, firstAbsolute := corpusV2PathComponents(first)
+	secondVolume, secondParts, secondAbsolute := corpusV2PathComponents(second)
+	if !firstAbsolute || !secondAbsolute || !strings.EqualFold(firstVolume, secondVolume) || len(firstParts) != len(secondParts) {
+		return false
+	}
+
+	parent := firstVolume + string(filepath.Separator)
+	if firstVolume == "" {
+		parent = string(filepath.Separator)
+	}
+	for index, firstPart := range firstParts {
+		secondPart := secondParts[index]
+		if firstPart != secondPart {
+			if !strings.EqualFold(firstPart, secondPart) {
+				return false
+			}
+			firstInfo, firstErr := os.Lstat(filepath.Join(parent, firstPart))
+			secondInfo, secondErr := os.Lstat(filepath.Join(parent, secondPart))
+			if firstErr != nil || secondErr != nil || !os.SameFile(firstInfo, secondInfo) {
+				return false
+			}
+			entries, readErr := os.ReadDir(parent)
+			if readErr != nil {
+				return false
+			}
+			foundFirst, foundSecond := false, false
+			for _, entry := range entries {
+				foundFirst = foundFirst || entry.Name() == firstPart
+				foundSecond = foundSecond || entry.Name() == secondPart
+			}
+			if foundFirst && foundSecond {
+				return false
+			}
+		}
+		parent = filepath.Join(parent, firstPart)
+	}
+	return true
+}
+
+func corpusV2PathComponents(path string) (string, []string, bool) {
+	if !filepath.IsAbs(path) {
+		return filepath.VolumeName(path), nil, false
+	}
+	volume := filepath.VolumeName(path)
+	remainder := strings.TrimPrefix(path, volume)
+	remainder = strings.TrimLeft(remainder, string(filepath.Separator))
+	if remainder == "" {
+		return volume, nil, true
+	}
+	return volume, strings.Split(remainder, string(filepath.Separator)), true
 }
 
 func corpusV2Slash(value string) string {

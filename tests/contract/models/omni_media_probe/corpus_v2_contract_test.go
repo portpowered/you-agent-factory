@@ -116,6 +116,51 @@ func TestCorpusSymlinkedParentsAreRejectedBeforeReading(t *testing.T) {
 	})
 }
 
+func TestCorpusCaseOnlySymlinkAliasIsRejectedBeforeReading(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	indexedClip := filepath.Join(root, "clip.mp4")
+	siblingClip := filepath.Join(root, "CLIP.mp4")
+	if err := os.WriteFile(siblingClip, []byte("sibling media bytes"), 0o600); err != nil {
+		t.Fatalf("write case-distinct sibling clip: %v", err)
+	}
+	if _, err := os.Lstat(indexedClip); err == nil {
+		t.Skip("filesystem does not distinguish case-only sibling names")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("probe case-sensitive sibling name: %v", err)
+	}
+	if err := os.Symlink(filepath.Base(siblingClip), indexedClip); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("file symlinks unavailable in this Windows environment: %v", err)
+		}
+		t.Fatalf("create case-only clip symlink: %v", err)
+	}
+
+	identity, data, err := corpusV2ReadIdentity(root, indexedClip)
+	assertCorpusV2Code(t, err, CorpusV2CodePathEscape)
+	if data != nil || identity.Identity != "" || identity.Bytes != 0 {
+		t.Fatalf("case-only symlink returned bytes or identity: bytes=%d identity=%q", len(data), identity.Identity)
+	}
+}
+
+func TestCorpusSamePathFollowsFilesystemCaseSemantics(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	first := filepath.Join(root, "Clip.mp4")
+	caseVariant := filepath.Join(root, "CLIP.mp4")
+	if err := os.WriteFile(first, []byte("media bytes"), 0o600); err != nil {
+		t.Fatalf("write case probe file: %v", err)
+	}
+	_, err := os.Lstat(caseVariant)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("probe case-variant path: %v", err)
+	}
+	wantSamePath := err == nil
+	if got := corpusV2SamePath(first, caseVariant); got != wantSamePath {
+		t.Fatalf("case-variant path equality = %t, want %t for this filesystem", got, wantSamePath)
+	}
+}
+
 func TestCorpusSelectionIsDeterministic(t *testing.T) {
 	t.Parallel()
 	authority := CorpusV2Authority{RequiredStudies: []string{"study-a"}}
