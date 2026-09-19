@@ -11,9 +11,9 @@ import (
 )
 
 // TestReviewFailureRouting_ManualMigrationDispatchesExactReviewOnce proves the
-// preserved operator state: same-name historical Work shares the root trace,
-// while the current task is in review and its matching review is initial.
-// The public batch boundary represents the manual-migration/recovery path.
+// manual operator state where same-name historical Work shares the root trace,
+// while the current task is in review and the current review is initial. The
+// transition-generated test below owns the exact parent-child regression.
 func TestReviewFailureRouting_ManualMigrationDispatchesExactReviewOnce(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
@@ -46,9 +46,9 @@ func TestReviewFailureRouting_ManualMigrationDispatchesExactReviewOnce(t *testin
 }
 
 // TestReviewFailureRouting_RejectionReturnsOneCorrectionToSameOwner proves a
-// terminal red review emits one correction packet for the same task owner,
-// carries the exact feedback into that processor prompt, and retries review
-// with only the replacement child.
+// transition-generated review dispatches, one rejection returns one correction
+// to the same task Work, the accepted replacement leaves no matching task in
+// review or review in init, and every observed dispatch has a response.
 func TestReviewFailureRouting_RejectionReturnsOneCorrectionToSameOwner(t *testing.T) {
 	t.Parallel()
 	const feedback = "review feedback: add the exact failure-routing evidence 4a6d"
@@ -102,6 +102,13 @@ func TestReviewFailureRouting_RejectionReturnsOneCorrectionToSameOwner(t *testin
 	}
 	assertExactReviewFailureInputIDs(t, process[1], currentTaskID)
 	assertRejectionReviewDispatches(t, dispatches, currentTaskID, currentReviewID, replacementReviewID)
+	works := scenario.listWorks(t)
+	assertReviewFailureWorkStates(t, works, map[string]string{
+		currentTaskID:       "to-complete",
+		replacementReviewID: "complete",
+	})
+	assertNoReviewFailureStrands(t, works, name)
+	assertNoIncompleteReviewFailureDispatches(t, dispatches)
 }
 
 func replacementReviewWorkID(t *testing.T, response factoryapi.DispatchResponseEventPayload) string {
