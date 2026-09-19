@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -64,6 +67,121 @@ func TestWorkerSessionRouteCharacterization_AfterDefaultPauseResume(t *testing.T
 	if runner.callCount() != 2 {
 		t.Fatalf("controlled provider calls across pause/resume = %d, want exactly 2", runner.callCount())
 	}
+}
+
+// TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped proves
+// that HTTP and CLI return the historical and current attempts for one Work,
+// while a sibling Work in the same Factory Session stays out of that result.
+func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *testing.T) {
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "worker-sessions-route-multiple-attempts",
+		"workTypes": []any{map[string]any{
+			"name": "task",
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "review", "type": "PROCESSING"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{
+			map[string]any{"name": "processor"},
+			map[string]any{"name": "reviewer"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "process",
+				"worker":    "processor",
+				"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
+				"outputs":   []any{map[string]any{"workType": "task", "state": "review"}},
+				"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+			},
+			{
+				"name":      "review",
+				"worker":    "reviewer",
+				"inputs":    []any{map[string]any{"workType": "task", "state": "review"}},
+				"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
+				"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+			},
+		},
+	})
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+
+	firstGate := make(chan struct{})
+	currentGate := make(chan struct{})
+	openGate := make(chan struct{})
+	close(openGate)
+	var firstOnce, currentOnce sync.Once
+	releaseFirst := func() { firstOnce.Do(func() { close(firstGate) }) }
+	releaseCurrent := func() { currentOnce.Do(func() { close(currentGate) }) }
+	runner := &routeStepWorkerRunner{
+		gates:   []<-chan struct{}{firstGate, currentGate, openGate, openGate},
+		started: make(chan int, 8),
+	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	t.Cleanup(func() {
+		releaseFirst()
+		releaseCurrent()
+	})
+	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
+
+	targetName := "route-multiple-attempts-target"
+	targetSubmission := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &targetName,
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": targetName},
+	})
+	targetWorkID := support.StringPointerValue(targetSubmission.WorkId)
+	if targetWorkID == "" {
+		t.Fatalf("target Work submission = %#v, want Work ID", targetSubmission)
+	}
+	runner.waitCallCount(t, 1)
+	historical := waitForRouteCharacterizationAssociation(t, stream, targetWorkID)
+	releaseFirst()
+	runner.waitCallCount(t, 2)
+	current := waitForRouteCharacterizationAssociation(t, stream, targetWorkID)
+
+	siblingName := "route-multiple-attempts-sibling"
+	siblingSubmission := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &siblingName,
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": siblingName},
+	})
+	siblingWorkID := support.StringPointerValue(siblingSubmission.WorkId)
+	if siblingWorkID == "" {
+		t.Fatalf("sibling Work submission = %#v, want Work ID", siblingSubmission)
+	}
+	runner.waitCallCount(t, 3)
+	siblingAttempt := waitForRouteCharacterizationAssociation(t, stream, siblingWorkID)
+	if siblingAttempt.workerSessionID == historical.workerSessionID || siblingAttempt.workerSessionID == current.workerSessionID {
+		t.Fatalf("sibling Work %q reused target Worker Session identity %q", siblingWorkID, siblingAttempt.workerSessionID)
+	}
+
+	siblingList := support.ListDefaultSessionWorkerSessions(t, server.URL(), siblingWorkID)
+	if len(siblingList.Sessions) == 0 {
+		t.Fatalf("sibling Work %q list = %#v, want its own Worker Session", siblingWorkID, siblingList)
+	}
+	assertRouteCharacterizationAttemptList(t, server, targetWorkID, []routeCharacterizationAttemptExpectation{
+		{dispatch: historical, state: factoryapi.WorkerSessionObservationStateCompleted},
+		{dispatch: current, current: true},
+	})
+
+	releaseCurrent()
+	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, routeCharacterizationTimeout)
+	if runner.callCount() != 4 {
+		t.Fatalf("controlled provider calls after both Works completed = %d, want four staged dispatches", runner.callCount())
+	}
+	assertRouteCharacterizationAttemptList(t, server, targetWorkID, []routeCharacterizationAttemptExpectation{
+		{dispatch: historical, state: factoryapi.WorkerSessionObservationStateCompleted},
+		{dispatch: current, state: factoryapi.WorkerSessionObservationStateCompleted},
+	})
 }
 
 type routeCharacterizationDispatch struct {
@@ -208,6 +326,114 @@ func assertRouteCharacterizationRead(
 	if !reflect.DeepEqual(cliResponse, restResponse) {
 		t.Fatalf("CLI and REST Worker Session responses for Work %q differ:\nCLI: %#v\nREST: %#v", expected.workID, cliResponse, restResponse)
 	}
+}
+
+type routeCharacterizationAttemptExpectation struct {
+	dispatch routeCharacterizationDispatch
+	state    factoryapi.WorkerSessionObservationState
+	current  bool
+}
+
+func assertRouteCharacterizationAttemptList(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	workID string,
+	expected []routeCharacterizationAttemptExpectation,
+) {
+	t.Helper()
+	cliInputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", workID,
+		"--server", server.URL(), "--output", "json",
+	})
+	if err := server.Execute(t, cliInputs.Input); err != nil {
+		t.Fatalf("JSON Worker Sessions list for Work %q: %v\nstderr:\n%s", workID, err, cliInputs.Stderr())
+	}
+	var cliResponse factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(cliInputs.Stdout())), &cliResponse); err != nil {
+		t.Fatalf("decode JSON Worker Sessions list for Work %q: %v\nstdout:\n%s", workID, err, cliInputs.Stdout())
+	}
+	restResponse := support.ListDefaultSessionWorkerSessions(t, server.URL(), workID)
+	if len(cliResponse.Sessions) != len(restResponse.Sessions) {
+		t.Fatalf("CLI and REST Worker Session counts for Work %q differ: CLI %d, REST %d", workID, len(cliResponse.Sessions), len(restResponse.Sessions))
+	}
+	for index := range cliResponse.Sessions {
+		if cliResponse.Sessions[index].DurationBasis == "ACTIVE_CLOCK" || restResponse.Sessions[index].DurationBasis == "ACTIVE_CLOCK" {
+			cliResponse.Sessions[index].DurationMillis = nil
+			restResponse.Sessions[index].DurationMillis = nil
+		}
+	}
+	if !reflect.DeepEqual(cliResponse, restResponse) {
+		t.Fatalf("CLI and REST Worker Session responses for Work %q differ:\nCLI: %#v\nREST: %#v", workID, cliResponse, restResponse)
+	}
+	if len(restResponse.Sessions) != len(expected) {
+		t.Fatalf("Worker Sessions for Work %q = %#v, want exactly %d attempts", workID, restResponse.Sessions, len(expected))
+	}
+	for index, want := range expected {
+		got := restResponse.Sessions[index]
+		if got.WorkerSessionId != want.dispatch.workerSessionID || got.AttemptId != want.dispatch.dispatchID {
+			t.Fatalf("Work %q attempt %d identity = worker:%q attempt:%q, want worker:%q attempt:%q", workID, index, got.WorkerSessionId, got.AttemptId, want.dispatch.workerSessionID, want.dispatch.dispatchID)
+		}
+		if want.current {
+			if got.State != factoryapi.WorkerSessionObservationStateStarting && got.State != factoryapi.WorkerSessionObservationStateRunning {
+				t.Fatalf("current Work %q Worker Session state = %q, want STARTING or RUNNING", workID, got.State)
+			}
+		} else if got.State != want.state {
+			t.Fatalf("Work %q Worker Session state = %q, want %q", workID, got.State, want.state)
+		}
+		if got.FactorySessionId == nil || *got.FactorySessionId != factorysessions.DefaultSessionID ||
+			got.WorkId == nil || *got.WorkId != workID || !reflect.DeepEqual(got.WorkIds, []string{workID}) {
+			t.Fatalf("Work %q Worker Session attribution = session:%v work:%v workIds:%v, want exact Factory Session and Work", workID, got.FactorySessionId, got.WorkId, got.WorkIds)
+		}
+	}
+}
+
+type routeStepWorkerRunner struct {
+	gates   []<-chan struct{}
+	started chan int
+	mu      sync.Mutex
+	calls   int
+}
+
+func (runner *routeStepWorkerRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	call := runner.calls + 1
+	runner.calls++
+	runner.mu.Unlock()
+	select {
+	case runner.started <- call:
+	default:
+	}
+	if call > len(runner.gates) {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider call %d", call)
+	}
+	select {
+	case <-runner.gates[call-1]:
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("staged Worker Session completed. COMPLETE")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func (runner *routeStepWorkerRunner) waitCallCount(t *testing.T, want int) {
+	t.Helper()
+	timer := time.NewTimer(routeCharacterizationTimeout)
+	defer timer.Stop()
+	for runner.callCount() < want {
+		select {
+		case <-runner.started:
+		case <-timer.C:
+			t.Fatalf("staged provider calls = %d, want at least %d", runner.callCount(), want)
+		}
+	}
+}
+
+func (runner *routeStepWorkerRunner) callCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
 }
 
 func assertRouteCharacterizationObservation(

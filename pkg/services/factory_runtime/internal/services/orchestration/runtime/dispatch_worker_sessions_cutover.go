@@ -518,6 +518,9 @@ func (s *recordedWorkerSessionObservation) listLive(
 	if s == nil || s.Service == nil {
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	if factorySessionID := strings.TrimSpace(s.factorySessionID); factorySessionID != "" {
+		req.FactorySessionID = factorySessionID
+	}
 	return s.Service.ListObservations(ctx, req)
 }
 

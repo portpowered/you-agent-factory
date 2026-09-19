@@ -67,7 +67,10 @@ func (a *Adapter) listWorkerSessionsForWork(
 	if observations == nil {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
 	}
-	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID})
+	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{
+		FactorySessionID: scope.effectiveID,
+		WorkID:           workID,
+	})
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, ctxErr
 	}

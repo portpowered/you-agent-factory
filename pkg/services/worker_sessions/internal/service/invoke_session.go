@@ -432,6 +432,7 @@ func (r *registry) ensureObservationWithFactorySession(
 		factorySessionID: strings.TrimSpace(factorySessionID),
 		startedAt:        startedAt,
 	}
+	r.indexObservationBySessionWorkLocked(id, r.observations[id])
 	return startedAt
 }
 

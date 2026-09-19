@@ -64,15 +64,18 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
-	mu                  sync.RWMutex
-	sessions            map[string]workersessions.Session
-	publications        map[string]*publication
-	supervisions        map[string]*supervision
-	observations        map[string]*observation
-	startReplays        map[string]*startReplay
-	continueReplays     map[string]*continueReplay
-	continuationSources map[string]string
-	interruptReplays    map[string]*interruptReplay
+	mu           sync.RWMutex
+	sessions     map[string]workersessions.Session
+	publications map[string]*publication
+	supervisions map[string]*supervision
+	observations map[string]*observation
+	// observationIDsBySessionWork lets a runtime list only the Worker Session
+	// attempts associated with its exact Factory Session and Work.
+	observationIDsBySessionWork map[observationWorkKey]map[string]struct{}
+	startReplays                map[string]*startReplay
+	continueReplays             map[string]*continueReplay
+	continuationSources         map[string]string
+	interruptReplays            map[string]*interruptReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
@@ -141,26 +144,27 @@ func New(
 	startsDone := make(chan struct{})
 	close(startsDone)
 	registry := &registry{
-		sessions:            make(map[string]workersessions.Session),
-		publications:        make(map[string]*publication),
-		supervisions:        make(map[string]*supervision),
-		observations:        make(map[string]*observation),
-		startReplays:        make(map[string]*startReplay),
-		continueReplays:     make(map[string]*continueReplay),
-		continuationSources: make(map[string]string),
-		interruptReplays:    make(map[string]*interruptReplay),
-		dispatchOwners:      make(map[string]string),
-		runtimeAttempts:     make(map[string]struct{}),
-		execution:           execution,
-		events:              eventsAppender,
-		clock:               clock,
-		providerSessions:    providerSessions,
-		recording:           recording,
-		logger:              logging.EnsureLogger(logger),
-		lifecycleCtx:        lifecycleCtx,
-		lifecycleCancel:     lifecycleCancel,
-		startsDone:          startsDone,
-		stopDone:            make(chan struct{}),
+		sessions:                    make(map[string]workersessions.Session),
+		publications:                make(map[string]*publication),
+		supervisions:                make(map[string]*supervision),
+		observations:                make(map[string]*observation),
+		observationIDsBySessionWork: make(map[observationWorkKey]map[string]struct{}),
+		startReplays:                make(map[string]*startReplay),
+		continueReplays:             make(map[string]*continueReplay),
+		continuationSources:         make(map[string]string),
+		interruptReplays:            make(map[string]*interruptReplay),
+		dispatchOwners:              make(map[string]string),
+		runtimeAttempts:             make(map[string]struct{}),
+		execution:                   execution,
+		events:                      eventsAppender,
+		clock:                       clock,
+		providerSessions:            providerSessions,
+		recording:                   recording,
+		logger:                      logging.EnsureLogger(logger),
+		lifecycleCtx:                lifecycleCtx,
+		lifecycleCancel:             lifecycleCancel,
+		startsDone:                  startsDone,
+		stopDone:                    make(chan struct{}),
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader

@@ -72,7 +72,9 @@ type Service interface {
 	List(ctx context.Context, req ListRequest) (ListResult, error)
 
 	// ListObservations returns detached, provider-neutral observations
-	// correlated with one Work identity. It is backed by Worker Sessions'
+	// correlated with one Work identity and optionally narrowed to one exact
+	// Factory Session. Runtime-owned reads set that scope so they do not query
+	// attempts belonging to unrelated Factory Sessions. It is backed by Worker Sessions'
 	// lifecycle state, the exact Providers-owned association, and normalized
 	// Provider Sessions projection facts; it does not expose recording stores,
 	// provider readers, or filesystem paths.
