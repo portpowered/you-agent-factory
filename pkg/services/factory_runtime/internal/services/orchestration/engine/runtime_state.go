@@ -122,6 +122,29 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 	return snap
 }
 
+// SeedRestoredDispatchHistory publishes canonical completions on a newly
+// constructed engine before execution begins. Work reads use this history to
+// retain completed-dispatch associations after Factory Session recovery.
+func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.CompletedDispatch) error {
+	if e == nil || e.runtimeState == nil {
+		return fmt.Errorf("Factory Runtime engine is required")
+	}
+	if len(history) == 0 {
+		return nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.runLoopActive || e.runtimeState.TickCount != 0 || len(e.runtimeState.DispatchHistory) != 0 {
+		return fmt.Errorf("Factory Runtime dispatch history can only be restored before execution")
+	}
+	e.runtimeState.DispatchHistory = make([]interfaces.CompletedDispatch, len(history))
+	for index := range history {
+		e.runtimeState.DispatchHistory[index] = deepCopyCompletedDispatch(history[index])
+	}
+	e.publishRuntimeSnapshotLocked()
+	return nil
+}
+
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)

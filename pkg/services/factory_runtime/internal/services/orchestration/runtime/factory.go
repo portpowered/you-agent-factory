@@ -302,6 +302,9 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
 	}
+	if err := runtimeEngine.SeedRestoredDispatchHistory(restoredDispatchHistoryForRuntime(cfg.restoredWorldState)); err != nil {
+		return nil, fmt.Errorf("restore Factory Runtime dispatch history: %w", err)
+	}
 	if cfg.skipRestoredDispatchReconciliation {
 		runtimeEngine.SetReplayHistoricalWorks(replayHistoricalWorks)
 	}

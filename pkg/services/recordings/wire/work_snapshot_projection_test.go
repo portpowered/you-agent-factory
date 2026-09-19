@@ -512,6 +512,41 @@ func TestReadSnapshotFromFactoryWorldStateUsesFailedDispatchAndFailureDetailArti
 	}
 }
 
+func TestReadSnapshotFromFactoryWorldStateKeepsFailureDetailForFailedState(t *testing.T) {
+	t.Parallel()
+
+	item := work.FactoryWorkItem{ID: "work-replayed-failure", WorkTypeID: "task", DisplayName: "replayed failure", State: "failed"}
+	failure := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure, Message: "Provider authentication failed."}
+	state := factorydefinitions.FactoryWorldState{
+		Topology: factorydefinitions.InitialStructurePayload{
+			WorkTypes: []factorydefinitions.FactoryWorkType{{
+				ID:     "task",
+				States: []factorydefinitions.FactoryStateDefinition{{Value: "failed", Category: work.StateTypeFailed}},
+			}},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+		CompletedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{{
+			DispatchID:  "dispatch-replayed-failure",
+			WorkItemIDs: []string{item.ID},
+			Result: workers.WorkstationResult{
+				Outcome:       string(workers.OutcomeFailed),
+				FailureDetail: failure,
+			},
+		}},
+	}
+
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	if len(snapshot.Items) != 1 {
+		t.Fatalf("replayed failed Work rows = %d, want 1", len(snapshot.Items))
+	}
+	got := snapshot.Items[0]
+	if got.State == nil || got.State.Type != work.StateTypeFailed || got.FailureDetail == nil ||
+		got.FailureDetail.Reason != string(workers.WorkFailureTypeAuthFailure) ||
+		got.FailureDetail.Message != failure.Message {
+		t.Fatalf("replayed failed Work projection = %#v, want exact typed failure detail", got)
+	}
+}
+
 func TestWorldArtifactProjectionCoversFallbackBranches(t *testing.T) {
 	t.Parallel()
 

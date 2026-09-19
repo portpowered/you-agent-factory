@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -839,4 +840,33 @@ func runInvokeWorker(
 		t.Fatalf("InvokeWorker(%q): %v", req.DispatchID, got.err)
 	}
 	return request, got.result
+}
+
+func TestMergeRecordedObservationsKeepsTerminalTimingAcrossRestart(t *testing.T) {
+	recordedStarted := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	recordedEnded := recordedStarted.Add(2 * time.Second)
+	recordedDuration := 2 * time.Second
+	processStarted := recordedEnded.Add(30 * time.Second)
+
+	merged := mergeRecordedObservations(
+		[]workersessions.Observation{{
+			WorkerSessionID: "worker-terminal",
+			State:           workersessions.StateCompleted,
+			StartedAt:       &recordedStarted,
+			EndedAt:         &recordedEnded,
+			Duration:        &recordedDuration,
+			DurationBasis:   workersessions.DurationBasisRecordedTimestamps,
+		}},
+		[]workersessions.Observation{{
+			WorkerSessionID: "worker-terminal",
+			State:           workersessions.StateCompleted,
+			StartedAt:       &processStarted,
+		}},
+	)
+	if len(merged) != 1 || merged[0].StartedAt == nil || !merged[0].StartedAt.Equal(recordedStarted) ||
+		merged[0].EndedAt == nil || !merged[0].EndedAt.Equal(recordedEnded) ||
+		merged[0].Duration == nil || *merged[0].Duration != recordedDuration ||
+		merged[0].DurationBasis != workersessions.DurationBasisRecordedTimestamps {
+		t.Fatalf("merged terminal Worker Session timing = %#v, want the stable recorded Factory timeline", merged)
+	}
 }

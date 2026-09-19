@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestRestoreRestoredActiveDispatchResolvesUniqueCanonicalPlace(t *testing.T) {
@@ -299,5 +300,70 @@ func restoredMissingPlaceDispatchFixture() *interfaces.FactoryWorldState {
 			},
 		},
 		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+}
+
+func TestNewRestoresCompletedDispatchHistoryForWorkReads(t *testing.T) {
+	t.Parallel()
+
+	workID := "work-restored-failure"
+	startedAt := time.Date(2026, time.August, 11, 9, 30, 0, 0, time.UTC)
+	completedAt := startedAt.Add(750 * time.Millisecond)
+	item := work.FactoryWorkItem{
+		ID: workID, WorkTypeID: "task", State: "failed", DisplayName: "restored failure",
+		TraceID: "trace-restored-failure", PreviousChainingTraceIDs: []string{"trace-parent"},
+	}
+	failure := &workerexecution.FailureDetail{
+		Reason:  workerexecution.WorkFailureTypeAuthFailure,
+		Message: "Provider authentication failed.",
+	}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{workID: item},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID:     "dispatch-restored-failure",
+			TransitionID:   "process",
+			Workstation:    interfaces.FactoryWorkstationRef{Name: "processor"},
+			StartedAt:      startedAt,
+			CompletedAt:    completedAt,
+			DurationMillis: 750,
+			WorkItemIDs:    []string{workID},
+			ConsumedInputs: []interfaces.WorkstationInput{{
+				TokenID:  "token-restored-failure",
+				WorkItem: &item,
+			}},
+			InputWorkItems: []work.FactoryWorkItem{item},
+			Result: interfaces.WorkstationResult{
+				Outcome:       string(workerexecution.OutcomeFailed),
+				Error:         failure.Message,
+				FailureDetail: failure,
+			},
+		}},
+	}
+	f, err := newTestFactory(withNet(buildSimpleNetWithFailureArc()), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New with restored dispatch history: %v", err)
+	}
+
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if len(snapshot.DispatchHistory) != 1 {
+		t.Fatalf("restored dispatch history = %d entries, want one", len(snapshot.DispatchHistory))
+	}
+	completed := snapshot.DispatchHistory[0]
+	if completed.DispatchID != "dispatch-restored-failure" || completed.Outcome != workerexecution.OutcomeFailed ||
+		!completed.StartTime.Equal(startedAt) || !completed.EndTime.Equal(completedAt) || completed.Duration != 750*time.Millisecond ||
+		len(completed.ConsumedTokens) != 1 || completed.ConsumedTokens[0].Color.WorkID != workID ||
+		completed.FailureDetail == nil || *completed.FailureDetail != *failure {
+		t.Fatalf("restored completed dispatch = %#v, want Work-associated failure and exact timing", completed)
+	}
+	completed.FailureDetail.Message = "mutated detached snapshot"
+	second, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after mutation: %v", err)
+	}
+	if second.DispatchHistory[0].FailureDetail == nil || second.DispatchHistory[0].FailureDetail.Message != failure.Message {
+		t.Fatalf("mutated restored dispatch history leaked into runtime: %#v", second.DispatchHistory[0].FailureDetail)
 	}
 }
