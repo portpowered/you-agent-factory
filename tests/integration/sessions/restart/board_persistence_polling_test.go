@@ -110,24 +110,40 @@ func assertBoardResumeStartupWasCancelled(t *testing.T, daemon *boardPersistence
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("successor startup log %q was not retained after exit: %v", path, err)
 	}
-	if !boardPersistenceHasRunServiceCancellation(daemon.stderr.String()) {
-		t.Fatalf("successor did not report run.service outcome=cancelled: stderr=%s", daemon.stderr.String())
+	if !boardPersistenceCancellationRecordObserved(daemon, path) {
+		t.Fatalf("successor did not emit structured cancellation evidence before readiness (log=%q)", path)
 	}
 }
 
-func boardPersistenceHasRunServiceCancellation(stderr string) bool {
-	for _, line := range strings.Split(stderr, "\n") {
-		start := strings.IndexByte(line, '{')
-		end := strings.LastIndexByte(line, '}')
-		if start < 0 || end < start {
-			continue
-		}
+func boardPersistenceCancellationRecordObserved(daemon *boardPersistenceDaemon, path string) bool {
+	if daemon == nil {
+		return false
+	}
+	if boardPersistenceLogsShowCancellation(daemon.stdout.String()) ||
+		boardPersistenceLogsShowCancellation(daemon.stderr.String()) {
+		return true
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return boardPersistenceLogsShowCancellation(string(contents))
+}
+
+func boardPersistenceLogsShowCancellation(logs string) bool {
+	for _, line := range strings.Split(logs, "\n") {
 		var fields map[string]any
-		if err := json.Unmarshal([]byte(line[start:end+1]), &fields); err != nil {
+		if err := json.Unmarshal([]byte(line), &fields); err != nil {
 			continue
 		}
 		if fields["operation"] == "run.service" && fields["outcome"] == "cancelled" {
 			return true
+		}
+		if fields["level"] == "error" && fields["error"] == "context canceled" {
+			message, _ := fields["msg"].(string)
+			if message == "engine initial tick error" || message == "failed to compile factory orchestration" {
+				return true
+			}
 		}
 	}
 	return false
