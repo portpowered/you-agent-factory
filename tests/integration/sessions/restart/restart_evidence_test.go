@@ -20,28 +20,64 @@ import (
 const (
 	restartBaselineEvidenceSchema = "factory.restart-baseline.v1"
 	restartBaselineStoryID        = "factory-reliability-host-restart-single-instance-recovery-001-001"
+	restartRecoveryStoryID        = "factory-reliability-host-restart-single-instance-recovery-001-003"
 	restartLogTailLimit           = 8192
 )
 
 type restartBaselineEvidence struct {
-	SchemaVersion              string                      `json:"schemaVersion"`
-	StoryID                    string                      `json:"storyId"`
-	TestName                   string                      `json:"testName"`
-	Outcome                    string                      `json:"outcome"`
-	ExitCode                   int                         `json:"testExitCode"`
-	StartedAt                  time.Time                   `json:"startedAt"`
-	CompletedAt                time.Time                   `json:"completedAt,omitempty"`
-	EvidencePath               string                      `json:"evidencePath,omitempty"`
-	Artifact                   restartCLIArtifactIdentity  `json:"artifact"`
-	FixtureSHA256              map[string]string           `json:"fixtureSha256"`
-	SourceRecordingSHA256      string                      `json:"sourceRecordingSha256,omitempty"`
-	SourceRecordingAfterSHA256 string                      `json:"sourceRecordingAfterSha256,omitempty"`
-	SuccessorRecordingSHA256   string                      `json:"successorRecordingSha256,omitempty"`
-	ManualWorkMoves            []string                    `json:"baselineManualWorkMoves,omitempty"`
-	Generations                []restartGenerationEvidence `json:"processGenerations"`
-	Observations               []restartPublicObservation  `json:"publicObservations"`
-	TimingSamples              []restartTimingSample       `json:"timingSamples"`
-	TimingRange                restartTimingRange          `json:"timingRange"`
+	SchemaVersion              string                       `json:"schemaVersion"`
+	StoryID                    string                       `json:"storyId"`
+	TestName                   string                       `json:"testName"`
+	Outcome                    string                       `json:"outcome"`
+	ExitCode                   int                          `json:"testExitCode"`
+	StartedAt                  time.Time                    `json:"startedAt"`
+	CompletedAt                time.Time                    `json:"completedAt,omitempty"`
+	EvidencePath               string                       `json:"evidencePath,omitempty"`
+	Artifact                   restartCLIArtifactIdentity   `json:"artifact"`
+	FixtureSHA256              map[string]string            `json:"fixtureSha256"`
+	SourceRecordingSHA256      string                       `json:"sourceRecordingSha256,omitempty"`
+	SourceRecordingAfterSHA256 string                       `json:"sourceRecordingAfterSha256,omitempty"`
+	SuccessorRecordingSHA256   string                       `json:"successorRecordingSha256,omitempty"`
+	ManualWorkMoves            []string                     `json:"baselineManualWorkMoves,omitempty"`
+	Generations                []restartGenerationEvidence  `json:"processGenerations"`
+	Observations               []restartPublicObservation   `json:"publicObservations"`
+	TimingSamples              []restartTimingSample        `json:"timingSamples"`
+	TimingRange                restartTimingRange           `json:"timingRange"`
+	ScenarioID                 string                       `json:"scenarioId,omitempty"`
+	FailureCases               []restartFailureCaseEvidence `json:"failureCases,omitempty"`
+	RestartScenarios           []restartScenarioEvidence    `json:"restartScenarios,omitempty"`
+}
+
+type restartFailureCaseEvidence struct {
+	ID                   string `json:"id"`
+	SourceSHA256         string `json:"sourceSha256,omitempty"`
+	SourceAfterSHA256    string `json:"sourceAfterSha256,omitempty"`
+	ExitCode             *int   `json:"exitCode,omitempty"`
+	ErrorCode            string `json:"errorCode,omitempty"`
+	DiagnosticCount      int    `json:"diagnosticCount"`
+	RecoveryRecordCount  int    `json:"recoveryRecordCount"`
+	RecoverySuccessCount int    `json:"recoverySuccessCount"`
+	DurationNanoseconds  int64  `json:"durationNanoseconds,omitempty"`
+	Outcome              string `json:"outcome"`
+}
+
+type restartScenarioEvidence struct {
+	StoryID                    string                       `json:"storyId"`
+	ScenarioID                 string                       `json:"scenarioId"`
+	TestName                   string                       `json:"testName"`
+	Outcome                    string                       `json:"outcome"`
+	StartedAt                  time.Time                    `json:"startedAt"`
+	CompletedAt                time.Time                    `json:"completedAt"`
+	Artifact                   restartCLIArtifactIdentity   `json:"artifact"`
+	FixtureSHA256              map[string]string            `json:"fixtureSha256"`
+	SourceRecordingSHA256      string                       `json:"sourceRecordingSha256,omitempty"`
+	SourceRecordingAfterSHA256 string                       `json:"sourceRecordingAfterSha256,omitempty"`
+	SuccessorRecordingSHA256   string                       `json:"successorRecordingSha256,omitempty"`
+	ProcessGenerations         []restartGenerationEvidence  `json:"processGenerations"`
+	PublicObservations         []restartPublicObservation   `json:"publicObservations"`
+	FailureCases               []restartFailureCaseEvidence `json:"failureCases,omitempty"`
+	TimingSamples              []restartTimingSample        `json:"timingSamples"`
+	TimingRange                restartTimingRange           `json:"timingRange"`
 }
 
 type restartGenerationEvidence struct {
@@ -119,19 +155,102 @@ type restartTimingRange struct {
 }
 
 func beginRestartBaselineEvidence(artifact restartCLIArtifactIdentity) *restartBaselineEvidence {
-	evidence := &restartBaselineEvidence{
+	restartEvidenceMu.Lock()
+	evidence := restartRunEvidence
+	if evidence == nil {
+		evidence = &restartBaselineEvidence{
+			SchemaVersion:    restartBaselineEvidenceSchema,
+			FixtureSHA256:    make(map[string]string),
+			RestartScenarios: make([]restartScenarioEvidence, 0),
+		}
+		restartRunEvidence = evidence
+	}
+	evidence.StoryID = restartBaselineStoryID
+	evidence.TestName = "TestRestoredReviewTransitionDispatchesEveryMigratedPair"
+	evidence.Outcome = "RUNNING"
+	evidence.StartedAt = time.Now().UTC()
+	evidence.Artifact = artifact
+	if evidence.FixtureSHA256 == nil {
+		evidence.FixtureSHA256 = make(map[string]string)
+	}
+	restartEvidenceMu.Unlock()
+	return evidence
+}
+
+func newRestartScenarioEvidence(artifact restartCLIArtifactIdentity, scenarioID, testName string) *restartBaselineEvidence {
+	return &restartBaselineEvidence{
 		SchemaVersion: restartBaselineEvidenceSchema,
-		StoryID:       restartBaselineStoryID,
-		TestName:      "TestRestoredReviewTransitionDispatchesEveryMigratedPair",
+		StoryID:       restartRecoveryStoryID,
+		ScenarioID:    scenarioID,
+		TestName:      testName,
 		Outcome:       "RUNNING",
 		StartedAt:     time.Now().UTC(),
 		Artifact:      artifact,
 		FixtureSHA256: make(map[string]string),
 	}
+}
+
+func ensureRestartEvidence(artifact restartCLIArtifactIdentity) {
 	restartEvidenceMu.Lock()
-	restartRunEvidence = evidence
+	defer restartEvidenceMu.Unlock()
+	if restartRunEvidence != nil {
+		return
+	}
+	restartRunEvidence = &restartBaselineEvidence{
+		SchemaVersion:    restartBaselineEvidenceSchema,
+		StoryID:          restartBaselineStoryID,
+		TestName:         "TestRestoredReviewTransitionDispatchesEveryMigratedPair",
+		Outcome:          "RUNNING",
+		StartedAt:        time.Now().UTC(),
+		Artifact:         artifact,
+		FixtureSHA256:    make(map[string]string),
+		RestartScenarios: make([]restartScenarioEvidence, 0),
+	}
+}
+
+func (evidence *restartBaselineEvidence) publishRestartScenario(t *testing.T) {
+	t.Helper()
+	if evidence == nil || evidence.ScenarioID == "" {
+		return
+	}
+	evidence.CompletedAt = time.Now().UTC()
+	if t.Failed() {
+		evidence.Outcome = "FAIL"
+	} else if evidence.Outcome == "RUNNING" {
+		evidence.Outcome = "PASS"
+	}
+	evidence.TimingRange = timingRange(evidence.TimingSamples)
+	scenario := restartScenarioEvidence{
+		StoryID:                    evidence.StoryID,
+		ScenarioID:                 evidence.ScenarioID,
+		TestName:                   evidence.TestName,
+		Outcome:                    evidence.Outcome,
+		StartedAt:                  evidence.StartedAt,
+		CompletedAt:                evidence.CompletedAt,
+		Artifact:                   evidence.Artifact,
+		FixtureSHA256:              cloneStringStringMap(evidence.FixtureSHA256),
+		SourceRecordingSHA256:      evidence.SourceRecordingSHA256,
+		SourceRecordingAfterSHA256: evidence.SourceRecordingAfterSHA256,
+		SuccessorRecordingSHA256:   evidence.SuccessorRecordingSHA256,
+		ProcessGenerations:         append([]restartGenerationEvidence(nil), evidence.Generations...),
+		PublicObservations:         append([]restartPublicObservation(nil), evidence.Observations...),
+		FailureCases:               append([]restartFailureCaseEvidence(nil), evidence.FailureCases...),
+		TimingSamples:              append([]restartTimingSample(nil), evidence.TimingSamples...),
+		TimingRange:                evidence.TimingRange,
+	}
+	restartEvidenceMu.Lock()
+	if restartRunEvidence != nil {
+		restartRunEvidence.RestartScenarios = append(restartRunEvidence.RestartScenarios, scenario)
+	}
 	restartEvidenceMu.Unlock()
-	return evidence
+}
+
+func cloneStringStringMap(values map[string]string) map[string]string {
+	clone := make(map[string]string, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
 }
 
 func writeRestartBaselineEvidence(path string, testExitCode int) error {

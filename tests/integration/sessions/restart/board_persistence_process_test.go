@@ -75,13 +75,32 @@ func startBoardPersistenceDaemonProcessWithResume(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false)
+}
+
+func startBoardPersistenceJSONResumeProcess(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, true)
+}
+
+func startBoardPersistenceDaemonProcessWithResumeOutput(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+	jsonOutput bool,
+) *boardPersistenceDaemon {
 	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
-	args := []string{
+	args := make([]string, 0, 12)
+	if jsonOutput {
+		args = append(args, "--json")
+	}
+	args = append(args,
 		"run", "--dir", factoryDir,
 		"--continuously", "--with-server",
 		"--listen", address,
-	}
+	)
 	if resumePath != "" {
 		args = append(args, "--resume", resumePath)
 	}
