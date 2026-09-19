@@ -298,6 +298,28 @@ func assertReviewFailureWorkStates(
 	}
 }
 
+func assertNoReviewFailureStrands(t *testing.T, works []factoryapi.Work, name string) {
+	t.Helper()
+	for _, item := range works {
+		if item.Name != name || item.WorkTypeName == nil || item.State == nil {
+			continue
+		}
+		if (*item.WorkTypeName == "task" && item.State.Name == "in-review") ||
+			(*item.WorkTypeName == "review" && item.State.Name == "init") {
+			t.Fatalf("review-routing Work remains stranded: %#v", item)
+		}
+	}
+}
+
+func assertNoIncompleteReviewFailureDispatches(t *testing.T, dispatches []support.DispatchEventObservation) {
+	t.Helper()
+	for _, dispatch := range dispatches {
+		if dispatch.Response == nil {
+			t.Fatalf("dispatch %q for transition %q has no terminal response", dispatch.DispatchID, dispatch.Request.TransitionId)
+		}
+	}
+}
+
 func reviewFailureDispatches(t *testing.T, scenario *reviewFailureScenario) []support.DispatchEventObservation {
 	t.Helper()
 	return support.ObserveDispatchEvents(
