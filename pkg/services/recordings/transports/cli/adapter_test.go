@@ -287,6 +287,105 @@ func TestMapStructuralReplayFailurePreservesSafeCodedDiagnostic(t *testing.T) {
 	}
 }
 
+func TestMapReplayInputFailurePreservesExistingCodesAndRedactsSourceDetails(t *testing.T) {
+	t.Parallel()
+
+	codes := []recordings.ReplayArtifactDiagnosticCode{
+		recordings.ReplayArtifactDiagnosticMalformed,
+		recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+		recordings.ReplayArtifactDiagnosticUnsupportedSchema,
+		recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		recordings.ReplayArtifactDiagnosticInvalidSummary,
+		recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		recordings.ReplayArtifactDiagnosticInvalidOrder,
+		recordings.ReplayArtifactDiagnosticMissingReference,
+		recordings.ReplayArtifactDiagnosticForeignReference,
+		recordings.ReplayArtifactDiagnosticRecordingNotFound,
+		recordings.ReplayArtifactDiagnosticRecordingNotFinalized,
+		recordings.ReplayArtifactDiagnosticDependencyFailure,
+		recordings.ReplayArtifactDiagnosticCancelled,
+	}
+	for _, code := range codes {
+		code := code
+		t.Run(string(code), func(t *testing.T) {
+			t.Parallel()
+
+			cause := errors.New(`open C:\private\recording.json payload=TOPSECRET`)
+			inputErr := &recordings.ReplayInputError{
+				Family: recordings.ReplayInputFamilyPortable,
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: code, Area: "recording", Path: "recording", Message: "TOPSECRET source bytes",
+				},
+				Cause: cause,
+			}
+			mapped := MapReplayInputFailure(inputErr)
+			if mapped == nil {
+				t.Fatal("MapReplayInputFailure() = nil, want a coded Recordings diagnostic")
+			}
+			type codedError interface {
+				error
+				CLIErrorCode() string
+				CLIErrorFamily() factoryapi.ErrorFamily
+				CLIErrorMessage() string
+			}
+			var coded codedError
+			if !errors.As(mapped, &coded) {
+				t.Fatalf("mapped error %T does not implement the coded CLI error contract", mapped)
+			}
+			if coded.CLIErrorCode() != string(code) || coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("coded error = %q / %q, want %q / bad request", coded.CLIErrorCode(), coded.CLIErrorFamily(), code)
+			}
+			if strings.Contains(mapped.Error(), "TOPSECRET") || strings.Contains(mapped.Error(), `C:\private`) ||
+				strings.Contains(coded.CLIErrorMessage(), "recording.json") {
+				t.Fatalf("mapped error exposed source details: %q / %q", mapped, coded.CLIErrorMessage())
+			}
+			if !errors.Is(mapped, cause) {
+				t.Fatalf("mapped error %v lost its cause", mapped)
+			}
+		})
+	}
+}
+
+func TestMapReplayInputFailureUsesMalformedGuidanceAndKnownFallbackCode(t *testing.T) {
+	t.Parallel()
+
+	malformed := MapReplayInputFailure(&recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyLegacy,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "untrusted source text",
+		},
+	})
+	type codedError interface {
+		error
+		CLIErrorCode() string
+		CLIErrorMessage() string
+	}
+	var malformedCoded codedError
+	if !errors.As(malformed, &malformedCoded) {
+		t.Fatalf("malformed error %T does not implement the coded CLI error contract", malformed)
+	}
+	if malformedCoded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticMalformed) ||
+		malformedCoded.CLIErrorMessage() != "preserve the recording and replace it from a trusted backup before retrying" {
+		t.Fatalf("malformed CLI diagnostic = %q / %q", malformedCoded.CLIErrorCode(), malformedCoded.CLIErrorMessage())
+	}
+
+	unknown := MapReplayInputFailure(&recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyLegacy,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticCode("UNSAFE_SOURCE_CODE"),
+		},
+	})
+	var unknownCoded codedError
+	if !errors.As(unknown, &unknownCoded) ||
+		unknownCoded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticDependencyFailure) {
+		t.Fatalf("unknown diagnostic = %#v, want the existing dependency-failure code", unknown)
+	}
+	if MapReplayInputFailure(errors.New("ordinary error")) != nil {
+		t.Fatal("MapReplayInputFailure(ordinary error) != nil")
+	}
+}
+
 func TestMapStructuralReplayFailureAcceptsEachStructuralCode(t *testing.T) {
 	t.Parallel()
 

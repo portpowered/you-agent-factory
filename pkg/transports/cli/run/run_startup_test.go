@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	service "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -589,13 +590,105 @@ func TestRunServiceOutcomeLogsSafePreReadinessClassification(t *testing.T) {
 	}
 }
 
+func TestHostedResumeReadinessLogsRecoveryAndUnavailableHostGap(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	observe := newRuntimeHostObserver(
+		context.Background(),
+		RunConfig{
+			Logger: logger, ResumePath: `C:\private\source.recording.json`,
+			FactorySessionID: "factory-session-1",
+		},
+		resolvedRunRecordPath{},
+		49152,
+		func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
+		nil,
+	)
+	observe(initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 49152})
+
+	entries := observed.FilterMessage("run recovery outcome").All()
+	if len(entries) != 1 {
+		t.Fatalf("run recovery records = %d, want one after host readiness", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	wantFields := map[string]any{
+		"event":              runRecoveryEventName,
+		"outcome":            runRecoveryOutcomeSuccess,
+		"host_observation":   runRecoveryHostObservation,
+		"supervisor":         runRecoverySupervisor,
+		"factory_session_id": "factory-session-1",
+	}
+	if len(fields) != len(wantFields) {
+		t.Fatalf("recovery fields = %#v, want only %#v", fields, wantFields)
+	}
+	for name, want := range wantFields {
+		if got := fields[name]; got != want {
+			t.Errorf("recovery field %s = %#v, want %#v", name, got, want)
+		}
+	}
+}
+
+func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	secretCause := errors.New(`open C:\private\source.recording.json credential=TOPSECRET`)
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyPortable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "untrusted bytes TOPSECRET",
+		},
+		Cause: secretCause,
+	}
+	logRunServiceOutcome(
+		context.Background(),
+		RunConfig{
+			Logger: logger, ResumePath: `C:\private\source.recording.json`,
+			FactorySessionID: "factory-session-2", WithServer: true,
+		},
+		&initializer.RuntimeHostStartupError{Cause: inputErr},
+	)
+
+	serviceEntries := observed.FilterMessage("run service failed").All()
+	if len(serviceEntries) != 1 || serviceEntries[0].ContextMap()["error_code"] != string(recordings.ReplayArtifactDiagnosticMalformed) {
+		t.Fatalf("run service failure entries = %#v, want the existing malformed replay code", serviceEntries)
+	}
+	recoveryEntries := observed.FilterMessage("run recovery outcome").All()
+	if len(recoveryEntries) != 1 {
+		t.Fatalf("run recovery failure records = %d, want one", len(recoveryEntries))
+	}
+	fields := recoveryEntries[0].ContextMap()
+	wantFields := map[string]any{
+		"event":              runRecoveryEventName,
+		"outcome":            runRecoveryOutcomeFailed,
+		"host_observation":   runRecoveryHostObservation,
+		"supervisor":         runRecoverySupervisor,
+		"factory_session_id": "factory-session-2",
+		"error_code":         string(recordings.ReplayArtifactDiagnosticMalformed),
+	}
+	if len(fields) != len(wantFields) {
+		t.Fatalf("recovery fields = %#v, want only %#v", fields, wantFields)
+	}
+	for name, want := range wantFields {
+		if got := fields[name]; got != want {
+			t.Errorf("recovery field %s = %#v, want %#v", name, got, want)
+		}
+	}
+}
+
 func TestRunServiceOutcomeLogsCancellationWithoutFailureClassification(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	core, observed := observer.New(zap.InfoLevel)
-	logRunServiceOutcome(ctx, RunConfig{Logger: zap.New(core), WithServer: true}, nil)
+	logRunServiceOutcome(ctx, RunConfig{
+		Logger: zap.New(core), WithServer: true, ResumePath: "source.recording.json",
+	}, nil)
 
 	entries := observed.FilterMessage("run service completed").All()
 	if len(entries) != 1 {
@@ -607,6 +700,9 @@ func TestRunServiceOutcomeLogsCancellationWithoutFailureClassification(t *testin
 	}
 	if _, ok := fields["error_code"]; ok {
 		t.Fatalf("cancellation unexpectedly logged error code: %#v", fields)
+	}
+	if recoveryEntries := observed.FilterMessage("run recovery outcome").All(); len(recoveryEntries) != 0 {
+		t.Fatalf("cancelled startup recovery records = %#v, want none", recoveryEntries)
 	}
 }
 

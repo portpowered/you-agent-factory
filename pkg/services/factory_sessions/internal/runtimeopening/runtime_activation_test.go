@@ -797,6 +797,12 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	if resumeRuntime.path != "source.recording.json" {
 		t.Fatalf("resume source path = %q, want source.recording.json", resumeRuntime.path)
 	}
+	if resumeRuntime.calls != 1 {
+		t.Fatalf("resume source loads = %d, want one", resumeRuntime.calls)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want one", root.activations)
+	}
 	if root.activation.Inputs.ResumeInput != resumeInput {
 		t.Fatalf("activation resume input = %#v, want %#v", root.activation.Inputs.ResumeInput, resumeInput)
 	}
@@ -851,6 +857,11 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 	}
 
 	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
+			Directory:        "/authored-b",
+			SourcePath:       "/authored-b/factory.json",
+			ExecutionBaseDir: "/authored-b",
+		},
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: "successor.recording.json",
 			ResumePath: "source.recording.json",
@@ -861,6 +872,12 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 	}
 	if string(definitions.request.Canonical) != string(factorySnapshot) {
 		t.Fatalf("resume Factory Definition canonical = %q, want captured recording definition", definitions.request.Canonical)
+	}
+	if definitions.request.Canonical != nil && strings.Contains(string(definitions.request.Canonical), "authored-b") {
+		t.Fatalf("resume Factory Definition canonical selected authored input B: %q", definitions.request.Canonical)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
 	}
 	if root.activation.Snapshot.EffectiveFactory.Name != "recorded" {
 		t.Fatalf("activation Factory name = %q, want captured recording definition", root.activation.Snapshot.EffectiveFactory.Name)
@@ -876,15 +893,51 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 	}
 }
 
+func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	root := &resumeRoutingRoot{}
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyPortable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "invalid source bytes",
+		},
+		Cause: errors.New("invalid source bytes"),
+	}
+	resumeRuntime := &resumeInputRuntime{err: inputErr}
+	factory := &Factory{
+		runtimeRoot:               root,
+		recordingsRuntime:         resumeRuntime,
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+	}
+
+	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "source.recording.json"},
+	})
+	var replayInputErr *recordings.ReplayInputError
+	if !errors.As(err, &replayInputErr) || replayInputErr != inputErr {
+		t.Fatalf("openForRequest error = %T %v, want original ReplayInputError", err, err)
+	}
+	if resumeRuntime.path != "source.recording.json" || resumeRuntime.calls != 1 {
+		t.Fatalf("resume reads = %d at %q, want one source read", resumeRuntime.calls, resumeRuntime.path)
+	}
+	if root.activations != 0 {
+		t.Fatalf("Runtime root activations = %d, want zero before valid resume input", root.activations)
+	}
+}
+
 type resumeRoutingRoot struct {
 	factoryruntime.Service
-	activation factoryruntime.RuntimeActivationRequest
+	activation  factoryruntime.RuntimeActivationRequest
+	activations int
 }
 
 func (root *resumeRoutingRoot) Activate(
 	_ context.Context,
 	request factoryruntime.RuntimeActivationRequest,
 ) (factoryruntime.RuntimeActivationResult, error) {
+	root.activations++
 	root.activation = request
 	return factoryruntime.RuntimeActivationResult{
 		RuntimeID: "runtime-1",
@@ -905,14 +958,17 @@ func (root *resumeRoutingRoot) Deactivate(
 type resumeInputRuntime struct {
 	recordings.RuntimeOpening
 	path   string
+	calls  int
 	result recordings.LoadResumeInputResult
+	err    error
 }
 
 func (runtime *resumeInputRuntime) LoadResumeInput(
 	request recordings.LoadResumeInputRequest,
 ) (recordings.LoadResumeInputResult, error) {
 	runtime.path = request.Path
-	return runtime.result, nil
+	runtime.calls++
+	return runtime.result, runtime.err
 }
 
 type replayRoutingRoot struct {
