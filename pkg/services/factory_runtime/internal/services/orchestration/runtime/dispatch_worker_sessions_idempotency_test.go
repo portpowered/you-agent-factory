@@ -870,3 +870,35 @@ func TestMergeRecordedObservationsKeepsTerminalTimingAcrossRestart(t *testing.T)
 		t.Fatalf("merged terminal Worker Session timing = %#v, want the stable recorded Factory timeline", merged)
 	}
 }
+
+type listObservationRequestRecorder struct {
+	workersessions.Service
+	request workersessions.ListObservationsRequest
+}
+
+func (recorder *listObservationRequestRecorder) ListObservations(
+	_ context.Context,
+	request workersessions.ListObservationsRequest,
+) (workersessions.ListObservationsResult, error) {
+	recorder.request = request
+	return workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID:  "worker-target",
+		FactorySessionID: request.FactorySessionID,
+		WorkIDs:          []string{request.WorkID},
+	}}}, nil
+}
+
+func TestRecordedWorkerSessionObservationScopesLiveWorkReadToItsFactorySession(t *testing.T) {
+	live := &listObservationRequestRecorder{}
+	service := &recordedWorkerSessionObservation{Service: live, factorySessionID: " factory-target "}
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{
+		FactorySessionID: "factory-sibling",
+		WorkID:           "work-1",
+	})
+	if err != nil || len(result.Observations) != 1 || result.Observations[0].FactorySessionID != "factory-target" {
+		t.Fatalf("ListObservations() = %#v, %v; want one target-session observation", result, err)
+	}
+	if live.request.FactorySessionID != "factory-target" || live.request.WorkID != "work-1" {
+		t.Fatalf("live Worker Sessions request = %#v, want runtime-owned Factory Session and Work", live.request)
+	}
+}

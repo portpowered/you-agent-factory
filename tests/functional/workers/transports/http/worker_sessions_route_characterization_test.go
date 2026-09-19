@@ -69,11 +69,15 @@ func TestWorkerSessionRouteCharacterization_AfterDefaultPauseResume(t *testing.T
 	}
 }
 
-// TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped proves
-// that HTTP and CLI return the historical and current attempts for one Work,
-// while a sibling Work in the same Factory Session stays out of that result.
-func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *testing.T) {
-	t.Parallel()
+type routeCharacterizationMultipleAttemptsFixture struct {
+	server         *support.FunctionalAPIServer
+	runner         *routeStepWorkerRunner
+	releaseFirst   func()
+	releaseCurrent func()
+}
+
+func newRouteCharacterizationMultipleAttemptsFixture(t *testing.T) routeCharacterizationMultipleAttemptsFixture {
+	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "worker-sessions-route-multiple-attempts",
 		"workTypes": []any{map[string]any{
@@ -130,6 +134,18 @@ func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *test
 		releaseFirst()
 		releaseCurrent()
 	})
+	return routeCharacterizationMultipleAttemptsFixture{
+		server: server, runner: runner, releaseFirst: releaseFirst, releaseCurrent: releaseCurrent,
+	}
+}
+
+// TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped proves
+// that HTTP and CLI return a Work's attempts without including a sibling Work.
+func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *testing.T) {
+	t.Parallel()
+	fixture := newRouteCharacterizationMultipleAttemptsFixture(t)
+	server := fixture.server
+	runner := fixture.runner
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
 
 	targetName := "route-multiple-attempts-target"
@@ -144,7 +160,7 @@ func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *test
 	}
 	runner.waitCallCount(t, 1)
 	historical := waitForRouteCharacterizationAssociation(t, stream, targetWorkID)
-	releaseFirst()
+	fixture.releaseFirst()
 	runner.waitCallCount(t, 2)
 	current := waitForRouteCharacterizationAssociation(t, stream, targetWorkID)
 
@@ -173,7 +189,7 @@ func TestWorkerSessionRouteCharacterization_MultipleAttemptsRemainScoped(t *test
 		{dispatch: current, current: true},
 	})
 
-	releaseCurrent()
+	fixture.releaseCurrent()
 	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, routeCharacterizationTimeout)
 	if runner.callCount() != 4 {
 		t.Fatalf("controlled provider calls after both Works completed = %d, want four staged dispatches", runner.callCount())

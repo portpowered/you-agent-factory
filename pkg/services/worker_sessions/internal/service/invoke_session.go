@@ -585,3 +585,64 @@ func startReplayOutcome(err error) string {
 	}
 	return "rejected"
 }
+
+type observationWorkKey struct {
+	factorySessionID string
+	workID           string
+}
+
+func (r *registry) indexObservationBySessionWorkLocked(id string, current *observation) {
+	if current == nil || strings.TrimSpace(current.factorySessionID) == "" {
+		return
+	}
+	if r.observationIDsBySessionWork == nil {
+		r.observationIDsBySessionWork = make(map[observationWorkKey]map[string]struct{})
+	}
+	keySessionID := strings.TrimSpace(current.factorySessionID)
+	for _, workID := range current.workIDs {
+		workID = strings.TrimSpace(workID)
+		if workID == "" {
+			continue
+		}
+		key := observationWorkKey{factorySessionID: keySessionID, workID: workID}
+		ids := r.observationIDsBySessionWork[key]
+		if ids == nil {
+			ids = make(map[string]struct{})
+			r.observationIDsBySessionWork[key] = ids
+		}
+		ids[id] = struct{}{}
+	}
+}
+
+func (r *registry) observationCandidatesForWork(req workersessions.ListObservationsRequest) []observationOrder {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	workID := strings.TrimSpace(req.WorkID)
+	factorySessionID := strings.TrimSpace(req.FactorySessionID)
+	ids := make([]observationOrder, 0)
+	if factorySessionID != "" {
+		for id := range r.observationIDsBySessionWork[observationWorkKey{factorySessionID: factorySessionID, workID: workID}] {
+			metadata := r.observations[id]
+			if metadata == nil || metadata.factorySessionID != factorySessionID || !containsString(metadata.workIDs, workID) {
+				continue
+			}
+			if _, exists := r.sessions[id]; !exists {
+				continue
+			}
+			ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
+		}
+		return ids
+	}
+
+	for id, metadata := range r.observations {
+		if metadata == nil || !containsString(metadata.workIDs, workID) {
+			continue
+		}
+		if _, exists := r.sessions[id]; !exists {
+			continue
+		}
+		ids = append(ids, observationOrder{id: id, startedAt: metadata.startedAt, attemptID: metadata.attemptID})
+	}
+	return ids
+}

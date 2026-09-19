@@ -7,9 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -352,18 +355,187 @@ func TestNewRestoresCompletedDispatchHistoryForWorkReads(t *testing.T) {
 		t.Fatalf("restored dispatch history = %d entries, want one", len(snapshot.DispatchHistory))
 	}
 	completed := snapshot.DispatchHistory[0]
+	assertRestoredFailureDispatch(t, completed, workID, startedAt, completedAt, failure)
+	completed.FailureDetail.Message = "mutated detached snapshot"
+	second, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after mutation: %v", err)
+	}
+	assertRestoredDispatchFailureIsDetached(t, second.DispatchHistory[0], failure.Message)
+}
+
+func assertRestoredFailureDispatch(
+	t *testing.T,
+	completed interfaces.CompletedDispatch,
+	workID string,
+	startedAt, completedAt time.Time,
+	failure *workerexecution.FailureDetail,
+) {
+	t.Helper()
 	if completed.DispatchID != "dispatch-restored-failure" || completed.Outcome != workerexecution.OutcomeFailed ||
 		!completed.StartTime.Equal(startedAt) || !completed.EndTime.Equal(completedAt) || completed.Duration != 750*time.Millisecond ||
 		len(completed.ConsumedTokens) != 1 || completed.ConsumedTokens[0].Color.WorkID != workID ||
 		completed.FailureDetail == nil || *completed.FailureDetail != *failure {
 		t.Fatalf("restored completed dispatch = %#v, want Work-associated failure and exact timing", completed)
 	}
-	completed.FailureDetail.Message = "mutated detached snapshot"
-	second, err := f.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot after mutation: %v", err)
+}
+
+func assertRestoredDispatchFailureIsDetached(t *testing.T, completed interfaces.CompletedDispatch, wantMessage string) {
+	t.Helper()
+	if completed.FailureDetail == nil || completed.FailureDetail.Message != wantMessage {
+		t.Fatalf("mutated restored dispatch history leaked into runtime: %#v", completed.FailureDetail)
 	}
-	if second.DispatchHistory[0].FailureDetail == nil || second.DispatchHistory[0].FailureDetail.Message != failure.Message {
-		t.Fatalf("mutated restored dispatch history leaked into runtime: %#v", second.DispatchHistory[0].FailureDetail)
+}
+
+func TestWorkerRecordingSessionStartedAt(t *testing.T) {
+	t.Parallel()
+
+	want := time.Date(2026, time.August, 11, 16, 30, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		session recordings.WorkerSessionRecordingSnapshot
+		want    *time.Time
+		wantErr bool
+	}{
+		{name: "empty history", session: recordings.WorkerSessionRecordingSnapshot{WorkerSessionID: "worker-1"}},
+		{
+			name:    "malformed draft",
+			session: workerRecordingSessionSnapshot("worker-1", `{`),
+			wantErr: true,
+		},
+		{
+			name:    "wrong kind",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"RUN","phase":"STARTED","payload":{}}`),
+			wantErr: true,
+		},
+		{
+			name:    "wrong phase",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"SESSION","phase":"UPDATED","payload":{}}`),
+			wantErr: true,
+		},
+		{
+			name:    "malformed session payload",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"SESSION","phase":"STARTED","payload":"invalid"}`),
+			wantErr: true,
+		},
+		{
+			name:    "opening identity mismatch",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"other"}}`),
+			wantErr: true,
+		},
+		{
+			name:    "legacy timestamp absent",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-1"}}`),
+		},
+		{
+			name:    "source timestamp normalized to UTC",
+			session: workerRecordingSessionSnapshot("worker-1", `{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":"worker-1","startedAt":"2026-08-11T09:30:00-07:00"}}`),
+			want:    &want,
+		},
 	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := workerRecordingSessionStartedAt(test.session)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("workerRecordingSessionStartedAt() error = %v, want error %v", err, test.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if test.want == nil {
+				if got != nil {
+					t.Fatalf("workerRecordingSessionStartedAt() = %v, want no timestamp", got)
+				}
+				return
+			}
+			if got == nil || !got.Equal(*test.want) || got.Location() != time.UTC {
+				t.Fatalf("workerRecordingSessionStartedAt() = %v, want %v in UTC", got, test.want)
+			}
+		})
+	}
+}
+
+func workerRecordingSessionSnapshot(workerSessionID, payload string) recordings.WorkerSessionRecordingSnapshot {
+	return recordings.WorkerSessionRecordingSnapshot{
+		WorkerSessionID: workerSessionID,
+		Records:         []events.Record{{Payload: []byte(payload)}},
+	}
+}
+
+func TestRestoredCompletionInputTokensPreservesRecordedSources(t *testing.T) {
+	t.Parallel()
+
+	workOne := work.FactoryWorkItem{ID: "work-one", WorkTypeID: "task", State: "review"}
+	consumed := restoredCompletionInputTokens(interfaces.FactoryWorldDispatchCompletion{
+		ConsumedInputs: []interfaces.WorkstationInput{
+			{TokenID: "missing-work"},
+			{WorkItem: &work.FactoryWorkItem{}},
+			{WorkItem: &workOne},
+			{TokenID: "duplicate", WorkItem: &workOne},
+		},
+	})
+	if len(consumed) != 1 || consumed[0].ID != workOne.ID || consumed[0].Color.WorkID != workOne.ID {
+		t.Fatalf("restored consumed tokens = %#v, want one deduplicated Work token", consumed)
+	}
+
+	workTwo := work.FactoryWorkItem{ID: "work-two", WorkTypeID: "task", State: "review"}
+	inputFallback := restoredCompletionInputTokens(interfaces.FactoryWorldDispatchCompletion{
+		ConsumedInputs: []interfaces.WorkstationInput{{}, {WorkItem: &work.FactoryWorkItem{}}},
+		InputWorkItems: []work.FactoryWorkItem{{}, workTwo, workTwo},
+	})
+	if len(inputFallback) != 1 || inputFallback[0].ID != workTwo.ID {
+		t.Fatalf("restored input-work fallback = %#v, want one deduplicated Work token", inputFallback)
+	}
+
+	workIDFallback := restoredCompletionInputTokens(interfaces.FactoryWorldDispatchCompletion{
+		ConsumedInputs: []interfaces.WorkstationInput{{}},
+		InputWorkItems: []work.FactoryWorkItem{{}},
+		WorkItemIDs:    []string{"", "work-three", "work-three"},
+	})
+	if len(workIDFallback) != 1 || workIDFallback[0].ID != "work-three" {
+		t.Fatalf("restored Work ID fallback = %#v, want one Work token", workIDFallback)
+	}
+
+	if tokens := restoredCompletionInputTokens(interfaces.FactoryWorldDispatchCompletion{}); len(tokens) != 0 {
+		t.Fatalf("restored empty inputs = %#v, want no tokens", tokens)
+	}
+}
+
+func TestRestoredCompletionOutputMutationsSkipEmptyWork(t *testing.T) {
+	t.Parallel()
+
+	mutations := restoredCompletionOutputMutations(interfaces.FactoryWorldDispatchCompletion{
+		DispatchID:   "dispatch-output",
+		TransitionID: "process",
+		Result:       interfaces.WorkstationResult{Outcome: "COMPLETED"},
+		OutputWorkItems: []work.FactoryWorkItem{
+			{},
+			{ID: "work-output", WorkTypeID: "task", State: "review"},
+		},
+	})
+	if len(mutations) != 1 || mutations[0].TokenID != "work-output" || mutations[0].Token == nil || mutations[0].Token.Color.WorkID != "work-output" {
+		t.Fatalf("restored output mutations = %#v, want one output Work mutation", mutations)
+	}
+}
+
+func TestReconcileRuntimeRestoredDispatches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("disabled reconciliation", func(t *testing.T) {
+		if err := reconcileRuntimeRestoredDispatches(&runtimeConfig{skipRestoredDispatchReconciliation: true}, nil); err != nil {
+			t.Fatalf("reconcile disabled Factory Runtime: %v", err)
+		}
+	})
+	t.Run("preserves reconciliation errors", func(t *testing.T) {
+		cfg := &runtimeConfig{restoredWorldState: &interfaces.FactoryWorldState{
+			ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+				"dispatch-without-identity": {TransitionID: "process"},
+			},
+		}}
+		err := reconcileRuntimeRestoredDispatches(cfg, &recordingfixtures.ScriptedRuntimeLedger{})
+		if err == nil {
+			t.Fatal("reconcile invalid restored dispatch: want an identity error")
+		}
+	})
 }
