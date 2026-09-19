@@ -199,10 +199,14 @@ type LoadReplayInputRequest struct {
 // input, or detached Metadata when the caller requested metadata-only mode.
 // Diagnostics may accompany a fully decoded portable input.
 type LoadReplayInputResult struct {
-	Portable    *PortableRecording
-	Legacy      *ReplayArtifact
-	Metadata    *ReplayInputMetadata
-	Diagnostics *ReplayInputDecodeDiagnostics
+	Portable *PortableRecording
+	Legacy   *ReplayArtifact
+	// LegacyFormat identifies the on-disk format of Legacy when the input was
+	// loaded by the production path. It is empty for older or synthetic
+	// capability implementations that do not report the framing version.
+	LegacyFormat string
+	Metadata     *ReplayInputMetadata
+	Diagnostics  *ReplayInputDecodeDiagnostics
 }
 
 // ReplayInputMetadata contains only the identity needed to enumerate a

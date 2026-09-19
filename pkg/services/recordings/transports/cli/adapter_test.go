@@ -1,4 +1,4 @@
-package cli_test
+package cli
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestAdapterResolveRecordPathModes(t *testing.T) {
@@ -16,7 +16,7 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 	homeDir := t.TempDir()
 	plannedPath := filepath.Join(homeDir, "recordings", "planned.json")
 	planner := recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-		if request.HomeDir != homeDir || request.ReportedSessionID != recordingscli.DefaultReportedFactorySessionID {
+		if request.HomeDir != homeDir || request.ReportedSessionID != DefaultReportedFactorySessionID {
 			t.Fatalf("recording request = %#v", request)
 		}
 		return recordings.LiveRecordingTarget{
@@ -24,18 +24,18 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 			ReportedPath: plannedPath,
 		}, nil
 	})
-	adapter := recordingscli.New()
+	adapter := New()
 
 	tests := []struct {
 		name          string
-		request       recordingscli.InvocationRequest
+		request       InvocationRequest
 		wantService   string
 		wantReported  string
 		wantGenerated bool
 	}{
 		{
 			name: "default live mode",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				HomeDir:                homeDir,
 				RecordingTargetPlanner: planner,
 			},
@@ -45,7 +45,7 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 		},
 		{
 			name: "resume plans live successor recording",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				ResumePath:             "existing.recording.json",
 				HomeDir:                homeDir,
 				RecordingTargetPlanner: planner,
@@ -56,7 +56,7 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 		},
 		{
 			name: "resume with explicit successor recording",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				ResumePath: "existing.recording.json",
 				RecordPath: "successor.recording.json",
 			},
@@ -64,20 +64,20 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 		},
 		{
 			name: "explicit record path",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				RecordPath: "run.replay.json",
 			},
 			wantService: "run.replay.json",
 		},
 		{
 			name: "replay disables default recording",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				ReplayPath: "existing.replay.json",
 			},
 		},
 		{
 			name: "no-record disables default recording",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				DisableDefaultRecording: true,
 			},
 		},
@@ -108,15 +108,15 @@ func TestAdapterResolveRecordPathModes(t *testing.T) {
 func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 	t.Parallel()
 
-	adapter := recordingscli.New()
+	adapter := New()
 	tests := []struct {
 		name    string
-		request recordingscli.InvocationRequest
+		request InvocationRequest
 		wantErr string
 	}{
 		{
 			name: "no-record with record",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				RecordPath:              "run.replay.json",
 				DisableDefaultRecording: true,
 			},
@@ -124,7 +124,7 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 		},
 		{
 			name: "record with replay",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				RecordPath: "run.replay.json",
 				ReplayPath: "existing.replay.json",
 			},
@@ -132,7 +132,7 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 		},
 		{
 			name: "resume with replay",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				ResumePath: "existing.recording.json",
 				ReplayPath: "existing.replay.json",
 			},
@@ -140,7 +140,7 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 		},
 		{
 			name: "resume with no-record",
-			request: recordingscli.InvocationRequest{
+			request: InvocationRequest{
 				ResumePath:              "existing.recording.json",
 				DisableDefaultRecording: true,
 			},
@@ -167,16 +167,32 @@ func TestAdapterResolveRecordPathRejectsIncompatibleFlags(t *testing.T) {
 func TestAdapterResolveRecordPathRequiresPlannerForDefaultMode(t *testing.T) {
 	t.Parallel()
 
-	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{HomeDir: "home"})
+	_, err := New().ResolveRecordPath(InvocationRequest{HomeDir: "home"})
 	if err == nil || err.Error() != "Recordings live recording target planner is required" {
 		t.Fatalf("ResolveRecordPath() error = %v, want required planner", err)
+	}
+}
+
+func TestAdapterResolveDefaultRecordPathRejectsEmptyPlannedServicePath(t *testing.T) {
+	t.Parallel()
+
+	_, err := New().ResolveRecordPath(InvocationRequest{
+		HomeDir: t.TempDir(),
+		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
+			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				return recordings.LiveRecordingTarget{}, nil
+			},
+		),
+	})
+	if err == nil || err.Error() != "resolve default replay record path: planner returned an empty service path" {
+		t.Fatalf("ResolveRecordPath() error = %v, want empty default service path failure", err)
 	}
 }
 
 func TestAdapterResolveRecordPathPropagatesPlannerFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+	_, err := New().ResolveRecordPath(InvocationRequest{
 		HomeDir: t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -195,7 +211,7 @@ func TestAdapterResolveRecordPathPropagatesPlannerFailure(t *testing.T) {
 func TestAdapterResolveResumeRecordPathPropagatesPlannerFailure(t *testing.T) {
 	t.Parallel()
 
-	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+	_, err := New().ResolveRecordPath(InvocationRequest{
 		ResumePath: "existing.recording.json",
 		HomeDir:    t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
@@ -215,7 +231,7 @@ func TestAdapterResolveResumeRecordPathPropagatesPlannerFailure(t *testing.T) {
 func TestAdapterResolveResumeRecordPathRequiresNonEmptyPlannedServicePath(t *testing.T) {
 	t.Parallel()
 
-	_, err := recordingscli.New().ResolveRecordPath(recordingscli.InvocationRequest{
+	_, err := New().ResolveRecordPath(InvocationRequest{
 		ResumePath: "existing.recording.json",
 		HomeDir:    t.TempDir(),
 		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(
@@ -226,5 +242,199 @@ func TestAdapterResolveResumeRecordPathRequiresNonEmptyPlannedServicePath(t *tes
 	})
 	if err == nil || !strings.Contains(err.Error(), "planner returned an empty service path") {
 		t.Fatalf("error = %v, want empty planned service path failure", err)
+	}
+}
+
+func TestMapStructuralReplayFailurePreservesSafeCodedDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`open C:\private\recordings\legacy.jsonl`)
+	diagnostic := recordings.ReplayArtifactDiagnostic{
+		Code:    recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		Area:    "events",
+		Path:    "events[3]",
+		Message: "event \"event-bad\" has\tduplicate\nidentity",
+	}
+	inputErr := &recordings.ReplayInputError{
+		Family:     recordings.ReplayInputFamilyLegacy,
+		Diagnostic: diagnostic,
+		Cause:      cause,
+	}
+	mapped := MapStructuralReplayFailure(inputErr)
+	if mapped == nil {
+		t.Fatal("MapStructuralReplayFailure() = nil, want legacy structural diagnostic")
+	}
+	type codedError interface {
+		error
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	var coded codedError
+	if !errors.As(mapped, &coded) {
+		t.Fatalf("mapped error %T does not implement the coded CLI error contract", mapped)
+	}
+	if coded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticInvalidIdentity) ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("coded error = %q / %q, want invalid identity / bad request", coded.CLIErrorCode(), coded.CLIErrorFamily())
+	}
+	want := `Error: INVALID_RECORDING_IDENTITY area=events path=events[3] event="event-bad" action="REPLACE_OR_REGENERATE_RECORDING": event "event-bad" has duplicate identity`
+	if mapped.Error() != want || coded.CLIErrorMessage() != want {
+		t.Fatalf("mapped error = %q, coded message = %q, want %q", mapped.Error(), coded.CLIErrorMessage(), want)
+	}
+	if strings.Contains(mapped.Error(), `C:\private\recordings\legacy.jsonl`) || !errors.Is(mapped, cause) {
+		t.Fatalf("mapped error leaked its local source or lost its cause: %q", mapped)
+	}
+}
+
+func TestMapStructuralReplayFailureAcceptsEachStructuralCode(t *testing.T) {
+	t.Parallel()
+
+	codes := []recordings.ReplayArtifactDiagnosticCode{
+		recordings.ReplayArtifactDiagnosticMalformed,
+		recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		recordings.ReplayArtifactDiagnosticInvalidOrder,
+		recordings.ReplayArtifactDiagnosticMissingReference,
+		recordings.ReplayArtifactDiagnosticForeignReference,
+	}
+	for _, code := range codes {
+		code := code
+		t.Run(string(code), func(t *testing.T) {
+			t.Parallel()
+
+			mapped := MapStructuralReplayFailure(&recordings.ReplayArtifactError{
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: code, Area: "events", Path: "events[4]", Message: `event "bad-event" is invalid`,
+				},
+			})
+			if mapped == nil {
+				t.Fatal("MapStructuralReplayFailure() = nil, want structural diagnostic")
+			}
+			if !strings.Contains(mapped.Error(), "event=\"bad-event\"") || !strings.Contains(mapped.Error(), "path=events[4]") {
+				t.Fatalf("mapped error = %q, want safe first-corrupt event context", mapped)
+			}
+		})
+	}
+}
+
+func TestMapStructuralReplayFailureUsesFallbackEventGuidance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		message    string
+		wantDetail string
+	}{
+		{name: "unrecognized event context", message: "recording event is invalid", wantDetail: "recording event is invalid"},
+		{name: "missing closing quote", message: `event "`, wantDetail: `event "`},
+		{name: "empty event identity", message: `event "" is invalid`, wantDetail: `event "" is invalid`},
+		{name: "empty diagnostic", wantDetail: "recording event is structurally invalid"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			mapped := MapStructuralReplayFailure(&recordings.ReplayArtifactError{
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: recordings.ReplayArtifactDiagnosticMalformed,
+					Area: "events", Path: "events[0]", Message: test.message,
+				},
+			})
+			if mapped == nil {
+				t.Fatal("MapStructuralReplayFailure() = nil, want malformed event diagnostic")
+			}
+			wantPrefix := `Error: MALFORMED_REPLAY_ARTIFACT area=events path=events[0] event="unknown" action="REPLACE_OR_REGENERATE_RECORDING": `
+			if !strings.HasPrefix(mapped.Error(), wantPrefix) || !strings.HasSuffix(mapped.Error(), test.wantDetail) {
+				t.Fatalf("mapped error = %q, want prefix %q and detail %q", mapped.Error(), wantPrefix, test.wantDetail)
+			}
+		})
+	}
+}
+
+func TestMapStructuralReplayFailureIgnoresOtherFamiliesAndFailures(t *testing.T) {
+	t.Parallel()
+
+	diagnostic := recordings.ReplayArtifactDiagnostic{
+		Code: recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		Area: "events", Path: "events[3]", Message: `event "event-bad" is invalid`,
+	}
+	tests := []struct {
+		name  string
+		cause error
+	}{
+		{name: "nil"},
+		{name: "ordinary error", cause: errors.New("not a replay diagnostic")},
+		{
+			name: "portable structural diagnostic",
+			cause: &recordings.ReplayInputError{
+				Family: recordings.ReplayInputFamilyPortable, Diagnostic: diagnostic,
+			},
+		},
+		{
+			name: "legacy non-event diagnostic",
+			cause: &recordings.ReplayInputError{
+				Family: recordings.ReplayInputFamilyLegacy,
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: diagnostic.Code, Area: "recording", Path: "header", Message: diagnostic.Message,
+				},
+			},
+		},
+		{
+			name: "legacy dependency failure",
+			cause: &recordings.ReplayInputError{
+				Family: recordings.ReplayInputFamilyLegacy,
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: recordings.ReplayArtifactDiagnosticDependencyFailure,
+					Area: diagnostic.Area, Path: diagnostic.Path, Message: diagnostic.Message,
+				},
+			},
+		},
+		{
+			name: "artifact integrity failure",
+			cause: &recordings.ReplayArtifactError{
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+					Area: diagnostic.Area, Path: diagnostic.Path, Message: diagnostic.Message,
+				},
+			},
+		},
+		{
+			name: "artifact diagnostic outside event area",
+			cause: &recordings.ReplayArtifactError{
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: diagnostic.Code, Area: "recording", Path: "header", Message: diagnostic.Message,
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if mapped := MapStructuralReplayFailure(test.cause); mapped != nil {
+				t.Fatalf("MapStructuralReplayFailure(%v) = %v, want nil", test.cause, mapped)
+			}
+		})
+	}
+}
+
+func TestReplayStructuralCLIErrorNilAndEmptyValueDefaults(t *testing.T) {
+	t.Parallel()
+
+	var nilError *replayStructuralCLIError
+	if nilError.Error() != "" || nilError.Unwrap() != nil ||
+		nilError.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticMalformed) {
+		t.Fatal("nil structural CLI error did not return empty message, nil cause, and malformed code")
+	}
+	if nilError.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("nil structural CLI error family = %q, want bad request", nilError.CLIErrorFamily())
+	}
+
+	emptyError := &replayStructuralCLIError{}
+	want := `Error: MALFORMED_REPLAY_ARTIFACT area=events path=events event="unknown" action="REPLACE_OR_REGENERATE_RECORDING": recording event is structurally invalid`
+	if emptyError.Error() != want || emptyError.CLIErrorMessage() != want ||
+		emptyError.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticMalformed) || emptyError.Unwrap() != nil {
+		t.Fatalf("zero-value structural CLI error = %q / %q / %q", emptyError.Error(), emptyError.CLIErrorMessage(), emptyError.CLIErrorCode())
 	}
 }

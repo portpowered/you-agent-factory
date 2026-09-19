@@ -363,6 +363,12 @@ const (
 	ReplayArtifactDiagnosticCancelled             ReplayArtifactDiagnosticCode = "REPLAY_ARTIFACT_CANCELLED"
 )
 
+// ReplayArtifactStructuralRepairAction is the stable guidance attached to a
+// structural replay failure. A corrupt historical event cannot be repaired by
+// replaying a suffix because doing so would make the resulting history
+// dependent on an arbitrary truncation point.
+const ReplayArtifactStructuralRepairAction = "REPLACE_OR_REGENERATE_RECORDING"
+
 // ReplayArtifactDiagnostic is the detached, Recordings-owned explanation of
 // a rejected replay/artifact operation. Path is a safe logical field path,
 // never a customer filesystem path. SupportedVersions is present only when a
