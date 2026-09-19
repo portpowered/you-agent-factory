@@ -125,6 +125,10 @@ func (runner historicalReplayRunner) HostedInvocation() HostedInvocationOperatio
 	return provider.HostedInvocation()
 }
 
+func (runner historicalReplayRunner) ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata {
+	return resumeRecoveryMetadataForRunner(runner.runner)
+}
+
 func (runner historicalReplayRunner) CleanInvocationSnapshot(
 	ctx context.Context,
 ) (factoryruntime.CleanInvocationSnapshot, error) {
@@ -207,6 +211,10 @@ func (runner replayMetadataWarningRunner) HostedInvocation() HostedInvocationOpe
 	return provider.HostedInvocation()
 }
 
+func (runner replayMetadataWarningRunner) ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata {
+	return resumeRecoveryMetadataForRunner(runner.runner)
+}
+
 func (runner replayMetadataWarningRunner) ReplayMetadataWarnings() []recordings.MetadataMismatchWarning {
 	return append([]recordings.MetadataMismatchWarning(nil), runner.warnings...)
 }
@@ -241,6 +249,7 @@ func replayMetadataWarningsForRunner(
 type hostedInvocationRunner struct {
 	runner     initializer.LocalRuntimeRunner
 	invocation HostedInvocationOperation
+	recovery   *recordings.ResumeRecoveryMetadata
 }
 
 func (runner hostedInvocationRunner) Run(ctx context.Context) error {
@@ -260,6 +269,14 @@ func (runner hostedInvocationRunner) RunWithCompletion(
 
 func (runner hostedInvocationRunner) HostedInvocation() HostedInvocationOperation {
 	return runner.invocation
+}
+
+func (runner hostedInvocationRunner) ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata {
+	if runner.recovery == nil {
+		return nil
+	}
+	clone := *runner.recovery
+	return &clone
 }
 
 func (runner hostedInvocationRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
@@ -287,11 +304,18 @@ func (runner hostedInvocationRunner) RuntimeLogDiagnostics() runtimeartifact.Dia
 func WithHostedInvocation(
 	runner initializer.LocalRuntimeRunner,
 	invocation HostedInvocationOperation,
+	recovery ...*recordings.ResumeRecoveryMetadata,
 ) initializer.LocalRuntimeRunner {
-	if runner == nil || invocation == nil {
+	hasRecoveryMetadata := len(recovery) > 0 && recovery[0] != nil
+	if runner == nil || (invocation == nil && !hasRecoveryMetadata) {
 		return runner
 	}
-	return hostedInvocationRunner{runner: runner, invocation: invocation}
+	var metadata *recordings.ResumeRecoveryMetadata
+	if len(recovery) > 0 && recovery[0] != nil {
+		clone := *recovery[0]
+		metadata = &clone
+	}
+	return hostedInvocationRunner{runner: runner, invocation: invocation, recovery: metadata}
 }
 
 type cleanInvocationSnapshotRunner struct {
@@ -361,6 +385,10 @@ func (runner cleanInvocationSnapshotRunner) HostedInvocation() HostedInvocationO
 	return provider.HostedInvocation()
 }
 
+func (runner cleanInvocationSnapshotRunner) ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata {
+	return resumeRecoveryMetadataForRunner(runner.runner)
+}
+
 func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
 	provider, ok := runner.runner.(interface {
 		HistoricalReplay() *factorysessions.HistoricalReplayInspection
@@ -419,10 +447,12 @@ func openHostedRuntime(
 	}
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig)
 	var factorySvc initializer.LocalRuntimeRunner
+	var recoveryMetadata *recordings.ResumeRecoveryMetadata
 	onBound := newRuntimeHostObserver(
 		ctx, cfg, recordPath, requestedPort,
 		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
 		startupDisclosure,
+		func() *recordings.ResumeRecoveryMetadata { return recoveryMetadata },
 	)
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
@@ -440,6 +470,7 @@ func openHostedRuntime(
 		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
+	recoveryMetadata = resumeRecoveryMetadataForRunner(factorySvc)
 	if cfg.Port <= 0 {
 		startupDisclosure.commit()
 	}
@@ -451,6 +482,7 @@ func openHostedRuntime(
 	}
 	if operation != nil {
 		operation.runner = factorySvc
+		operation.resumeRecoveryMetadata = cloneRunResumeRecoveryMetadata(recoveryMetadata)
 		operation.batchReportProvider = batchProvider
 		operation.hostedInvocation = hostedInvocation
 		operation.historicalReplay = historicalReplay
@@ -464,9 +496,10 @@ func openHostedRuntime(
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		startupPrepared:     true,
-		batchReportProvider: batchProvider,
-		hostedInvocation:    hostedInvocation, historicalReplay: historicalReplay,
+		resumeRecoveryMetadata: recoveryMetadata,
+		startupPrepared:        true,
+		batchReportProvider:    batchProvider,
+		hostedInvocation:       hostedInvocation, historicalReplay: historicalReplay,
 		replayMetadataWarnings: replayMetadataWarnings,
 		openingPresentations:   presentations, visualizations: visualizations,
 		visualizationSinkID: visualizationSinkID,
@@ -524,6 +557,33 @@ func hostedRuntimeCapabilities(
 	return historicalReplay, hostedInvocation
 }
 
+func resumeRecoveryMetadataForRunner(
+	runner initializer.LocalRuntimeRunner,
+) *recordings.ResumeRecoveryMetadata {
+	provider, ok := runner.(interface {
+		ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata
+	})
+	if !ok || provider == nil {
+		return nil
+	}
+	metadata := provider.ResumeRecoveryMetadata()
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
+}
+
+func cloneRunResumeRecoveryMetadata(
+	metadata *recordings.ResumeRecoveryMetadata,
+) *recordings.ResumeRecoveryMetadata {
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
+}
+
 func prepareHostedInvocation(
 	ctx context.Context,
 	cfg RunConfig,
@@ -564,6 +624,7 @@ func newRuntimeHostObserver(
 	requestedPort int,
 	diagnostics func() runtimeartifact.Diagnostics,
 	startupDisclosure *startupDisclosure,
+	recoveryMetadata ...func() *recordings.ResumeRecoveryMetadata,
 ) factorysessions.RuntimeHostObserver {
 	return func(binding factorysessions.RuntimeHostBinding) {
 		resolved := cfg
@@ -575,7 +636,11 @@ func newRuntimeHostObserver(
 		// commits it only after binding succeeds so a listener failure remains
 		// free of human startup output.
 		startupDisclosure.commit()
-		logRunRecoveryOutcome(resolved, runRecoveryOutcomeSuccess, nil)
+		var recovery *recordings.ResumeRecoveryMetadata
+		if len(recoveryMetadata) > 0 && recoveryMetadata[0] != nil {
+			recovery = recoveryMetadata[0]()
+		}
+		logRunRecoveryOutcome(resolved, runRecoveryOutcomeSuccess, nil, recovery)
 		emitStartupDetails(resolved, diagnostics())
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {

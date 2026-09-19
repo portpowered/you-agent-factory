@@ -346,6 +346,38 @@ func TestMapReplayInputFailurePreservesExistingCodesAndRedactsSourceDetails(t *t
 	}
 }
 
+func TestMapReplayInputFailureAdaptsRecordingsArtifactErrors(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("recording dependency failed")
+	mapped := MapReplayInputFailure(&recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorUnavailable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticDependencyFailure,
+			Area: "recording", Path: "recording", Message: "untrusted source path and contents",
+		},
+		Cause: cause,
+	})
+	if mapped == nil {
+		t.Fatal("MapReplayInputFailure() = nil, want adapted Recordings artifact failure")
+	}
+	type codedError interface {
+		error
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	var coded codedError
+	if !errors.As(mapped, &coded) || coded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticDependencyFailure) ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("mapped error = %#v, want dependency code in the bad-request family", mapped)
+	}
+	if coded.CLIErrorMessage() != "verify that the recording is available and readable before retrying" ||
+		strings.Contains(mapped.Error(), "untrusted") || !errors.Is(mapped, cause) {
+		t.Fatalf("mapped error = %q / %q, want safe guidance and preserved cause", mapped, coded.CLIErrorMessage())
+	}
+}
+
 func TestMapReplayInputFailureUsesMalformedGuidanceAndKnownFallbackCode(t *testing.T) {
 	t.Parallel()
 

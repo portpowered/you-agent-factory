@@ -2,6 +2,8 @@ package runtimeopening
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -18,6 +20,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
+
+func recoveryRecordingID(recordingID string) string {
+	recordingID = strings.TrimSpace(recordingID)
+	if recordingID == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(recordingID))
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
 
 // runtimeProducts is the Factory Sessions side of a completed runtime opening.
 // It retains the opened role bundles, the Runtime binding publication edge, and

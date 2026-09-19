@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -476,6 +478,57 @@ func TestReplayInputLoaderClassifiesDependencyAndValidationFailures(t *testing.T
 			}
 			if testCase.wantCause != nil && !errors.Is(err, testCase.wantCause) {
 				t.Fatalf("error = %v, want cause %v", err, testCase.wantCause)
+			}
+		})
+	}
+}
+
+func TestReplayInputLoaderRetainsContentIdentityForSuccessAndValidationFailure(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload []byte
+		legacy  recordings.ReplayArtifactLoader
+		wantErr bool
+	}{
+		{
+			name:    "legacy input",
+			payload: []byte(`{"schemaVersion":"legacy"}`),
+			legacy: func(string) (*recordings.ReplayArtifact, error) {
+				return &recordings.ReplayArtifact{}, nil
+			},
+		},
+		{
+			name:    "malformed portable input",
+			payload: []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","schemaVersion":"unsupported"}`),
+			wantErr: true,
+		},
+	}
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			loader := NewReplayInputLoader(
+				func(string) ([]byte, error) { return testCase.payload, nil }, nil, testCase.legacy, nil,
+				logging.NoopLogger{},
+			)
+			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "source.recording"})
+			digest := sha256.Sum256(testCase.payload)
+			wantDigest := "sha256:" + hex.EncodeToString(digest[:])
+			if testCase.wantErr {
+				var inputErr *recordings.ReplayInputError
+				if !errors.As(err, &inputErr) || inputErr.ArtifactDigest != wantDigest {
+					t.Fatalf("LoadReplayInput() error = %#v, want typed failure with digest %q", err, wantDigest)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadReplayInput() error = %v", err)
+			}
+			if result.ArtifactDigest != wantDigest {
+				t.Fatalf("artifact digest = %q, want %q", result.ArtifactDigest, wantDigest)
 			}
 		})
 	}

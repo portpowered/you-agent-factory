@@ -108,9 +108,10 @@ const (
 // fact to preserve the established portable-versus-legacy error context
 // without depending on a Recordings implementation detail.
 type ReplayInputError struct {
-	Family     ReplayInputFamily
-	Diagnostic ReplayArtifactDiagnostic
-	Cause      error
+	Family         ReplayInputFamily
+	Diagnostic     ReplayArtifactDiagnostic
+	ArtifactDigest string
+	Cause          error
 }
 
 func (e *ReplayInputError) Error() string {

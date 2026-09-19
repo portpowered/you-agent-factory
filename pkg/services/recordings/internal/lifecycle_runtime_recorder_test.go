@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -517,9 +519,14 @@ func TestResumeSourceCanonicalSessionIDAllowsAliasAlongsideCanonicalEventIdentit
 }
 
 func TestLoadResumeInputCarriesV2MetadataIdentityWithoutChangingHistory(t *testing.T) {
+	recordedAt := time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC)
+	factorySnapshot := factorydefinitions.FactorySnapshot(`{"name":"recorded-factory"}`)
 	fullInput := recordings.LoadReplayInputResult{
+		ArtifactDigest: "sha256:source-recording-digest",
 		Legacy: &factorydefinitions.ReplayArtifact{
-			Events: []factorydefinitions.FactoryEvent{{Id: "resume-event"}},
+			RecordedAt: recordedAt,
+			Factory:    &factorySnapshot,
+			Events:     []factorydefinitions.FactoryEvent{{Id: "resume-event"}},
 		},
 	}
 	metadataInput := recordings.LoadReplayInputResult{
@@ -542,6 +549,12 @@ func TestLoadResumeInputCarriesV2MetadataIdentityWithoutChangingHistory(t *testi
 	}
 	if got.Input.Legacy == nil || len(got.Input.Legacy.Events) != 1 || got.Input.Legacy.Events[0].Id != "resume-event" {
 		t.Fatalf("resume history = %#v, want unchanged legacy history", got.Input.Legacy)
+	}
+	definitionDigest := sha256.Sum256([]byte(factorySnapshot))
+	if got.RecoveryMetadata.SourceRecordingID != fullInput.ArtifactDigest ||
+		got.RecoveryMetadata.RecordedDefinitionID != "sha256:"+hex.EncodeToString(definitionDigest[:]) ||
+		!got.RecoveryMetadata.PreviousRecordedAt.Equal(recordedAt) {
+		t.Fatalf("resume recovery metadata = %#v, want source digest, recorded definition digest, and recorded time", got.RecoveryMetadata)
 	}
 }
 

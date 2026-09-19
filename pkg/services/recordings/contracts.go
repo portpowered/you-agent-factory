@@ -144,6 +144,7 @@ type (
 	ReplayInputMetadata                                        = recordingcontracts.ReplayInputMetadata
 	LoadResumeInputRequest                                     = recordingcontracts.LoadResumeInputRequest
 	LoadResumeInputResult                                      = recordingcontracts.LoadResumeInputResult
+	ResumeRecoveryMetadata                                     = recordingcontracts.ResumeRecoveryMetadata
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
 	LoadReplayRecordingForResumeRequest                        = recordingcontracts.LoadReplayRecordingForResumeRequest

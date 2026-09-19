@@ -424,10 +424,9 @@ func assertRestartRecoveryFailureIsSafe(t *testing.T, daemon *boardPersistenceDa
 	}
 }
 
-// TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess sends an
-// OS interrupt immediately after starting the successor executable. This is
-// the controlled real-process cancellation boundary; the success record is
-// emitted only after host readiness, and the interrupted source stays intact.
+// TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess observes
+// runtime opening before public readiness, then interrupts that successor.
+// The success record is emitted only after host readiness, and the source stays intact.
 func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testing.T) {
 	t.Parallel()
 	artifactPath := requireRestartCLIArtifact(t)
@@ -451,8 +450,14 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 		t.Fatalf("hash cancellation source recording: %v", err)
 	}
 
-	second := startBoardPersistenceJSONResumeProcess(t, artifactPath, factoryDir, homeDir, sourcePath, successorPath, filepath.Join(t.TempDir(), "unused-release"))
+	logDir := filepath.Join(homeDir, ".you-agent-factory", "logs")
+	logWatcher := newBoardPersistenceLogWatcher(t, logDir)
+	second := startBoardPersistenceDaemonProcessWithResumeOutput(
+		t, artifactPath, factoryDir, homeDir, sourcePath, successorPath,
+		filepath.Join(t.TempDir(), "unused-release"), true, true,
+	)
 	evidence.trackDaemon(t, "cancelled-successor-process", second)
+	waitForBoardStartupLogBeforeReadiness(t, second, logWatcher, []string{"engine started"}, restartRecoveryProcessTimeout)
 	if err := interruptBoardPersistenceProcess(second.cmd); err != nil {
 		t.Fatalf("cancel successor before readiness: %v", err)
 	}

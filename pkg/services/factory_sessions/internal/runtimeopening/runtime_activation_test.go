@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -532,6 +533,11 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 
 	const resumePath = "source.recording.json"
 	resumeInput := recordings.LoadResumeInputResult{
+		RecoveryMetadata: recordings.ResumeRecoveryMetadata{
+			SourceRecordingID:    "sha256:source-recording",
+			RecordedDefinitionID: "sha256:recorded-definition",
+			PreviousRecordedAt:   time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC),
+		},
 		Input: recordings.LoadReplayInputResult{
 			Legacy: &factorydefinitions.ReplayArtifact{
 				Events: []factorydefinitions.FactoryEvent{{
@@ -764,6 +770,11 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	root := &resumeRoutingRoot{}
 	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/factory","name":"legacy"}`)
 	resumeInput := recordings.LoadResumeInputResult{
+		RecoveryMetadata: recordings.ResumeRecoveryMetadata{
+			SourceRecordingID:    "sha256:source-recording",
+			RecordedDefinitionID: "sha256:recorded-definition",
+			PreviousRecordedAt:   time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC),
+		},
 		Input: recordings.LoadReplayInputResult{
 			Legacy: &factorydefinitions.ReplayArtifact{
 				Factory: &factorySnapshot,
@@ -784,7 +795,7 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 			return replayRuntimeConfigStub{}, nil
 		},
 	}
-	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	opened, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: "successor.recording.json",
@@ -818,6 +829,13 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	}
 	if root.activation.Inputs.Recordings.ReplayPath != "" {
 		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
+	}
+	metadata := opened.application.ResumeRecoveryMetadata
+	if metadata == nil || metadata.SourceRecordingID != "sha256:source-recording" ||
+		metadata.RecordedDefinitionID != "sha256:recorded-definition" ||
+		metadata.SuccessorRecordingID != recoveryRecordingID("runtime-1") ||
+		!metadata.PreviousRecordedAt.Equal(resumeInput.RecoveryMetadata.PreviousRecordedAt) {
+		t.Fatalf("opened resume recovery metadata = %#v, want selected source and successor identities", metadata)
 	}
 }
 

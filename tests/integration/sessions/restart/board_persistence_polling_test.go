@@ -12,8 +12,122 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func newBoardPersistenceLogWatcher(t *testing.T, logDir string) *fsnotify.Watcher {
+	t.Helper()
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatalf("create isolated runtime log root: %v", err)
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("watch isolated runtime logs: %v", err)
+	}
+	if err := addBoardPersistenceLogDirectories(watcher, logDir); err != nil {
+		_ = watcher.Close()
+		t.Fatalf("watch isolated runtime log root %q: %v", logDir, err)
+	}
+	t.Cleanup(func() { _ = watcher.Close() })
+	return watcher
+}
+
+func addBoardPersistenceLogDirectories(watcher *fsnotify.Watcher, root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return watcher.Add(path)
+		}
+		return nil
+	})
+}
+
+func waitForBoardStartupLogBeforeReadiness(
+	t *testing.T,
+	daemon *boardPersistenceDaemon,
+	watcher *fsnotify.Watcher,
+	fragments []string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		if boardPersistenceLogsContain(daemon.logDir, fragments) {
+			if boardPersistenceDaemonReady(t, daemon) {
+				t.Fatalf("successor reached public readiness before the parent observed startup log %q", fragments)
+			}
+			return
+		}
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				t.Fatal("runtime log watcher closed before startup barrier")
+			}
+			if event.Op&fsnotify.Create != 0 {
+				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+					if err := addBoardPersistenceLogDirectories(watcher, event.Name); err != nil {
+						t.Fatalf("watch new runtime log directory %q: %v", event.Name, err)
+					}
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				t.Fatal("runtime log watcher error stream closed before startup barrier")
+			}
+			t.Fatalf("observe runtime startup log: %v", err)
+		case <-daemon.done:
+			dumpBoardPersistenceDiagnostics(t, daemon)
+			t.Fatalf("successor exited before observed startup barrier: %v", daemon.waitError())
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for startup log %q before readiness in %q", fragments, daemon.logDir)
+		}
+	}
+}
+
+func boardPersistenceLogsContain(logDir string, fragments []string) bool {
+	found := false
+	_ = filepath.WalkDir(logDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(contents), fragment) {
+				return nil
+			}
+		}
+		found = true
+		return filepath.SkipAll
+	})
+	return found
+}
+
+func boardPersistenceDaemonReady(t *testing.T, daemon *boardPersistenceDaemon) bool {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, daemon.baseURL+"/status", nil)
+	if err != nil {
+		t.Fatalf("build startup barrier readiness probe: %v", err)
+	}
+	response, err := (&http.Client{Timeout: 100 * time.Millisecond}).Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	var status factoryapi.StatusResponse
+	if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&status) != nil {
+		return false
+	}
+	return status.RuntimeStatus != ""
+}
 
 func waitForBoardDaemonReady(t *testing.T, daemon *boardPersistenceDaemon, timeout time.Duration) {
 	t.Helper()

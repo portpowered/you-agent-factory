@@ -639,7 +639,7 @@ func remotePlacementSelected(globals *cliGlobalOptions) bool {
 
 func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
 	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
-	err = runcli.MapServerFailure(err)
+	err = runcli.MapServerFailureForInvocation(err, strings.TrimSpace(resolvedConfig.ResumePath) != "")
 	if currentFactorySelected {
 		err = runcli.MapCurrentFactoryFailure(err)
 	}
