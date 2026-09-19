@@ -55,9 +55,17 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
-	runBoardPersistenceInitialGeneration(t, scenario)
-	runBoardPersistenceRecoveryGeneration(t, scenario)
-	runBoardPersistenceSecondRestart(t, scenario)
+	t.Run("source-to-successor", func(t *testing.T) {
+		// This cell owns exactly two Factory process generations: the original
+		// owner and its externally started successor.
+		runBoardPersistenceInitialGeneration(t, scenario)
+		runBoardPersistenceRecoveryGeneration(t, scenario)
+	})
+	t.Run("successor-recording-restart", func(t *testing.T) {
+		// The next serialized cell consumes the flushed successor recording and
+		// owns only that final process generation.
+		runBoardPersistenceSecondRestart(t, scenario)
+	})
 }
 
 // TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording proves
@@ -205,15 +213,12 @@ type boardPersistenceScenario struct {
 	expected              map[string]boardPersistenceExpectedWork
 	activeDispatchID      string
 	activeWorkerSessionID string
-	second                *boardPersistenceDaemon
 }
 
 func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	t.Helper()
-	binaryPath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("resolve functional test executable: %v", err)
-	}
+	binaryPath := requireRestartCLIArtifact(t)
+	workerPath := currentRestartWorkerExecutable(t)
 	factoryDir := scaffoldBoardPersistenceFactory(t, boardPersistenceFactoryConfig())
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-worker")
@@ -222,7 +227,7 @@ func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 		t,
 		factoryDir,
 		"restart-blocker",
-		boardPersistenceWorkerConfig(binaryPath),
+		boardPersistenceWorkerConfig(workerPath),
 	)
 	return &boardPersistenceScenario{
 		binaryPath: binaryPath, factoryDir: factoryDir, homeDir: homeDir,
@@ -352,7 +357,6 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 	}
 
 	second.stop(t)
-	scenario.second = second
 }
 
 func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceScenario) {

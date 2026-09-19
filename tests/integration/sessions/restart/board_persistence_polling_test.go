@@ -43,6 +43,7 @@ func waitForBoardDaemonReady(t *testing.T, daemon *boardPersistenceDaemon, timeo
 			decodeErr := json.NewDecoder(response.Body).Decode(&status)
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK && decodeErr == nil && status.RuntimeStatus != "" {
+				daemon.readyAt = time.Now()
 				return
 			}
 		case <-deadline.C:
