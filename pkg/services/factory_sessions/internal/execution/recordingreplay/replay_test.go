@@ -514,31 +514,84 @@ func TestReplayLegacyRecordingProjectsSnapshotLifecycleAndArtifacts(t *testing.T
 	if err != nil {
 		t.Fatalf("ReplayLegacyRecording: %v", err)
 	}
-	if got.Session.SessionID != sessionID || got.Session.Status != fse.LifecycleStatusSucceeded ||
-		got.Session.ResolvedSource.SourceRef != "snapshot/source.js" ||
-		got.Session.ResolvedSource.SourceHash != "snapshot-source-hash" ||
-		got.Session.OrchestratorKind != "JAVASCRIPT" || got.Session.Dialect != "typescript" {
-		t.Fatalf("historical session projection = %#v, want snapshot and lifecycle facts", got.Session)
+	assertLegacySnapshotSession(t, got.Session, sessionID)
+	assertLegacySnapshotResult(t, got.Result, got.FactoryProjection)
+	assertLegacyReplayLifecycleTimestamps(t, got.Session.Lifecycle, startedAt, pausedAt, resumedAt, completedAt)
+	assertLegacySnapshotArtifacts(t, got.Artifacts.Artifacts, capturedAt)
+	assertLegacySnapshotAvailability(t, got)
+}
+
+func assertLegacySnapshotSession(t *testing.T, session fse.SessionReadResult, sessionID string) {
+	t.Helper()
+	if session.SessionID != sessionID || session.Status != fse.LifecycleStatusSucceeded ||
+		session.ResolvedSource.SourceRef != "snapshot/source.js" ||
+		session.ResolvedSource.SourceHash != "snapshot-source-hash" ||
+		session.OrchestratorKind != "JAVASCRIPT" || session.Dialect != "typescript" {
+		t.Fatalf("historical session projection = %#v, want snapshot and lifecycle facts", session)
 	}
-	if got.Result.ResultStatus != fse.ResultStatusFinal || got.FactoryProjection == nil {
-		t.Fatalf("result/projection = %#v / %#v, want final result and canonical Factory state", got.Result, got.FactoryProjection)
+}
+
+func assertLegacySnapshotResult(t *testing.T, result fse.ResultReadResult, projection *recording.FactoryWorldState) {
+	t.Helper()
+	if result.ResultStatus != fse.ResultStatusFinal || projection == nil {
+		t.Fatalf("result/projection = %#v / %#v, want final result and canonical Factory state", result, projection)
 	}
-	lifecycle := got.Session.Lifecycle
-	if lifecycle == nil || lifecycle.StartedAt == nil || !lifecycle.StartedAt.Equal(startedAt.UTC()) ||
-		lifecycle.PausedAt == nil || !lifecycle.PausedAt.Equal(pausedAt.UTC()) ||
-		lifecycle.ResumedAt == nil || !lifecycle.ResumedAt.Equal(resumedAt.UTC()) ||
-		lifecycle.FinishedAt == nil || !lifecycle.FinishedAt.Equal(completedAt.UTC()) {
-		t.Fatalf("lifecycle timestamps = %#v, want UTC event payload timestamps", lifecycle)
+}
+
+func assertLegacyReplayLifecycleTimestamps(
+	t *testing.T,
+	lifecycle *fse.LifecycleTimestamps,
+	startedAt, pausedAt, resumedAt, finishedAt time.Time,
+) {
+	t.Helper()
+	if lifecycle == nil {
+		t.Fatal("lifecycle projection is nil")
 	}
-	if len(got.Artifacts.Artifacts) != 2 || got.Artifacts.Artifacts[0].ID != "artifact-result" ||
-		got.Artifacts.Artifacts[0].CreatedAt == nil || !got.Artifacts.Artifacts[0].CreatedAt.Equal(capturedAt.UTC()) ||
-		got.Artifacts.Artifacts[0].DispatchID != "dispatch-result" ||
-		got.Artifacts.Artifacts[1].CreatedAt != nil || got.Artifacts.Artifacts[1].RedactionCounts != nil {
-		t.Fatalf("artifact projection = %#v, want recorded metadata and absent optional fields", got.Artifacts)
+	assertLegacyReplayTimestamp(t, "started", lifecycle.StartedAt, startedAt)
+	assertLegacyReplayTimestamp(t, "paused", lifecycle.PausedAt, pausedAt)
+	assertLegacyReplayTimestamp(t, "resumed", lifecycle.ResumedAt, resumedAt)
+	assertLegacyReplayTimestamp(t, "finished", lifecycle.FinishedAt, finishedAt)
+}
+
+func assertLegacyReplayTimestamp(t *testing.T, name string, got *time.Time, want time.Time) {
+	t.Helper()
+	if got == nil {
+		t.Fatalf("%s timestamp is nil, want %v", name, want)
 	}
-	if got.Redaction.SecretsRedacted != 2 ||
-		got.WorkerHistory.Availability != recording.PortableRecordingWorkerHistoryUnavailable {
-		t.Fatalf("legacy availability/redaction = %#v / %#v", got.WorkerHistory, got.Redaction)
+	if !got.Equal(want) {
+		t.Fatalf("%s timestamp = %v, want %v", name, got, want)
+	}
+}
+
+func assertLegacySnapshotArtifacts(t *testing.T, artifacts []factorysessions.ArtifactSummary, capturedAt time.Time) {
+	t.Helper()
+	if len(artifacts) != 2 {
+		t.Fatalf("artifact count = %d, want 2", len(artifacts))
+	}
+	result := artifacts[0]
+	if result.ID != "artifact-result" {
+		t.Fatalf("result artifact ID = %q, want artifact-result", result.ID)
+	}
+	assertLegacyReplayTimestamp(t, "artifact captured", result.CreatedAt, capturedAt)
+	if result.DispatchID != "dispatch-result" {
+		t.Fatalf("result artifact dispatch = %q, want dispatch-result", result.DispatchID)
+	}
+	checkpoint := artifacts[1]
+	if checkpoint.CreatedAt != nil {
+		t.Fatalf("checkpoint artifact createdAt = %v, want absent", checkpoint.CreatedAt)
+	}
+	if checkpoint.RedactionCounts != nil {
+		t.Fatalf("checkpoint artifact redaction counts = %#v, want absent", checkpoint.RedactionCounts)
+	}
+}
+
+func assertLegacySnapshotAvailability(t *testing.T, projection RecordingReplayProjection) {
+	t.Helper()
+	if projection.Redaction.SecretsRedacted != 2 {
+		t.Fatalf("secrets redacted = %d, want 2", projection.Redaction.SecretsRedacted)
+	}
+	if projection.WorkerHistory.Availability != recording.PortableRecordingWorkerHistoryUnavailable {
+		t.Fatalf("legacy worker history availability = %q, want unavailable", projection.WorkerHistory.Availability)
 	}
 }
 
@@ -570,24 +623,40 @@ func TestReplayLegacyRecordingProjectsBracketResultAndArtifactReferences(t *test
 	if err != nil {
 		t.Fatalf("ReplayLegacyRecording: %v", err)
 	}
-	if got.Session.SessionID != "bracket-session" || got.Session.Status != fse.LifecycleStatusFailed ||
-		got.Session.ResolvedSource.SourceRef != "workflow/bracket.js" || got.Result.ResultStatus != fse.ResultStatusFailedWithPartial {
-		t.Fatalf("session/result projection = %#v / %#v, want bracket-owned facts", got.Session, got.Result)
+	assertLegacyBracketSessionAndResult(t, got.Session, got.Result)
+	assertLegacyBracketResultArtifacts(t, got.Result)
+	assertLegacyBracketFailure(t, got.Result.Failure)
+	assertLegacyReplayLifecycleTimestamps(t, got.Session.Lifecycle, startedAt, pausedAt, resumedAt, completedAt)
+}
+
+func assertLegacyBracketSessionAndResult(t *testing.T, session fse.SessionReadResult, result fse.ResultReadResult) {
+	t.Helper()
+	if session.SessionID != "bracket-session" || session.Status != fse.LifecycleStatusFailed ||
+		session.ResolvedSource.SourceRef != "workflow/bracket.js" || result.ResultStatus != fse.ResultStatusFailedWithPartial {
+		t.Fatalf("session/result projection = %#v / %#v, want bracket-owned facts", session, result)
 	}
-	if !strings.Contains(string(got.Result.PrimaryResult), "persisted partial result") ||
-		!reflect.DeepEqual(got.Result.ArtifactIDs, []string{"artifact-present", "artifact-missing"}) ||
-		len(got.Result.ArtifactRefs) != 1 || got.Result.ArtifactRefs[0].ID != "artifact-present" {
-		t.Fatalf("recorded result/artifacts = %#v, want summary and only known artifact reference", got.Result)
+}
+
+func assertLegacyBracketResultArtifacts(t *testing.T, result fse.ResultReadResult) {
+	t.Helper()
+	if !strings.Contains(string(result.PrimaryResult), "persisted partial result") {
+		t.Fatalf("recorded primary result = %s, want persisted partial result", result.PrimaryResult)
 	}
-	if got.Result.Failure == nil || got.Result.Failure.Message != "recorded session failure" || !got.Result.Failure.PartialResultAvailable {
-		t.Fatalf("recorded failure = %#v, want partial session failure", got.Result.Failure)
+	if !reflect.DeepEqual(result.ArtifactIDs, []string{"artifact-present", "artifact-missing"}) {
+		t.Fatalf("recorded artifact IDs = %#v, want both recorded references", result.ArtifactIDs)
 	}
-	if got.Session.Lifecycle == nil || got.Session.Lifecycle.StartedAt == nil ||
-		!got.Session.Lifecycle.StartedAt.Equal(startedAt) || got.Session.Lifecycle.PausedAt == nil ||
-		!got.Session.Lifecycle.PausedAt.Equal(pausedAt) || got.Session.Lifecycle.ResumedAt == nil ||
-		!got.Session.Lifecycle.ResumedAt.Equal(resumedAt) || got.Session.Lifecycle.FinishedAt == nil ||
-		!got.Session.Lifecycle.FinishedAt.Equal(completedAt) {
-		t.Fatalf("bracket lifecycle timestamps = %#v", got.Session.Lifecycle)
+	if len(result.ArtifactRefs) != 1 {
+		t.Fatalf("known artifact reference count = %d, want 1", len(result.ArtifactRefs))
+	}
+	if result.ArtifactRefs[0].ID != "artifact-present" {
+		t.Fatalf("known artifact reference ID = %q, want artifact-present", result.ArtifactRefs[0].ID)
+	}
+}
+
+func assertLegacyBracketFailure(t *testing.T, failure *fse.FailureSummary) {
+	t.Helper()
+	if failure == nil || failure.Message != "recorded session failure" || !failure.PartialResultAvailable {
+		t.Fatalf("recorded failure = %#v, want partial session failure", failure)
 	}
 }
 
@@ -751,21 +820,40 @@ func TestReplayLegacyRecordingEnrichesFailuresFromCompletedDispatches(t *testing
 	if len(expectedMessage) > 512 {
 		expectedMessage = expectedMessage[:512]
 	}
-	if got.Result.Failure == nil || got.Result.Failure.Reason != string(workers.WorkFailureTypeUnknown) ||
-		got.Result.Failure.Message != expectedMessage || got.Result.SessionStatus != fse.LifecycleStatusFailed {
-		t.Fatalf("result failure = %#v, want safe recorded failure", got.Result)
+	assertLegacyCompletedDispatchResultFailure(t, got.Result, expectedMessage)
+	assertLegacyCompletedDispatchFailureDetails(t, got.FactoryProjection, expectedMessage)
+	assertLegacySuccessfulDispatchStaysSuccessful(t, got.FactoryProjection)
+}
+
+func assertLegacyCompletedDispatchResultFailure(t *testing.T, result fse.ResultReadResult, expectedMessage string) {
+	t.Helper()
+	if result.Failure == nil || result.Failure.Reason != string(workers.WorkFailureTypeUnknown) ||
+		result.Failure.Message != expectedMessage || result.SessionStatus != fse.LifecycleStatusFailed {
+		t.Fatalf("result failure = %#v, want safe recorded failure", result)
 	}
-	if got.FactoryProjection == nil || len(got.FactoryProjection.FailureDetailsByWorkID) != 3 {
-		t.Fatalf("Factory failure projection = %#v, want existing, output, and input Work facts", got.FactoryProjection)
+}
+
+func assertLegacyCompletedDispatchFailureDetails(
+	t *testing.T,
+	projection *recording.FactoryWorldState,
+	expectedMessage string,
+) {
+	t.Helper()
+	if projection == nil || len(projection.FailureDetailsByWorkID) != 3 {
+		t.Fatalf("Factory failure projection = %#v, want existing, output, and input Work facts", projection)
 	}
 	for _, id := range []string{"work-existing", "work-output", "work-input"} {
-		detail, ok := got.FactoryProjection.FailureDetailsByWorkID[id]
+		detail, ok := projection.FailureDetailsByWorkID[id]
 		if !ok || detail.DispatchID != "dispatch-failed" || detail.TransitionID != "transition-failed" ||
 			detail.WorkItem.ID != id || detail.FailureDetail == nil || detail.FailureDetail.Message != expectedMessage {
 			t.Errorf("failure detail for %q = %#v, want preserved dispatch, Work, and safe message", id, detail)
 		}
 	}
-	if _, ok := got.FactoryProjection.FailureDetailsByWorkID["work-succeeded"]; ok {
+}
+
+func assertLegacySuccessfulDispatchStaysSuccessful(t *testing.T, projection *recording.FactoryWorldState) {
+	t.Helper()
+	if _, ok := projection.FailureDetailsByWorkID["work-succeeded"]; ok {
 		t.Fatal("successful completion was converted into a recorded failure")
 	}
 }
