@@ -450,10 +450,11 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 		t.Fatalf("hash cancellation source recording: %v", err)
 	}
 
-	logDir := filepath.Join(homeDir, ".you-agent-factory", "logs")
+	successorHomeDir := t.TempDir()
+	logDir := filepath.Join(successorHomeDir, ".you-agent-factory", "logs")
 	logWatcher := newBoardPersistenceLogWatcher(t, logDir)
 	second := startBoardPersistenceDaemonProcessWithResumeOutput(
-		t, artifactPath, factoryDir, homeDir, sourcePath, successorPath,
+		t, artifactPath, factoryDir, successorHomeDir, sourcePath, successorPath,
 		filepath.Join(t.TempDir(), "unused-release"), true, true,
 	)
 	evidence.trackDaemon(t, "cancelled-successor-process", second)
