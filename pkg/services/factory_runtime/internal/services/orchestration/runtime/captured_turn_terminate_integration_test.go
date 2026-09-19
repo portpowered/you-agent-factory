@@ -26,28 +26,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestRecordedWorkerSessionLiveIdentityOnlyRebindsForResumedRuntime(t *testing.T) {
+func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.T) {
 	t.Parallel()
 	const (
-		workerSessionID  = "worker-live-identity"
-		explicitSession  = "factory-explicit"
-		successorSession = "factory-successor"
+		workerSessionID   = "worker-live-identity"
+		historicalSession = "factory-historical"
+		foreignSession    = "factory-foreign"
+		successorSession  = "factory-successor"
 	)
 	live := &processLocalWorkerSessionService{getByWorkerResult: workersessions.Observation{
-		WorkerSessionID: workerSessionID, FactorySessionID: explicitSession,
+		WorkerSessionID: workerSessionID, FactorySessionID: foreignSession,
 	}}
 	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}
-	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: successorSession}
-	observation, err := fresh.GetObservationByWorkerSessionID(context.Background(), request)
-	if err != nil || observation.FactorySessionID != explicitSession {
-		t.Fatalf("fresh GetObservationByWorkerSessionID() = %#v, %v; want explicit Factory Session", observation, err)
+	restored := &recordedWorkerSessionObservation{
+		Service: live, factorySessionID: successorSession,
+		restoredWorldState: &interfaces.FactoryWorldState{},
+		restoredEventPrefix: []interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{
+			SessionID: stringPointerForRecordedTest(historicalSession),
+		}}},
 	}
-	resumed := &recordedWorkerSessionObservation{
-		Service: live, factorySessionID: successorSession, restoredWorldState: &interfaces.FactoryWorldState{},
+	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: foreignSession}
+	fleet := workersessionswire.NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{restored, fresh}, nil
+	})
+	observation, err := fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	if err != nil || observation.FactorySessionID != foreignSession {
+		t.Fatalf("foreign fleet observation = %#v, %v; want preserved Factory Session", observation, err)
 	}
-	observation, err = resumed.GetObservationByWorkerSessionID(context.Background(), request)
+	live.getByWorkerResult.FactorySessionID = historicalSession
+	observation, err = fleet.GetObservationByWorkerSessionID(context.Background(), request)
 	if err != nil || observation.FactorySessionID != successorSession {
-		t.Fatalf("resumed GetObservationByWorkerSessionID() = %#v, %v; want successor Factory Session", observation, err)
+		t.Fatalf("restored fleet observation = %#v, %v; want successor Factory Session", observation, err)
 	}
 }
 

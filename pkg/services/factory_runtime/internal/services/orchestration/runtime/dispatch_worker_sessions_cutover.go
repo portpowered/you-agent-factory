@@ -812,11 +812,11 @@ func (s *recordedWorkerSessionObservation) withLiveRecordingHealth(
 	ctx context.Context,
 	observation workersessions.Observation,
 ) (workersessions.Observation, error) {
-	// A resumed runtime owns a successor identity that differs from the Factory
-	// Session captured by its restored live registry. Fresh runtimes, however,
-	// can share that registry with direct Worker Session invocations carrying an
-	// explicit customer-selected Factory Session; preserve that live identity.
-	if s != nil && (s.restoredWorldState != nil || len(s.restoredEventPrefix) > 0) {
+	// A resumed runtime owns live attempts restored from its historical prefix,
+	// but the process-local registry can also return attempts admitted by another
+	// Factory Session. Rebind only restored lineage and preserve that foreign
+	// attempt's authoritative live identity for the fleet reader.
+	if s.liveObservationBelongsToRestoredPrefix(observation) {
 		return s.withRecordingHealth(ctx, observation)
 	}
 	health, err := s.recordingHealth(ctx)
