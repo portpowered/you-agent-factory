@@ -241,10 +241,39 @@ type HostProcessStartSpec struct {
 	Configuration           ResolvedHostConfiguration
 }
 
+// HostProcessStreamDiagnostic contains complete bounded facts for one
+// managed-host output stream. Retained output is deliberately not part of the
+// Models seam.
+type HostProcessStreamDiagnostic struct {
+	Bytes     uint64
+	SHA256    string
+	Truncated bool
+}
+
+// HostProcessDiagnosticSnapshot is optional terminal evidence for one managed
+// host process. Its cause fields are re-projected by Models before logging or
+// recording evidence.
+type HostProcessDiagnosticSnapshot struct {
+	ExitClass            string
+	ExitCode             int
+	ExitCodeKnown        bool
+	Stdout               HostProcessStreamDiagnostic
+	Stderr               HostProcessStreamDiagnostic
+	CauseCode            string
+	CauseMessage         string
+	CauseMessageRedacted bool
+}
+
 type HostManagedProcess interface {
 	HealthEndpoint() string
 	Wait() error
 	Stop(context.Context) error
+}
+
+// HostManagedProcessDiagnosticSource is optional so existing host process
+// implementations remain source-compatible.
+type HostManagedProcessDiagnosticSource interface {
+	DiagnosticSnapshot() (HostProcessDiagnosticSnapshot, bool)
 }
 
 type HostProcessLauncher interface {

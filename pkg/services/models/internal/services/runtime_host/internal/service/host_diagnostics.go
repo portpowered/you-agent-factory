@@ -111,17 +111,20 @@ func (d hostDiagnostics) logLoadFailed(
 	class hostFailureClass,
 	err error,
 	elapsed time.Duration,
+	process modelseffects.HostManagedProcess,
 ) {
 	runtimeErr := modelseffects.WrapRuntimeFailure(
 		runtimeStageForHostFailure(class), err,
 	)
 	fields := safeRuntimeDiagnosticFields(identity, runtimeErr, elapsed)
+	snapshot, hasSnapshot := projectManagedProcessDiagnostic(process)
+	addManagedProcessDiagnosticFields(fields, snapshot, hasSnapshot)
 	addLifecycleFields(
 		fields, correlation, string(runtimeStageForHostFailure(class)),
 		hostLifecycleOutcomeFailed, elapsed,
 	)
 	d.warn("model host load failed", fields)
-	d.recordRuntimeStage(class, runtimeErr, elapsed)
+	d.recordRuntimeStage(class, runtimeErr, elapsed, snapshot, hasSnapshot)
 	metricFields := identityDiagnosticFields(identity)
 	metricFields["failure_class"] = string(class)
 	d.record(metricLoadFailure, metricFields)
@@ -138,17 +141,22 @@ func (d hostDiagnostics) logProcessCrash(
 	correlation string,
 	err error,
 	elapsed time.Duration,
+	process modelseffects.HostManagedProcess,
 ) {
 	runtimeErr := modelseffects.WrapRuntimeFailure(
 		runtimeStageForHostFailure(hostFailureClassProcessCrash), err,
 	)
 	fields := safeRuntimeDiagnosticFields(identity, runtimeErr, elapsed)
+	snapshot, hasSnapshot := projectManagedProcessDiagnostic(process)
+	addManagedProcessDiagnosticFields(fields, snapshot, hasSnapshot)
 	addLifecycleFields(
 		fields, correlation, string(runtimeStageForHostFailure(hostFailureClassProcessCrash)),
 		hostLifecycleOutcomeFailed, elapsed,
 	)
 	d.warn("model host process crashed", fields)
-	d.recordRuntimeStage(hostFailureClassProcessCrash, runtimeErr, elapsed)
+	d.recordRuntimeStage(
+		hostFailureClassProcessCrash, runtimeErr, elapsed, snapshot, hasSnapshot,
+	)
 	metricFields := identityDiagnosticFields(identity)
 	metricFields["failure_class"] = string(hostFailureClassProcessCrash)
 	d.record(metricProcessCrash, metricFields)
@@ -158,8 +166,20 @@ func (d hostDiagnostics) recordRuntimeStage(
 	class hostFailureClass,
 	err error,
 	elapsed time.Duration,
+	snapshot modelseffects.HostProcessDiagnosticSnapshot,
+	hasSnapshot bool,
 ) {
 	if err == nil {
+		return
+	}
+	if hasSnapshot {
+		modelseffects.RecordRuntimeEvidenceStageWithHostProcessDiagnostic(
+			d.evidence,
+			runtimeStageForHostFailure(class),
+			err,
+			elapsed,
+			snapshot,
+		)
 		return
 	}
 	modelseffects.RecordRuntimeEvidenceStage(
@@ -189,6 +209,57 @@ func safeRuntimeDiagnosticFields(
 	return fields
 }
 
+func projectManagedProcessDiagnostic(
+	process modelseffects.HostManagedProcess,
+) (snapshot modelseffects.HostProcessDiagnosticSnapshot, ok bool) {
+	if process == nil {
+		return modelseffects.HostProcessDiagnosticSnapshot{}, false
+	}
+	source, implementsSource := process.(modelseffects.HostManagedProcessDiagnosticSource)
+	if !implementsSource || source == nil {
+		return modelseffects.HostProcessDiagnosticSnapshot{}, false
+	}
+	// Optional effect implementations must not change Runtime Host control
+	// flow if their diagnostic method is unavailable or defective.
+	defer func() {
+		if recover() != nil {
+			snapshot = modelseffects.HostProcessDiagnosticSnapshot{}
+			ok = false
+		}
+	}()
+	snapshot, ready := source.DiagnosticSnapshot()
+	if !ready {
+		return modelseffects.HostProcessDiagnosticSnapshot{}, false
+	}
+	return modelseffects.ProjectHostProcessDiagnostic(snapshot)
+}
+
+func addManagedProcessDiagnosticFields(
+	fields map[string]string,
+	snapshot modelseffects.HostProcessDiagnosticSnapshot,
+	hasSnapshot bool,
+) {
+	if fields == nil || !hasSnapshot {
+		return
+	}
+	fields["exit_class"] = snapshot.ExitClass
+	fields["exit_code_known"] = strconv.FormatBool(snapshot.ExitCodeKnown)
+	if snapshot.ExitCodeKnown {
+		fields["exit_code"] = strconv.Itoa(snapshot.ExitCode)
+	}
+	fields["stdout_bytes"] = strconv.FormatUint(snapshot.Stdout.Bytes, 10)
+	fields["stdout_sha256"] = snapshot.Stdout.SHA256
+	fields["stdout_truncated"] = strconv.FormatBool(snapshot.Stdout.Truncated)
+	fields["stderr_bytes"] = strconv.FormatUint(snapshot.Stderr.Bytes, 10)
+	fields["stderr_sha256"] = snapshot.Stderr.SHA256
+	fields["stderr_truncated"] = strconv.FormatBool(snapshot.Stderr.Truncated)
+	if snapshot.CauseCode != "" {
+		fields["cause_code"] = snapshot.CauseCode
+		fields["cause_message"] = snapshot.CauseMessage
+		fields["cause_message_redacted"] = strconv.FormatBool(snapshot.CauseMessageRedacted)
+	}
+}
+
 func (d hostDiagnostics) logUnload(
 	identity supervisedIdentity,
 	correlation string,
@@ -214,12 +285,15 @@ func (d hostDiagnostics) logStop(
 	correlation string,
 	elapsed time.Duration,
 	err error,
+	process modelseffects.HostManagedProcess,
 ) {
 	outcome := hostLifecycleOutcomeCompleted
 	if err != nil {
 		outcome = hostLifecycleOutcomeFailed
 	}
 	fields := lifecycleDiagnosticFields(identity, correlation, hostLifecycleStageStop, outcome, elapsed)
+	snapshot, hasSnapshot := projectManagedProcessDiagnostic(process)
+	addManagedProcessDiagnosticFields(fields, snapshot, hasSnapshot)
 	if err != nil {
 		diagnostic := modelseffects.ProjectRuntimeFailure(
 			modelseffects.WrapRuntimeFailure(modelseffects.RuntimeStageBackendStart, err),

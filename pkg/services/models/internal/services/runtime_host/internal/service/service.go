@@ -678,7 +678,9 @@ func (s *service) pinnedBackendFailure(
 	cause error,
 ) error {
 	failure := hostReadinessFailure(identity, publicHostFailureClass(class), cause)
-	s.supervisor.Diagnostics.recordRuntimeStage(class, failure, 0)
+	s.supervisor.Diagnostics.recordRuntimeStage(
+		class, failure, 0, modelseffects.HostProcessDiagnosticSnapshot{}, false,
+	)
 	return failure
 }
 

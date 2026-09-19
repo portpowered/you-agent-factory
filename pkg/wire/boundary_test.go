@@ -13,7 +13,6 @@ import (
 	"go/token"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -54,6 +54,7 @@ func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 		t.Fatalf("CanonicalIdentity(codex) = %q, want codex", canonical)
 	}
 }
+
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
@@ -445,7 +446,6 @@ func TestManagedEnvironmentFactsUseOnlyAllowlistedValueDigests(t *testing.T) {
 
 func TestManagedChildEvidenceUsesBoundedIdentityAndSharedSequence(t *testing.T) {
 	t.Parallel()
-
 	path := filepath.Join(t.TempDir(), "runtime.jsonl")
 	recorder := &modelRuntimeEvidenceFileRecorder{path: path}
 	recorder.RecordRuntimeEvidence(modelswire.RuntimeEvidenceRecord{
@@ -525,7 +525,9 @@ func TestModelsProcessLauncherStartFailureRetainsCleanupCause(t *testing.T) {
 				},
 			}, nil
 		},
-		startCommand: func(*exec.Cmd) error { return startCause },
+		startProcess: func(context.Context, managedchild.Spec) (*managedchild.Process, error) {
+			return nil, startCause
+		},
 	}
 	_, err := launcher.Start(context.Background(), serviceedges.HostProcessStartSpec{Backend: "localai-vibevoice"})
 	if cleanupCalls != 1 {
@@ -562,7 +564,6 @@ func TestProvideModelRuntimeEvidenceRecorderIsOptionalAndOwnerOnlyJSONL(t *testi
 	if recorder, err := provideModelRuntimeEvidenceRecorder(); err != nil || recorder != nil {
 		t.Fatalf("absent runtime evidence recorder = (%v, %v), want (nil, nil)", recorder, err)
 	}
-
 	path := filepath.Join(t.TempDir(), "runtime.jsonl")
 	t.Setenv(modelRuntimeEvidenceEnvironment, path)
 	recorder, err := provideModelRuntimeEvidenceRecorder()
@@ -972,28 +973,4 @@ type verifiedArchiveCompatibilityChecker struct{}
 
 func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
 	return nil
-}
-
-func TestModelsManagedProcessRetainsCleanupErrorOnce(t *testing.T) {
-	t.Parallel()
-
-	cleanupErr := errors.New("bounded cleanup failure")
-	cleanupCalls := 0
-	process := &modelsManagedProcess{
-		cleanup: func() error {
-			cleanupCalls++
-			return cleanupErr
-		},
-		finished: make(chan struct{}),
-	}
-	close(process.finished)
-
-	process.cleanupResources()
-	process.cleanupResources()
-	if cleanupCalls != 1 {
-		t.Fatalf("cleanup calls = %d, want once", cleanupCalls)
-	}
-	if err := process.Wait(); !errors.Is(err, cleanupErr) {
-		t.Fatalf("process wait error = %v, want retained cleanup error", err)
-	}
 }
