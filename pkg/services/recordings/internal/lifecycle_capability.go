@@ -88,7 +88,25 @@ func (service *combinedService) LoadResumeInput(
 	return recordings.LoadResumeInputResult{
 		Input:                    input,
 		SourceCanonicalSessionID: sourceID,
+		RecoveryMetadata:         resumeRecoveryMetadataForInput(input),
 	}, nil
+}
+
+func resumeRecoveryMetadataForInput(
+	input recordings.LoadReplayInputResult,
+) recordings.ResumeRecoveryMetadata {
+	metadata := recordings.ResumeRecoveryMetadata{
+		SourceRecordingID: input.ArtifactDigest,
+	}
+	if input.Legacy == nil {
+		return metadata
+	}
+	metadata.PreviousRecordedAt = input.Legacy.RecordedAt.UTC()
+	if input.Legacy.Factory != nil {
+		digest := sha256.Sum256([]byte(*input.Legacy.Factory))
+		metadata.RecordedDefinitionID = "sha256:" + hex.EncodeToString(digest[:])
+	}
+	return metadata
 }
 
 // Begin implements recordings.RecordingLifecycle by adapting the existing

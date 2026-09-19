@@ -267,7 +267,7 @@ func MapReplayInputFailure(cause error) error {
 		diagnostic = artifactErr.Diagnostic
 	}
 	code, message := replayInputCLIFields(diagnostic.Code)
-	return &replayInputCLIError{code: code, message: message, cause: cause}
+	return replayInputCLIError{code: code, message: message, cause: cause}
 }
 
 type replayInputCLIError struct {
@@ -276,35 +276,23 @@ type replayInputCLIError struct {
 	cause   error
 }
 
-func (err *replayInputCLIError) Error() string {
-	if err == nil {
-		return ""
-	}
+func (err replayInputCLIError) Error() string {
 	return strings.TrimSpace(err.code + ": " + err.message)
 }
 
-func (err *replayInputCLIError) Unwrap() error {
-	if err == nil {
-		return nil
-	}
+func (err replayInputCLIError) Unwrap() error {
 	return err.cause
 }
 
-func (err *replayInputCLIError) CLIErrorCode() string {
-	if err == nil || strings.TrimSpace(err.code) == "" {
-		return string(recordings.ReplayArtifactDiagnosticDependencyFailure)
-	}
+func (err replayInputCLIError) CLIErrorCode() string {
 	return err.code
 }
 
-func (err *replayInputCLIError) CLIErrorFamily() factoryapi.ErrorFamily {
+func (err replayInputCLIError) CLIErrorFamily() factoryapi.ErrorFamily {
 	return factoryapi.ErrorFamilyBadRequest
 }
 
-func (err *replayInputCLIError) CLIErrorMessage() string {
-	if err == nil || strings.TrimSpace(err.message) == "" {
-		return "verify that the recording is available and readable before retrying"
-	}
+func (err replayInputCLIError) CLIErrorMessage() string {
 	return err.message
 }
 

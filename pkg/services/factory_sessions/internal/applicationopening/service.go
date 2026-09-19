@@ -147,8 +147,19 @@ func (service *Service) bindLiveApplication(
 			[]recordings.MetadataMismatchWarning(nil),
 			opened.ReplayMetadataWarnings...,
 		),
-		HostedInvocation: hostedInvocation(opened.FactorySessions),
+		HostedInvocation:       hostedInvocation(opened.FactorySessions),
+		ResumeRecoveryMetadata: cloneResumeRecoveryMetadata(opened.ResumeRecoveryMetadata),
 	}, nil
+}
+
+func cloneResumeRecoveryMetadata(
+	metadata *recordings.ResumeRecoveryMetadata,
+) *recordings.ResumeRecoveryMetadata {
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
 }
 
 func (service *Service) openHistoricalReplayApplication(
@@ -166,9 +177,10 @@ func (service *Service) openHistoricalReplayApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session historical replay lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:             plan,
-		Diagnostics:      opened.Resources.Diagnostics,
-		HistoricalReplay: opened.HistoricalReplay,
+		Plan:                   plan,
+		Diagnostics:            opened.Resources.Diagnostics,
+		HistoricalReplay:       opened.HistoricalReplay,
+		ResumeRecoveryMetadata: cloneResumeRecoveryMetadata(opened.ResumeRecoveryMetadata),
 		ReplayMetadataWarnings: append(
 			[]recordings.MetadataMismatchWarning(nil),
 			opened.ReplayMetadataWarnings...,

@@ -207,6 +207,10 @@ type LoadReplayInputResult struct {
 	LegacyFormat string
 	Metadata     *ReplayInputMetadata
 	Diagnostics  *ReplayInputDecodeDiagnostics
+	// ArtifactDigest is the SHA-256 identity of the exact bytes read for this
+	// input. It is populated only for a full input load, never metadata-only
+	// reads, and is safe to retain in operational recovery records.
+	ArtifactDigest string
 }
 
 // ReplayInputMetadata contains only the identity needed to enumerate a
@@ -242,6 +246,19 @@ type LoadResumeInputResult struct {
 	// artifacts intentionally leave it empty so a resume cannot widen metrics
 	// selection through a public selector such as ~default.
 	SourceCanonicalSessionID string
+	// RecoveryMetadata contains safe, detached identity facts from the exact
+	// selected source. It carries no path, recording bytes, or payload data.
+	RecoveryMetadata ResumeRecoveryMetadata
+}
+
+// ResumeRecoveryMetadata contains safe identities and recorded time retained
+// for the CLI's operational recovery record. SuccessorRecordingID is filled
+// by Factory Sessions after it selects the live Runtime recording identity.
+type ResumeRecoveryMetadata struct {
+	SourceRecordingID    string
+	RecordedDefinitionID string
+	SuccessorRecordingID string
+	PreviousRecordedAt   time.Time
 }
 
 // RuntimeOpening is the Recordings-owned capability used by Factory Runtime

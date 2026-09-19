@@ -593,18 +593,27 @@ func TestRunServiceOutcomeLogsSafePreReadinessClassification(t *testing.T) {
 func TestHostedResumeReadinessLogsRecoveryAndUnavailableHostGap(t *testing.T) {
 	t.Parallel()
 
+	previousRecordedAt := time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC)
+	restartedAt := previousRecordedAt.Add(time.Minute)
+	recoveryMetadata := &recordings.ResumeRecoveryMetadata{
+		SourceRecordingID:    "sha256:source-recording",
+		RecordedDefinitionID: "sha256:recorded-definition",
+		SuccessorRecordingID: "sha256:successor-recording",
+		PreviousRecordedAt:   previousRecordedAt,
+	}
 	core, observed := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
 	observe := newRuntimeHostObserver(
 		context.Background(),
 		RunConfig{
 			Logger: logger, ResumePath: `C:\private\source.recording.json`,
-			FactorySessionID: "factory-session-1",
+			FactorySessionID: "factory-session-1", Clock: runRecoveryTestClock{now: restartedAt},
 		},
 		resolvedRunRecordPath{},
 		49152,
 		func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
 		nil,
+		func() *recordings.ResumeRecoveryMetadata { return recoveryMetadata },
 	)
 	observe(initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 49152})
 
@@ -614,19 +623,29 @@ func TestHostedResumeReadinessLogsRecoveryAndUnavailableHostGap(t *testing.T) {
 	}
 	fields := entries[0].ContextMap()
 	wantFields := map[string]any{
-		"event":              runRecoveryEventName,
-		"outcome":            runRecoveryOutcomeSuccess,
-		"host_observation":   runRecoveryHostObservation,
-		"supervisor":         runRecoverySupervisor,
-		"factory_session_id": "factory-session-1",
+		"event":                  runRecoveryEventName,
+		"outcome":                runRecoveryOutcomeSuccess,
+		"recorded_definition_id": recoveryMetadata.RecordedDefinitionID,
+		"source_recording_id":    recoveryMetadata.SourceRecordingID,
+		"successor_recording_id": recoveryMetadata.SuccessorRecordingID,
+		"host_observation":       runRecoveryHostObservation,
+		"previous_recorded_at":   previousRecordedAt.Format(time.RFC3339Nano),
+		"restarted_at":           restartedAt.Format(time.RFC3339Nano),
+		"supervisor":             runRecoverySupervisor,
+		"factory_session_id":     "factory-session-1",
 	}
 	if len(fields) != len(wantFields) {
-		t.Fatalf("recovery fields = %#v, want only %#v", fields, wantFields)
+		t.Fatalf("recovery fields = %#v, want exactly %#v", fields, wantFields)
 	}
 	for name, want := range wantFields {
 		if got := fields[name]; got != want {
 			t.Errorf("recovery field %s = %#v, want %#v", name, got, want)
 		}
+	}
+	if restartedAt, ok := fields["restarted_at"].(string); !ok {
+		t.Fatalf("restarted_at = %#v, want timestamp string", fields["restarted_at"])
+	} else if _, err := time.Parse(time.RFC3339Nano, restartedAt); err != nil {
+		t.Fatalf("restarted_at = %q is not a trustworthy RFC3339 timestamp: %v", restartedAt, err)
 	}
 }
 
@@ -635,9 +654,11 @@ func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
 
 	core, observed := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
+	restartedAt := time.Date(2026, 9, 19, 18, 2, 0, 0, time.UTC)
 	secretCause := errors.New(`open C:\private\source.recording.json credential=TOPSECRET`)
 	inputErr := &recordings.ReplayInputError{
-		Family: recordings.ReplayInputFamilyPortable,
+		Family:         recordings.ReplayInputFamilyPortable,
+		ArtifactDigest: "sha256:broken-source-recording",
 		Diagnostic: recordings.ReplayArtifactDiagnostic{
 			Code: recordings.ReplayArtifactDiagnosticMalformed,
 			Area: "recording", Path: "recording", Message: "untrusted bytes TOPSECRET",
@@ -649,6 +670,7 @@ func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
 		RunConfig{
 			Logger: logger, ResumePath: `C:\private\source.recording.json`,
 			FactorySessionID: "factory-session-2", WithServer: true,
+			Clock: runRecoveryTestClock{now: restartedAt},
 		},
 		&initializer.RuntimeHostStartupError{Cause: inputErr},
 	)
@@ -663,22 +685,36 @@ func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
 	}
 	fields := recoveryEntries[0].ContextMap()
 	wantFields := map[string]any{
-		"event":              runRecoveryEventName,
-		"outcome":            runRecoveryOutcomeFailed,
-		"host_observation":   runRecoveryHostObservation,
-		"supervisor":         runRecoverySupervisor,
-		"factory_session_id": "factory-session-2",
-		"error_code":         string(recordings.ReplayArtifactDiagnosticMalformed),
+		"event":                  runRecoveryEventName,
+		"outcome":                runRecoveryOutcomeFailed,
+		"recorded_definition_id": "UNAVAILABLE",
+		"source_recording_id":    "sha256:broken-source-recording",
+		"successor_recording_id": "UNAVAILABLE",
+		"host_observation":       runRecoveryHostObservation,
+		"previous_recorded_at":   "UNAVAILABLE",
+		"restarted_at":           restartedAt.Format(time.RFC3339Nano),
+		"supervisor":             runRecoverySupervisor,
+		"factory_session_id":     "factory-session-2",
+		"error_code":             string(recordings.ReplayArtifactDiagnosticMalformed),
 	}
 	if len(fields) != len(wantFields) {
-		t.Fatalf("recovery fields = %#v, want only %#v", fields, wantFields)
+		t.Fatalf("recovery fields = %#v, want exactly %#v", fields, wantFields)
 	}
 	for name, want := range wantFields {
 		if got := fields[name]; got != want {
 			t.Errorf("recovery field %s = %#v, want %#v", name, got, want)
 		}
 	}
+	if restartedAt, ok := fields["restarted_at"].(string); !ok {
+		t.Fatalf("restarted_at = %#v, want timestamp string", fields["restarted_at"])
+	} else if _, err := time.Parse(time.RFC3339Nano, restartedAt); err != nil {
+		t.Fatalf("restarted_at = %q is not a trustworthy RFC3339 timestamp: %v", restartedAt, err)
+	}
 }
+
+type runRecoveryTestClock struct{ now time.Time }
+
+func (clock runRecoveryTestClock) Now() time.Time { return clock.now }
 
 func TestRunServiceOutcomeLogsCancellationWithoutFailureClassification(t *testing.T) {
 	t.Parallel()

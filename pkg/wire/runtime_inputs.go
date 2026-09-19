@@ -130,7 +130,7 @@ func provideRunRuntimeRunnerBuilder(
 				return nil, err
 			}
 		}
-		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
+		runner = runcli.WithHostedInvocation(runner, hostedInvocation, opened.ResumeRecoveryMetadata)
 		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
 		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
 		return runcli.WithHistoricalReplay(runner, replay), nil

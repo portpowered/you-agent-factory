@@ -228,6 +228,38 @@ func TestClassifyRunInputFailurePreservesTypedResumeDiagnosticWithoutSourceDetai
 	}
 }
 
+func TestClassifyRunInputFailureKeepsOrdinaryReplayDependencyFailureUnchanged(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("replay loader failure")
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyLegacy,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticDependencyFailure,
+			Area: "input", Path: "replayInput", Message: "replay input could not be loaded",
+		},
+		Cause: cause,
+	}
+
+	got := classifyRunInputFailure(RunConfig{ReplayPath: "recording.jsonl"}, inputErr)
+	var localInputErr *clidiag.LocalFailure
+	if !errors.As(got, &localInputErr) {
+		t.Fatalf("classified ordinary replay failure = %T %v, want local input failure", got, got)
+	}
+	if localInputErr.CLIErrorCode() != clidiag.LocalInputFailureCode {
+		t.Fatalf("ordinary replay failure code = %q, want %q", localInputErr.CLIErrorCode(), clidiag.LocalInputFailureCode)
+	}
+	if !errors.Is(got, cause) {
+		t.Fatalf("classified ordinary replay failure %v lost its loader cause", got)
+	}
+	if strings.Contains(got.Error(), string(recordings.ReplayArtifactDiagnosticDependencyFailure)) {
+		t.Fatalf("ordinary replay failure changed to the resume diagnostic: %q", got)
+	}
+	if got.Error() != `failed to load --replay input "recording.jsonl"` {
+		t.Fatalf("ordinary replay failure = %q, want the established local replay diagnostic", got)
+	}
+}
+
 func TestOperationRunEmitsReplayDriftAfterHistoricalInspection(t *testing.T) {
 	t.Parallel()
 
@@ -388,9 +420,9 @@ func TestMapServerFailurePreservesTypedResumeDiagnosticWithoutSourceDetails(t *t
 		},
 		Cause: cause,
 	}
-	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{
+	mapped := MapServerFailureForInvocation(&initializer.RuntimeHostStartupError{
 		Cause: fmt.Errorf("open resumed runtime: %w", inputErr),
-	})
+	}, true)
 	var invocationErr *InvocationError
 	if !errors.As(mapped, &invocationErr) {
 		t.Fatalf("mapped error = %T, want InvocationError", mapped)
