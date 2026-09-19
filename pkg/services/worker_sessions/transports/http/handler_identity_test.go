@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -137,6 +138,21 @@ func TestListWorkerSessionsBySessionIDValidatesWorkBeforeResolvingScope(t *testi
 	}
 	if resolver.observationSessionID != "session-1" {
 		t.Fatalf("scoped observation session ID = %q, want session-1", resolver.observationSessionID)
+	}
+}
+
+func TestListWorkerSessionsPreservesUnknownFactorySessionWhenWorkLookupFails(t *testing.T) {
+	t.Parallel()
+
+	resolver := &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}
+	adapter := NewAdapter(
+		&sessionObservationServiceStub{},
+		workServiceStub{getErr: errors.New("Work snapshot lookup failed for missing session")},
+		resolver,
+	)
+	_, err := adapter.ListWorkerSessions(context.Background(), "missing-session", "work-1")
+	if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("missing Factory Session error = %v, want ErrObservationSessionNotFound", err)
 	}
 }
 
